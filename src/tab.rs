@@ -16,6 +16,36 @@ use crate::mime_icon::mime_icon;
 
 const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 
+#[cfg(target_os = "linux")]
+pub fn open_command(path: &PathBuf) -> process::Command {
+    let mut command = process::Command::new("xdg-open");
+    command.arg(path);
+    command
+}
+
+#[cfg(target_os = "macos")]
+pub fn open_command(path: &PathBuf) -> process::Command {
+    let mut command = process::Command::new("open");
+    command.arg(path);
+    command
+}
+
+#[cfg(target_os = "redox")]
+pub fn open_command(path: &PathBuf) -> process::Command {
+    let mut command = process::Command::new("launcher");
+    command.arg(path);
+    command
+}
+
+#[cfg(target_os = "windows")]
+pub fn open_command(path: &PathBuf) -> process::Command {
+    let mut command = process::Command::new("cmd");
+    command.arg("/c");
+    command.arg("start");
+    command.arg(path);
+    command
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum Message {
     Click(usize),
@@ -120,8 +150,13 @@ impl Tab {
                                 if item.is_dir {
                                     cd = Some(item.path.clone());
                                 } else {
-                                    //TODO: support multiple OS
-                                    process::Command::new("xdg-open").arg(&item.path).spawn();
+                                    let mut command = open_command(&item.path);
+                                    match command.spawn() {
+                                        Ok(_) => (),
+                                        Err(err) => {
+                                            log::warn!("failed to open {:?}: {}", item.path, err);
+                                        }
+                                    }
                                 }
                             }
                         }
