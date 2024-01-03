@@ -1,0 +1,10 @@
+#TODO: more build-out, desktop actions, translations?
+[Desktop Entry]
+Name=COSMIC File Manager
+Exec=cosmic-files
+Terminal=false
+Type=Application
+StartupNotify=true
+Icon=system-file-manager
+Categories=COSMIC;Utility;FileManager;
+Keywords=Folder;Manager;

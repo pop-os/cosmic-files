@@ -1,0 +1,36 @@
+[package]
+name = "cosmic-files"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dirs = "5.0.1"
+env_logger = "0.10"
+lazy_static = "1"
+log = "0.4"
+serde = { version = "1", features = ["serde_derive"] }
+tokio = { version = "1", features = ["sync"] }
+# Internationalization
+i18n-embed = { version = "0.13", features = ["fluent-system", "desktop-requester"] }
+i18n-embed-fl = "0.6"
+rust-embed = "6"
+
+[dependencies.libcosmic]
+git = "https://github.com/pop-os/libcosmic.git"
+default-features = false
+features = ["tokio", "winit"]
+#path = "../libcosmic"
+
+[features]
+default = ["wgpu"]
+wgpu = ["libcosmic/wgpu"]
+
+[patch.crates-io]
+smithay-client-toolkit = { git = "https://github.com/pop-os/client-toolkit", branch = "wayland-resize" }
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
+
+[target.'cfg(unix)'.dependencies]
+fork = "0.1"

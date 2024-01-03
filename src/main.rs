@@ -1,0 +1,515 @@
+// Copyright 2023 System76 <info@system76.com>
+// SPDX-License-Identifier: GPL-3.0-only
+
+use cosmic::{
+    app::{Command, Core, Settings},
+    cosmic_config::{self, CosmicConfigEntry},
+    cosmic_theme, executor,
+    iced::{subscription::Subscription, widget::row, window, Alignment, Length, Point},
+    style,
+    widget::{self, segmented_button},
+    Application, ApplicationExt, Element,
+};
+use std::{any::TypeId, env, path::PathBuf, process};
+
+use config::{AppTheme, Config, CONFIG_VERSION};
+mod config;
+
+mod localize;
+
+use tab::Tab;
+mod tab;
+
+/// Runs application with these settings
+#[rustfmt::skip]
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(all(unix, not(target_os = "redox")))]
+    match fork::daemon(true, true) {
+        Ok(fork::Fork::Child) => (),
+        Ok(fork::Fork::Parent(_child_pid)) => process::exit(0),
+        Err(err) => {
+            eprintln!("failed to daemonize: {:?}", err);
+            process::exit(1);
+        }
+    }
+
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+
+    localize::localize();
+
+    let (config_handler, config) = match cosmic_config::Config::new(App::APP_ID, CONFIG_VERSION) {
+        Ok(config_handler) => {
+            let config = match Config::get_entry(&config_handler) {
+                Ok(ok) => ok,
+                Err((errs, config)) => {
+                    log::info!("errors loading config: {:?}", errs);
+                    config
+                }
+            };
+            (Some(config_handler), config)
+        }
+        Err(err) => {
+            log::error!("failed to create config handler: {}", err);
+            (None, Config::default())
+        }
+    };
+
+    let mut settings = Settings::default();
+    settings = settings.theme(config.app_theme.theme());
+
+    #[cfg(target_os = "redox")]
+    {
+        // Redox does not support resize if doing CSDs
+        settings = settings.client_decorations(false);
+    }
+
+    //TODO: allow size limits on iced_winit
+    //settings = settings.size_limits(Limits::NONE.min_width(400.0).min_height(200.0));
+
+    let flags = Flags {
+        config_handler,
+        config,
+    };
+    cosmic::app::run::<App>(settings, flags)?;
+
+    Ok(())
+}
+
+#[derive(Clone, Debug)]
+pub struct Flags {
+    config_handler: Option<cosmic_config::Config>,
+    config: Config,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Action {
+    /*TODO
+    Copy,
+    Paste,
+    SelectAll,
+    */
+    Settings,
+    TabNew,
+}
+
+impl Action {
+    pub fn message(self, entity: segmented_button::Entity) -> Message {
+        match self {
+            /*TODO
+            Action::Copy => Message::Copy(Some(entity)),
+            Action::Paste => Message::Paste(Some(entity)),
+            Action::SelectAll => Message::SelectAll(Some(entity)),
+            */
+            Action::Settings => Message::ToggleContextPage(ContextPage::Settings),
+            Action::TabNew => Message::TabNew,
+        }
+    }
+}
+
+/// Messages that are used specifically by our [`App`].
+#[derive(Clone, Debug)]
+pub enum Message {
+    Todo,
+    AppTheme(AppTheme),
+    Config(Config),
+    SystemThemeModeChange(cosmic_theme::ThemeMode),
+    TabActivate(segmented_button::Entity),
+    TabClose(segmented_button::Entity),
+    TabContextAction(segmented_button::Entity, Action),
+    TabContextMenu(segmented_button::Entity, Option<Point>),
+    TabMessage(segmented_button::Entity, tab::Message),
+    TabNew,
+    ToggleContextPage(ContextPage),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ContextPage {
+    Settings,
+}
+
+impl ContextPage {
+    fn title(&self) -> String {
+        match self {
+            Self::Settings => fl!("settings"),
+        }
+    }
+}
+
+/// The [`App`] stores application-specific state.
+pub struct App {
+    core: Core,
+    tab_model: segmented_button::Model<segmented_button::SingleSelect>,
+    config_handler: Option<cosmic_config::Config>,
+    config: Config,
+    app_themes: Vec<String>,
+    context_page: ContextPage,
+}
+
+impl App {
+    fn open_home(&mut self) -> Command<Message> {
+        match dirs::home_dir() {
+            Some(home) => self.open_tab(home),
+            None => {
+                log::warn!("failed to locate home directory");
+                self.open_tab("/")
+            }
+        }
+    }
+
+    fn open_tab<P: Into<PathBuf>>(&mut self, path: P) -> Command<Message> {
+        let tab = Tab::new(path);
+        self.tab_model
+            .insert()
+            .text(tab.title())
+            .data(tab)
+            .closable()
+            .activate();
+        self.update_title()
+    }
+
+    fn update_config(&mut self) -> Command<Message> {
+        cosmic::app::command::set_theme(self.config.app_theme.theme())
+    }
+
+    fn save_config(&mut self) -> Command<Message> {
+        match self.config_handler {
+            Some(ref config_handler) => match self.config.write_entry(&config_handler) {
+                Ok(()) => {}
+                Err(err) => {
+                    log::error!("failed to save config: {}", err);
+                }
+            },
+            None => {}
+        }
+        self.update_config()
+    }
+
+    fn update_title(&mut self) -> Command<Message> {
+        let (header_title, window_title) = match self.tab_model.text(self.tab_model.active()) {
+            Some(tab_title) => (
+                tab_title.to_string(),
+                format!("{tab_title} — COSMIC File Manager"),
+            ),
+            None => (String::new(), "COSMIC File Manager".to_string()),
+        };
+        self.set_header_title(header_title);
+        self.set_window_title(window_title)
+    }
+
+    fn settings(&self) -> Element<Message> {
+        let app_theme_selected = match self.config.app_theme {
+            AppTheme::Dark => 1,
+            AppTheme::Light => 2,
+            AppTheme::System => 0,
+        };
+        widget::settings::view_column(vec![widget::settings::view_section(fl!("appearance"))
+            .add(
+                widget::settings::item::builder(fl!("theme")).control(widget::dropdown(
+                    &self.app_themes,
+                    Some(app_theme_selected),
+                    move |index| {
+                        Message::AppTheme(match index {
+                            1 => AppTheme::Dark,
+                            2 => AppTheme::Light,
+                            _ => AppTheme::System,
+                        })
+                    },
+                )),
+            )
+            .into()])
+        .into()
+    }
+}
+
+/// Implement [`Application`] to integrate with COSMIC.
+impl Application for App {
+    /// Default async executor to use with the app.
+    type Executor = executor::Default;
+
+    /// Argument received
+    type Flags = Flags;
+
+    /// Message type specific to our [`App`].
+    type Message = Message;
+
+    /// The unique application ID to supply to the window manager.
+    const APP_ID: &'static str = "com.system76.CosmicFiles";
+
+    fn core(&self) -> &Core {
+        &self.core
+    }
+
+    fn core_mut(&mut self) -> &mut Core {
+        &mut self.core
+    }
+
+    /// Creates the application, and optionally emits command on initialize.
+    fn init(core: Core, flags: Self::Flags) -> (Self, Command<Self::Message>) {
+        let app_themes = vec![fl!("match-desktop"), fl!("dark"), fl!("light")];
+
+        let mut app = App {
+            core,
+            tab_model: segmented_button::ModelBuilder::default().build(),
+            config_handler: flags.config_handler,
+            config: flags.config,
+            app_themes,
+            context_page: ContextPage::Settings,
+        };
+
+        for arg in env::args().skip(1) {
+            let _ = app.open_tab(arg);
+        }
+
+        if app.tab_model.iter().next().is_none() {
+            let _ = app.open_home();
+        }
+
+        let command = app.update_title();
+
+        (app, command)
+    }
+
+    /// Handle application events here.
+    fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
+        match message {
+            Message::Todo => {
+                log::warn!("TODO");
+            }
+            Message::AppTheme(app_theme) => {
+                self.config.app_theme = app_theme;
+                return self.save_config();
+            }
+            Message::Config(config) => {
+                if config != self.config {
+                    log::info!("update config");
+                    //TODO: update syntax theme by clearing tabs, only if needed
+                    self.config = config;
+                    return self.update_config();
+                }
+            }
+            Message::SystemThemeModeChange(_theme_mode) => {
+                return self.update_config();
+            }
+            Message::TabActivate(entity) => {
+                self.tab_model.activate(entity);
+                return self.update_title();
+            }
+            Message::TabClose(entity) => {
+                // Activate closest item
+                if let Some(position) = self.tab_model.position(entity) {
+                    if position > 0 {
+                        self.tab_model.activate_position(position - 1);
+                    } else {
+                        self.tab_model.activate_position(position + 1);
+                    }
+                }
+
+                // Remove item
+                self.tab_model.remove(entity);
+
+                // If that was the last tab, close window
+                if self.tab_model.iter().next().is_none() {
+                    return window::close(window::Id::MAIN);
+                }
+
+                return self.update_title();
+            }
+            Message::TabContextAction(entity, action) => {
+                match self.tab_model.data_mut::<Tab>(entity) {
+                    Some(tab) => {
+                        // Close context menu
+                        {
+                            tab.context_menu = None;
+                        }
+                        // Run action's message
+                        return self.update(action.message(entity));
+                    }
+                    _ => {}
+                }
+            }
+            Message::TabContextMenu(entity, position_opt) => {
+                match self.tab_model.data_mut::<Tab>(entity) {
+                    Some(tab) => {
+                        // Update context menu position
+                        tab.context_menu = position_opt;
+                    }
+                    _ => {}
+                }
+            }
+            Message::TabMessage(entity, tab_message) => {
+                let mut tab_title_opt = None;
+                match self.tab_model.data_mut::<Tab>(entity) {
+                    Some(tab) => {
+                        if tab.update(tab_message) {
+                            tab_title_opt = Some(tab.title());
+                        }
+                    }
+                    _ => (),
+                }
+                if let Some(tab_title) = tab_title_opt {
+                    self.tab_model.text_set(entity, tab_title);
+                    return self.update_title();
+                }
+            }
+            Message::TabNew => {
+                let active = self.tab_model.active();
+                let path_opt = match self.tab_model.data::<Tab>(active) {
+                    Some(tab) => Some(tab.path.clone()),
+                    None => None,
+                };
+                match path_opt {
+                    Some(path) => return self.open_tab(path),
+                    None => return self.open_home(),
+                }
+            }
+            Message::ToggleContextPage(context_page) => {
+                if self.context_page == context_page {
+                    self.core.window.show_context = !self.core.window.show_context;
+                } else {
+                    self.context_page = context_page;
+                    self.core.window.show_context = true;
+                }
+                self.set_context_title(context_page.title());
+            }
+        }
+
+        Command::none()
+    }
+
+    fn context_drawer(&self) -> Option<Element<Message>> {
+        if !self.core.window.show_context {
+            return None;
+        }
+
+        Some(match self.context_page {
+            ContextPage::Settings => self.settings(),
+        })
+    }
+
+    fn header_start(&self) -> Vec<Element<Self::Message>> {
+        let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
+
+        let active = self.tab_model.active();
+        vec![row![
+            widget::button(widget::icon::from_name("list-add-symbolic").size(16).icon())
+                .on_press(Message::TabNew)
+                .padding(space_xxs)
+                .style(style::Button::Icon),
+            widget::button(widget::icon::from_name("go-up-symbolic").size(16).icon())
+                .on_press(Message::TabMessage(active, tab::Message::Parent))
+                .padding(space_xxs)
+                .style(style::Button::Icon)
+        ]
+        .align_items(Alignment::Center)
+        .into()]
+    }
+
+    fn header_end(&self) -> Vec<Element<Self::Message>> {
+        let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
+
+        vec![row![widget::button(
+            widget::icon::from_name("preferences-system-symbolic")
+                .size(16)
+                .icon()
+        )
+        .on_press(Message::ToggleContextPage(ContextPage::Settings))
+        .padding(space_xxs)
+        .style(style::Button::Icon)]
+        .align_items(Alignment::Center)
+        .into()]
+    }
+
+    /// Creates a view after each update.
+    fn view(&self) -> Element<Self::Message> {
+        let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
+
+        let mut tab_column = widget::column::with_capacity(1);
+
+        if self.tab_model.iter().count() > 1 {
+            tab_column = tab_column.push(
+                widget::container(
+                    widget::view_switcher::horizontal(&self.tab_model)
+                        .button_height(32)
+                        .button_spacing(space_xxs)
+                        .on_activate(Message::TabActivate)
+                        .on_close(Message::TabClose),
+                )
+                .style(style::Container::Background)
+                .width(Length::Fill),
+            );
+        }
+
+        let entity = self.tab_model.active();
+        match self.tab_model.data::<Tab>(entity) {
+            Some(tab) => {
+                tab_column = tab_column.push(
+                    tab.view(self.core())
+                        .map(move |message| Message::TabMessage(entity, message)),
+                );
+
+                /*TODO
+                let terminal_box = terminal_box(terminal).on_context_menu(move |position_opt| {
+                    Message::TabContextMenu(entity, position_opt)
+                });
+
+                let context_menu = {
+                    let terminal = terminal.lock().unwrap();
+                    terminal.context_menu
+                };
+
+                let tab_element: Element<'_, Message> = match tab.context_menu {
+                    Some(position) => widget::popover(
+                        terminal_box.context_menu(position),
+                        menu::context_menu(&self.config, entity),
+                    )
+                    .position(position)
+                    .into(),
+                    None => terminal_box.into(),
+                };
+                tab_column = tab_column.push(tab_element);
+                */
+            }
+            None => {
+                //TODO
+            }
+        }
+
+        let content: Element<_> = tab_column.into();
+
+        // Uncomment to debug layout:
+        //content.explain(cosmic::iced::Color::WHITE)
+        content
+    }
+
+    fn subscription(&self) -> Subscription<Self::Message> {
+        struct ConfigSubscription;
+        struct ThemeSubscription;
+
+        Subscription::batch([
+            cosmic_config::config_subscription(
+                TypeId::of::<ConfigSubscription>(),
+                Self::APP_ID.into(),
+                CONFIG_VERSION,
+            )
+            .map(|(_, res)| match res {
+                Ok(config) => Message::Config(config),
+                Err((errs, config)) => {
+                    log::info!("errors loading config: {:?}", errs);
+                    Message::Config(config)
+                }
+            }),
+            cosmic_config::config_subscription::<_, cosmic_theme::ThemeMode>(
+                TypeId::of::<ThemeSubscription>(),
+                cosmic_theme::THEME_MODE_ID.into(),
+                cosmic_theme::ThemeMode::version(),
+            )
+            .map(|(_, u)| match u {
+                Ok(t) => Message::SystemThemeModeChange(t),
+                Err((errs, t)) => {
+                    log::info!("errors loading theme mode: {:?}", errs);
+                    Message::SystemThemeModeChange(t)
+                }
+            }),
+        ])
+    }
+}
