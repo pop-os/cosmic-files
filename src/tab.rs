@@ -12,6 +12,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::mime_icon::mime_icon;
+
 const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 
 #[derive(Clone, Copy, Debug)]
@@ -24,7 +26,7 @@ pub struct Item {
     pub name: String,
     pub path: PathBuf,
     pub is_dir: bool,
-    pub icon: widget::icon::Named,
+    pub icon: widget::icon::Icon,
     pub select_time: Option<Instant>,
 }
 
@@ -73,14 +75,14 @@ impl Tab {
                     };
 
                     let path = entry.path();
-
                     let is_dir = path.is_dir();
-                    let icon = widget::icon::from_name(if is_dir {
-                        "folder"
+                    //TODO: configurable size
+                    let icon_size = 32;
+                    let icon = if is_dir {
+                        widget::icon::from_name("folder").size(icon_size).icon()
                     } else {
-                        //TODO: get icon from mime
-                        "text-x-generic"
-                    });
+                        mime_icon(&path, icon_size)
+                    };
 
                     self.items.push(Item {
                         name,
@@ -158,7 +160,7 @@ impl Tab {
             column = column.push(
                 widget::button(
                     widget::row::with_children(vec![
-                        item.icon.clone().size(32).icon().into(),
+                        item.icon.clone().into(),
                         widget::text(item.name.clone()).into(),
                     ])
                     .align_items(Alignment::Center)

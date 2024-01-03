@@ -17,6 +17,8 @@ mod config;
 
 mod localize;
 
+mod mime_icon;
+
 use tab::Tab;
 mod tab;
 

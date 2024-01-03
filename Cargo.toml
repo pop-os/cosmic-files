@@ -21,6 +21,10 @@ default-features = false
 features = ["tokio", "winit"]
 #path = "../libcosmic"
 
+#TODO: clean up and send changes upstream
+[dependencies.systemicons]
+git = "https://github.com/jackpot51/systemicons"
+
 [features]
 default = ["wgpu"]
 wgpu = ["libcosmic/wgpu"]
