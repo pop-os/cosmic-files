@@ -8,3 +8,4 @@ StartupNotify=true
 Icon=system-file-manager
 Categories=COSMIC;Utility;FileManager;
 Keywords=Folder;Manager;
+MimeType=inode/directory;
