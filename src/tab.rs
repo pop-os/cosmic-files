@@ -49,6 +49,7 @@ pub fn open_command(path: &PathBuf) -> process::Command {
 #[derive(Clone, Copy, Debug)]
 pub enum Message {
     Click(usize),
+    Home,
     Parent,
 }
 
@@ -69,9 +70,15 @@ pub struct Tab {
 
 impl Tab {
     pub fn new<P: Into<PathBuf>>(path: P) -> Self {
-        //TODO: store absolute path
+        let path = path.into();
         let mut tab = Self {
-            path: path.into(),
+            path: match fs::canonicalize(&path) {
+                Ok(absolute) => absolute,
+                Err(err) => {
+                    log::warn!("failed to canonicalize {:?}: {}", path, err);
+                    path
+                }
+            },
             context_menu: None,
             items: Vec::new(),
         };
@@ -166,6 +173,9 @@ impl Tab {
                         item.select_time = None;
                     }
                 }
+            }
+            Message::Home => {
+                cd = Some(crate::home_dir());
             }
             Message::Parent => {
                 if let Some(parent) = self.path.parent() {

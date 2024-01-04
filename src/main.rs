@@ -77,6 +77,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn home_dir() -> PathBuf {
+    match dirs::home_dir() {
+        Some(home) => home,
+        None => {
+            log::warn!("failed to locate home directory");
+            PathBuf::from("/")
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Flags {
     config_handler: Option<cosmic_config::Config>,
@@ -148,16 +158,6 @@ pub struct App {
 }
 
 impl App {
-    fn open_home(&mut self) -> Command<Message> {
-        match dirs::home_dir() {
-            Some(home) => self.open_tab(home),
-            None => {
-                log::warn!("failed to locate home directory");
-                self.open_tab("/")
-            }
-        }
-    }
-
     fn open_tab<P: Into<PathBuf>>(&mut self, path: P) -> Command<Message> {
         let tab = Tab::new(path);
         self.tab_model
@@ -263,7 +263,7 @@ impl Application for App {
         }
 
         if app.tab_model.iter().next().is_none() {
-            let _ = app.open_home();
+            let _ = app.open_tab(home_dir());
         }
 
         let command = app.update_title();
@@ -355,14 +355,11 @@ impl Application for App {
             }
             Message::TabNew => {
                 let active = self.tab_model.active();
-                let path_opt = match self.tab_model.data::<Tab>(active) {
-                    Some(tab) => Some(tab.path.clone()),
-                    None => None,
+                let path = match self.tab_model.data::<Tab>(active) {
+                    Some(tab) => tab.path.clone(),
+                    None => home_dir(),
                 };
-                match path_opt {
-                    Some(path) => return self.open_tab(path),
-                    None => return self.open_home(),
-                }
+                return self.open_tab(path);
             }
             Message::ToggleContextPage(context_page) => {
                 if self.context_page == context_page {
@@ -395,6 +392,10 @@ impl Application for App {
         vec![row![
             widget::button(widget::icon::from_name("list-add-symbolic").size(16).icon())
                 .on_press(Message::TabNew)
+                .padding(space_xxs)
+                .style(style::Button::Icon),
+            widget::button(widget::icon::from_name("go-home-symbolic").size(16).icon())
+                .on_press(Message::TabMessage(active, tab::Message::Home))
                 .padding(space_xxs)
                 .style(style::Button::Icon),
             widget::button(widget::icon::from_name("go-up-symbolic").size(16).icon())
