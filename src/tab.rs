@@ -57,29 +57,50 @@ fn folder_icon(path: &PathBuf, icon_size: u16) -> widget::icon::Icon {
         .icon()
 }
 
+#[cfg(not(target_os = "windows"))]
+fn hidden_attribute(_path: &PathBuf) -> bool {
+    false
+}
+
+#[cfg(target_os = "windows")]
+fn hidden_attribute(path: &PathBuf) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    match fs::metadata(path) {
+        Ok(metadata) => {
+            // https://learn.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants
+            const FILE_ATTRIBUTE_HIDDEN: u32 = 2;
+            metadata.file_attributes() & FILE_ATTRIBUTE_HIDDEN == FILE_ATTRIBUTE_HIDDEN
+        }
+        Err(err) => {
+            log::warn!("failed to get hidden attribute for {:?}: {}", path, err);
+            false
+        }
+    }
+}
+
 #[cfg(target_os = "linux")]
-pub fn open_command(path: &PathBuf) -> process::Command {
+fn open_command(path: &PathBuf) -> process::Command {
     let mut command = process::Command::new("xdg-open");
     command.arg(path);
     command
 }
 
 #[cfg(target_os = "macos")]
-pub fn open_command(path: &PathBuf) -> process::Command {
+fn open_command(path: &PathBuf) -> process::Command {
     let mut command = process::Command::new("open");
     command.arg(path);
     command
 }
 
 #[cfg(target_os = "redox")]
-pub fn open_command(path: &PathBuf) -> process::Command {
+fn open_command(path: &PathBuf) -> process::Command {
     let mut command = process::Command::new("launcher");
     command.arg(path);
     command
 }
 
 #[cfg(target_os = "windows")]
-pub fn open_command(path: &PathBuf) -> process::Command {
+fn open_command(path: &PathBuf) -> process::Command {
     let mut command = process::Command::new("cmd");
     command.arg("/c");
     command.arg("start");
@@ -97,6 +118,7 @@ pub enum Message {
 pub struct Item {
     pub name: String,
     pub path: PathBuf,
+    pub hidden: bool,
     pub is_dir: bool,
     pub icon: widget::icon::Icon,
     pub select_time: Option<Instant>,
@@ -153,6 +175,7 @@ impl Tab {
                     };
 
                     let path = entry.path();
+                    let hidden = name.starts_with(".") || hidden_attribute(&path);
                     let is_dir = path.is_dir();
                     //TODO: configurable size
                     let icon_size = 32;
@@ -165,6 +188,7 @@ impl Tab {
                     self.items.push(Item {
                         name,
                         path,
+                        hidden,
                         is_dir,
                         icon,
                         select_time: None,
@@ -238,7 +262,7 @@ impl Tab {
 
         let mut column = widget::column();
         for (i, item) in self.items.iter().enumerate() {
-            if item.name.starts_with(".") {
+            if item.hidden {
                 //TODO: SHOW HIDDEN OPTION
                 continue;
             }
