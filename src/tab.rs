@@ -6,6 +6,7 @@ use cosmic::{
 };
 use std::{
     cmp::Ordering,
+    collections::HashMap,
     fs,
     path::PathBuf,
     process,
@@ -15,6 +16,46 @@ use std::{
 use crate::mime_icon::mime_icon;
 
 const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
+
+lazy_static::lazy_static! {
+    static ref SPECIAL_DIRS: HashMap<PathBuf, &'static str> = {
+        let mut special_dirs = HashMap::new();
+        if let Some(dir) = dirs::document_dir() {
+            special_dirs.insert(dir, "folder-documents");
+        }
+        if let Some(dir) = dirs::download_dir() {
+            special_dirs.insert(dir, "folder-download");
+        }
+        if let Some(dir) = dirs::audio_dir() {
+            special_dirs.insert(dir, "folder-music");
+        }
+        if let Some(dir) = dirs::picture_dir() {
+            special_dirs.insert(dir, "folder-pictures");
+        }
+        if let Some(dir) = dirs::public_dir() {
+            special_dirs.insert(dir, "folder-publicshare");
+        }
+        if let Some(dir) = dirs::template_dir() {
+            special_dirs.insert(dir, "folder-templates");
+        }
+        if let Some(dir) = dirs::video_dir() {
+            special_dirs.insert(dir, "folder-videos");
+        }
+        if let Some(dir) = dirs::desktop_dir() {
+            special_dirs.insert(dir, "user-desktop");
+        }
+        if let Some(dir) = dirs::home_dir() {
+            special_dirs.insert(dir, "user-home");
+        }
+        special_dirs
+    };
+}
+
+fn folder_icon(path: &PathBuf, icon_size: u16) -> widget::icon::Icon {
+    widget::icon::from_name(SPECIAL_DIRS.get(path).map_or("folder", |x| *x))
+        .size(icon_size)
+        .icon()
+}
 
 #[cfg(target_os = "linux")]
 pub fn open_command(path: &PathBuf) -> process::Command {
@@ -116,7 +157,7 @@ impl Tab {
                     //TODO: configurable size
                     let icon_size = 32;
                     let icon = if is_dir {
-                        widget::icon::from_name("folder").size(icon_size).icon()
+                        folder_icon(&path, icon_size)
                     } else {
                         mime_icon(&path, icon_size)
                     };
