@@ -155,9 +155,9 @@ fn open_command(path: &PathBuf) -> process::Command {
     command
 }
 
-pub fn rescan(tab_path: PathBuf) -> Vec<Item> {
+pub fn scan_path(tab_path: &PathBuf) -> Vec<Item> {
     let mut items = Vec::new();
-    match fs::read_dir(&tab_path) {
+    match fs::read_dir(tab_path) {
         Ok(entries) => {
             for entry_res in entries {
                 let entry = match entry_res {
@@ -211,7 +211,7 @@ pub fn rescan(tab_path: PathBuf) -> Vec<Item> {
 
                 items.push(Item {
                     name,
-                    metadata,
+                    metadata_opt: Some(metadata),
                     hidden,
                     path,
                     icon_handle_grid,
@@ -224,7 +224,66 @@ pub fn rescan(tab_path: PathBuf) -> Vec<Item> {
             log::warn!("failed to read directory {:?}: {}", tab_path, err);
         }
     }
-    items.sort_by(|a, b| match (a.metadata.is_dir(), b.metadata.is_dir()) {
+    items.sort_by(|a, b| lexical_sort::natural_lexical_cmp(&a.name, &b.name));
+    items
+}
+
+// This config statement is from trash::os_limited, inverted
+#[cfg(not(any(
+    target_os = "windows",
+    all(
+        unix,
+        not(target_os = "macos"),
+        not(target_os = "ios"),
+        not(target_os = "android")
+    )
+)))]
+pub fn scan_trash() -> Vec<Item> {
+    log::warn!("viewing trash not supported on this platform");
+    Vec::new()
+}
+
+// This config statement is from trash::os_limited
+#[cfg(any(
+    target_os = "windows",
+    all(
+        unix,
+        not(target_os = "macos"),
+        not(target_os = "ios"),
+        not(target_os = "android")
+    )
+))]
+pub fn scan_trash() -> Vec<Item> {
+    let mut items: Vec<Item> = Vec::new();
+    match trash::os_limited::list() {
+        Ok(entries) => {
+            for entry in entries {
+                let path = entry.original_path();
+                let name = entry.name;
+
+                //TODO: configurable size
+                let (icon_handle_grid, icon_handle_list) = (
+                    mime_icon(&path, ICON_SIZE_GRID),
+                    mime_icon(&path, ICON_SIZE_LIST),
+                );
+
+                items.push(Item {
+                    name,
+                    //TODO: how will we get proper info on if this is a file or directory?
+                    metadata_opt: None,
+                    hidden: false,
+                    path,
+                    icon_handle_grid,
+                    icon_handle_list,
+                    select_time: None,
+                });
+            }
+        }
+        Err(err) => {
+            log::warn!("failed to read trash items: {}", err);
+        }
+    }
+    items.sort_by(|a, b| match (a.is_dir(), b.is_dir()) {
         (true, false) => Ordering::Less,
         (false, true) => Ordering::Greater,
         _ => lexical_sort::natural_lexical_cmp(&a.name, &b.name),
@@ -232,18 +291,34 @@ pub fn rescan(tab_path: PathBuf) -> Vec<Item> {
     items
 }
 
+#[derive(Clone, Debug)]
+pub enum Location {
+    Path(PathBuf),
+    Trash,
+}
+
+impl Location {
+    pub fn scan(&self) -> Vec<Item> {
+        match self {
+            Self::Path(path) => scan_path(path),
+            Self::Trash => scan_trash(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum Message {
     Click(Option<usize>),
     Home,
     Parent,
+    Trash,
     View(View),
 }
 
 #[derive(Clone)]
 pub struct Item {
     pub name: String,
-    pub metadata: Metadata,
+    pub metadata_opt: Option<Metadata>,
     pub hidden: bool,
     pub path: PathBuf,
     pub icon_handle_grid: widget::icon::Handle,
@@ -252,6 +327,10 @@ pub struct Item {
 }
 
 impl Item {
+    pub fn is_dir(&self) -> bool {
+        self.metadata_opt.as_ref().map_or(false, |x| x.is_dir())
+    }
+
     pub fn property_view(&self, core: &Core) -> Element<crate::Message> {
         let mut section = widget::settings::view_section("");
         section = section.add(widget::settings::item::item_row(vec![
@@ -263,44 +342,46 @@ impl Item {
 
         //TODO: translate!
         //TODO: correct display of folder size?
-        if !self.metadata.is_dir() {
-            section = section.add(widget::settings::item::item(
-                "Size",
-                widget::text(format_size(self.metadata.len())),
-            ));
-        }
+        if let Some(ref metadata) = self.metadata_opt {
+            if !metadata.is_dir() {
+                section = section.add(widget::settings::item::item(
+                    "Size",
+                    widget::text(format_size(metadata.len())),
+                ));
+            }
 
-        if let Ok(time) = self.metadata.accessed() {
-            section = section.add(widget::settings::item(
-                "Accessed",
-                widget::text(
-                    chrono::DateTime::<chrono::Local>::from(time)
-                        .format("%c")
-                        .to_string(),
-                ),
-            ));
-        }
+            if let Ok(time) = metadata.accessed() {
+                section = section.add(widget::settings::item(
+                    "Accessed",
+                    widget::text(
+                        chrono::DateTime::<chrono::Local>::from(time)
+                            .format("%c")
+                            .to_string(),
+                    ),
+                ));
+            }
 
-        if let Ok(time) = self.metadata.modified() {
-            section = section.add(widget::settings::item(
-                "Modified",
-                widget::text(
-                    chrono::DateTime::<chrono::Local>::from(time)
-                        .format("%c")
-                        .to_string(),
-                ),
-            ));
-        }
+            if let Ok(time) = metadata.modified() {
+                section = section.add(widget::settings::item(
+                    "Modified",
+                    widget::text(
+                        chrono::DateTime::<chrono::Local>::from(time)
+                            .format("%c")
+                            .to_string(),
+                    ),
+                ));
+            }
 
-        if let Ok(time) = self.metadata.created() {
-            section = section.add(widget::settings::item(
-                "Created",
-                widget::text(
-                    chrono::DateTime::<chrono::Local>::from(time)
-                        .format("%c")
-                        .to_string(),
-                ),
-            ));
+            if let Ok(time) = metadata.created() {
+                section = section.add(widget::settings::item(
+                    "Created",
+                    widget::text(
+                        chrono::DateTime::<chrono::Local>::from(time)
+                            .format("%c")
+                            .to_string(),
+                    ),
+                ));
+            }
         }
 
         section.into()
@@ -311,7 +392,7 @@ impl fmt::Debug for Item {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Item")
             .field("name", &self.name)
-            .field("metadata", &self.metadata)
+            .field("metadata_opt", &self.metadata_opt)
             .field("hidden", &self.hidden)
             .field("path", &self.path)
             // icon_handles
@@ -328,7 +409,7 @@ pub enum View {
 
 #[derive(Clone, Debug)]
 pub struct Tab {
-    pub path: PathBuf,
+    pub location: Location,
     //TODO
     pub context_menu: Option<Point>,
     pub items_opt: Option<Vec<Item>>,
@@ -336,15 +417,9 @@ pub struct Tab {
 }
 
 impl Tab {
-    pub fn new(path: PathBuf) -> Self {
+    pub fn new(location: Location) -> Self {
         Self {
-            path: match fs::canonicalize(&path) {
-                Ok(absolute) => absolute,
-                Err(err) => {
-                    log::warn!("failed to canonicalize {:?}: {}", path, err);
-                    path
-                }
-            },
+            location,
             context_menu: None,
             items_opt: None,
             view: View::Grid,
@@ -353,7 +428,14 @@ impl Tab {
 
     pub fn title(&self) -> String {
         //TODO: better title
-        format!("{}", self.path.display())
+        match &self.location {
+            Location::Path(path) => {
+                format!("{}", path.display())
+            }
+            Location::Trash => {
+                fl!("trash")
+            }
+        }
     }
 
     pub fn update(&mut self, message: Message) -> bool {
@@ -365,8 +447,8 @@ impl Tab {
                         if Some(i) == click_i_opt {
                             if let Some(select_time) = item.select_time {
                                 if select_time.elapsed() < DOUBLE_CLICK_DURATION {
-                                    if item.metadata.is_dir() {
-                                        cd = Some(item.path.clone());
+                                    if item.is_dir() {
+                                        cd = Some(Location::Path(item.path.clone()));
                                     } else {
                                         let mut command = open_command(&item.path);
                                         match command.spawn() {
@@ -392,19 +474,24 @@ impl Tab {
                 self.context_menu = None;
             }
             Message::Home => {
-                cd = Some(crate::home_dir());
+                cd = Some(Location::Path(crate::home_dir()));
             }
             Message::Parent => {
-                if let Some(parent) = self.path.parent() {
-                    cd = Some(parent.to_owned());
+                if let Location::Path(path) = &self.location {
+                    if let Some(parent) = path.parent() {
+                        cd = Some(Location::Path(parent.to_owned()));
+                    }
                 }
+            }
+            Message::Trash => {
+                cd = Some(Location::Trash);
             }
             Message::View(view) => {
                 self.view = view;
             }
         }
-        if let Some(path) = cd {
-            self.path = path;
+        if let Some(location) = cd {
+            self.location = location;
             self.items_opt = None;
             true
         } else {
@@ -433,8 +520,8 @@ impl Tab {
         )
         .align_x(Horizontal::Center)
         .align_y(Vertical::Center)
-        .height(Length::Fill)
         .width(Length::Fill)
+        .height(Length::Fill)
         .into()
     }
 
@@ -483,7 +570,9 @@ impl Tab {
                 return self.empty_view(hidden > 0, core);
             }
         }
-        widget::flex_row(children).into()
+        widget::scrollable(widget::flex_row(children))
+            .width(Length::Fill)
+            .into()
     }
 
     pub fn list_view(&self, core: &Core) -> Element<Message> {
@@ -527,10 +616,14 @@ impl Tab {
                             .into(),
                         widget::text(item.name.clone()).into(),
                         widget::horizontal_space(Length::Fill).into(),
-                        widget::text(if item.metadata.is_dir() {
+                        widget::text(if item.is_dir() {
                             "\u{2014}".to_string()
                         } else {
-                            format_size(item.metadata.len())
+                            if let Some(ref metadata) = item.metadata_opt {
+                                format_size(metadata.len())
+                            } else {
+                                "\u{2014}".to_string()
+                            }
                         })
                         .into(),
                         // Hack to make room for scroll bar
@@ -557,17 +650,16 @@ impl Tab {
                 return self.empty_view(hidden > 0, core);
             }
         }
-        widget::column::with_children(children).into()
+        widget::scrollable(widget::column::with_children(children))
+            .width(Length::Fill)
+            .into()
     }
 
     pub fn view(&self, core: &Core) -> Element<Message> {
-        widget::container(
-            widget::scrollable(match self.view {
-                View::Grid => self.grid_view(core),
-                View::List => self.list_view(core),
-            })
-            .width(Length::Fill),
-        )
+        widget::container(match self.view {
+            View::Grid => self.grid_view(core),
+            View::List => self.list_view(core),
+        })
         .height(Length::Fill)
         .width(Length::Fill)
         .into()

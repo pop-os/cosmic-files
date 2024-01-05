@@ -10,7 +10,13 @@ use cosmic::{
     widget::{self, segmented_button},
     Application, ApplicationExt, Element,
 };
-use std::{any::TypeId, env, path::PathBuf, process, time::Instant};
+use std::{
+    any::TypeId,
+    env, fs,
+    path::{Path, PathBuf},
+    process,
+    time::Instant,
+};
 
 use config::{AppTheme, Config, CONFIG_VERSION};
 mod config;
@@ -23,7 +29,7 @@ mod localize;
 
 mod mime_icon;
 
-use tab::Tab;
+use tab::{Location, Tab};
 mod tab;
 
 /// Runs application with these settings
@@ -100,6 +106,7 @@ pub struct Flags {
 #[derive(Clone, Copy, Debug)]
 pub enum Action {
     Copy,
+    MoveToTrash,
     NewFile,
     NewFolder,
     Paste,
@@ -113,6 +120,7 @@ impl Action {
     pub fn message(self, entity: segmented_button::Entity) -> Message {
         match self {
             Action::Copy => Message::Copy(Some(entity)),
+            Action::MoveToTrash => Message::MoveToTrash(Some(entity)),
             Action::NewFile => Message::NewFile(Some(entity)),
             Action::NewFolder => Message::NewFolder(Some(entity)),
             Action::Paste => Message::Paste(Some(entity)),
@@ -131,6 +139,7 @@ pub enum Message {
     AppTheme(AppTheme),
     Config(Config),
     Copy(Option<segmented_button::Entity>),
+    MoveToTrash(Option<segmented_button::Entity>),
     NewFile(Option<segmented_button::Entity>),
     NewFolder(Option<segmented_button::Entity>),
     Paste(Option<segmented_button::Entity>),
@@ -172,9 +181,8 @@ pub struct App {
 }
 
 impl App {
-    fn open_tab<P: Into<PathBuf>>(&mut self, path: P) -> Command<Message> {
-        let path = path.into();
-        let tab = Tab::new(path.clone());
+    fn open_tab(&mut self, location: Location) -> Command<Message> {
+        let tab = Tab::new(location.clone());
         let entity = self
             .tab_model
             .insert()
@@ -183,18 +191,17 @@ impl App {
             .closable()
             .activate()
             .id();
-        Command::batch([self.update_title(), self.rescan_tab(entity, path)])
+        Command::batch([self.update_title(), self.rescan_tab(entity, location)])
     }
 
-    fn rescan_tab<P: Into<PathBuf>>(
+    fn rescan_tab(
         &mut self,
         entity: segmented_button::Entity,
-        path: P,
+        location: Location,
     ) -> Command<Message> {
-        let path = path.into();
         Command::perform(
             async move {
-                match tokio::task::spawn_blocking(move || tab::rescan(path)).await {
+                match tokio::task::spawn_blocking(move || location.scan()).await {
                     Ok(items) => message::app(Message::TabRescan(entity, items)),
                     Err(err) => {
                         log::warn!("failed to rescan: {}", err);
@@ -313,11 +320,18 @@ impl Application for App {
         let mut commands = Vec::new();
 
         for arg in env::args().skip(1) {
-            commands.push(app.open_tab(arg));
+            let location = match fs::canonicalize(&arg) {
+                Ok(absolute) => Location::Path(absolute),
+                Err(err) => {
+                    log::warn!("failed to canonicalize {:?}: {}", arg, err);
+                    continue;
+                }
+            };
+            commands.push(app.open_tab(location));
         }
 
         if app.tab_model.iter().next().is_none() {
-            commands.push(app.open_tab(home_dir()));
+            commands.push(app.open_tab(Location::Path(home_dir())));
         }
 
         (app, Command::batch(commands))
@@ -343,6 +357,9 @@ impl Application for App {
             }
             Message::Copy(entity_opt) => {
                 log::warn!("TODO: COPY");
+            }
+            Message::MoveToTrash(entity_opt) => {
+                log::warn!("TODO: MOVE TO TRASH");
             }
             Message::NewFile(entity_opt) => {
                 log::warn!("TODO: NEW FILE");
@@ -424,7 +441,7 @@ impl Application for App {
                 match self.tab_model.data_mut::<Tab>(entity) {
                     Some(tab) => {
                         if tab.update(tab_message) {
-                            update_opt = Some((tab.title(), tab.path.clone()));
+                            update_opt = Some((tab.title(), tab.location.clone()));
                         }
                     }
                     _ => (),
@@ -439,11 +456,11 @@ impl Application for App {
             }
             Message::TabNew => {
                 let active = self.tab_model.active();
-                let path = match self.tab_model.data::<Tab>(active) {
-                    Some(tab) => tab.path.clone(),
-                    None => home_dir(),
+                let location = match self.tab_model.data::<Tab>(active) {
+                    Some(tab) => tab.location.clone(),
+                    None => Location::Path(home_dir()),
                 };
-                return self.open_tab(path);
+                return self.open_tab(location);
             }
             Message::TabRescan(entity, items) => match self.tab_model.data_mut::<Tab>(entity) {
                 Some(tab) => {
@@ -492,6 +509,7 @@ impl Application for App {
             tab::View::List => (tab::View::Grid, "view-grid-symbolic"),
         };
 
+        //TODO: use nav bar instead, dynamically show items
         vec![row![
             widget::button(widget::icon::from_name("list-add-symbolic").size(16).icon())
                 .on_press(Message::TabNew)
@@ -505,6 +523,14 @@ impl Application for App {
                 .on_press(Message::TabMessage(active, tab::Message::Parent))
                 .padding(space_xxs)
                 .style(style::Button::Icon),
+            widget::button(
+                widget::icon::from_name("user-trash-full-symbolic")
+                    .size(16)
+                    .icon()
+            )
+            .on_press(Message::TabMessage(active, tab::Message::Trash))
+            .padding(space_xxs)
+            .style(style::Button::Icon),
             widget::button(widget::icon::from_name(view_icon).size(16).icon())
                 .on_press(Message::TabMessage(active, tab::Message::View(view)))
                 .padding(space_xxs)

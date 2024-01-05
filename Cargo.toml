@@ -12,6 +12,7 @@ lexical-sort = "0.3.1"
 log = "0.4"
 serde = { version = "1", features = ["serde_derive"] }
 tokio = { version = "1" }
+trash = "3.1.2"
 # Internationalization
 i18n-embed = { version = "0.13", features = ["fluent-system", "desktop-requester"] }
 i18n-embed-fl = "0.6"

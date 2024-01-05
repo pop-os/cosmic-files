@@ -33,6 +33,7 @@ pub fn context_menu<'a>(entity: segmented_button::Entity) -> Element<'a, Message
         menu_button!(widget::text(label)).on_press(Message::TabContextAction(entity, action))
     };
 
+    //TODO: change items based on selection
     widget::container(column!(
         menu_action(fl!("new-file"), Action::NewFile),
         menu_action(fl!("new-folder"), Action::NewFolder),
@@ -40,6 +41,8 @@ pub fn context_menu<'a>(entity: segmented_button::Entity) -> Element<'a, Message
         menu_action(fl!("copy"), Action::Copy),
         menu_action(fl!("paste"), Action::Paste),
         menu_action(fl!("select-all"), Action::SelectAll),
+        horizontal_rule(1),
+        menu_action(fl!("move-to-trash"), Action::MoveToTrash),
         horizontal_rule(1),
         menu_action(fl!("properties"), Action::Properties),
     ))

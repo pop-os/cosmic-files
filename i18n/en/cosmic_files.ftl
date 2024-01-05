@@ -1,5 +1,6 @@
 empty-folder = Empty folder
 empty-folder-hidden = Empty folder (has hidden items)
+trash = Trash
 
 # Context Pages
 
@@ -22,3 +23,4 @@ new-folder = New folder
 copy = Copy
 paste = Paste
 select-all = Select all
+move-to-trash = Move to trash
