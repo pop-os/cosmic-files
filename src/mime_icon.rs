@@ -7,6 +7,7 @@ pub const FALLBACK_MIME_ICON: &str = "text-x-generic";
 
 #[derive(Debug, Eq, Hash, PartialEq)]
 struct MimeIconKey {
+    //TODO: this stores icon data for every path, instead store per mime type
     path: String,
     size: u16,
 }

@@ -208,7 +208,7 @@ pub fn rescan(tab_path: PathBuf) -> Vec<Item> {
 
 #[derive(Clone, Copy, Debug)]
 pub enum Message {
-    Click(usize),
+    Click(Option<usize>),
     Home,
     Parent,
 }
@@ -276,10 +276,10 @@ impl Tab {
     pub fn update(&mut self, message: Message) -> bool {
         let mut cd = None;
         match message {
-            Message::Click(click_i) => {
+            Message::Click(click_i_opt) => {
                 if let Some(ref mut items) = self.items_opt {
                     for (i, item) in items.iter_mut().enumerate() {
-                        if i == click_i {
+                        if Some(i) == click_i_opt {
                             if let Some(select_time) = item.select_time {
                                 if select_time.elapsed() < DOUBLE_CLICK_DURATION {
                                     if item.is_dir {
@@ -306,6 +306,7 @@ impl Tab {
                         }
                     }
                 }
+                self.context_menu = None;
             }
             Message::Home => {
                 cd = Some(crate::home_dir());
@@ -380,7 +381,7 @@ impl Tab {
                         .width(Length::Fixed(128.0)),
                     )
                     .style(button_style(item.select_time.is_some()))
-                    .on_press(Message::Click(i))
+                    .on_press(Message::Click(Some(i)))
                     .into(),
                 );
                 count += 1;
@@ -420,7 +421,7 @@ impl Tab {
                     )
                     .style(button_style(item.select_time.is_some()))
                     .width(Length::Fill)
-                    .on_press(Message::Click(i))
+                    .on_press(Message::Click(Some(i)))
                     .into(),
                 );
                 count += 1;
@@ -436,10 +437,14 @@ impl Tab {
     }
 
     pub fn view(&self, core: &Core) -> Element<Message> {
-        widget::scrollable(match self.view {
-            View::Grid => self.grid_view(core),
-            View::List => self.list_view(core),
-        })
+        widget::container(
+            widget::scrollable(match self.view {
+                View::Grid => self.grid_view(core),
+                View::List => self.list_view(core),
+            })
+            .width(Length::Fill),
+        )
+        .height(Length::Fill)
         .width(Length::Fill)
         .into()
     }

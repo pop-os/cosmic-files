@@ -10,10 +10,14 @@ use cosmic::{
     widget::{self, segmented_button},
     Application, ApplicationExt, Element,
 };
-use std::{any::TypeId, env, path::PathBuf, process};
+use std::{any::TypeId, env, path::PathBuf, process, time::Instant};
 
 use config::{AppTheme, Config, CONFIG_VERSION};
 mod config;
+
+mod menu;
+
+mod mouse_area;
 
 mod localize;
 
@@ -95,11 +99,9 @@ pub struct Flags {
 
 #[derive(Clone, Copy, Debug)]
 pub enum Action {
-    /*TODO
     Copy,
     Paste,
     SelectAll,
-    */
     Settings,
     TabNew,
 }
@@ -107,11 +109,9 @@ pub enum Action {
 impl Action {
     pub fn message(self, entity: segmented_button::Entity) -> Message {
         match self {
-            /*TODO
             Action::Copy => Message::Copy(Some(entity)),
             Action::Paste => Message::Paste(Some(entity)),
             Action::SelectAll => Message::SelectAll(Some(entity)),
-            */
             Action::Settings => Message::ToggleContextPage(ContextPage::Settings),
             Action::TabNew => Message::TabNew,
         }
@@ -124,6 +124,9 @@ pub enum Message {
     Todo,
     AppTheme(AppTheme),
     Config(Config),
+    Copy(Option<segmented_button::Entity>),
+    Paste(Option<segmented_button::Entity>),
+    SelectAll(Option<segmented_button::Entity>),
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     TabActivate(segmented_button::Entity),
     TabClose(segmented_button::Entity),
@@ -313,6 +316,23 @@ impl Application for App {
                     return self.update_config();
                 }
             }
+            Message::Copy(entity_opt) => {
+                log::warn!("TODO: COPY");
+            }
+            Message::Paste(entity_opt) => {
+                log::warn!("TODO: PASTE");
+            }
+            Message::SelectAll(entity_opt) => {
+                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                    if let Some(ref mut items) = tab.items_opt {
+                        let select_time = Instant::now();
+                        for item in items.iter_mut() {
+                            item.select_time = Some(select_time);
+                        }
+                    }
+                }
+            }
             Message::SystemThemeModeChange(_theme_mode) => {
                 return self.update_config();
             }
@@ -479,32 +499,29 @@ impl Application for App {
         let entity = self.tab_model.active();
         match self.tab_model.data::<Tab>(entity) {
             Some(tab) => {
-                tab_column = tab_column.push(
+                let mut mouse_area = mouse_area::MouseArea::new(
                     tab.view(self.core())
                         .map(move |message| Message::TabMessage(entity, message)),
-                );
-
-                /*TODO
-                let terminal_box = terminal_box(terminal).on_context_menu(move |position_opt| {
-                    Message::TabContextMenu(entity, position_opt)
-                });
-
-                let context_menu = {
-                    let terminal = terminal.lock().unwrap();
-                    terminal.context_menu
-                };
-
-                let tab_element: Element<'_, Message> = match tab.context_menu {
-                    Some(position) => widget::popover(
-                        terminal_box.context_menu(position),
-                        menu::context_menu(&self.config, entity),
-                    )
-                    .position(position)
-                    .into(),
-                    None => terminal_box.into(),
-                };
-                tab_column = tab_column.push(tab_element);
-                */
+                )
+                .on_press(move |_point_opt| Message::TabMessage(entity, tab::Message::Click(None)));
+                if tab.context_menu.is_some() {
+                    mouse_area = mouse_area
+                        .on_right_press(move |_point_opt| Message::TabContextMenu(entity, None));
+                } else {
+                    mouse_area = mouse_area.on_right_press(move |point_opt| {
+                        Message::TabContextMenu(entity, point_opt)
+                    });
+                }
+                let mut popover = widget::popover(mouse_area, menu::context_menu(entity));
+                match tab.context_menu {
+                    Some(point) => {
+                        popover = popover.position(point);
+                    }
+                    None => {
+                        popover = popover.show_popup(false);
+                    }
+                }
+                tab_column = tab_column.push(popover);
             }
             None => {
                 //TODO

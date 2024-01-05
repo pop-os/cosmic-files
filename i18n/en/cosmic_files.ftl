@@ -12,3 +12,9 @@ theme = Theme
 match-desktop = Match desktop
 dark = Dark
 light = Light
+
+# Context menu
+copy = Copy
+paste = Paste
+select-all = Select all
+new-tab = New tab
