@@ -3,6 +3,9 @@ empty-folder-hidden = Empty folder (has hidden items)
 
 # Context Pages
 
+## Properties
+properties = Properties
+
 ## Settings
 settings = Settings
 
@@ -19,4 +22,3 @@ new-folder = New folder
 copy = Copy
 paste = Paste
 select-all = Select all
-new-tab = New tab

@@ -103,6 +103,7 @@ pub enum Action {
     NewFile,
     NewFolder,
     Paste,
+    Properties,
     SelectAll,
     Settings,
     TabNew,
@@ -115,6 +116,7 @@ impl Action {
             Action::NewFile => Message::NewFile(Some(entity)),
             Action::NewFolder => Message::NewFolder(Some(entity)),
             Action::Paste => Message::Paste(Some(entity)),
+            Action::Properties => Message::ToggleContextPage(ContextPage::Properties),
             Action::SelectAll => Message::SelectAll(Some(entity)),
             Action::Settings => Message::ToggleContextPage(ContextPage::Settings),
             Action::TabNew => Message::TabNew,
@@ -146,12 +148,14 @@ pub enum Message {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ContextPage {
+    Properties,
     Settings,
 }
 
 impl ContextPage {
     fn title(&self) -> String {
         match self {
+            Self::Properties => fl!("properties"),
             Self::Settings => fl!("settings"),
         }
     }
@@ -229,6 +233,21 @@ impl App {
         };
         self.set_header_title(header_title);
         self.set_window_title(window_title)
+    }
+
+    fn properties(&self) -> Element<Message> {
+        let mut children = Vec::new();
+        let entity = self.tab_model.active();
+        if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+            if let Some(ref items) = tab.items_opt {
+                for item in items.iter() {
+                    if item.select_time.is_some() {
+                        children.push(item.property_view());
+                    }
+                }
+            }
+        }
+        widget::settings::view_column(children).into()
     }
 
     fn settings(&self) -> Element<Message> {
@@ -447,6 +466,7 @@ impl Application for App {
         }
 
         Some(match self.context_page {
+            ContextPage::Properties => self.properties(),
             ContextPage::Settings => self.settings(),
         })
     }

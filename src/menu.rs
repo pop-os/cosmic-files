@@ -41,8 +41,7 @@ pub fn context_menu<'a>(entity: segmented_button::Entity) -> Element<'a, Message
         menu_action(fl!("paste"), Action::Paste),
         menu_action(fl!("select-all"), Action::SelectAll),
         horizontal_rule(1),
-        menu_action(fl!("new-tab"), Action::TabNew),
-        menu_action(fl!("settings"), Action::Settings),
+        menu_action(fl!("properties"), Action::Properties),
     ))
     .padding(1)
     //TODO: move style to libcosmic

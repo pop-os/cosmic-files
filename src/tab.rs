@@ -10,7 +10,8 @@ use cosmic::{
 use std::{
     cmp::Ordering,
     collections::HashMap,
-    fmt, fs,
+    fmt,
+    fs::{self, Metadata},
     path::PathBuf,
     process,
     time::{Duration, Instant},
@@ -92,24 +93,16 @@ fn folder_icon(path: &PathBuf, icon_size: u16) -> widget::icon::Handle {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn hidden_attribute(_path: &PathBuf) -> bool {
+fn hidden_attribute(_metadata: &Metadata) -> bool {
     false
 }
 
 #[cfg(target_os = "windows")]
-fn hidden_attribute(path: &PathBuf) -> bool {
+fn hidden_attribute(metadata: &Metadata) -> bool {
     use std::os::windows::fs::MetadataExt;
-    match fs::metadata(path) {
-        Ok(metadata) => {
-            // https://learn.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants
-            const FILE_ATTRIBUTE_HIDDEN: u32 = 2;
-            metadata.file_attributes() & FILE_ATTRIBUTE_HIDDEN == FILE_ATTRIBUTE_HIDDEN
-        }
-        Err(err) => {
-            log::warn!("failed to get hidden attribute for {:?}: {}", path, err);
-            false
-        }
-    }
+    // https://learn.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants
+    const FILE_ATTRIBUTE_HIDDEN: u32 = 2;
+    metadata.file_attributes() & FILE_ATTRIBUTE_HIDDEN == FILE_ATTRIBUTE_HIDDEN
 }
 
 #[cfg(target_os = "linux")]
@@ -156,7 +149,7 @@ pub fn rescan(tab_path: PathBuf) -> Vec<Item> {
                 };
 
                 let name = match entry.file_name().into_string() {
-                    Ok(some) => some,
+                    Ok(ok) => ok,
                     Err(name_os) => {
                         log::warn!(
                             "failed to parse entry in {:?}: {:?} is not valid UTF-8",
@@ -167,11 +160,24 @@ pub fn rescan(tab_path: PathBuf) -> Vec<Item> {
                     }
                 };
 
+                let metadata = match entry.metadata() {
+                    Ok(ok) => ok,
+                    Err(err) => {
+                        log::warn!(
+                            "failed to read metadata for entry in {:?}: {}",
+                            tab_path,
+                            err
+                        );
+                        continue;
+                    }
+                };
+
+                let hidden = name.starts_with(".") || hidden_attribute(&metadata);
+
                 let path = entry.path();
-                let hidden = name.starts_with(".") || hidden_attribute(&path);
-                let is_dir = path.is_dir();
+
                 //TODO: configurable size
-                let (icon_handle_grid, icon_handle_list) = if is_dir {
+                let (icon_handle_grid, icon_handle_list) = if metadata.is_dir() {
                     (
                         folder_icon(&path, ICON_SIZE_GRID),
                         folder_icon(&path, ICON_SIZE_LIST),
@@ -185,9 +191,9 @@ pub fn rescan(tab_path: PathBuf) -> Vec<Item> {
 
                 items.push(Item {
                     name,
-                    path,
+                    metadata,
                     hidden,
-                    is_dir,
+                    path,
                     icon_handle_grid,
                     icon_handle_list,
                     select_time: None,
@@ -198,7 +204,7 @@ pub fn rescan(tab_path: PathBuf) -> Vec<Item> {
             log::warn!("failed to read directory {:?}: {}", tab_path, err);
         }
     }
-    items.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+    items.sort_by(|a, b| match (a.metadata.is_dir(), b.metadata.is_dir()) {
         (true, false) => Ordering::Less,
         (false, true) => Ordering::Greater,
         _ => lexical_sort::natural_lexical_cmp(&a.name, &b.name),
@@ -216,22 +222,93 @@ pub enum Message {
 #[derive(Clone)]
 pub struct Item {
     pub name: String,
-    pub path: PathBuf,
+    pub metadata: Metadata,
     pub hidden: bool,
-    pub is_dir: bool,
+    pub path: PathBuf,
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
     pub select_time: Option<Instant>,
+}
+
+impl Item {
+    pub fn property_view(&self) -> Element<crate::Message> {
+        let mut children = Vec::new();
+        children.push(
+            widget::icon::icon(self.icon_handle_grid.clone())
+                .size(ICON_SIZE_GRID)
+                .into(),
+        );
+        children.push(widget::text(self.name.clone()).into());
+
+        //TODO: translate!
+        {
+            const KIB: u64 = 1024;
+            const MIB: u64 = 1024 * KIB;
+            const GIB: u64 = 1024 * MIB;
+            const TIB: u64 = 1024 * GIB;
+
+            fn format_size(size: u64) -> String {
+                if size >= 4 * TIB {
+                    format!("{:.1} TiB", size as f64 / TIB as f64)
+                } else if size >= GIB {
+                    format!("{:.1} GiB", size as f64 / GIB as f64)
+                } else if size >= MIB {
+                    format!("{:.1} MiB", size as f64 / MIB as f64)
+                } else if size >= KIB {
+                    format!("{:.1} KiB", size as f64 / KIB as f64)
+                } else {
+                    format!("{} B", size)
+                }
+            }
+
+            children
+                .push(widget::text(format!("Size: {}", format_size(self.metadata.len()))).into());
+        }
+
+        if let Ok(time) = self.metadata.accessed() {
+            children.push(
+                widget::text(format!(
+                    "Accessed: {}",
+                    chrono::DateTime::<chrono::Local>::from(time).format("%c")
+                ))
+                .into(),
+            );
+        }
+
+        if let Ok(time) = self.metadata.modified() {
+            children.push(
+                widget::text(format!(
+                    "Modified: {}",
+                    chrono::DateTime::<chrono::Local>::from(time).format("%c")
+                ))
+                .into(),
+            );
+        }
+
+        if let Ok(time) = self.metadata.created() {
+            children.push(
+                widget::text(format!(
+                    "Created: {}",
+                    chrono::DateTime::<chrono::Local>::from(time).format("%c")
+                ))
+                .into(),
+            );
+        }
+
+        widget::column::with_children(children)
+            .width(Length::Fill)
+            .into()
+    }
 }
 
 impl fmt::Debug for Item {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Item")
             .field("name", &self.name)
-            .field("path", &self.path)
+            .field("metadata", &self.metadata)
             .field("hidden", &self.hidden)
-            .field("is_dir", &self.is_dir)
-            //icon_handles
+            .field("path", &self.path)
+            // icon_handles
             .field("select_time", &self.select_time)
             .finish()
     }
@@ -282,7 +359,7 @@ impl Tab {
                         if Some(i) == click_i_opt {
                             if let Some(select_time) = item.select_time {
                                 if select_time.elapsed() < DOUBLE_CLICK_DURATION {
-                                    if item.is_dir {
+                                    if item.metadata.is_dir() {
                                         cd = Some(item.path.clone());
                                     } else {
                                         let mut command = open_command(&item.path);
