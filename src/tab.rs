@@ -201,7 +201,7 @@ pub fn rescan(tab_path: PathBuf) -> Vec<Item> {
     items.sort_by(|a, b| match (a.is_dir, b.is_dir) {
         (true, false) => Ordering::Less,
         (false, true) => Ordering::Greater,
-        _ => a.name.cmp(&b.name),
+        _ => lexical_sort::natural_lexical_cmp(&a.name, &b.name),
     });
     items
 }
