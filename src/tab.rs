@@ -447,24 +447,30 @@ impl Tab {
                     continue;
                 }
 
-                children.push(
-                    widget::button(
-                        widget::column::with_children(vec![
-                            widget::icon::icon(item.icon_handle_grid.clone())
-                                .size(ICON_SIZE_GRID)
-                                .into(),
-                            widget::text(item.name.clone()).into(),
-                        ])
-                        .align_items(Alignment::Center)
-                        .spacing(space_xxs)
-                        //TODO: get from config
-                        .height(Length::Fixed(128.0))
-                        .width(Length::Fixed(128.0)),
-                    )
-                    .style(button_style(item.select_time.is_some()))
-                    .on_press(Message::Click(Some(i)))
-                    .into(),
-                );
+                let button = widget::button(
+                    widget::column::with_children(vec![
+                        widget::icon::icon(item.icon_handle_grid.clone())
+                            .size(ICON_SIZE_GRID)
+                            .into(),
+                        widget::text(item.name.clone()).into(),
+                    ])
+                    .align_items(Alignment::Center)
+                    .spacing(space_xxs)
+                    //TODO: get from config
+                    .height(Length::Fixed(128.0))
+                    .width(Length::Fixed(128.0)),
+                )
+                .style(button_style(item.select_time.is_some()))
+                .on_press(Message::Click(Some(i)));
+                if self.context_menu.is_some() {
+                    children.push(button.into());
+                } else {
+                    children.push(
+                        crate::mouse_area::MouseArea::new(button)
+                            .on_right_press_no_capture(move |_point_opt| Message::Click(Some(i)))
+                            .into(),
+                    );
+                }
                 count += 1;
             }
 
@@ -489,22 +495,28 @@ impl Tab {
                     continue;
                 }
 
-                children.push(
-                    widget::button(
-                        widget::row::with_children(vec![
-                            widget::icon::icon(item.icon_handle_list.clone())
-                                .size(ICON_SIZE_LIST)
-                                .into(),
-                            widget::text(item.name.clone()).into(),
-                        ])
-                        .align_items(Alignment::Center)
-                        .spacing(space_xxs),
-                    )
-                    .style(button_style(item.select_time.is_some()))
-                    .width(Length::Fill)
-                    .on_press(Message::Click(Some(i)))
-                    .into(),
-                );
+                let button = widget::button(
+                    widget::row::with_children(vec![
+                        widget::icon::icon(item.icon_handle_list.clone())
+                            .size(ICON_SIZE_LIST)
+                            .into(),
+                        widget::text(item.name.clone()).into(),
+                    ])
+                    .align_items(Alignment::Center)
+                    .spacing(space_xxs),
+                )
+                .style(button_style(item.select_time.is_some()))
+                .width(Length::Fill)
+                .on_press(Message::Click(Some(i)));
+                if self.context_menu.is_some() {
+                    children.push(button.into());
+                } else {
+                    children.push(
+                        crate::mouse_area::MouseArea::new(button)
+                            .on_right_press_no_capture(move |_point_opt| Message::Click(Some(i)))
+                            .into(),
+                    );
+                }
                 count += 1;
             }
 

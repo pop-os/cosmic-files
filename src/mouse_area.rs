@@ -15,6 +15,7 @@ pub struct MouseArea<'a, Message, Renderer> {
     on_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_right_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
+    on_right_press_no_capture: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_right_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_middle_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_middle_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
@@ -46,6 +47,16 @@ impl<'a, Message, Renderer> MouseArea<'a, Message, Renderer> {
     #[must_use]
     pub fn on_right_press(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
         self.on_right_press = Some(Box::new(message));
+        self
+    }
+
+    /// The message to emit on a right button press without capturing.
+    #[must_use]
+    pub fn on_right_press_no_capture(
+        mut self,
+        message: impl Fn(Option<Point>) -> Message + 'a,
+    ) -> Self {
+        self.on_right_press_no_capture = Some(Box::new(message));
         self
     }
 
@@ -87,6 +98,7 @@ impl<'a, Message, Renderer> MouseArea<'a, Message, Renderer> {
             on_press: None,
             on_release: None,
             on_right_press: None,
+            on_right_press_no_capture: None,
             on_right_release: None,
             on_middle_press: None,
             on_middle_release: None,
@@ -282,6 +294,14 @@ fn update<Message: Clone, Renderer>(
             shell.publish(message(cursor.position_in(layout.bounds())));
 
             return event::Status::Captured;
+        }
+    }
+
+    if let Some(message) = widget.on_right_press_no_capture.as_ref() {
+        if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)) = event {
+            shell.publish(message(cursor.position_in(layout.bounds())));
+
+            return event::Status::Ignored;
         }
     }
 

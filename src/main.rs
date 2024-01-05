@@ -416,6 +416,8 @@ impl Application for App {
                     }
                     _ => {}
                 }
+                // Disable side context page
+                self.core.window.show_context = false;
             }
             Message::TabMessage(entity, tab_message) => {
                 let mut update_opt = None;
@@ -451,6 +453,7 @@ impl Application for App {
             },
             //TODO: TABRELOAD
             Message::ToggleContextPage(context_page) => {
+                //TODO: ensure context menus are closed
                 if self.context_page == context_page {
                     self.core.window.show_context = !self.core.window.show_context;
                 } else {
