@@ -217,6 +217,7 @@ pub enum Message {
     Click(Option<usize>),
     Home,
     Parent,
+    View(View),
 }
 
 #[derive(Clone)]
@@ -396,6 +397,9 @@ impl Tab {
                 if let Some(parent) = self.path.parent() {
                     cd = Some(parent.to_owned());
                 }
+            }
+            Message::View(view) => {
+                self.view = view;
             }
         }
         if let Some(path) = cd {

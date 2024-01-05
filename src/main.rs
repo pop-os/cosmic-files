@@ -482,6 +482,16 @@ impl Application for App {
         let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
 
         let active = self.tab_model.active();
+        let current_view = if let Some(tab) = self.tab_model.data::<Tab>(active) {
+            tab.view
+        } else {
+            tab::View::Grid
+        };
+        let (view, view_icon) = match current_view {
+            tab::View::Grid => (tab::View::List, "view-list-symbolic"),
+            tab::View::List => (tab::View::Grid, "view-grid-symbolic"),
+        };
+
         vec![row![
             widget::button(widget::icon::from_name("list-add-symbolic").size(16).icon())
                 .on_press(Message::TabNew)
@@ -493,6 +503,10 @@ impl Application for App {
                 .style(style::Button::Icon),
             widget::button(widget::icon::from_name("go-up-symbolic").size(16).icon())
                 .on_press(Message::TabMessage(active, tab::Message::Parent))
+                .padding(space_xxs)
+                .style(style::Button::Icon),
+            widget::button(widget::icon::from_name(view_icon).size(16).icon())
+                .on_press(Message::TabMessage(active, tab::Message::View(view)))
                 .padding(space_xxs)
                 .style(style::Button::Icon)
         ]
