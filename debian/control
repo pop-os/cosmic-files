@@ -12,5 +12,5 @@ Homepage: https://github.com/pop-os/cosmic-files
 
 Package: cosmic-files
 Architecture: amd64 arm64
-Depends: ${misc:Depends}, ${shlibs:Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}, xdg-utils
 Description: Cosmic File Manager
