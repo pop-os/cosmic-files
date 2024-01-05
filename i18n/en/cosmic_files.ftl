@@ -14,6 +14,8 @@ dark = Dark
 light = Light
 
 # Context menu
+new-file = New file
+new-folder = New folder
 copy = Copy
 paste = Paste
 select-all = Select all

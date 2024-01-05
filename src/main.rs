@@ -100,6 +100,8 @@ pub struct Flags {
 #[derive(Clone, Copy, Debug)]
 pub enum Action {
     Copy,
+    NewFile,
+    NewFolder,
     Paste,
     SelectAll,
     Settings,
@@ -110,6 +112,8 @@ impl Action {
     pub fn message(self, entity: segmented_button::Entity) -> Message {
         match self {
             Action::Copy => Message::Copy(Some(entity)),
+            Action::NewFile => Message::NewFile(Some(entity)),
+            Action::NewFolder => Message::NewFolder(Some(entity)),
             Action::Paste => Message::Paste(Some(entity)),
             Action::SelectAll => Message::SelectAll(Some(entity)),
             Action::Settings => Message::ToggleContextPage(ContextPage::Settings),
@@ -125,6 +129,8 @@ pub enum Message {
     AppTheme(AppTheme),
     Config(Config),
     Copy(Option<segmented_button::Entity>),
+    NewFile(Option<segmented_button::Entity>),
+    NewFolder(Option<segmented_button::Entity>),
     Paste(Option<segmented_button::Entity>),
     SelectAll(Option<segmented_button::Entity>),
     SystemThemeModeChange(cosmic_theme::ThemeMode),
@@ -318,6 +324,12 @@ impl Application for App {
             }
             Message::Copy(entity_opt) => {
                 log::warn!("TODO: COPY");
+            }
+            Message::NewFile(entity_opt) => {
+                log::warn!("TODO: NEW FILE");
+            }
+            Message::NewFolder(entity_opt) => {
+                log::warn!("TODO: NEW FOLDER");
             }
             Message::Paste(entity_opt) => {
                 log::warn!("TODO: PASTE");

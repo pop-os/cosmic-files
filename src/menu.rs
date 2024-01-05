@@ -34,6 +34,9 @@ pub fn context_menu<'a>(entity: segmented_button::Entity) -> Element<'a, Message
     };
 
     widget::container(column!(
+        menu_action(fl!("new-file"), Action::NewFile),
+        menu_action(fl!("new-folder"), Action::NewFolder),
+        horizontal_rule(1),
         menu_action(fl!("copy"), Action::Copy),
         menu_action(fl!("paste"), Action::Paste),
         menu_action(fl!("select-all"), Action::SelectAll),
