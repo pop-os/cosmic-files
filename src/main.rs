@@ -242,7 +242,7 @@ impl App {
             if let Some(ref items) = tab.items_opt {
                 for item in items.iter() {
                     if item.select_time.is_some() {
-                        children.push(item.property_view());
+                        children.push(item.property_view(&self.core));
                     }
                 }
             }
@@ -359,6 +359,10 @@ impl Application for App {
                     if let Some(ref mut items) = tab.items_opt {
                         let select_time = Instant::now();
                         for item in items.iter_mut() {
+                            if item.hidden {
+                                //TODO: option to show hidden files
+                                continue;
+                            }
                             item.select_time = Some(select_time);
                         }
                     }

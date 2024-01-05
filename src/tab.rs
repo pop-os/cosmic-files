@@ -231,14 +231,14 @@ pub struct Item {
 }
 
 impl Item {
-    pub fn property_view(&self) -> Element<crate::Message> {
-        let mut children = Vec::new();
-        children.push(
-            widget::icon::icon(self.icon_handle_grid.clone())
-                .size(ICON_SIZE_GRID)
+    pub fn property_view(&self, core: &Core) -> Element<crate::Message> {
+        let mut section = widget::settings::view_section("");
+        section = section.add(widget::settings::item::item_row(vec![
+            widget::icon::icon(self.icon_handle_list.clone())
+                .size(ICON_SIZE_LIST)
                 .into(),
-        );
-        children.push(widget::text(self.name.clone()).into());
+            widget::text(self.name.clone()).into(),
+        ]));
 
         //TODO: translate!
         //TODO: correct display of folder size?
@@ -262,43 +262,46 @@ impl Item {
                 }
             }
 
-            children
-                .push(widget::text(format!("Size: {}", format_size(self.metadata.len()))).into());
+            section = section.add(widget::settings::item::item(
+                "Size",
+                widget::text(format_size(self.metadata.len())),
+            ));
         }
 
         if let Ok(time) = self.metadata.accessed() {
-            children.push(
-                widget::text(format!(
-                    "Accessed: {}",
-                    chrono::DateTime::<chrono::Local>::from(time).format("%c")
-                ))
-                .into(),
-            );
+            section = section.add(widget::settings::item(
+                "Accessed",
+                widget::text(
+                    chrono::DateTime::<chrono::Local>::from(time)
+                        .format("%c")
+                        .to_string(),
+                ),
+            ));
         }
 
         if let Ok(time) = self.metadata.modified() {
-            children.push(
-                widget::text(format!(
-                    "Modified: {}",
-                    chrono::DateTime::<chrono::Local>::from(time).format("%c")
-                ))
-                .into(),
-            );
+            section = section.add(widget::settings::item(
+                "Modified",
+                widget::text(
+                    chrono::DateTime::<chrono::Local>::from(time)
+                        .format("%c")
+                        .to_string(),
+                ),
+            ));
         }
 
         if let Ok(time) = self.metadata.created() {
-            children.push(
-                widget::text(format!(
-                    "Created: {}",
-                    chrono::DateTime::<chrono::Local>::from(time).format("%c")
-                ))
-                .into(),
-            );
+            section = section.add(widget::settings::item(
+                "Created",
+                widget::text(
+                    chrono::DateTime::<chrono::Local>::from(time)
+                        .format("%c")
+                        .to_string(),
+                ),
+            ));
         }
 
-        widget::column::with_children(children)
-            .width(Length::Fill)
-            .into()
+        section.into()
     }
 }
 
