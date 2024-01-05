@@ -92,6 +92,26 @@ fn folder_icon(path: &PathBuf, icon_size: u16) -> widget::icon::Handle {
         .handle()
 }
 
+//TODO: translate, add more levels?
+fn format_size(size: u64) -> String {
+    const KIB: u64 = 1024;
+    const MIB: u64 = 1024 * KIB;
+    const GIB: u64 = 1024 * MIB;
+    const TIB: u64 = 1024 * GIB;
+
+    if size >= 4 * TIB {
+        format!("{:.1} TiB", size as f64 / TIB as f64)
+    } else if size >= GIB {
+        format!("{:.1} GiB", size as f64 / GIB as f64)
+    } else if size >= MIB {
+        format!("{:.1} MiB", size as f64 / MIB as f64)
+    } else if size >= KIB {
+        format!("{:.1} KiB", size as f64 / KIB as f64)
+    } else {
+        format!("{} B", size)
+    }
+}
+
 #[cfg(not(target_os = "windows"))]
 fn hidden_attribute(_metadata: &Metadata) -> bool {
     false
@@ -244,25 +264,6 @@ impl Item {
         //TODO: translate!
         //TODO: correct display of folder size?
         if !self.metadata.is_dir() {
-            const KIB: u64 = 1024;
-            const MIB: u64 = 1024 * KIB;
-            const GIB: u64 = 1024 * MIB;
-            const TIB: u64 = 1024 * GIB;
-
-            fn format_size(size: u64) -> String {
-                if size >= 4 * TIB {
-                    format!("{:.1} TiB", size as f64 / TIB as f64)
-                } else if size >= GIB {
-                    format!("{:.1} GiB", size as f64 / GIB as f64)
-                } else if size >= MIB {
-                    format!("{:.1} MiB", size as f64 / MIB as f64)
-                } else if size >= KIB {
-                    format!("{:.1} KiB", size as f64 / KIB as f64)
-                } else {
-                    format!("{} B", size)
-                }
-            }
-
             section = section.add(widget::settings::item::item(
                 "Size",
                 widget::text(format_size(self.metadata.len())),
@@ -489,6 +490,25 @@ impl Tab {
         let cosmic_theme::Spacing { space_xxs, .. } = core.system_theme().cosmic().spacing;
 
         let mut children: Vec<Element<_>> = Vec::new();
+
+        children.push(
+            //TODO: translate
+            widget::row::with_children(vec![
+                widget::text("Name").into(),
+                widget::horizontal_space(Length::Fill).into(),
+                widget::text("Size").into(),
+                // Hack to make room for scroll bar
+                widget::horizontal_space(Length::Fixed(space_xxs as f32)).into(),
+            ])
+            .align_items(Alignment::Center)
+            .padding(space_xxs)
+            .spacing(space_xxs)
+            .into(),
+        );
+
+        //TODO: export in cosmic::widget
+        children.push(cosmic::iced::widget::horizontal_rule(1).into());
+
         if let Some(ref items) = self.items_opt {
             let mut count = 0;
             let mut hidden = 0;
@@ -499,18 +519,27 @@ impl Tab {
                     continue;
                 }
 
+                //TODO: align columns
                 let button = widget::button(
                     widget::row::with_children(vec![
                         widget::icon::icon(item.icon_handle_list.clone())
                             .size(ICON_SIZE_LIST)
                             .into(),
                         widget::text(item.name.clone()).into(),
+                        widget::horizontal_space(Length::Fill).into(),
+                        widget::text(if item.metadata.is_dir() {
+                            "\u{2014}".to_string()
+                        } else {
+                            format_size(item.metadata.len())
+                        })
+                        .into(),
+                        // Hack to make room for scroll bar
+                        widget::horizontal_space(Length::Fixed(space_xxs as f32)).into(),
                     ])
                     .align_items(Alignment::Center)
                     .spacing(space_xxs),
                 )
                 .style(button_style(item.select_time.is_some()))
-                .width(Length::Fill)
                 .on_press(Message::Click(Some(i)));
                 if self.context_menu.is_some() {
                     children.push(button.into());
@@ -528,9 +557,7 @@ impl Tab {
                 return self.empty_view(hidden > 0, core);
             }
         }
-        widget::column::with_children(children)
-            .width(Length::Fill)
-            .into()
+        widget::column::with_children(children).into()
     }
 
     pub fn view(&self, core: &Core) -> Element<Message> {
