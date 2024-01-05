@@ -1,3 +1,6 @@
+empty-folder = Empty folder
+empty-folder-hidden = Empty folder (has hidden items)
+
 # Context Pages
 
 ## Settings

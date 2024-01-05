@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{
-    app::{Command, Core, Settings},
+    app::{message, Command, Core, Settings},
     cosmic_config::{self, CosmicConfigEntry},
     cosmic_theme, executor,
     iced::{subscription::Subscription, widget::row, window, Alignment, Length, Point},
@@ -131,6 +131,7 @@ pub enum Message {
     TabContextMenu(segmented_button::Entity, Option<Point>),
     TabMessage(segmented_button::Entity, tab::Message),
     TabNew,
+    TabRescan(segmented_button::Entity, Vec<tab::Item>),
     ToggleContextPage(ContextPage),
 }
 
@@ -159,14 +160,37 @@ pub struct App {
 
 impl App {
     fn open_tab<P: Into<PathBuf>>(&mut self, path: P) -> Command<Message> {
-        let tab = Tab::new(path);
-        self.tab_model
+        let path = path.into();
+        let tab = Tab::new(path.clone());
+        let entity = self
+            .tab_model
             .insert()
             .text(tab.title())
             .data(tab)
             .closable()
-            .activate();
-        self.update_title()
+            .activate()
+            .id();
+        Command::batch([self.update_title(), self.rescan_tab(entity, path)])
+    }
+
+    fn rescan_tab<P: Into<PathBuf>>(
+        &mut self,
+        entity: segmented_button::Entity,
+        path: P,
+    ) -> Command<Message> {
+        let path = path.into();
+        Command::perform(
+            async move {
+                match tokio::task::spawn_blocking(move || tab::rescan(path)).await {
+                    Ok(items) => message::app(Message::TabRescan(entity, items)),
+                    Err(err) => {
+                        log::warn!("failed to rescan: {}", err);
+                        message::none()
+                    }
+                }
+            },
+            |x| x,
+        )
     }
 
     fn update_config(&mut self) -> Command<Message> {
@@ -258,17 +282,17 @@ impl Application for App {
             context_page: ContextPage::Settings,
         };
 
+        let mut commands = Vec::new();
+
         for arg in env::args().skip(1) {
-            let _ = app.open_tab(arg);
+            commands.push(app.open_tab(arg));
         }
 
         if app.tab_model.iter().next().is_none() {
-            let _ = app.open_tab(home_dir());
+            commands.push(app.open_tab(home_dir()));
         }
 
-        let command = app.update_title();
-
-        (app, command)
+        (app, Command::batch(commands))
     }
 
     /// Handle application events here.
@@ -339,18 +363,21 @@ impl Application for App {
                 }
             }
             Message::TabMessage(entity, tab_message) => {
-                let mut tab_title_opt = None;
+                let mut update_opt = None;
                 match self.tab_model.data_mut::<Tab>(entity) {
                     Some(tab) => {
                         if tab.update(tab_message) {
-                            tab_title_opt = Some(tab.title());
+                            update_opt = Some((tab.title(), tab.path.clone()));
                         }
                     }
                     _ => (),
                 }
-                if let Some(tab_title) = tab_title_opt {
+                if let Some((tab_title, tab_path)) = update_opt {
                     self.tab_model.text_set(entity, tab_title);
-                    return self.update_title();
+                    return Command::batch([
+                        self.update_title(),
+                        self.rescan_tab(entity, tab_path),
+                    ]);
                 }
             }
             Message::TabNew => {
@@ -361,6 +388,13 @@ impl Application for App {
                 };
                 return self.open_tab(path);
             }
+            Message::TabRescan(entity, items) => match self.tab_model.data_mut::<Tab>(entity) {
+                Some(tab) => {
+                    tab.items_opt = Some(items);
+                }
+                _ => (),
+            },
+            //TODO: TABRELOAD
             Message::ToggleContextPage(context_page) => {
                 if self.context_page == context_page {
                     self.core.window.show_context = !self.core.window.show_context;

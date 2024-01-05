@@ -43,7 +43,7 @@ lazy_static::lazy_static! {
     static ref MIME_ICON_CACHE: Mutex<MimeIconCache> = Mutex::new(MimeIconCache::new());
 }
 
-pub fn mime_icon<P: AsRef<Path>>(path: P, size: u16) -> icon::Icon {
+pub fn mime_icon<P: AsRef<Path>>(path: P, size: u16) -> icon::Handle {
     //TODO: smarter path handling
     let path = path
         .as_ref()
@@ -52,7 +52,7 @@ pub fn mime_icon<P: AsRef<Path>>(path: P, size: u16) -> icon::Icon {
         .to_owned();
     let mut mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
     match mime_icon_cache.get(MimeIconKey { path, size }) {
-        Some(handle) => icon::icon(handle).size(size),
-        None => icon::from_name(FALLBACK_MIME_ICON).size(size).icon(),
+        Some(handle) => handle,
+        None => icon::from_name(FALLBACK_MIME_ICON).size(size).handle(),
     }
 }

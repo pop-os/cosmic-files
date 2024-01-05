@@ -1,19 +1,22 @@
 use cosmic::{
     app::Core,
     cosmic_theme,
-    iced::{Alignment, Length, Point},
+    iced::{
+        alignment::{Horizontal, Vertical},
+        Alignment, Length, Point,
+    },
     theme, widget, Element,
 };
 use std::{
     cmp::Ordering,
     collections::HashMap,
-    fs,
+    fmt, fs,
     path::PathBuf,
     process,
     time::{Duration, Instant},
 };
 
-use crate::mime_icon::mime_icon;
+use crate::{fl, mime_icon::mime_icon};
 
 const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 
@@ -51,10 +54,10 @@ lazy_static::lazy_static! {
     };
 }
 
-fn folder_icon(path: &PathBuf, icon_size: u16) -> widget::icon::Icon {
+fn folder_icon(path: &PathBuf, icon_size: u16) -> widget::icon::Handle {
     widget::icon::from_name(SPECIAL_DIRS.get(path).map_or("folder", |x| *x))
         .size(icon_size)
-        .icon()
+        .handle()
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -115,26 +118,98 @@ pub enum Message {
     Parent,
 }
 
+#[derive(Clone)]
 pub struct Item {
     pub name: String,
     pub path: PathBuf,
     pub hidden: bool,
     pub is_dir: bool,
-    pub icon: widget::icon::Icon,
+    pub icon_handle: widget::icon::Handle,
     pub select_time: Option<Instant>,
 }
 
+impl fmt::Debug for Item {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Item")
+            .field("name", &self.name)
+            .field("path", &self.path)
+            .field("hidden", &self.hidden)
+            .field("is_dir", &self.is_dir)
+            //icon_handle
+            .field("select_time", &self.select_time)
+            .finish()
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct Tab {
     pub path: PathBuf,
     //TODO
     pub context_menu: Option<Point>,
-    pub items: Vec<Item>,
+    pub items_opt: Option<Vec<Item>>,
+}
+
+pub fn rescan(tab_path: PathBuf) -> Vec<Item> {
+    let mut items = Vec::new();
+    match fs::read_dir(&tab_path) {
+        Ok(entries) => {
+            for entry_res in entries {
+                let entry = match entry_res {
+                    Ok(ok) => ok,
+                    Err(err) => {
+                        log::warn!("failed to read entry in {:?}: {}", tab_path, err);
+                        continue;
+                    }
+                };
+
+                let name = match entry.file_name().into_string() {
+                    Ok(some) => some,
+                    Err(name_os) => {
+                        log::warn!(
+                            "failed to parse entry in {:?}: {:?} is not valid UTF-8",
+                            tab_path,
+                            name_os,
+                        );
+                        continue;
+                    }
+                };
+
+                let path = entry.path();
+                let hidden = name.starts_with(".") || hidden_attribute(&path);
+                let is_dir = path.is_dir();
+                //TODO: configurable size
+                let icon_size = 32;
+                let icon_handle = if is_dir {
+                    folder_icon(&path, icon_size)
+                } else {
+                    mime_icon(&path, icon_size)
+                };
+
+                items.push(Item {
+                    name,
+                    path,
+                    hidden,
+                    is_dir,
+                    icon_handle,
+                    select_time: None,
+                });
+            }
+        }
+        Err(err) => {
+            log::warn!("failed to read directory {:?}: {}", tab_path, err);
+        }
+    }
+    items.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+        (true, false) => Ordering::Less,
+        (false, true) => Ordering::Greater,
+        _ => a.name.cmp(&b.name),
+    });
+    items
 }
 
 impl Tab {
-    pub fn new<P: Into<PathBuf>>(path: P) -> Self {
-        let path = path.into();
-        let mut tab = Self {
+    pub fn new(path: PathBuf) -> Self {
+        Self {
             path: match fs::canonicalize(&path) {
                 Ok(absolute) => absolute,
                 Err(err) => {
@@ -143,67 +218,8 @@ impl Tab {
                 }
             },
             context_menu: None,
-            items: Vec::new(),
-        };
-        tab.rescan();
-        tab
-    }
-
-    pub fn rescan(&mut self) {
-        self.items.clear();
-        match fs::read_dir(&self.path) {
-            Ok(entries) => {
-                for entry_res in entries {
-                    let entry = match entry_res {
-                        Ok(ok) => ok,
-                        Err(err) => {
-                            log::warn!("failed to read entry in {:?}: {}", self.path, err);
-                            continue;
-                        }
-                    };
-
-                    let name = match entry.file_name().into_string() {
-                        Ok(some) => some,
-                        Err(name_os) => {
-                            log::warn!(
-                                "failed to parse entry in {:?}: {:?} is not valid UTF-8",
-                                self.path,
-                                name_os,
-                            );
-                            continue;
-                        }
-                    };
-
-                    let path = entry.path();
-                    let hidden = name.starts_with(".") || hidden_attribute(&path);
-                    let is_dir = path.is_dir();
-                    //TODO: configurable size
-                    let icon_size = 32;
-                    let icon = if is_dir {
-                        folder_icon(&path, icon_size)
-                    } else {
-                        mime_icon(&path, icon_size)
-                    };
-
-                    self.items.push(Item {
-                        name,
-                        path,
-                        hidden,
-                        is_dir,
-                        icon,
-                        select_time: None,
-                    });
-                }
-            }
-            Err(err) => {
-                log::warn!("failed to read directory {:?}: {}", self.path, err);
-            }
+            items_opt: None,
         }
-        self.items.sort_by(|a, b| match (a.is_dir, b.is_dir) {
-            (true, false) => Ordering::Less,
-            (false, true) => Ordering::Greater,
-            _ => a.name.cmp(&b.name),
-        });
     }
 
     pub fn title(&self) -> String {
@@ -215,27 +231,33 @@ impl Tab {
         let mut cd = None;
         match message {
             Message::Click(click_i) => {
-                for (i, item) in self.items.iter_mut().enumerate() {
-                    if i == click_i {
-                        if let Some(select_time) = item.select_time {
-                            if select_time.elapsed() < DOUBLE_CLICK_DURATION {
-                                if item.is_dir {
-                                    cd = Some(item.path.clone());
-                                } else {
-                                    let mut command = open_command(&item.path);
-                                    match command.spawn() {
-                                        Ok(_) => (),
-                                        Err(err) => {
-                                            log::warn!("failed to open {:?}: {}", item.path, err);
+                if let Some(ref mut items) = self.items_opt {
+                    for (i, item) in items.iter_mut().enumerate() {
+                        if i == click_i {
+                            if let Some(select_time) = item.select_time {
+                                if select_time.elapsed() < DOUBLE_CLICK_DURATION {
+                                    if item.is_dir {
+                                        cd = Some(item.path.clone());
+                                    } else {
+                                        let mut command = open_command(&item.path);
+                                        match command.spawn() {
+                                            Ok(_) => (),
+                                            Err(err) => {
+                                                log::warn!(
+                                                    "failed to open {:?}: {}",
+                                                    item.path,
+                                                    err
+                                                );
+                                            }
                                         }
                                     }
                                 }
                             }
+                            //TODO: prevent triple-click and beyond from opening file
+                            item.select_time = Some(Instant::now());
+                        } else {
+                            item.select_time = None;
                         }
-                        //TODO: prevent triple-click and beyond from opening file
-                        item.select_time = Some(Instant::now());
-                    } else {
-                        item.select_time = None;
                     }
                 }
             }
@@ -250,7 +272,7 @@ impl Tab {
         }
         if let Some(path) = cd {
             self.path = path;
-            self.rescan();
+            self.items_opt = None;
             true
         } else {
             false
@@ -261,30 +283,60 @@ impl Tab {
         let cosmic_theme::Spacing { space_xxs, .. } = core.system_theme().cosmic().spacing;
 
         let mut column = widget::column();
-        for (i, item) in self.items.iter().enumerate() {
-            if item.hidden {
-                //TODO: SHOW HIDDEN OPTION
-                continue;
+        if let Some(ref items) = self.items_opt {
+            let mut count = 0;
+            let mut hidden = 0;
+            for (i, item) in items.iter().enumerate() {
+                if item.hidden {
+                    hidden += 1;
+                    //TODO: SHOW HIDDEN OPTION
+                    continue;
+                }
+
+                column = column.push(
+                    widget::button(
+                        widget::row::with_children(vec![
+                            widget::icon::icon(item.icon_handle.clone()).into(),
+                            widget::text(item.name.clone()).into(),
+                        ])
+                        .align_items(Alignment::Center)
+                        .spacing(space_xxs),
+                    )
+                    //TODO: improve style
+                    .style(if item.select_time.is_some() {
+                        theme::Button::Standard
+                    } else {
+                        theme::Button::AppletMenu
+                    })
+                    .width(Length::Fill)
+                    .on_press(Message::Click(i)),
+                );
+                count += 1;
             }
 
-            column = column.push(
-                widget::button(
-                    widget::row::with_children(vec![
-                        item.icon.clone().into(),
-                        widget::text(item.name.clone()).into(),
+            if count == 0 {
+                return widget::container(
+                    widget::column::with_children(vec![
+                        widget::icon::from_name("folder-symbolic")
+                            .size(64)
+                            .icon()
+                            .into(),
+                        widget::text(if hidden > 0 {
+                            fl!("empty-folder-hidden")
+                        } else {
+                            fl!("empty-folder")
+                        })
+                        .into(),
                     ])
                     .align_items(Alignment::Center)
                     .spacing(space_xxs),
                 )
-                //TODO: improve style
-                .style(if item.select_time.is_some() {
-                    theme::Button::Standard
-                } else {
-                    theme::Button::AppletMenu
-                })
+                .align_x(Horizontal::Center)
+                .align_y(Vertical::Center)
+                .height(Length::Fill)
                 .width(Length::Fill)
-                .on_press(Message::Click(i)),
-            );
+                .into();
+            }
         }
         widget::scrollable(column.width(Length::Fill)).into()
     }
