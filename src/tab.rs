@@ -19,6 +19,9 @@ use std::{
 use crate::{fl, mime_icon::mime_icon};
 
 const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
+//TODO: configurable
+const ICON_SIZE_LIST: u16 = 32;
+const ICON_SIZE_GRID: u16 = 64;
 
 lazy_static::lazy_static! {
     static ref SPECIAL_DIRS: HashMap<PathBuf, &'static str> = {
@@ -52,6 +55,34 @@ lazy_static::lazy_static! {
         }
         special_dirs
     };
+}
+
+fn button_style(selected: bool) -> theme::Button {
+    //TODO: move to libcosmic
+    theme::Button::Custom {
+        active: Box::new(move |focused, theme| {
+            let mut appearance =
+                widget::button::StyleSheet::active(theme, focused, &theme::Button::MenuItem);
+            if !selected {
+                appearance.background = None;
+            }
+            appearance
+        }),
+        disabled: Box::new(move |theme| {
+            let mut appearance =
+                widget::button::StyleSheet::disabled(theme, &theme::Button::MenuItem);
+            if !selected {
+                appearance.background = None;
+            }
+            appearance
+        }),
+        hovered: Box::new(move |focused, theme| {
+            widget::button::StyleSheet::hovered(theme, focused, &theme::Button::MenuItem)
+        }),
+        pressed: Box::new(move |focused, theme| {
+            widget::button::StyleSheet::pressed(theme, focused, &theme::Button::MenuItem)
+        }),
+    }
 }
 
 fn folder_icon(path: &PathBuf, icon_size: u16) -> widget::icon::Handle {
@@ -111,44 +142,6 @@ fn open_command(path: &PathBuf) -> process::Command {
     command
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum Message {
-    Click(usize),
-    Home,
-    Parent,
-}
-
-#[derive(Clone)]
-pub struct Item {
-    pub name: String,
-    pub path: PathBuf,
-    pub hidden: bool,
-    pub is_dir: bool,
-    pub icon_handle: widget::icon::Handle,
-    pub select_time: Option<Instant>,
-}
-
-impl fmt::Debug for Item {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Item")
-            .field("name", &self.name)
-            .field("path", &self.path)
-            .field("hidden", &self.hidden)
-            .field("is_dir", &self.is_dir)
-            //icon_handle
-            .field("select_time", &self.select_time)
-            .finish()
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Tab {
-    pub path: PathBuf,
-    //TODO
-    pub context_menu: Option<Point>,
-    pub items_opt: Option<Vec<Item>>,
-}
-
 pub fn rescan(tab_path: PathBuf) -> Vec<Item> {
     let mut items = Vec::new();
     match fs::read_dir(&tab_path) {
@@ -178,11 +171,16 @@ pub fn rescan(tab_path: PathBuf) -> Vec<Item> {
                 let hidden = name.starts_with(".") || hidden_attribute(&path);
                 let is_dir = path.is_dir();
                 //TODO: configurable size
-                let icon_size = 32;
-                let icon_handle = if is_dir {
-                    folder_icon(&path, icon_size)
+                let (icon_handle_grid, icon_handle_list) = if is_dir {
+                    (
+                        folder_icon(&path, ICON_SIZE_GRID),
+                        folder_icon(&path, ICON_SIZE_LIST),
+                    )
                 } else {
-                    mime_icon(&path, icon_size)
+                    (
+                        mime_icon(&path, ICON_SIZE_GRID),
+                        mime_icon(&path, ICON_SIZE_LIST),
+                    )
                 };
 
                 items.push(Item {
@@ -190,7 +188,8 @@ pub fn rescan(tab_path: PathBuf) -> Vec<Item> {
                     path,
                     hidden,
                     is_dir,
-                    icon_handle,
+                    icon_handle_grid,
+                    icon_handle_list,
                     select_time: None,
                 });
             }
@@ -207,6 +206,52 @@ pub fn rescan(tab_path: PathBuf) -> Vec<Item> {
     items
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum Message {
+    Click(usize),
+    Home,
+    Parent,
+}
+
+#[derive(Clone)]
+pub struct Item {
+    pub name: String,
+    pub path: PathBuf,
+    pub hidden: bool,
+    pub is_dir: bool,
+    pub icon_handle_grid: widget::icon::Handle,
+    pub icon_handle_list: widget::icon::Handle,
+    pub select_time: Option<Instant>,
+}
+
+impl fmt::Debug for Item {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Item")
+            .field("name", &self.name)
+            .field("path", &self.path)
+            .field("hidden", &self.hidden)
+            .field("is_dir", &self.is_dir)
+            //icon_handles
+            .field("select_time", &self.select_time)
+            .finish()
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum View {
+    Grid,
+    List,
+}
+
+#[derive(Clone, Debug)]
+pub struct Tab {
+    pub path: PathBuf,
+    //TODO
+    pub context_menu: Option<Point>,
+    pub items_opt: Option<Vec<Item>>,
+    pub view: View,
+}
+
 impl Tab {
     pub fn new(path: PathBuf) -> Self {
         Self {
@@ -219,6 +264,7 @@ impl Tab {
             },
             context_menu: None,
             items_opt: None,
+            view: View::Grid,
         }
     }
 
@@ -279,10 +325,36 @@ impl Tab {
         }
     }
 
-    pub fn view(&self, core: &Core) -> Element<Message> {
+    pub fn empty_view(&self, has_hidden: bool, core: &Core) -> Element<Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = core.system_theme().cosmic().spacing;
 
-        let mut column = widget::column();
+        widget::container(
+            widget::column::with_children(vec![
+                widget::icon::from_name("folder-symbolic")
+                    .size(64)
+                    .icon()
+                    .into(),
+                widget::text(if has_hidden {
+                    fl!("empty-folder-hidden")
+                } else {
+                    fl!("empty-folder")
+                })
+                .into(),
+            ])
+            .align_items(Alignment::Center)
+            .spacing(space_xxs),
+        )
+        .align_x(Horizontal::Center)
+        .align_y(Vertical::Center)
+        .height(Length::Fill)
+        .width(Length::Fill)
+        .into()
+    }
+
+    pub fn grid_view(&self, core: &Core) -> Element<Message> {
+        let cosmic_theme::Spacing { space_xxs, .. } = core.system_theme().cosmic().spacing;
+
+        let mut children: Vec<Element<_>> = Vec::new();
         if let Some(ref items) = self.items_opt {
             let mut count = 0;
             let mut hidden = 0;
@@ -293,51 +365,82 @@ impl Tab {
                     continue;
                 }
 
-                column = column.push(
+                children.push(
                     widget::button(
-                        widget::row::with_children(vec![
-                            widget::icon::icon(item.icon_handle.clone()).into(),
+                        widget::column::with_children(vec![
+                            widget::icon::icon(item.icon_handle_grid.clone())
+                                .size(ICON_SIZE_GRID)
+                                .into(),
                             widget::text(item.name.clone()).into(),
                         ])
                         .align_items(Alignment::Center)
-                        .spacing(space_xxs),
+                        .spacing(space_xxs)
+                        //TODO: get from config
+                        .height(Length::Fixed(128.0))
+                        .width(Length::Fixed(128.0)),
                     )
-                    //TODO: improve style
-                    .style(if item.select_time.is_some() {
-                        theme::Button::Standard
-                    } else {
-                        theme::Button::AppletMenu
-                    })
-                    .width(Length::Fill)
-                    .on_press(Message::Click(i)),
+                    .style(button_style(item.select_time.is_some()))
+                    .on_press(Message::Click(i))
+                    .into(),
                 );
                 count += 1;
             }
 
             if count == 0 {
-                return widget::container(
-                    widget::column::with_children(vec![
-                        widget::icon::from_name("folder-symbolic")
-                            .size(64)
-                            .icon()
-                            .into(),
-                        widget::text(if hidden > 0 {
-                            fl!("empty-folder-hidden")
-                        } else {
-                            fl!("empty-folder")
-                        })
-                        .into(),
-                    ])
-                    .align_items(Alignment::Center)
-                    .spacing(space_xxs),
-                )
-                .align_x(Horizontal::Center)
-                .align_y(Vertical::Center)
-                .height(Length::Fill)
-                .width(Length::Fill)
-                .into();
+                return self.empty_view(hidden > 0, core);
             }
         }
-        widget::scrollable(column.width(Length::Fill)).into()
+        widget::flex_row(children).into()
+    }
+
+    pub fn list_view(&self, core: &Core) -> Element<Message> {
+        let cosmic_theme::Spacing { space_xxs, .. } = core.system_theme().cosmic().spacing;
+
+        let mut children: Vec<Element<_>> = Vec::new();
+        if let Some(ref items) = self.items_opt {
+            let mut count = 0;
+            let mut hidden = 0;
+            for (i, item) in items.iter().enumerate() {
+                if item.hidden {
+                    hidden += 1;
+                    //TODO: SHOW HIDDEN OPTION
+                    continue;
+                }
+
+                children.push(
+                    widget::button(
+                        widget::row::with_children(vec![
+                            widget::icon::icon(item.icon_handle_list.clone())
+                                .size(ICON_SIZE_LIST)
+                                .into(),
+                            widget::text(item.name.clone()).into(),
+                        ])
+                        .align_items(Alignment::Center)
+                        .spacing(space_xxs),
+                    )
+                    .style(button_style(item.select_time.is_some()))
+                    .width(Length::Fill)
+                    .on_press(Message::Click(i))
+                    .into(),
+                );
+                count += 1;
+            }
+
+            if count == 0 {
+                return self.empty_view(hidden > 0, core);
+            }
+        }
+        widget::column::with_children(children)
+            .width(Length::Fill)
+            .into()
+    }
+
+    pub fn view(&self, core: &Core) -> Element<Message> {
+        widget::scrollable(match self.view {
+            View::Grid => self.grid_view(core),
+            View::List => self.list_view(core),
+        })
+        .width(Length::Fill)
+        .into()
     }
 }
