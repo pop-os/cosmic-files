@@ -3,6 +3,9 @@ empty-folder-hidden = Prazna fascikla (ima skrivene stavke)
 
 # Context Pages
 
+## Properties
+properties = Svojstva
+
 ## Settings
 settings = Podešavanja
 
@@ -19,4 +22,3 @@ new-folder = Nova fascikla
 copy = Kopiraj
 paste = Nalepi
 select-all = Izaberi sve
-new-tab = Novi kartica
