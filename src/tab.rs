@@ -241,7 +241,8 @@ impl Item {
         children.push(widget::text(self.name.clone()).into());
 
         //TODO: translate!
-        {
+        //TODO: correct display of folder size?
+        if !self.metadata.is_dir() {
             const KIB: u64 = 1024;
             const MIB: u64 = 1024 * KIB;
             const GIB: u64 = 1024 * MIB;
