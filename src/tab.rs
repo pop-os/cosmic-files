@@ -211,7 +211,7 @@ pub fn scan_path(tab_path: &PathBuf) -> Vec<Item> {
 
                 items.push(Item {
                     name,
-                    metadata_opt: Some(metadata),
+                    metadata: ItemMetadata::Path(metadata),
                     hidden,
                     path,
                     icon_handle_grid,
@@ -224,7 +224,11 @@ pub fn scan_path(tab_path: &PathBuf) -> Vec<Item> {
             log::warn!("failed to read directory {:?}: {}", tab_path, err);
         }
     }
-    items.sort_by(|a, b| lexical_sort::natural_lexical_cmp(&a.name, &b.name));
+    items.sort_by(|a, b| match (a.metadata.is_dir(), b.metadata.is_dir()) {
+        (true, false) => Ordering::Less,
+        (false, true) => Ordering::Greater,
+        _ => lexical_sort::natural_lexical_cmp(&a.name, &b.name),
+    });
     items
 }
 
@@ -258,19 +262,33 @@ pub fn scan_trash() -> Vec<Item> {
     match trash::os_limited::list() {
         Ok(entries) => {
             for entry in entries {
+                let metadata = match trash::os_limited::metadata(&entry) {
+                    Ok(ok) => ok,
+                    Err(err) => {
+                        log::warn!("failed to get metadata for trash item {:?}: {}", entry, err);
+                        continue;
+                    }
+                };
+
                 let path = entry.original_path();
                 let name = entry.name;
 
                 //TODO: configurable size
-                let (icon_handle_grid, icon_handle_list) = (
-                    mime_icon(&path, ICON_SIZE_GRID),
-                    mime_icon(&path, ICON_SIZE_LIST),
-                );
+                let (icon_handle_grid, icon_handle_list) = if metadata.is_dir {
+                    (
+                        folder_icon(&path, ICON_SIZE_GRID),
+                        folder_icon(&path, ICON_SIZE_LIST),
+                    )
+                } else {
+                    (
+                        mime_icon(&path, ICON_SIZE_GRID),
+                        mime_icon(&path, ICON_SIZE_LIST),
+                    )
+                };
 
                 items.push(Item {
                     name,
-                    //TODO: how will we get proper info on if this is a file or directory?
-                    metadata_opt: None,
+                    metadata: ItemMetadata::Trash(metadata),
                     hidden: false,
                     path,
                     icon_handle_grid,
@@ -283,7 +301,7 @@ pub fn scan_trash() -> Vec<Item> {
             log::warn!("failed to read trash items: {}", err);
         }
     }
-    items.sort_by(|a, b| match (a.is_dir(), b.is_dir()) {
+    items.sort_by(|a, b| match (a.metadata.is_dir(), b.metadata.is_dir()) {
         (true, false) => Ordering::Less,
         (false, true) => Ordering::Greater,
         _ => lexical_sort::natural_lexical_cmp(&a.name, &b.name),
@@ -315,10 +333,25 @@ pub enum Message {
     View(View),
 }
 
+#[derive(Clone, Debug)]
+pub enum ItemMetadata {
+    Path(Metadata),
+    Trash(trash::TrashItemMetadata),
+}
+
+impl ItemMetadata {
+    pub fn is_dir(&self) -> bool {
+        match self {
+            Self::Path(metadata) => metadata.is_dir(),
+            Self::Trash(metadata) => metadata.is_dir,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Item {
     pub name: String,
-    pub metadata_opt: Option<Metadata>,
+    pub metadata: ItemMetadata,
     pub hidden: bool,
     pub path: PathBuf,
     pub icon_handle_grid: widget::icon::Handle,
@@ -327,10 +360,6 @@ pub struct Item {
 }
 
 impl Item {
-    pub fn is_dir(&self) -> bool {
-        self.metadata_opt.as_ref().map_or(false, |x| x.is_dir())
-    }
-
     pub fn property_view(&self, core: &Core) -> Element<crate::Message> {
         let mut section = widget::settings::view_section("");
         section = section.add(widget::settings::item::item_row(vec![
@@ -342,45 +371,50 @@ impl Item {
 
         //TODO: translate!
         //TODO: correct display of folder size?
-        if let Some(ref metadata) = self.metadata_opt {
-            if !metadata.is_dir() {
-                section = section.add(widget::settings::item::item(
-                    "Size",
-                    widget::text(format_size(metadata.len())),
-                ));
-            }
+        match &self.metadata {
+            ItemMetadata::Path(metadata) => {
+                if !metadata.is_dir() {
+                    section = section.add(widget::settings::item::item(
+                        "Size",
+                        widget::text(format_size(metadata.len())),
+                    ));
+                }
 
-            if let Ok(time) = metadata.accessed() {
-                section = section.add(widget::settings::item(
-                    "Accessed",
-                    widget::text(
-                        chrono::DateTime::<chrono::Local>::from(time)
-                            .format("%c")
-                            .to_string(),
-                    ),
-                ));
-            }
+                if let Ok(time) = metadata.accessed() {
+                    section = section.add(widget::settings::item(
+                        "Accessed",
+                        widget::text(
+                            chrono::DateTime::<chrono::Local>::from(time)
+                                .format("%c")
+                                .to_string(),
+                        ),
+                    ));
+                }
 
-            if let Ok(time) = metadata.modified() {
-                section = section.add(widget::settings::item(
-                    "Modified",
-                    widget::text(
-                        chrono::DateTime::<chrono::Local>::from(time)
-                            .format("%c")
-                            .to_string(),
-                    ),
-                ));
-            }
+                if let Ok(time) = metadata.modified() {
+                    section = section.add(widget::settings::item(
+                        "Modified",
+                        widget::text(
+                            chrono::DateTime::<chrono::Local>::from(time)
+                                .format("%c")
+                                .to_string(),
+                        ),
+                    ));
+                }
 
-            if let Ok(time) = metadata.created() {
-                section = section.add(widget::settings::item(
-                    "Created",
-                    widget::text(
-                        chrono::DateTime::<chrono::Local>::from(time)
-                            .format("%c")
-                            .to_string(),
-                    ),
-                ));
+                if let Ok(time) = metadata.created() {
+                    section = section.add(widget::settings::item(
+                        "Created",
+                        widget::text(
+                            chrono::DateTime::<chrono::Local>::from(time)
+                                .format("%c")
+                                .to_string(),
+                        ),
+                    ));
+                }
+            }
+            ItemMetadata::Trash(metadata) => {
+                //TODO: trash metadata
             }
         }
 
@@ -392,7 +426,7 @@ impl fmt::Debug for Item {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Item")
             .field("name", &self.name)
-            .field("metadata_opt", &self.metadata_opt)
+            .field("metadata", &self.metadata)
             .field("hidden", &self.hidden)
             .field("path", &self.path)
             // icon_handles
@@ -447,7 +481,7 @@ impl Tab {
                         if Some(i) == click_i_opt {
                             if let Some(select_time) = item.select_time {
                                 if select_time.elapsed() < DOUBLE_CLICK_DURATION {
-                                    if item.is_dir() {
+                                    if item.path.is_dir() {
                                         cd = Some(Location::Path(item.path.clone()));
                                     } else {
                                         let mut command = open_command(&item.path);
@@ -616,13 +650,21 @@ impl Tab {
                             .into(),
                         widget::text(item.name.clone()).into(),
                         widget::horizontal_space(Length::Fill).into(),
-                        widget::text(if item.is_dir() {
-                            "\u{2014}".to_string()
-                        } else {
-                            if let Some(ref metadata) = item.metadata_opt {
-                                format_size(metadata.len())
-                            } else {
-                                "\u{2014}".to_string()
+                        widget::text(match &item.metadata {
+                            ItemMetadata::Path(metadata) => {
+                                //TODO: directory entry count
+                                if metadata.is_dir() {
+                                    "\u{2014}".to_string()
+                                } else {
+                                    format_size(metadata.len())
+                                }
+                            }
+                            ItemMetadata::Trash(metadata) => {
+                                if metadata.is_dir {
+                                    format!("{} items", metadata.size)
+                                } else {
+                                    format_size(metadata.size)
+                                }
                             }
                         })
                         .into(),
