@@ -209,9 +209,22 @@ pub fn scan_path(tab_path: &PathBuf) -> Vec<Item> {
                     )
                 };
 
+                let children = if metadata.is_dir() {
+                    //TODO: calculate children in the background (and make it cancellable?)
+                    match fs::read_dir(&path) {
+                        Ok(entries) => entries.count(),
+                        Err(err) => {
+                            log::warn!("failed to read directory {:?}: {}", path, err);
+                            0
+                        }
+                    }
+                } else {
+                    0
+                };
+
                 items.push(Item {
                     name,
-                    metadata: ItemMetadata::Path(metadata),
+                    metadata: ItemMetadata::Path(metadata, children),
                     hidden,
                     path,
                     icon_handle_grid,
@@ -335,14 +348,14 @@ pub enum Message {
 
 #[derive(Clone, Debug)]
 pub enum ItemMetadata {
-    Path(Metadata),
+    Path(Metadata, usize),
     Trash(trash::TrashItemMetadata),
 }
 
 impl ItemMetadata {
     pub fn is_dir(&self) -> bool {
         match self {
-            Self::Path(metadata) => metadata.is_dir(),
+            Self::Path(metadata, _) => metadata.is_dir(),
             Self::Trash(metadata) => metadata.is_dir,
         }
     }
@@ -372,8 +385,13 @@ impl Item {
         //TODO: translate!
         //TODO: correct display of folder size?
         match &self.metadata {
-            ItemMetadata::Path(metadata) => {
-                if !metadata.is_dir() {
+            ItemMetadata::Path(metadata, children) => {
+                if metadata.is_dir() {
+                    section = section.add(widget::settings::item::item(
+                        "Items",
+                        widget::text(format!("{}", children)),
+                    ));
+                } else {
                     section = section.add(widget::settings::item::item(
                         "Size",
                         widget::text(format_size(metadata.len())),
@@ -456,7 +474,7 @@ impl Tab {
             location,
             context_menu: None,
             items_opt: None,
-            view: View::Grid,
+            view: View::List,
         }
     }
 
@@ -651,10 +669,9 @@ impl Tab {
                         widget::text(item.name.clone()).into(),
                         widget::horizontal_space(Length::Fill).into(),
                         widget::text(match &item.metadata {
-                            ItemMetadata::Path(metadata) => {
-                                //TODO: directory entry count
+                            ItemMetadata::Path(metadata, children) => {
                                 if metadata.is_dir() {
-                                    "\u{2014}".to_string()
+                                    format!("{} items", children)
                                 } else {
                                     format_size(metadata.len())
                                 }
