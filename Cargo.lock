@@ -1204,7 +1204,7 @@ dependencies = [
  "ident_case",
  "proc-macro2",
  "quote",
- "strsim 0.10.0",
+ "strsim 0.10.1",
  "syn 2.0.48",
 ]
 
@@ -2275,7 +2275,7 @@ dependencies = [
  "proc-macro-error",
  "proc-macro2",
  "quote",
- "strsim 0.10.0",
+ "strsim 0.10.1",
  "syn 2.0.48",
  "unic-langid",
 ]
@@ -2770,9 +2770,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.151"
+version = "0.2.152"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "302d7ab3130588088d277783b1e2d2e10c9e9e4a16dd9050e6ec93fb3e7048f4"
+checksum = "13e3bf6590cbc649f4d1a3eefc9d5d6eb746f5200ffb04e5e142700b8faa56e7"
 
 [[package]]
 name = "libcosmic"
@@ -4659,9 +4659,9 @@ checksum = "6446ced80d6c486436db5c078dde11a9f73d42b57fb273121e160b84f63d894c"
 
 [[package]]
 name = "strsim"
-version = "0.10.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
+checksum = "ccbca6f34534eb78dbee83f6b2c9442fea7113f43d9e80ea320f0972ae5dc08d"
 
 [[package]]
 name = "svg_fmt"
@@ -5003,7 +5003,7 @@ dependencies = [
 [[package]]
 name = "trash"
 version = "3.1.2"
-source = "git+https://github.com/jackpot51/trash-rs#1a1f75e59b4c18abdf6bc8790a4e54b53dff50df"
+source = "git+https://github.com/jackpot51/trash-rs#c2177ebf48ce2578cf4281dfcded7b7fcf702d55"
 dependencies = [
  "chrono",
  "libc",
