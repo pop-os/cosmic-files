@@ -5003,7 +5003,7 @@ dependencies = [
 [[package]]
 name = "trash"
 version = "3.1.2"
-source = "git+https://github.com/jackpot51/trash-rs#c2177ebf48ce2578cf4281dfcded7b7fcf702d55"
+source = "git+https://github.com/jackpot51/trash-rs#fd89ea5d780fa111d12fbe6644dc4153a78565c5"
 dependencies = [
  "chrono",
  "libc",
