@@ -331,7 +331,7 @@ pub fn scan_trash() -> Vec<Item> {
     items
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Location {
     Path(PathBuf),
     Trash,
@@ -548,9 +548,13 @@ impl Tab {
             }
         }
         if let Some(location) = cd {
-            self.location = location;
-            self.items_opt = None;
-            true
+            if location != self.location {
+                self.location = location;
+                self.items_opt = None;
+                true
+            } else {
+                false
+            }
         } else {
             false
         }

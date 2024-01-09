@@ -10,13 +10,7 @@ use cosmic::{
     widget::{self, segmented_button},
     Application, ApplicationExt, Element,
 };
-use std::{
-    any::TypeId,
-    env, fs,
-    path::{Path, PathBuf},
-    process,
-    time::Instant,
-};
+use std::{any::TypeId, env, fs, path::PathBuf, process, time::Instant};
 
 use config::{AppTheme, Config, CONFIG_VERSION};
 mod config;
@@ -368,6 +362,25 @@ impl Application for App {
         }
 
         (app, Command::batch(commands))
+    }
+
+    // The default nav_bar widget needs to have its width reduced for cosmic-files
+    fn nav_bar(&self) -> Option<Element<message::Message<Self::Message>>> {
+        if !self.core().nav_bar_active() {
+            return None;
+        }
+
+        let nav_model = self.nav_model()?;
+
+        let mut nav = crate::widget::nav_bar(nav_model, |entity| {
+            message::cosmic(cosmic::app::cosmic::Message::NavBar(entity))
+        });
+
+        if !self.core().is_condensed() {
+            nav = nav.max_width(200);
+        }
+
+        Some(Element::from(nav))
     }
 
     fn nav_model(&self) -> Option<&segmented_button::SingleSelectModel> {

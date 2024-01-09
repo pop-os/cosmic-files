@@ -11,7 +11,7 @@ use cosmic::{
     Element,
 };
 
-use crate::{fl, Action, Config, Message};
+use crate::{fl, Action, Message};
 
 macro_rules! menu_button {
     ($($x:expr),+ $(,)?) => (
