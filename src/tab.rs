@@ -86,10 +86,19 @@ fn button_style(selected: bool) -> theme::Button {
     }
 }
 
-fn folder_icon(path: &PathBuf, icon_size: u16) -> widget::icon::Handle {
+pub fn folder_icon(path: &PathBuf, icon_size: u16) -> widget::icon::Handle {
     widget::icon::from_name(SPECIAL_DIRS.get(path).map_or("folder", |x| *x))
         .size(icon_size)
         .handle()
+}
+
+pub fn folder_icon_symbolic(path: &PathBuf, icon_size: u16) -> widget::icon::Handle {
+    widget::icon::from_name(format!(
+        "{}-symbolic",
+        SPECIAL_DIRS.get(path).map_or("folder", |x| *x)
+    ))
+    .size(icon_size)
+    .handle()
 }
 
 //TODO: translate, add more levels?
@@ -337,12 +346,11 @@ impl Location {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum Message {
     Click(Option<usize>),
-    Home,
+    Location(Location),
     Parent,
-    Trash,
     View(View),
 }
 
@@ -431,7 +439,7 @@ impl Item {
                     ));
                 }
             }
-            ItemMetadata::Trash(metadata) => {
+            ItemMetadata::Trash(_metadata) => {
                 //TODO: trash metadata
             }
         }
@@ -525,8 +533,8 @@ impl Tab {
                 }
                 self.context_menu = None;
             }
-            Message::Home => {
-                cd = Some(Location::Path(crate::home_dir()));
+            Message::Location(location) => {
+                cd = Some(location);
             }
             Message::Parent => {
                 if let Location::Path(path) = &self.location {
@@ -534,9 +542,6 @@ impl Tab {
                         cd = Some(Location::Path(parent.to_owned()));
                     }
                 }
-            }
-            Message::Trash => {
-                cd = Some(Location::Trash);
             }
             Message::View(view) => {
                 self.view = view;
@@ -676,13 +681,12 @@ impl Tab {
                                     format_size(metadata.len())
                                 }
                             }
-                            ItemMetadata::Trash(metadata) => {
-                                if metadata.is_dir {
-                                    format!("{} items", metadata.size)
-                                } else {
-                                    format_size(metadata.size)
+                            ItemMetadata::Trash(metadata) => match metadata.size {
+                                trash::TrashItemSize::Entries(entries) => {
+                                    format!("{} items", entries)
                                 }
-                            }
+                                trash::TrashItemSize::Bytes(bytes) => format_size(bytes),
+                            },
                         })
                         .into(),
                         // Hack to make room for scroll bar

@@ -173,6 +173,7 @@ impl ContextPage {
 /// The [`App`] stores application-specific state.
 pub struct App {
     core: Core,
+    nav_model: segmented_button::SingleSelectModel,
     tab_model: segmented_button::Model<segmented_button::SingleSelect>,
     config_handler: Option<cosmic_config::Config>,
     config: Config,
@@ -308,8 +309,40 @@ impl Application for App {
     fn init(core: Core, flags: Self::Flags) -> (Self, Command<Self::Message>) {
         let app_themes = vec![fl!("match-desktop"), fl!("dark"), fl!("light")];
 
+        let mut nav_model = segmented_button::ModelBuilder::default();
+        //TODO: Sort by name?
+        for dir_opt in &[
+            dirs::home_dir(),
+            dirs::document_dir(),
+            dirs::download_dir(),
+            dirs::audio_dir(),
+            dirs::picture_dir(),
+            dirs::video_dir(),
+        ] {
+            if let Some(dir) = dir_opt {
+                if let Some(file_name) = dir.file_name().and_then(|x| x.to_str()) {
+                    nav_model = nav_model.insert(move |b| {
+                        b.text(file_name.to_string())
+                            .icon(widget::icon::icon(tab::folder_icon_symbolic(&dir, 16)).size(16))
+                            .data(Location::Path(dir.clone()))
+                    });
+                }
+            }
+        }
+        nav_model = nav_model.insert(|b| {
+            b.text(fl!("trash"))
+                .icon(
+                    //TODO: dynamic empty/full icon
+                    widget::icon::from_name("user-trash-full-symbolic")
+                        .size(16)
+                        .icon(),
+                )
+                .data(Location::Trash)
+        });
+
         let mut app = App {
             core,
+            nav_model: nav_model.build(),
             tab_model: segmented_button::ModelBuilder::default().build(),
             config_handler: flags.config_handler,
             config: flags.config,
@@ -335,6 +368,24 @@ impl Application for App {
         }
 
         (app, Command::batch(commands))
+    }
+
+    fn nav_model(&self) -> Option<&segmented_button::SingleSelectModel> {
+        Some(&self.nav_model)
+    }
+
+    fn on_nav_select(&mut self, entity: segmented_button::Entity) -> Command<Self::Message> {
+        let location_opt = self.nav_model.data::<Location>(entity).clone();
+
+        if let Some(location) = location_opt {
+            let message = Message::TabMessage(
+                self.tab_model.active(),
+                tab::Message::Location(location.clone()),
+            );
+            return self.update(message);
+        }
+
+        Command::none()
     }
 
     /// Handle application events here.
@@ -499,6 +550,26 @@ impl Application for App {
         let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
 
         let active = self.tab_model.active();
+
+        //TODO: dynamically show items
+        vec![row![
+            widget::button(widget::icon::from_name("list-add-symbolic").size(16).icon())
+                .on_press(Message::TabNew)
+                .padding(space_xxs)
+                .style(style::Button::Icon),
+            widget::button(widget::icon::from_name("go-up-symbolic").size(16).icon())
+                .on_press(Message::TabMessage(active, tab::Message::Parent))
+                .padding(space_xxs)
+                .style(style::Button::Icon),
+        ]
+        .align_items(Alignment::Center)
+        .into()]
+    }
+
+    fn header_end(&self) -> Vec<Element<Self::Message>> {
+        let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
+
+        let active = self.tab_model.active();
         let current_view = if let Some(tab) = self.tab_model.data::<Tab>(active) {
             tab.view
         } else {
@@ -509,48 +580,20 @@ impl Application for App {
             tab::View::List => (tab::View::Grid, "view-grid-symbolic"),
         };
 
-        //TODO: use nav bar instead, dynamically show items
         vec![row![
-            widget::button(widget::icon::from_name("list-add-symbolic").size(16).icon())
-                .on_press(Message::TabNew)
-                .padding(space_xxs)
-                .style(style::Button::Icon),
-            widget::button(widget::icon::from_name("go-home-symbolic").size(16).icon())
-                .on_press(Message::TabMessage(active, tab::Message::Home))
-                .padding(space_xxs)
-                .style(style::Button::Icon),
-            widget::button(widget::icon::from_name("go-up-symbolic").size(16).icon())
-                .on_press(Message::TabMessage(active, tab::Message::Parent))
-                .padding(space_xxs)
-                .style(style::Button::Icon),
-            widget::button(
-                widget::icon::from_name("user-trash-full-symbolic")
-                    .size(16)
-                    .icon()
-            )
-            .on_press(Message::TabMessage(active, tab::Message::Trash))
-            .padding(space_xxs)
-            .style(style::Button::Icon),
             widget::button(widget::icon::from_name(view_icon).size(16).icon())
                 .on_press(Message::TabMessage(active, tab::Message::View(view)))
                 .padding(space_xxs)
-                .style(style::Button::Icon)
+                .style(style::Button::Icon),
+            widget::button(
+                widget::icon::from_name("preferences-system-symbolic")
+                    .size(16)
+                    .icon()
+            )
+            .on_press(Message::ToggleContextPage(ContextPage::Settings))
+            .padding(space_xxs)
+            .style(style::Button::Icon)
         ]
-        .align_items(Alignment::Center)
-        .into()]
-    }
-
-    fn header_end(&self) -> Vec<Element<Self::Message>> {
-        let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
-
-        vec![row![widget::button(
-            widget::icon::from_name("preferences-system-symbolic")
-                .size(16)
-                .icon()
-        )
-        .on_press(Message::ToggleContextPage(ContextPage::Settings))
-        .padding(space_xxs)
-        .style(style::Button::Icon)]
         .align_items(Alignment::Center)
         .into()]
     }
