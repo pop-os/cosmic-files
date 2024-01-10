@@ -3,6 +3,7 @@ use cosmic::{
     cosmic_theme,
     iced::{
         alignment::{Horizontal, Vertical},
+        keyboard::Modifiers,
         Alignment, Length, Point,
     },
     theme, widget, Element,
@@ -505,7 +506,7 @@ impl Tab {
         }
     }
 
-    pub fn update(&mut self, message: Message) -> bool {
+    pub fn update(&mut self, message: Message, modifiers: Modifiers) -> bool {
         let mut cd = None;
         match message {
             Message::Click(click_i_opt) => {
@@ -541,6 +542,9 @@ impl Tab {
                             }
                             //TODO: prevent triple-click and beyond from opening file?
                             item.click_time = Some(Instant::now());
+                        } else if modifiers.contains(Modifiers::CTRL) {
+                            // Holding control allows multiple selection
+                            item.click_time = None;
                         } else {
                             item.selected = false;
                             item.click_time = None;
@@ -564,7 +568,14 @@ impl Tab {
                     if !items.get(click_i).map_or(false, |x| x.selected) {
                         // If item not selected, clear selection on other items
                         for (i, item) in items.iter_mut().enumerate() {
-                            item.selected = i == click_i;
+                            if i == click_i {
+                                item.selected = true;
+                            } else if modifiers.contains(Modifiers::CTRL) {
+                                // Holding control allows multiple selection
+                            } else {
+                                item.selected = false;
+                            }
+                            item.click_time = None;
                         }
                     }
                 }

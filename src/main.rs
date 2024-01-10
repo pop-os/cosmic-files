@@ -5,7 +5,13 @@ use cosmic::{
     app::{message, Command, Core, Settings},
     cosmic_config::{self, CosmicConfigEntry},
     cosmic_theme, executor,
-    iced::{subscription::Subscription, widget::row, window, Alignment, Length, Point},
+    iced::{
+        event,
+        keyboard::{Event as KeyEvent, KeyCode, Modifiers},
+        subscription::Subscription,
+        widget::row,
+        window, Alignment, Event, Length, Point,
+    },
     style,
     widget::{self, segmented_button},
     Application, ApplicationExt, Element,
@@ -135,6 +141,7 @@ pub enum Message {
     AppTheme(AppTheme),
     Config(Config),
     Copy(Option<segmented_button::Entity>),
+    KeyModifiers(Modifiers),
     MoveToTrash(Option<segmented_button::Entity>),
     NewFile(Option<segmented_button::Entity>),
     NewFolder(Option<segmented_button::Entity>),
@@ -176,6 +183,7 @@ pub struct App {
     config: Config,
     app_themes: Vec<String>,
     context_page: ContextPage,
+    modifiers: Modifiers,
 }
 
 impl App {
@@ -345,6 +353,7 @@ impl Application for App {
             config: flags.config,
             app_themes,
             context_page: ContextPage::Settings,
+            modifiers: Modifiers::empty(),
         };
 
         let mut commands = Vec::new();
@@ -424,6 +433,9 @@ impl Application for App {
             }
             Message::Copy(entity_opt) => {
                 log::warn!("TODO: COPY");
+            }
+            Message::KeyModifiers(modifiers) => {
+                self.modifiers = modifiers;
             }
             Message::MoveToTrash(entity_opt) => {
                 log::warn!("TODO: MOVE TO TRASH");
@@ -510,7 +522,7 @@ impl Application for App {
                 let mut update_opt = None;
                 match self.tab_model.data_mut::<Tab>(entity) {
                     Some(tab) => {
-                        if tab.update(tab_message) {
+                        if tab.update(tab_message, self.modifiers) {
                             update_opt = Some((tab.title(), tab.location.clone()));
                         }
                     }
@@ -682,6 +694,62 @@ impl Application for App {
         struct ThemeSubscription;
 
         Subscription::batch([
+            event::listen_with(|event, _status| match event {
+                Event::Keyboard(KeyEvent::KeyPressed {
+                    key_code: KeyCode::A,
+                    modifiers,
+                }) => {
+                    if modifiers == Modifiers::CTRL {
+                        Some(Message::SelectAll(None))
+                    } else {
+                        None
+                    }
+                }
+                Event::Keyboard(KeyEvent::KeyPressed {
+                    key_code: KeyCode::C,
+                    modifiers,
+                }) => {
+                    if modifiers == Modifiers::CTRL {
+                        Some(Message::Copy(None))
+                    } else {
+                        None
+                    }
+                }
+                Event::Keyboard(KeyEvent::KeyPressed {
+                    key_code: KeyCode::X,
+                    modifiers,
+                }) => {
+                    if modifiers == Modifiers::CTRL {
+                        Some(Message::Copy(None))
+                    } else {
+                        None
+                    }
+                }
+                Event::Keyboard(KeyEvent::KeyPressed {
+                    key_code: KeyCode::T,
+                    modifiers,
+                }) => {
+                    if modifiers == Modifiers::CTRL {
+                        Some(Message::TabNew)
+                    } else {
+                        None
+                    }
+                }
+                Event::Keyboard(KeyEvent::KeyPressed {
+                    key_code: KeyCode::V,
+                    modifiers,
+                }) => {
+                    if modifiers == Modifiers::CTRL {
+                        Some(Message::Paste(None))
+                    } else {
+                        None
+                    }
+                }
+                Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
+                    Some(Message::KeyModifiers(modifiers))
+                }
+                _ => None,
+            }),
             cosmic_config::config_subscription(
                 TypeId::of::<ConfigSubscription>(),
                 Self::APP_ID.into(),
