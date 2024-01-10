@@ -655,8 +655,7 @@ impl Application for App {
                         Message::TabContextMenu(entity, point_opt)
                     });
                 }
-                let mut popover =
-                    widget::popover(mouse_area, menu::context_menu(entity, &tab.location));
+                let mut popover = widget::popover(mouse_area, menu::context_menu(entity, &tab));
                 match tab.context_menu {
                     Some(point) => {
                         let rounded = Point::new(point.x.round(), point.y.round());

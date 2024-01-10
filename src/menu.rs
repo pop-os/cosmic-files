@@ -1,17 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{
-    //TODO: export in cosmic::widget
-    iced::{
-        widget::{column, horizontal_rule},
-        Alignment, Background, Length,
-    },
+    //TODO: export iced::widget::horizontal_rule in cosmic::widget
+    iced::{widget::horizontal_rule, Alignment, Background, Length},
     theme,
     widget::{self, segmented_button},
     Element,
 };
 
-use crate::{fl, Action, Location, Message};
+use crate::{fl, Action, Location, Message, Tab};
 
 macro_rules! menu_button {
     ($($x:expr),+ $(,)?) => (
@@ -28,42 +25,45 @@ macro_rules! menu_button {
     );
 }
 
-pub fn context_menu<'a>(
-    entity: segmented_button::Entity,
-    location: &Location,
-) -> Element<'a, Message> {
+pub fn context_menu<'a>(entity: segmented_button::Entity, tab: &Tab) -> Element<'a, Message> {
     let menu_action = |label, action| {
         menu_button!(widget::text(label)).on_press(Message::TabContextAction(entity, action))
     };
 
-    //TODO: change items based on selection
-    let column = match location {
+    let selected = tab
+        .items_opt
+        .as_ref()
+        .map_or(0, |items| items.iter().filter(|x| x.selected).count());
+
+    let mut children: Vec<Element<_>> = Vec::new();
+    match tab.location {
         Location::Path(_) => {
-            column!(
-                menu_action(fl!("new-file"), Action::NewFile),
-                menu_action(fl!("new-folder"), Action::NewFolder),
-                horizontal_rule(1),
-                menu_action(fl!("copy"), Action::Copy),
-                menu_action(fl!("paste"), Action::Paste),
-                menu_action(fl!("select-all"), Action::SelectAll),
-                horizontal_rule(1),
-                menu_action(fl!("move-to-trash"), Action::MoveToTrash),
-                horizontal_rule(1),
-                menu_action(fl!("properties"), Action::Properties),
-            )
+            children.push(menu_action(fl!("new-file"), Action::NewFile).into());
+            children.push(menu_action(fl!("new-folder"), Action::NewFolder).into());
+            children.push(horizontal_rule(1).into());
+            if selected > 0 {
+                children.push(menu_action(fl!("copy"), Action::Copy).into());
+                children.push(menu_action(fl!("paste"), Action::Paste).into());
+            }
+            children.push(menu_action(fl!("select-all"), Action::SelectAll).into());
+            if selected > 0 {
+                children.push(horizontal_rule(1).into());
+                children.push(menu_action(fl!("move-to-trash"), Action::MoveToTrash).into());
+            }
         }
         Location::Trash => {
-            column!(
-                menu_action(fl!("select-all"), Action::SelectAll),
-                horizontal_rule(1),
-                menu_action(fl!("restore-from-trash"), Action::RestoreFromTrash),
-                horizontal_rule(1),
-                menu_action(fl!("properties"), Action::Properties),
-            )
+            children.push(menu_action(fl!("select-all"), Action::SelectAll).into());
+            if selected > 0 {
+                children.push(horizontal_rule(1).into());
+                children
+                    .push(menu_action(fl!("restore-from-trash"), Action::RestoreFromTrash).into());
+            }
         }
-    };
+    }
+    children.push(horizontal_rule(1).into());
+    children.push(menu_action(fl!("properties"), Action::Properties).into());
 
-    widget::container(column)
+    widget::container(widget::column::with_children(children))
         .padding(1)
         //TODO: move style to libcosmic
         .style(theme::Container::custom(|theme| {
