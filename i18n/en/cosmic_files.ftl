@@ -1,5 +1,6 @@
 empty-folder = Empty folder
 empty-folder-hidden = Empty folder (has hidden items)
+filesystem = Filesystem
 trash = Trash
 
 # Context Pages

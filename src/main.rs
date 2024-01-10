@@ -9,8 +9,7 @@ use cosmic::{
         event,
         keyboard::{Event as KeyEvent, KeyCode, Modifiers},
         subscription::Subscription,
-        widget::row,
-        window, Alignment, Event, Length, Point,
+        window, Event, Length, Point,
     },
     style,
     widget::{self, segmented_button},
@@ -601,17 +600,33 @@ impl Application for App {
     }
 
     fn header_start(&self) -> Vec<Element<Self::Message>> {
+        vec![
+            menu::menu_bar().into(),
+            //TODO: use theme defined space?
+            widget::horizontal_space(Length::Fixed(32.0)).into(),
+        ]
+    }
+
+    fn header_center(&self) -> Vec<Element<Self::Message>> {
         let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
 
-        vec![row![
-            menu::menu_bar(),
-            widget::button(widget::icon::from_name("go-up-symbolic").size(16).icon())
-                .on_press(Message::TabMessage(None, tab::Message::Parent))
-                .padding(space_xxs)
-                .style(style::Button::Icon),
+        let entity = self.tab_model.active();
+        let tab = match self.tab_model.data::<Tab>(entity) {
+            Some(some) => some,
+            None => return Vec::new(),
+        };
+
+        vec![tab
+            .breadcrumbs_view(&self.core)
+            .map(move |message| Message::TabMessage(Some(entity), message))
+            .into()]
+    }
+
+    fn header_end(&self) -> Vec<Element<Self::Message>> {
+        vec![
+            //TODO: use defined space
+            widget::horizontal_space(Length::Fixed(32.0)).into(),
         ]
-        .align_items(Alignment::Center)
-        .into()]
     }
 
     /// Creates a view after each update.

@@ -102,6 +102,20 @@ pub fn folder_icon_symbolic(path: &PathBuf, icon_size: u16) -> widget::icon::Han
     .handle()
 }
 
+fn trash_icon_symbolic(icon_size: u16) -> widget::icon::Handle {
+    let full = match trash::os_limited::list() {
+        Ok(entries) => !entries.is_empty(),
+        Err(_err) => false,
+    };
+    widget::icon::from_name(if full {
+        "user-trash-full-symbolic"
+    } else {
+        "user-trash-symbolic"
+    })
+    .size(icon_size)
+    .handle()
+}
+
 //TODO: translate, add more levels?
 fn format_size(size: u64) -> String {
     const KIB: u64 = 1024;
@@ -352,7 +366,6 @@ impl Location {
 pub enum Message {
     Click(Option<usize>),
     Location(Location),
-    Parent,
     RightClick(usize),
     View(View),
 }
@@ -556,13 +569,6 @@ impl Tab {
             Message::Location(location) => {
                 cd = Some(location);
             }
-            Message::Parent => {
-                if let Location::Path(path) = &self.location {
-                    if let Some(parent) = path.parent() {
-                        cd = Some(Location::Path(parent.to_owned()));
-                    }
-                }
-            }
             Message::RightClick(click_i) => {
                 if let Some(ref mut items) = self.items_opt {
                     if !items.get(click_i).map_or(false, |x| x.selected) {
@@ -595,6 +601,81 @@ impl Tab {
         } else {
             false
         }
+    }
+
+    pub fn breadcrumbs_view(&self, core: &Core) -> Element<Message> {
+        let cosmic_theme::Spacing { space_xxxs, .. } = core.system_theme().cosmic().spacing;
+
+        let mut children: Vec<Element<_>> = Vec::new();
+        match &self.location {
+            Location::Path(path) => {
+                let home_dir = crate::home_dir();
+                for ancestor in path.ancestors() {
+                    let ancestor = ancestor.to_path_buf();
+                    let mut found_home = false;
+                    let mut row = widget::row::with_capacity(2)
+                        .align_items(Alignment::Center)
+                        .spacing(space_xxxs);
+                    match ancestor.file_name() {
+                        Some(name) => {
+                            if ancestor == home_dir {
+                                row = row.push(
+                                    widget::icon::icon(folder_icon_symbolic(&ancestor, 16))
+                                        .size(16),
+                                );
+                                found_home = true;
+                            }
+                            row = row.push(widget::text(name.to_string_lossy().to_string()));
+                        }
+                        None => {
+                            row = row.push(
+                                widget::icon::from_name("drive-harddisk-system-symbolic")
+                                    .size(16)
+                                    .icon(),
+                            );
+                            row = row.push(widget::text(fl!("filesystem")));
+                        }
+                    }
+
+                    if !children.is_empty() {
+                        children.push(widget::text("/").into());
+                    }
+
+                    children.push(
+                        widget::button(row)
+                            .padding(space_xxxs)
+                            .on_press(Message::Location(Location::Path(ancestor)))
+                            .style(theme::Button::Text)
+                            .into(),
+                    );
+
+                    if found_home {
+                        break;
+                    }
+                }
+                children.reverse();
+            }
+            Location::Trash => {
+                let mut row = widget::row::with_capacity(2)
+                    .align_items(Alignment::Center)
+                    .spacing(space_xxxs);
+                row = row.push(widget::icon::icon(trash_icon_symbolic(16)).size(16));
+                row = row.push(widget::text(fl!("trash")));
+
+                children.push(
+                    widget::button(row)
+                        .padding(space_xxxs)
+                        .on_press(Message::Location(Location::Trash))
+                        .style(theme::Button::Text)
+                        .into(),
+                );
+            }
+        }
+        children.push(widget::horizontal_space(Length::Fill).into());
+
+        widget::container(widget::row::with_children(children).align_items(Alignment::Center))
+            .style(theme::Container::Primary)
+            .into()
     }
 
     pub fn empty_view(&self, has_hidden: bool, core: &Core) -> Element<Message> {
