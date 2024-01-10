@@ -1,5 +1,6 @@
 empty-folder = Prazna fascikla
 empty-folder-hidden = Prazna fascikla (ima skrivene stavke)
+filesystem = Sistem datoteka
 trash = Otpad
 
 # Context Pages
