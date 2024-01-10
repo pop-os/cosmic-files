@@ -538,11 +538,9 @@ impl Tab {
                                         }
                                     }
                                 }
-                                //TODO: prevent triple-click and beyond from opening file
-                                item.click_time = Some(Instant::now());
-                            } else {
-                                item.click_time = None;
                             }
+                            //TODO: prevent triple-click and beyond from opening file?
+                            item.click_time = Some(Instant::now());
                         } else {
                             item.selected = false;
                             item.click_time = None;
