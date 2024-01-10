@@ -20,8 +20,27 @@ light = Light
 # Context menu
 new-file = New file
 new-folder = New folder
+move-to-trash = Move to trash
+restore-from-trash = Restore from trash
+
+# Menu
+
+## File
+file = File
+new-tab = New tab
+new-window = New window
+close-tab = Close tab
+quit = Quit
+
+## Edit
+edit = Edit
+cut = Cut
 copy = Copy
 paste = Paste
 select-all = Select all
-move-to-trash = Move to trash
-restore-from-trash = Restore from trash
+
+## View
+view = View
+grid-view = Grid view
+list-view = List view
+menu-settings = Settings...

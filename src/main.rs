@@ -106,6 +106,7 @@ pub struct Flags {
 #[derive(Clone, Copy, Debug)]
 pub enum Action {
     Copy,
+    Cut,
     MoveToTrash,
     NewFile,
     NewFolder,
@@ -121,6 +122,7 @@ impl Action {
     pub fn message(self, entity: segmented_button::Entity) -> Message {
         match self {
             Action::Copy => Message::Copy(Some(entity)),
+            Action::Cut => Message::Cut(Some(entity)),
             Action::MoveToTrash => Message::MoveToTrash(Some(entity)),
             Action::NewFile => Message::NewFile(Some(entity)),
             Action::NewFolder => Message::NewFolder(Some(entity)),
@@ -141,6 +143,7 @@ pub enum Message {
     AppTheme(AppTheme),
     Config(Config),
     Copy(Option<segmented_button::Entity>),
+    Cut(Option<segmented_button::Entity>),
     KeyModifiers(Modifiers),
     MoveToTrash(Option<segmented_button::Entity>),
     NewFile(Option<segmented_button::Entity>),
@@ -150,13 +153,15 @@ pub enum Message {
     SelectAll(Option<segmented_button::Entity>),
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     TabActivate(segmented_button::Entity),
-    TabClose(segmented_button::Entity),
+    TabClose(Option<segmented_button::Entity>),
     TabContextAction(segmented_button::Entity, Action),
     TabContextMenu(segmented_button::Entity, Option<Point>),
-    TabMessage(segmented_button::Entity, tab::Message),
+    TabMessage(Option<segmented_button::Entity>, tab::Message),
     TabNew,
     TabRescan(segmented_button::Entity, Vec<tab::Item>),
     ToggleContextPage(ContextPage),
+    WindowClose,
+    WindowNew,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -403,10 +408,7 @@ impl Application for App {
         let location_opt = self.nav_model.data::<Location>(entity).clone();
 
         if let Some(location) = location_opt {
-            let message = Message::TabMessage(
-                self.tab_model.active(),
-                tab::Message::Location(location.clone()),
-            );
+            let message = Message::TabMessage(None, tab::Message::Location(location.clone()));
             return self.update(message);
         }
 
@@ -433,6 +435,9 @@ impl Application for App {
             }
             Message::Copy(entity_opt) => {
                 log::warn!("TODO: COPY");
+            }
+            Message::Cut(entity_opt) => {
+                log::warn!("TODO: CUT");
             }
             Message::KeyModifiers(modifiers) => {
                 self.modifiers = modifiers;
@@ -474,7 +479,9 @@ impl Application for App {
                 self.tab_model.activate(entity);
                 return self.update_title();
             }
-            Message::TabClose(entity) => {
+            Message::TabClose(entity_opt) => {
+                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+
                 // Activate closest item
                 if let Some(position) = self.tab_model.position(entity) {
                     if position > 0 {
@@ -518,7 +525,9 @@ impl Application for App {
                 // Disable side context page
                 self.core.window.show_context = false;
             }
-            Message::TabMessage(entity, tab_message) => {
+            Message::TabMessage(entity_opt, tab_message) => {
+                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+
                 let mut update_opt = None;
                 match self.tab_model.data_mut::<Tab>(entity) {
                     Some(tab) => {
@@ -561,6 +570,20 @@ impl Application for App {
                 }
                 self.set_context_title(context_page.title());
             }
+            Message::WindowClose => {
+                return window::close(window::Id::MAIN);
+            }
+            Message::WindowNew => match env::current_exe() {
+                Ok(exe) => match process::Command::new(&exe).spawn() {
+                    Ok(_child) => {}
+                    Err(err) => {
+                        log::error!("failed to execute {:?}: {}", exe, err);
+                    }
+                },
+                Err(err) => {
+                    log::error!("failed to get current executable path: {}", err);
+                }
+            },
         }
 
         Command::none()
@@ -580,50 +603,12 @@ impl Application for App {
     fn header_start(&self) -> Vec<Element<Self::Message>> {
         let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
 
-        let active = self.tab_model.active();
-
-        //TODO: dynamically show items
         vec![row![
-            widget::button(widget::icon::from_name("list-add-symbolic").size(16).icon())
-                .on_press(Message::TabNew)
-                .padding(space_xxs)
-                .style(style::Button::Icon),
+            menu::menu_bar(),
             widget::button(widget::icon::from_name("go-up-symbolic").size(16).icon())
-                .on_press(Message::TabMessage(active, tab::Message::Parent))
+                .on_press(Message::TabMessage(None, tab::Message::Parent))
                 .padding(space_xxs)
                 .style(style::Button::Icon),
-        ]
-        .align_items(Alignment::Center)
-        .into()]
-    }
-
-    fn header_end(&self) -> Vec<Element<Self::Message>> {
-        let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
-
-        let active = self.tab_model.active();
-        let current_view = if let Some(tab) = self.tab_model.data::<Tab>(active) {
-            tab.view
-        } else {
-            tab::View::Grid
-        };
-        let (view, view_icon) = match current_view {
-            tab::View::Grid => (tab::View::List, "view-list-symbolic"),
-            tab::View::List => (tab::View::Grid, "view-grid-symbolic"),
-        };
-
-        vec![row![
-            widget::button(widget::icon::from_name(view_icon).size(16).icon())
-                .on_press(Message::TabMessage(active, tab::Message::View(view)))
-                .padding(space_xxs)
-                .style(style::Button::Icon),
-            widget::button(
-                widget::icon::from_name("preferences-system-symbolic")
-                    .size(16)
-                    .icon()
-            )
-            .on_press(Message::ToggleContextPage(ContextPage::Settings))
-            .padding(space_xxs)
-            .style(style::Button::Icon)
         ]
         .align_items(Alignment::Center)
         .into()]
@@ -642,7 +627,7 @@ impl Application for App {
                         .button_height(32)
                         .button_spacing(space_xxs)
                         .on_activate(Message::TabActivate)
-                        .on_close(Message::TabClose),
+                        .on_close(|entity| Message::TabClose(Some(entity))),
                 )
                 .style(style::Container::Background)
                 .width(Length::Fill),
@@ -654,9 +639,11 @@ impl Application for App {
             Some(tab) => {
                 let mut mouse_area = mouse_area::MouseArea::new(
                     tab.view(self.core())
-                        .map(move |message| Message::TabMessage(entity, message)),
+                        .map(move |message| Message::TabMessage(Some(entity), message)),
                 )
-                .on_press(move |_point_opt| Message::TabMessage(entity, tab::Message::Click(None)));
+                .on_press(move |_point_opt| {
+                    Message::TabMessage(Some(entity), tab::Message::Click(None))
+                });
                 if tab.context_menu.is_some() {
                     mouse_area = mouse_area
                         .on_right_press(move |_point_opt| Message::TabContextMenu(entity, None));
@@ -720,7 +707,7 @@ impl Application for App {
                     modifiers,
                 }) => {
                     if modifiers == Modifiers::CTRL {
-                        Some(Message::Copy(None))
+                        Some(Message::Cut(None))
                     } else {
                         None
                     }
