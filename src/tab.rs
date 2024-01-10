@@ -296,16 +296,15 @@ pub fn scan_trash() -> Vec<Item> {
                 let name = entry.name;
 
                 //TODO: configurable size
-                let (icon_handle_grid, icon_handle_list) = if metadata.is_dir {
-                    (
+                let (icon_handle_grid, icon_handle_list) = match metadata.size {
+                    trash::TrashItemSize::Entries(_) => (
                         folder_icon(&path, ICON_SIZE_GRID),
                         folder_icon(&path, ICON_SIZE_LIST),
-                    )
-                } else {
-                    (
+                    ),
+                    trash::TrashItemSize::Bytes(_) => (
                         mime_icon(&path, ICON_SIZE_GRID),
                         mime_icon(&path, ICON_SIZE_LIST),
-                    )
+                    ),
                 };
 
                 items.push(Item {
@@ -364,7 +363,10 @@ impl ItemMetadata {
     pub fn is_dir(&self) -> bool {
         match self {
             Self::Path(metadata, _) => metadata.is_dir(),
-            Self::Trash(metadata) => metadata.is_dir,
+            Self::Trash(metadata) => match metadata.size {
+                trash::TrashItemSize::Entries(_) => true,
+                trash::TrashItemSize::Bytes(_) => false,
+            },
         }
     }
 }
