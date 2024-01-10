@@ -24,3 +24,4 @@ copy = Copy
 paste = Paste
 select-all = Select all
 move-to-trash = Move to trash
+restore-from-trash = Restore from trash

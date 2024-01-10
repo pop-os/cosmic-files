@@ -238,7 +238,8 @@ pub fn scan_path(tab_path: &PathBuf) -> Vec<Item> {
                     path,
                     icon_handle_grid,
                     icon_handle_list,
-                    select_time: None,
+                    selected: false,
+                    click_time: None,
                 });
             }
         }
@@ -314,7 +315,8 @@ pub fn scan_trash() -> Vec<Item> {
                     path,
                     icon_handle_grid,
                     icon_handle_list,
-                    select_time: None,
+                    selected: false,
+                    click_time: None,
                 });
             }
         }
@@ -347,7 +349,7 @@ impl Location {
 
 #[derive(Clone, Debug)]
 pub enum Message {
-    Click(Option<usize>),
+    Click(Option<usize>, bool),
     Location(Location),
     Parent,
     View(View),
@@ -379,7 +381,8 @@ pub struct Item {
     pub path: PathBuf,
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
-    pub select_time: Option<Instant>,
+    pub selected: bool,
+    pub click_time: Option<Instant>,
 }
 
 impl Item {
@@ -458,7 +461,8 @@ impl fmt::Debug for Item {
             .field("hidden", &self.hidden)
             .field("path", &self.path)
             // icon_handles
-            .field("select_time", &self.select_time)
+            .field("selected", &self.selected)
+            .field("click_time", &self.click_time)
             .finish()
     }
 }
@@ -503,33 +507,46 @@ impl Tab {
     pub fn update(&mut self, message: Message) -> bool {
         let mut cd = None;
         match message {
-            Message::Click(click_i_opt) => {
+            Message::Click(click_i_opt, handle_double_click) => {
                 if let Some(ref mut items) = self.items_opt {
                     for (i, item) in items.iter_mut().enumerate() {
                         if Some(i) == click_i_opt {
-                            if let Some(select_time) = item.select_time {
-                                if select_time.elapsed() < DOUBLE_CLICK_DURATION {
-                                    if item.path.is_dir() {
-                                        cd = Some(Location::Path(item.path.clone()));
-                                    } else {
-                                        let mut command = open_command(&item.path);
-                                        match command.spawn() {
-                                            Ok(_) => (),
-                                            Err(err) => {
-                                                log::warn!(
-                                                    "failed to open {:?}: {}",
-                                                    item.path,
-                                                    err
-                                                );
+                            item.selected = true;
+                            if handle_double_click {
+                                if let Some(click_time) = item.click_time {
+                                    if click_time.elapsed() < DOUBLE_CLICK_DURATION {
+                                        match self.location {
+                                            Location::Path(_) => {
+                                                if item.path.is_dir() {
+                                                    cd = Some(Location::Path(item.path.clone()));
+                                                } else {
+                                                    let mut command = open_command(&item.path);
+                                                    match command.spawn() {
+                                                        Ok(_) => (),
+                                                        Err(err) => {
+                                                            log::warn!(
+                                                                "failed to open {:?}: {}",
+                                                                item.path,
+                                                                err
+                                                            );
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            Location::Trash => {
+                                                //TODO: open properties?
                                             }
                                         }
                                     }
                                 }
+                                //TODO: prevent triple-click and beyond from opening file
+                                item.click_time = Some(Instant::now());
+                            } else {
+                                item.click_time = None;
                             }
-                            //TODO: prevent triple-click and beyond from opening file
-                            item.select_time = Some(Instant::now());
                         } else {
-                            item.select_time = None;
+                            item.selected = false;
+                            item.click_time = None;
                         }
                     }
                 }
@@ -615,14 +632,16 @@ impl Tab {
                     .height(Length::Fixed(128.0))
                     .width(Length::Fixed(128.0)),
                 )
-                .style(button_style(item.select_time.is_some()))
-                .on_press(Message::Click(Some(i)));
+                .style(button_style(item.selected))
+                .on_press(Message::Click(Some(i), true));
                 if self.context_menu.is_some() {
                     children.push(button.into());
                 } else {
                     children.push(
                         crate::mouse_area::MouseArea::new(button)
-                            .on_right_press_no_capture(move |_point_opt| Message::Click(Some(i)))
+                            .on_right_press_no_capture(move |_point_opt| {
+                                Message::Click(Some(i), false)
+                            })
                             .into(),
                     );
                 }
@@ -701,14 +720,16 @@ impl Tab {
                     .align_items(Alignment::Center)
                     .spacing(space_xxs),
                 )
-                .style(button_style(item.select_time.is_some()))
-                .on_press(Message::Click(Some(i)));
+                .style(button_style(item.selected))
+                .on_press(Message::Click(Some(i), true));
                 if self.context_menu.is_some() {
                     children.push(button.into());
                 } else {
                     children.push(
                         crate::mouse_area::MouseArea::new(button)
-                            .on_right_press_no_capture(move |_point_opt| Message::Click(Some(i)))
+                            .on_right_press_no_capture(move |_point_opt| {
+                                Message::Click(Some(i), false)
+                            })
                             .into(),
                     );
                 }

@@ -10,7 +10,7 @@ use cosmic::{
     widget::{self, segmented_button},
     Application, ApplicationExt, Element,
 };
-use std::{any::TypeId, env, fs, path::PathBuf, process, time::Instant};
+use std::{any::TypeId, env, fs, path::PathBuf, process};
 
 use config::{AppTheme, Config, CONFIG_VERSION};
 mod config;
@@ -105,6 +105,7 @@ pub enum Action {
     NewFolder,
     Paste,
     Properties,
+    RestoreFromTrash,
     SelectAll,
     Settings,
     TabNew,
@@ -119,6 +120,7 @@ impl Action {
             Action::NewFolder => Message::NewFolder(Some(entity)),
             Action::Paste => Message::Paste(Some(entity)),
             Action::Properties => Message::ToggleContextPage(ContextPage::Properties),
+            Action::RestoreFromTrash => Message::RestoreFromTrash(Some(entity)),
             Action::SelectAll => Message::SelectAll(Some(entity)),
             Action::Settings => Message::ToggleContextPage(ContextPage::Settings),
             Action::TabNew => Message::TabNew,
@@ -137,6 +139,7 @@ pub enum Message {
     NewFile(Option<segmented_button::Entity>),
     NewFolder(Option<segmented_button::Entity>),
     Paste(Option<segmented_button::Entity>),
+    RestoreFromTrash(Option<segmented_button::Entity>),
     SelectAll(Option<segmented_button::Entity>),
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     TabActivate(segmented_button::Entity),
@@ -243,7 +246,7 @@ impl App {
         if let Some(tab) = self.tab_model.data::<Tab>(entity) {
             if let Some(ref items) = tab.items_opt {
                 for item in items.iter() {
-                    if item.select_time.is_some() {
+                    if item.selected {
                         children.push(item.property_view(&self.core));
                     }
                 }
@@ -434,17 +437,20 @@ impl Application for App {
             Message::Paste(entity_opt) => {
                 log::warn!("TODO: PASTE");
             }
+            Message::RestoreFromTrash(entity_opt) => {
+                log::warn!("TODO: RESTORE FROM TRASH");
+            }
             Message::SelectAll(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
                     if let Some(ref mut items) = tab.items_opt {
-                        let select_time = Instant::now();
                         for item in items.iter_mut() {
                             if item.hidden {
                                 //TODO: option to show hidden files
                                 continue;
                             }
-                            item.select_time = Some(select_time);
+                            item.selected = true;
+                            item.click_time = None;
                         }
                     }
                 }
@@ -638,7 +644,9 @@ impl Application for App {
                     tab.view(self.core())
                         .map(move |message| Message::TabMessage(entity, message)),
                 )
-                .on_press(move |_point_opt| Message::TabMessage(entity, tab::Message::Click(None)));
+                .on_press(move |_point_opt| {
+                    Message::TabMessage(entity, tab::Message::Click(None, false))
+                });
                 if tab.context_menu.is_some() {
                     mouse_area = mouse_area
                         .on_right_press(move |_point_opt| Message::TabContextMenu(entity, None));
@@ -647,7 +655,8 @@ impl Application for App {
                         Message::TabContextMenu(entity, point_opt)
                     });
                 }
-                let mut popover = widget::popover(mouse_area, menu::context_menu(entity));
+                let mut popover =
+                    widget::popover(mouse_area, menu::context_menu(entity, &tab.location));
                 match tab.context_menu {
                     Some(point) => {
                         let rounded = Point::new(point.x.round(), point.y.round());
