@@ -349,9 +349,10 @@ impl Location {
 
 #[derive(Clone, Debug)]
 pub enum Message {
-    Click(Option<usize>, bool),
+    Click(Option<usize>),
     Location(Location),
     Parent,
+    RightClick(usize),
     View(View),
 }
 
@@ -507,35 +508,33 @@ impl Tab {
     pub fn update(&mut self, message: Message) -> bool {
         let mut cd = None;
         match message {
-            Message::Click(click_i_opt, handle_double_click) => {
+            Message::Click(click_i_opt) => {
                 if let Some(ref mut items) = self.items_opt {
                     for (i, item) in items.iter_mut().enumerate() {
                         if Some(i) == click_i_opt {
                             item.selected = true;
-                            if handle_double_click {
-                                if let Some(click_time) = item.click_time {
-                                    if click_time.elapsed() < DOUBLE_CLICK_DURATION {
-                                        match self.location {
-                                            Location::Path(_) => {
-                                                if item.path.is_dir() {
-                                                    cd = Some(Location::Path(item.path.clone()));
-                                                } else {
-                                                    let mut command = open_command(&item.path);
-                                                    match command.spawn() {
-                                                        Ok(_) => (),
-                                                        Err(err) => {
-                                                            log::warn!(
-                                                                "failed to open {:?}: {}",
-                                                                item.path,
-                                                                err
-                                                            );
-                                                        }
+                            if let Some(click_time) = item.click_time {
+                                if click_time.elapsed() < DOUBLE_CLICK_DURATION {
+                                    match self.location {
+                                        Location::Path(_) => {
+                                            if item.path.is_dir() {
+                                                cd = Some(Location::Path(item.path.clone()));
+                                            } else {
+                                                let mut command = open_command(&item.path);
+                                                match command.spawn() {
+                                                    Ok(_) => (),
+                                                    Err(err) => {
+                                                        log::warn!(
+                                                            "failed to open {:?}: {}",
+                                                            item.path,
+                                                            err
+                                                        );
                                                     }
                                                 }
                                             }
-                                            Location::Trash => {
-                                                //TODO: open properties?
-                                            }
+                                        }
+                                        Location::Trash => {
+                                            //TODO: open properties?
                                         }
                                     }
                                 }
@@ -559,6 +558,16 @@ impl Tab {
                 if let Location::Path(path) = &self.location {
                     if let Some(parent) = path.parent() {
                         cd = Some(Location::Path(parent.to_owned()));
+                    }
+                }
+            }
+            Message::RightClick(click_i) => {
+                if let Some(ref mut items) = self.items_opt {
+                    if !items.get(click_i).map_or(false, |x| x.selected) {
+                        // If item not selected, clear selection on other items
+                        for (i, item) in items.iter_mut().enumerate() {
+                            item.selected = i == click_i;
+                        }
                     }
                 }
             }
@@ -633,15 +642,13 @@ impl Tab {
                     .width(Length::Fixed(128.0)),
                 )
                 .style(button_style(item.selected))
-                .on_press(Message::Click(Some(i), true));
+                .on_press(Message::Click(Some(i)));
                 if self.context_menu.is_some() {
                     children.push(button.into());
                 } else {
                     children.push(
                         crate::mouse_area::MouseArea::new(button)
-                            .on_right_press_no_capture(move |_point_opt| {
-                                Message::Click(Some(i), false)
-                            })
+                            .on_right_press_no_capture(move |_point_opt| Message::RightClick(i))
                             .into(),
                     );
                 }
@@ -721,15 +728,13 @@ impl Tab {
                     .spacing(space_xxs),
                 )
                 .style(button_style(item.selected))
-                .on_press(Message::Click(Some(i), true));
+                .on_press(Message::Click(Some(i)));
                 if self.context_menu.is_some() {
                     children.push(button.into());
                 } else {
                     children.push(
                         crate::mouse_area::MouseArea::new(button)
-                            .on_right_press_no_capture(move |_point_opt| {
-                                Message::Click(Some(i), false)
-                            })
+                            .on_right_press_no_capture(move |_point_opt| Message::RightClick(i))
                             .into(),
                     );
                 }

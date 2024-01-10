@@ -644,9 +644,7 @@ impl Application for App {
                     tab.view(self.core())
                         .map(move |message| Message::TabMessage(entity, message)),
                 )
-                .on_press(move |_point_opt| {
-                    Message::TabMessage(entity, tab::Message::Click(None, false))
-                });
+                .on_press(move |_point_opt| Message::TabMessage(entity, tab::Message::Click(None)));
                 if tab.context_menu.is_some() {
                     mouse_area = mouse_area
                         .on_right_press(move |_point_opt| Message::TabContextMenu(entity, None));
