@@ -1,5 +1,6 @@
 empty-folder = Празна фасцикла
 empty-folder-hidden = Празна фасцикла (има скривене ставке)
+filesystem = Систем датотека
 trash = Отпад
 
 # Context Pages
