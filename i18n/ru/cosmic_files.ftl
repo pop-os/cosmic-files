@@ -1,5 +1,6 @@
 empty-folder = Пустая папка
 empty-folder-hidden = Пустая папка (со скрытыми элементами)
+filesystem = Файловая система
 trash = Корзина
 
 # Context Pages
@@ -8,19 +9,39 @@ trash = Корзина
 properties = Свойства
 
 ## Settings
-settings = Настройки
+settings = Параметры
 
 ### Appearance
-appearance = Внешность
+appearance = Оформление
 theme = Тема
-match-desktop = Как система
+match-desktop = Как в системе
 dark = Темная
 light = Светлая
 
 # Context menu
 new-file = Новый файл
 new-folder = Новая папка
+move-to-trash = Переместить в корзину
+restore-from-trash = Восстановить из корзины
+
+# Menu
+
+## File
+file = Файл
+new-tab = Новая вкладка
+new-window = Новое окно
+close-tab = Закрыть вкладку
+quit = Завершить
+
+## Edit
+edit = Правка
+cut = Вырезать
 copy = Копировать
 paste = Вставить
 select-all = Выбрать все
-move-to-trash = Удалить
+
+## View
+view = Вид
+grid-view = Сетка
+list-view = Список
+menu-settings = Параметры...
