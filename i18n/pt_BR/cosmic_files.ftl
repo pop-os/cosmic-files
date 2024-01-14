@@ -30,7 +30,7 @@ restore-from-trash = Restaurar da lixeira
 file = Arquivo 
 new-tab = Nova aba 
 new-window = Nova janela 
-close-tab = Fechar janela
+close-tab = Fechar aba 
 quit = Sair 
 
 ## Edit
