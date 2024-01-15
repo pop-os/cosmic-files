@@ -978,6 +978,7 @@ dependencies = [
  "log",
  "paste",
  "remotefs",
+ "remotefs-smb",
  "remotefs-ssh",
  "rust-embed",
  "serde",
@@ -3789,6 +3790,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e91099d4268b0e11973f036e885d652fb0b21fedcf69738c627f94db6a44f42"
 
 [[package]]
+name = "pavao"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bcafb8d680c0b6750c095fbd3c9263fc0b3c315e6055cd1867db038641c1757"
+dependencies = [
+ "cfg_aliases",
+ "lazy_static",
+ "libc",
+ "log",
+ "pkg-config",
+ "thiserror",
+]
+
+[[package]]
 name = "percent-encoding"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4219,6 +4234,20 @@ dependencies = [
  "log",
  "thiserror",
  "wildmatch",
+]
+
+[[package]]
+name = "remotefs-smb"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb76e3ab6ac8dd9ba93dfb7754825855e22cf6c5177e98f1ea26a4cf5f48c4b6"
+dependencies = [
+ "filetime",
+ "libc",
+ "log",
+ "pavao",
+ "remotefs",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

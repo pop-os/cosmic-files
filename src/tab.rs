@@ -273,18 +273,18 @@ pub fn scan_path(tab_path: &PathBuf) -> Vec<Item> {
 
 pub fn scan_remote(url: &Url, remote_cache: &mut RemoteCache) -> Vec<Item> {
     let mut items = Vec::new();
-    let fs_mutex = match remote_cache.get(url) {
+    let (fs_mutex, fs_path) = match remote_cache.get(url) {
         Ok(ok) => ok,
         Err(err) => {
-            log::warn!("failed to scan {:?}: {}", url, err);
+            log::warn!("failed to scan {}: {}", url, err);
             return items;
         }
     };
     let mut fs = fs_mutex.lock().unwrap();
-    let files = match fs.list_dir(Path::new(".")) {
+    let files = match fs.list_dir(&fs_path) {
         Ok(ok) => ok,
         Err(err) => {
-            log::warn!("failed to list {:?}: {}", url, err);
+            log::warn!("failed to list {}: {}", url, err);
             return items;
         }
     };

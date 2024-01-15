@@ -16,7 +16,8 @@ tokio = { version = "1" }
 trash = "3.2.0"
 # Remote filesystems
 remotefs = "0.2"
-remotefs-ssh = "0.2" # uses libssh
+remotefs-smb = { version = "0.2", optional = true } # uses libsmbclient
+remotefs-ssh = { version = "0.2", optional = true } # uses libssh
 url = "2.5"
 whoami = "1.4"
 # Internationalization
@@ -35,7 +36,7 @@ features = ["tokio", "winit"]
 git = "https://github.com/jackpot51/systemicons"
 
 [features]
-default = ["wgpu"]
+default = ["remotefs-ssh", "remotefs-smb", "wgpu"]
 wgpu = ["libcosmic/wgpu"]
 
 [patch.crates-io]
