@@ -13,12 +13,13 @@ use std::{
     collections::HashMap,
     fmt,
     fs::{self, Metadata},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process,
     time::{Duration, Instant},
 };
+use url::Url;
 
-use crate::{fl, mime_icon::mime_icon};
+use crate::{fl, mime_icon::mime_icon, RemoteCache};
 
 const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 //TODO: configurable
@@ -270,6 +271,62 @@ pub fn scan_path(tab_path: &PathBuf) -> Vec<Item> {
     items
 }
 
+pub fn scan_remote(url: &Url, remote_cache: &mut RemoteCache) -> Vec<Item> {
+    let mut items = Vec::new();
+    let fs_mutex = match remote_cache.get(url) {
+        Ok(ok) => ok,
+        Err(err) => {
+            log::warn!("failed to scan {:?}: {}", url, err);
+            return items;
+        }
+    };
+    let mut fs = fs_mutex.lock().unwrap();
+    let files = match fs.list_dir(Path::new(".")) {
+        Ok(ok) => ok,
+        Err(err) => {
+            log::warn!("failed to list {:?}: {}", url, err);
+            return items;
+        }
+    };
+    for file in files {
+        let name = file.name();
+        let remotefs::fs::File { path, metadata } = file;
+
+        //TODO: hidden information for SMB?
+        let hidden = name.starts_with(".");
+
+        //TODO: configurable size
+        let (icon_handle_grid, icon_handle_list) = if metadata.is_dir() {
+            (
+                folder_icon(&path, ICON_SIZE_GRID),
+                folder_icon(&path, ICON_SIZE_LIST),
+            )
+        } else {
+            (
+                mime_icon(&path, ICON_SIZE_GRID),
+                mime_icon(&path, ICON_SIZE_LIST),
+            )
+        };
+
+        items.push(Item {
+            name,
+            metadata: ItemMetadata::Remote(metadata),
+            hidden,
+            path,
+            icon_handle_grid,
+            icon_handle_list,
+            selected: false,
+            click_time: None,
+        });
+    }
+    items.sort_by(|a, b| match (a.metadata.is_dir(), b.metadata.is_dir()) {
+        (true, false) => Ordering::Less,
+        (false, true) => Ordering::Greater,
+        _ => lexical_sort::natural_lexical_cmp(&a.name, &b.name),
+    });
+    items
+}
+
 // This config statement is from trash::os_limited, inverted
 #[cfg(not(any(
     target_os = "windows",
@@ -350,13 +407,15 @@ pub fn scan_trash() -> Vec<Item> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Location {
     Path(PathBuf),
+    Remote(Url),
     Trash,
 }
 
 impl Location {
-    pub fn scan(&self) -> Vec<Item> {
+    pub fn scan(&self, remote_cache: &mut RemoteCache) -> Vec<Item> {
         match self {
             Self::Path(path) => scan_path(path),
+            Self::Remote(url) => scan_remote(url, remote_cache),
             Self::Trash => scan_trash(),
         }
     }
@@ -373,6 +432,7 @@ pub enum Message {
 #[derive(Clone, Debug)]
 pub enum ItemMetadata {
     Path(Metadata, usize),
+    Remote(remotefs::fs::Metadata),
     Trash(trash::TrashItemMetadata),
 }
 
@@ -380,6 +440,7 @@ impl ItemMetadata {
     pub fn is_dir(&self) -> bool {
         match self {
             Self::Path(metadata, _) => metadata.is_dir(),
+            Self::Remote(metadata) => metadata.is_dir(),
             Self::Trash(metadata) => match metadata.size {
                 trash::TrashItemSize::Entries(_) => true,
                 trash::TrashItemSize::Bytes(_) => false,
@@ -459,6 +520,49 @@ impl Item {
                     ));
                 }
             }
+            ItemMetadata::Remote(metadata) => {
+                if metadata.is_dir() {
+                    //TODO: entries list? (expensive on remote)
+                } else {
+                    section = section.add(widget::settings::item::item(
+                        "Size",
+                        widget::text(format_size(metadata.size)),
+                    ));
+                }
+
+                if let Some(time) = metadata.accessed {
+                    section = section.add(widget::settings::item(
+                        "Accessed",
+                        widget::text(
+                            chrono::DateTime::<chrono::Local>::from(time)
+                                .format("%c")
+                                .to_string(),
+                        ),
+                    ));
+                }
+
+                if let Some(time) = metadata.modified {
+                    section = section.add(widget::settings::item(
+                        "Modified",
+                        widget::text(
+                            chrono::DateTime::<chrono::Local>::from(time)
+                                .format("%c")
+                                .to_string(),
+                        ),
+                    ));
+                }
+
+                if let Some(time) = metadata.created {
+                    section = section.add(widget::settings::item(
+                        "Created",
+                        widget::text(
+                            chrono::DateTime::<chrono::Local>::from(time)
+                                .format("%c")
+                                .to_string(),
+                        ),
+                    ));
+                }
+            }
             ItemMetadata::Trash(_metadata) => {
                 //TODO: trash metadata
             }
@@ -513,6 +617,9 @@ impl Tab {
             Location::Path(path) => {
                 format!("{}", path.display())
             }
+            Location::Remote(url) => {
+                format!("{}", url)
+            }
             Location::Trash => {
                 fl!("trash")
             }
@@ -529,9 +636,9 @@ impl Tab {
                             item.selected = true;
                             if let Some(click_time) = item.click_time {
                                 if click_time.elapsed() < DOUBLE_CLICK_DURATION {
-                                    match self.location {
+                                    match &self.location {
                                         Location::Path(_) => {
-                                            if item.path.is_dir() {
+                                            if item.metadata.is_dir() {
                                                 cd = Some(Location::Path(item.path.clone()));
                                             } else {
                                                 let mut command = open_command(&item.path);
@@ -545,6 +652,26 @@ impl Tab {
                                                         );
                                                     }
                                                 }
+                                            }
+                                        }
+                                        Location::Remote(url) => {
+                                            if item.metadata.is_dir() {
+                                                match item.path.to_str() {
+                                                    Some(path_str) => {
+                                                        let mut item_url = url.clone();
+                                                        item_url.set_path(path_str);
+                                                        cd = Some(Location::Remote(item_url));
+                                                    }
+                                                    None => {
+                                                        log::warn!(
+                                                            "invalid directory path {:?} in {:?}",
+                                                            item.path,
+                                                            url
+                                                        )
+                                                    }
+                                                }
+                                            } else {
+                                                //TODO: open properties?
                                             }
                                         }
                                         Location::Trash => {
@@ -654,6 +781,62 @@ impl Tab {
                     }
                 }
                 children.reverse();
+            }
+            Location::Remote(url) => {
+                // Get root URL
+                let mut url_root = url.clone();
+                url_root.set_path("/");
+
+                let mut row = widget::row::with_capacity(2)
+                    .align_items(Alignment::Center)
+                    .spacing(space_xxxs);
+                row = row.push(
+                    widget::icon::from_name("network-server-symbolic")
+                        .size(16)
+                        .icon(),
+                );
+                {
+                    // Remove password and path from URL
+                    let mut url_clean = url_root.clone();
+                    url_clean.set_password(None).unwrap();
+                    url_clean.set_path("");
+                    row = row.push(widget::text(url_clean.to_string()));
+                }
+                children.push(
+                    widget::button(row)
+                        .padding(space_xxxs)
+                        .on_press(Message::Location(Location::Remote(url_root.clone())))
+                        .style(theme::Button::Text)
+                        .into(),
+                );
+
+                if let Some(parts) = url.path_segments() {
+                    let mut path = String::new();
+                    for part in parts {
+                        path.push('/');
+                        path.push_str(part);
+
+                        // Do not create button for empty part
+                        if part.is_empty() {
+                            continue;
+                        }
+
+                        let mut url_part = url_root.clone();
+                        url_part.set_path(&path);
+
+                        if !children.is_empty() {
+                            children.push(widget::text("/").into());
+                        }
+
+                        children.push(
+                            widget::button(widget::text(part.to_string()))
+                                .padding(space_xxxs)
+                                .on_press(Message::Location(Location::Remote(url_part)))
+                                .style(theme::Button::Text)
+                                .into(),
+                        );
+                    }
+                }
             }
             Location::Trash => {
                 let mut row = widget::row::with_capacity(2)
@@ -801,6 +984,14 @@ impl Tab {
                                     format!("{} items", children)
                                 } else {
                                     format_size(metadata.len())
+                                }
+                            }
+                            ItemMetadata::Remote(metadata) => {
+                                if metadata.is_dir() {
+                                    //TODO: remote items? (expensive)
+                                    format!("-")
+                                } else {
+                                    format_size(metadata.size)
                                 }
                             }
                             ItemMetadata::Trash(metadata) => match metadata.size {
