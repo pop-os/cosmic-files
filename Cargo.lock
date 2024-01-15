@@ -976,6 +976,7 @@ dependencies = [
  "lexical-sort",
  "libcosmic",
  "log",
+ "paste",
  "rust-embed",
  "serde",
  "systemicons",
