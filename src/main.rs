@@ -152,6 +152,8 @@ pub enum Message {
     SelectAll(Option<segmented_button::Entity>),
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     TabActivate(segmented_button::Entity),
+    TabNext,
+    TabPrev,
     TabClose(Option<segmented_button::Entity>),
     TabContextAction(segmented_button::Entity, Action),
     TabContextMenu(segmented_button::Entity, Option<Point>),
@@ -505,6 +507,39 @@ impl Application for App {
                 self.tab_model.activate(entity);
                 return self.update_title();
             }
+            Message::TabNext => {
+                let len = self.tab_model.iter().count();
+                let pos = self
+                    .tab_model
+                    .position(self.tab_model.active())
+                    // Wraparound to 0 if i + 1 > num of tabs
+                    .map(|i| (i as usize + 1) % len)
+                    .expect("should always be at least one tab open");
+
+                let entity = self.tab_model.iter().nth(pos);
+                if let Some(entity) = entity {
+                    return self.update(Message::TabActivate(entity));
+                }
+            }
+            Message::TabPrev => {
+                let pos = self
+                    .tab_model
+                    .position(self.tab_model.active())
+                    .and_then(|i| (i as usize).checked_sub(1))
+                    // Subtraction underflow => last tab; i.e. it wraps around
+                    .unwrap_or_else(|| {
+                        self.tab_model
+                            .iter()
+                            .count()
+                            .checked_sub(1)
+                            .unwrap_or_default()
+                    });
+
+                let entity = self.tab_model.iter().nth(pos);
+                if let Some(entity) = entity {
+                    return self.update(Message::TabActivate(entity));
+                }
+            }
             Message::TabClose(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
 
@@ -766,14 +801,16 @@ impl Application for App {
                 }
                 Event::Keyboard(KeyEvent::KeyPressed {
                     key_code: KeyCode::W,
-                    modifiers,
-                }) => {
-                    if modifiers == Modifiers::CTRL {
-                        Some(Message::TabClose(None))
-                    } else {
-                        None
-                    }
-                }
+                    modifiers: Modifiers::CTRL,
+                }) => Some(Message::TabClose(None)),
+                Event::Keyboard(KeyEvent::KeyPressed {
+                    key_code: key @ (KeyCode::PageUp | KeyCode::PageDown),
+                    modifiers: Modifiers::CTRL,
+                }) => match key {
+                    KeyCode::PageDown => Some(Message::TabPrev),
+                    KeyCode::PageUp => Some(Message::TabNext),
+                    _ => None,
+                },
                 Event::Keyboard(KeyEvent::KeyPressed {
                     key_code: KeyCode::V,
                     modifiers,
