@@ -56,6 +56,9 @@ pub fn context_menu<'a>(entity: segmented_button::Entity, tab: &Tab) -> Element<
                 children.push(menu_action(fl!("move-to-trash"), Action::MoveToTrash).into());
             }
         }
+        Location::Remote(_) => {
+            //TODO: context menu for remote
+        }
         Location::Trash => {
             children.push(menu_action(fl!("select-all"), Action::SelectAll).into());
             if selected > 0 {

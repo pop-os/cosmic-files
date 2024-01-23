@@ -16,17 +16,21 @@ use cosmic::{
     Application, ApplicationExt, Element,
 };
 use std::{any::TypeId, env, fs, path::PathBuf, process};
+use url::Url;
 
 use config::{AppTheme, Config, CONFIG_VERSION};
 mod config;
 
+mod localize;
+
 mod menu;
+
+mod mime_icon;
 
 mod mouse_area;
 
-mod localize;
-
-mod mime_icon;
+use remote::RemoteCache;
+mod remote;
 
 use tab::{Location, Tab};
 mod tab;
@@ -187,6 +191,7 @@ pub struct App {
     tab_model: segmented_button::Model<segmented_button::SingleSelect>,
     config_handler: Option<cosmic_config::Config>,
     config: Config,
+    remote_cache: RemoteCache,
     app_themes: Vec<String>,
     context_page: ContextPage,
     modifiers: Modifiers,
@@ -213,7 +218,11 @@ impl App {
     ) -> Command<Message> {
         Command::perform(
             async move {
-                match tokio::task::spawn_blocking(move || location.scan()).await {
+                match tokio::task::spawn_blocking(move || {
+                    location.scan(/*TODO: save remote cache */ &mut RemoteCache::new())
+                })
+                .await
+                {
                     Ok(items) => message::app(Message::TabRescan(entity, items)),
                     Err(err) => {
                         log::warn!("failed to rescan: {}", err);
@@ -227,19 +236,6 @@ impl App {
 
     fn update_config(&mut self) -> Command<Message> {
         cosmic::app::command::set_theme(self.config.app_theme.theme())
-    }
-
-    fn save_config(&mut self) -> Command<Message> {
-        match self.config_handler {
-            Some(ref config_handler) => match self.config.write_entry(&config_handler) {
-                Ok(()) => {}
-                Err(err) => {
-                    log::error!("failed to save config: {}", err);
-                }
-            },
-            None => {}
-        }
-        self.update_config()
     }
 
     fn update_title(&mut self) -> Command<Message> {
@@ -357,6 +353,7 @@ impl Application for App {
             tab_model: segmented_button::ModelBuilder::default().build(),
             config_handler: flags.config_handler,
             config: flags.config,
+            remote_cache: RemoteCache::new(),
             app_themes,
             context_page: ContextPage::Settings,
             modifiers: Modifiers::empty(),
@@ -365,12 +362,15 @@ impl Application for App {
         let mut commands = Vec::new();
 
         for arg in env::args().skip(1) {
-            let location = match fs::canonicalize(&arg) {
-                Ok(absolute) => Location::Path(absolute),
-                Err(err) => {
-                    log::warn!("failed to canonicalize {:?}: {}", arg, err);
-                    continue;
-                }
+            let location = match Url::parse(&arg) {
+                Ok(url) => Location::Remote(url),
+                Err(_) => match fs::canonicalize(&arg) {
+                    Ok(absolute) => Location::Path(absolute),
+                    Err(err) => {
+                        log::warn!("failed to canonicalize {:?}: {}", arg, err);
+                        continue;
+                    }
+                },
             };
             commands.push(app.open_tab(location));
         }
