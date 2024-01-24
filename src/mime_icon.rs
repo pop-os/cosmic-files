@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::widget::icon;
+use once_cell::sync::Lazy;
 use std::{collections::HashMap, path::Path, sync::Mutex};
 
 pub const FALLBACK_MIME_ICON: &str = "text-x-generic";
@@ -39,10 +40,7 @@ impl MimeIconCache {
             .clone()
     }
 }
-
-lazy_static::lazy_static! {
-    static ref MIME_ICON_CACHE: Mutex<MimeIconCache> = Mutex::new(MimeIconCache::new());
-}
+static MIME_ICON_CACHE: Lazy<Mutex<MimeIconCache>> = Lazy::new(|| Mutex::new(MimeIconCache::new()));
 
 pub fn mime_icon<P: AsRef<Path>>(path: P, size: u16) -> icon::Handle {
     //TODO: smarter path handling

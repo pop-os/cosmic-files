@@ -8,6 +8,7 @@ use cosmic::{
     },
     theme, widget, Element,
 };
+use once_cell::sync::Lazy;
 use std::{
     cmp::Ordering,
     collections::HashMap,
@@ -24,41 +25,37 @@ const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 //TODO: configurable
 const ICON_SIZE_LIST: u16 = 32;
 const ICON_SIZE_GRID: u16 = 64;
-
-lazy_static::lazy_static! {
-    static ref SPECIAL_DIRS: HashMap<PathBuf, &'static str> = {
-        let mut special_dirs = HashMap::new();
-        if let Some(dir) = dirs::document_dir() {
-            special_dirs.insert(dir, "folder-documents");
-        }
-        if let Some(dir) = dirs::download_dir() {
-            special_dirs.insert(dir, "folder-download");
-        }
-        if let Some(dir) = dirs::audio_dir() {
-            special_dirs.insert(dir, "folder-music");
-        }
-        if let Some(dir) = dirs::picture_dir() {
-            special_dirs.insert(dir, "folder-pictures");
-        }
-        if let Some(dir) = dirs::public_dir() {
-            special_dirs.insert(dir, "folder-publicshare");
-        }
-        if let Some(dir) = dirs::template_dir() {
-            special_dirs.insert(dir, "folder-templates");
-        }
-        if let Some(dir) = dirs::video_dir() {
-            special_dirs.insert(dir, "folder-videos");
-        }
-        if let Some(dir) = dirs::desktop_dir() {
-            special_dirs.insert(dir, "user-desktop");
-        }
-        if let Some(dir) = dirs::home_dir() {
-            special_dirs.insert(dir, "user-home");
-        }
-        special_dirs
-    };
-}
-
+static SPECIAL_DIRS: Lazy<HashMap<PathBuf, &'static str>> = Lazy::new(|| {
+    let mut special_dirs = HashMap::new();
+    if let Some(dir) = dirs::document_dir() {
+        special_dirs.insert(dir, "folder-documents");
+    }
+    if let Some(dir) = dirs::download_dir() {
+        special_dirs.insert(dir, "folder-download");
+    }
+    if let Some(dir) = dirs::audio_dir() {
+        special_dirs.insert(dir, "folder-music");
+    }
+    if let Some(dir) = dirs::picture_dir() {
+        special_dirs.insert(dir, "folder-pictures");
+    }
+    if let Some(dir) = dirs::public_dir() {
+        special_dirs.insert(dir, "folder-publicshare");
+    }
+    if let Some(dir) = dirs::template_dir() {
+        special_dirs.insert(dir, "folder-templates");
+    }
+    if let Some(dir) = dirs::video_dir() {
+        special_dirs.insert(dir, "folder-videos");
+    }
+    if let Some(dir) = dirs::desktop_dir() {
+        special_dirs.insert(dir, "user-desktop");
+    }
+    if let Some(dir) = dirs::home_dir() {
+        special_dirs.insert(dir, "user-home");
+    }
+    special_dirs
+});
 fn button_style(selected: bool) -> theme::Button {
     //TODO: move to libcosmic
     theme::Button::Custom {
