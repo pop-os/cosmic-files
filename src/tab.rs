@@ -169,10 +169,16 @@ fn open_command(path: &PathBuf) -> process::Command {
 
 #[cfg(target_os = "windows")]
 fn open_command(path: &PathBuf) -> process::Command {
+    use std::os::windows::process::CommandExt;
+
     let mut command = process::Command::new("cmd");
-    command.arg("/c");
-    command.arg("start");
-    command.arg(path);
+
+    command
+        .arg("/c")
+        .arg("start")
+        .raw_arg("\"\"")
+        .arg(path)
+        .creation_flags(0x08000000);
     command
 }
 
