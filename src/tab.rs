@@ -725,6 +725,10 @@ impl Tab {
     pub fn grid_view(&self, core: &Core) -> Element<Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = core.system_theme().cosmic().spacing;
 
+        //TODO: get from config
+        let item_width = Length::Fixed(96.0);
+        let item_height = Length::Fixed(116.0);
+
         let mut children: Vec<Element<_>> = Vec::new();
         if let Some(ref items) = self.items_opt {
             let mut count = 0;
@@ -745,9 +749,8 @@ impl Tab {
                     ])
                     .align_items(Alignment::Center)
                     .spacing(space_xxs)
-                    //TODO: get from config
-                    .height(Length::Fixed(128.0))
-                    .width(Length::Fixed(128.0)),
+                    .height(item_height)
+                    .width(item_width),
                 )
                 .style(button_style(item.selected))
                 .on_press(Message::Click(Some(i)));
