@@ -48,7 +48,7 @@ check-json: (check '--message-format=json')
 
 # Run with debug logs
 run *args:
-    env RUST_LOG=debug RUST_BACKTRACE=full cargo run --release {{args}}
+    env RUST_LOG=cosmic_files=debug RUST_BACKTRACE=full cargo run --release {{args}}
 
 # Installs files
 install:
