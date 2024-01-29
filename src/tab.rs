@@ -372,6 +372,7 @@ impl Location {
 #[derive(Clone, Debug)]
 pub enum Message {
     Click(Option<usize>),
+    EditLocation(Option<Location>),
     Location(Location),
     RightClick(usize),
     View(View),
@@ -502,6 +503,7 @@ pub struct Tab {
     pub context_menu: Option<Point>,
     pub items_opt: Option<Vec<Item>>,
     pub view: View,
+    pub edit_location: Option<Location>,
 }
 
 impl Tab {
@@ -511,6 +513,7 @@ impl Tab {
             context_menu: None,
             items_opt: None,
             view: View::List,
+            edit_location: None,
         }
     }
 
@@ -573,6 +576,9 @@ impl Tab {
                 }
                 self.context_menu = None;
             }
+            Message::EditLocation(edit_location) => {
+                self.edit_location = edit_location;
+            }
             Message::Location(location) => {
                 cd = Some(location);
             }
@@ -601,6 +607,7 @@ impl Tab {
             if location != self.location {
                 self.location = location;
                 self.items_opt = None;
+                self.edit_location = None;
                 true
             } else {
                 false
@@ -611,7 +618,36 @@ impl Tab {
     }
 
     pub fn breadcrumbs_view(&self, core: &Core) -> Element<Message> {
-        let cosmic_theme::Spacing { space_xxxs, .. } = core.system_theme().cosmic().spacing;
+        let cosmic_theme::Spacing {
+            space_xxxs,
+            space_xxs,
+            ..
+        } = core.system_theme().cosmic().spacing;
+
+        if let Some(location) = &self.edit_location {
+            match location {
+                Location::Path(path) => {
+                    return widget::row::with_children(vec![
+                        widget::button(widget::icon::from_name("window-close-symbolic").size(16))
+                            .on_press(Message::EditLocation(None))
+                            .padding(space_xxs)
+                            .style(theme::Button::Icon)
+                            .into(),
+                        widget::text_input("", path.to_string_lossy())
+                            .on_input(|input| {
+                                Message::EditLocation(Some(Location::Path(PathBuf::from(input))))
+                            })
+                            .on_submit(Message::Location(location.clone()))
+                            .into(),
+                    ])
+                    .align_items(Alignment::Center)
+                    .into();
+                }
+                _ => {
+                    //TODO: allow editing other locations
+                }
+            }
+        }
 
         let mut children: Vec<Element<_>> = Vec::new();
         match &self.location {
@@ -689,7 +725,15 @@ impl Tab {
                 );
             }
         }
-        children.push(widget::horizontal_space(Length::Fill).into());
+
+        children.insert(
+            0,
+            widget::button(widget::icon::from_name("edit-symbolic").size(16))
+                .on_press(Message::EditLocation(Some(self.location.clone())))
+                .padding(space_xxs)
+                .style(theme::Button::Icon)
+                .into(),
+        );
 
         widget::row::with_children(children)
             .align_items(Alignment::Center)
