@@ -767,9 +767,12 @@ impl Tab {
                 return self.empty_view(hidden > 0, core);
             }
         }
-        widget::scrollable(widget::flex_row(children))
-            .width(Length::Fill)
-            .into()
+        widget::scrollable(widget::column::with_children(vec![
+            self.breadcrumbs_view(core),
+            widget::flex_row(children).into(),
+        ]))
+        .width(Length::Fill)
+        .into()
     }
 
     pub fn list_view(&self, core: &Core) -> Element<Message> {
