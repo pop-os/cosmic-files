@@ -3,6 +3,11 @@ empty-folder-hidden = Empty folder (has hidden items)
 filesystem = Filesystem
 trash = Trash
 
+# List view
+name = Name
+modified = Modified
+size = Size
+
 # Context Pages
 
 ## Properties

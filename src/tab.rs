@@ -760,16 +760,23 @@ impl Tab {
     pub fn list_view(&self, core: &Core) -> Element<Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = core.system_theme().cosmic().spacing;
 
+        //TODO: make adaptive?
+        let column_width = Length::Fixed(200.0);
+
         let mut children: Vec<Element<_>> = Vec::new();
 
         children.push(
-            //TODO: translate
             widget::row::with_children(vec![
-                widget::text("Name").into(),
-                widget::horizontal_space(Length::Fill).into(),
-                widget::text("Size").into(),
-                // Hack to make room for scroll bar
-                widget::horizontal_space(Length::Fixed(space_xxs as f32)).into(),
+                widget::text::heading(fl!("name"))
+                    .width(Length::Fill)
+                    .into(),
+                //TODO: do not show modified column when in the trash
+                widget::text::heading(fl!("modified"))
+                    .width(column_width)
+                    .into(),
+                widget::text::heading(fl!("size"))
+                    .width(column_width)
+                    .into(),
             ])
             .align_items(Alignment::Center)
             .padding(space_xxs)
@@ -790,32 +797,46 @@ impl Tab {
                     continue;
                 }
 
+                let modified_text = match &item.metadata {
+                    ItemMetadata::Path(metadata, _children) => match metadata.modified() {
+                        Ok(time) => chrono::DateTime::<chrono::Local>::from(time)
+                            .format("%c")
+                            .to_string(),
+                        Err(_) => String::new(),
+                    },
+                    ItemMetadata::Trash(metadata) => String::new(),
+                };
+
+                let size_text = match &item.metadata {
+                    ItemMetadata::Path(metadata, children) => {
+                        if metadata.is_dir() {
+                            format!("{} items", children)
+                        } else {
+                            format_size(metadata.len())
+                        }
+                    }
+                    ItemMetadata::Trash(metadata) => match metadata.size {
+                        trash::TrashItemSize::Entries(entries) => {
+                            //TODO: translate
+                            if entries == 1 {
+                                format!("{} item", entries)
+                            } else {
+                                format!("{} items", entries)
+                            }
+                        }
+                        trash::TrashItemSize::Bytes(bytes) => format_size(bytes),
+                    },
+                };
+
                 //TODO: align columns
                 let button = widget::button(
                     widget::row::with_children(vec![
                         widget::icon::icon(item.icon_handle_list.clone())
                             .size(ICON_SIZE_LIST)
                             .into(),
-                        widget::text(item.name.clone()).into(),
-                        widget::horizontal_space(Length::Fill).into(),
-                        widget::text(match &item.metadata {
-                            ItemMetadata::Path(metadata, children) => {
-                                if metadata.is_dir() {
-                                    format!("{} items", children)
-                                } else {
-                                    format_size(metadata.len())
-                                }
-                            }
-                            ItemMetadata::Trash(metadata) => match metadata.size {
-                                trash::TrashItemSize::Entries(entries) => {
-                                    format!("{} items", entries)
-                                }
-                                trash::TrashItemSize::Bytes(bytes) => format_size(bytes),
-                            },
-                        })
-                        .into(),
-                        // Hack to make room for scroll bar
-                        widget::horizontal_space(Length::Fixed(space_xxs as f32)).into(),
+                        widget::text(item.name.clone()).width(Length::Fill).into(),
+                        widget::text(modified_text).width(column_width).into(),
+                        widget::text(size_text).width(column_width).into(),
                     ])
                     .align_items(Alignment::Center)
                     .spacing(space_xxs),
@@ -838,9 +859,13 @@ impl Tab {
                 return self.empty_view(hidden > 0, core);
             }
         }
-        widget::scrollable(widget::column::with_children(children))
-            .width(Length::Fill)
-            .into()
+        widget::scrollable(
+            widget::column::with_children(children)
+                // Hack to make room for scroll bar
+                .padding([0, space_xxs, 0, 0]),
+        )
+        .width(Length::Fill)
+        .into()
     }
 
     pub fn view(&self, core: &Core) -> Element<Message> {
