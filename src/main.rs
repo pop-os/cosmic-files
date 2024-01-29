@@ -15,10 +15,13 @@ use cosmic::{
     widget::{self, segmented_button},
     Application, ApplicationExt, Element,
 };
-use std::{any::TypeId, env, fs, path::PathBuf, process};
+use std::{any::TypeId, env, fs, path::PathBuf, process, collections::HashMap};
 
 use config::{AppTheme, Config, CONFIG_VERSION};
 mod config;
+
+use key_bind::{key_binds, KeyBind};
+mod key_bind;
 
 mod localize;
 
@@ -104,7 +107,7 @@ pub struct Flags {
     config: Config,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Action {
     Copy,
     Cut,
@@ -116,23 +119,37 @@ pub enum Action {
     RestoreFromTrash,
     SelectAll,
     Settings,
+    TabClose,
     TabNew,
+    TabNext,
+    TabPrev,
+    TabViewGrid,
+    TabViewList,
+    WindowClose,
+    WindowNew,
 }
 
 impl Action {
-    pub fn message(self, entity: segmented_button::Entity) -> Message {
+    pub fn message(self, entity_opt: Option<segmented_button::Entity>) -> Message {
         match self {
-            Action::Copy => Message::Copy(Some(entity)),
-            Action::Cut => Message::Cut(Some(entity)),
-            Action::MoveToTrash => Message::MoveToTrash(Some(entity)),
-            Action::NewFile => Message::NewFile(Some(entity)),
-            Action::NewFolder => Message::NewFolder(Some(entity)),
-            Action::Paste => Message::Paste(Some(entity)),
+            Action::Copy => Message::Copy(entity_opt),
+            Action::Cut => Message::Cut(entity_opt),
+            Action::MoveToTrash => Message::MoveToTrash(entity_opt),
+            Action::NewFile => Message::NewFile(entity_opt),
+            Action::NewFolder => Message::NewFolder(entity_opt),
+            Action::Paste => Message::Paste(entity_opt),
             Action::Properties => Message::ToggleContextPage(ContextPage::Properties),
-            Action::RestoreFromTrash => Message::RestoreFromTrash(Some(entity)),
-            Action::SelectAll => Message::SelectAll(Some(entity)),
+            Action::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
+            Action::SelectAll => Message::SelectAll(entity_opt),
             Action::Settings => Message::ToggleContextPage(ContextPage::Settings),
+            Action::TabClose => Message::TabClose(entity_opt),
             Action::TabNew => Message::TabNew,
+            Action::TabNext => Message::TabNext,
+            Action::TabPrev => Message::TabPrev,
+            Action::TabViewGrid => Message::TabMessage(entity_opt, tab::Message::View(tab::View::Grid)),
+            Action::TabViewList => Message::TabMessage(entity_opt, tab::Message::View(tab::View::List)),
+            Action::WindowClose => Message::WindowClose,
+            Action::WindowNew => Message::WindowNew,
         }
     }
 }
@@ -145,7 +162,8 @@ pub enum Message {
     Config(Config),
     Copy(Option<segmented_button::Entity>),
     Cut(Option<segmented_button::Entity>),
-    KeyModifiers(Modifiers),
+    Key(Modifiers, KeyCode),
+    Modifiers(Modifiers),
     MoveToTrash(Option<segmented_button::Entity>),
     NewFile(Option<segmented_button::Entity>),
     NewFolder(Option<segmented_button::Entity>),
@@ -191,6 +209,7 @@ pub struct App {
     config: Config,
     app_themes: Vec<String>,
     context_page: ContextPage,
+    key_binds: HashMap<KeyBind, Action>,
     modifiers: Modifiers,
 }
 
@@ -367,6 +386,7 @@ impl Application for App {
             config: flags.config,
             app_themes,
             context_page: ContextPage::Settings,
+            key_binds: key_binds(),
             modifiers: Modifiers::empty(),
         };
 
@@ -475,7 +495,15 @@ impl Application for App {
             Message::Cut(entity_opt) => {
                 log::warn!("TODO: CUT");
             }
-            Message::KeyModifiers(modifiers) => {
+            Message::Key(modifiers, key_code) => {
+                let entity = self.tab_model.active();
+                for (key_bind, action) in self.key_binds.iter() {
+                    if key_bind.matches(modifiers, key_code) {
+                        return self.update(action.message(Some(entity)));
+                    }
+                }
+            }
+            Message::Modifiers(modifiers) => {
                 self.modifiers = modifiers;
             }
             Message::MoveToTrash(entity_opt) => {
@@ -578,7 +606,7 @@ impl Application for App {
                             tab.context_menu = None;
                         }
                         // Run action's message
-                        return self.update(action.message(entity));
+                        return self.update(action.message(Some(entity)));
                     }
                     _ => {}
                 }
@@ -671,7 +699,7 @@ impl Application for App {
 
     fn header_start(&self) -> Vec<Element<Self::Message>> {
         vec![
-            menu::menu_bar().into(),
+            menu::menu_bar(&self.key_binds).into(),
             //TODO: use theme defined space?
             widget::horizontal_space(Length::Fixed(32.0)).into(),
         ]
@@ -753,69 +781,13 @@ impl Application for App {
         Subscription::batch([
             event::listen_with(|event, _status| match event {
                 Event::Keyboard(KeyEvent::KeyPressed {
-                    key_code: KeyCode::A,
+                    key_code,
                     modifiers,
                 }) => {
-                    if modifiers == Modifiers::CTRL {
-                        Some(Message::SelectAll(None))
-                    } else {
-                        None
-                    }
-                }
-                Event::Keyboard(KeyEvent::KeyPressed {
-                    key_code: KeyCode::C,
-                    modifiers,
-                }) => {
-                    if modifiers == Modifiers::CTRL {
-                        Some(Message::Copy(None))
-                    } else {
-                        None
-                    }
-                }
-                Event::Keyboard(KeyEvent::KeyPressed {
-                    key_code: KeyCode::X,
-                    modifiers,
-                }) => {
-                    if modifiers == Modifiers::CTRL {
-                        Some(Message::Cut(None))
-                    } else {
-                        None
-                    }
-                }
-                Event::Keyboard(KeyEvent::KeyPressed {
-                    key_code: KeyCode::T,
-                    modifiers,
-                }) => {
-                    if modifiers == Modifiers::CTRL {
-                        Some(Message::TabNew)
-                    } else {
-                        None
-                    }
-                }
-                Event::Keyboard(KeyEvent::KeyPressed {
-                    key_code: KeyCode::W,
-                    modifiers: Modifiers::CTRL,
-                }) => Some(Message::TabClose(None)),
-                Event::Keyboard(KeyEvent::KeyPressed {
-                    key_code: key @ (KeyCode::PageUp | KeyCode::PageDown),
-                    modifiers: Modifiers::CTRL,
-                }) => match key {
-                    KeyCode::PageDown => Some(Message::TabPrev),
-                    KeyCode::PageUp => Some(Message::TabNext),
-                    _ => None,
-                },
-                Event::Keyboard(KeyEvent::KeyPressed {
-                    key_code: KeyCode::V,
-                    modifiers,
-                }) => {
-                    if modifiers == Modifiers::CTRL {
-                        Some(Message::Paste(None))
-                    } else {
-                        None
-                    }
+                    Some(Message::Key(modifiers, key_code))
                 }
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
-                    Some(Message::KeyModifiers(modifiers))
+                    Some(Message::Modifiers(modifiers))
                 }
                 _ => None,
             }),
