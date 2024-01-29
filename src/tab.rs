@@ -623,17 +623,18 @@ impl Tab {
                     let mut row = widget::row::with_capacity(2)
                         .align_items(Alignment::Center)
                         .spacing(space_xxxs);
-                    match ancestor.file_name() {
+
+                    let name = match ancestor.file_name() {
                         Some(name) => {
                             if ancestor == home_dir {
                                 row = row.push(
                                     widget::icon::icon(folder_icon_symbolic(&ancestor, 16))
                                         .size(16),
                                 );
-                                row = row.push(widget::text(fl!("home")));
                                 found_home = true;
+                                fl!("home")
                             } else {
-                                row = row.push(widget::text(name.to_string_lossy().to_string()));
+                                name.to_string_lossy().to_string()
                             }
                         }
                         None => {
@@ -642,17 +643,20 @@ impl Tab {
                                     .size(16)
                                     .icon(),
                             );
-                            row = row.push(widget::text(fl!("filesystem")));
+                            fl!("filesystem")
                         }
-                    }
+                    };
 
-                    if !children.is_empty() {
+                    if children.is_empty() {
+                        row = row.push(widget::text::heading(name));
+                    } else {
                         children.push(
                             widget::icon::from_name("go-next-symbolic")
                                 .size(16)
                                 .icon()
                                 .into(),
                         );
+                        row = row.push(widget::text(name));
                     }
 
                     children.push(
@@ -674,7 +678,7 @@ impl Tab {
                     .align_items(Alignment::Center)
                     .spacing(space_xxxs);
                 row = row.push(widget::icon::icon(trash_icon_symbolic(16)).size(16));
-                row = row.push(widget::text(fl!("trash")));
+                row = row.push(widget::text::heading(fl!("trash")));
 
                 children.push(
                     widget::button(row)
