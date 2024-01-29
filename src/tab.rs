@@ -115,19 +115,19 @@ fn trash_icon_symbolic(icon_size: u16) -> widget::icon::Handle {
 
 //TODO: translate, add more levels?
 fn format_size(size: u64) -> String {
-    const KIB: u64 = 1024;
-    const MIB: u64 = 1024 * KIB;
-    const GIB: u64 = 1024 * MIB;
-    const TIB: u64 = 1024 * GIB;
+    const KB: u64 = 1000;
+    const MB: u64 = 1000 * KB;
+    const GB: u64 = 1000 * MB;
+    const TB: u64 = 1000 * GB;
 
-    if size >= 4 * TIB {
-        format!("{:.1} TiB", size as f64 / TIB as f64)
-    } else if size >= GIB {
-        format!("{:.1} GiB", size as f64 / GIB as f64)
-    } else if size >= MIB {
-        format!("{:.1} MiB", size as f64 / MIB as f64)
-    } else if size >= KIB {
-        format!("{:.1} KiB", size as f64 / KIB as f64)
+    if size >= TB {
+        format!("{:.1} TB", size as f64 / TB as f64)
+    } else if size >= GB {
+        format!("{:.1} GB", size as f64 / GB as f64)
+    } else if size >= MB {
+        format!("{:.1} MB", size as f64 / MB as f64)
+    } else if size >= KB {
+        format!("{:.1} KB", size as f64 / KB as f64)
     } else {
         format!("{} B", size)
     }
