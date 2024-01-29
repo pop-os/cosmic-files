@@ -1,6 +1,7 @@
 empty-folder = Empty folder
 empty-folder-hidden = Empty folder (has hidden items)
 filesystem = Filesystem
+home = Home
 trash = Trash
 
 # List view

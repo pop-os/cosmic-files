@@ -321,9 +321,15 @@ impl Application for App {
         let app_themes = vec![fl!("match-desktop"), fl!("dark"), fl!("light")];
 
         let mut nav_model = segmented_button::ModelBuilder::default();
+        if let Some(dir) = dirs::home_dir() {
+            nav_model = nav_model.insert(move |b| {
+                b.text(fl!("home"))
+                    .icon(widget::icon::icon(tab::folder_icon_symbolic(&dir, 16)).size(16))
+                    .data(Location::Path(dir.clone()))
+            });
+        }
         //TODO: Sort by name?
         for dir_opt in &[
-            dirs::home_dir(),
             dirs::document_dir(),
             dirs::download_dir(),
             dirs::audio_dir(),
@@ -667,21 +673,6 @@ impl Application for App {
             //TODO: use theme defined space?
             widget::horizontal_space(Length::Fixed(32.0)).into(),
         ]
-    }
-
-    fn header_center(&self) -> Vec<Element<Self::Message>> {
-        let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
-
-        let entity = self.tab_model.active();
-        let tab = match self.tab_model.data::<Tab>(entity) {
-            Some(some) => some,
-            None => return Vec::new(),
-        };
-
-        vec![tab
-            .breadcrumbs_view(&self.core)
-            .map(move |message| Message::TabMessage(Some(entity), message))
-            .into()]
     }
 
     fn header_end(&self) -> Vec<Element<Self::Message>> {

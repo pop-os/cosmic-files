@@ -4,7 +4,11 @@ use cosmic::{
     iced::{
         alignment::{Horizontal, Vertical},
         keyboard::Modifiers,
-        Alignment, Length, Point,
+        //TODO: export in cosmic::widget
+        widget::horizontal_rule,
+        Alignment,
+        Length,
+        Point,
     },
     theme, widget, Element,
 };
@@ -626,9 +630,11 @@ impl Tab {
                                     widget::icon::icon(folder_icon_symbolic(&ancestor, 16))
                                         .size(16),
                                 );
+                                row = row.push(widget::text(fl!("home")));
                                 found_home = true;
+                            } else {
+                                row = row.push(widget::text(name.to_string_lossy().to_string()));
                             }
-                            row = row.push(widget::text(name.to_string_lossy().to_string()));
                         }
                         None => {
                             row = row.push(
@@ -641,14 +647,19 @@ impl Tab {
                     }
 
                     if !children.is_empty() {
-                        children.push(widget::text("/").into());
+                        children.push(
+                            widget::icon::from_name("go-next-symbolic")
+                                .size(16)
+                                .icon()
+                                .into(),
+                        );
                     }
 
                     children.push(
                         widget::button(row)
                             .padding(space_xxxs)
                             .on_press(Message::Location(Location::Path(ancestor)))
-                            .style(theme::Button::Text)
+                            .style(theme::Button::Link)
                             .into(),
                     );
 
@@ -676,8 +687,8 @@ impl Tab {
         }
         children.push(widget::horizontal_space(Length::Fill).into());
 
-        widget::container(widget::row::with_children(children).align_items(Alignment::Center))
-            .style(theme::Container::Primary)
+        widget::row::with_children(children)
+            .align_items(Alignment::Center)
             .into()
     }
 
@@ -765,6 +776,8 @@ impl Tab {
 
         let mut children: Vec<Element<_>> = Vec::new();
 
+        children.push(self.breadcrumbs_view(core));
+
         children.push(
             widget::row::with_children(vec![
                 widget::text::heading(fl!("name"))
@@ -784,8 +797,7 @@ impl Tab {
             .into(),
         );
 
-        //TODO: export in cosmic::widget
-        children.push(cosmic::iced::widget::horizontal_rule(1).into());
+        children.push(horizontal_rule(1).into());
 
         if let Some(ref items) = self.items_opt {
             let mut count = 0;
@@ -795,6 +807,10 @@ impl Tab {
                     hidden += 1;
                     //TODO: SHOW HIDDEN OPTION
                     continue;
+                }
+
+                if count > 0 {
+                    children.push(horizontal_rule(1).into());
                 }
 
                 let modified_text = match &item.metadata {
