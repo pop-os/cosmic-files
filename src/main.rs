@@ -20,13 +20,15 @@ use std::{any::TypeId, env, fs, path::PathBuf, process};
 use config::{AppTheme, Config, CONFIG_VERSION};
 mod config;
 
+mod localize;
+
 mod menu;
 
 mod mouse_area;
 
-mod localize;
-
 mod mime_icon;
+
+mod operation;
 
 use tab::{Location, Tab};
 mod tab;
