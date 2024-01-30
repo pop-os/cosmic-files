@@ -804,26 +804,30 @@ impl Tab {
     pub fn empty_view(&self, has_hidden: bool, core: &Core) -> Element<Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = core.system_theme().cosmic().spacing;
 
-        widget::container(
-            widget::column::with_children(vec![
-                widget::icon::from_name("folder-symbolic")
-                    .size(64)
-                    .icon()
+        widget::column::with_children(vec![
+            self.location_view(core),
+            widget::container(
+                widget::column::with_children(vec![
+                    widget::icon::from_name("folder-symbolic")
+                        .size(64)
+                        .icon()
+                        .into(),
+                    widget::text(if has_hidden {
+                        fl!("empty-folder-hidden")
+                    } else {
+                        fl!("empty-folder")
+                    })
                     .into(),
-                widget::text(if has_hidden {
-                    fl!("empty-folder-hidden")
-                } else {
-                    fl!("empty-folder")
-                })
-                .into(),
-            ])
-            .align_items(Alignment::Center)
-            .spacing(space_xxs),
-        )
-        .align_x(Horizontal::Center)
-        .align_y(Vertical::Center)
-        .width(Length::Fill)
-        .height(Length::Fill)
+                ])
+                .align_items(Alignment::Center)
+                .spacing(space_xxs),
+            )
+            .align_x(Horizontal::Center)
+            .align_y(Vertical::Center)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into(),
+        ])
         .into()
     }
 

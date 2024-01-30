@@ -385,7 +385,7 @@ impl App {
 
         if !self.pending_operations.is_empty() {
             let mut section = widget::settings::view_section(fl!("pending"));
-            for (id, (op, progress)) in self.pending_operations.iter() {
+            for (id, (op, progress)) in self.pending_operations.iter().rev() {
                 section = section.add(widget::column::with_children(vec![
                     widget::text(format!("{:?}", op)).into(),
                     widget::progress_bar(0.0..=100.0, *progress)
@@ -398,7 +398,7 @@ impl App {
 
         if !self.failed_operations.is_empty() {
             let mut section = widget::settings::view_section(fl!("failed"));
-            for (id, (op, error)) in self.failed_operations.iter() {
+            for (id, (op, error)) in self.failed_operations.iter().rev() {
                 section = section.add(widget::column::with_children(vec![
                     widget::text(format!("{:?}", op)).into(),
                     widget::text(error).into(),
@@ -409,7 +409,7 @@ impl App {
 
         if !self.complete_operations.is_empty() {
             let mut section = widget::settings::view_section(fl!("complete"));
-            for (id, op) in self.complete_operations.iter() {
+            for (id, op) in self.complete_operations.iter().rev() {
                 section = section.add(widget::text(format!("{:?}", op)));
             }
             children.push(section.into());
