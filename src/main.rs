@@ -7,15 +7,22 @@ use cosmic::{
     cosmic_theme, executor,
     iced::{
         event,
+        futures::SinkExt,
         keyboard::{Event as KeyEvent, KeyCode, Modifiers},
-        subscription::Subscription,
+        subscription::{self, Subscription},
         window, Event, Length, Point,
     },
     style,
     widget::{self, segmented_button},
     Application, ApplicationExt, Element,
 };
-use std::{any::TypeId, env, fs, path::PathBuf, process, collections::HashMap};
+use std::{
+    any::TypeId,
+    collections::{BTreeMap, HashMap},
+    env, fs, io,
+    path::PathBuf,
+    process, time,
+};
 
 use config::{AppTheme, Config, CONFIG_VERSION};
 mod config;
@@ -31,9 +38,10 @@ mod mouse_area;
 
 mod mime_icon;
 
+use operation::Operation;
 mod operation;
 
-use tab::{Location, Tab};
+use tab::{ItemMetadata, Location, Tab};
 mod tab;
 
 /// Runs application with these settings
@@ -146,8 +154,12 @@ impl Action {
             Action::TabNew => Message::TabNew,
             Action::TabNext => Message::TabNext,
             Action::TabPrev => Message::TabPrev,
-            Action::TabViewGrid => Message::TabMessage(entity_opt, tab::Message::View(tab::View::Grid)),
-            Action::TabViewList => Message::TabMessage(entity_opt, tab::Message::View(tab::View::List)),
+            Action::TabViewGrid => {
+                Message::TabMessage(entity_opt, tab::Message::View(tab::View::Grid))
+            }
+            Action::TabViewList => {
+                Message::TabMessage(entity_opt, tab::Message::View(tab::View::List))
+            }
             Action::WindowClose => Message::WindowClose,
             Action::WindowNew => Message::WindowNew,
         }
@@ -168,6 +180,9 @@ pub enum Message {
     NewFile(Option<segmented_button::Entity>),
     NewFolder(Option<segmented_button::Entity>),
     Paste(Option<segmented_button::Entity>),
+    PendingComplete(u64),
+    PendingError(u64, String),
+    PendingProgress(u64, f32),
     RestoreFromTrash(Option<segmented_button::Entity>),
     SelectAll(Option<segmented_button::Entity>),
     SystemThemeModeChange(cosmic_theme::ThemeMode),
@@ -187,6 +202,7 @@ pub enum Message {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ContextPage {
+    Operations,
     Properties,
     Settings,
 }
@@ -194,6 +210,7 @@ pub enum ContextPage {
 impl ContextPage {
     fn title(&self) -> String {
         match self {
+            Self::Operations => fl!("operations"),
             Self::Properties => fl!("properties"),
             Self::Settings => fl!("settings"),
         }
@@ -211,6 +228,10 @@ pub struct App {
     context_page: ContextPage,
     key_binds: HashMap<KeyBind, Action>,
     modifiers: Modifiers,
+    pending_operation_id: u64,
+    pending_operations: BTreeMap<u64, (Operation, f32)>,
+    complete_operations: BTreeMap<u64, Operation>,
+    failed_operations: BTreeMap<u64, (Operation, String)>,
 }
 
 impl App {
@@ -225,6 +246,15 @@ impl App {
             .activate()
             .id();
         Command::batch([self.update_title(), self.rescan_tab(entity, location)])
+    }
+
+    fn operation(&mut self, operation: Operation) {
+        let id = self.pending_operation_id;
+        self.pending_operation_id += 1;
+        self.pending_operations.insert(id, (operation, 0.0));
+        //TODO: have some button to show current status
+        self.core.window.show_context = true;
+        self.context_page = ContextPage::Operations;
     }
 
     fn rescan_tab(
@@ -273,6 +303,47 @@ impl App {
         };
         self.set_header_title(header_title);
         self.set_window_title(window_title)
+    }
+
+    fn operations(&self) -> Element<Message> {
+        let mut children = Vec::new();
+
+        //TODO: get height from theme?
+        let progress_bar_height = Length::Fixed(4.0);
+
+        if !self.pending_operations.is_empty() {
+            let mut section = widget::settings::view_section(fl!("pending"));
+            for (id, (op, progress)) in self.pending_operations.iter() {
+                section = section.add(widget::column::with_children(vec![
+                    widget::text(format!("{:?}", op)).into(),
+                    widget::progress_bar(0.0..=100.0, *progress)
+                        .height(progress_bar_height)
+                        .into(),
+                ]));
+            }
+            children.push(section.into());
+        }
+
+        if !self.failed_operations.is_empty() {
+            let mut section = widget::settings::view_section(fl!("failed"));
+            for (id, (op, error)) in self.failed_operations.iter() {
+                section = section.add(widget::column::with_children(vec![
+                    widget::text(format!("{:?}", op)).into(),
+                    widget::text(error).into(),
+                ]));
+            }
+            children.push(section.into());
+        }
+
+        if !self.complete_operations.is_empty() {
+            let mut section = widget::settings::view_section(fl!("complete"));
+            for (id, op) in self.complete_operations.iter() {
+                section = section.add(widget::text(format!("{:?}", op)));
+            }
+            children.push(section.into());
+        }
+
+        widget::settings::view_column(children).into()
     }
 
     fn properties(&self) -> Element<Message> {
@@ -388,6 +459,10 @@ impl Application for App {
             context_page: ContextPage::Settings,
             key_binds: key_binds(),
             modifiers: Modifiers::empty(),
+            pending_operation_id: 0,
+            pending_operations: BTreeMap::new(),
+            complete_operations: BTreeMap::new(),
+            failed_operations: BTreeMap::new(),
         };
 
         let mut commands = Vec::new();
@@ -507,7 +582,20 @@ impl Application for App {
                 self.modifiers = modifiers;
             }
             Message::MoveToTrash(entity_opt) => {
-                log::warn!("TODO: MOVE TO TRASH");
+                let mut paths = Vec::new();
+                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                    if let Some(ref mut items) = tab.items_opt {
+                        for item in items.iter_mut() {
+                            if item.selected {
+                                paths.push(item.path.clone());
+                            }
+                        }
+                    }
+                }
+                if !paths.is_empty() {
+                    self.operation(Operation::Delete { paths });
+                }
             }
             Message::NewFile(entity_opt) => {
                 log::warn!("TODO: NEW FILE");
@@ -518,8 +606,43 @@ impl Application for App {
             Message::Paste(entity_opt) => {
                 log::warn!("TODO: PASTE");
             }
+            Message::PendingComplete(id) => {
+                if let Some((op, _)) = self.pending_operations.remove(&id) {
+                    self.complete_operations.insert(id, op);
+                }
+            }
+            Message::PendingError(id, err) => {
+                if let Some((op, _)) = self.pending_operations.remove(&id) {
+                    self.failed_operations.insert(id, (op, err));
+                }
+            }
+            Message::PendingProgress(id, new_progress) => {
+                if let Some((_, progress)) = self.pending_operations.get_mut(&id) {
+                    *progress = new_progress;
+                }
+            }
             Message::RestoreFromTrash(entity_opt) => {
-                log::warn!("TODO: RESTORE FROM TRASH");
+                let mut paths = Vec::new();
+                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                    if let Some(ref mut items) = tab.items_opt {
+                        for item in items.iter_mut() {
+                            if item.selected {
+                                match &item.metadata {
+                                    ItemMetadata::Trash { entry, .. } => {
+                                        paths.push(entry.clone());
+                                    }
+                                    _ => {
+                                        //TODO: error on trying to restore non-trash file?
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if !paths.is_empty() {
+                    self.operation(Operation::Restore { paths });
+                }
             }
             Message::SelectAll(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
@@ -692,24 +815,18 @@ impl Application for App {
         }
 
         Some(match self.context_page {
+            ContextPage::Operations => self.operations(),
             ContextPage::Properties => self.properties(),
             ContextPage::Settings => self.settings(),
         })
     }
 
     fn header_start(&self) -> Vec<Element<Self::Message>> {
-        vec![
-            menu::menu_bar(&self.key_binds).into(),
-            //TODO: use theme defined space?
-            widget::horizontal_space(Length::Fixed(32.0)).into(),
-        ]
+        vec![menu::menu_bar(&self.key_binds).into()]
     }
 
     fn header_end(&self) -> Vec<Element<Self::Message>> {
-        vec![
-            //TODO: use defined space
-            widget::horizontal_space(Length::Fixed(32.0)).into(),
-        ]
+        vec![]
     }
 
     /// Creates a view after each update.
@@ -778,14 +895,12 @@ impl Application for App {
         struct ConfigSubscription;
         struct ThemeSubscription;
 
-        Subscription::batch([
+        let mut subscriptions = vec![
             event::listen_with(|event, _status| match event {
                 Event::Keyboard(KeyEvent::KeyPressed {
                     key_code,
                     modifiers,
-                }) => {
-                    Some(Message::Key(modifiers, key_code))
-                }
+                }) => Some(Message::Key(modifiers, key_code)),
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
                     Some(Message::Modifiers(modifiers))
                 }
@@ -821,6 +936,34 @@ impl Application for App {
                 }
                 Message::SystemThemeModeChange(update.config)
             }),
-        ])
+        ];
+
+        for (id, (pending_operation, _)) in self.pending_operations.iter() {
+            //TODO: use recipe?
+            let id = *id;
+            let pending_operation = pending_operation.clone();
+            subscriptions.push(subscription::channel(
+                id,
+                16,
+                move |mut msg_tx| async move {
+                    match pending_operation.perform(id, &mut msg_tx).await {
+                        Ok(()) => {
+                            msg_tx.send(Message::PendingComplete(id)).await;
+                        }
+                        Err(err) => {
+                            msg_tx
+                                .send(Message::PendingError(id, err.to_string()))
+                                .await;
+                        }
+                    }
+
+                    loop {
+                        tokio::time::sleep(time::Duration::new(1, 0)).await;
+                    }
+                },
+            ));
+        }
+
+        Subscription::batch(subscriptions)
     }
 }

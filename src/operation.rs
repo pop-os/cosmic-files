@@ -1,57 +1,73 @@
-use std::path::PathBuf;
+use cosmic::iced::futures::{channel::mpsc, SinkExt};
+use std::{error::Error, future::Future, io, path::PathBuf, time};
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+use crate::Message;
+
+fn err_str<T: ToString>(err: T) -> String {
+    err.to_string()
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Operation {
-    /// Move a path to the trash
-    Delete { path: PathBuf },
-    /// Rename a path
-    Rename { old: PathBuf, new: PathBuf },
+    /// Copy items
+    Copy { paths: Vec<PathBuf>, to: PathBuf },
+    /// Move items to the trash
+    Delete { paths: Vec<PathBuf> },
+    /// Move items
+    Move { paths: Vec<PathBuf>, to: PathBuf },
     /// Restore a path from the trash
-    Restore { path: PathBuf },
+    Restore { paths: Vec<trash::TrashItem> },
 }
 
 impl Operation {
-    pub fn delete(path: impl Into<PathBuf>) -> Self {
-        Self::Delete { path: path.into() }
-    }
+    /// Perform the operation
+    pub async fn perform(self, id: u64, msg_tx: &mut mpsc::Sender<Message>) -> Result<(), String> {
+        msg_tx.send(Message::PendingProgress(id, 0.0)).await;
 
-    pub fn rename(old: impl Into<PathBuf>, new: impl Into<PathBuf>) -> Self {
-        Self::Rename {
-            old: old.into(),
-            new: new.into(),
-        }
-    }
-
-    pub fn restore(path: impl Into<PathBuf>) -> Self {
-        Self::Restore { path: path.into() }
-    }
-
-    pub fn reverse(self) -> Self {
+        //TODO: IF ERROR, RETURN AN Operation THAT CAN UNDO THE CURRENT STATE
+        //TODO: SAFELY HANDLE CANCEL
         match self {
-            Self::Delete { path } => Self::Restore { path },
-            Self::Rename { old, new } => Self::Rename { old: new, new: old },
-            Self::Restore { path } => Self::Delete { path },
+            Self::Delete { paths } => {
+                let mut total = paths.len();
+                let mut count = 0;
+                for path in paths {
+                    tokio::task::spawn_blocking(|| trash::delete(path))
+                        .await
+                        .map_err(err_str)?
+                        .map_err(err_str)?;
+                    count += 1;
+                    msg_tx
+                        .send(Message::PendingProgress(
+                            id,
+                            100.0 * (count as f32) / (total as f32),
+                        ))
+                        .await;
+                }
+            }
+            Self::Restore { paths } => {
+                let mut total = paths.len();
+                let mut count = 0;
+                for path in paths {
+                    tokio::task::spawn_blocking(|| trash::os_limited::restore_all([path]))
+                        .await
+                        .map_err(err_str)?
+                        .map_err(err_str)?;
+                    count += 1;
+                    msg_tx
+                        .send(Message::PendingProgress(
+                            id,
+                            100.0 * (count as f32) / (total as f32),
+                        ))
+                        .await;
+                }
+            }
+            _ => {
+                return Err("not implemented".to_string());
+            }
         }
-    }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::Operation;
+        msg_tx.send(Message::PendingProgress(id, 100.0)).await;
 
-    #[test]
-    fn operation() {
-        assert_eq!(
-            Operation::delete("foo").reverse(),
-            Operation::restore("foo")
-        );
-        assert_eq!(
-            Operation::rename("foo", "bar").reverse(),
-            Operation::rename("bar", "foo")
-        );
-        assert_eq!(
-            Operation::restore("foo").reverse(),
-            Operation::delete("foo")
-        );
+        Ok(())
     }
 }

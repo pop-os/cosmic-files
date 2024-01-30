@@ -13,7 +13,7 @@ use cosmic::{
 };
 use std::collections::HashMap;
 
-use crate::{fl, KeyBind, tab, Action, ContextPage, Location, Message, Tab};
+use crate::{fl, tab, Action, ContextPage, KeyBind, Location, Message, Tab};
 
 macro_rules! menu_button {
     ($($x:expr),+ $(,)?) => (
@@ -144,19 +144,10 @@ pub fn menu_bar<'a>(key_binds: &HashMap<KeyBind, Action>) -> Element<'a, Message
         MenuTree::with_children(
             menu_root(fl!("view")),
             vec![
-                menu_item(
-                    fl!("grid-view"),
-                    Action::TabViewGrid
-                ),
-                menu_item(
-                    fl!("list-view"),
-                    Action::TabViewList
-                ),
+                menu_item(fl!("grid-view"), Action::TabViewGrid),
+                menu_item(fl!("list-view"), Action::TabViewList),
                 MenuTree::new(horizontal_rule(1)),
-                menu_item(
-                    fl!("menu-settings"),
-                    Action::Settings,
-                ),
+                menu_item(fl!("menu-settings"), Action::Settings),
             ],
         ),
     ])

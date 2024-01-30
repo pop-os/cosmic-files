@@ -255,7 +255,7 @@ pub fn scan_path(tab_path: &PathBuf) -> Vec<Item> {
 
                 items.push(Item {
                     name,
-                    metadata: ItemMetadata::Path(metadata, children),
+                    metadata: ItemMetadata::Path { metadata, children },
                     hidden,
                     path,
                     icon_handle_grid,
@@ -316,7 +316,7 @@ pub fn scan_trash() -> Vec<Item> {
                 };
 
                 let path = entry.original_path();
-                let name = entry.name;
+                let name = entry.name.clone();
 
                 //TODO: configurable size
                 let (icon_handle_grid, icon_handle_list) = match metadata.size {
@@ -332,7 +332,7 @@ pub fn scan_trash() -> Vec<Item> {
 
                 items.push(Item {
                     name,
-                    metadata: ItemMetadata::Trash(metadata),
+                    metadata: ItemMetadata::Trash { metadata, entry },
                     hidden: false,
                     path,
                     icon_handle_grid,
@@ -373,6 +373,8 @@ impl Location {
 pub enum Message {
     Click(Option<usize>),
     EditLocation(Option<Location>),
+    GoNext,
+    GoPrevious,
     Location(Location),
     RightClick(usize),
     View(View),
@@ -380,15 +382,21 @@ pub enum Message {
 
 #[derive(Clone, Debug)]
 pub enum ItemMetadata {
-    Path(Metadata, usize),
-    Trash(trash::TrashItemMetadata),
+    Path {
+        metadata: Metadata,
+        children: usize,
+    },
+    Trash {
+        metadata: trash::TrashItemMetadata,
+        entry: trash::TrashItem,
+    },
 }
 
 impl ItemMetadata {
     pub fn is_dir(&self) -> bool {
         match self {
-            Self::Path(metadata, _) => metadata.is_dir(),
-            Self::Trash(metadata) => match metadata.size {
+            Self::Path { metadata, .. } => metadata.is_dir(),
+            Self::Trash { metadata, .. } => match metadata.size {
                 trash::TrashItemSize::Entries(_) => true,
                 trash::TrashItemSize::Bytes(_) => false,
             },
@@ -421,7 +429,7 @@ impl Item {
         //TODO: translate!
         //TODO: correct display of folder size?
         match &self.metadata {
-            ItemMetadata::Path(metadata, children) => {
+            ItemMetadata::Path { metadata, children } => {
                 if metadata.is_dir() {
                     section = section.add(widget::settings::item::item(
                         "Items",
@@ -467,7 +475,7 @@ impl Item {
                     ));
                 }
             }
-            ItemMetadata::Trash(_metadata) => {
+            ItemMetadata::Trash { .. } => {
                 //TODO: trash metadata
             }
         }
@@ -504,16 +512,21 @@ pub struct Tab {
     pub items_opt: Option<Vec<Item>>,
     pub view: View,
     pub edit_location: Option<Location>,
+    pub history_i: usize,
+    pub history: Vec<Location>,
 }
 
 impl Tab {
     pub fn new(location: Location) -> Self {
+        let history = vec![location.clone()];
         Self {
             location,
             context_menu: None,
             items_opt: None,
             view: View::List,
             edit_location: None,
+            history_i: 0,
+            history,
         }
     }
 
@@ -531,6 +544,7 @@ impl Tab {
 
     pub fn update(&mut self, message: Message, modifiers: Modifiers) -> bool {
         let mut cd = None;
+        let mut history_i_opt = None;
         match message {
             Message::Click(click_i_opt) => {
                 if let Some(ref mut items) = self.items_opt {
@@ -579,6 +593,22 @@ impl Tab {
             Message::EditLocation(edit_location) => {
                 self.edit_location = edit_location;
             }
+            Message::GoNext => {
+                if let Some(history_i) = self.history_i.checked_add(1) {
+                    if let Some(location) = self.history.get(history_i) {
+                        cd = Some(location.clone());
+                        history_i_opt = Some(history_i);
+                    }
+                }
+            }
+            Message::GoPrevious => {
+                if let Some(history_i) = self.history_i.checked_sub(1) {
+                    if let Some(location) = self.history.get(history_i) {
+                        cd = Some(location.clone());
+                        history_i_opt = Some(history_i);
+                    }
+                }
+            }
             Message::Location(location) => {
                 cd = Some(location);
             }
@@ -603,11 +633,22 @@ impl Tab {
                 self.view = view;
             }
         }
-        if let Some(location) = cd {
+        if let Some(mut location) = cd {
             if location != self.location {
-                self.location = location;
+                self.location = location.clone();
                 self.items_opt = None;
                 self.edit_location = None;
+                if let Some(history_i) = history_i_opt {
+                    // Navigating in history
+                    self.history_i = history_i;
+                } else {
+                    // Truncate history to remove next entries
+                    self.history.truncate(self.history_i + 1);
+
+                    // Push to the front of history
+                    self.history_i = self.history.len();
+                    self.history.push(location);
+                }
                 true
             } else {
                 false
@@ -617,36 +658,64 @@ impl Tab {
         }
     }
 
-    pub fn breadcrumbs_view(&self, core: &Core) -> Element<Message> {
+    pub fn location_view(&self, core: &Core) -> Element<Message> {
         let cosmic_theme::Spacing {
             space_xxxs,
             space_xxs,
+            space_s,
             ..
         } = core.system_theme().cosmic().spacing;
+
+        let mut row = widget::row::with_capacity(5).align_items(Alignment::Center);
+
+        let mut prev_button =
+            widget::button(widget::icon::from_name("go-previous-symbolic").size(16))
+                .padding(space_xxs)
+                .style(theme::Button::Icon);
+        if self.history_i > 0 && !self.history.is_empty() {
+            prev_button = prev_button.on_press(Message::GoPrevious);
+        }
+        row = row.push(prev_button);
+
+        let mut next_button = widget::button(widget::icon::from_name("go-next-symbolic").size(16))
+            .padding(space_xxs)
+            .style(theme::Button::Icon);
+        if self.history_i + 1 < self.history.len() {
+            next_button = next_button.on_press(Message::GoNext);
+        }
+        row = row.push(next_button);
+
+        row = row.push(widget::horizontal_space(Length::Fixed(space_s.into())));
 
         if let Some(location) = &self.edit_location {
             match location {
                 Location::Path(path) => {
-                    return widget::row::with_children(vec![
+                    row = row.push(
                         widget::button(widget::icon::from_name("window-close-symbolic").size(16))
                             .on_press(Message::EditLocation(None))
                             .padding(space_xxs)
-                            .style(theme::Button::Icon)
-                            .into(),
+                            .style(theme::Button::Icon),
+                    );
+                    row = row.push(
                         widget::text_input("", path.to_string_lossy())
                             .on_input(|input| {
                                 Message::EditLocation(Some(Location::Path(PathBuf::from(input))))
                             })
-                            .on_submit(Message::Location(location.clone()))
-                            .into(),
-                    ])
-                    .align_items(Alignment::Center)
-                    .into();
+                            .on_submit(Message::Location(location.clone())),
+                    );
+                    return row.into();
                 }
                 _ => {
                     //TODO: allow editing other locations
                 }
             }
+        } else {
+            row = row.push(
+                widget::button(widget::icon::from_name("edit-symbolic").size(16))
+                    .on_press(Message::EditLocation(Some(self.location.clone())))
+                    .padding(space_xxs)
+                    .style(theme::Button::Icon),
+            );
         }
 
         let mut children: Vec<Element<_>> = Vec::new();
@@ -726,18 +795,10 @@ impl Tab {
             }
         }
 
-        children.insert(
-            0,
-            widget::button(widget::icon::from_name("edit-symbolic").size(16))
-                .on_press(Message::EditLocation(Some(self.location.clone())))
-                .padding(space_xxs)
-                .style(theme::Button::Icon)
-                .into(),
-        );
-
-        widget::row::with_children(children)
-            .align_items(Alignment::Center)
-            .into()
+        for child in children {
+            row = row.push(child);
+        }
+        row.into()
     }
 
     pub fn empty_view(&self, has_hidden: bool, core: &Core) -> Element<Message> {
@@ -815,7 +876,7 @@ impl Tab {
             }
         }
         widget::scrollable(widget::column::with_children(vec![
-            self.breadcrumbs_view(core),
+            self.location_view(core),
             widget::flex_row(children).into(),
         ]))
         .width(Length::Fill)
@@ -830,7 +891,7 @@ impl Tab {
 
         let mut children: Vec<Element<_>> = Vec::new();
 
-        children.push(self.breadcrumbs_view(core));
+        children.push(self.location_view(core));
 
         children.push(
             widget::row::with_children(vec![
@@ -868,24 +929,24 @@ impl Tab {
                 }
 
                 let modified_text = match &item.metadata {
-                    ItemMetadata::Path(metadata, _children) => match metadata.modified() {
+                    ItemMetadata::Path { metadata, .. } => match metadata.modified() {
                         Ok(time) => chrono::DateTime::<chrono::Local>::from(time)
                             .format("%c")
                             .to_string(),
                         Err(_) => String::new(),
                     },
-                    ItemMetadata::Trash(metadata) => String::new(),
+                    ItemMetadata::Trash { .. } => String::new(),
                 };
 
                 let size_text = match &item.metadata {
-                    ItemMetadata::Path(metadata, children) => {
+                    ItemMetadata::Path { metadata, children } => {
                         if metadata.is_dir() {
                             format!("{} items", children)
                         } else {
                             format_size(metadata.len())
                         }
                     }
-                    ItemMetadata::Trash(metadata) => match metadata.size {
+                    ItemMetadata::Trash { metadata, .. } => match metadata.size {
                         trash::TrashItemSize::Entries(entries) => {
                             //TODO: translate
                             if entries == 1 {

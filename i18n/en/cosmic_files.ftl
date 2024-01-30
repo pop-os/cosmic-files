@@ -11,6 +11,12 @@ size = Size
 
 # Context Pages
 
+## Operations
+operations = Operations
+pending = Pending
+failed = Failed
+complete = Complete
+
 ## Properties
 properties = Properties
 

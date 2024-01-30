@@ -46,9 +46,17 @@ check *args:
 # Runs a clippy check with JSON message format
 check-json: (check '--message-format=json')
 
+# Developer target
+dev *args:
+    cargo fmt
+    cargo test
+    cargo build --profile release-with-debug
+    env RUST_LOG=cosmic_files=debug RUST_BACKTRACE=full target/release-with-debug/cosmic-files {{args}}
+
 # Run with debug logs
 run *args:
-    env RUST_LOG=cosmic_files=debug RUST_BACKTRACE=full cargo run --release {{args}}
+    cargo build --release
+    env RUST_LOG=cosmic_files=debug RUST_BACKTRACE=full target/release/cosmic-files {{args}}
 
 # Installs files
 install:
