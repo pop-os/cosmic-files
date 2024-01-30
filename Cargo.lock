@@ -1098,6 +1098,7 @@ dependencies = [
  "lexical-sort",
  "libcosmic",
  "log",
+ "notify",
  "once_cell",
  "paste",
  "rust-embed",

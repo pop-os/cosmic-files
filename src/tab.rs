@@ -709,7 +709,7 @@ impl Tab {
                     //TODO: allow editing other locations
                 }
             }
-        } else {
+        } else if let Location::Path(_) = &self.location {
             row = row.push(
                 widget::button(widget::icon::from_name("edit-symbolic").size(16))
                     .on_press(Message::EditLocation(Some(self.location.clone())))

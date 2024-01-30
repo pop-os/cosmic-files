@@ -7,7 +7,7 @@ use cosmic::{
     cosmic_theme, executor,
     iced::{
         event,
-        futures::SinkExt,
+        futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, KeyCode, Modifiers},
         subscription::{self, Subscription},
         window, Event, Length, Point,
@@ -16,9 +16,10 @@ use cosmic::{
     widget::{self, segmented_button},
     Application, ApplicationExt, Element,
 };
+use notify::Watcher;
 use std::{
     any::TypeId,
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     env, fs, io,
     path::PathBuf,
     process, time,
@@ -179,6 +180,8 @@ pub enum Message {
     MoveToTrash(Option<segmented_button::Entity>),
     NewFile(Option<segmented_button::Entity>),
     NewFolder(Option<segmented_button::Entity>),
+    NotifyEvent(notify::Event),
+    NotifyWatcher(WatcherWrapper),
     Paste(Option<segmented_button::Entity>),
     PendingComplete(u64),
     PendingError(u64, String),
@@ -217,6 +220,23 @@ impl ContextPage {
     }
 }
 
+#[derive(Debug)]
+pub struct WatcherWrapper {
+    watcher_opt: Option<notify::RecommendedWatcher>,
+}
+
+impl Clone for WatcherWrapper {
+    fn clone(&self) -> Self {
+        Self { watcher_opt: None }
+    }
+}
+
+impl PartialEq for WatcherWrapper {
+    fn eq(&self, _other: &Self) -> bool {
+        false
+    }
+}
+
 /// The [`App`] stores application-specific state.
 pub struct App {
     core: Core,
@@ -232,6 +252,7 @@ pub struct App {
     pending_operations: BTreeMap<u64, (Operation, f32)>,
     complete_operations: BTreeMap<u64, Operation>,
     failed_operations: BTreeMap<u64, (Operation, String)>,
+    watcher_opt: Option<(notify::RecommendedWatcher, HashSet<PathBuf>)>,
 }
 
 impl App {
@@ -245,7 +266,11 @@ impl App {
             .closable()
             .activate()
             .id();
-        Command::batch([self.update_title(), self.rescan_tab(entity, location)])
+        Command::batch([
+            self.update_title(),
+            self.update_watcher(),
+            self.rescan_tab(entity, location),
+        ])
     }
 
     fn operation(&mut self, operation: Operation) {
@@ -303,6 +328,53 @@ impl App {
         };
         self.set_header_title(header_title);
         self.set_window_title(window_title)
+    }
+
+    fn update_watcher(&mut self) -> Command<Message> {
+        if let Some((mut watcher, old_paths)) = self.watcher_opt.take() {
+            let mut new_paths = HashSet::new();
+            for entity in self.tab_model.iter() {
+                if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+                    if let Location::Path(path) = &tab.location {
+                        new_paths.insert(path.clone());
+                    }
+                }
+            }
+
+            // Unwatch paths no longer used
+            for path in old_paths.iter() {
+                if !new_paths.contains(path) {
+                    match watcher.unwatch(path) {
+                        Ok(()) => {
+                            log::debug!("unwatching {:?}", path);
+                        }
+                        Err(err) => {
+                            log::debug!("failed to unwatch {:?}: {}", path, err);
+                        }
+                    }
+                }
+            }
+
+            // Watch new paths
+            for path in new_paths.iter() {
+                if !old_paths.contains(path) {
+                    //TODO: should this be recursive?
+                    match watcher.watch(path, notify::RecursiveMode::NonRecursive) {
+                        Ok(()) => {
+                            log::debug!("watching {:?}", path);
+                        }
+                        Err(err) => {
+                            log::debug!("failed to watch {:?}: {}", path, err);
+                        }
+                    }
+                }
+            }
+
+            self.watcher_opt = Some((watcher, new_paths));
+        }
+
+        //TODO: should any of this run in a command?
+        Command::none()
     }
 
     fn operations(&self) -> Element<Message> {
@@ -463,6 +535,7 @@ impl Application for App {
             pending_operations: BTreeMap::new(),
             complete_operations: BTreeMap::new(),
             failed_operations: BTreeMap::new(),
+            watcher_opt: None,
         };
 
         let mut commands = Vec::new();
@@ -603,6 +676,44 @@ impl Application for App {
             Message::NewFolder(entity_opt) => {
                 log::warn!("TODO: NEW FOLDER");
             }
+            Message::NotifyEvent(event) => {
+                log::debug!("{:?}", event);
+
+                let mut needs_reload = Vec::new();
+                for entity in self.tab_model.iter() {
+                    if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+                        //TODO: support reloading trash, somehow
+                        if let Location::Path(path) = &tab.location {
+                            let mut contains_change = false;
+                            for event_path in event.paths.iter() {
+                                if event_path.starts_with(&path) {
+                                    contains_change = true;
+                                    break;
+                                }
+                            }
+                            if contains_change {
+                                needs_reload.push((entity, tab.location.clone()));
+                            }
+                        }
+                    }
+                }
+
+                let mut commands = Vec::with_capacity(needs_reload.len());
+                for (entity, location) in needs_reload {
+                    commands.push(self.rescan_tab(entity, location));
+                }
+                return Command::batch(commands);
+            }
+            Message::NotifyWatcher(mut watcher_wrapper) => match watcher_wrapper.watcher_opt.take()
+            {
+                Some(mut watcher) => {
+                    self.watcher_opt = Some((watcher, HashSet::new()));
+                    return self.update_watcher();
+                }
+                None => {
+                    log::warn!("message did not contain notify watcher");
+                }
+            },
             Message::Paste(entity_opt) => {
                 log::warn!("TODO: PASTE");
             }
@@ -719,7 +830,7 @@ impl Application for App {
                     return window::close(window::Id::MAIN);
                 }
 
-                return self.update_title();
+                return Command::batch([self.update_title(), self.update_watcher()]);
             }
             Message::TabContextAction(entity, action) => {
                 match self.tab_model.data_mut::<Tab>(entity) {
@@ -761,6 +872,7 @@ impl Application for App {
                     self.tab_model.text_set(entity, tab_title);
                     return Command::batch([
                         self.update_title(),
+                        self.update_watcher(),
                         self.rescan_tab(entity, tab_path),
                     ]);
                 }
@@ -894,6 +1006,7 @@ impl Application for App {
     fn subscription(&self) -> Subscription<Self::Message> {
         struct ConfigSubscription;
         struct ThemeSubscription;
+        struct WatcherSubscription;
 
         let mut subscriptions = vec![
             event::listen_with(|event, _status| match event {
@@ -936,6 +1049,68 @@ impl Application for App {
                 }
                 Message::SystemThemeModeChange(update.config)
             }),
+            subscription::channel(
+                TypeId::of::<WatcherSubscription>(),
+                100,
+                |mut output| async move {
+                    let watcher_res = {
+                        let mut output = output.clone();
+                        //TODO: debounce
+                        notify::recommended_watcher(
+                            move |event_res: Result<notify::Event, notify::Error>| match event_res {
+                                Ok(event) => {
+                                    match &event.kind {
+                                        notify::EventKind::Access(_)
+                                        | notify::EventKind::Modify(
+                                            notify::event::ModifyKind::Metadata(_),
+                                        ) => {
+                                            // Data not mutated
+                                            return;
+                                        }
+                                        _ => {}
+                                    }
+
+                                    match futures::executor::block_on(async {
+                                        output.send(Message::NotifyEvent(event)).await
+                                    }) {
+                                        Ok(()) => {}
+                                        Err(err) => {
+                                            log::warn!("failed to send notify event: {:?}", err);
+                                        }
+                                    }
+                                }
+                                Err(err) => {
+                                    log::warn!("failed to watch files: {:?}", err);
+                                }
+                            },
+                        )
+                    };
+
+                    match watcher_res {
+                        Ok(watcher) => {
+                            match output
+                                .send(Message::NotifyWatcher(WatcherWrapper {
+                                    watcher_opt: Some(watcher),
+                                }))
+                                .await
+                            {
+                                Ok(()) => {}
+                                Err(err) => {
+                                    log::warn!("failed to send notify watcher: {:?}", err);
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            log::warn!("failed to create file watcher: {:?}", err);
+                        }
+                    }
+
+                    //TODO: how to properly kill this task?
+                    loop {
+                        tokio::time::sleep(time::Duration::new(1, 0)).await;
+                    }
+                },
+            ),
         ];
 
         for (id, (pending_operation, _)) in self.pending_operations.iter() {
