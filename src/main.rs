@@ -512,12 +512,7 @@ impl Application for App {
         }
         nav_model = nav_model.insert(|b| {
             b.text(fl!("trash"))
-                .icon(
-                    //TODO: dynamic empty/full icon
-                    widget::icon::from_name("user-trash-full-symbolic")
-                        .size(16)
-                        .icon(),
-                )
+                .icon(widget::icon::icon(tab::trash_icon_symbolic(16)))
                 .data(Location::Trash)
         });
 
