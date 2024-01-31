@@ -1144,6 +1144,7 @@ impl Application for App {
 #[cfg(test)]
 mod test_utils {
     use std::{
+        cmp::Ordering,
         fs::File,
         io::{self, Write},
         iter,
@@ -1153,13 +1154,15 @@ mod test_utils {
     use log::debug;
     use tempfile::{tempdir, TempDir};
 
+    use crate::tab::Item;
+
     use super::*;
 
     // Default number of files, directories, and nested directories for test file system
-    const NUM_FILES: usize = 5;
-    const NUM_DIRS: usize = 2;
-    const NUM_NESTED: usize = 1;
-    const NAME_LEN: usize = 5;
+    pub const NUM_FILES: usize = 2;
+    pub const NUM_DIRS: usize = 2;
+    pub const NUM_NESTED: usize = 1;
+    pub const NAME_LEN: usize = 5;
 
     /// Add `n` temporary files in `dir`
     ///
@@ -1219,27 +1222,45 @@ mod test_utils {
             }
         }
 
-        // let (dirs, temp_files): (Vec<_>, Vec<_>) =
-        //     std::fs::read_dir(root.as_ref())?.partition(|entry| {
-        //         entry
-        //             .as_ref()
-        //             .ok()
-        //             .and_then(|entry| entry.file_type().ok())
-        //             .map(|file_type| file_type.is_dir())
-        //             .unwrap_or_default()
-        //     });
-        //
-        // let entries = dirs
-        //     .into_iter()
-        //     .flat_map(|entry| -> Result<ReadDir, _> {
-        //         let entry = entry?;
-        //         std::fs::read_dir(entry.path())
-        //     });
-        //
-        // for entry in entries {
-        //     debug!("{entry:?}");
-        // }
-
         Ok(root)
+    }
+
+    /// Empty file hierarchy
+    pub fn empty_fs() -> io::Result<TempDir> {
+        tempdir()
+    }
+
+    /// Sort files.
+    ///
+    /// Directories are placed before files.
+    /// Files are lexically sorted.
+    /// This is more or less copied right from the [Tab] code
+    pub fn sort_files(a: &PathBuf, b: &PathBuf) -> Ordering {
+        match (a.is_dir(), b.is_dir()) {
+            (true, false) => Ordering::Less,
+            (false, true) => Ordering::Greater,
+            _ => lexical_sort::natural_lexical_cmp(
+                a.file_name()
+                    .expect("temp entries should have names")
+                    .to_str()
+                    .expect("temp entries should be valid UTF-8"),
+                b.file_name()
+                    .expect("temp entries should have names")
+                    .to_str()
+                    .expect("temp entries should be valid UTF-8"),
+            ),
+        }
+    }
+
+    /// Equality for [Path] and [Item].
+    pub fn eq_path_item(path: &Path, item: &Item) -> bool {
+        let name = path
+            .file_name()
+            .expect("temp entries should have names")
+            .to_str()
+            .expect("temp entries should be valid UTF-8");
+        let metadata = path.is_dir();
+
+        name == item.name && metadata == item.metadata.is_dir() && path == item.path
     }
 }
