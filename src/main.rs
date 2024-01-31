@@ -1137,3 +1137,109 @@ impl Application for App {
         Subscription::batch(subscriptions)
     }
 }
+
+// Utilities to build a temporary file hierarchy for tests.
+//
+// Ideally, tests would use the cap-std crate which limits path traversal.
+#[cfg(test)]
+mod test_utils {
+    use std::{
+        fs::File,
+        io::{self, Write},
+        iter,
+        path::Path,
+    };
+
+    use log::debug;
+    use tempfile::{tempdir, TempDir};
+
+    use super::*;
+
+    // Default number of files, directories, and nested directories for test file system
+    const NUM_FILES: usize = 5;
+    const NUM_DIRS: usize = 2;
+    const NUM_NESTED: usize = 1;
+    const NAME_LEN: usize = 5;
+
+    /// Add `n` temporary files in `dir`
+    ///
+    /// Each file is assigned a numeric name from 0..n.
+    pub fn file_flat_hier<D: AsRef<Path>>(dir: D, n: usize) -> io::Result<Vec<File>> {
+        let dir = dir.as_ref();
+        (0..n)
+            .map(|i| -> io::Result<File> {
+                let name = i.to_string();
+                let path = dir.join(&name);
+
+                let mut file = File::create(path)?;
+                file.write_all(name.as_bytes())?;
+
+                Ok(file)
+            })
+            .collect()
+    }
+
+    // Random alphanumeric String of length `len`
+    fn rand_string(len: usize) -> String {
+        (0..len).map(|_| fastrand::alphanumeric()).collect()
+    }
+
+    /// Create a small, temporary file hierarchy.
+    pub fn simple_fs(
+        files: usize,
+        dirs: usize,
+        nested: usize,
+        name_len: usize,
+    ) -> io::Result<TempDir> {
+        // Files created inside of a TempDir are deleted with the directory
+        // TempDir won't leak resources as long as the destructor runs
+        let root = tempdir()?;
+        debug!("Root temp directory: {}", root.as_ref().display());
+
+        // All paths for directories and nested directories
+        let paths = (0..dirs).flat_map(|_| {
+            let root = root.as_ref();
+            let current = rand_string(name_len);
+
+            iter::once(root.join(&current)).chain(
+                (0..nested).map(move |_| root.join(format!("{current}/{}", rand_string(name_len)))),
+            )
+        });
+
+        // Create directories from `paths` and add a few files
+        for path in paths {
+            fs::create_dir_all(&path)?;
+            file_flat_hier(&path, files)?;
+
+            for entry in path.read_dir()? {
+                let entry = entry?;
+                if entry.file_type()?.is_file() {
+                    debug!("Created file: {}", entry.path().display());
+                }
+            }
+        }
+
+        // let (dirs, temp_files): (Vec<_>, Vec<_>) =
+        //     std::fs::read_dir(root.as_ref())?.partition(|entry| {
+        //         entry
+        //             .as_ref()
+        //             .ok()
+        //             .and_then(|entry| entry.file_type().ok())
+        //             .map(|file_type| file_type.is_dir())
+        //             .unwrap_or_default()
+        //     });
+        //
+        // let entries = dirs
+        //     .into_iter()
+        //     .flat_map(|entry| -> Result<ReadDir, _> {
+        //         let entry = entry?;
+        //         std::fs::read_dir(entry.path())
+        //     });
+        //
+        // for entry in entries {
+        //     debug!("{entry:?}");
+        // }
+
+        Ok(root)
+    }
+}

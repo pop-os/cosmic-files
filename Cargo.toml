@@ -47,3 +47,10 @@ debug = true
 
 [target.'cfg(unix)'.dependencies]
 fork = "0.1"
+
+[dev-dependencies]
+# cap-std = "3"
+# cap-tempfile = "3"
+fastrand = "2"
+tempfile = "3"
+test-log = "0.2"
