@@ -1137,3 +1137,130 @@ impl Application for App {
         Subscription::batch(subscriptions)
     }
 }
+
+// Utilities to build a temporary file hierarchy for tests.
+//
+// Ideally, tests would use the cap-std crate which limits path traversal.
+#[cfg(test)]
+mod test_utils {
+    use std::{
+        cmp::Ordering,
+        fs::File,
+        io::{self, Write},
+        iter,
+        path::Path,
+    };
+
+    use log::{debug, trace};
+    use tempfile::{tempdir, TempDir};
+
+    use crate::tab::Item;
+
+    use super::*;
+
+    // Default number of files, directories, and nested directories for test file system
+    pub const NUM_FILES: usize = 2;
+    pub const NUM_DIRS: usize = 2;
+    pub const NUM_NESTED: usize = 1;
+    pub const NAME_LEN: usize = 5;
+
+    /// Add `n` temporary files in `dir`
+    ///
+    /// Each file is assigned a numeric name from [0, n).
+    pub fn file_flat_hier<D: AsRef<Path>>(dir: D, n: usize) -> io::Result<Vec<File>> {
+        let dir = dir.as_ref();
+        (0..n)
+            .map(|i| -> io::Result<File> {
+                let name = i.to_string();
+                let path = dir.join(&name);
+
+                let mut file = File::create(path)?;
+                file.write_all(name.as_bytes())?;
+
+                Ok(file)
+            })
+            .collect()
+    }
+
+    // Random alphanumeric String of length `len`
+    fn rand_string(len: usize) -> String {
+        (0..len).map(|_| fastrand::alphanumeric()).collect()
+    }
+
+    /// Create a small, temporary file hierarchy.
+    pub fn simple_fs(
+        files: usize,
+        dirs: usize,
+        nested: usize,
+        name_len: usize,
+    ) -> io::Result<TempDir> {
+        // Files created inside of a TempDir are deleted with the directory
+        // TempDir won't leak resources as long as the destructor runs
+        let root = tempdir()?;
+        debug!("Root temp directory: {}", root.as_ref().display());
+
+        // All paths for directories and nested directories
+        let paths = (0..dirs).flat_map(|_| {
+            let root = root.as_ref();
+            let current = rand_string(name_len);
+
+            iter::once(root.join(&current)).chain(
+                (0..nested).map(move |_| root.join(format!("{current}/{}", rand_string(name_len)))),
+            )
+        });
+
+        // Create directories from `paths` and add a few files
+        for path in paths {
+            fs::create_dir_all(&path)?;
+            file_flat_hier(&path, files)?;
+
+            for entry in path.read_dir()? {
+                let entry = entry?;
+                if entry.file_type()?.is_file() {
+                    trace!("Created file: {}", entry.path().display());
+                }
+            }
+        }
+
+        Ok(root)
+    }
+
+    /// Empty file hierarchy
+    pub fn empty_fs() -> io::Result<TempDir> {
+        tempdir()
+    }
+
+    /// Sort files.
+    ///
+    /// Directories are placed before files.
+    /// Files are lexically sorted.
+    /// This is more or less copied right from the [Tab] code
+    pub fn sort_files(a: &Path, b: &Path) -> Ordering {
+        match (a.is_dir(), b.is_dir()) {
+            (true, false) => Ordering::Less,
+            (false, true) => Ordering::Greater,
+            _ => lexical_sort::natural_lexical_cmp(
+                a.file_name()
+                    .expect("temp entries should have names")
+                    .to_str()
+                    .expect("temp entries should be valid UTF-8"),
+                b.file_name()
+                    .expect("temp entries should have names")
+                    .to_str()
+                    .expect("temp entries should be valid UTF-8"),
+            ),
+        }
+    }
+
+    /// Equality for [Path] and [Item].
+    pub fn eq_path_item(path: &Path, item: &Item) -> bool {
+        let name = path
+            .file_name()
+            .expect("temp entries should have names")
+            .to_str()
+            .expect("temp entries should be valid UTF-8");
+        let metadata = path.is_dir();
+
+        name == item.name && metadata == item.metadata.is_dir() && path == item.path
+    }
+}

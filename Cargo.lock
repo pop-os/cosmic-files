@@ -1092,6 +1092,7 @@ dependencies = [
  "chrono",
  "dirs",
  "env_logger",
+ "fastrand 2.0.1",
  "fork",
  "i18n-embed",
  "i18n-embed-fl",
@@ -1104,6 +1105,8 @@ dependencies = [
  "rust-embed",
  "serde",
  "systemicons",
+ "tempfile",
+ "test-log",
  "tokio",
  "trash",
 ]
@@ -5012,6 +5015,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "test-log"
+version = "0.2.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6159ab4116165c99fc88cce31f99fa2c9dbe08d3691cb38da02fc3b45f357d2b"
+dependencies = [
+ "env_logger",
+ "test-log-macros",
+]
+
+[[package]]
+name = "test-log-macros"
+version = "0.2.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ba277e77219e9eea169e8508942db1bf5d8a41ff2db9b20aab5a5aadc9fa25d"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.48",
 ]
 
 [[package]]
