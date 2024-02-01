@@ -1151,7 +1151,7 @@ mod test_utils {
         path::Path,
     };
 
-    use log::debug;
+    use log::{debug, trace};
     use tempfile::{tempdir, TempDir};
 
     use crate::tab::Item;
@@ -1166,7 +1166,7 @@ mod test_utils {
 
     /// Add `n` temporary files in `dir`
     ///
-    /// Each file is assigned a numeric name from 0..n.
+    /// Each file is assigned a numeric name from [0, n).
     pub fn file_flat_hier<D: AsRef<Path>>(dir: D, n: usize) -> io::Result<Vec<File>> {
         let dir = dir.as_ref();
         (0..n)
@@ -1217,7 +1217,7 @@ mod test_utils {
             for entry in path.read_dir()? {
                 let entry = entry?;
                 if entry.file_type()?.is_file() {
-                    debug!("Created file: {}", entry.path().display());
+                    trace!("Created file: {}", entry.path().display());
                 }
             }
         }
@@ -1235,7 +1235,7 @@ mod test_utils {
     /// Directories are placed before files.
     /// Files are lexically sorted.
     /// This is more or less copied right from the [Tab] code
-    pub fn sort_files(a: &PathBuf, b: &PathBuf) -> Ordering {
+    pub fn sort_files(a: &Path, b: &Path) -> Ordering {
         match (a.is_dir(), b.is_dir()) {
             (true, false) => Ordering::Less,
             (false, true) => Ordering::Greater,

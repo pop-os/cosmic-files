@@ -1035,7 +1035,7 @@ mod tests {
             .read_dir()?
             .map(|maybe_entry| maybe_entry.map(|entry| entry.path()))
             .collect::<io::Result<_>>()?;
-        entries.sort_by(sort_files);
+        entries.sort_by(|a, b| sort_files(a, b));
 
         debug!("Calling scan_path(\"{}\")", path.display());
         let actual = scan_path(&path.to_owned());
