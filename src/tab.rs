@@ -27,6 +27,7 @@ use crate::{fl, mime_icon::mime_icon};
 
 const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 //TODO: configurable
+const ICON_SIZE_DIALOG: u16 = 16;
 const ICON_SIZE_LIST: u16 = 32;
 const ICON_SIZE_GRID: u16 = 64;
 static SPECIAL_DIRS: Lazy<HashMap<PathBuf, &'static str>> = Lazy::new(|| {
@@ -228,13 +229,16 @@ pub fn scan_path(tab_path: &PathBuf) -> Vec<Item> {
                 let path = entry.path();
 
                 //TODO: configurable size
-                let (icon_handle_grid, icon_handle_list) = if metadata.is_dir() {
+                let (icon_handle_dialog, icon_handle_grid, icon_handle_list) = if metadata.is_dir()
+                {
                     (
+                        folder_icon(&path, ICON_SIZE_DIALOG),
                         folder_icon(&path, ICON_SIZE_GRID),
                         folder_icon(&path, ICON_SIZE_LIST),
                     )
                 } else {
                     (
+                        mime_icon(&path, ICON_SIZE_DIALOG),
                         mime_icon(&path, ICON_SIZE_GRID),
                         mime_icon(&path, ICON_SIZE_LIST),
                     )
@@ -258,6 +262,7 @@ pub fn scan_path(tab_path: &PathBuf) -> Vec<Item> {
                     metadata: ItemMetadata::Path { metadata, children },
                     hidden,
                     path,
+                    icon_handle_dialog,
                     icon_handle_grid,
                     icon_handle_list,
                     selected: false,
@@ -319,12 +324,14 @@ pub fn scan_trash() -> Vec<Item> {
                 let name = entry.name.clone();
 
                 //TODO: configurable size
-                let (icon_handle_grid, icon_handle_list) = match metadata.size {
+                let (icon_handle_dialog, icon_handle_grid, icon_handle_list) = match metadata.size {
                     trash::TrashItemSize::Entries(_) => (
+                        folder_icon(&path, ICON_SIZE_DIALOG),
                         folder_icon(&path, ICON_SIZE_GRID),
                         folder_icon(&path, ICON_SIZE_LIST),
                     ),
                     trash::TrashItemSize::Bytes(_) => (
+                        mime_icon(&path, ICON_SIZE_DIALOG),
                         mime_icon(&path, ICON_SIZE_GRID),
                         mime_icon(&path, ICON_SIZE_LIST),
                     ),
@@ -335,6 +342,7 @@ pub fn scan_trash() -> Vec<Item> {
                     metadata: ItemMetadata::Trash { metadata, entry },
                     hidden: false,
                     path,
+                    icon_handle_dialog,
                     icon_handle_grid,
                     icon_handle_list,
                     selected: false,
@@ -410,6 +418,7 @@ pub struct Item {
     pub metadata: ItemMetadata,
     pub hidden: bool,
     pub path: PathBuf,
+    pub icon_handle_dialog: widget::icon::Handle,
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
     pub selected: bool,
@@ -507,10 +516,10 @@ pub enum View {
 #[derive(Clone, Debug)]
 pub struct Tab {
     pub location: Location,
-    //TODO
     pub context_menu: Option<Point>,
     pub items_opt: Option<Vec<Item>>,
     pub view: View,
+    pub dialog: bool,
     pub edit_location: Option<Location>,
     pub history_i: usize,
     pub history: Vec<Location>,
@@ -524,6 +533,7 @@ impl Tab {
             context_menu: None,
             items_opt: None,
             view: View::List,
+            dialog: false,
             edit_location: None,
             history_i: 0,
             history,
@@ -879,11 +889,12 @@ impl Tab {
                 return self.empty_view(hidden > 0, core);
             }
         }
-        widget::scrollable(widget::column::with_children(vec![
+        widget::column::with_children(vec![
             self.location_view(core),
-            widget::flex_row(children).into(),
-        ]))
-        .width(Length::Fill)
+            widget::scrollable(widget::flex_row(children))
+                .width(Length::Fill)
+                .into(),
+        ])
         .into()
     }
 
@@ -894,8 +905,6 @@ impl Tab {
         let column_width = Length::Fixed(200.0);
 
         let mut children: Vec<Element<_>> = Vec::new();
-
-        children.push(self.location_view(core));
 
         children.push(
             widget::row::with_children(vec![
@@ -966,9 +975,15 @@ impl Tab {
                 //TODO: align columns
                 let button = widget::button(
                     widget::row::with_children(vec![
-                        widget::icon::icon(item.icon_handle_list.clone())
-                            .size(ICON_SIZE_LIST)
-                            .into(),
+                        if self.dialog {
+                            widget::icon::icon(item.icon_handle_dialog.clone())
+                                .size(ICON_SIZE_DIALOG)
+                                .into()
+                        } else {
+                            widget::icon::icon(item.icon_handle_list.clone())
+                                .size(ICON_SIZE_LIST)
+                                .into()
+                        },
                         widget::text(item.name.clone()).width(Length::Fill).into(),
                         widget::text(modified_text).width(column_width).into(),
                         widget::text(size_text).width(column_width).into(),
@@ -994,12 +1009,17 @@ impl Tab {
                 return self.empty_view(hidden > 0, core);
             }
         }
-        widget::scrollable(
-            widget::column::with_children(children)
-                // Hack to make room for scroll bar
-                .padding([0, space_xxs, 0, 0]),
-        )
-        .width(Length::Fill)
+
+        widget::column::with_children(vec![
+            self.location_view(core).into(),
+            widget::scrollable(
+                widget::column::with_children(children)
+                    // Hack to make room for scroll bar
+                    .padding([0, space_xxs, 0, 0]),
+            )
+            .width(Length::Fill)
+            .into(),
+        ])
         .into()
     }
 

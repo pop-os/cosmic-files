@@ -11,6 +11,7 @@ use app::{App, Flags};
 mod app;
 use config::{Config, CONFIG_VERSION};
 mod config;
+mod dialog;
 mod key_bind;
 mod localize;
 mod menu;
@@ -27,6 +28,24 @@ pub fn home_dir() -> PathBuf {
             PathBuf::from("/")
         }
     }
+}
+
+/// Runs application with these settings
+pub fn dialog() -> Result<(), Box<dyn std::error::Error>> {
+    localize::localize();
+
+    let mut settings = Settings::default();
+
+    #[cfg(target_os = "redox")]
+    {
+        // Redox does not support resize if doing CSDs
+        settings = settings.client_decorations(false);
+    }
+
+    let flags = dialog::Flags {};
+    cosmic::app::run::<dialog::App>(settings, flags)?;
+
+    Ok(())
 }
 
 /// Runs application with these settings

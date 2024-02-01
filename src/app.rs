@@ -94,7 +94,6 @@ impl Action {
 /// Messages that are used specifically by our [`App`].
 #[derive(Clone, Debug)]
 pub enum Message {
-    Todo,
     AppTheme(AppTheme),
     Config(Config),
     Copy(Option<segmented_button::Entity>),
@@ -541,9 +540,6 @@ impl Application for App {
         }
 
         match message {
-            Message::Todo => {
-                log::warn!("TODO");
-            }
             Message::AppTheme(app_theme) => {
                 config_set!(app_theme, app_theme);
                 return self.update_config();
