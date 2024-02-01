@@ -567,7 +567,7 @@ impl Tab {
                                         Location::Path(_) => {
                                             if item.path.is_dir() {
                                                 cd = Some(Location::Path(item.path.clone()));
-                                            } else {
+                                            } else if !self.dialog {
                                                 let mut command = open_command(&item.path);
                                                 match command.spawn() {
                                                     Ok(_) => (),
