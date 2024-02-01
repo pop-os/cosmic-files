@@ -13,7 +13,12 @@ use cosmic::{
 };
 use std::collections::HashMap;
 
-use crate::{fl, tab, Action, ContextPage, KeyBind, Location, Message, Tab};
+use crate::{
+    app::{Action, ContextPage, Message},
+    fl,
+    key_bind::KeyBind,
+    tab::{self, Location, Tab},
+};
 
 macro_rules! menu_button {
     ($($x:expr),+ $(,)?) => (

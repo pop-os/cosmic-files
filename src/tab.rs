@@ -417,7 +417,7 @@ pub struct Item {
 }
 
 impl Item {
-    pub fn property_view(&self, core: &Core) -> Element<crate::Message> {
+    pub fn property_view(&self, core: &Core) -> Element<crate::app::Message> {
         let mut section = widget::settings::view_section("");
         section = section.add(widget::settings::item::item_row(vec![
             widget::icon::icon(self.icon_handle_list.clone())
@@ -1022,7 +1022,7 @@ mod tests {
     use test_log::test;
 
     use super::scan_path;
-    use crate::test_utils::{
+    use crate::app::test_utils::{
         empty_fs, eq_path_item, simple_fs, sort_files, NAME_LEN, NUM_DIRS, NUM_FILES, NUM_NESTED,
     };
 

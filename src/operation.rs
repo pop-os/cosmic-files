@@ -1,7 +1,7 @@
 use cosmic::iced::futures::{channel::mpsc, SinkExt};
 use std::{error::Error, future::Future, io, path::PathBuf, time};
 
-use crate::Message;
+use crate::app::Message;
 
 fn err_str<T: ToString>(err: T) -> String {
     err.to_string()

@@ -2,7 +2,7 @@ use cosmic::iced::keyboard::{KeyCode, Modifiers};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt};
 
-use crate::Action;
+use crate::app::Action;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub enum Modifier {
