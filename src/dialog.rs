@@ -16,7 +16,13 @@ use cosmic::{
     Application, ApplicationExt, Element,
 };
 use notify::Watcher;
-use std::{any::TypeId, collections::HashSet, path::PathBuf, time};
+use std::{
+    any::TypeId,
+    collections::HashSet,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    time,
+};
 
 use crate::{
     fl, home_dir,
@@ -24,7 +30,9 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub struct Flags {}
+pub struct Flags {
+    pub result_lock: Arc<Mutex<Option<Vec<PathBuf>>>>,
+}
 
 /// Messages that are used specifically by our [`App`].
 #[derive(Clone, Debug)]
@@ -61,6 +69,7 @@ impl PartialEq for WatcherWrapper {
 /// The [`App`] stores application-specific state.
 pub struct App {
     core: Core,
+    flags: Flags,
     nav_model: segmented_button::SingleSelectModel,
     tab_model: segmented_button::Model<segmented_button::SingleSelect>,
     modifiers: Modifiers,
@@ -221,6 +230,7 @@ impl Application for App {
 
         let mut app = App {
             core,
+            flags,
             nav_model: nav_model.build(),
             tab_model: segmented_button::ModelBuilder::default().build(),
             modifiers: Modifiers::empty(),
@@ -274,7 +284,8 @@ impl Application for App {
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
         match message {
             Message::Cancel => {
-                println!("CANCEL");
+                *self.flags.result_lock.lock().unwrap() = None;
+                return window::close(window::Id::MAIN);
             }
             Message::Modifiers(modifiers) => {
                 self.modifiers = modifiers;
@@ -329,7 +340,8 @@ impl Application for App {
                         }
                     }
                 }
-                println!("OPEN {:?}", paths);
+                *self.flags.result_lock.lock().unwrap() = Some(paths);
+                return window::close(window::Id::MAIN);
             }
             Message::SelectAll(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());

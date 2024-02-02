@@ -5,7 +5,11 @@ use cosmic::{
     app::{Application, Settings},
     cosmic_config::{self, CosmicConfigEntry},
 };
-use std::{path::PathBuf, process};
+use std::{
+    path::PathBuf,
+    process,
+    sync::{Arc, Mutex},
+};
 
 use app::{App, Flags};
 mod app;
@@ -31,7 +35,7 @@ pub fn home_dir() -> PathBuf {
 }
 
 /// Runs application with these settings
-pub fn dialog() -> Result<(), Box<dyn std::error::Error>> {
+pub fn dialog() -> Result<Option<Vec<PathBuf>>, Box<dyn std::error::Error>> {
     localize::localize();
 
     let mut settings = Settings::default();
@@ -42,10 +46,16 @@ pub fn dialog() -> Result<(), Box<dyn std::error::Error>> {
         settings = settings.client_decorations(false);
     }
 
-    let flags = dialog::Flags {};
+    let mut result_lock = Arc::new(Mutex::new(None));
+
+    let flags = dialog::Flags {
+        result_lock: result_lock.clone(),
+    };
     cosmic::app::run::<dialog::App>(settings, flags)?;
 
-    Ok(())
+    let mut result_guard = result_lock.lock().unwrap();
+    let result = result_guard.take();
+    Ok(result)
 }
 
 /// Runs application with these settings
