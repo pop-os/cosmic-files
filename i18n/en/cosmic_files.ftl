@@ -4,6 +4,10 @@ filesystem = Filesystem
 home = Home
 trash = Trash
 
+# Dialog
+cancel = Cancel
+open = Open
+
 # List view
 name = Name
 modified = Modified

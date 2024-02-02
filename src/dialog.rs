@@ -29,9 +29,11 @@ pub struct Flags {}
 /// Messages that are used specifically by our [`App`].
 #[derive(Clone, Debug)]
 pub enum Message {
+    Cancel,
     Modifiers(Modifiers),
     NotifyEvent(notify::Event),
     NotifyWatcher(WatcherWrapper),
+    Open,
     SelectAll(Option<segmented_button::Entity>),
     TabActivate(segmented_button::Entity),
     TabClose(Option<segmented_button::Entity>),
@@ -271,6 +273,9 @@ impl Application for App {
     /// Handle application events here.
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
         match message {
+            Message::Cancel => {
+                println!("CANCEL");
+            }
             Message::Modifiers(modifiers) => {
                 self.modifiers = modifiers;
             }
@@ -312,6 +317,20 @@ impl Application for App {
                     log::warn!("message did not contain notify watcher");
                 }
             },
+            Message::Open => {
+                let mut paths = Vec::new();
+                let entity = self.tab_model.active();
+                if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                    if let Some(ref mut items) = tab.items_opt {
+                        for item in items.iter_mut() {
+                            if item.selected {
+                                paths.push(item.path.clone());
+                            }
+                        }
+                    }
+                }
+                println!("OPEN {:?}", paths);
+            }
             Message::SelectAll(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
@@ -409,7 +428,7 @@ impl Application for App {
         match self.tab_model.data::<Tab>(entity) {
             Some(tab) => {
                 tab_column = tab_column.push(
-                    tab.list_view(self.core())
+                    tab.view(self.core())
                         .map(move |message| Message::TabMessage(Some(entity), message)),
                 );
             }
@@ -417,6 +436,20 @@ impl Application for App {
                 //TODO
             }
         }
+
+        tab_column = tab_column.push(
+            widget::row::with_children(vec![
+                widget::horizontal_space(Length::Fill).into(),
+                widget::button(widget::text(fl!("cancel")))
+                    .on_press(Message::Cancel)
+                    .into(),
+                widget::button(widget::text(fl!("open")))
+                    .on_press(Message::Open)
+                    .into(),
+            ])
+            .padding(space_xxs)
+            .spacing(space_xxs),
+        );
 
         let content: Element<_> = tab_column.into();
 
