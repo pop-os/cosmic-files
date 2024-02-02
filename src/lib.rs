@@ -15,7 +15,7 @@ use app::{App, Flags};
 mod app;
 use config::{Config, CONFIG_VERSION};
 mod config;
-mod dialog;
+pub mod dialog;
 mod key_bind;
 mod localize;
 mod menu;

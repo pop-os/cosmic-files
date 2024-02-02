@@ -123,7 +123,7 @@ impl App {
             None => (String::new(), "COSMIC File Manager".to_string()),
         };
         self.set_header_title(header_title);
-        self.set_window_title(window_title)
+        self.set_window_title(window_title, window::Id::MAIN)
     }
 
     fn update_watcher(&mut self) -> Command<Message> {

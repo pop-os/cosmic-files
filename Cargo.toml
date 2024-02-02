@@ -27,7 +27,7 @@ rust-embed = "8"
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
 default-features = false
-features = ["tokio", "winit"]
+features = ["multi-window", "tokio", "winit"]
 #path = "../libcosmic"
 
 #TODO: clean up and send changes upstream
