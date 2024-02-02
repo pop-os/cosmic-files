@@ -1,9 +1,25 @@
 empty-folder = Пустая папка
 empty-folder-hidden = Пустая папка (со скрытыми элементами)
 filesystem = Файловая система
+home = Домашний
 trash = Корзина
 
+# Dialog
+cancel = Отменить
+open = Открыть
+
+# List view
+name = Имя
+modified = Изменено
+size = Размер
+
 # Context Pages
+
+## Operations
+operations = Операции
+pending = В ожидании
+failed = Сбой
+complete = Завершено
 
 ## Properties
 properties = Свойства
