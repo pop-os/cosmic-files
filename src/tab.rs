@@ -1043,12 +1043,13 @@ mod tests {
 
     use super::scan_path;
     use crate::app::test_utils::{
-        empty_fs, eq_path_item, simple_fs, sort_files, NAME_LEN, NUM_DIRS, NUM_FILES, NUM_NESTED,
+        empty_fs, eq_path_item, simple_fs, sort_files, NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN,
+        NUM_NESTED,
     };
 
     #[test]
     fn scan_path_succeeds_on_valid_path() -> io::Result<()> {
-        let fs = simple_fs(NUM_FILES, NUM_DIRS, NUM_NESTED, NAME_LEN)?;
+        let fs = simple_fs(NUM_FILES, NUM_HIDDEN, NUM_DIRS, NUM_NESTED, NAME_LEN)?;
         let path = fs.path();
 
         let mut entries: Vec<_> = path
@@ -1074,7 +1075,7 @@ mod tests {
 
     #[test]
     fn scan_path_returns_empty_vec_for_invalid_path() -> io::Result<()> {
-        let fs = simple_fs(NUM_FILES, NUM_DIRS, NUM_NESTED, NAME_LEN)?;
+        let fs = simple_fs(NUM_FILES, NUM_NESTED, NUM_DIRS, NUM_NESTED, NAME_LEN)?;
         let path = fs.path();
 
         // A nonexisting path within the temp dir

@@ -1080,18 +1080,19 @@ pub(crate) mod test_utils {
 
     // Default number of files, directories, and nested directories for test file system
     pub const NUM_FILES: usize = 2;
+    pub const NUM_HIDDEN: usize = 1;
     pub const NUM_DIRS: usize = 2;
     pub const NUM_NESTED: usize = 1;
     pub const NAME_LEN: usize = 5;
 
     /// Add `n` temporary files in `dir`
     ///
-    /// Each file is assigned a numeric name from [0, n).
-    pub fn file_flat_hier<D: AsRef<Path>>(dir: D, n: usize) -> io::Result<Vec<File>> {
+    /// Each file is assigned a numeric name from [0, n) with a prefix.
+    pub fn file_flat_hier<D: AsRef<Path>>(dir: D, n: usize, prefix: &str) -> io::Result<Vec<File>> {
         let dir = dir.as_ref();
         (0..n)
             .map(|i| -> io::Result<File> {
-                let name = i.to_string();
+                let name = format!("{prefix}{i}");
                 let path = dir.join(&name);
 
                 let mut file = File::create(path)?;
@@ -1108,8 +1109,17 @@ pub(crate) mod test_utils {
     }
 
     /// Create a small, temporary file hierarchy.
+    ///
+    /// # Arguments
+    ///
+    /// * `files` - Number of files to create in temp directories
+    /// * `hidden` - Number of hidden files to create
+    /// * `dirs` - Number of directories to create
+    /// * `nested` - Number of nested directories to create in new dirs
+    /// * `name_len` - Length of randomized directory names
     pub fn simple_fs(
         files: usize,
+        hidden: usize,
         dirs: usize,
         nested: usize,
         name_len: usize,
@@ -1118,6 +1128,7 @@ pub(crate) mod test_utils {
         // TempDir won't leak resources as long as the destructor runs
         let root = tempdir()?;
         debug!("Root temp directory: {}", root.as_ref().display());
+        trace!("Creating {files} files and {hidden} hidden files in {dirs} temp dirs with {nested} nested temp dirs");
 
         // All paths for directories and nested directories
         let paths = (0..dirs).flat_map(|_| {
@@ -1132,7 +1143,11 @@ pub(crate) mod test_utils {
         // Create directories from `paths` and add a few files
         for path in paths {
             fs::create_dir_all(&path)?;
-            file_flat_hier(&path, files)?;
+
+            // Normal files
+            file_flat_hier(&path, files, "")?;
+            // Hidden files
+            file_flat_hier(&path, hidden, ".")?;
 
             for entry in path.read_dir()? {
                 let entry = entry?;
@@ -1179,8 +1194,24 @@ pub(crate) mod test_utils {
             .expect("temp entries should have names")
             .to_str()
             .expect("temp entries should be valid UTF-8");
-        let metadata = path.is_dir();
+        let is_dir = path.is_dir();
 
-        name == item.name && metadata == item.metadata.is_dir() && path == item.path
+        // NOTE: I don't want to change `tab::hidden_attribute` to `pub(crate)` for
+        // tests without asking
+        #[cfg(not(target_os = "windows"))]
+        let is_hidden = name.starts_with('.');
+
+        #[cfg(target_os = "windows")]
+        let is_hidden = {
+            use std::os::windows::fs::MetadataExt;
+            const FILE_ATTRIBUTE_HIDDEN: u32 = 2;
+            let metadata = path.metadata().expect("fetching file metadata");
+            metadata.file_attributes() & FILE_ATTRIBUTE_HIDDEN == FILE_ATTRIBUTE_HIDDEN
+        };
+
+        name == item.name
+            && is_dir == item.metadata.is_dir()
+            && path == item.path
+            && is_hidden == item.hidden
     }
 }
