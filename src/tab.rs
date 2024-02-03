@@ -1038,13 +1038,14 @@ impl Tab {
 mod tests {
     use std::io;
 
+    use cosmic::iced_runtime::keyboard::Modifiers;
     use log::debug;
     use test_log::test;
 
-    use super::scan_path;
+    use super::{scan_path, Item, Location, Message, Tab};
     use crate::app::test_utils::{
-        empty_fs, eq_path_item, simple_fs, sort_files, NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN,
-        NUM_NESTED,
+        assert_eq_tab_path, assert_eq_tab_path_contents, empty_fs, eq_path_item, simple_fs,
+        sort_files, NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED,
     };
 
     #[test]
@@ -1099,8 +1100,84 @@ mod tests {
         let actual = scan_path(&path.to_owned());
 
         assert_eq!(0, path.read_dir()?.count());
-        assert_eq!(0, actual.len());
+        assert!(actual.is_empty());
 
         Ok(())
+    }
+
+    #[test]
+    fn tab_location_changes_location() -> io::Result<()> {
+        let fs = simple_fs(NUM_FILES, NUM_NESTED, NUM_DIRS, NUM_NESTED, NAME_LEN)?;
+        let path = fs.path();
+
+        // Next directory in temp directory
+        let next_dir = path
+            .read_dir()?
+            .filter_map(|entry| {
+                entry.ok().and_then(|entry| {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        Some(path)
+                    } else {
+                        None
+                    }
+                })
+            })
+            .next()
+            .expect("temp directory should have at least one directory");
+
+        let mut tab = Tab::new(Location::Path(path.to_owned()));
+        debug!(
+            "Emitting Message::Location(Location::Path(\"{}\"))",
+            next_dir.display()
+        );
+        tab.update(
+            Message::Location(Location::Path(next_dir.clone())),
+            Modifiers::empty(),
+        );
+
+        // Validate that the tab's path updated
+        // NOTE: `items_opt` is set to None with Message::Location so this ONLY checks for equal paths
+        // If item contents are NOT None then this needs to be reevaluated for correctness
+        assert_eq_tab_path(&tab, &next_dir);
+        assert!(
+            tab.items_opt.is_none(),
+            "Tab's `items` is not None which means this test needs to be updated"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn tab_click_single_selects_item() -> io::Result<()> {
+        let fs = simple_fs(NUM_FILES, NUM_NESTED, NUM_DIRS, NUM_NESTED, NAME_LEN)?;
+        let path = fs.path();
+
+        todo!()
+    }
+
+    #[test]
+    fn tab_click_double_opens_folder() -> io::Result<()> {
+        unimplemented!()
+    }
+
+    #[test]
+    fn tab_click_ctrl_selects_multiple() -> io::Result<()> {
+        unimplemented!()
+    }
+
+    #[test]
+    fn tab_gonext_moves_forward_in_history() -> io::Result<()> {
+        unimplemented!()
+    }
+
+    #[test]
+    fn tab_goprev_moves_backward_in_history() -> io::Result<()> {
+        unimplemented!()
+    }
+
+    #[test]
+    fn tab_empty_history_does_nothing_on_prev_next() -> io::Result<()> {
+        unimplemented!()
     }
 }
