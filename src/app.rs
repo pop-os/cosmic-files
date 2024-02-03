@@ -1187,6 +1187,17 @@ pub(crate) mod test_utils {
         }
     }
 
+    /// Read directory entries from `path` and sort.
+    pub fn read_dir_sorted(path: &Path) -> io::Result<Vec<PathBuf>> {
+        let mut entries: Vec<_> = path
+            .read_dir()?
+            .map(|maybe_entry| maybe_entry.map(|entry| entry.path()))
+            .collect::<io::Result<_>>()?;
+        entries.sort_by(|a, b| sort_files(a, b));
+
+        Ok(entries)
+    }
+
     /// Equality for [Path] and [Item].
     pub fn eq_path_item(path: &Path, item: &Item) -> bool {
         let name = path
@@ -1213,5 +1224,51 @@ pub(crate) mod test_utils {
             && is_dir == item.metadata.is_dir()
             && path == item.path
             && is_hidden == item.hidden
+    }
+
+    /// Asserts `tab`'s location changed to `path`
+    pub fn assert_eq_tab_path(tab: &Tab, path: &Path) {
+        // Paths should be the same
+        let Location::Path(ref tab_path) = tab.location else {
+            panic!("Expected tab's location to be a path");
+        };
+
+        assert_eq!(
+            path,
+            tab_path,
+            "Tab's path is {} instead of being updated to {}",
+            tab_path.display(),
+            path.display()
+        );
+    }
+
+    /// Assert that tab's items are equal to a path's entries.
+    pub fn assert_eq_tab_path_contents(tab: &Tab, path: &Path) {
+        let Location::Path(ref tab_path) = tab.location else {
+            panic!("Expected tab's location to be a path");
+        };
+
+        // Tab items are sorted so paths from read_dir must be too
+        let entries = read_dir_sorted(path).expect("should be able to read paths from temp dir");
+
+        // Check lengths.
+        // `items_opt` is optional and the directory at `path` may have zero entries
+        // Therefore, this doesn't panic if `items_opt` is None
+        let items_len = tab
+            .items_opt
+            .as_ref()
+            .map(|items| items.len())
+            .unwrap_or_default();
+        assert_eq!(entries.len(), items_len);
+
+        assert!(
+            entries
+                .into_iter()
+                .zip(tab.items_opt.clone().unwrap_or_default())
+                .all(|(a, b)| eq_path_item(&a, &b)),
+            "Path ({}) and Tab path ({}) don't have equal contents",
+            path.display(),
+            tab_path.display()
+        );
     }
 }
