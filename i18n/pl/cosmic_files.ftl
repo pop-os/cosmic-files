@@ -1,9 +1,25 @@
 empty-folder = Pusty katalog
 empty-folder-hidden = Pusty katalog (z ukrytymi plikami)
 filesystem = System plików
+home = Katalog Domowy
 trash = Kosz
 
+# Dialog
+cancel = Anuluj
+open = Otwórz
+
+# List view
+name = Nazwa
+modified = Zmodyfikowany
+size = Rozmiar
+
 # Context Pages
+
+## Operations
+operations = Operacje
+pending = Oczekujące
+failed = Nieudane
+complete = Ukończone
 
 ## Properties
 properties = Właściwości
@@ -21,10 +37,10 @@ light = Jasny
 # Context menu
 new-file = Nowy plik
 new-folder = Nowy katalog
-copy = Kopiuj
-paste = Wklej
 move-to-trash = Przenieś do kosza
 restore-from-trash = Przywróć z kosza
+
+# Menu
 
 ## File
 file = Plik
