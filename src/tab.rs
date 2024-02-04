@@ -1044,20 +1044,53 @@ mod tests {
 
     use super::{scan_path, Item, Location, Message, Tab};
     use crate::app::test_utils::{
-        assert_eq_tab_path, assert_eq_tab_path_contents, empty_fs, eq_path_item, simple_fs,
-        sort_files, NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED,
+        assert_eq_tab_path, assert_eq_tab_path_contents, empty_fs, eq_path_item, filter_dirs,
+        read_dir_sorted, simple_fs, sort_files, tab_click_new, NAME_LEN, NUM_DIRS, NUM_FILES,
+        NUM_HIDDEN, NUM_NESTED,
     };
+
+    // Boilerplate for tab tests. Checks if simulated clicks selected items.
+    fn tab_selects_item(
+        clicks: &[usize],
+        modifiers: Modifiers,
+        expected_selected: &[bool],
+    ) -> io::Result<()> {
+        let (_fs, mut tab) = tab_click_new(NUM_FILES, NUM_NESTED, NUM_DIRS, NUM_NESTED, NAME_LEN)?;
+
+        // Simulate clicks by triggering Message::Click
+        for &click in clicks {
+            debug!("Emitting Message::Click(Some({click})) with modifiers: {modifiers:?}");
+            tab.update(Message::Click(Some(click)), modifiers);
+        }
+
+        let items = tab
+            .items_opt
+            .as_deref()
+            .expect("tab should be populated with items");
+
+        for (i, (&expected, actual)) in expected_selected.into_iter().zip(items).enumerate() {
+            assert_eq!(
+                expected,
+                actual.selected,
+                "expected index {i} to be {}",
+                if expected {
+                    "selected but it was deselected"
+                } else {
+                    "deselected but it was selected"
+                }
+            );
+        }
+
+        Ok(())
+    }
 
     #[test]
     fn scan_path_succeeds_on_valid_path() -> io::Result<()> {
         let fs = simple_fs(NUM_FILES, NUM_HIDDEN, NUM_DIRS, NUM_NESTED, NAME_LEN)?;
         let path = fs.path();
 
-        let mut entries: Vec<_> = path
-            .read_dir()?
-            .map(|maybe_entry| maybe_entry.map(|entry| entry.path()))
-            .collect::<io::Result<_>>()?;
-        entries.sort_by(|a, b| sort_files(a, b));
+        // Read directory entries and sort as cosmic-files does
+        let entries = read_dir_sorted(path)?;
 
         debug!("Calling scan_path(\"{}\")", path.display());
         let actual = scan_path(&path.to_owned());
@@ -1111,18 +1144,7 @@ mod tests {
         let path = fs.path();
 
         // Next directory in temp directory
-        let next_dir = path
-            .read_dir()?
-            .filter_map(|entry| {
-                entry.ok().and_then(|entry| {
-                    let path = entry.path();
-                    if path.is_dir() {
-                        Some(path)
-                    } else {
-                        None
-                    }
-                })
-            })
+        let next_dir = filter_dirs(path)?
             .next()
             .expect("temp directory should have at least one directory");
 
@@ -1150,20 +1172,38 @@ mod tests {
 
     #[test]
     fn tab_click_single_selects_item() -> io::Result<()> {
-        let fs = simple_fs(NUM_FILES, NUM_NESTED, NUM_DIRS, NUM_NESTED, NAME_LEN)?;
-        let path = fs.path();
-
-        todo!()
+        // Select the second directory with no keys held down
+        tab_selects_item(&[1], Modifiers::empty(), &[false, true])
     }
 
     #[test]
     fn tab_click_double_opens_folder() -> io::Result<()> {
-        unimplemented!()
+        let (fs, mut tab) = tab_click_new(NUM_FILES, NUM_NESTED, NUM_DIRS, NUM_NESTED, NAME_LEN)?;
+        let path = fs.path();
+
+        // Simulate double clicking second directory
+        debug!("Emitting first Message::Click(Some(1))");
+        tab.update(Message::Click(Some(1)), Modifiers::empty());
+        debug!("Emitting second Message::Click(Some(1))");
+        tab.update(Message::Click(Some(1)), Modifiers::empty());
+
+        // Path to second directory
+        let second_dir = read_dir_sorted(path)?
+            .iter()
+            .filter(|p| p.is_dir())
+            .nth(1)
+            .expect("should be at least two directories");
+
+        // Location should have changed to second_dir
+        assert_eq_tab_path(&tab, &second_dir);
+
+        Ok(())
     }
 
     #[test]
     fn tab_click_ctrl_selects_multiple() -> io::Result<()> {
-        unimplemented!()
+        // Select the first and second directory by holding down ctrl
+        tab_selects_item(&[0, 1], Modifiers::CTRL, &[true, true])
     }
 
     #[test]

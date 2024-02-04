@@ -1198,6 +1198,47 @@ pub(crate) mod test_utils {
         Ok(entries)
     }
 
+    /// Filter `path` for directories
+    pub fn filter_dirs(path: &Path) -> io::Result<impl Iterator<Item = PathBuf>> {
+        Ok(path.read_dir()?.filter_map(|entry| {
+            entry.ok().and_then(|entry| {
+                let path = entry.path();
+                if path.is_dir() {
+                    Some(path)
+                } else {
+                    None
+                }
+            })
+        }))
+    }
+
+    /// Boiler plate for Tab tests
+    pub fn tab_click_new(
+        files: usize,
+        hidden: usize,
+        dirs: usize,
+        nested: usize,
+        name_len: usize,
+    ) -> io::Result<(TempDir, Tab)> {
+        let fs = simple_fs(files, hidden, dirs, nested, name_len)?;
+        let path = fs.path();
+
+        // New tab with items
+        let location = Location::Path(path.to_owned());
+        let items = location.scan();
+        let mut tab = Tab::new(location);
+        tab.items_opt = Some(items);
+
+        // Ensure correct number of directories as a sanity check
+        let items = tab
+            .items_opt
+            .as_deref()
+            .expect("tab should be populated with Items");
+        assert_eq!(NUM_DIRS, items.len());
+
+        Ok((fs, tab))
+    }
+
     /// Equality for [Path] and [Item].
     pub fn eq_path_item(path: &Path, item: &Item) -> bool {
         let name = path
