@@ -1036,10 +1036,11 @@ impl Tab {
 
 #[cfg(test)]
 mod tests {
-    use std::io;
+    use std::{io, path::PathBuf};
 
     use cosmic::iced_runtime::keyboard::Modifiers;
-    use log::debug;
+    use log::{debug, trace};
+    use tempfile::TempDir;
     use test_log::test;
 
     use super::{scan_path, Item, Location, Message, Tab};
@@ -1082,6 +1083,41 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    fn tab_history() -> io::Result<(TempDir, Tab, Vec<PathBuf>)> {
+        let fs = simple_fs(NUM_FILES, NUM_NESTED, NUM_DIRS, NUM_NESTED, NAME_LEN)?;
+        let path = fs.path();
+        let mut tab = Tab::new(Location::Path(path.into()));
+
+        // All directories (simple_fs only produces one nested layer)
+        let dirs: Vec<PathBuf> = filter_dirs(path)?
+            .flat_map(|dir| {
+                filter_dirs(&dir).map(|nested_dirs| std::iter::once(dir).chain(nested_dirs))
+            })
+            .flatten()
+            .collect();
+        assert!(
+            dirs.len() == NUM_DIRS + NUM_DIRS * NUM_NESTED,
+            "Sanity check: Have {} dirs instead of {}",
+            dirs.len(),
+            NUM_DIRS + NUM_DIRS * NUM_NESTED
+        );
+
+        debug!("Building history by emitting Message::Location");
+        for dir in &dirs {
+            debug!(
+                "Emitting Message::Location(Location::Path(\"{}\"))",
+                dir.display()
+            );
+            tab.update(
+                Message::Location(Location::Path(dir.clone())),
+                Modifiers::empty(),
+            );
+        }
+        trace!("Tab history: {:?}", tab.history);
+
+        Ok((fs, tab, dirs))
     }
 
     #[test]
@@ -1144,6 +1180,7 @@ mod tests {
         let path = fs.path();
 
         // Next directory in temp directory
+        // This does not have to be sorted
         let next_dir = filter_dirs(path)?
             .next()
             .expect("temp directory should have at least one directory");
@@ -1189,7 +1226,7 @@ mod tests {
 
         // Path to second directory
         let second_dir = read_dir_sorted(path)?
-            .iter()
+            .into_iter()
             .filter(|p| p.is_dir())
             .nth(1)
             .expect("should be at least two directories");
@@ -1208,16 +1245,56 @@ mod tests {
 
     #[test]
     fn tab_gonext_moves_forward_in_history() -> io::Result<()> {
-        unimplemented!()
+        let (fs, mut tab, dirs) = tab_history()?;
+        let path = fs.path();
+
+        // Rewind to the start
+        for _ in 0..dirs.len() {
+            debug!("Emitting Message::GoPrevious to rewind to the start",);
+            tab.update(Message::GoPrevious, Modifiers::empty());
+        }
+        assert_eq_tab_path(&tab, path);
+
+        // Back to the future. Directories should be in the order they were opened.
+        for dir in dirs {
+            debug!("Emitting Message::GoNext",);
+            tab.update(Message::GoNext, Modifiers::empty());
+            assert_eq_tab_path(&tab, &dir);
+        }
+
+        Ok(())
     }
 
     #[test]
     fn tab_goprev_moves_backward_in_history() -> io::Result<()> {
-        unimplemented!()
+        let (fs, mut tab, dirs) = tab_history()?;
+        let path = fs.path();
+
+        for dir in dirs.into_iter().rev() {
+            assert_eq_tab_path(&tab, &dir);
+            debug!("Emitting Message::GoPrevious",);
+            tab.update(Message::GoPrevious, Modifiers::empty());
+        }
+        assert_eq_tab_path(&tab, path);
+
+        Ok(())
     }
 
     #[test]
     fn tab_empty_history_does_nothing_on_prev_next() -> io::Result<()> {
-        unimplemented!()
+        let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
+        let path = fs.path();
+        let mut tab = Tab::new(Location::Path(path.into()));
+
+        // Tab's location shouldn't change if GoPrev or GoNext is triggered
+        debug!("Emitting Message::GoPrevious",);
+        tab.update(Message::GoPrevious, Modifiers::empty());
+        assert_eq_tab_path(&tab, path);
+
+        debug!("Emitting Message::GoNext",);
+        tab.update(Message::GoNext, Modifiers::empty());
+        assert_eq_tab_path(&tab, path);
+
+        Ok(())
     }
 }
