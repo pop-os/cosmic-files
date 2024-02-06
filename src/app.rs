@@ -44,6 +44,8 @@ pub struct Flags {
 pub enum Action {
     Copy,
     Cut,
+    HistoryNext,
+    HistoryPrevious,
     MoveToTrash,
     NewFile,
     NewFolder,
@@ -67,6 +69,8 @@ impl Action {
         match self {
             Action::Copy => Message::Copy(entity_opt),
             Action::Cut => Message::Cut(entity_opt),
+            Action::HistoryNext => Message::TabMessage(None, tab::Message::GoNext),
+            Action::HistoryPrevious => Message::TabMessage(None, tab::Message::GoPrevious),
             Action::MoveToTrash => Message::MoveToTrash(entity_opt),
             Action::NewFile => Message::NewFile(entity_opt),
             Action::NewFolder => Message::NewFolder(entity_opt),
