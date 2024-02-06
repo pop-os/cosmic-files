@@ -55,6 +55,8 @@ pub fn key_binds() -> HashMap<KeyBind, Action> {
 
     bind!([Ctrl], C, Copy);
     bind!([Ctrl], X, Cut);
+    bind!([Alt], Right, HistoryNext);
+    bind!([Alt], Left, HistoryPrevious);
     bind!([Ctrl], V, Paste);
     bind!([Ctrl], A, SelectAll);
     bind!([Ctrl], W, TabClose);
