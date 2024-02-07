@@ -23,7 +23,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{fl, mime_icon::mime_icon};
+use crate::{fl, home_dir, mime_icon::mime_icon};
 
 const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 //TODO: configurable
@@ -384,6 +384,7 @@ pub enum Message {
     GoNext,
     GoPrevious,
     Location(Location),
+    LocationUp,
     RightClick(usize),
     View(View),
 }
@@ -621,6 +622,22 @@ impl Tab {
             }
             Message::Location(location) => {
                 cd = Some(location);
+            }
+            Message::LocationUp => {
+                // Sets location to the path's parent
+                // Does nothing if path is root or location is Trash
+                if let Location::Path(ref path) = self.location {
+                    // Canonicalize is needed because parent() can return an empty path for
+                    // relative paths which would fail to open.
+                    // Canonicalizing the path should do the right thing of evaluating the path
+                    // so that the parent successfully moves up the hierarchy.
+                    // If it fails (i.e. the path doesn't exist for some reason) then it returns
+                    // to home.
+                    let mut path = path.canonicalize().unwrap_or_else(|_| home_dir());
+                    if path.pop() {
+                        cd = Some(Location::Path(path));
+                    }
+                }
             }
             Message::RightClick(click_i) => {
                 if let Some(ref mut items) = self.items_opt {
@@ -1294,6 +1311,25 @@ mod tests {
         debug!("Emitting Message::GoNext",);
         tab.update(Message::GoNext, Modifiers::empty());
         assert_eq_tab_path(&tab, path);
+
+        Ok(())
+    }
+
+    #[test]
+    fn tab_locationup_moves_up_hierarchy() -> io::Result<()> {
+        let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
+        let path = fs.path();
+        let mut next_dir = filter_dirs(path)?
+            .next()
+            .expect("should be at least one directory");
+
+        let mut tab = Tab::new(Location::Path(next_dir.clone()));
+        // This will eventually yield false once root is hit
+        while next_dir.pop() {
+            debug!("Emitting Message::LocationUp",);
+            tab.update(Message::LocationUp, Modifiers::empty());
+            assert_eq_tab_path(&tab, &next_dir);
+        }
 
         Ok(())
     }
