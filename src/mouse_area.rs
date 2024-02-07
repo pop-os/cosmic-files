@@ -19,6 +19,10 @@ pub struct MouseArea<'a, Message, Renderer> {
     on_right_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_middle_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_middle_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
+    on_back_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
+    on_back_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
+    on_forward_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
+    on_forward_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
 }
 
 impl<'a, Message, Renderer> MouseArea<'a, Message, Renderer> {
@@ -80,6 +84,34 @@ impl<'a, Message, Renderer> MouseArea<'a, Message, Renderer> {
         self.on_middle_release = Some(Box::new(message));
         self
     }
+
+     /// The message to emit on a back button press.
+    #[must_use]
+    pub fn on_back_press(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
+        self.on_back_press = Some(Box::new(message));
+        self
+    }
+    
+    /// The message to emit on a back button release.
+    #[must_use]
+    pub fn on_back_release(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
+        self.on_back_release = Some(Box::new(message));
+        self
+    }
+    
+    /// The message to emit on a forward button press.
+    #[must_use]
+    pub fn on_forward_press(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
+        self.on_forward_press = Some(Box::new(message));
+        self
+    }
+    
+    /// The message to emit on a forward button release.
+    #[must_use]
+    pub fn on_forward_release(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
+        self.on_forward_release = Some(Box::new(message));
+        self
+    }
 }
 
 /// Local state of the [`MouseArea`].
@@ -102,6 +134,10 @@ impl<'a, Message, Renderer> MouseArea<'a, Message, Renderer> {
             on_right_release: None,
             on_middle_press: None,
             on_middle_release: None,
+            on_back_press: None,
+            on_back_release: None,
+            on_forward_press: None,
+            on_forward_release: None,
         }
     }
 }
@@ -323,6 +359,38 @@ fn update<Message: Clone, Renderer>(
 
     if let Some(message) = widget.on_middle_release.as_ref() {
         if let Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Middle)) = event {
+            shell.publish(message(cursor.position_in(layout.bounds())));
+
+            return event::Status::Captured;
+        }
+    }
+
+    if let Some(message) = widget.on_back_press.as_ref() {
+        if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Back)) = event {
+            shell.publish(message(cursor.position_in(layout.bounds())));
+
+            return event::Status::Captured;
+        }
+    }
+    
+    if let Some(message) = widget.on_back_release.as_ref() {
+        if let Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Back)) = event {
+            shell.publish(message(cursor.position_in(layout.bounds())));
+
+            return event::Status::Captured;
+        }
+    }
+    
+    if let Some(message) = widget.on_forward_press.as_ref() {
+        if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Forward)) = event {
+            shell.publish(message(cursor.position_in(layout.bounds())));
+
+            return event::Status::Captured;
+        }
+    }
+    
+    if let Some(message) = widget.on_forward_release.as_ref() {
+        if let Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Forward)) = event {
             shell.publish(message(cursor.position_in(layout.bounds())));
 
             return event::Status::Captured;
