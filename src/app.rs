@@ -44,6 +44,9 @@ pub struct Flags {
 pub enum Action {
     Copy,
     Cut,
+    HistoryNext,
+    HistoryPrevious,
+    LocationUp,
     MoveToTrash,
     NewFile,
     NewFolder,
@@ -67,6 +70,9 @@ impl Action {
         match self {
             Action::Copy => Message::Copy(entity_opt),
             Action::Cut => Message::Cut(entity_opt),
+            Action::HistoryNext => Message::TabMessage(None, tab::Message::GoNext),
+            Action::HistoryPrevious => Message::TabMessage(None, tab::Message::GoPrevious),
+            Action::LocationUp => Message::TabMessage(None, tab::Message::LocationUp),
             Action::MoveToTrash => Message::MoveToTrash(entity_opt),
             Action::NewFile => Message::NewFile(entity_opt),
             Action::NewFolder => Message::NewFolder(entity_opt),
@@ -885,6 +891,12 @@ impl Application for App {
                 )
                 .on_press(move |_point_opt| {
                     Message::TabMessage(Some(entity), tab::Message::Click(None))
+                })
+                .on_back_press(move |_point_opt| {
+                    Message::TabMessage(None, tab::Message::GoPrevious)
+                })
+                .on_forward_press(move |_point_opt| {
+                    Message::TabMessage(None, tab::Message::GoNext)
                 });
                 if tab.context_menu.is_some() {
                     mouse_area = mouse_area
