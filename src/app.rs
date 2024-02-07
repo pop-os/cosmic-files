@@ -891,6 +891,12 @@ impl Application for App {
                 )
                 .on_press(move |_point_opt| {
                     Message::TabMessage(Some(entity), tab::Message::Click(None))
+                })
+                .on_back_press(move |_point_opt| {
+                    Message::TabMessage(None, tab::Message::GoPrevious)
+                })
+                .on_forward_press(move |_point_opt| {
+                    Message::TabMessage(None, tab::Message::GoNext)
                 });
                 if tab.context_menu.is_some() {
                     mouse_area = mouse_area
