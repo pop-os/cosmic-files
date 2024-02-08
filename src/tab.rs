@@ -627,15 +627,8 @@ impl Tab {
                 // Sets location to the path's parent
                 // Does nothing if path is root or location is Trash
                 if let Location::Path(ref path) = self.location {
-                    // Canonicalize is needed because parent() can return an empty path for
-                    // relative paths which would fail to open.
-                    // Canonicalizing the path should do the right thing of evaluating the path
-                    // so that the parent successfully moves up the hierarchy.
-                    // If it fails (i.e. the path doesn't exist for some reason) then it returns
-                    // to home.
-                    let mut path = path.canonicalize().unwrap_or_else(|_| home_dir());
-                    if path.pop() {
-                        cd = Some(Location::Path(path));
+                    if let Some(parent) = path.parent() {
+                        cd = Some(Location::Path(parent.to_owned()));
                     }
                 }
             }
