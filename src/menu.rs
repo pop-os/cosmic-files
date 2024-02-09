@@ -2,7 +2,7 @@
 
 use cosmic::{
     //TODO: export iced::widget::horizontal_rule in cosmic::widget
-    iced::{widget::horizontal_rule, Alignment, Background, Length},
+    iced::{widget::horizontal_rule, Alignment, Background, Border, Length},
     theme,
     widget::{
         self,
@@ -85,9 +85,12 @@ pub fn context_menu<'a>(entity: segmented_button::Entity, tab: &Tab) -> Element<
                 icon_color: Some(component.on.into()),
                 text_color: Some(component.on.into()),
                 background: Some(Background::Color(component.base.into())),
-                border_radius: 8.0.into(),
-                border_width: 1.0,
-                border_color: component.divider.into(),
+                border: Border {
+                    radius: 8.0.into(),
+                    width: 1.0,
+                    color: component.divider.into(),
+                },
+                ..Default::default()
             }
         }))
         .width(Length::Fixed(240.0))

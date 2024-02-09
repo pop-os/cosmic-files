@@ -30,6 +30,10 @@ default-features = false
 features = ["multi-window", "tokio", "winit"]
 #path = "../libcosmic"
 
+[dependencies.smol_str]
+version = "0.2.1"
+features = ["serde"]
+
 #TODO: clean up and send changes upstream
 [dependencies.systemicons]
 git = "https://github.com/jackpot51/systemicons"
@@ -37,11 +41,6 @@ git = "https://github.com/jackpot51/systemicons"
 [features]
 default = ["wgpu"]
 wgpu = ["libcosmic/wgpu"]
-
-[patch.crates-io]
-smithay-client-toolkit = { git = "https://github.com/pop-os/client-toolkit", branch = "wayland-resize" }
-# https://github.com/gfx-rs/wgpu/pull/4959
-wgpu = { git = "https://github.com/pop-os/wgpu", branch = "v0.18" }
 
 [profile.release-with-debug]
 inherits = "release"

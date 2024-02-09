@@ -8,7 +8,7 @@ use cosmic::{
     iced::{
         event,
         futures::{self, SinkExt},
-        keyboard::{Event as KeyEvent, KeyCode, Modifiers},
+        keyboard::{Event as KeyEvent, Key, Modifiers},
         subscription::{self, Subscription},
         window, Event, Length, Point,
     },
@@ -104,7 +104,7 @@ pub enum Message {
     Config(Config),
     Copy(Option<segmented_button::Entity>),
     Cut(Option<segmented_button::Entity>),
-    Key(Modifiers, KeyCode),
+    Key(Modifiers, Key),
     Modifiers(Modifiers),
     MoveToTrash(Option<segmented_button::Entity>),
     NewFile(Option<segmented_button::Entity>),
@@ -564,10 +564,10 @@ impl Application for App {
             Message::Cut(entity_opt) => {
                 log::warn!("TODO: CUT");
             }
-            Message::Key(modifiers, key_code) => {
+            Message::Key(modifiers, key) => {
                 let entity = self.tab_model.active();
                 for (key_bind, action) in self.key_binds.iter() {
-                    if key_bind.matches(modifiers, key_code) {
+                    if key_bind.matches(modifiers, &key) {
                         return self.update(action.message(Some(entity)));
                     }
                 }
@@ -937,10 +937,9 @@ impl Application for App {
 
         let mut subscriptions = vec![
             event::listen_with(|event, _status| match event {
-                Event::Keyboard(KeyEvent::KeyPressed {
-                    key_code,
-                    modifiers,
-                }) => Some(Message::Key(modifiers, key_code)),
+                Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => {
+                    Some(Message::Key(modifiers, key))
+                }
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
                     Some(Message::Modifiers(modifiers))
                 }

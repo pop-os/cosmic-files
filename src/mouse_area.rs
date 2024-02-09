@@ -4,13 +4,13 @@ use cosmic::iced_core::{
     event::{self, Event},
     layout, mouse, overlay, renderer, touch,
     widget::{tree, Operation, OperationOutputWrapper, Tree},
-    {Clipboard, Element, Layout, Length, Point, Rectangle, Shell, Widget},
+    Size, {Clipboard, Element, Layout, Length, Point, Rectangle, Shell, Widget},
 };
 
 /// Emit messages on mouse events.
 #[allow(missing_debug_implementations)]
-pub struct MouseArea<'a, Message, Renderer> {
-    content: Element<'a, Message, Renderer>,
+pub struct MouseArea<'a, Message, Theme, Renderer> {
+    content: Element<'a, Message, Theme, Renderer>,
     on_drag: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
@@ -25,7 +25,7 @@ pub struct MouseArea<'a, Message, Renderer> {
     on_forward_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
 }
 
-impl<'a, Message, Renderer> MouseArea<'a, Message, Renderer> {
+impl<'a, Message, Theme, Renderer> MouseArea<'a, Message, Theme, Renderer> {
     /// The message to emit when a drag is initiated.
     #[must_use]
     pub fn on_drag(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
@@ -85,27 +85,27 @@ impl<'a, Message, Renderer> MouseArea<'a, Message, Renderer> {
         self
     }
 
-     /// The message to emit on a back button press.
+    /// The message to emit on a back button press.
     #[must_use]
     pub fn on_back_press(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
         self.on_back_press = Some(Box::new(message));
         self
     }
-    
+
     /// The message to emit on a back button release.
     #[must_use]
     pub fn on_back_release(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
         self.on_back_release = Some(Box::new(message));
         self
     }
-    
+
     /// The message to emit on a forward button press.
     #[must_use]
     pub fn on_forward_press(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
         self.on_forward_press = Some(Box::new(message));
         self
     }
-    
+
     /// The message to emit on a forward button release.
     #[must_use]
     pub fn on_forward_release(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
@@ -121,9 +121,9 @@ struct State {
     drag_initiated: Option<Point>,
 }
 
-impl<'a, Message, Renderer> MouseArea<'a, Message, Renderer> {
+impl<'a, Message, Theme, Renderer> MouseArea<'a, Message, Theme, Renderer> {
     /// Creates a [`MouseArea`] with the given content.
-    pub fn new(content: impl Into<Element<'a, Message, Renderer>>) -> Self {
+    pub fn new(content: impl Into<Element<'a, Message, Theme, Renderer>>) -> Self {
         MouseArea {
             content: content.into(),
             on_drag: None,
@@ -142,7 +142,8 @@ impl<'a, Message, Renderer> MouseArea<'a, Message, Renderer> {
     }
 }
 
-impl<'a, Message, Renderer> Widget<Message, Renderer> for MouseArea<'a, Message, Renderer>
+impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
+    for MouseArea<'a, Message, Theme, Renderer>
 where
     Renderer: renderer::Renderer,
     Message: Clone,
@@ -163,12 +164,8 @@ where
         tree.diff_children(std::slice::from_mut(&mut self.content));
     }
 
-    fn width(&self) -> Length {
-        self.content.as_widget().width()
-    }
-
-    fn height(&self) -> Length {
-        self.content.as_widget().height()
+    fn size(&self) -> Size<Length> {
+        self.content.as_widget().size()
     }
 
     fn layout(
@@ -249,7 +246,7 @@ where
         &self,
         tree: &Tree,
         renderer: &mut Renderer,
-        theme: &Renderer::Theme,
+        theme: &Theme,
         renderer_style: &renderer::Style,
         layout: Layout<'_>,
         cursor: mouse::Cursor,
@@ -271,28 +268,31 @@ where
         tree: &'b mut Tree,
         layout: Layout<'_>,
         renderer: &Renderer,
-    ) -> Option<overlay::Element<'b, Message, Renderer>> {
+    ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
         self.content
             .as_widget_mut()
             .overlay(&mut tree.children[0], layout, renderer)
     }
 }
 
-impl<'a, Message, Renderer> From<MouseArea<'a, Message, Renderer>>
-    for Element<'a, Message, Renderer>
+impl<'a, Message, Theme, Renderer> From<MouseArea<'a, Message, Theme, Renderer>>
+    for Element<'a, Message, Theme, Renderer>
 where
     Message: 'a + Clone,
     Renderer: 'a + renderer::Renderer,
+    Theme: 'a,
 {
-    fn from(area: MouseArea<'a, Message, Renderer>) -> Element<'a, Message, Renderer> {
+    fn from(
+        area: MouseArea<'a, Message, Theme, Renderer>,
+    ) -> Element<'a, Message, Theme, Renderer> {
         Element::new(area)
     }
 }
 
 /// Processes the given [`Event`] and updates the [`State`] of an [`MouseArea`]
 /// accordingly.
-fn update<Message: Clone, Renderer>(
-    widget: &mut MouseArea<'_, Message, Renderer>,
+fn update<Message: Clone, Theme, Renderer>(
+    widget: &mut MouseArea<'_, Message, Theme, Renderer>,
     event: &Event,
     layout: Layout<'_>,
     cursor: mouse::Cursor,
@@ -372,7 +372,7 @@ fn update<Message: Clone, Renderer>(
             return event::Status::Captured;
         }
     }
-    
+
     if let Some(message) = widget.on_back_release.as_ref() {
         if let Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Back)) = event {
             shell.publish(message(cursor.position_in(layout.bounds())));
@@ -380,7 +380,7 @@ fn update<Message: Clone, Renderer>(
             return event::Status::Captured;
         }
     }
-    
+
     if let Some(message) = widget.on_forward_press.as_ref() {
         if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Forward)) = event {
             shell.publish(message(cursor.position_in(layout.bounds())));
@@ -388,7 +388,7 @@ fn update<Message: Clone, Renderer>(
             return event::Status::Captured;
         }
     }
-    
+
     if let Some(message) = widget.on_forward_release.as_ref() {
         if let Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Forward)) = event {
             shell.publish(message(cursor.position_in(layout.bounds())));
