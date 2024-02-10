@@ -26,7 +26,7 @@ use std::{
 };
 
 use crate::{
-    config::{AppTheme, Config, CONFIG_VERSION},
+    config::{AppTheme, Config, Tab as TabConfig, CONFIG_VERSION},
     fl, home_dir,
     key_bind::{key_binds, KeyBind},
     menu, mouse_area,
@@ -186,7 +186,7 @@ pub struct App {
 
 impl App {
     fn open_tab(&mut self, location: Location) -> Command<Message> {
-        let tab = Tab::new(location.clone());
+        let tab = Tab::new(location.clone(), TabConfig::default());
         let entity = self
             .tab_model
             .insert()
@@ -1237,7 +1237,7 @@ pub(crate) mod test_utils {
         // New tab with items
         let location = Location::Path(path.to_owned());
         let items = location.scan();
-        let mut tab = Tab::new(location);
+        let mut tab = Tab::new(location, TabConfig::default());
         tab.items_opt = Some(items);
 
         // Ensure correct number of directories as a sanity check

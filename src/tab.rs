@@ -23,7 +23,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{fl, home_dir, mime_icon::mime_icon};
+use crate::{config::Tab as TabConfig, fl, home_dir, mime_icon::mime_icon};
 
 const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 //TODO: configurable
@@ -524,10 +524,11 @@ pub struct Tab {
     pub edit_location: Option<Location>,
     pub history_i: usize,
     pub history: Vec<Location>,
+    pub config: TabConfig,
 }
 
 impl Tab {
-    pub fn new(location: Location) -> Self {
+    pub fn new(location: Location, config: TabConfig) -> Self {
         let history = vec![location.clone()];
         Self {
             location,
@@ -538,6 +539,7 @@ impl Tab {
             edit_location: None,
             history_i: 0,
             history,
+            config,
         }
     }
 
@@ -1054,10 +1056,13 @@ mod tests {
     use test_log::test;
 
     use super::{scan_path, Item, Location, Message, Tab};
-    use crate::app::test_utils::{
-        assert_eq_tab_path, assert_eq_tab_path_contents, empty_fs, eq_path_item, filter_dirs,
-        read_dir_sorted, simple_fs, sort_files, tab_click_new, NAME_LEN, NUM_DIRS, NUM_FILES,
-        NUM_HIDDEN, NUM_NESTED,
+    use crate::{
+        app::test_utils::{
+            assert_eq_tab_path, assert_eq_tab_path_contents, empty_fs, eq_path_item, filter_dirs,
+            read_dir_sorted, simple_fs, sort_files, tab_click_new, NAME_LEN, NUM_DIRS, NUM_FILES,
+            NUM_HIDDEN, NUM_NESTED,
+        },
+        config::Tab as TabConfig,
     };
 
     // Boilerplate for tab tests. Checks if simulated clicks selected items.
@@ -1098,7 +1103,7 @@ mod tests {
     fn tab_history() -> io::Result<(TempDir, Tab, Vec<PathBuf>)> {
         let fs = simple_fs(NUM_FILES, NUM_NESTED, NUM_DIRS, NUM_NESTED, NAME_LEN)?;
         let path = fs.path();
-        let mut tab = Tab::new(Location::Path(path.into()));
+        let mut tab = Tab::new(Location::Path(path.into()), TabConfig::default());
 
         // All directories (simple_fs only produces one nested layer)
         let dirs: Vec<PathBuf> = filter_dirs(path)?
@@ -1195,7 +1200,7 @@ mod tests {
             .next()
             .expect("temp directory should have at least one directory");
 
-        let mut tab = Tab::new(Location::Path(path.to_owned()));
+        let mut tab = Tab::new(Location::Path(path.to_owned()), TabConfig::default());
         debug!(
             "Emitting Message::Location(Location::Path(\"{}\"))",
             next_dir.display()
@@ -1294,7 +1299,7 @@ mod tests {
     fn tab_empty_history_does_nothing_on_prev_next() -> io::Result<()> {
         let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
         let path = fs.path();
-        let mut tab = Tab::new(Location::Path(path.into()));
+        let mut tab = Tab::new(Location::Path(path.into()), TabConfig::default());
 
         // Tab's location shouldn't change if GoPrev or GoNext is triggered
         debug!("Emitting Message::GoPrevious",);
@@ -1316,7 +1321,7 @@ mod tests {
             .next()
             .expect("should be at least one directory");
 
-        let mut tab = Tab::new(Location::Path(next_dir.clone()));
+        let mut tab = Tab::new(Location::Path(next_dir.clone()), TabConfig::default());
         // This will eventually yield false once root is hit
         while next_dir.pop() {
             debug!("Emitting Message::LocationUp",);

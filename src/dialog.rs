@@ -25,6 +25,7 @@ use std::{
 };
 
 use crate::{
+    config::Tab as TabConfig,
     fl, home_dir,
     tab::{self, Location, Tab},
 };
@@ -78,7 +79,7 @@ pub struct App {
 
 impl App {
     fn open_tab(&mut self, location: Location) -> Command<Message> {
-        let mut tab = Tab::new(location.clone());
+        let mut tab = Tab::new(location.clone(), TabConfig::default());
         tab.dialog = true;
         let entity = self
             .tab_model
