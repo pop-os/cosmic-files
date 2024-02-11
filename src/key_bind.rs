@@ -71,6 +71,7 @@ pub fn key_binds() -> HashMap<KeyBind, Action> {
     bind!([Ctrl], Key::Character("t".into()), TabNew);
     bind!([Ctrl], Key::Named(Named::Tab), TabNext);
     bind!([Ctrl, Shift], Key::Named(Named::Tab), TabPrev);
+    bind!([Ctrl], Key::Character("h".into()), ToggleShowHidden);
     bind!([Ctrl], Key::Character("q".into()), WindowClose);
     bind!([Ctrl], Key::Character("n".into()), WindowNew);
 
