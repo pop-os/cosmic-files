@@ -349,8 +349,7 @@ impl Application for App {
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
                     if let Some(ref mut items) = tab.items_opt {
                         for item in items.iter_mut() {
-                            if item.hidden {
-                                //TODO: option to show hidden files
+                            if !tab.config.show_hidden && item.hidden {
                                 continue;
                             }
                             item.selected = true;

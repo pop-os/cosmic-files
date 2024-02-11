@@ -380,12 +380,14 @@ impl Location {
 #[derive(Clone, Debug)]
 pub enum Message {
     Click(Option<usize>),
+    Config(TabConfig),
     EditLocation(Option<Location>),
     GoNext,
     GoPrevious,
     Location(Location),
     LocationUp,
     RightClick(usize),
+    ToggleShowHidden,
     View(View),
 }
 
@@ -603,6 +605,9 @@ impl Tab {
                 }
                 self.context_menu = None;
             }
+            Message::Config(config) => {
+                self.config = config;
+            }
             Message::EditLocation(edit_location) => {
                 self.edit_location = edit_location;
             }
@@ -651,6 +656,7 @@ impl Tab {
                     }
                 }
             }
+            Message::ToggleShowHidden => self.config.show_hidden = !self.config.show_hidden,
             Message::View(view) => {
                 self.view = view;
             }
@@ -859,15 +865,15 @@ impl Tab {
         //TODO: get from config
         let item_width = Length::Fixed(96.0);
         let item_height = Length::Fixed(116.0);
+        let TabConfig { show_hidden } = self.config;
 
         let mut children: Vec<Element<_>> = Vec::new();
         if let Some(ref items) = self.items_opt {
             let mut count = 0;
             let mut hidden = 0;
             for (i, item) in items.iter().enumerate() {
-                if item.hidden {
+                if !show_hidden && item.hidden {
                     hidden += 1;
-                    //TODO: SHOW HIDDEN OPTION
                     continue;
                 }
 
@@ -942,10 +948,10 @@ impl Tab {
         if let Some(ref items) = self.items_opt {
             let mut count = 0;
             let mut hidden = 0;
+            let TabConfig { show_hidden } = self.config;
             for (i, item) in items.iter().enumerate() {
-                if item.hidden {
+                if !show_hidden && item.hidden {
                     hidden += 1;
-                    //TODO: SHOW HIDDEN OPTION
                     continue;
                 }
 
