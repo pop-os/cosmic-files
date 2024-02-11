@@ -23,7 +23,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{config::Tab as TabConfig, fl, home_dir, mime_icon::mime_icon};
+use crate::{config::TabConfig, fl, home_dir, mime_icon::mime_icon};
 
 const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 //TODO: configurable
@@ -1068,7 +1068,7 @@ mod tests {
             read_dir_sorted, simple_fs, sort_files, tab_click_new, NAME_LEN, NUM_DIRS, NUM_FILES,
             NUM_HIDDEN, NUM_NESTED,
         },
-        config::Tab as TabConfig,
+        config::TabConfig,
     };
 
     // Boilerplate for tab tests. Checks if simulated clicks selected items.
