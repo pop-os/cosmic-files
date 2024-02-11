@@ -1,5 +1,5 @@
 # COSMIC FILE MANAGER
-The News File Manager for Cosmic Desktop write in Rust
+The New File Manager for Cosmic Desktop write in Rust
 > [!NOTE]
 > This Project is in early development version
 
