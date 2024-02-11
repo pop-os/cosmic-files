@@ -4,7 +4,9 @@ filesystem = Sistema de ficheiros
 trash = Lixeira 
 
 # Context Pages
-
+name = Nome
+modified = Data da Motificação
+size = Tamanho
 ## Properties
 properties = Propriedades 
 

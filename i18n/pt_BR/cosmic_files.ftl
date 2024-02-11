@@ -1,10 +1,12 @@
 empty-folder = Pasta vazia 
 empty-folder-hidden = Pasta vazia (contém arquivos ocultos)
-filesystem = Sistema de arquivos 
+filesystem = Sistema de Arquivos 
 trash = Lixeira 
 
 # Context Pages
-
+name = Nome
+modified = Data da Motificação
+size = Tamanho
 ## Properties
 properties = Propriedades 
 
