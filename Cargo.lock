@@ -5311,9 +5311,9 @@ dependencies = [
 
 [[package]]
 name = "trash"
-version = "3.2.1"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55bb920006929bc37df8c151c3c063b6fc10f485dfe4937393f905861a632e53"
+checksum = "9e0434017970a3b6770ee6f0117e9a7afe25b02e540fab01759e137e508e2f81"
 dependencies = [
  "chrono",
  "libc",
@@ -6315,7 +6315,7 @@ dependencies = [
 [[package]]
 name = "winit"
 version = "0.29.10"
-source = "git+https://github.com/pop-os/winit.git?branch=winit-0.29#8987daa8e6a860b8927e040076482cd63b6e734f"
+source = "git+https://github.com/pop-os/winit.git?branch=winit-0.29#bdc66109acc85c912264c9e4b864520345bdb45f"
 dependencies = [
  "ahash",
  "android-activity",
