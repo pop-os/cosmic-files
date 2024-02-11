@@ -25,7 +25,7 @@ use std::{
 };
 
 use crate::{
-    config::Tab as TabConfig,
+    config::TabConfig,
     fl, home_dir,
     tab::{self, Location, Tab},
 };

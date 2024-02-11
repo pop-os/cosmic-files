@@ -28,22 +28,26 @@ impl AppTheme {
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Config {
     pub app_theme: AppTheme,
-    pub tab: Tab,
+    pub tab: TabConfig,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             app_theme: AppTheme::System,
-            tab: Tab::default(),
+            tab: TabConfig::default(),
         }
     }
 }
 
-/// Per tab config
+/// Global and local [`crate::tab::Tab`] config.
+///
+/// [`TabConfig`] contains options that are passed to each instance of [`crate::tab::Tab`].
+/// These options are set globally through the main config, but each tab may change options
+/// locally. Local changes aren't saved to the main config.
 #[derive(Clone, Debug, Eq, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
-pub struct Tab {
-    /// Show hidden files
+pub struct TabConfig {
+    /// Show hidden files and folders
     pub show_hidden: bool,
     // TODO: Other possible options
     // pub sort_by: fn(&PathBuf, &PathBuf) -> Ordering,
@@ -53,7 +57,7 @@ pub struct Tab {
     // icon_size_grid: u16,
 }
 
-impl Default for Tab {
+impl Default for TabConfig {
     fn default() -> Self {
         Self { show_hidden: false }
     }

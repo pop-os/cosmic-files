@@ -26,7 +26,7 @@ use std::{
 };
 
 use crate::{
-    config::{AppTheme, Config, Tab as TabConfig, CONFIG_VERSION},
+    config::{AppTheme, Config, CONFIG_VERSION},
     fl, home_dir,
     key_bind::{key_binds, KeyBind},
     menu, mouse_area,
@@ -188,7 +188,7 @@ pub struct App {
 
 impl App {
     fn open_tab(&mut self, location: Location) -> Command<Message> {
-        let tab = Tab::new(location.clone(), TabConfig::default());
+        let tab = Tab::new(location.clone(), self.config.tab.clone());
         let entity = self
             .tab_model
             .insert()
@@ -1086,7 +1086,7 @@ pub(crate) mod test_utils {
     use log::{debug, trace};
     use tempfile::{tempdir, TempDir};
 
-    use crate::tab::Item;
+    use crate::{config::TabConfig, tab::Item};
 
     use super::*;
 
