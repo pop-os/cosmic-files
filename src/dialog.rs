@@ -59,12 +59,16 @@ impl<M: 'static> Dialog<M> {
         settings.decorations = false;
         settings.exit_on_close_request = false;
         settings.transparent = true;
-        settings.platform_specific.application_id = App::APP_ID.to_string();
+
+        //TODO: allow resize!
+        settings.size = Size::new(800.0, 600.0);
+        settings.resizable = false;
+
+        #[cfg(target_os = "linux")]
         {
-            //TODO: allow resize!
-            settings.size = Size::new(800.0, 600.0);
-            settings.resizable = false;
+            settings.platform_specific.application_id = App::APP_ID.to_string();
         }
+
         let (window_id, window_command) = window::spawn(settings);
 
         let core = Core::default();
