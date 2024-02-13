@@ -14,7 +14,7 @@ use cosmic::{
         keyboard::{Event as KeyEvent, Modifiers},
         multi_window::Application as IcedApplication,
         subscription::{self, Subscription},
-        window, Event, Length,
+        window, Event, Length, Size,
     },
     style,
     widget::{self, segmented_button},
@@ -60,6 +60,11 @@ impl<M: 'static> Dialog<M> {
         settings.exit_on_close_request = false;
         settings.transparent = true;
         settings.platform_specific.application_id = App::APP_ID.to_string();
+        {
+            //TODO: allow resize!
+            settings.size = Size::new(800.0, 600.0);
+            settings.resizable = false;
+        }
         let (window_id, window_command) = window::spawn(settings);
 
         let core = Core::default();
