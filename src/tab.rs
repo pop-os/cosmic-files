@@ -23,7 +23,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{config::TabConfig, fl, home_dir, mime_icon::mime_icon};
+use crate::{config::TabConfig, fl, mime_icon::mime_icon};
 
 const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 //TODO: configurable

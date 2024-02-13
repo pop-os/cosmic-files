@@ -6,11 +6,7 @@ use cosmic::{
     cosmic_config::{self, CosmicConfigEntry},
     iced::Limits,
 };
-use std::{
-    path::PathBuf,
-    process,
-    sync::{Arc, Mutex},
-};
+use std::{path::PathBuf, process};
 
 use app::{App, Flags};
 mod app;
@@ -33,24 +29,6 @@ pub fn home_dir() -> PathBuf {
             PathBuf::from("/")
         }
     }
-}
-
-/// Runs application with these settings
-pub fn dialog() -> Result<Option<Vec<PathBuf>>, Box<dyn std::error::Error>> {
-    localize::localize();
-
-    let mut settings = Settings::default();
-
-    let mut result_lock = Arc::new(Mutex::new(None));
-
-    let flags = dialog::Flags {
-        result_lock: result_lock.clone(),
-    };
-    cosmic::app::run::<dialog::App>(settings, flags)?;
-
-    let mut result_guard = result_lock.lock().unwrap();
-    let result = result_guard.take();
-    Ok(result)
 }
 
 /// Runs application with these settings

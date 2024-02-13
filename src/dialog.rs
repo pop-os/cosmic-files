@@ -2,12 +2,17 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{
-    app::{message, Command, Core},
+    app::{
+        self,
+        cosmic::{Cosmic, Message as CosmicMessage},
+        message, Command, Core,
+    },
     cosmic_theme, executor,
     iced::{
         event,
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Modifiers},
+        multi_window::Application as IcedApplication,
         subscription::{self, Subscription},
         window, Event, Length,
     },
@@ -31,13 +36,89 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub struct Flags {
-    pub result_lock: Arc<Mutex<Option<Vec<PathBuf>>>>,
+pub struct DialogMessage(app::Message<Message>);
+
+#[derive(Clone, Debug)]
+pub enum DialogResult {
+    Cancel,
+    Open(Vec<PathBuf>),
+}
+
+pub struct Dialog<M> {
+    cosmic: Cosmic<App>,
+    mapper: fn(DialogMessage) -> M,
+    on_result: fn(DialogResult) -> M,
+}
+
+impl<M: 'static> Dialog<M> {
+    pub fn new(
+        mapper: fn(DialogMessage) -> M,
+        on_result: fn(DialogResult) -> M,
+    ) -> (Self, Command<M>) {
+        let mut settings = window::Settings::default();
+        settings.decorations = false;
+        settings.exit_on_close_request = false;
+        settings.transparent = true;
+        settings.platform_specific.application_id = App::APP_ID.to_string();
+        let (window_id, window_command) = window::spawn(settings);
+
+        let core = Core::default();
+        let flags = Flags { window_id };
+        let (cosmic, cosmic_command) = <Cosmic<App> as IcedApplication>::new((core, flags));
+
+        (
+            Self {
+                cosmic,
+                mapper,
+                on_result,
+            },
+            Command::batch([window_command, cosmic_command])
+                .map(DialogMessage)
+                .map(move |message| app::Message::App(mapper(message))),
+        )
+    }
+
+    pub fn subscription(&self) -> Subscription<M> {
+        self.cosmic
+            .subscription()
+            .map(DialogMessage)
+            .map(self.mapper)
+    }
+
+    pub fn update(&mut self, message: DialogMessage) -> Command<M> {
+        let mapper = self.mapper;
+        let command = self
+            .cosmic
+            .update(message.0)
+            .map(DialogMessage)
+            .map(move |message| app::Message::App(mapper(message)));
+        if let Some(result) = self.cosmic.app.result_opt.take() {
+            let on_result = self.on_result;
+            Command::batch([
+                command,
+                Command::perform(async move { app::Message::App(on_result(result)) }, |x| x),
+            ])
+        } else {
+            command
+        }
+    }
+
+    pub fn view(&self, window_id: window::Id) -> Element<M> {
+        self.cosmic
+            .view(window_id)
+            .map(DialogMessage)
+            .map(self.mapper)
+    }
+}
+
+#[derive(Clone, Debug)]
+struct Flags {
+    window_id: window::Id,
 }
 
 /// Messages that are used specifically by our [`App`].
 #[derive(Clone, Debug)]
-pub enum Message {
+enum Message {
     Cancel,
     Modifiers(Modifiers),
     NotifyEvent(notify::Event),
@@ -51,7 +132,7 @@ pub enum Message {
 }
 
 #[derive(Debug)]
-pub struct WatcherWrapper {
+struct WatcherWrapper {
     watcher_opt: Option<notify::RecommendedWatcher>,
 }
 
@@ -68,12 +149,13 @@ impl PartialEq for WatcherWrapper {
 }
 
 /// The [`App`] stores application-specific state.
-pub struct App {
+struct App {
     core: Core,
     flags: Flags,
-    nav_model: segmented_button::SingleSelectModel,
-    tab_model: segmented_button::Model<segmented_button::SingleSelect>,
     modifiers: Modifiers,
+    nav_model: segmented_button::SingleSelectModel,
+    result_opt: Option<DialogResult>,
+    tab_model: segmented_button::Model<segmented_button::SingleSelect>,
     watcher_opt: Option<(notify::RecommendedWatcher, HashSet<PathBuf>)>,
 }
 
@@ -124,7 +206,7 @@ impl App {
             None => (String::new(), "COSMIC File Manager".to_string()),
         };
         self.set_header_title(header_title);
-        self.set_window_title(window_title, window::Id::MAIN)
+        self.set_window_title(window_title, self.main_window_id())
     }
 
     fn update_watcher(&mut self) -> Command<Message> {
@@ -187,7 +269,7 @@ impl Application for App {
     type Message = Message;
 
     /// The unique application ID to supply to the window manager.
-    const APP_ID: &'static str = "com.system76.CosmicFiles";
+    const APP_ID: &'static str = "com.system76.CosmicFilesDialog";
 
     fn core(&self) -> &Core {
         &self.core
@@ -198,7 +280,7 @@ impl Application for App {
     }
 
     /// Creates the application, and optionally emits command on initialize.
-    fn init(mut core: Core, flags: Self::Flags) -> (Self, Command<Self::Message>) {
+    fn init(mut core: Core, flags: Self::Flags) -> (Self, Command<Message>) {
         core.window.show_maximize = false;
         core.window.show_minimize = false;
 
@@ -232,9 +314,10 @@ impl Application for App {
         let mut app = App {
             core,
             flags,
-            nav_model: nav_model.build(),
-            tab_model: segmented_button::ModelBuilder::default().build(),
             modifiers: Modifiers::empty(),
+            nav_model: nav_model.build(),
+            result_opt: None,
+            tab_model: segmented_button::ModelBuilder::default().build(),
             watcher_opt: None,
         };
 
@@ -247,8 +330,12 @@ impl Application for App {
         (app, Command::batch(commands))
     }
 
+    fn main_window_id(&self) -> window::Id {
+        self.flags.window_id
+    }
+
     // The default nav_bar widget needs to have its width reduced for cosmic-files
-    fn nav_bar(&self) -> Option<Element<message::Message<Self::Message>>> {
+    fn nav_bar(&self) -> Option<Element<message::Message<Message>>> {
         if !self.core().nav_bar_active() {
             return None;
         }
@@ -270,7 +357,11 @@ impl Application for App {
         Some(&self.nav_model)
     }
 
-    fn on_nav_select(&mut self, entity: segmented_button::Entity) -> Command<Self::Message> {
+    fn on_app_exit(&mut self) {
+        self.result_opt = Some(DialogResult::Cancel);
+    }
+
+    fn on_nav_select(&mut self, entity: segmented_button::Entity) -> Command<Message> {
         let location_opt = self.nav_model.data::<Location>(entity).clone();
 
         if let Some(location) = location_opt {
@@ -282,11 +373,11 @@ impl Application for App {
     }
 
     /// Handle application events here.
-    fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
+    fn update(&mut self, message: Message) -> Command<Message> {
         match message {
             Message::Cancel => {
-                *self.flags.result_lock.lock().unwrap() = None;
-                return window::close(window::Id::MAIN);
+                self.result_opt = Some(DialogResult::Cancel);
+                return window::close(self.main_window_id());
             }
             Message::Modifiers(modifiers) => {
                 self.modifiers = modifiers;
@@ -341,8 +432,8 @@ impl Application for App {
                         }
                     }
                 }
-                *self.flags.result_lock.lock().unwrap() = Some(paths);
-                return window::close(window::Id::MAIN);
+                self.result_opt = Some(DialogResult::Open(paths));
+                return window::close(self.main_window_id());
             }
             Message::SelectAll(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
@@ -379,7 +470,7 @@ impl Application for App {
 
                 // If that was the last tab, close window
                 if self.tab_model.iter().next().is_none() {
-                    return window::close(window::Id::MAIN);
+                    return window::close(self.main_window_id());
                 }
 
                 return Command::batch([self.update_title(), self.update_watcher()]);
@@ -417,7 +508,7 @@ impl Application for App {
     }
 
     /// Creates a view after each update.
-    fn view(&self) -> Element<Self::Message> {
+    fn view(&self) -> Element<Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
 
         let mut tab_column = widget::column::with_capacity(1);
@@ -470,7 +561,7 @@ impl Application for App {
         content
     }
 
-    fn subscription(&self) -> Subscription<Self::Message> {
+    fn subscription(&self) -> Subscription<Message> {
         struct WatcherSubscription;
 
         Subscription::batch([

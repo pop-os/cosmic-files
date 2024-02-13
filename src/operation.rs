@@ -1,5 +1,5 @@
 use cosmic::iced::futures::{channel::mpsc, SinkExt};
-use std::{error::Error, future::Future, io, path::PathBuf, time};
+use std::path::PathBuf;
 
 use crate::app::Message;
 
