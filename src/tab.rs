@@ -920,7 +920,8 @@ impl Tab {
         let cosmic_theme::Spacing { space_xxs, .. } = core.system_theme().cosmic().spacing;
 
         //TODO: make adaptive?
-        let column_width = Length::Fixed(200.0);
+        let modified_width = Length::Fixed(200.0);
+        let size_width = Length::Fixed(100.0);
 
         let mut children: Vec<Element<_>> = Vec::new();
 
@@ -931,10 +932,10 @@ impl Tab {
                     .into(),
                 //TODO: do not show modified column when in the trash
                 widget::text::heading(fl!("modified"))
-                    .width(column_width)
+                    .width(modified_width)
                     .into(),
                 widget::text::heading(fl!("size"))
-                    .width(column_width)
+                    .width(size_width)
                     .into(),
             ])
             .align_items(Alignment::Center)
@@ -1003,8 +1004,8 @@ impl Tab {
                                 .into()
                         },
                         widget::text(item.name.clone()).width(Length::Fill).into(),
-                        widget::text(modified_text).width(column_width).into(),
-                        widget::text(size_text).width(column_width).into(),
+                        widget::text(modified_text).width(modified_width).into(),
+                        widget::text(size_text).width(size_width).into(),
                     ])
                     .align_items(Alignment::Center)
                     .spacing(space_xxs),
