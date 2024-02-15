@@ -2,11 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{
-    app::{
-        self,
-        cosmic::{Cosmic, Message as CosmicMessage},
-        message, Command, Core,
-    },
+    app::{self, cosmic::Cosmic, message, Command, Core},
     cosmic_theme, executor,
     iced::{
         event,
@@ -16,18 +12,11 @@ use cosmic::{
         subscription::{self, Subscription},
         window, Event, Length, Size,
     },
-    style,
     widget::{self, segmented_button},
     Application, ApplicationExt, Element,
 };
 use notify::Watcher;
-use std::{
-    any::TypeId,
-    collections::HashSet,
-    path::PathBuf,
-    sync::{Arc, Mutex},
-    time,
-};
+use std::{any::TypeId, collections::HashSet, env, fs, path::PathBuf, time};
 
 use crate::{
     config::TabConfig,
@@ -44,17 +33,51 @@ pub enum DialogResult {
     Open(Vec<PathBuf>),
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum DialogKind {
+    OpenFile,
+    OpenFolder,
+    OpenMultipleFiles,
+    OpenMultipleFolders,
+    SaveFile,
+}
+
+impl DialogKind {
+    pub fn title(&self) -> String {
+        match self {
+            Self::OpenFile => fl!("open-file"),
+            Self::OpenFolder => fl!("open-folder"),
+            Self::OpenMultipleFiles => fl!("open-multiple-files"),
+            Self::OpenMultipleFolders => fl!("open-multiple-folders"),
+            Self::SaveFile => fl!("save-file"),
+        }
+    }
+
+    pub fn multiple(&self) -> bool {
+        matches!(self, Self::OpenMultipleFiles | Self::OpenMultipleFolders)
+    }
+
+    pub fn save(&self) -> bool {
+        matches!(self, Self::SaveFile)
+    }
+}
+
 pub struct Dialog<M> {
     cosmic: Cosmic<App>,
     mapper: fn(DialogMessage) -> M,
-    on_result: fn(DialogResult) -> M,
+    on_result: Box<dyn Fn(DialogResult) -> M>,
 }
 
-impl<M: 'static> Dialog<M> {
+impl<M: Send + 'static> Dialog<M> {
     pub fn new(
+        kind: DialogKind,
+        path_opt: Option<PathBuf>,
         mapper: fn(DialogMessage) -> M,
-        on_result: fn(DialogResult) -> M,
+        on_result: impl Fn(DialogResult) -> M + 'static,
     ) -> (Self, Command<M>) {
+        //TODO: only do this once somehow?
+        crate::localize::localize();
+
         let mut settings = window::Settings::default();
         settings.decorations = false;
         settings.exit_on_close_request = false;
@@ -72,14 +95,26 @@ impl<M: 'static> Dialog<M> {
         let (window_id, window_command) = window::spawn(settings);
 
         let core = Core::default();
-        let flags = Flags { window_id };
+        let flags = Flags {
+            kind,
+            path_opt: path_opt
+                .as_ref()
+                .and_then(|path| match fs::canonicalize(path) {
+                    Ok(ok) => Some(ok),
+                    Err(err) => {
+                        log::warn!("failed to canonicalize {:?}: {}", path, err);
+                        None
+                    }
+                }),
+            window_id,
+        };
         let (cosmic, cosmic_command) = <Cosmic<App> as IcedApplication>::new((core, flags));
 
         (
             Self {
                 cosmic,
                 mapper,
-                on_result,
+                on_result: Box::new(on_result),
             },
             Command::batch([window_command, cosmic_command])
                 .map(DialogMessage)
@@ -102,10 +137,10 @@ impl<M: 'static> Dialog<M> {
             .map(DialogMessage)
             .map(move |message| app::Message::App(mapper(message)));
         if let Some(result) = self.cosmic.app.result_opt.take() {
-            let on_result = self.on_result;
+            let on_result_message = (self.on_result)(result);
             Command::batch([
                 command,
-                Command::perform(async move { app::Message::App(on_result(result)) }, |x| x),
+                Command::perform(async move { app::Message::App(on_result_message) }, |x| x),
             ])
         } else {
             command
@@ -122,6 +157,8 @@ impl<M: 'static> Dialog<M> {
 
 #[derive(Clone, Debug)]
 struct Flags {
+    kind: DialogKind,
+    path_opt: Option<PathBuf>,
     window_id: window::Id,
 }
 
@@ -129,15 +166,14 @@ struct Flags {
 #[derive(Clone, Debug)]
 enum Message {
     Cancel,
+    Filename(String),
     Modifiers(Modifiers),
     NotifyEvent(notify::Event),
     NotifyWatcher(WatcherWrapper),
     Open,
-    SelectAll(Option<segmented_button::Entity>),
-    TabActivate(segmented_button::Entity),
-    TabClose(Option<segmented_button::Entity>),
-    TabMessage(Option<segmented_button::Entity>, tab::Message),
-    TabRescan(segmented_button::Entity, Vec<tab::Item>),
+    Save,
+    TabMessage(tab::Message),
+    TabRescan(Vec<tab::Item>),
 }
 
 #[derive(Debug)]
@@ -161,41 +197,22 @@ impl PartialEq for WatcherWrapper {
 struct App {
     core: Core,
     flags: Flags,
+    filename: String,
+    filename_id: widget::Id,
     modifiers: Modifiers,
     nav_model: segmented_button::SingleSelectModel,
     result_opt: Option<DialogResult>,
-    tab_model: segmented_button::Model<segmented_button::SingleSelect>,
+    tab: Tab,
     watcher_opt: Option<(notify::RecommendedWatcher, HashSet<PathBuf>)>,
 }
 
 impl App {
-    fn open_tab(&mut self, location: Location) -> Command<Message> {
-        let mut tab = Tab::new(location.clone(), TabConfig::default());
-        tab.dialog = true;
-        let entity = self
-            .tab_model
-            .insert()
-            .text(tab.title())
-            .data(tab)
-            .closable()
-            .activate()
-            .id();
-        Command::batch([
-            self.update_title(),
-            self.update_watcher(),
-            self.rescan_tab(entity, location),
-        ])
-    }
-
-    fn rescan_tab(
-        &mut self,
-        entity: segmented_button::Entity,
-        location: Location,
-    ) -> Command<Message> {
+    fn rescan_tab(&self) -> Command<Message> {
+        let location = self.tab.location.clone();
         Command::perform(
             async move {
                 match tokio::task::spawn_blocking(move || location.scan()).await {
-                    Ok(items) => message::app(Message::TabRescan(entity, items)),
+                    Ok(items) => message::app(Message::TabRescan(items)),
                     Err(err) => {
                         log::warn!("failed to rescan: {}", err);
                         message::none()
@@ -207,26 +224,16 @@ impl App {
     }
 
     fn update_title(&mut self) -> Command<Message> {
-        let (header_title, window_title) = match self.tab_model.text(self.tab_model.active()) {
-            Some(tab_title) => (
-                tab_title.to_string(),
-                format!("{tab_title} — COSMIC File Manager"),
-            ),
-            None => (String::new(), "COSMIC File Manager".to_string()),
-        };
-        self.set_header_title(header_title);
-        self.set_window_title(window_title, self.main_window_id())
+        let title = self.flags.kind.title();
+        self.set_header_title(title.clone());
+        self.set_window_title(title, self.main_window_id())
     }
 
     fn update_watcher(&mut self) -> Command<Message> {
         if let Some((mut watcher, old_paths)) = self.watcher_opt.take() {
             let mut new_paths = HashSet::new();
-            for entity in self.tab_model.iter() {
-                if let Some(tab) = self.tab_model.data::<Tab>(entity) {
-                    if let Location::Path(path) = &tab.location {
-                        new_paths.insert(path.clone());
-                    }
-                }
+            if let Location::Path(path) = &self.tab.location {
+                new_paths.insert(path.clone());
             }
 
             // Unwatch paths no longer used
@@ -320,23 +327,44 @@ impl Application for App {
             }
         }
 
+        let mut filename = String::new();
+        let location = Location::Path(match &flags.path_opt {
+            Some(path) => {
+                if path.is_dir() {
+                    path.to_path_buf()
+                } else if let Some(parent) = path.parent() {
+                    if let Some(filename_os) = path.file_name() {
+                        filename = filename_os.to_str().unwrap_or_default().to_string();
+                    }
+                    parent.to_path_buf()
+                } else {
+                    path.to_path_buf()
+                }
+            }
+            None => match env::current_dir() {
+                Ok(path) => path,
+                Err(_) => home_dir(),
+            },
+        });
+
+        let mut tab = Tab::new(location, TabConfig::default());
+        tab.dialog = Some(flags.kind);
+
         let mut app = App {
             core,
             flags,
+            filename,
+            filename_id: widget::Id::unique(),
             modifiers: Modifiers::empty(),
             nav_model: nav_model.build(),
             result_opt: None,
-            tab_model: segmented_button::ModelBuilder::default().build(),
+            tab,
             watcher_opt: None,
         };
 
-        let mut commands = Vec::new();
+        let commands = Command::batch([app.update_title(), app.update_watcher(), app.rescan_tab()]);
 
-        if app.tab_model.iter().next().is_none() {
-            commands.push(app.open_tab(Location::Path(home_dir())));
-        }
-
-        (app, Command::batch(commands))
+        (app, commands)
     }
 
     fn main_window_id(&self) -> window::Id {
@@ -374,7 +402,7 @@ impl Application for App {
         let location_opt = self.nav_model.data::<Location>(entity).clone();
 
         if let Some(location) = location_opt {
-            let message = Message::TabMessage(None, tab::Message::Location(location.clone()));
+            let message = Message::TabMessage(tab::Message::Location(location.clone()));
             return self.update(message);
         }
 
@@ -388,40 +416,38 @@ impl Application for App {
                 self.result_opt = Some(DialogResult::Cancel);
                 return window::close(self.main_window_id());
             }
+            Message::Filename(filename) => {
+                self.filename = filename;
+
+                // Select based on filename
+                if let Some(items) = &mut self.tab.items_opt {
+                    for item in items.iter_mut() {
+                        item.selected = item.name == self.filename;
+                    }
+                }
+            }
             Message::Modifiers(modifiers) => {
                 self.modifiers = modifiers;
             }
             Message::NotifyEvent(event) => {
                 log::debug!("{:?}", event);
 
-                let mut needs_reload = Vec::new();
-                for entity in self.tab_model.iter() {
-                    if let Some(tab) = self.tab_model.data::<Tab>(entity) {
-                        //TODO: support reloading trash, somehow
-                        if let Location::Path(path) = &tab.location {
-                            let mut contains_change = false;
-                            for event_path in event.paths.iter() {
-                                if event_path.starts_with(&path) {
-                                    contains_change = true;
-                                    break;
-                                }
-                            }
-                            if contains_change {
-                                needs_reload.push((entity, tab.location.clone()));
-                            }
+                if let Location::Path(path) = &self.tab.location {
+                    let mut contains_change = false;
+                    for event_path in event.paths.iter() {
+                        if event_path.starts_with(&path) {
+                            contains_change = true;
+                            break;
                         }
                     }
+                    if contains_change {
+                        return self.rescan_tab();
+                    }
                 }
-
-                let mut commands = Vec::with_capacity(needs_reload.len());
-                for (entity, location) in needs_reload {
-                    commands.push(self.rescan_tab(entity, location));
-                }
-                return Command::batch(commands);
             }
             Message::NotifyWatcher(mut watcher_wrapper) => match watcher_wrapper.watcher_opt.take()
             {
-                Some(mut watcher) => {
+                Some(watcher) => {
                     self.watcher_opt = Some((watcher, HashSet::new()));
                     return self.update_watcher();
                 }
@@ -431,86 +457,67 @@ impl Application for App {
             },
             Message::Open => {
                 let mut paths = Vec::new();
-                let entity = self.tab_model.active();
-                if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-                    if let Some(ref mut items) = tab.items_opt {
-                        for item in items.iter_mut() {
-                            if item.selected {
-                                paths.push(item.path.clone());
-                            }
+                if let Some(ref mut items) = self.tab.items_opt {
+                    for item in items.iter_mut() {
+                        if item.selected {
+                            paths.push(item.path.clone());
                         }
                     }
                 }
-                self.result_opt = Some(DialogResult::Open(paths));
-                return window::close(self.main_window_id());
-            }
-            Message::SelectAll(entity_opt) => {
-                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
-                if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-                    if let Some(ref mut items) = tab.items_opt {
-                        for item in items.iter_mut() {
-                            if !tab.config.show_hidden && item.hidden {
-                                continue;
-                            }
-                            item.selected = true;
-                            item.click_time = None;
-                        }
-                    }
-                }
-            }
-            Message::TabActivate(entity) => {
-                self.tab_model.activate(entity);
-                return self.update_title();
-            }
-            Message::TabClose(entity_opt) => {
-                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
-
-                // Activate closest item
-                if let Some(position) = self.tab_model.position(entity) {
-                    if position > 0 {
-                        self.tab_model.activate_position(position - 1);
-                    } else {
-                        self.tab_model.activate_position(position + 1);
-                    }
-                }
-
-                // Remove item
-                self.tab_model.remove(entity);
-
-                // If that was the last tab, close window
-                if self.tab_model.iter().next().is_none() {
+                if !paths.is_empty() {
+                    self.result_opt = Some(DialogResult::Open(paths));
                     return window::close(self.main_window_id());
                 }
-
-                return Command::batch([self.update_title(), self.update_watcher()]);
             }
-            Message::TabMessage(entity_opt, tab_message) => {
-                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+            Message::Save => {
+                if !self.filename.is_empty() {
+                    if let Location::Path(tab_path) = &self.tab.location {
+                        let path = tab_path.join(&self.filename);
+                        if path.exists() {
+                            //TODO: dialog or something?
+                            log::warn!("{:?} exists", path);
+                        }
+                        self.result_opt = Some(DialogResult::Open(vec![path]));
+                        return window::close(self.main_window_id());
+                    }
+                }
+            }
+            Message::TabMessage(tab_message) => {
+                let click_i_opt = match tab_message {
+                    tab::Message::Click(click_i_opt) => click_i_opt,
+                    _ => None,
+                };
 
-                let mut update_opt = None;
-                match self.tab_model.data_mut::<Tab>(entity) {
-                    Some(tab) => {
-                        if tab.update(tab_message, self.modifiers) {
-                            update_opt = Some((tab.title(), tab.location.clone()));
+                let updated = self.tab.update(tab_message, self.modifiers);
+
+                // Update filename box when anything is selected
+                if self.flags.kind.save() {
+                    if let Some(click_i) = click_i_opt {
+                        if let Some(items) = &self.tab.items_opt {
+                            if let Some(item) = items.get(click_i) {
+                                if item.selected {
+                                    self.filename = item.name.clone();
+                                }
+                            }
                         }
                     }
-                    _ => (),
                 }
-                if let Some((tab_title, tab_path)) = update_opt {
-                    self.tab_model.text_set(entity, tab_title);
-                    return Command::batch([
-                        self.update_title(),
-                        self.update_watcher(),
-                        self.rescan_tab(entity, tab_path),
-                    ]);
+
+                if updated {
+                    return Command::batch([self.update_watcher(), self.rescan_tab()]);
                 }
             }
-            Message::TabRescan(entity, items) => match self.tab_model.data_mut::<Tab>(entity) {
-                Some(tab) => {
-                    tab.items_opt = Some(items);
+            Message::TabRescan(mut items) => {
+                // Select based on filename
+                for item in items.iter_mut() {
+                    item.selected = item.name == self.filename;
                 }
-                _ => (),
-            },
+
+                self.tab.items_opt = Some(items);
+
+                // Reset focus on location change
+                return widget::text_input::focus(self.filename_id.clone());
+            }
         }
 
         Command::none()
@@ -520,44 +527,34 @@ impl Application for App {
     fn view(&self) -> Element<Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
 
-        let mut tab_column = widget::column::with_capacity(1);
+        let mut tab_column = widget::column::with_capacity(2);
 
-        if self.tab_model.iter().count() > 1 {
-            tab_column = tab_column.push(
-                widget::container(
-                    widget::view_switcher::horizontal(&self.tab_model)
-                        .button_height(32)
-                        .button_spacing(space_xxs)
-                        .on_activate(Message::TabActivate)
-                        .on_close(|entity| Message::TabClose(Some(entity))),
-                )
-                .style(style::Container::Background)
-                .width(Length::Fill),
-            );
-        }
-
-        let entity = self.tab_model.active();
-        match self.tab_model.data::<Tab>(entity) {
-            Some(tab) => {
-                tab_column = tab_column.push(
-                    tab.view(self.core())
-                        .map(move |message| Message::TabMessage(Some(entity), message)),
-                );
-            }
-            None => {
-                //TODO
-            }
-        }
+        tab_column = tab_column.push(
+            self.tab
+                .view(self.core())
+                .map(move |message| Message::TabMessage(message)),
+        );
 
         tab_column = tab_column.push(
             widget::row::with_children(vec![
-                widget::horizontal_space(Length::Fill).into(),
+                if self.flags.kind.save() {
+                    widget::text_input("", &self.filename)
+                        .id(self.filename_id.clone())
+                        .on_input(Message::Filename)
+                        .on_submit(Message::Save)
+                        .into()
+                } else {
+                    widget::horizontal_space(Length::Fill).into()
+                },
                 widget::button(widget::text(fl!("cancel")))
                     .on_press(Message::Cancel)
                     .into(),
-                widget::button(widget::text(fl!("open")))
-                    .on_press(Message::Open)
-                    .into(),
+                if self.flags.kind.save() {
+                    widget::button(widget::text(fl!("save"))).on_press(Message::Save)
+                } else {
+                    widget::button(widget::text(fl!("open"))).on_press(Message::Open)
+                }
+                .into(),
             ])
             .padding(space_xxs)
             .spacing(space_xxs),

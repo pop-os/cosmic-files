@@ -4,9 +4,11 @@ use cosmic::{
     iced::{subscription::Subscription, window},
     widget, Application, Element,
 };
-use cosmic_files::dialog::{Dialog, DialogMessage, DialogResult};
+use cosmic_files::dialog::{Dialog, DialogKind, DialogMessage, DialogResult};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+
     let settings = Settings::default();
     app::run::<App>(settings, ())?;
     Ok(())
@@ -17,6 +19,7 @@ pub enum Message {
     DialogMessage(DialogMessage),
     DialogOpen,
     DialogResult(DialogResult),
+    DialogSave,
 }
 
 pub struct App {
@@ -60,8 +63,12 @@ impl Application for App {
             }
             Message::DialogOpen => {
                 if self.dialog_opt.is_none() {
-                    let (dialog, command) =
-                        Dialog::new(Message::DialogMessage, Message::DialogResult);
+                    let (dialog, command) = Dialog::new(
+                        DialogKind::OpenFile,
+                        None,
+                        Message::DialogMessage,
+                        Message::DialogResult,
+                    );
                     self.dialog_opt = Some(dialog);
                     return command;
                 }
@@ -69,6 +76,18 @@ impl Application for App {
             Message::DialogResult(result) => {
                 self.dialog_opt = None;
                 self.result_opt = Some(result);
+            }
+            Message::DialogSave => {
+                if self.dialog_opt.is_none() {
+                    let (dialog, command) = Dialog::new(
+                        DialogKind::SaveFile,
+                        Some("README.md".into()),
+                        Message::DialogMessage,
+                        Message::DialogResult,
+                    );
+                    self.dialog_opt = Some(dialog);
+                    return command;
+                }
             }
         }
 
@@ -83,12 +102,21 @@ impl Application for App {
     }
 
     fn view(&self) -> Element<Message> {
-        let mut button = widget::button(widget::text("Open Dialog"));
-        if self.dialog_opt.is_none() {
-            button = button.on_press(Message::DialogOpen);
+        let mut column = widget::column().spacing(8);
+        {
+            let mut button = widget::button(widget::text("Open Dialog"));
+            if self.dialog_opt.is_none() {
+                button = button.on_press(Message::DialogOpen);
+            }
+            column = column.push(button);
         }
-        let mut column = widget::column();
-        column = column.push(button);
+        {
+            let mut button = widget::button(widget::text("Save Dialog"));
+            if self.dialog_opt.is_none() {
+                button = button.on_press(Message::DialogSave);
+            }
+            column = column.push(button);
+        }
         if let Some(result) = &self.result_opt {
             match result {
                 DialogResult::Cancel => {
