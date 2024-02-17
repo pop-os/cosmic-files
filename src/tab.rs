@@ -192,82 +192,12 @@ pub fn scan_path(tab_path: &PathBuf) -> Vec<Item> {
     match fs::read_dir(tab_path) {
         Ok(entries) => {
             for entry_res in entries {
-                let entry = match entry_res {
-                    Ok(ok) => ok,
-                    Err(err) => {
-                        log::warn!("failed to read entry in {:?}: {}", tab_path, err);
-                        continue;
-                    }
+                let item = match get_item(entry_res, tab_path) {
+                    Some(value) => value,
+                    None => continue,
                 };
 
-                let name = match entry.file_name().into_string() {
-                    Ok(ok) => ok,
-                    Err(name_os) => {
-                        log::warn!(
-                            "failed to parse entry in {:?}: {:?} is not valid UTF-8",
-                            tab_path,
-                            name_os,
-                        );
-                        continue;
-                    }
-                };
-
-                let metadata = match entry.metadata() {
-                    Ok(ok) => ok,
-                    Err(err) => {
-                        log::warn!(
-                            "failed to read metadata for entry in {:?}: {}",
-                            tab_path,
-                            err
-                        );
-                        continue;
-                    }
-                };
-
-                let hidden = name.starts_with(".") || hidden_attribute(&metadata);
-
-                let path = entry.path();
-
-                //TODO: configurable size
-                let (icon_handle_dialog, icon_handle_grid, icon_handle_list) = if metadata.is_dir()
-                {
-                    (
-                        folder_icon(&path, ICON_SIZE_DIALOG),
-                        folder_icon(&path, ICON_SIZE_GRID),
-                        folder_icon(&path, ICON_SIZE_LIST),
-                    )
-                } else {
-                    (
-                        mime_icon(&path, ICON_SIZE_DIALOG),
-                        mime_icon(&path, ICON_SIZE_GRID),
-                        mime_icon(&path, ICON_SIZE_LIST),
-                    )
-                };
-
-                let children = if metadata.is_dir() {
-                    //TODO: calculate children in the background (and make it cancellable?)
-                    match fs::read_dir(&path) {
-                        Ok(entries) => entries.count(),
-                        Err(err) => {
-                            log::warn!("failed to read directory {:?}: {}", path, err);
-                            0
-                        }
-                    }
-                } else {
-                    0
-                };
-
-                items.push(Item {
-                    name,
-                    metadata: ItemMetadata::Path { metadata, children },
-                    hidden,
-                    path,
-                    icon_handle_dialog,
-                    icon_handle_grid,
-                    icon_handle_list,
-                    selected: false,
-                    click_time: None,
-                });
+                items.push(item);
             }
         }
         Err(err) => {
@@ -280,6 +210,95 @@ pub fn scan_path(tab_path: &PathBuf) -> Vec<Item> {
         _ => lexical_sort::natural_lexical_cmp(&a.name, &b.name),
     });
     items
+}
+
+fn get_item(entry_res: Result<fs::DirEntry, std::io::Error>, tab_path: &PathBuf) -> Option<Item> {
+    let entry = match entry_res {
+        Ok(ok) => ok,
+        Err(err) => {
+            log::warn!("failed to read entry in {:?}: {}", tab_path, err);
+            return None;
+        }
+    };
+    let name = match entry.file_name().into_string() {
+        Ok(ok) => ok,
+        Err(name_os) => {
+            log::warn!(
+                "failed to parse entry in {:?}: {:?} is not valid UTF-8",
+                tab_path,
+                name_os,
+            );
+            return None;
+        }
+    };
+    let (symlink, metadata) = match entry.metadata() {
+        Ok(metadata) => {
+            if metadata.is_symlink() {
+                match std::fs::metadata(entry.path()) {
+                    Ok(ok) => (true, ok),
+                    Err(err) => {
+                        log::warn!(
+                            "failed to read metadata for symlinked entry in {:?}: {}",
+                            tab_path,
+                            err
+                        );
+                        return None;
+                    }
+                }
+            } else {
+                (false, metadata)
+            }
+        }
+        Err(err) => {
+            log::warn!(
+                "failed to read metadata for entry in {:?}: {}",
+                tab_path,
+                err
+            );
+            return None;
+        }
+    };
+
+    let hidden = name.starts_with(".") || hidden_attribute(&metadata);
+    let path = entry.path();
+    let (icon_handle_dialog, icon_handle_grid, icon_handle_list) = if metadata.is_dir() {
+        (
+            folder_icon(&path, ICON_SIZE_DIALOG),
+            folder_icon(&path, ICON_SIZE_GRID),
+            folder_icon(&path, ICON_SIZE_LIST),
+        )
+    } else {
+        (
+            mime_icon(&path, ICON_SIZE_DIALOG),
+            mime_icon(&path, ICON_SIZE_GRID),
+            mime_icon(&path, ICON_SIZE_LIST),
+        )
+    };
+    let children = if metadata.is_dir() {
+        //TODO: calculate children in the background (and make it cancellable?)
+        match fs::read_dir(&path) {
+            Ok(entries) => entries.count(),
+            Err(err) => {
+                log::warn!("failed to read directory {:?}: {}", path, err);
+                0
+            }
+        }
+    } else {
+        0
+    };
+    let item = Item {
+        name,
+        metadata: ItemMetadata::Path { metadata, children },
+        hidden,
+        path,
+        symlink,
+        icon_handle_dialog,
+        icon_handle_grid,
+        icon_handle_list,
+        selected: false,
+        click_time: None,
+    };
+    Some(item)
 }
 
 // This config statement is from trash::os_limited, inverted
@@ -341,6 +360,7 @@ pub fn scan_trash() -> Vec<Item> {
                     name,
                     metadata: ItemMetadata::Trash { metadata, entry },
                     hidden: false,
+                    symlink: false,
                     path,
                     icon_handle_dialog,
                     icon_handle_grid,
@@ -421,6 +441,7 @@ pub struct Item {
     pub metadata: ItemMetadata,
     pub hidden: bool,
     pub path: PathBuf,
+    pub symlink: bool,
     pub icon_handle_dialog: widget::icon::Handle,
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
@@ -1005,6 +1026,9 @@ impl Tab {
                                 .size(ICON_SIZE_LIST)
                                 .into()
                         },
+                        widget::text(if item.symlink { "T" } else { "F" })
+                            .width(10)
+                            .into(),
                         widget::text(item.name.clone()).width(Length::Fill).into(),
                         widget::text(modified_text).width(modified_width).into(),
                         widget::text(size_text).width(size_width).into(),
