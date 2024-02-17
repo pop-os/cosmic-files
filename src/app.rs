@@ -26,7 +26,7 @@ use std::{
 };
 
 use crate::{
-    config::{AppTheme, Config, CONFIG_VERSION},
+    config::{AppTheme, Config, TabConfig, CONFIG_VERSION},
     fl, home_dir,
     key_bind::{key_binds, KeyBind},
     menu, mouse_area,
@@ -124,6 +124,7 @@ pub enum Message {
     TabNext,
     TabPrev,
     TabClose(Option<segmented_button::Entity>),
+    TabConfig(TabConfig),
     TabContextAction(segmented_button::Entity, Action),
     TabContextMenu(segmented_button::Entity, Option<Point>),
     TabMessage(Option<segmented_button::Entity>, tab::Message),
@@ -370,21 +371,40 @@ impl App {
             AppTheme::Light => 2,
             AppTheme::System => 0,
         };
-        widget::settings::view_column(vec![widget::settings::view_section(fl!("appearance"))
-            .add(
-                widget::settings::item::builder(fl!("theme")).control(widget::dropdown(
-                    &self.app_themes,
-                    Some(app_theme_selected),
-                    move |index| {
-                        Message::AppTheme(match index {
-                            1 => AppTheme::Dark,
-                            2 => AppTheme::Light,
-                            _ => AppTheme::System,
-                        })
-                    },
-                )),
-            )
-            .into()])
+        let hidden_selected = self.config.tab.show_hidden;
+        widget::settings::view_column(vec![
+            widget::settings::view_section(fl!("appearance"))
+                .add(
+                    widget::settings::item::builder(fl!("theme")).control(widget::dropdown(
+                        &self.app_themes,
+                        Some(app_theme_selected),
+                        move |index| {
+                            Message::AppTheme(match index {
+                                1 => AppTheme::Dark,
+                                2 => AppTheme::Light,
+                                _ => AppTheme::System,
+                            })
+                        },
+                    )),
+                )
+                .into(),
+            widget::settings::view_section(fl!("settings-tab"))
+                .add(
+                    widget::settings::item::builder(fl!("settings-hidden")).control(
+                        widget::checkbox(
+                            fl!("settings-show-hidden"),
+                            hidden_selected,
+                            |show_hidden| {
+                                Message::TabConfig(TabConfig {
+                                    show_hidden,
+                                    ..self.config.tab
+                                })
+                            },
+                        ),
+                    ),
+                )
+                .into(),
+        ])
         .into()
     }
 }
@@ -753,6 +773,23 @@ impl Application for App {
                 }
 
                 return Command::batch([self.update_title(), self.update_watcher()]);
+            }
+            Message::TabConfig(config) => {
+                // Tabs are collected first to placate the borrowck
+                let tabs: Vec<_> = self.tab_model.iter().collect();
+                // Update main conf and each tab with the new config
+                let commands: Vec<_> = std::iter::once(self.update_config())
+                    .chain(tabs.into_iter().map(|entity| {
+                        let config = config.clone();
+                        self.update(Message::TabMessage(
+                            Some(entity),
+                            tab::Message::Config(config),
+                        ))
+                    }))
+                    .collect();
+
+                config_set!(tab, config);
+                return Command::batch(commands);
             }
             Message::TabContextAction(entity, action) => {
                 match self.tab_model.data_mut::<Tab>(entity) {
