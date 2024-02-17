@@ -23,7 +23,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{config::TabConfig, fl, home_dir, mime_icon::mime_icon};
+use crate::{config::TabConfig, dialog::DialogKind, fl, mime_icon::mime_icon};
 
 const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 //TODO: configurable
@@ -522,7 +522,7 @@ pub struct Tab {
     pub context_menu: Option<Point>,
     pub items_opt: Option<Vec<Item>>,
     pub view: View,
-    pub dialog: bool,
+    pub dialog: Option<DialogKind>,
     pub edit_location: Option<Location>,
     pub history_i: usize,
     pub history: Vec<Location>,
@@ -537,7 +537,7 @@ impl Tab {
             context_menu: None,
             items_opt: None,
             view: View::List,
-            dialog: false,
+            dialog: None,
             edit_location: None,
             history_i: 0,
             history,
@@ -572,7 +572,7 @@ impl Tab {
                                         Location::Path(_) => {
                                             if item.path.is_dir() {
                                                 cd = Some(Location::Path(item.path.clone()));
-                                            } else if !self.dialog {
+                                            } else if !self.dialog.is_some() {
                                                 let mut command = open_command(&item.path);
                                                 match command.spawn() {
                                                     Ok(_) => (),
@@ -594,7 +594,9 @@ impl Tab {
                             }
                             //TODO: prevent triple-click and beyond from opening file?
                             item.click_time = Some(Instant::now());
-                        } else if modifiers.contains(Modifiers::CTRL) {
+                        } else if modifiers.contains(Modifiers::CTRL)
+                            && self.dialog.map_or(true, |x| x.multiple())
+                        {
                             // Holding control allows multiple selection
                             item.click_time = None;
                         } else {
@@ -646,7 +648,9 @@ impl Tab {
                         for (i, item) in items.iter_mut().enumerate() {
                             if i == click_i {
                                 item.selected = true;
-                            } else if modifiers.contains(Modifiers::CTRL) {
+                            } else if modifiers.contains(Modifiers::CTRL)
+                                && self.dialog.map_or(true, |x| x.multiple())
+                            {
                                 // Holding control allows multiple selection
                             } else {
                                 item.selected = false;
@@ -920,7 +924,8 @@ impl Tab {
         let cosmic_theme::Spacing { space_xxs, .. } = core.system_theme().cosmic().spacing;
 
         //TODO: make adaptive?
-        let column_width = Length::Fixed(200.0);
+        let modified_width = Length::Fixed(200.0);
+        let size_width = Length::Fixed(100.0);
 
         let mut children: Vec<Element<_>> = Vec::new();
 
@@ -931,11 +936,9 @@ impl Tab {
                     .into(),
                 //TODO: do not show modified column when in the trash
                 widget::text::heading(fl!("modified"))
-                    .width(column_width)
+                    .width(modified_width)
                     .into(),
-                widget::text::heading(fl!("size"))
-                    .width(column_width)
-                    .into(),
+                widget::text::heading(fl!("size")).width(size_width).into(),
             ])
             .align_items(Alignment::Center)
             .padding(space_xxs)
@@ -993,7 +996,7 @@ impl Tab {
                 //TODO: align columns
                 let button = widget::button(
                     widget::row::with_children(vec![
-                        if self.dialog {
+                        if self.dialog.is_some() {
                             widget::icon::icon(item.icon_handle_dialog.clone())
                                 .size(ICON_SIZE_DIALOG)
                                 .into()
@@ -1003,8 +1006,8 @@ impl Tab {
                                 .into()
                         },
                         widget::text(item.name.clone()).width(Length::Fill).into(),
-                        widget::text(modified_text).width(column_width).into(),
-                        widget::text(size_text).width(column_width).into(),
+                        widget::text(modified_text).width(modified_width).into(),
+                        widget::text(size_text).width(size_width).into(),
                     ])
                     .align_items(Alignment::Center)
                     .spacing(space_xxs),

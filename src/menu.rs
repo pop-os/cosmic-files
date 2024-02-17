@@ -14,10 +14,10 @@ use cosmic::{
 use std::collections::HashMap;
 
 use crate::{
-    app::{Action, ContextPage, Message},
+    app::{Action, Message},
     fl,
     key_bind::KeyBind,
-    tab::{self, Location, Tab},
+    tab::{Location, Tab},
 };
 
 macro_rules! menu_button {

@@ -7,6 +7,12 @@ trash = Trash
 # Dialog
 cancel = Cancel
 open = Open
+open-file = Open file
+open-folder = Open folder
+open-multiple-files = Open multiple files
+open-multiple-folders = Open multiple folders
+save = Save
+save-file = Save file
 
 # List view
 name = Name
