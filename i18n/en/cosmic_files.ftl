@@ -32,6 +32,9 @@ properties = Properties
 
 ## Settings
 settings = Settings
+settings-tab = Tab
+settings-hidden = Hidden files
+settings-show-hidden = Show hidden files
 
 ### Appearance
 appearance = Appearance
