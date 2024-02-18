@@ -23,13 +23,14 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{config::TabConfig, dialog::DialogKind, fl, mime_icon::mime_icon};
+use crate::{
+    config::{IconSizes, TabConfig},
+    dialog::DialogKind,
+    fl,
+    mime_icon::mime_icon,
+};
 
 const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
-//TODO: configurable
-const ICON_SIZE_DIALOG: u16 = 16;
-const ICON_SIZE_LIST: u16 = 32;
-const ICON_SIZE_GRID: u16 = 64;
 static SPECIAL_DIRS: Lazy<HashMap<PathBuf, &'static str>> = Lazy::new(|| {
     let mut special_dirs = HashMap::new();
     if let Some(dir) = dirs::document_dir() {
@@ -187,7 +188,7 @@ fn open_command(path: &PathBuf) -> process::Command {
     command
 }
 
-pub fn scan_path(tab_path: &PathBuf) -> Vec<Item> {
+pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
     let mut items = Vec::new();
     match fs::read_dir(tab_path) {
         Ok(entries) => {
@@ -228,19 +229,18 @@ pub fn scan_path(tab_path: &PathBuf) -> Vec<Item> {
 
                 let path = entry.path();
 
-                //TODO: configurable size
                 let (icon_handle_dialog, icon_handle_grid, icon_handle_list) = if metadata.is_dir()
                 {
                     (
-                        folder_icon(&path, ICON_SIZE_DIALOG),
-                        folder_icon(&path, ICON_SIZE_GRID),
-                        folder_icon(&path, ICON_SIZE_LIST),
+                        folder_icon(&path, sizes.dialog()),
+                        folder_icon(&path, sizes.grid()),
+                        folder_icon(&path, sizes.list()),
                     )
                 } else {
                     (
-                        mime_icon(&path, ICON_SIZE_DIALOG),
-                        mime_icon(&path, ICON_SIZE_GRID),
-                        mime_icon(&path, ICON_SIZE_LIST),
+                        mime_icon(&path, sizes.dialog()),
+                        mime_icon(&path, sizes.grid()),
+                        mime_icon(&path, sizes.list()),
                     )
                 };
 
@@ -307,7 +307,7 @@ pub fn scan_trash() -> Vec<Item> {
         not(target_os = "android")
     )
 ))]
-pub fn scan_trash() -> Vec<Item> {
+pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
     let mut items: Vec<Item> = Vec::new();
     match trash::os_limited::list() {
         Ok(entries) => {
@@ -323,17 +323,16 @@ pub fn scan_trash() -> Vec<Item> {
                 let path = entry.original_path();
                 let name = entry.name.clone();
 
-                //TODO: configurable size
                 let (icon_handle_dialog, icon_handle_grid, icon_handle_list) = match metadata.size {
                     trash::TrashItemSize::Entries(_) => (
-                        folder_icon(&path, ICON_SIZE_DIALOG),
-                        folder_icon(&path, ICON_SIZE_GRID),
-                        folder_icon(&path, ICON_SIZE_LIST),
+                        folder_icon(&path, sizes.dialog()),
+                        folder_icon(&path, sizes.grid()),
+                        folder_icon(&path, sizes.list()),
                     ),
                     trash::TrashItemSize::Bytes(_) => (
-                        mime_icon(&path, ICON_SIZE_DIALOG),
-                        mime_icon(&path, ICON_SIZE_GRID),
-                        mime_icon(&path, ICON_SIZE_LIST),
+                        mime_icon(&path, sizes.dialog()),
+                        mime_icon(&path, sizes.grid()),
+                        mime_icon(&path, sizes.list()),
                     ),
                 };
 
@@ -369,10 +368,10 @@ pub enum Location {
 }
 
 impl Location {
-    pub fn scan(&self) -> Vec<Item> {
+    pub fn scan(&self, sizes: IconSizes) -> Vec<Item> {
         match self {
-            Self::Path(path) => scan_path(path),
-            Self::Trash => scan_trash(),
+            Self::Path(path) => scan_path(path, sizes),
+            Self::Trash => scan_trash(sizes),
         }
     }
 }
@@ -429,11 +428,11 @@ pub struct Item {
 }
 
 impl Item {
-    pub fn property_view(&self, core: &Core) -> Element<crate::app::Message> {
+    pub fn property_view(&self, core: &Core, sizes: IconSizes) -> Element<crate::app::Message> {
         let mut section = widget::settings::view_section("");
         section = section.add(widget::settings::item::item_row(vec![
             widget::icon::icon(self.icon_handle_list.clone())
-                .size(ICON_SIZE_LIST)
+                .size(sizes.list())
                 .into(),
             widget::text(self.name.clone()).into(),
         ]));
@@ -869,7 +868,10 @@ impl Tab {
         //TODO: get from config
         let item_width = Length::Fixed(96.0);
         let item_height = Length::Fixed(116.0);
-        let TabConfig { show_hidden } = self.config;
+        let TabConfig {
+            show_hidden,
+            icon_sizes,
+        } = self.config;
 
         let mut children: Vec<Element<_>> = Vec::new();
         if let Some(ref items) = self.items_opt {
@@ -884,7 +886,7 @@ impl Tab {
                 let button = widget::button(
                     widget::column::with_children(vec![
                         widget::icon::icon(item.icon_handle_grid.clone())
-                            .size(ICON_SIZE_GRID)
+                            .size(icon_sizes.grid())
                             .into(),
                         widget::text(item.name.clone()).into(),
                     ])
@@ -951,7 +953,10 @@ impl Tab {
         if let Some(ref items) = self.items_opt {
             let mut count = 0;
             let mut hidden = 0;
-            let TabConfig { show_hidden } = self.config;
+            let TabConfig {
+                show_hidden,
+                icon_sizes,
+            } = self.config;
             for (i, item) in items.iter().enumerate() {
                 if !show_hidden && item.hidden {
                     hidden += 1;
@@ -998,11 +1003,11 @@ impl Tab {
                     widget::row::with_children(vec![
                         if self.dialog.is_some() {
                             widget::icon::icon(item.icon_handle_dialog.clone())
-                                .size(ICON_SIZE_DIALOG)
+                                .size(icon_sizes.dialog())
                                 .into()
                         } else {
                             widget::icon::icon(item.icon_handle_list.clone())
-                                .size(ICON_SIZE_LIST)
+                                .size(icon_sizes.list())
                                 .into()
                         },
                         widget::text(item.name.clone()).width(Length::Fill).into(),
@@ -1071,7 +1076,7 @@ mod tests {
             read_dir_sorted, simple_fs, sort_files, tab_click_new, NAME_LEN, NUM_DIRS, NUM_FILES,
             NUM_HIDDEN, NUM_NESTED,
         },
-        config::TabConfig,
+        config::{IconSizes, TabConfig},
     };
 
     // Boilerplate for tab tests. Checks if simulated clicks selected items.
@@ -1153,7 +1158,7 @@ mod tests {
         let entries = read_dir_sorted(path)?;
 
         debug!("Calling scan_path(\"{}\")", path.display());
-        let actual = scan_path(&path.to_owned());
+        let actual = scan_path(&path.to_owned(), IconSizes::default());
 
         // scan_path shouldn't skip any entries
         assert_eq!(entries.len(), actual.len());
@@ -1177,7 +1182,7 @@ mod tests {
         assert!(!invalid_path.exists());
 
         debug!("Calling scan_path(\"{}\")", invalid_path.display());
-        let actual = scan_path(&invalid_path);
+        let actual = scan_path(&invalid_path, IconSizes::default());
 
         assert!(actual.is_empty());
 
@@ -1190,7 +1195,7 @@ mod tests {
         let path = fs.path();
 
         debug!("Calling scan_path(\"{}\")", path.display());
-        let actual = scan_path(&path.to_owned());
+        let actual = scan_path(&path.to_owned(), IconSizes::default());
 
         assert_eq!(0, path.read_dir()?.count());
         assert!(actual.is_empty());
