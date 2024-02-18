@@ -219,9 +219,12 @@ impl App {
         entity: segmented_button::Entity,
         location: Location,
     ) -> Command<Message> {
+        let icon_sizes = self.config.tab.icon_sizes;
         Command::perform(
             async move {
-                match tokio::task::spawn_blocking(move || location.scan()).await {
+                match tokio::task::spawn_blocking(move || location.scan(icon_sizes))
+                    .await
+                {
                     Ok(items) => message::app(Message::TabRescan(entity, items)),
                     Err(err) => {
                         log::warn!("failed to rescan: {}", err);
@@ -357,7 +360,7 @@ impl App {
             if let Some(ref items) = tab.items_opt {
                 for item in items.iter() {
                     if item.selected {
-                        children.push(item.property_view(&self.core));
+                        children.push(item.property_view(&self.core, tab.config.icon_sizes));
                     }
                 }
             }
@@ -1123,7 +1126,7 @@ pub(crate) mod test_utils {
     use log::{debug, trace};
     use tempfile::{tempdir, TempDir};
 
-    use crate::{config::TabConfig, tab::Item};
+    use crate::{config::{TabConfig, IconSizes}, tab::Item};
 
     use super::*;
 
@@ -1274,7 +1277,7 @@ pub(crate) mod test_utils {
 
         // New tab with items
         let location = Location::Path(path.to_owned());
-        let items = location.scan();
+        let items = location.scan(IconSizes::default());
         let mut tab = Tab::new(location, TabConfig::default());
         tab.items_opt = Some(items);
 

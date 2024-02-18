@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
+use std::num::NonZeroU16;
+
 use cosmic::{
     cosmic_config::{self, cosmic_config_derive::CosmicConfigEntry, CosmicConfigEntry},
     theme,
@@ -7,6 +9,13 @@ use cosmic::{
 use serde::{Deserialize, Serialize};
 
 pub const CONFIG_VERSION: u64 = 1;
+
+// Default icon sizes
+const ICON_SIZE_DIALOG: u16 = 16;
+const ICON_SIZE_LIST: u16 = 32;
+const ICON_SIZE_GRID: u16 = 64;
+// TODO: 5 is an arbitrary number. Maybe there's a better icon size max
+const ICON_SCALE_MAX: u16 = 5;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum AppTheme {
@@ -51,14 +60,52 @@ pub struct TabConfig {
     pub show_hidden: bool,
     // TODO: Other possible options
     // pub sort_by: fn(&PathBuf, &PathBuf) -> Ordering,
-    // Icon handle sizes
-    // icon_size_dialog: u16,
-    // icon_size_list: u16,
-    // icon_size_grid: u16,
+    // Icon handle zoom percents
+    pub icon_sizes: IconSizes,
 }
 
 impl Default for TabConfig {
     fn default() -> Self {
-        Self { show_hidden: false }
+        Self {
+            show_hidden: false,
+            icon_sizes: IconSizes::default(),
+        }
+    }
+}
+
+macro_rules! percent {
+    ($perc:expr, $pixel:ident) => {
+        (($perc.get() as f32 * $pixel as f32) / 100.).clamp(1., ($pixel * ICON_SCALE_MAX) as _)
+    };
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
+pub struct IconSizes {
+    pub dialog: NonZeroU16,
+    pub list: NonZeroU16,
+    pub grid: NonZeroU16,
+}
+
+impl Default for IconSizes {
+    fn default() -> Self {
+        Self {
+            dialog: 100.try_into().unwrap(),
+            list: 100.try_into().unwrap(),
+            grid: 100.try_into().unwrap(),
+        }
+    }
+}
+
+impl IconSizes {
+    pub fn dialog(&self) -> u16 {
+        percent!(self.dialog, ICON_SIZE_DIALOG) as _
+    }
+
+    pub fn list(&self) -> u16 {
+        percent!(self.list, ICON_SIZE_LIST) as _
+    }
+
+    pub fn grid(&self) -> u16 {
+        percent!(self.grid, ICON_SIZE_GRID) as _
     }
 }
