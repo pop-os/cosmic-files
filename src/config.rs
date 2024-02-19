@@ -54,13 +54,13 @@ impl Default for Config {
 /// [`TabConfig`] contains options that are passed to each instance of [`crate::tab::Tab`].
 /// These options are set globally through the main config, but each tab may change options
 /// locally. Local changes aren't saved to the main config.
-#[derive(Clone, Debug, Eq, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
 pub struct TabConfig {
     /// Show hidden files and folders
     pub show_hidden: bool,
     // TODO: Other possible options
     // pub sort_by: fn(&PathBuf, &PathBuf) -> Ordering,
-    // Icon handle zoom percents
+    // Icon zoom
     pub icon_sizes: IconSizes,
 }
 

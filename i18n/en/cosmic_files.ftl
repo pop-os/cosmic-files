@@ -35,6 +35,9 @@ settings = Settings
 settings-tab = Tab
 settings-hidden = Hidden files
 settings-show-hidden = Show hidden files
+icon-size-list = Icon size (list)
+icon-size-grid = Icon size (grid)
+icon-zoom = Zoom
 
 ### Appearance
 appearance = Appearance

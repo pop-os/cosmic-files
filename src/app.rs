@@ -26,7 +26,7 @@ use std::{
 };
 
 use crate::{
-    config::{AppTheme, Config, TabConfig, CONFIG_VERSION},
+    config::{AppTheme, Config, IconSizes, TabConfig, CONFIG_VERSION},
     fl, home_dir,
     key_bind::{key_binds, KeyBind},
     menu, mouse_area,
@@ -222,9 +222,7 @@ impl App {
         let icon_sizes = self.config.tab.icon_sizes;
         Command::perform(
             async move {
-                match tokio::task::spawn_blocking(move || location.scan(icon_sizes))
-                    .await
-                {
+                match tokio::task::spawn_blocking(move || location.scan(icon_sizes)).await {
                     Ok(items) => message::app(Message::TabRescan(entity, items)),
                     Err(err) => {
                         log::warn!("failed to rescan: {}", err);
@@ -375,6 +373,8 @@ impl App {
             AppTheme::System => 0,
         };
         let hidden_selected = self.config.tab.show_hidden;
+        // TODO: Should dialog be updated here too?
+        let IconSizes { list, grid, .. } = self.config.tab.icon_sizes;
         widget::settings::view_column(vec![
             widget::settings::view_section(fl!("appearance"))
                 .add(
@@ -389,6 +389,40 @@ impl App {
                             })
                         },
                     )),
+                )
+                .add(
+                    widget::settings::item::builder(fl!("icon-size-list")).control(
+                        widget::text_input(fl!("icon-zoom"), list.to_string()).on_input(|s| {
+                            s.parse()
+                                .map(|list_next| {
+                                    Message::TabConfig(TabConfig {
+                                        icon_sizes: IconSizes {
+                                            list: list_next,
+                                            ..self.config.tab.icon_sizes
+                                        },
+                                        ..self.config.tab
+                                    })
+                                })
+                                .unwrap_or_else(|_| Message::TabConfig(self.config.tab))
+                        }),
+                    ),
+                )
+                .add(
+                    widget::settings::item::builder(fl!("icon-size-grid")).control(
+                        widget::text_input(fl!("icon-zoom"), grid.to_string()).on_input(|s| {
+                            s.parse()
+                                .map(|grid_next| {
+                                    Message::TabConfig(TabConfig {
+                                        icon_sizes: IconSizes {
+                                            grid: grid_next,
+                                            ..self.config.tab.icon_sizes
+                                        },
+                                        ..self.config.tab
+                                    })
+                                })
+                                .unwrap_or_else(|_| Message::TabConfig(self.config.tab))
+                        }),
+                    ),
                 )
                 .into(),
             widget::settings::view_section(fl!("settings-tab"))
@@ -778,21 +812,23 @@ impl Application for App {
                 return Command::batch([self.update_title(), self.update_watcher()]);
             }
             Message::TabConfig(config) => {
-                // Tabs are collected first to placate the borrowck
-                let tabs: Vec<_> = self.tab_model.iter().collect();
-                // Update main conf and each tab with the new config
-                let commands: Vec<_> = std::iter::once(self.update_config())
-                    .chain(tabs.into_iter().map(|entity| {
-                        let config = config.clone();
-                        self.update(Message::TabMessage(
-                            Some(entity),
-                            tab::Message::Config(config),
-                        ))
-                    }))
-                    .collect();
+                if config != self.config.tab {
+                    // Tabs are collected first to placate the borrowck
+                    let tabs: Vec<_> = self.tab_model.iter().collect();
+                    // Update main conf and each tab with the new config
+                    let commands: Vec<_> = std::iter::once(self.update_config())
+                        .chain(tabs.into_iter().map(|entity| {
+                            let config = config.clone();
+                            self.update(Message::TabMessage(
+                                Some(entity),
+                                tab::Message::Config(config),
+                            ))
+                        }))
+                        .collect();
 
-                config_set!(tab, config);
-                return Command::batch(commands);
+                    config_set!(tab, config);
+                    return Command::batch(commands);
+                }
             }
             Message::TabContextAction(entity, action) => {
                 match self.tab_model.data_mut::<Tab>(entity) {
@@ -1126,7 +1162,10 @@ pub(crate) mod test_utils {
     use log::{debug, trace};
     use tempfile::{tempdir, TempDir};
 
-    use crate::{config::{TabConfig, IconSizes}, tab::Item};
+    use crate::{
+        config::{IconSizes, TabConfig},
+        tab::Item,
+    };
 
     use super::*;
 
