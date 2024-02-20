@@ -80,8 +80,8 @@ impl Application for App {
             Message::DialogSave => {
                 if self.dialog_opt.is_none() {
                     let (dialog, command) = Dialog::new(
-                        DialogKind::SaveFile,
-                        Some("README.md".into()),
+                        DialogKind::SaveFile { filename: "README.md".to_string() },
+                        None,
                         Message::DialogMessage,
                         Message::DialogResult,
                     );

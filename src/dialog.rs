@@ -33,13 +33,13 @@ pub enum DialogResult {
     Open(Vec<PathBuf>),
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub enum DialogKind {
     OpenFile,
     OpenFolder,
     OpenMultipleFiles,
     OpenMultipleFolders,
-    SaveFile,
+    SaveFile { filename: String },
 }
 
 impl DialogKind {
@@ -49,7 +49,7 @@ impl DialogKind {
             Self::OpenFolder => fl!("open-folder"),
             Self::OpenMultipleFiles => fl!("open-multiple-files"),
             Self::OpenMultipleFolders => fl!("open-multiple-folders"),
-            Self::SaveFile => fl!("save-file"),
+            Self::SaveFile { .. } => fl!("save-file"),
         }
     }
 
@@ -58,7 +58,7 @@ impl DialogKind {
     }
 
     pub fn save(&self) -> bool {
-        matches!(self, Self::SaveFile)
+        matches!(self, Self::SaveFile { .. })
     }
 }
 
@@ -197,7 +197,6 @@ impl PartialEq for WatcherWrapper {
 struct App {
     core: Core,
     flags: Flags,
-    filename: String,
     filename_id: widget::Id,
     modifiers: Modifiers,
     nav_model: segmented_button::SingleSelectModel,
@@ -328,20 +327,8 @@ impl Application for App {
             }
         }
 
-        let mut filename = String::new();
         let location = Location::Path(match &flags.path_opt {
-            Some(path) => {
-                if path.is_dir() {
-                    path.to_path_buf()
-                } else if let Some(parent) = path.parent() {
-                    if let Some(filename_os) = path.file_name() {
-                        filename = filename_os.to_str().unwrap_or_default().to_string();
-                    }
-                    parent.to_path_buf()
-                } else {
-                    path.to_path_buf()
-                }
-            }
+            Some(path) => path.to_path_buf(),
             None => match env::current_dir() {
                 Ok(path) => path,
                 Err(_) => home_dir(),
@@ -349,12 +336,11 @@ impl Application for App {
         });
 
         let mut tab = Tab::new(location, TabConfig::default());
-        tab.dialog = Some(flags.kind);
+        tab.dialog = Some(flags.kind.clone());
 
         let mut app = App {
             core,
             flags,
-            filename,
             filename_id: widget::Id::unique(),
             modifiers: Modifiers::empty(),
             nav_model: nav_model.build(),
@@ -417,13 +403,15 @@ impl Application for App {
                 self.result_opt = Some(DialogResult::Cancel);
                 return window::close(self.main_window_id());
             }
-            Message::Filename(filename) => {
-                self.filename = filename;
+            Message::Filename(new_filename) => {
+                if let DialogKind::SaveFile { filename } = &mut self.flags.kind {
+                    *filename = new_filename.clone();
+                }
 
                 // Select based on filename
                 if let Some(items) = &mut self.tab.items_opt {
                     for item in items.iter_mut() {
-                        item.selected = item.name == self.filename;
+                        item.selected = item.name == new_filename;
                     }
                 }
             }
@@ -471,16 +459,18 @@ impl Application for App {
                 }
             }
             Message::Save => {
-                if !self.filename.is_empty() {
-                    if let Location::Path(tab_path) = &self.tab.location {
-                        let path = tab_path.join(&self.filename);
-                        if path.exists() {
-                            //TODO: dialog or something?
-                            log::warn!("{:?} exists", path);
+                if let DialogKind::SaveFile { filename } = &self.flags.kind {
+                    if !filename.is_empty() {
+                        if let Location::Path(tab_path) = &self.tab.location {
+                            let path = tab_path.join(&filename);
+                            if path.exists() {
+                                //TODO: dialog or something?
+                                log::warn!("{:?} exists", path);
+                            }
+                            self.result_opt = Some(DialogResult::Open(vec![path]));
+                            return window::close(self.main_window_id());
                         }
-                        self.result_opt = Some(DialogResult::Open(vec![path]));
-                        return window::close(self.main_window_id());
-                    }
+                     }
                 }
             }
             Message::TabMessage(tab_message) => {
@@ -492,12 +482,12 @@ impl Application for App {
                 let updated = self.tab.update(tab_message, self.modifiers);
 
                 // Update filename box when anything is selected
-                if self.flags.kind.save() {
+                if let DialogKind::SaveFile { filename } = &mut self.flags.kind {
                     if let Some(click_i) = click_i_opt {
                         if let Some(items) = &self.tab.items_opt {
                             if let Some(item) = items.get(click_i) {
                                 if item.selected {
-                                    self.filename = item.name.clone();
+                                    *filename = item.name.clone();
                                 }
                             }
                         }
@@ -510,8 +500,10 @@ impl Application for App {
             }
             Message::TabRescan(mut items) => {
                 // Select based on filename
-                for item in items.iter_mut() {
-                    item.selected = item.name == self.filename;
+                if let DialogKind::SaveFile { filename } = &self.flags.kind {
+                    for item in items.iter_mut() {
+                        item.selected = &item.name == filename;
+                    }
                 }
 
                 self.tab.items_opt = Some(items);
@@ -538,8 +530,8 @@ impl Application for App {
 
         tab_column = tab_column.push(
             widget::row::with_children(vec![
-                if self.flags.kind.save() {
-                    widget::text_input("", &self.filename)
+                if let DialogKind::SaveFile { filename } = &self.flags.kind {
+                    widget::text_input("", filename)
                         .id(self.filename_id.clone())
                         .on_input(Message::Filename)
                         .on_submit(Message::Save)

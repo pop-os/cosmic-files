@@ -686,7 +686,7 @@ impl Application for App {
             }
             Message::NotifyWatcher(mut watcher_wrapper) => match watcher_wrapper.watcher_opt.take()
             {
-                Some(mut watcher) => {
+                Some(watcher) => {
                     self.watcher_opt = Some((watcher, HashSet::new()));
                     return self.update_watcher();
                 }

@@ -594,7 +594,7 @@ impl Tab {
                             //TODO: prevent triple-click and beyond from opening file?
                             item.click_time = Some(Instant::now());
                         } else if modifiers.contains(Modifiers::CTRL)
-                            && self.dialog.map_or(true, |x| x.multiple())
+                            && self.dialog.as_ref().map_or(true, |x| x.multiple())
                         {
                             // Holding control allows multiple selection
                             item.click_time = None;
@@ -648,7 +648,7 @@ impl Tab {
                             if i == click_i {
                                 item.selected = true;
                             } else if modifiers.contains(Modifiers::CTRL)
-                                && self.dialog.map_or(true, |x| x.multiple())
+                                && self.dialog.as_ref().map_or(true, |x| x.multiple())
                             {
                                 // Holding control allows multiple selection
                             } else {
@@ -664,7 +664,7 @@ impl Tab {
                 self.view = view;
             }
         }
-        if let Some(mut location) = cd {
+        if let Some(location) = cd {
             if location != self.location {
                 self.location = location.clone();
                 self.items_opt = None;
