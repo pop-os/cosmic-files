@@ -1,5 +1,5 @@
 # cosmic-files
-WIP file manager for the COSMIC desktop environment
+File manager for the COSMIC desktop environment
 
 > [!NOTE]
 > This project is still a work in progress
@@ -26,4 +26,4 @@ consider joining the [Pop!_OS Chat](https://chat.pop-os.org/). More information 
 
 ## License
 
-This is Project is licensed under [GPLv3](LICENSE)
+This project is licensed under [GPLv3](LICENSE)
