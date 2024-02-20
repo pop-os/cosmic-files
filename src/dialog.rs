@@ -539,13 +539,13 @@ impl Application for App {
                 } else {
                     widget::horizontal_space(Length::Fill).into()
                 },
-                widget::button(widget::text(fl!("cancel")))
+                widget::button::standard(fl!("cancel"))
                     .on_press(Message::Cancel)
                     .into(),
                 if self.flags.kind.save() {
-                    widget::button(widget::text(fl!("save"))).on_press(Message::Save)
+                    widget::button::standard(fl!("save")).on_press(Message::Save)
                 } else {
-                    widget::button(widget::text(fl!("open"))).on_press(Message::Open)
+                    widget::button::standard(fl!("open")).on_press(Message::Open)
                 }
                 .into(),
             ])

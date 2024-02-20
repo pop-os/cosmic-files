@@ -104,14 +104,14 @@ impl Application for App {
     fn view(&self) -> Element<Message> {
         let mut column = widget::column().spacing(8);
         {
-            let mut button = widget::button(widget::text("Open Dialog"));
+            let mut button = widget::button::standard("Open Dialog");
             if self.dialog_opt.is_none() {
                 button = button.on_press(Message::DialogOpen);
             }
             column = column.push(button);
         }
         {
-            let mut button = widget::button(widget::text("Save Dialog"));
+            let mut button = widget::button::standard("Save Dialog");
             if self.dialog_opt.is_none() {
                 button = button.on_press(Message::DialogSave);
             }
