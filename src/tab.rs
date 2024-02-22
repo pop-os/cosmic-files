@@ -12,6 +12,7 @@ use cosmic::{
     },
     theme, widget, Element,
 };
+use mime_guess::MimeGuess;
 use once_cell::sync::Lazy;
 use std::{
     cmp::Ordering,
@@ -31,6 +32,8 @@ use crate::{
 };
 
 const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
+//TODO: adjust for locales?
+const TIME_FORMAT: &'static str = "%a %-d %b %-Y %r";
 static SPECIAL_DIRS: Lazy<HashMap<PathBuf, &'static str>> = Lazy::new(|| {
     let mut special_dirs = HashMap::new();
     if let Some(dir) = dirs::document_dir() {
@@ -229,6 +232,10 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
 
                 let path = entry.path();
 
+                let mime_guess = MimeGuess::from_path(&path);
+
+                //TODO: previews of images
+
                 let (icon_handle_dialog, icon_handle_grid, icon_handle_list) = if metadata.is_dir()
                 {
                     (
@@ -262,6 +269,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                     metadata: ItemMetadata::Path { metadata, children },
                     hidden,
                     path,
+                    mime_guess,
                     icon_handle_dialog,
                     icon_handle_grid,
                     icon_handle_list,
@@ -323,6 +331,8 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                 let path = entry.original_path();
                 let name = entry.name.clone();
 
+                let mime_guess = MimeGuess::from_path(&path);
+
                 let (icon_handle_dialog, icon_handle_grid, icon_handle_list) = match metadata.size {
                     trash::TrashItemSize::Entries(_) => (
                         folder_icon(&path, sizes.dialog()),
@@ -341,6 +351,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     metadata: ItemMetadata::Trash { metadata, entry },
                     hidden: false,
                     path,
+                    mime_guess,
                     icon_handle_dialog,
                     icon_handle_grid,
                     icon_handle_list,
@@ -420,6 +431,7 @@ pub struct Item {
     pub metadata: ItemMetadata,
     pub hidden: bool,
     pub path: PathBuf,
+    pub mime_guess: MimeGuess,
     pub icon_handle_dialog: widget::icon::Handle,
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
@@ -430,12 +442,19 @@ pub struct Item {
 impl Item {
     pub fn property_view(&self, core: &Core, sizes: IconSizes) -> Element<crate::app::Message> {
         let mut section = widget::settings::view_section("");
+
+        section = section.add(widget::icon::icon(self.icon_handle_grid.clone()).size(sizes.grid()));
+
         section = section.add(widget::settings::item::item_row(vec![
-            widget::icon::icon(self.icon_handle_list.clone())
-                .size(sizes.list())
-                .into(),
-            widget::text(self.name.clone()).into(),
+            widget::text::heading(self.name.clone()).into(),
         ]));
+
+        if let Some(mime) = self.mime_guess.first() {
+            section = section.add(widget::settings::item(
+                "Type",
+                widget::text(format!("{}", mime)),
+            ));
+        }
 
         //TODO: translate!
         //TODO: correct display of folder size?
@@ -453,12 +472,12 @@ impl Item {
                     ));
                 }
 
-                if let Ok(time) = metadata.accessed() {
+                if let Ok(time) = metadata.created() {
                     section = section.add(widget::settings::item(
-                        "Accessed",
+                        "Created",
                         widget::text(
                             chrono::DateTime::<chrono::Local>::from(time)
-                                .format("%c")
+                                .format(TIME_FORMAT)
                                 .to_string(),
                         ),
                     ));
@@ -469,18 +488,18 @@ impl Item {
                         "Modified",
                         widget::text(
                             chrono::DateTime::<chrono::Local>::from(time)
-                                .format("%c")
+                                .format(TIME_FORMAT)
                                 .to_string(),
                         ),
                     ));
                 }
 
-                if let Ok(time) = metadata.created() {
+                if let Ok(time) = metadata.accessed() {
                     section = section.add(widget::settings::item(
-                        "Created",
+                        "Accessed",
                         widget::text(
                             chrono::DateTime::<chrono::Local>::from(time)
-                                .format("%c")
+                                .format(TIME_FORMAT)
                                 .to_string(),
                         ),
                     ));
@@ -970,7 +989,7 @@ impl Tab {
                 let modified_text = match &item.metadata {
                     ItemMetadata::Path { metadata, .. } => match metadata.modified() {
                         Ok(time) => chrono::DateTime::<chrono::Local>::from(time)
-                            .format("%c")
+                            .format(TIME_FORMAT)
                             .to_string(),
                         Err(_) => String::new(),
                     },
