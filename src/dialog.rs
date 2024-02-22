@@ -632,6 +632,7 @@ impl Application for App {
                     }
                 },
             ),
+            self.tab.subscription().map(Message::TabMessage),
         ])
     }
 }

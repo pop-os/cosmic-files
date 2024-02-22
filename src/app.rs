@@ -359,6 +359,9 @@ impl App {
                 for item in items.iter() {
                     if item.selected {
                         children.push(item.property_view(&self.core, tab.config.icon_sizes));
+                        // Only show one property view to avoid issues like hangs when generating
+                        // preview images on thousands of files
+                        break;
                     }
                 }
             }
@@ -1156,6 +1159,16 @@ impl Application for App {
                     }
                 },
             ));
+        }
+
+        for entity in self.tab_model.iter() {
+            if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+                subscriptions.push(
+                    tab.subscription()
+                        .with(entity)
+                        .map(|(entity, tab_msg)| Message::TabMessage(Some(entity), tab_msg)),
+                );
+            }
         }
 
         Subscription::batch(subscriptions)

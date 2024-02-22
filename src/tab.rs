@@ -3,7 +3,9 @@ use cosmic::{
     cosmic_theme,
     iced::{
         alignment::{Horizontal, Vertical},
+        futures::SinkExt,
         keyboard::Modifiers,
+        subscription::{self, Subscription},
         //TODO: export in cosmic::widget
         widget::horizontal_rule,
         Alignment,
@@ -234,8 +236,6 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
 
                 let mime_guess = MimeGuess::from_path(&path);
 
-                //TODO: previews of images
-
                 let (icon_handle_dialog, icon_handle_grid, icon_handle_list) = if metadata.is_dir()
                 {
                     (
@@ -273,6 +273,10 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                     icon_handle_dialog,
                     icon_handle_grid,
                     icon_handle_list,
+                    thumbnail_res_opt: match mime_guess.first() {
+                        Some(mime) if mime.type_() == "image" => None,
+                        _ => Some(Err(())),
+                    },
                     selected: false,
                     click_time: None,
                 });
@@ -355,6 +359,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     icon_handle_dialog,
                     icon_handle_grid,
                     icon_handle_list,
+                    thumbnail_res_opt: Some(Err(())),
                     selected: false,
                     click_time: None,
                 });
@@ -397,6 +402,7 @@ pub enum Message {
     Location(Location),
     LocationUp,
     RightClick(usize),
+    Thumbnail(PathBuf, Result<image::RgbaImage, ()>),
     ToggleShowHidden,
     View(View),
 }
@@ -435,25 +441,39 @@ pub struct Item {
     pub icon_handle_dialog: widget::icon::Handle,
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
+    pub thumbnail_res_opt: Option<Result<image::RgbaImage, ()>>,
     pub selected: bool,
     pub click_time: Option<Instant>,
 }
 
 impl Item {
     pub fn property_view(&self, core: &Core, sizes: IconSizes) -> Element<crate::app::Message> {
-        let mut section = widget::settings::view_section("");
+        let cosmic_theme::Spacing { space_xxxs, .. } = core.system_theme().cosmic().spacing;
 
-        section = section.add(widget::icon::icon(self.icon_handle_grid.clone()).size(sizes.grid()));
+        let mut column = widget::column().spacing(space_xxxs);
 
-        section = section.add(widget::settings::item::item_row(vec![
-            widget::text::heading(self.name.clone()).into(),
+        let is_image = if let Some(mime) = self.mime_guess.first() {
+            mime.type_() == "image" && self.path.is_file()
+        } else {
+            false
+        };
+
+        column = column.push(widget::row::with_children(vec![
+            widget::horizontal_space(Length::Fill).into(),
+            if is_image {
+                widget::image::Image::new(&self.path).into()
+            } else {
+                widget::icon::icon(self.icon_handle_grid.clone())
+                    .size(sizes.grid())
+                    .into()
+            },
+            widget::horizontal_space(Length::Fill).into(),
         ]));
 
+        column = column.push(widget::text::heading(self.name.clone()));
+
         if let Some(mime) = self.mime_guess.first() {
-            section = section.add(widget::settings::item(
-                "Type",
-                widget::text(format!("{}", mime)),
-            ));
+            column = column.push(widget::text(format!("Type: {}", mime)));
         }
 
         //TODO: translate!
@@ -461,48 +481,33 @@ impl Item {
         match &self.metadata {
             ItemMetadata::Path { metadata, children } => {
                 if metadata.is_dir() {
-                    section = section.add(widget::settings::item::item(
-                        "Items",
-                        widget::text(format!("{}", children)),
-                    ));
+                    column = column.push(widget::text(format!("Items: {}", children)));
                 } else {
-                    section = section.add(widget::settings::item::item(
-                        "Size",
-                        widget::text(format_size(metadata.len())),
-                    ));
+                    column = column.push(widget::text(format!(
+                        "Size: {}",
+                        format_size(metadata.len())
+                    )));
                 }
 
                 if let Ok(time) = metadata.created() {
-                    section = section.add(widget::settings::item(
-                        "Created",
-                        widget::text(
-                            chrono::DateTime::<chrono::Local>::from(time)
-                                .format(TIME_FORMAT)
-                                .to_string(),
-                        ),
-                    ));
+                    column = column.push(widget::text(format!(
+                        "Created: {}",
+                        chrono::DateTime::<chrono::Local>::from(time).format(TIME_FORMAT)
+                    )));
                 }
 
                 if let Ok(time) = metadata.modified() {
-                    section = section.add(widget::settings::item(
-                        "Modified",
-                        widget::text(
-                            chrono::DateTime::<chrono::Local>::from(time)
-                                .format(TIME_FORMAT)
-                                .to_string(),
-                        ),
-                    ));
+                    column = column.push(widget::text(format!(
+                        "Modified: {}",
+                        chrono::DateTime::<chrono::Local>::from(time).format(TIME_FORMAT)
+                    )));
                 }
 
                 if let Ok(time) = metadata.accessed() {
-                    section = section.add(widget::settings::item(
-                        "Accessed",
-                        widget::text(
-                            chrono::DateTime::<chrono::Local>::from(time)
-                                .format(TIME_FORMAT)
-                                .to_string(),
-                        ),
-                    ));
+                    column = column.push(widget::text(format!(
+                        "Accessed: {}",
+                        chrono::DateTime::<chrono::Local>::from(time).format(TIME_FORMAT)
+                    )));
                 }
             }
             ItemMetadata::Trash { .. } => {
@@ -510,7 +515,7 @@ impl Item {
             }
         }
 
-        section.into()
+        column.into()
     }
 }
 
@@ -674,6 +679,27 @@ impl Tab {
                                 item.selected = false;
                             }
                             item.click_time = None;
+                        }
+                    }
+                }
+            }
+            Message::Thumbnail(path, thumbnail_res) => {
+                if let Some(ref mut items) = self.items_opt {
+                    for item in items.iter_mut() {
+                        if item.path == path {
+                            if let Ok(thumbnail) = &thumbnail_res {
+                                //TODO: pass handles already generated to avoid blocking main thread
+                                let handle = widget::icon::from_raster_pixels(
+                                    thumbnail.width(),
+                                    thumbnail.height(),
+                                    thumbnail.as_raw().clone(),
+                                );
+                                item.icon_handle_dialog = handle.clone();
+                                item.icon_handle_grid = handle.clone();
+                                item.icon_handle_list = handle;
+                            }
+                            item.thumbnail_res_opt = Some(thumbnail_res);
+                            break;
                         }
                     }
                 }
@@ -1076,6 +1102,87 @@ impl Tab {
         .height(Length::Fill)
         .width(Length::Fill)
         .into()
+    }
+
+    pub fn subscription(&self) -> Subscription<Message> {
+        if let Some(items) = &self.items_opt {
+            //TODO: how many thumbnail loads should be in flight at once?
+            let jobs = 8;
+            let mut subscriptions = Vec::with_capacity(jobs);
+            for item in items.iter() {
+                match item.thumbnail_res_opt {
+                    Some(_) => continue,
+                    None => {
+                        let path = item.path.clone();
+                        subscriptions.push(subscription::channel(
+                            path.clone(),
+                            1,
+                            |mut output| async move {
+                                let (path, thumbnail_res) =
+                                    tokio::task::spawn_blocking(move || {
+                                        let start = std::time::Instant::now();
+                                        let thumbnail_res = match image::io::Reader::open(&path) {
+                                            Ok(reader) => match reader.decode() {
+                                                Ok(image) => {
+                                                    //TODO: configurable thumbnail size
+                                                    let thumbnail = image.thumbnail(256, 256);
+                                                    Ok(thumbnail.to_rgba8())
+                                                }
+                                                Err(err) => {
+                                                    log::warn!(
+                                                        "failed to decode {:?}: {}",
+                                                        path,
+                                                        err
+                                                    );
+                                                    Err(())
+                                                }
+                                            },
+                                            Err(err) => {
+                                                log::warn!("failed to read {:?}: {}", path, err);
+                                                Err(())
+                                            }
+                                        };
+                                        log::info!(
+                                            "thumbnailed {:?} in {:?}",
+                                            path,
+                                            start.elapsed()
+                                        );
+                                        (path, thumbnail_res)
+                                    })
+                                    .await
+                                    .unwrap();
+
+                                match output
+                                    .send(Message::Thumbnail(path.clone(), thumbnail_res))
+                                    .await
+                                {
+                                    Ok(()) => {}
+                                    Err(err) => {
+                                        log::warn!(
+                                            "failed to send thumbnail for {:?}: {}",
+                                            path,
+                                            err
+                                        );
+                                    }
+                                }
+
+                                //TODO: how to properly kill this task?
+                                loop {
+                                    tokio::time::sleep(std::time::Duration::new(1, 0)).await;
+                                }
+                            },
+                        ));
+                    }
+                }
+
+                if subscriptions.len() >= jobs {
+                    break;
+                }
+            }
+            Subscription::batch(subscriptions)
+        } else {
+            Subscription::none()
+        }
     }
 }
 

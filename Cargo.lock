@@ -1156,6 +1156,7 @@ dependencies = [
  "fork",
  "i18n-embed",
  "i18n-embed-fl",
+ "image 0.24.8",
  "lexical-sort",
  "libcosmic",
  "log",
