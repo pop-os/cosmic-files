@@ -575,6 +575,22 @@ impl Application for App {
         Command::none()
     }
 
+    fn on_escape(&mut self) -> Command<Self::Message> {
+        let entity = self.tab_model.active();
+
+        // Close menus and context panes in order per message
+        // Why: It'd be weird to close everything all at once
+        // Usually, the Escape key (for example) closes menus and panes one by one instead
+        // of closing everything on one press
+        // TODO: Close MenuBar too
+        match self.tab_model.data_mut::<Tab>(entity) {
+            Some(tab) if tab.context_menu.is_some() => tab.context_menu = None,
+            _ => self.core.window.show_context = false,
+        }
+
+        Command::none()
+    }
+
     /// Handle application events here.
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
         // Helper for updating config values efficiently
