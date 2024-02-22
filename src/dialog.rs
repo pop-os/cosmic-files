@@ -470,7 +470,7 @@ impl Application for App {
                             self.result_opt = Some(DialogResult::Open(vec![path]));
                             return window::close(self.main_window_id());
                         }
-                     }
+                    }
                 }
             }
             Message::TabMessage(tab_message) => {
