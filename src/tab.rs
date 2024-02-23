@@ -237,16 +237,13 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
 
                 let mime_guess = MimeGuess::from_path(&path);
 
-                let (icon_handle_dialog, icon_handle_grid, icon_handle_list) = if metadata.is_dir()
-                {
+                let (icon_handle_grid, icon_handle_list) = if metadata.is_dir() {
                     (
-                        folder_icon(&path, sizes.dialog()),
                         folder_icon(&path, sizes.grid()),
                         folder_icon(&path, sizes.list()),
                     )
                 } else {
                     (
-                        mime_icon(&path, sizes.dialog()),
                         mime_icon(&path, sizes.grid()),
                         mime_icon(&path, sizes.list()),
                     )
@@ -271,7 +268,6 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                     hidden,
                     path,
                     mime_guess,
-                    icon_handle_dialog,
                     icon_handle_grid,
                     icon_handle_list,
                     thumbnail_res_opt: match mime_guess.first() {
@@ -338,14 +334,12 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
 
                 let mime_guess = MimeGuess::from_path(&path);
 
-                let (icon_handle_dialog, icon_handle_grid, icon_handle_list) = match metadata.size {
+                let (icon_handle_grid, icon_handle_list) = match metadata.size {
                     trash::TrashItemSize::Entries(_) => (
-                        folder_icon(&path, sizes.dialog()),
                         folder_icon(&path, sizes.grid()),
                         folder_icon(&path, sizes.list()),
                     ),
                     trash::TrashItemSize::Bytes(_) => (
-                        mime_icon(&path, sizes.dialog()),
                         mime_icon(&path, sizes.grid()),
                         mime_icon(&path, sizes.list()),
                     ),
@@ -357,7 +351,6 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     hidden: false,
                     path,
                     mime_guess,
-                    icon_handle_dialog,
                     icon_handle_grid,
                     icon_handle_list,
                     thumbnail_res_opt: Some(Err(())),
@@ -439,7 +432,6 @@ pub struct Item {
     pub hidden: bool,
     pub path: PathBuf,
     pub mime_guess: MimeGuess,
-    pub icon_handle_dialog: widget::icon::Handle,
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
     pub thumbnail_res_opt: Option<Result<image::RgbaImage, ()>>,
@@ -698,7 +690,6 @@ impl Tab {
                                     thumbnail.height(),
                                     thumbnail.as_raw().clone(),
                                 );
-                                item.icon_handle_dialog = handle.clone();
                                 item.icon_handle_grid = handle.clone();
                                 item.icon_handle_list = handle;
                             }
@@ -1051,17 +1042,10 @@ impl Tab {
                 //TODO: align columns
                 let button = widget::button(
                     widget::row::with_children(vec![
-                        if self.dialog.is_some() {
-                            widget::icon::icon(item.icon_handle_dialog.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_sizes.dialog())
-                                .into()
-                        } else {
-                            widget::icon::icon(item.icon_handle_list.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_sizes.list())
-                                .into()
-                        },
+                        widget::icon::icon(item.icon_handle_list.clone())
+                            .content_fit(ContentFit::Contain)
+                            .size(icon_sizes.list())
+                            .into(),
                         widget::text(item.name.clone()).width(Length::Fill).into(),
                         widget::text(modified_text).width(modified_width).into(),
                         widget::text(size_text).width(size_width).into(),
@@ -1069,6 +1053,7 @@ impl Tab {
                     .align_items(Alignment::Center)
                     .spacing(space_xxs),
                 )
+                .padding(space_xxs)
                 .style(button_style(item.selected))
                 .on_press(Message::Click(Some(i)));
                 if self.context_menu.is_some() {

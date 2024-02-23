@@ -11,8 +11,7 @@ use serde::{Deserialize, Serialize};
 pub const CONFIG_VERSION: u64 = 1;
 
 // Default icon sizes
-const ICON_SIZE_DIALOG: u16 = 16;
-const ICON_SIZE_LIST: u16 = 32;
+const ICON_SIZE_LIST: u16 = 24;
 const ICON_SIZE_GRID: u16 = 64;
 // TODO: 5 is an arbitrary number. Maybe there's a better icon size max
 const ICON_SCALE_MAX: u16 = 5;
@@ -81,7 +80,6 @@ macro_rules! percent {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
 pub struct IconSizes {
-    pub dialog: NonZeroU16,
     pub list: NonZeroU16,
     pub grid: NonZeroU16,
 }
@@ -89,7 +87,6 @@ pub struct IconSizes {
 impl Default for IconSizes {
     fn default() -> Self {
         Self {
-            dialog: 100.try_into().unwrap(),
             list: 100.try_into().unwrap(),
             grid: 100.try_into().unwrap(),
         }
@@ -97,10 +94,6 @@ impl Default for IconSizes {
 }
 
 impl IconSizes {
-    pub fn dialog(&self) -> u16 {
-        percent!(self.dialog, ICON_SIZE_DIALOG) as _
-    }
-
     pub fn list(&self) -> u16 {
         percent!(self.list, ICON_SIZE_LIST) as _
     }
