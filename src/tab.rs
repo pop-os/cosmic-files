@@ -461,7 +461,9 @@ impl Item {
         column = column.push(widget::row::with_children(vec![
             widget::horizontal_space(Length::Fill).into(),
             if is_image {
-                widget::image::Image::new(&self.path).into()
+                widget::image::viewer(widget::image::Handle::from_path(&self.path))
+                    .min_scale(1.0)
+                    .into()
             } else {
                 widget::icon::icon(self.icon_handle_grid.clone())
                     .size(sizes.grid())
@@ -1125,7 +1127,7 @@ impl Tab {
                                             Ok(reader) => match reader.decode() {
                                                 Ok(image) => {
                                                     //TODO: configurable thumbnail size
-                                                    let thumbnail = image.thumbnail(256, 256);
+                                                    let thumbnail = image.thumbnail(64, 64);
                                                     Ok(thumbnail.to_rgba8())
                                                 }
                                                 Err(err) => {
