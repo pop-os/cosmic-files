@@ -9,6 +9,7 @@ use cosmic::{
         //TODO: export in cosmic::widget
         widget::horizontal_rule,
         Alignment,
+        ContentFit,
         Length,
         Point,
     },
@@ -466,6 +467,7 @@ impl Item {
                     .into()
             } else {
                 widget::icon::icon(self.icon_handle_grid.clone())
+                    .content_fit(ContentFit::Contain)
                     .size(sizes.grid())
                     .into()
             },
@@ -933,6 +935,7 @@ impl Tab {
                 let button = widget::button(
                     widget::column::with_children(vec![
                         widget::icon::icon(item.icon_handle_grid.clone())
+                            .content_fit(ContentFit::Contain)
                             .size(icon_sizes.grid())
                             .into(),
                         widget::text(item.name.clone()).into(),
@@ -1050,10 +1053,12 @@ impl Tab {
                     widget::row::with_children(vec![
                         if self.dialog.is_some() {
                             widget::icon::icon(item.icon_handle_dialog.clone())
+                                .content_fit(ContentFit::Contain)
                                 .size(icon_sizes.dialog())
                                 .into()
                         } else {
                             widget::icon::icon(item.icon_handle_list.clone())
+                                .content_fit(ContentFit::Contain)
                                 .size(icon_sizes.list())
                                 .into()
                         },
