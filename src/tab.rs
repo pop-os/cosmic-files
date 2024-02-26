@@ -391,6 +391,13 @@ impl Location {
 }
 
 #[derive(Clone, Debug)]
+pub enum Command {
+    None,
+    Action(Action),
+    ChangeLocation(String, Location),
+}
+
+#[derive(Clone, Debug)]
 pub enum Message {
     Click(Option<usize>),
     Config(TabConfig),
@@ -605,7 +612,7 @@ impl Tab {
         }
     }
 
-    pub fn update(&mut self, message: Message, modifiers: Modifiers) -> bool {
+    pub fn update(&mut self, message: Message, modifiers: Modifiers) -> Command {
         let mut cd = None;
         let mut history_i_opt = None;
         match message {
@@ -662,8 +669,7 @@ impl Tab {
                 // Close context menu
                 self.context_menu = None;
 
-                // TODO: run actions message
-                println!("TODO {:?}", action);
+                return Command::Action(action);
             }
             Message::ContextMenu(point_opt) => {
                 self.context_menu = point_opt;
@@ -787,14 +793,14 @@ impl Tab {
 
                     // Push to the front of history
                     self.history_i = self.history.len();
-                    self.history.push(location);
+                    self.history.push(location.clone());
                 }
-                true
+                Command::ChangeLocation(self.title(), location)
             } else {
-                false
+                Command::None
             }
         } else {
-            false
+            Command::None
         }
     }
 

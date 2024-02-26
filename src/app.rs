@@ -125,7 +125,6 @@ pub enum Message {
     TabPrev,
     TabClose(Option<segmented_button::Entity>),
     TabConfig(TabConfig),
-    TabContextAction(segmented_button::Entity, Action),
     TabMessage(Option<segmented_button::Entity>, tab::Message),
     TabNew,
     TabRescan(segmented_button::Entity, Vec<tab::Item>),
@@ -848,19 +847,6 @@ impl Application for App {
                     return Command::batch(commands);
                 }
             }
-            Message::TabContextAction(entity, action) => {
-                match self.tab_model.data_mut::<Tab>(entity) {
-                    Some(tab) => {
-                        // Close context menu
-                        {
-                            tab.context_menu = None;
-                        }
-                        // Run action's message
-                        return self.update(action.message(Some(entity)));
-                    }
-                    _ => {}
-                }
-            }
             Message::TabMessage(entity_opt, tab_message) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
 
@@ -869,22 +855,23 @@ impl Application for App {
                     self.core.window.show_context = false;
                 }
 
-                let mut update_opt = None;
-                match self.tab_model.data_mut::<Tab>(entity) {
-                    Some(tab) => {
-                        if tab.update(tab_message, self.modifiers) {
-                            update_opt = Some((tab.title(), tab.location.clone()));
-                        }
+                let tab_command = match self.tab_model.data_mut::<Tab>(entity) {
+                    Some(tab) => tab.update(tab_message, self.modifiers),
+                    _ => tab::Command::None,
+                };
+                match tab_command {
+                    tab::Command::None => {}
+                    tab::Command::Action(action) => {
+                        return self.update(action.message(Some(entity)));
                     }
-                    _ => (),
-                }
-                if let Some((tab_title, tab_path)) = update_opt {
-                    self.tab_model.text_set(entity, tab_title);
-                    return Command::batch([
-                        self.update_title(),
-                        self.update_watcher(),
-                        self.rescan_tab(entity, tab_path),
-                    ]);
+                    tab::Command::ChangeLocation(tab_title, tab_path) => {
+                        self.tab_model.text_set(entity, tab_title);
+                        return Command::batch([
+                            self.update_title(),
+                            self.update_watcher(),
+                            self.rescan_tab(entity, tab_path),
+                        ]);
+                    }
                 }
             }
             Message::TabNew => {
