@@ -536,7 +536,7 @@ impl Tab {
             location,
             context_menu: None,
             items_opt: None,
-            view: View::Grid,
+            view: View::List,
             dialog: None,
             drag_opt: None,
             scroll_opt: None,
@@ -566,10 +566,6 @@ impl Tab {
         };
 
         println!("{:?}", rect);
-        let (row, col) = match self.view {
-            View::Grid => (0, 0),
-            View::List => (0, 0),
-        };
         for (i, item) in items.iter_mut().enumerate() {
             item.selected = false;
             //TODO
@@ -585,6 +581,19 @@ impl Tab {
                 if let Some(ref mut items) = self.items_opt {
                     for (i, item) in items.iter_mut().enumerate() {
                         if Some(i) == click_i_opt {
+                            // Filter out selection if it does not match dialog kind
+                            if let Some(dialog) = &self.dialog {
+                                let item_is_dir = item.path.is_dir();
+                                if item_is_dir != dialog.is_dir() {
+                                    // Allow selecting folder if dialog is for files to make it
+                                    // possible to double click
+                                    //TODO: clear any other selection when selecting a folder
+                                    if !item_is_dir {
+                                        continue;
+                                    }
+                                }
+                            }
+
                             item.selected = true;
                             if let Some(click_time) = item.click_time {
                                 if click_time.elapsed() < DOUBLE_CLICK_DURATION {

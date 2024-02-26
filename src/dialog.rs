@@ -341,6 +341,7 @@ impl Application for App {
 
         let mut tab = Tab::new(location, TabConfig::default());
         tab.dialog = Some(flags.kind.clone());
+        tab.view = tab::View::List;
 
         let mut app = App {
             core,
@@ -457,15 +458,38 @@ impl Application for App {
                         }
                     }
                 }
+
+                // Ensure selection is allowed
+                //TODO: improve tab logic so this doesn't block the open button so often
+                for path in paths.iter() {
+                    let path_is_dir = path.is_dir();
+                    if path_is_dir != self.flags.kind.is_dir() {
+                        if path_is_dir && paths.len() == 1 {
+                            // If the only selected item is a directory and we are selecting files, cd to it
+                            let message = Message::TabMessage(tab::Message::Location(
+                                Location::Path(path.clone()),
+                            ));
+                            return self.update(message);
+                        } else {
+                            // Otherwise, this is not a legal selection
+                            return Command::none();
+                        }
+                    }
+                }
+
+                // If there are proper matching items, return them
                 if !paths.is_empty() {
                     self.result_opt = Some(DialogResult::Open(paths));
                     return window::close(self.main_window_id());
-                } else if self.flags.kind.is_dir() {
+                }
+
+                // If we are in directory mode, return the current directory
+                if self.flags.kind.is_dir() {
                     match &self.tab.location {
                         Location::Path(tab_path) => {
                             self.result_opt = Some(DialogResult::Open(vec![tab_path.clone()]));
                             return window::close(self.main_window_id());
-                        },
+                        }
                         _ => {}
                     }
                 }
@@ -513,7 +537,8 @@ impl Application for App {
                             log::warn!("Action {:?} not supported in dialog", action);
                         }
                         tab::Command::ChangeLocation(_tab_title, _tab_path) => {
-                            commands.push(Command::batch([self.update_watcher(), self.rescan_tab()]));
+                            commands
+                                .push(Command::batch([self.update_watcher(), self.rescan_tab()]));
                         }
                         tab::Command::OpenFile(_item_path) => {
                             commands.push(self.update(Message::Open));

@@ -122,7 +122,7 @@ impl Application for App {
             let mut button = widget::button::standard("Save File");
             if self.dialog_opt.is_none() {
                 button = button.on_press(Message::DialogOpen(DialogKind::SaveFile {
-                    filename: "test".to_string()
+                    filename: "test".to_string(),
                 }));
             }
             column = column.push(button);
