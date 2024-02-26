@@ -175,7 +175,7 @@ enum Message {
     NotifyEvent(notify::Event),
     NotifyWatcher(WatcherWrapper),
     Open,
-    Save,
+    Save(bool),
     TabMessage(tab::Message),
     TabRescan(Vec<tab::Item>),
 }
@@ -205,6 +205,7 @@ struct App {
     modifiers: Modifiers,
     nav_model: segmented_button::SingleSelectModel,
     result_opt: Option<DialogResult>,
+    replace_dialog: bool,
     tab: Tab,
     watcher_opt: Option<(notify::RecommendedWatcher, HashSet<PathBuf>)>,
 }
@@ -350,6 +351,7 @@ impl Application for App {
             modifiers: Modifiers::empty(),
             nav_model: nav_model.build(),
             result_opt: None,
+            replace_dialog: false,
             tab,
             watcher_opt: None,
         };
@@ -405,8 +407,12 @@ impl Application for App {
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
             Message::Cancel => {
-                self.result_opt = Some(DialogResult::Cancel);
-                return window::close(self.main_window_id());
+                if self.replace_dialog {
+                    self.replace_dialog = false;
+                } else {
+                    self.result_opt = Some(DialogResult::Cancel);
+                    return window::close(self.main_window_id());
+                }
             }
             Message::Filename(new_filename) => {
                 if let DialogKind::SaveFile { filename } = &mut self.flags.kind {
@@ -494,17 +500,23 @@ impl Application for App {
                     }
                 }
             }
-            Message::Save => {
+            Message::Save(replace) => {
                 if let DialogKind::SaveFile { filename } = &self.flags.kind {
                     if !filename.is_empty() {
                         if let Location::Path(tab_path) = &self.tab.location {
                             let path = tab_path.join(&filename);
-                            if path.exists() {
-                                //TODO: dialog or something?
-                                log::warn!("{:?} exists", path);
+                            if path.is_dir() {
+                                // cd to directory
+                                let message = Message::TabMessage(tab::Message::Location(
+                                    Location::Path(path.clone()),
+                                ));
+                                return self.update(message);
+                            } else if !replace && path.exists() {
+                                self.replace_dialog = true;
+                            } else {
+                                self.result_opt = Some(DialogResult::Open(vec![path]));
+                                return window::close(self.main_window_id());
                             }
-                            self.result_opt = Some(DialogResult::Open(vec![path]));
-                            return window::close(self.main_window_id());
                         }
                     }
                 }
@@ -522,7 +534,7 @@ impl Application for App {
                     if let Some(click_i) = click_i_opt {
                         if let Some(items) = &self.tab.items_opt {
                             if let Some(item) = items.get(click_i) {
-                                if item.selected {
+                                if item.selected && !item.path.is_dir() {
                                     *filename = item.name.clone();
                                 }
                             }
@@ -541,7 +553,11 @@ impl Application for App {
                                 .push(Command::batch([self.update_watcher(), self.rescan_tab()]));
                         }
                         tab::Command::OpenFile(_item_path) => {
-                            commands.push(self.update(Message::Open));
+                            if self.flags.kind.save() {
+                                commands.push(self.update(Message::Save(false)));
+                            } else {
+                                commands.push(self.update(Message::Open));
+                            }
                         }
                     }
                 }
@@ -567,10 +583,14 @@ impl Application for App {
 
     /// Creates a view after each update.
     fn view(&self) -> Element<Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
+        let cosmic_theme::Spacing {
+            space_m,
+            space_s,
+            space_xxs,
+            ..
+        } = self.core().system_theme().cosmic().spacing;
 
         let mut tab_column = widget::column::with_capacity(2);
-
         tab_column = tab_column.push(
             self.tab
                 .view(self.core())
@@ -583,7 +603,7 @@ impl Application for App {
                     widget::text_input("", filename)
                         .id(self.filename_id.clone())
                         .on_input(Message::Filename)
-                        .on_submit(Message::Save)
+                        .on_submit(Message::Save(false))
                         .into()
                 } else {
                     widget::horizontal_space(Length::Fill).into()
@@ -592,7 +612,7 @@ impl Application for App {
                     .on_press(Message::Cancel)
                     .into(),
                 if self.flags.kind.save() {
-                    widget::button::standard(fl!("save")).on_press(Message::Save)
+                    widget::button::standard(fl!("save")).on_press(Message::Save(false))
                 } else {
                     widget::button::standard(fl!("open")).on_press(Message::Open)
                 }
@@ -602,7 +622,41 @@ impl Application for App {
             .spacing(space_xxs),
         );
 
-        let content: Element<_> = tab_column.into();
+        //TODO: what is the best empty widget?
+        let mut overlay: Element<_> = widget::horizontal_space(Length::Shrink).into();
+        let mut show_popup = false;
+        if self.replace_dialog {
+            if let DialogKind::SaveFile { filename } = &self.flags.kind {
+                overlay = widget::cosmic_container::container(
+                    widget::column::with_children(vec![
+                        widget::text::title3(fl!("replace")).into(),
+                        //TODO: translate
+                        widget::text(format!("Do you want to replace \"{}\"?", filename)).into(),
+                        widget::row::with_children(vec![
+                            widget::horizontal_space(Length::Fill).into(),
+                            widget::button::standard(fl!("cancel"))
+                                .on_press(Message::Cancel)
+                                .into(),
+                            widget::button::destructive(fl!("replace"))
+                                .on_press(Message::Save(true))
+                                .into(),
+                        ])
+                        .spacing(space_xxs)
+                        .into(),
+                    ])
+                    .spacing(space_s),
+                )
+                .layer(cosmic_theme::Layer::Primary)
+                .padding(space_m)
+                .width(Length::Fixed(480.0))
+                .into();
+                show_popup = true;
+            }
+        }
+
+        let content: Element<_> = widget::popover(tab_column, overlay)
+            .show_popup(show_popup)
+            .into();
 
         // Uncomment to debug layout:
         //content.explain(cosmic::iced::Color::WHITE)
