@@ -479,7 +479,7 @@ impl Application for App {
                     _ => None,
                 };
 
-                let updated = self.tab.update(tab_message, self.modifiers);
+                let tab_command = self.tab.update(tab_message, self.modifiers);
 
                 // Update filename box when anything is selected
                 if let DialogKind::SaveFile { filename } = &mut self.flags.kind {
@@ -494,8 +494,14 @@ impl Application for App {
                     }
                 }
 
-                if updated {
-                    return Command::batch([self.update_watcher(), self.rescan_tab()]);
+                match tab_command {
+                    tab::Command::None => {}
+                    tab::Command::Action(action) => {
+                        log::warn!("Action {:?} not supported in dialog", action);
+                    }
+                    tab::Command::ChangeLocation(_tab_title, _tab_path) => {
+                        return Command::batch([self.update_watcher(), self.rescan_tab()]);
+                    }
                 }
             }
             Message::TabRescan(mut items) => {
