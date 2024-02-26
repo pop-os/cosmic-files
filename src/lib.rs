@@ -20,6 +20,7 @@ mod mime_icon;
 mod mouse_area;
 mod operation;
 mod tab;
+mod util;
 
 pub fn home_dir() -> PathBuf {
     match dirs::home_dir() {
