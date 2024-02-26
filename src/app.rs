@@ -967,7 +967,7 @@ impl Application for App {
         if self.tab_model.iter().count() > 1 {
             tab_column = tab_column.push(
                 widget::container(
-                    widget::view_switcher::horizontal(&self.tab_model)
+                    widget::tab_bar::horizontal(&self.tab_model)
                         .button_height(32)
                         .button_spacing(space_xxs)
                         .on_activate(Message::TabActivate)
