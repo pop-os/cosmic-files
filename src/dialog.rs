@@ -53,6 +53,10 @@ impl DialogKind {
         }
     }
 
+    pub fn is_dir(&self) -> bool {
+        matches!(self, Self::OpenFolder | Self::OpenMultipleFolders)
+    }
+
     pub fn multiple(&self) -> bool {
         matches!(self, Self::OpenMultipleFiles | Self::OpenMultipleFolders)
     }
@@ -456,6 +460,14 @@ impl Application for App {
                 if !paths.is_empty() {
                     self.result_opt = Some(DialogResult::Open(paths));
                     return window::close(self.main_window_id());
+                } else if self.flags.kind.is_dir() {
+                    match &self.tab.location {
+                        Location::Path(tab_path) => {
+                            self.result_opt = Some(DialogResult::Open(vec![tab_path.clone()]));
+                            return window::close(self.main_window_id());
+                        },
+                        _ => {}
+                    }
                 }
             }
             Message::Save => {
@@ -479,7 +491,7 @@ impl Application for App {
                     _ => None,
                 };
 
-                let tab_command = self.tab.update(tab_message, self.modifiers);
+                let tab_commands = self.tab.update(tab_message, self.modifiers);
 
                 // Update filename box when anything is selected
                 if let DialogKind::SaveFile { filename } = &mut self.flags.kind {
@@ -494,15 +506,21 @@ impl Application for App {
                     }
                 }
 
-                match tab_command {
-                    tab::Command::None => {}
-                    tab::Command::Action(action) => {
-                        log::warn!("Action {:?} not supported in dialog", action);
-                    }
-                    tab::Command::ChangeLocation(_tab_title, _tab_path) => {
-                        return Command::batch([self.update_watcher(), self.rescan_tab()]);
+                let mut commands = Vec::new();
+                for tab_command in tab_commands {
+                    match tab_command {
+                        tab::Command::Action(action) => {
+                            log::warn!("Action {:?} not supported in dialog", action);
+                        }
+                        tab::Command::ChangeLocation(_tab_title, _tab_path) => {
+                            commands.push(Command::batch([self.update_watcher(), self.rescan_tab()]));
+                        }
+                        tab::Command::OpenFile(_item_path) => {
+                            commands.push(self.update(Message::Open));
+                        }
                     }
                 }
+                return Command::batch(commands);
             }
             Message::TabRescan(mut items) => {
                 // Select based on filename

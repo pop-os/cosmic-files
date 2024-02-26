@@ -17,9 +17,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[derive(Clone, Debug)]
 pub enum Message {
     DialogMessage(DialogMessage),
-    DialogOpen,
+    DialogOpen(DialogKind),
     DialogResult(DialogResult),
-    DialogSave,
 }
 
 pub struct App {
@@ -61,10 +60,10 @@ impl Application for App {
                     return dialog.update(dialog_message);
                 }
             }
-            Message::DialogOpen => {
+            Message::DialogOpen(dialog_kind) => {
                 if self.dialog_opt.is_none() {
                     let (dialog, command) = Dialog::new(
-                        DialogKind::OpenFile,
+                        dialog_kind,
                         None,
                         Message::DialogMessage,
                         Message::DialogResult,
@@ -76,20 +75,6 @@ impl Application for App {
             Message::DialogResult(result) => {
                 self.dialog_opt = None;
                 self.result_opt = Some(result);
-            }
-            Message::DialogSave => {
-                if self.dialog_opt.is_none() {
-                    let (dialog, command) = Dialog::new(
-                        DialogKind::SaveFile {
-                            filename: "README.md".to_string(),
-                        },
-                        None,
-                        Message::DialogMessage,
-                        Message::DialogResult,
-                    );
-                    self.dialog_opt = Some(dialog);
-                    return command;
-                }
             }
         }
 
@@ -106,16 +91,39 @@ impl Application for App {
     fn view(&self) -> Element<Message> {
         let mut column = widget::column().spacing(8);
         {
-            let mut button = widget::button::standard("Open Dialog");
+            let mut button = widget::button::standard("Open File");
             if self.dialog_opt.is_none() {
-                button = button.on_press(Message::DialogOpen);
+                button = button.on_press(Message::DialogOpen(DialogKind::OpenFile));
             }
             column = column.push(button);
         }
         {
-            let mut button = widget::button::standard("Save Dialog");
+            let mut button = widget::button::standard("Open Multiple Files");
             if self.dialog_opt.is_none() {
-                button = button.on_press(Message::DialogSave);
+                button = button.on_press(Message::DialogOpen(DialogKind::OpenMultipleFiles));
+            }
+            column = column.push(button);
+        }
+        {
+            let mut button = widget::button::standard("Open Folder");
+            if self.dialog_opt.is_none() {
+                button = button.on_press(Message::DialogOpen(DialogKind::OpenFolder));
+            }
+            column = column.push(button);
+        }
+        {
+            let mut button = widget::button::standard("Open Multiple Folders");
+            if self.dialog_opt.is_none() {
+                button = button.on_press(Message::DialogOpen(DialogKind::OpenMultipleFolders));
+            }
+            column = column.push(button);
+        }
+        {
+            let mut button = widget::button::standard("Save File");
+            if self.dialog_opt.is_none() {
+                button = button.on_press(Message::DialogOpen(DialogKind::SaveFile {
+                    filename: "test".to_string()
+                }));
             }
             column = column.push(button);
         }

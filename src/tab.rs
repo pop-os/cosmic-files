@@ -162,42 +162,6 @@ fn hidden_attribute(metadata: &Metadata) -> bool {
     metadata.file_attributes() & FILE_ATTRIBUTE_HIDDEN == FILE_ATTRIBUTE_HIDDEN
 }
 
-#[cfg(target_os = "linux")]
-fn open_command(path: &PathBuf) -> process::Command {
-    let mut command = process::Command::new("xdg-open");
-    command.arg(path);
-    command
-}
-
-#[cfg(target_os = "macos")]
-fn open_command(path: &PathBuf) -> process::Command {
-    let mut command = process::Command::new("open");
-    command.arg(path);
-    command
-}
-
-#[cfg(target_os = "redox")]
-fn open_command(path: &PathBuf) -> process::Command {
-    let mut command = process::Command::new("launcher");
-    command.arg(path);
-    command
-}
-
-#[cfg(target_os = "windows")]
-fn open_command(path: &PathBuf) -> process::Command {
-    use std::os::windows::process::CommandExt;
-
-    let mut command = process::Command::new("cmd");
-
-    command
-        .arg("/c")
-        .arg("start")
-        .raw_arg("\"\"")
-        .arg(path)
-        .creation_flags(0x08000000);
-    command
-}
-
 pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
     let mut items = Vec::new();
     match fs::read_dir(tab_path) {
@@ -392,9 +356,9 @@ impl Location {
 
 #[derive(Clone, Debug)]
 pub enum Command {
-    None,
     Action(Action),
     ChangeLocation(String, Location),
+    OpenFile(PathBuf),
 }
 
 #[derive(Clone, Debug)]
@@ -612,7 +576,8 @@ impl Tab {
         }
     }
 
-    pub fn update(&mut self, message: Message, modifiers: Modifiers) -> Command {
+    pub fn update(&mut self, message: Message, modifiers: Modifiers) -> Vec<Command> {
+        let mut commands = Vec::new();
         let mut cd = None;
         let mut history_i_opt = None;
         match message {
@@ -626,19 +591,10 @@ impl Tab {
                                     match self.location {
                                         Location::Path(_) => {
                                             if item.path.is_dir() {
+                                                //TODO: allow opening multiple tabs?
                                                 cd = Some(Location::Path(item.path.clone()));
-                                            } else if !self.dialog.is_some() {
-                                                let mut command = open_command(&item.path);
-                                                match command.spawn() {
-                                                    Ok(_) => (),
-                                                    Err(err) => {
-                                                        log::warn!(
-                                                            "failed to open {:?}: {}",
-                                                            item.path,
-                                                            err
-                                                        );
-                                                    }
-                                                }
+                                            } else {
+                                                commands.push(Command::OpenFile(item.path.clone()));
                                             }
                                         }
                                         Location::Trash => {
@@ -669,7 +625,7 @@ impl Tab {
                 // Close context menu
                 self.context_menu = None;
 
-                return Command::Action(action);
+                commands.push(Command::Action(action));
             }
             Message::ContextMenu(point_opt) => {
                 self.context_menu = point_opt;
@@ -795,13 +751,10 @@ impl Tab {
                     self.history_i = self.history.len();
                     self.history.push(location.clone());
                 }
-                Command::ChangeLocation(self.title(), location)
-            } else {
-                Command::None
+                commands.push(Command::ChangeLocation(self.title(), location));
             }
-        } else {
-            Command::None
         }
+        commands
     }
 
     pub fn location_view(&self, core: &Core) -> Element<Message> {

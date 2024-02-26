@@ -50,8 +50,7 @@ check-json: (check '--message-format=json')
 dev *args:
     cargo fmt
     cargo test
-    cargo build --profile release-with-debug
-    env RUST_LOG=cosmic_files=debug RUST_BACKTRACE=full target/release-with-debug/cosmic-files {{args}}
+    just run {{args}}
 
 # Run with debug logs
 run *args:

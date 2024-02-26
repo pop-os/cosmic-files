@@ -30,6 +30,7 @@ use crate::{
     fl, home_dir,
     key_bind::{key_binds, KeyBind},
     menu,
+    util,
     operation::Operation,
     tab::{self, ItemMetadata, Location, Tab},
 };
@@ -850,29 +851,47 @@ impl Application for App {
             Message::TabMessage(entity_opt, tab_message) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
 
+                //TODO: move to Command?
                 if let tab::Message::ContextMenu(_point_opt) = tab_message {
                     // Disable side context page
                     self.core.window.show_context = false;
                 }
 
-                let tab_command = match self.tab_model.data_mut::<Tab>(entity) {
+                let tab_commands = match self.tab_model.data_mut::<Tab>(entity) {
                     Some(tab) => tab.update(tab_message, self.modifiers),
-                    _ => tab::Command::None,
+                    _ => Vec::new(),
                 };
-                match tab_command {
-                    tab::Command::None => {}
-                    tab::Command::Action(action) => {
-                        return self.update(action.message(Some(entity)));
-                    }
-                    tab::Command::ChangeLocation(tab_title, tab_path) => {
-                        self.tab_model.text_set(entity, tab_title);
-                        return Command::batch([
-                            self.update_title(),
-                            self.update_watcher(),
-                            self.rescan_tab(entity, tab_path),
-                        ]);
+
+                let mut commands = Vec::new();
+                for tab_command in tab_commands {
+                    match tab_command {
+                        tab::Command::Action(action) => {
+                            commands.push(self.update(action.message(Some(entity))));
+                        }
+                        tab::Command::ChangeLocation(tab_title, tab_path) => {
+                            self.tab_model.text_set(entity, tab_title);
+                            commands.push(Command::batch([
+                                self.update_title(),
+                                self.update_watcher(),
+                                self.rescan_tab(entity, tab_path),
+                            ]));
+                        }
+                        tab::Command::OpenFile(item_path) => {
+                            let mut command = util::open_command(&item_path);
+                            match command.spawn() {
+                                Ok(_) => (),
+                                Err(err) => {
+                                    log::warn!(
+                                        "failed to open {:?}: {}",
+                                        item_path,
+                                        err
+                                    );
+                                }
+                            }
+                        }
                     }
                 }
+                return Command::batch(commands);
             }
             Message::TabNew => {
                 let active = self.tab_model.active();
