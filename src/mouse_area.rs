@@ -1,16 +1,22 @@
 //! A container for capturing mouse events.
 
-use cosmic::iced_core::{
-    event::{self, Event},
-    layout, mouse, overlay, renderer, touch,
-    widget::{tree, Operation, OperationOutputWrapper, Tree},
-    Size, {Clipboard, Element, Layout, Length, Point, Rectangle, Shell, Widget},
+use cosmic::{
+    iced_core::{
+        border::Border,
+        event::{self, Event},
+        layout, mouse, overlay,
+        renderer::{self, Quad, Renderer as _},
+        touch,
+        widget::{tree, Operation, OperationOutputWrapper, Tree},
+        Clipboard, Color, Layout, Length, Point, Rectangle, Shell, Size, Widget,
+    },
+    Element, Renderer, Theme,
 };
 
 /// Emit messages on mouse events.
 #[allow(missing_debug_implementations)]
-pub struct MouseArea<'a, Message, Theme, Renderer> {
-    content: Element<'a, Message, Theme, Renderer>,
+pub struct MouseArea<'a, Message> {
+    content: Element<'a, Message>,
     on_drag: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
@@ -23,9 +29,10 @@ pub struct MouseArea<'a, Message, Theme, Renderer> {
     on_back_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_forward_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_forward_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
+    show_drag_box: bool,
 }
 
-impl<'a, Message, Theme, Renderer> MouseArea<'a, Message, Theme, Renderer> {
+impl<'a, Message> MouseArea<'a, Message> {
     /// The message to emit when a drag is initiated.
     #[must_use]
     pub fn on_drag(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
@@ -112,6 +119,12 @@ impl<'a, Message, Theme, Renderer> MouseArea<'a, Message, Theme, Renderer> {
         self.on_forward_release = Some(Box::new(message));
         self
     }
+
+    #[must_use]
+    pub fn show_drag_box(mut self, show_drag_box: bool) -> Self {
+        self.show_drag_box = show_drag_box;
+        self
+    }
 }
 
 /// Local state of the [`MouseArea`].
@@ -121,9 +134,9 @@ struct State {
     drag_initiated: Option<Point>,
 }
 
-impl<'a, Message, Theme, Renderer> MouseArea<'a, Message, Theme, Renderer> {
+impl<'a, Message> MouseArea<'a, Message> {
     /// Creates a [`MouseArea`] with the given content.
-    pub fn new(content: impl Into<Element<'a, Message, Theme, Renderer>>) -> Self {
+    pub fn new(content: impl Into<Element<'a, Message>>) -> Self {
         MouseArea {
             content: content.into(),
             on_drag: None,
@@ -138,14 +151,13 @@ impl<'a, Message, Theme, Renderer> MouseArea<'a, Message, Theme, Renderer> {
             on_back_release: None,
             on_forward_press: None,
             on_forward_release: None,
+            show_drag_box: false,
         }
     }
 }
 
-impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
-    for MouseArea<'a, Message, Theme, Renderer>
+impl<'a, Message> Widget<Message, Theme, Renderer> for MouseArea<'a, Message>
 where
-    Renderer: renderer::Renderer,
     Message: Clone,
 {
     fn tag(&self) -> tree::Tag {
@@ -261,6 +273,38 @@ where
             cursor,
             viewport,
         );
+
+        if self.show_drag_box {
+            let state = tree.state.downcast_ref::<State>();
+            if let Some(a) = state.drag_initiated {
+                if let Some(b) = cursor.position() {
+                    let min_x = a.x.min(b.x);
+                    let max_x = a.x.max(b.x);
+                    let min_y = a.y.min(b.y);
+                    let max_y = a.y.max(b.y);
+                    let bounds = Rectangle::new(
+                        Point::new(min_x, min_y),
+                        Size::new(max_x - min_x, max_y - min_y),
+                    );
+                    let cosmic = theme.cosmic();
+                    let mut bg_color = cosmic.accent_color();
+                    //TODO: get correct alpha
+                    bg_color.alpha = 0.2;
+                    renderer.fill_quad(
+                        Quad {
+                            bounds,
+                            border: Border {
+                                color: cosmic.accent_color().into(),
+                                width: 1.0,
+                                radius: cosmic.radius_xs().into(),
+                            },
+                            ..Default::default()
+                        },
+                        Color::from(bg_color),
+                    );
+                }
+            }
+        }
     }
 
     fn overlay<'b>(
@@ -275,50 +319,47 @@ where
     }
 }
 
-impl<'a, Message, Theme, Renderer> From<MouseArea<'a, Message, Theme, Renderer>>
-    for Element<'a, Message, Theme, Renderer>
+impl<'a, Message> From<MouseArea<'a, Message>> for Element<'a, Message>
 where
     Message: 'a + Clone,
     Renderer: 'a + renderer::Renderer,
     Theme: 'a,
 {
-    fn from(
-        area: MouseArea<'a, Message, Theme, Renderer>,
-    ) -> Element<'a, Message, Theme, Renderer> {
+    fn from(area: MouseArea<'a, Message>) -> Element<'a, Message> {
         Element::new(area)
     }
 }
 
 /// Processes the given [`Event`] and updates the [`State`] of an [`MouseArea`]
 /// accordingly.
-fn update<Message: Clone, Theme, Renderer>(
-    widget: &mut MouseArea<'_, Message, Theme, Renderer>,
+fn update<Message: Clone>(
+    widget: &mut MouseArea<'_, Message>,
     event: &Event,
     layout: Layout<'_>,
     cursor: mouse::Cursor,
     shell: &mut Shell<'_, Message>,
     state: &mut State,
 ) -> event::Status {
-    if !cursor.is_over(layout.bounds()) {
+    if state.drag_initiated.is_none() && !cursor.is_over(layout.bounds()) {
         return event::Status::Ignored;
     }
 
-    if let Some(message) = widget.on_press.as_ref() {
-        if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
-        | Event::Touch(touch::Event::FingerPressed { .. }) = event
-        {
-            state.drag_initiated = cursor.position();
+    if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
+    | Event::Touch(touch::Event::FingerPressed { .. }) = event
+    {
+        state.drag_initiated = cursor.position();
+        if let Some(message) = widget.on_press.as_ref() {
             shell.publish(message(cursor.position_in(layout.bounds())));
 
             return event::Status::Captured;
         }
     }
 
-    if let Some(message) = widget.on_release.as_ref() {
-        if let Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
-        | Event::Touch(touch::Event::FingerLifted { .. }) = event
-        {
-            state.drag_initiated = None;
+    if let Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
+    | Event::Touch(touch::Event::FingerLifted { .. }) = event
+    {
+        state.drag_initiated = None;
+        if let Some(message) = widget.on_release.as_ref() {
             shell.publish(message(cursor.position_in(layout.bounds())));
 
             return event::Status::Captured;
@@ -397,16 +438,9 @@ fn update<Message: Clone, Theme, Renderer>(
         }
     }
 
-    if state.drag_initiated.is_none() && widget.on_drag.is_some() {
-        if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
-        | Event::Touch(touch::Event::FingerPressed { .. }) = event
-        {
-            state.drag_initiated = cursor.position();
-        }
-    } else if let Some((message, drag_source)) = widget.on_drag.as_ref().zip(state.drag_initiated) {
+    if let Some((message, drag_source)) = widget.on_drag.as_ref().zip(state.drag_initiated) {
         if let Some(position) = cursor.position() {
             if position.distance(drag_source) > 1.0 {
-                state.drag_initiated = None;
                 shell.publish(message(cursor.position_in(layout.bounds())));
 
                 return event::Status::Captured;

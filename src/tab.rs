@@ -7,11 +7,13 @@ use cosmic::{
         keyboard::Modifiers,
         subscription::{self, Subscription},
         //TODO: export in cosmic::widget
-        widget::horizontal_rule,
+        widget::{horizontal_rule, scrollable::Viewport},
         Alignment,
         ContentFit,
         Length,
         Point,
+        Rectangle,
+        Size,
     },
     theme, widget, Element,
 };
@@ -28,10 +30,12 @@ use std::{
 };
 
 use crate::{
+    app::Action,
     config::{IconSizes, TabConfig},
     dialog::DialogKind,
-    fl,
+    fl, menu,
     mime_icon::mime_icon,
+    mouse_area,
 };
 
 const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
@@ -390,12 +394,16 @@ impl Location {
 pub enum Message {
     Click(Option<usize>),
     Config(TabConfig),
+    ContextAction(Action),
+    ContextMenu(Option<Point>),
+    Drag(Option<Point>),
     EditLocation(Option<Location>),
     GoNext,
     GoPrevious,
     Location(Location),
     LocationUp,
     RightClick(usize),
+    Scroll(Viewport),
     Thumbnail(PathBuf, Result<image::RgbaImage, ()>),
     ToggleShowHidden,
     View(View),
@@ -542,6 +550,8 @@ pub struct Tab {
     pub items_opt: Option<Vec<Item>>,
     pub view: View,
     pub dialog: Option<DialogKind>,
+    pub drag_opt: Option<Point>,
+    pub scroll_opt: Option<Viewport>,
     pub edit_location: Option<Location>,
     pub history_i: usize,
     pub history: Vec<Location>,
@@ -555,8 +565,10 @@ impl Tab {
             location,
             context_menu: None,
             items_opt: None,
-            view: View::List,
+            view: View::Grid,
             dialog: None,
+            drag_opt: None,
+            scroll_opt: None,
             edit_location: None,
             history_i: 0,
             history,
@@ -573,6 +585,23 @@ impl Tab {
             Location::Trash => {
                 fl!("trash")
             }
+        }
+    }
+
+    fn select_by_drag(&mut self, rect: Rectangle) {
+        let items = match &mut self.items_opt {
+            Some(some) => some,
+            None => return,
+        };
+
+        println!("{:?}", rect);
+        let (row, col) = match self.view {
+            View::Grid => (0, 0),
+            View::List => (0, 0),
+        };
+        for (i, item) in items.iter_mut().enumerate() {
+            item.selected = false;
+            //TODO
         }
     }
 
@@ -629,6 +658,43 @@ impl Tab {
             Message::Config(config) => {
                 self.config = config;
             }
+            Message::ContextAction(action) => {
+                // Close context menu
+                self.context_menu = None;
+
+                // TODO: run actions message
+                println!("TODO {:?}", action);
+            }
+            Message::ContextMenu(point_opt) => {
+                self.context_menu = point_opt;
+            }
+            Message::Drag(point_opt) => match point_opt {
+                Some(point) => {
+                    let drag = match self.drag_opt {
+                        Some(some) => some,
+                        None => {
+                            self.drag_opt = Some(point);
+                            point
+                        }
+                    };
+                    let min_x = drag.x.min(point.x);
+                    let max_x = drag.x.max(point.x);
+                    let min_y = drag.y.min(point.y);
+                    let max_y = drag.y.max(point.y);
+                    let offset_y = self
+                        .scroll_opt
+                        .map(|x| x.absolute_offset().y)
+                        .unwrap_or_default();
+                    let rect = Rectangle::new(
+                        Point::new(min_x, min_y + offset_y),
+                        Size::new(max_x - min_x, max_y - min_y),
+                    );
+                    self.select_by_drag(rect);
+                }
+                None => {
+                    self.drag_opt = None;
+                }
+            },
             Message::EditLocation(edit_location) => {
                 self.edit_location = edit_location;
             }
@@ -678,6 +744,9 @@ impl Tab {
                         }
                     }
                 }
+            }
+            Message::Scroll(viewport) => {
+                self.scroll_opt = Some(viewport);
             }
             Message::Thumbnail(path, thumbnail_res) => {
                 if let Some(ref mut items) = self.items_opt {
@@ -875,30 +944,27 @@ impl Tab {
     pub fn empty_view(&self, has_hidden: bool, core: &Core) -> Element<Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = core.system_theme().cosmic().spacing;
 
-        widget::column::with_children(vec![
-            self.location_view(core),
-            widget::container(
-                widget::column::with_children(vec![
-                    widget::icon::from_name("folder-symbolic")
-                        .size(64)
-                        .icon()
-                        .into(),
-                    widget::text(if has_hidden {
-                        fl!("empty-folder-hidden")
-                    } else {
-                        fl!("empty-folder")
-                    })
+        widget::column::with_children(vec![widget::container(
+            widget::column::with_children(vec![
+                widget::icon::from_name("folder-symbolic")
+                    .size(64)
+                    .icon()
                     .into(),
-                ])
-                .align_items(Alignment::Center)
-                .spacing(space_xxs),
-            )
-            .align_x(Horizontal::Center)
-            .align_y(Vertical::Center)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into(),
-        ])
+                widget::text(if has_hidden {
+                    fl!("empty-folder-hidden")
+                } else {
+                    fl!("empty-folder")
+                })
+                .into(),
+            ])
+            .align_items(Alignment::Center)
+            .spacing(space_xxs),
+        )
+        .align_x(Horizontal::Center)
+        .align_y(Vertical::Center)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()])
         .into()
     }
 
@@ -936,13 +1002,14 @@ impl Tab {
                     .height(item_height)
                     .width(item_width),
                 )
+                .padding(0)
                 .style(button_style(item.selected))
                 .on_press(Message::Click(Some(i)));
                 if self.context_menu.is_some() {
                     children.push(button.into());
                 } else {
                     children.push(
-                        crate::mouse_area::MouseArea::new(button)
+                        mouse_area::MouseArea::new(button)
                             .on_right_press_no_capture(move |_point_opt| Message::RightClick(i))
                             .into(),
                     );
@@ -954,13 +1021,10 @@ impl Tab {
                 return self.empty_view(hidden > 0, core);
             }
         }
-        widget::column::with_children(vec![
-            self.location_view(core),
-            widget::scrollable(widget::flex_row(children))
-                .width(Length::Fill)
-                .into(),
-        ])
-        .into()
+        widget::scrollable(widget::flex_row(children))
+            .on_scroll(Message::Scroll)
+            .width(Length::Fill)
+            .into()
     }
 
     pub fn list_view(&self, core: &Core) -> Element<Message> {
@@ -1060,7 +1124,7 @@ impl Tab {
                     children.push(button.into());
                 } else {
                     children.push(
-                        crate::mouse_area::MouseArea::new(button)
+                        mouse_area::MouseArea::new(button)
                             .on_right_press_no_capture(move |_point_opt| Message::RightClick(i))
                             .into(),
                     );
@@ -1073,24 +1137,50 @@ impl Tab {
             }
         }
 
-        widget::column::with_children(vec![
-            self.location_view(core).into(),
-            widget::scrollable(
-                widget::column::with_children(children)
-                    // Hack to make room for scroll bar
-                    .padding([0, space_xxs, 0, 0]),
-            )
-            .width(Length::Fill)
-            .into(),
-        ])
+        widget::scrollable(
+            widget::column::with_children(children)
+                // Hack to make room for scroll bar
+                .padding([0, space_xxs, 0, 0]),
+        )
+        .on_scroll(Message::Scroll)
+        .width(Length::Fill)
         .into()
     }
 
     pub fn view(&self, core: &Core) -> Element<Message> {
-        widget::container(match self.view {
+        let location_view = self.location_view(core);
+        let item_view = match self.view {
             View::Grid => self.grid_view(core),
             View::List => self.list_view(core),
-        })
+        };
+        let mut mouse_area =
+            mouse_area::MouseArea::new(widget::container(item_view).height(Length::Fill))
+                .on_drag(move |point_opt| Message::Drag(point_opt))
+                .on_press(move |_point_opt| Message::Click(None))
+                .on_release(move |point_opt| Message::Drag(None))
+                .on_back_press(move |_point_opt| Message::GoPrevious)
+                .on_forward_press(move |_point_opt| Message::GoNext)
+                .show_drag_box(true);
+        if self.context_menu.is_some() {
+            mouse_area = mouse_area.on_right_press(move |_point_opt| Message::ContextMenu(None));
+        } else {
+            mouse_area =
+                mouse_area.on_right_press(move |point_opt| Message::ContextMenu(point_opt));
+        }
+        let mut popover = widget::popover(mouse_area, menu::context_menu(&self));
+        match self.context_menu {
+            Some(point) => {
+                let rounded = Point::new(point.x.round(), point.y.round());
+                popover = popover.position(rounded);
+            }
+            None => {
+                popover = popover.show_popup(false);
+            }
+        }
+        widget::container(widget::column::with_children(vec![
+            location_view,
+            popover.into(),
+        ]))
         .height(Length::Fill)
         .width(Length::Fill)
         .into()
