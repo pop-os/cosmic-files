@@ -30,9 +30,9 @@ use crate::{
     fl, home_dir,
     key_bind::{key_binds, KeyBind},
     menu,
-    util,
     operation::Operation,
     tab::{self, ItemMetadata, Location, Tab},
+    util,
 };
 
 #[derive(Clone, Debug)]
@@ -881,11 +881,7 @@ impl Application for App {
                             match command.spawn() {
                                 Ok(_) => (),
                                 Err(err) => {
-                                    log::warn!(
-                                        "failed to open {:?}: {}",
-                                        item_path,
-                                        err
-                                    );
+                                    log::warn!("failed to open {:?}: {}", item_path, err);
                                 }
                             }
                         }
