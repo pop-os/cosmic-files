@@ -7,7 +7,6 @@ use cosmic::{
     widget::{
         self,
         menu::{ItemHeight, ItemWidth, MenuBar, MenuTree},
-        segmented_button,
     },
     Element,
 };
@@ -17,7 +16,7 @@ use crate::{
     app::{Action, Message},
     fl,
     key_bind::KeyBind,
-    tab::{Location, Tab},
+    tab::{self, Location, Tab},
 };
 
 macro_rules! menu_button {
@@ -35,10 +34,10 @@ macro_rules! menu_button {
     );
 }
 
-pub fn context_menu<'a>(entity: segmented_button::Entity, tab: &Tab) -> Element<'a, Message> {
+pub fn context_menu<'a>(tab: &Tab) -> Element<'a, tab::Message> {
     //TODO: show key bindings in context menu?
     let menu_action = |label, action| {
-        menu_button!(widget::text(label)).on_press(Message::TabContextAction(entity, action))
+        menu_button!(widget::text(label)).on_press(tab::Message::ContextAction(action))
     };
 
     let selected = tab

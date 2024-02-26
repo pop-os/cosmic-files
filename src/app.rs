@@ -10,7 +10,7 @@ use cosmic::{
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers},
         subscription::{self, Subscription},
-        window, Event, Length, Point,
+        window, Event, Length,
     },
     style,
     widget::{self, segmented_button},
@@ -29,7 +29,7 @@ use crate::{
     config::{AppTheme, Config, IconSizes, TabConfig, CONFIG_VERSION},
     fl, home_dir,
     key_bind::{key_binds, KeyBind},
-    menu, mouse_area,
+    menu,
     operation::Operation,
     tab::{self, ItemMetadata, Location, Tab},
 };
@@ -126,7 +126,6 @@ pub enum Message {
     TabClose(Option<segmented_button::Entity>),
     TabConfig(TabConfig),
     TabContextAction(segmented_button::Entity, Action),
-    TabContextMenu(segmented_button::Entity, Option<Point>),
     TabMessage(Option<segmented_button::Entity>, tab::Message),
     TabNew,
     TabRescan(segmented_button::Entity, Vec<tab::Item>),
@@ -862,19 +861,13 @@ impl Application for App {
                     _ => {}
                 }
             }
-            Message::TabContextMenu(entity, position_opt) => {
-                match self.tab_model.data_mut::<Tab>(entity) {
-                    Some(tab) => {
-                        // Update context menu position
-                        tab.context_menu = position_opt;
-                    }
-                    _ => {}
-                }
-                // Disable side context page
-                self.core.window.show_context = false;
-            }
             Message::TabMessage(entity_opt, tab_message) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+
+                if let tab::Message::ContextMenu(_point_opt) = tab_message {
+                    // Disable side context page
+                    self.core.window.show_context = false;
+                }
 
                 let mut update_opt = None;
                 match self.tab_model.data_mut::<Tab>(entity) {
@@ -981,38 +974,10 @@ impl Application for App {
         let entity = self.tab_model.active();
         match self.tab_model.data::<Tab>(entity) {
             Some(tab) => {
-                let mut mouse_area = mouse_area::MouseArea::new(
-                    tab.view(self.core())
-                        .map(move |message| Message::TabMessage(Some(entity), message)),
-                )
-                .on_press(move |_point_opt| {
-                    Message::TabMessage(Some(entity), tab::Message::Click(None))
-                })
-                .on_back_press(move |_point_opt| {
-                    Message::TabMessage(None, tab::Message::GoPrevious)
-                })
-                .on_forward_press(move |_point_opt| {
-                    Message::TabMessage(None, tab::Message::GoNext)
-                });
-                if tab.context_menu.is_some() {
-                    mouse_area = mouse_area
-                        .on_right_press(move |_point_opt| Message::TabContextMenu(entity, None));
-                } else {
-                    mouse_area = mouse_area.on_right_press(move |point_opt| {
-                        Message::TabContextMenu(entity, point_opt)
-                    });
-                }
-                let mut popover = widget::popover(mouse_area, menu::context_menu(entity, &tab));
-                match tab.context_menu {
-                    Some(point) => {
-                        let rounded = Point::new(point.x.round(), point.y.round());
-                        popover = popover.position(rounded);
-                    }
-                    None => {
-                        popover = popover.show_popup(false);
-                    }
-                }
-                tab_column = tab_column.push(popover);
+                let tab_view = tab
+                    .view(self.core())
+                    .map(move |message| Message::TabMessage(Some(entity), message));
+                tab_column = tab_column.push(tab_view);
             }
             None => {
                 //TODO
