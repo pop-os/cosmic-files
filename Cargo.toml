@@ -30,7 +30,6 @@ rust-embed = "8"
 git = "https://github.com/pop-os/libcosmic.git"
 default-features = false
 features = ["multi-window", "tokio", "winit"]
-#path = "../libcosmic"
 
 [dependencies.smol_str]
 version = "0.2.1"
