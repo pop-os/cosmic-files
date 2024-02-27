@@ -25,7 +25,6 @@ use std::{
     fmt,
     fs::{self, Metadata},
     path::PathBuf,
-    process,
     time::{Duration, Instant},
 };
 
@@ -566,7 +565,7 @@ impl Tab {
         };
 
         println!("{:?}", rect);
-        for (i, item) in items.iter_mut().enumerate() {
+        for (_i, item) in items.iter_mut().enumerate() {
             item.selected = false;
             //TODO
         }
@@ -1125,7 +1124,7 @@ impl Tab {
             mouse_area::MouseArea::new(widget::container(item_view).height(Length::Fill))
                 .on_drag(move |point_opt| Message::Drag(point_opt))
                 .on_press(move |_point_opt| Message::Click(None))
-                .on_release(move |point_opt| Message::Drag(None))
+                .on_release(move |_point_opt| Message::Drag(None))
                 .on_back_press(move |_point_opt| Message::GoPrevious)
                 .on_forward_press(move |_point_opt| Message::GoNext)
                 .show_drag_box(true);
@@ -1240,12 +1239,11 @@ mod tests {
     use tempfile::TempDir;
     use test_log::test;
 
-    use super::{scan_path, Item, Location, Message, Tab};
+    use super::{scan_path, Location, Message, Tab};
     use crate::{
         app::test_utils::{
-            assert_eq_tab_path, assert_eq_tab_path_contents, empty_fs, eq_path_item, filter_dirs,
-            read_dir_sorted, simple_fs, sort_files, tab_click_new, NAME_LEN, NUM_DIRS, NUM_FILES,
-            NUM_HIDDEN, NUM_NESTED,
+            assert_eq_tab_path, empty_fs, eq_path_item, filter_dirs, read_dir_sorted, simple_fs,
+            tab_click_new, NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED,
         },
         config::{IconSizes, TabConfig},
     };

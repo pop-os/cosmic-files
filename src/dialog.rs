@@ -12,7 +12,6 @@ use cosmic::{
         subscription::{self, Subscription},
         window, Event, Length, Size,
     },
-    style,
     widget::{self, segmented_button},
     Application, ApplicationExt, Element,
 };
@@ -600,12 +599,7 @@ impl Application for App {
 
     /// Creates a view after each update.
     fn view(&self) -> Element<Message> {
-        let cosmic_theme::Spacing {
-            space_m,
-            space_s,
-            space_xxs,
-            ..
-        } = self.core().system_theme().cosmic().spacing;
+        let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
 
         let mut tab_column = widget::column::with_capacity(2);
         tab_column = tab_column.push(

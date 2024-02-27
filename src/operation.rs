@@ -22,13 +22,13 @@ pub enum Operation {
 impl Operation {
     /// Perform the operation
     pub async fn perform(self, id: u64, msg_tx: &mut mpsc::Sender<Message>) -> Result<(), String> {
-        msg_tx.send(Message::PendingProgress(id, 0.0)).await;
+        let _ = msg_tx.send(Message::PendingProgress(id, 0.0)).await;
 
         //TODO: IF ERROR, RETURN AN Operation THAT CAN UNDO THE CURRENT STATE
         //TODO: SAFELY HANDLE CANCEL
         match self {
             Self::Delete { paths } => {
-                let mut total = paths.len();
+                let total = paths.len();
                 let mut count = 0;
                 for path in paths {
                     tokio::task::spawn_blocking(|| trash::delete(path))
@@ -36,7 +36,7 @@ impl Operation {
                         .map_err(err_str)?
                         .map_err(err_str)?;
                     count += 1;
-                    msg_tx
+                    let _ = msg_tx
                         .send(Message::PendingProgress(
                             id,
                             100.0 * (count as f32) / (total as f32),
@@ -45,7 +45,7 @@ impl Operation {
                 }
             }
             Self::Restore { paths } => {
-                let mut total = paths.len();
+                let total = paths.len();
                 let mut count = 0;
                 for path in paths {
                     tokio::task::spawn_blocking(|| trash::os_limited::restore_all([path]))
@@ -53,7 +53,7 @@ impl Operation {
                         .map_err(err_str)?
                         .map_err(err_str)?;
                     count += 1;
-                    msg_tx
+                    let _ = msg_tx
                         .send(Message::PendingProgress(
                             id,
                             100.0 * (count as f32) / (total as f32),
@@ -66,7 +66,7 @@ impl Operation {
             }
         }
 
-        msg_tx.send(Message::PendingProgress(id, 100.0)).await;
+        let _ = msg_tx.send(Message::PendingProgress(id, 100.0)).await;
 
         Ok(())
     }

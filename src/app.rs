@@ -3,8 +3,7 @@
 
 use cosmic::{
     app::{message, Command, Core},
-    cosmic_config::{self, CosmicConfigEntry},
-    cosmic_theme, executor,
+    cosmic_config, cosmic_theme, executor,
     iced::{
         event,
         futures::{self, SinkExt},
@@ -237,19 +236,6 @@ impl App {
         cosmic::app::command::set_theme(self.config.app_theme.theme())
     }
 
-    fn save_config(&mut self) -> Command<Message> {
-        match self.config_handler {
-            Some(ref config_handler) => match self.config.write_entry(&config_handler) {
-                Ok(()) => {}
-                Err(err) => {
-                    log::error!("failed to save config: {}", err);
-                }
-            },
-            None => {}
-        }
-        self.update_config()
-    }
-
     fn update_title(&mut self) -> Command<Message> {
         let (header_title, window_title) = match self.tab_model.text(self.tab_model.active()) {
             Some(tab_title) => (
@@ -317,7 +303,7 @@ impl App {
 
         if !self.pending_operations.is_empty() {
             let mut section = widget::settings::view_section(fl!("pending"));
-            for (id, (op, progress)) in self.pending_operations.iter().rev() {
+            for (_id, (op, progress)) in self.pending_operations.iter().rev() {
                 section = section.add(widget::column::with_children(vec![
                     widget::text(format!("{:?}", op)).into(),
                     widget::progress_bar(0.0..=100.0, *progress)
@@ -330,7 +316,7 @@ impl App {
 
         if !self.failed_operations.is_empty() {
             let mut section = widget::settings::view_section(fl!("failed"));
-            for (id, (op, error)) in self.failed_operations.iter().rev() {
+            for (_id, (op, error)) in self.failed_operations.iter().rev() {
                 section = section.add(widget::column::with_children(vec![
                     widget::text(format!("{:?}", op)).into(),
                     widget::text(error).into(),
@@ -341,7 +327,7 @@ impl App {
 
         if !self.complete_operations.is_empty() {
             let mut section = widget::settings::view_section(fl!("complete"));
-            for (id, op) in self.complete_operations.iter().rev() {
+            for (_id, op) in self.complete_operations.iter().rev() {
                 section = section.add(widget::text(format!("{:?}", op)));
             }
             children.push(section.into());
@@ -635,10 +621,10 @@ impl Application for App {
                     return self.update_config();
                 }
             }
-            Message::Copy(entity_opt) => {
+            Message::Copy(_entity_opt) => {
                 log::warn!("TODO: COPY");
             }
-            Message::Cut(entity_opt) => {
+            Message::Cut(_entity_opt) => {
                 log::warn!("TODO: CUT");
             }
             Message::Key(modifiers, key) => {
@@ -668,10 +654,10 @@ impl Application for App {
                     self.operation(Operation::Delete { paths });
                 }
             }
-            Message::NewFile(entity_opt) => {
+            Message::NewFile(_entity_opt) => {
                 log::warn!("TODO: NEW FILE");
             }
-            Message::NewFolder(entity_opt) => {
+            Message::NewFolder(_entity_opt) => {
                 log::warn!("TODO: NEW FOLDER");
             }
             Message::NotifyEvent(event) => {
@@ -712,7 +698,7 @@ impl Application for App {
                     log::warn!("message did not contain notify watcher");
                 }
             },
-            Message::Paste(entity_opt) => {
+            Message::Paste(_entity_opt) => {
                 log::warn!("TODO: PASTE");
             }
             Message::PendingComplete(id) => {
@@ -1112,10 +1098,10 @@ impl Application for App {
                 move |mut msg_tx| async move {
                     match pending_operation.perform(id, &mut msg_tx).await {
                         Ok(()) => {
-                            msg_tx.send(Message::PendingComplete(id)).await;
+                            let _ = msg_tx.send(Message::PendingComplete(id)).await;
                         }
                         Err(err) => {
-                            msg_tx
+                            let _ = msg_tx
                                 .send(Message::PendingError(id, err.to_string()))
                                 .await;
                         }
