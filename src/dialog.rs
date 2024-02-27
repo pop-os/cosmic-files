@@ -12,6 +12,7 @@ use cosmic::{
         subscription::{self, Subscription},
         window, Event, Length, Size,
     },
+    style,
     widget::{self, segmented_button},
     Application, ApplicationExt, Element,
 };
@@ -365,6 +366,22 @@ impl Application for App {
         self.flags.window_id
     }
 
+    fn dialog(&self) -> Option<Element<Message>> {
+        if self.replace_dialog {
+            if let DialogKind::SaveFile { filename } = &self.flags.kind {
+                return Some(
+                    widget::dialog(fl!("replace-title", filename = filename.as_str()))
+                        .icon(widget::icon::from_name("dialog-question").size(64))
+                        .body(fl!("replace-warning"))
+                        .primary_action(fl!("replace"), Message::Save(true))
+                        .secondary_action(fl!("cancel"), Message::Cancel)
+                        .into(),
+                );
+            }
+        }
+        None
+    }
+
     // The default nav_bar widget needs to have its width reduced for cosmic-files
     fn nav_bar(&self) -> Option<Element<message::Message<Message>>> {
         if !self.core().nav_bar_active() {
@@ -612,9 +629,9 @@ impl Application for App {
                     .on_press(Message::Cancel)
                     .into(),
                 if self.flags.kind.save() {
-                    widget::button::standard(fl!("save")).on_press(Message::Save(false))
+                    widget::button::suggested(fl!("save")).on_press(Message::Save(false))
                 } else {
-                    widget::button::standard(fl!("open")).on_press(Message::Open)
+                    widget::button::suggested(fl!("open")).on_press(Message::Open)
                 }
                 .into(),
             ])
@@ -622,41 +639,7 @@ impl Application for App {
             .spacing(space_xxs),
         );
 
-        //TODO: what is the best empty widget?
-        let mut overlay: Element<_> = widget::horizontal_space(Length::Shrink).into();
-        let mut show_popup = false;
-        if self.replace_dialog {
-            if let DialogKind::SaveFile { filename } = &self.flags.kind {
-                overlay = widget::cosmic_container::container(
-                    widget::column::with_children(vec![
-                        widget::text::title3(fl!("replace")).into(),
-                        //TODO: translate
-                        widget::text(format!("Do you want to replace \"{}\"?", filename)).into(),
-                        widget::row::with_children(vec![
-                            widget::horizontal_space(Length::Fill).into(),
-                            widget::button::standard(fl!("cancel"))
-                                .on_press(Message::Cancel)
-                                .into(),
-                            widget::button::destructive(fl!("replace"))
-                                .on_press(Message::Save(true))
-                                .into(),
-                        ])
-                        .spacing(space_xxs)
-                        .into(),
-                    ])
-                    .spacing(space_s),
-                )
-                .layer(cosmic_theme::Layer::Primary)
-                .padding(space_m)
-                .width(Length::Fixed(480.0))
-                .into();
-                show_popup = true;
-            }
-        }
-
-        let content: Element<_> = widget::popover(tab_column, overlay)
-            .show_popup(show_popup)
-            .into();
+        let content: Element<_> = tab_column.into();
 
         // Uncomment to debug layout:
         //content.explain(cosmic::iced::Color::WHITE)

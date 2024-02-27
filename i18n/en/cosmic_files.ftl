@@ -11,7 +11,9 @@ open-file = Open file
 open-folder = Open folder
 open-multiple-files = Open multiple files
 open-multiple-folders = Open multiple folders
-replace = Replace file
+replace = Replace
+replace-title = {$filename} already exists in this location.
+replace-warning = Do you want to replace it with the one you are saving? Replacing it will overwrite its content.
 save = Save
 save-file = Save file
 

@@ -1135,15 +1135,10 @@ impl Tab {
             mouse_area =
                 mouse_area.on_right_press(move |point_opt| Message::ContextMenu(point_opt));
         }
-        let mut popover = widget::popover(mouse_area, menu::context_menu(&self));
-        match self.context_menu {
-            Some(point) => {
-                let rounded = Point::new(point.x.round(), point.y.round());
-                popover = popover.position(rounded);
-            }
-            None => {
-                popover = popover.show_popup(false);
-            }
+        let mut popover = widget::popover(mouse_area);
+        if let Some(point) = self.context_menu {
+            let rounded = Point::new(point.x.round(), point.y.round());
+            popover = popover.popup(menu::context_menu(&self)).position(rounded);
         }
         widget::container(widget::column::with_children(vec![
             location_view,
