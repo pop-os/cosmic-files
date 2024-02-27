@@ -75,8 +75,8 @@ impl Action {
             Action::HistoryPrevious => Message::TabMessage(None, tab::Message::GoPrevious),
             Action::LocationUp => Message::TabMessage(None, tab::Message::LocationUp),
             Action::MoveToTrash => Message::MoveToTrash(entity_opt),
-            Action::NewFile => Message::NewFile(entity_opt),
-            Action::NewFolder => Message::NewFolder(entity_opt),
+            Action::NewFile => Message::NewItem(entity_opt, false),
+            Action::NewFolder => Message::NewItem(entity_opt, true),
             Action::Paste => Message::Paste(entity_opt),
             Action::Properties => Message::ToggleContextPage(ContextPage::Properties),
             Action::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
@@ -106,11 +106,13 @@ pub enum Message {
     Config(Config),
     Copy(Option<segmented_button::Entity>),
     Cut(Option<segmented_button::Entity>),
+    DialogCancel,
+    DialogComplete,
+    DialogPage(DialogPage),
     Key(Modifiers, Key),
     Modifiers(Modifiers),
     MoveToTrash(Option<segmented_button::Entity>),
-    NewFile(Option<segmented_button::Entity>),
-    NewFolder(Option<segmented_button::Entity>),
+    NewItem(Option<segmented_button::Entity>, bool),
     NotifyEvent(notify::Event),
     NotifyWatcher(WatcherWrapper),
     Paste(Option<segmented_button::Entity>),
@@ -150,6 +152,15 @@ impl ContextPage {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DialogPage {
+    NewItem {
+        parent: PathBuf,
+        name: String,
+        dir: bool,
+    },
+}
+
 #[derive(Debug)]
 pub struct WatcherWrapper {
     watcher_opt: Option<notify::RecommendedWatcher>,
@@ -176,6 +187,8 @@ pub struct App {
     config: Config,
     app_themes: Vec<String>,
     context_page: ContextPage,
+    dialog_page: Option<DialogPage>,
+    dialog_text_input: widget::Id,
     key_binds: HashMap<KeyBind, Action>,
     modifiers: Modifiers,
     pending_operation_id: u64,
@@ -500,6 +513,8 @@ impl Application for App {
             config: flags.config,
             app_themes,
             context_page: ContextPage::Settings,
+            dialog_page: None,
+            dialog_text_input: widget::Id::unique(),
             key_binds: key_binds(),
             modifiers: Modifiers::empty(),
             pending_operation_id: 0,
@@ -566,6 +581,11 @@ impl Application for App {
     fn on_escape(&mut self) -> Command<Self::Message> {
         let entity = self.tab_model.active();
 
+        // Close dialog if open
+        if self.dialog_page.take().is_some() {
+            return Command::none();
+        }
+
         // Close menus and context panes in order per message
         // Why: It'd be weird to close everything all at once
         // Usually, the Escape key (for example) closes menus and panes one by one instead
@@ -627,6 +647,32 @@ impl Application for App {
             Message::Cut(_entity_opt) => {
                 log::warn!("TODO: CUT");
             }
+            Message::DialogCancel => {
+                self.dialog_page = None;
+            }
+            Message::DialogComplete => {
+                if let Some(dialog_page) = self.dialog_page.take() {
+                    match dialog_page {
+                        DialogPage::NewItem { parent, name, dir } => {
+                            let path = parent.join(name);
+                            match if dir {
+                                fs::create_dir(&path)
+                            } else {
+                                fs::File::create(&path).map(|_| ())
+                            } {
+                                Ok(()) => {}
+                                Err(err) => {
+                                    //TODO: dialog
+                                    log::warn!("failed to create {:?}: {}", path, err);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Message::DialogPage(dialog_page) => {
+                self.dialog_page = Some(dialog_page);
+            }
             Message::Key(modifiers, key) => {
                 let entity = self.tab_model.active();
                 for (key_bind, action) in self.key_binds.iter() {
@@ -654,11 +700,20 @@ impl Application for App {
                     self.operation(Operation::Delete { paths });
                 }
             }
-            Message::NewFile(_entity_opt) => {
-                log::warn!("TODO: NEW FILE");
-            }
-            Message::NewFolder(_entity_opt) => {
-                log::warn!("TODO: NEW FOLDER");
+            Message::NewItem(entity_opt, dir) => {
+                if self.dialog_page.is_none() {
+                    let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                    if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                        if let Location::Path(path) = &tab.location {
+                            self.dialog_page = Some(DialogPage::NewItem {
+                                parent: path.clone(),
+                                name: String::new(),
+                                dir,
+                            });
+                            return widget::text_input::focus(self.dialog_text_input.clone());
+                        }
+                    }
+                }
             }
             Message::NotifyEvent(event) => {
                 log::debug!("{:?}", event);
@@ -929,6 +984,88 @@ impl Application for App {
             ContextPage::Properties => self.properties(),
             ContextPage::Settings => self.settings(),
         })
+    }
+
+    fn dialog(&self) -> Option<Element<Message>> {
+        let dialog_page = match &self.dialog_page {
+            Some(some) => some,
+            None => return None,
+        };
+
+        let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
+
+        let dialog = match dialog_page {
+            DialogPage::NewItem { parent, name, dir } => {
+                let mut dialog = widget::dialog(if *dir {
+                    fl!("create-new-folder")
+                } else {
+                    fl!("create-new-file")
+                });
+
+                let complete_maybe = if name.is_empty() {
+                    None
+                } else if name == "." || name == ".." {
+                    dialog = dialog.tertiary_action(widget::text::body(fl!(
+                        "name-invalid",
+                        filename = name.as_str()
+                    )));
+                    None
+                } else if name.contains('/') {
+                    dialog = dialog.tertiary_action(widget::text::body(fl!("name-no-slashes")));
+                    None
+                } else {
+                    let path = parent.join(name);
+                    if path.exists() {
+                        if path.is_dir() {
+                            dialog = dialog
+                                .tertiary_action(widget::text::body(fl!("folder-already-exists")));
+                        } else {
+                            dialog = dialog
+                                .tertiary_action(widget::text::body(fl!("file-already-exists")));
+                        }
+                        None
+                    } else {
+                        if name.starts_with('.') {
+                            dialog = dialog.tertiary_action(widget::text::body(fl!("name-hidden")));
+                        }
+                        Some(Message::DialogComplete)
+                    }
+                };
+
+                dialog
+                    .primary_action(
+                        widget::button::suggested(fl!("save"))
+                            .on_press_maybe(complete_maybe.clone()),
+                    )
+                    .secondary_action(
+                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                    )
+                    .control(
+                        widget::column::with_children(vec![
+                            widget::text::body(if *dir {
+                                fl!("folder-name")
+                            } else {
+                                fl!("file-name")
+                            })
+                            .into(),
+                            widget::text_input("", name.as_str())
+                                .id(self.dialog_text_input.clone())
+                                .on_input(move |name| {
+                                    Message::DialogPage(DialogPage::NewItem {
+                                        parent: parent.clone(),
+                                        name,
+                                        dir: *dir,
+                                    })
+                                })
+                                .on_submit_maybe(complete_maybe)
+                                .into(),
+                        ])
+                        .spacing(space_xxs),
+                    )
+            }
+        };
+
+        Some(dialog.into())
     }
 
     fn header_start(&self) -> Vec<Element<Self::Message>> {

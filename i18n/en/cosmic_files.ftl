@@ -4,18 +4,31 @@ filesystem = Filesystem
 home = Home
 trash = Trash
 
-# Dialog
+# New File/Folder Dialog
+create-new-file = Create new file
+create-new-folder = Create new folder
+file-name = File name
+folder-name = Folder name
+file-already-exists = A file with that name already exists.
+folder-already-exists = A folder with that name already exists.
+name-hidden = Names starting with "." will be hidden.
+name-invalid = Name cannot be "{$filename}".
+name-no-slashes = Name cannot contain slashes.
+
+# Open/Save Dialog
 cancel = Cancel
 open = Open
 open-file = Open file
 open-folder = Open folder
 open-multiple-files = Open multiple files
 open-multiple-folders = Open multiple folders
+save = Save
+save-file = Save file
+
+# Replace Dialog
 replace = Replace
 replace-title = {$filename} already exists in this location.
 replace-warning = Do you want to replace it with the one you are saving? Replacing it will overwrite its content.
-save = Save
-save-file = Save file
 
 # List view
 name = Name
