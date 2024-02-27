@@ -1136,8 +1136,9 @@ impl Tab {
         }
         let mut popover = widget::popover(mouse_area);
         if let Some(point) = self.context_menu {
-            let rounded = Point::new(point.x.round(), point.y.round());
-            popover = popover.popup(menu::context_menu(&self)).position(rounded);
+            popover = popover
+                .popup(menu::context_menu(&self))
+                .position(widget::popover::Position::Point(point));
         }
         widget::container(widget::column::with_children(vec![
             location_view,
