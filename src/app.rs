@@ -50,6 +50,7 @@ pub enum Action {
     MoveToTrash,
     NewFile,
     NewFolder,
+    Operations,
     Paste,
     Properties,
     RestoreFromTrash,
@@ -77,6 +78,7 @@ impl Action {
             Action::MoveToTrash => Message::MoveToTrash(entity_opt),
             Action::NewFile => Message::NewItem(entity_opt, false),
             Action::NewFolder => Message::NewItem(entity_opt, true),
+            Action::Operations => Message::ToggleContextPage(ContextPage::Operations),
             Action::Paste => Message::Paste(entity_opt),
             Action::Properties => Message::ToggleContextPage(ContextPage::Properties),
             Action::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
@@ -220,9 +222,6 @@ impl App {
         let id = self.pending_operation_id;
         self.pending_operation_id += 1;
         self.pending_operations.insert(id, (operation, 0.0));
-        //TODO: have some button to show current status
-        self.core.window.show_context = true;
-        self.context_page = ContextPage::Operations;
     }
 
     fn rescan_tab(

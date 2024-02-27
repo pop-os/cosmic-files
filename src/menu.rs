@@ -146,6 +146,9 @@ pub fn menu_bar<'a>(key_binds: &HashMap<KeyBind, Action>) -> Element<'a, Message
                 menu_item(fl!("copy"), Action::Copy),
                 menu_item(fl!("paste"), Action::Paste),
                 menu_item(fl!("select-all"), Action::SelectAll),
+                MenuTree::new(horizontal_rule(1)),
+                //TODO: edit history
+                menu_item(fl!("operations"), Action::Operations),
             ],
         ),
         MenuTree::with_children(
