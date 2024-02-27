@@ -18,7 +18,7 @@ use cosmic::{
 use notify::Watcher;
 use std::{
     any::TypeId,
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
     env, fs,
     path::PathBuf,
     process, time,
@@ -110,7 +110,7 @@ pub enum Message {
     Cut(Option<segmented_button::Entity>),
     DialogCancel,
     DialogComplete,
-    DialogPage(DialogPage),
+    DialogUpdate(DialogPage),
     Key(Modifiers, Key),
     Modifiers(Modifiers),
     MoveToTrash(Option<segmented_button::Entity>),
@@ -156,6 +156,7 @@ impl ContextPage {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DialogPage {
+    FailedOperation(u64),
     NewItem {
         parent: PathBuf,
         name: String,
@@ -189,7 +190,7 @@ pub struct App {
     config: Config,
     app_themes: Vec<String>,
     context_page: ContextPage,
-    dialog_page: Option<DialogPage>,
+    dialog_pages: VecDeque<DialogPage>,
     dialog_text_input: widget::Id,
     key_binds: HashMap<KeyBind, Action>,
     modifiers: Modifiers,
@@ -512,7 +513,7 @@ impl Application for App {
             config: flags.config,
             app_themes,
             context_page: ContextPage::Settings,
-            dialog_page: None,
+            dialog_pages: VecDeque::new(),
             dialog_text_input: widget::Id::unique(),
             key_binds: key_binds(),
             modifiers: Modifiers::empty(),
@@ -581,7 +582,7 @@ impl Application for App {
         let entity = self.tab_model.active();
 
         // Close dialog if open
-        if self.dialog_page.take().is_some() {
+        if self.dialog_pages.pop_front().is_some() {
             return Command::none();
         }
 
@@ -647,11 +648,14 @@ impl Application for App {
                 log::warn!("TODO: CUT");
             }
             Message::DialogCancel => {
-                self.dialog_page = None;
+                self.dialog_pages.pop_front();
             }
             Message::DialogComplete => {
-                if let Some(dialog_page) = self.dialog_page.take() {
+                if let Some(dialog_page) = self.dialog_pages.pop_front() {
                     match dialog_page {
+                        DialogPage::FailedOperation(id) => {
+                            log::warn!("TODO: retry operation {}", id);
+                        }
                         DialogPage::NewItem { parent, name, dir } => {
                             let path = parent.join(name);
                             self.operation(if dir {
@@ -663,8 +667,9 @@ impl Application for App {
                     }
                 }
             }
-            Message::DialogPage(dialog_page) => {
-                self.dialog_page = Some(dialog_page);
+            Message::DialogUpdate(dialog_page) => {
+                //TODO: panicless way to do this?
+                self.dialog_pages[0] = dialog_page;
             }
             Message::Key(modifiers, key) => {
                 let entity = self.tab_model.active();
@@ -694,17 +699,15 @@ impl Application for App {
                 }
             }
             Message::NewItem(entity_opt, dir) => {
-                if self.dialog_page.is_none() {
-                    let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
-                    if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-                        if let Location::Path(path) = &tab.location {
-                            self.dialog_page = Some(DialogPage::NewItem {
-                                parent: path.clone(),
-                                name: String::new(),
-                                dir,
-                            });
-                            return widget::text_input::focus(self.dialog_text_input.clone());
-                        }
+                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                    if let Location::Path(path) = &tab.location {
+                        self.dialog_pages.push_back(DialogPage::NewItem {
+                            parent: path.clone(),
+                            name: String::new(),
+                            dir,
+                        });
+                        return widget::text_input::focus(self.dialog_text_input.clone());
                     }
                 }
             }
@@ -756,8 +759,8 @@ impl Application for App {
             }
             Message::PendingError(id, err) => {
                 if let Some((op, _)) = self.pending_operations.remove(&id) {
-                    //TODO: dialog?
                     self.failed_operations.insert(id, (op, err));
+                    self.dialog_pages.push_back(DialogPage::FailedOperation(id));
                 }
             }
             Message::PendingProgress(id, new_progress) => {
@@ -981,7 +984,7 @@ impl Application for App {
     }
 
     fn dialog(&self) -> Option<Element<Message>> {
-        let dialog_page = match &self.dialog_page {
+        let dialog_page = match self.dialog_pages.front() {
             Some(some) => some,
             None => return None,
         };
@@ -989,6 +992,19 @@ impl Application for App {
         let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
 
         let dialog = match dialog_page {
+            DialogPage::FailedOperation(id) => {
+                //TODO: try next dialog page (making sure index is used by Dialog messages)?
+                let (operation, err) = self.failed_operations.get(id)?;
+
+                //TODO: nice description of error
+                widget::dialog("Failed operation")
+                    .body(format!("{:#?}\n{}", operation, err))
+                    .icon(widget::icon::from_name("dialog-error").size(64))
+                    //TODO: retry action
+                    .primary_action(
+                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                    )
+            }
             DialogPage::NewItem { parent, name, dir } => {
                 let mut dialog = widget::dialog(if *dir {
                     fl!("create-new-folder")
@@ -1045,7 +1061,7 @@ impl Application for App {
                             widget::text_input("", name.as_str())
                                 .id(self.dialog_text_input.clone())
                                 .on_input(move |name| {
-                                    Message::DialogPage(DialogPage::NewItem {
+                                    Message::DialogUpdate(DialogPage::NewItem {
                                         parent: parent.clone(),
                                         name,
                                         dir: *dir,
