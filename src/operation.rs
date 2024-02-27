@@ -1,5 +1,5 @@
 use cosmic::iced::futures::{channel::mpsc, SinkExt};
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 use crate::app::Message;
 
@@ -10,13 +10,29 @@ fn err_str<T: ToString>(err: T) -> String {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Operation {
     /// Copy items
-    Copy { paths: Vec<PathBuf>, to: PathBuf },
+    Copy {
+        paths: Vec<PathBuf>,
+        to: PathBuf,
+    },
     /// Move items to the trash
-    Delete { paths: Vec<PathBuf> },
+    Delete {
+        paths: Vec<PathBuf>,
+    },
     /// Move items
-    Move { paths: Vec<PathBuf>, to: PathBuf },
+    Move {
+        paths: Vec<PathBuf>,
+        to: PathBuf,
+    },
+    NewFile {
+        path: PathBuf,
+    },
+    NewFolder {
+        path: PathBuf,
+    },
     /// Restore a path from the trash
-    Restore { paths: Vec<trash::TrashItem> },
+    Restore {
+        paths: Vec<trash::TrashItem>,
+    },
 }
 
 impl Operation {
@@ -43,6 +59,20 @@ impl Operation {
                         ))
                         .await;
                 }
+            }
+            Self::NewFolder { path } => {
+                tokio::task::spawn_blocking(|| fs::create_dir(path))
+                    .await
+                    .map_err(err_str)?
+                    .map_err(err_str)?;
+                let _ = msg_tx.send(Message::PendingProgress(id, 100.0)).await;
+            }
+            Self::NewFile { path } => {
+                tokio::task::spawn_blocking(|| fs::File::create(path))
+                    .await
+                    .map_err(err_str)?
+                    .map_err(err_str)?;
+                let _ = msg_tx.send(Message::PendingProgress(id, 100.0)).await;
             }
             Self::Restore { paths } => {
                 let total = paths.len();

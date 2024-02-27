@@ -654,17 +654,11 @@ impl Application for App {
                     match dialog_page {
                         DialogPage::NewItem { parent, name, dir } => {
                             let path = parent.join(name);
-                            match if dir {
-                                fs::create_dir(&path)
+                            self.operation(if dir {
+                                Operation::NewFolder { path }
                             } else {
-                                fs::File::create(&path).map(|_| ())
-                            } {
-                                Ok(()) => {}
-                                Err(err) => {
-                                    //TODO: dialog
-                                    log::warn!("failed to create {:?}: {}", path, err);
-                                }
-                            }
+                                Operation::NewFile { path }
+                            });
                         }
                     }
                 }
@@ -762,6 +756,7 @@ impl Application for App {
             }
             Message::PendingError(id, err) => {
                 if let Some((op, _)) = self.pending_operations.remove(&id) {
+                    //TODO: dialog?
                     self.failed_operations.insert(id, (op, err));
                 }
             }
