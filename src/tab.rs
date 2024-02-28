@@ -1033,6 +1033,9 @@ impl Tab {
                     hidden += 1;
                     continue;
                 }
+                if self.filter_search(item) {
+                    continue;
+                }
 
                 let button = widget::button(
                     widget::column::with_children(vec![
@@ -1125,6 +1128,9 @@ impl Tab {
             for (i, item) in items.iter().enumerate() {
                 if !show_hidden && item.hidden {
                     hidden += 1;
+                    continue;
+                }
+                if self.filter_search(item) {
                     continue;
                 }
 
@@ -1241,7 +1247,37 @@ impl Tab {
         .width(Length::Fill)
         .into()
     }
-
+    
+    
+    fn filter_search(&self, item: &Item) -> bool {
+        if let Some(edit_location) = &self.edit_location {
+            match edit_location {
+                Location::Path(edit_path) => match &self.location {
+                    Location::Path(loc_path) => {
+                        if edit_path == loc_path {
+                            return false;
+                        }
+                        let search = edit_path.strip_prefix(loc_path).ok();
+                        if let Some(search) = search {
+                            // or starts_with
+                            if !item
+                                .name
+                                .to_lowercase()
+                                .contains(&*search.to_string_lossy().to_lowercase())
+                            {
+                                return true;
+                            }
+                        }
+                    }
+                    Location::Trash => {}
+                },
+                Location::Trash => {}
+            }
+        }
+        false
+    }
+    
+    
     pub fn subscription(&self) -> Subscription<Message> {
         if let Some(items) = &self.items_opt {
             //TODO: how many thumbnail loads should be in flight at once?
