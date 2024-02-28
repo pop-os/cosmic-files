@@ -16,7 +16,13 @@ use cosmic::{
     Application, ApplicationExt, Element,
 };
 use notify::Watcher;
-use std::{any::TypeId, collections::HashSet, env, fs, path::PathBuf, time};
+use std::{
+    any::TypeId,
+    collections::{HashMap, HashSet},
+    env, fs,
+    path::PathBuf,
+    time,
+};
 
 use crate::{
     config::TabConfig,
@@ -610,8 +616,9 @@ impl Application for App {
 
         let mut tab_column = widget::column::with_capacity(2);
         tab_column = tab_column.push(
+            //TODO: key binds for dialog
             self.tab
-                .view(self.core())
+                .view(self.core(), &HashMap::new())
                 .map(move |message| Message::TabMessage(message)),
         );
 

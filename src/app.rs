@@ -51,6 +51,7 @@ pub enum Action {
     MoveToTrash,
     NewFile,
     NewFolder,
+    Open,
     Operations,
     Paste,
     Properties,
@@ -76,12 +77,13 @@ impl Action {
             Action::Copy => Message::Copy(entity_opt),
             Action::Cut => Message::Cut(entity_opt),
             Action::EditLocation => Message::EditLocation(entity_opt),
-            Action::HistoryNext => Message::TabMessage(None, tab::Message::GoNext),
-            Action::HistoryPrevious => Message::TabMessage(None, tab::Message::GoPrevious),
-            Action::LocationUp => Message::TabMessage(None, tab::Message::LocationUp),
+            Action::HistoryNext => Message::TabMessage(entity_opt, tab::Message::GoNext),
+            Action::HistoryPrevious => Message::TabMessage(entity_opt, tab::Message::GoPrevious),
+            Action::LocationUp => Message::TabMessage(entity_opt, tab::Message::LocationUp),
             Action::MoveToTrash => Message::MoveToTrash(entity_opt),
             Action::NewFile => Message::NewItem(entity_opt, false),
             Action::NewFolder => Message::NewItem(entity_opt, true),
+            Action::Open => Message::TabMessage(entity_opt, tab::Message::Open),
             Action::Operations => Message::ToggleContextPage(ContextPage::Operations),
             Action::Paste => Message::Paste(entity_opt),
             Action::Properties => Message::ToggleContextPage(ContextPage::Properties),
@@ -1316,7 +1318,7 @@ impl Application for App {
         match self.tab_model.data::<Tab>(entity) {
             Some(tab) => {
                 let tab_view = tab
-                    .view(self.core())
+                    .view(self.core(), &self.key_binds)
                     .map(move |message| Message::TabMessage(Some(entity), message));
                 tab_column = tab_column.push(tab_view);
             }

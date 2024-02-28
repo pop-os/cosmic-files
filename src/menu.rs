@@ -34,10 +34,27 @@ macro_rules! menu_button {
     );
 }
 
-pub fn context_menu<'a>(tab: &Tab) -> Element<'a, tab::Message> {
-    //TODO: show key bindings in context menu?
-    let menu_action = |label, action| {
-        menu_button!(widget::text(label)).on_press(tab::Message::ContextAction(action))
+pub fn context_menu<'a>(
+    tab: &Tab,
+    key_binds: &HashMap<KeyBind, Action>,
+) -> Element<'a, tab::Message> {
+    let find_key = |action: &Action| -> String {
+        for (key_bind, key_action) in key_binds.iter() {
+            if action == key_action {
+                return key_bind.to_string();
+            }
+        }
+        String::new()
+    };
+
+    let menu_item = |label, action| {
+        let key = find_key(&action);
+        menu_button!(
+            widget::text(label),
+            widget::horizontal_space(Length::Fill),
+            widget::text(key)
+        )
+        .on_press(tab::Message::ContextAction(action))
     };
 
     let selected = tab
@@ -48,32 +65,41 @@ pub fn context_menu<'a>(tab: &Tab) -> Element<'a, tab::Message> {
     let mut children: Vec<Element<_>> = Vec::new();
     match tab.location {
         Location::Path(_) => {
-            children.push(menu_action(fl!("new-file"), Action::NewFile).into());
-            children.push(menu_action(fl!("new-folder"), Action::NewFolder).into());
-            children.push(horizontal_rule(1).into());
             if selected > 0 {
-                children.push(menu_action(fl!("rename"), Action::Rename).into());
-                children.push(menu_action(fl!("cut"), Action::Cut).into());
-                children.push(menu_action(fl!("copy"), Action::Copy).into());
-                children.push(menu_action(fl!("paste"), Action::Paste).into());
-            }
-            children.push(menu_action(fl!("select-all"), Action::SelectAll).into());
-            if selected > 0 {
+                children.push(menu_item(fl!("open"), Action::Open).into());
+                //TODO: Open with
                 children.push(horizontal_rule(1).into());
-                children.push(menu_action(fl!("move-to-trash"), Action::MoveToTrash).into());
+                children.push(menu_item(fl!("rename"), Action::Rename).into());
+                children.push(menu_item(fl!("cut"), Action::Cut).into());
+                children.push(menu_item(fl!("copy"), Action::Copy).into());
+                //TODO: Print?
+                children.push(horizontal_rule(1).into());
+                //TODO: change to Show details
+                children.push(menu_item(fl!("properties"), Action::Properties).into());
+                //TODO: Add to sidebar
+                children.push(horizontal_rule(1).into());
+                children.push(menu_item(fl!("move-to-trash"), Action::MoveToTrash).into());
+            } else {
+                //TODO: need better designs for menu with no selection
+                //TODO: have things like properties but they apply to the folder?
+                children.push(menu_item(fl!("new-file"), Action::NewFile).into());
+                children.push(menu_item(fl!("new-folder"), Action::NewFolder).into());
+                children.push(horizontal_rule(1).into());
+                children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
+                children.push(menu_item(fl!("paste"), Action::Paste).into());
             }
         }
         Location::Trash => {
-            children.push(menu_action(fl!("select-all"), Action::SelectAll).into());
+            children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
             if selected > 0 {
                 children.push(horizontal_rule(1).into());
+                children.push(menu_item(fl!("properties"), Action::Properties).into());
+                children.push(horizontal_rule(1).into());
                 children
-                    .push(menu_action(fl!("restore-from-trash"), Action::RestoreFromTrash).into());
+                    .push(menu_item(fl!("restore-from-trash"), Action::RestoreFromTrash).into());
             }
         }
     }
-    children.push(horizontal_rule(1).into());
-    children.push(menu_action(fl!("properties"), Action::Properties).into());
 
     widget::container(widget::column::with_children(children))
         .padding(1)
@@ -134,7 +160,7 @@ pub fn menu_bar<'a>(key_binds: &HashMap<KeyBind, Action>) -> Element<'a, Message
                 menu_item(fl!("new-window"), Action::WindowNew),
                 menu_item(fl!("new-file"), Action::NewFile),
                 menu_item(fl!("new-folder"), Action::NewFolder),
-                //TODO: open
+                menu_item(fl!("open"), Action::Open),
                 MenuTree::new(horizontal_rule(1)),
                 menu_item(fl!("rename"), Action::Rename),
                 //TOOD: add to sidebar, then divider

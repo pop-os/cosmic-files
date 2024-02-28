@@ -32,7 +32,9 @@ use crate::{
     app::Action,
     config::{IconSizes, TabConfig},
     dialog::DialogKind,
-    fl, menu,
+    fl,
+    key_bind::KeyBind,
+    menu,
     mime_icon::mime_icon,
     mouse_area,
 };
@@ -373,6 +375,7 @@ pub enum Message {
     GoPrevious,
     Location(Location),
     LocationUp,
+    Open,
     RightClick(usize),
     Scroll(Viewport),
     Thumbnail(PathBuf, Result<image::RgbaImage, ()>),
@@ -711,6 +714,27 @@ impl Tab {
                 if let Location::Path(ref path) = self.location {
                     if let Some(parent) = path.parent() {
                         cd = Some(Location::Path(parent.to_owned()));
+                    }
+                }
+            }
+            Message::Open => {
+                if let Some(ref mut items) = self.items_opt {
+                    for item in items.iter() {
+                        if item.selected {
+                            match self.location {
+                                Location::Path(_) => {
+                                    if item.path.is_dir() {
+                                        //TODO: allow opening multiple tabs?
+                                        cd = Some(Location::Path(item.path.clone()));
+                                    } else {
+                                        commands.push(Command::OpenFile(item.path.clone()));
+                                    }
+                                }
+                                Location::Trash => {
+                                    //TODO: open properties?
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1214,7 +1238,7 @@ impl Tab {
         .into()
     }
 
-    pub fn view(&self, core: &Core) -> Element<Message> {
+    pub fn view(&self, core: &Core, key_binds: &HashMap<KeyBind, Action>) -> Element<Message> {
         let location_view = self.location_view(core);
         let item_view = match self.view {
             View::Grid => self.grid_view(core),
@@ -1237,7 +1261,7 @@ impl Tab {
         let mut popover = widget::popover(mouse_area);
         if let Some(point) = self.context_menu {
             popover = popover
-                .popup(menu::context_menu(&self))
+                .popup(menu::context_menu(&self, &key_binds))
                 .position(widget::popover::Position::Point(point));
         }
         widget::container(widget::column::with_children(vec![
