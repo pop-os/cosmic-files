@@ -377,6 +377,7 @@ pub enum Message {
     Thumbnail(PathBuf, Result<image::RgbaImage, ()>),
     ToggleShowHidden,
     View(View),
+    ToggleSort(HeadingOptions),
 }
 
 #[derive(Clone, Debug)]
@@ -512,6 +513,12 @@ pub enum View {
     Grid,
     List,
 }
+#[derive(Clone, Copy, Debug, Hash, PartialEq, PartialOrd, Ord, Eq)]
+enum HeadingOptions {
+    Name,
+    Modified,
+    Size,
+}
 
 #[derive(Clone, Debug)]
 pub struct Tab {
@@ -526,11 +533,17 @@ pub struct Tab {
     pub history_i: usize,
     pub history: Vec<Location>,
     pub config: TabConfig,
+    sort_map: HashMap<HeadingOptions, bool>,
 }
 
 impl Tab {
     pub fn new(location: Location, config: TabConfig) -> Self {
         let history = vec![location.clone()];
+        let mut sort_map = HashMap::new();
+
+        sort_map.insert(HeadingOptions::Name, true);
+        sort_map.insert(HeadingOptions::Modified, true);
+        sort_map.insert(HeadingOptions::Size, true);
         Self {
             location,
             context_menu: None,
@@ -543,6 +556,7 @@ impl Tab {
             history_i: 0,
             history,
             config,
+            sort_map,
         }
     }
 
@@ -739,8 +753,73 @@ impl Tab {
                 }
             }
             Message::ToggleShowHidden => self.config.show_hidden = !self.config.show_hidden,
+
             Message::View(view) => {
                 self.view = view;
+            }
+            Message::ToggleSort(heading_option) => {
+                let heading_sort = !self.sort_map[&heading_option];
+                self.sort_map.insert(heading_option, heading_sort);
+                let check_reverse = |ord: Ordering, sort: bool| {
+                    if sort {
+                        ord
+                    } else {
+                        ord.reverse()
+                    }
+                };
+                if let Some(item) = &mut self.items_opt {
+                    match heading_option {
+                        HeadingOptions::Size => {
+                            item.sort_by(|a, b| {
+                                // entries take precedence over size
+                                let get_size = |x: &Item| match &x.metadata {
+                                    ItemMetadata::Path { metadata, children } => {
+                                        if metadata.is_dir() {
+                                            (true, *children as u64)
+                                        } else {
+                                            (false, metadata.len())
+                                        }
+                                    }
+                                    ItemMetadata::Trash { metadata, .. } => match metadata.size {
+                                        trash::TrashItemSize::Entries(entries) => {
+                                            (true, entries as u64)
+                                        }
+                                        trash::TrashItemSize::Bytes(bytes) => (false, bytes),
+                                    },
+                                };
+                                let (a_is_entry, a_size) = get_size(a);
+                                let (b_is_entry, b_size) = get_size(b);
+
+                                let ord = match (a_is_entry, b_is_entry) {
+                                    (true, false) => Ordering::Less,
+                                    (false, true) => Ordering::Greater,
+                                    _ => a_size.cmp(&b_size),
+                                };
+                                check_reverse(ord, heading_sort)
+                            })
+                        }
+                        HeadingOptions::Name => item.sort_by(|a, b| {
+                            let ord = match (a.path.is_dir(), b.path.is_dir()) {
+                                (true, false) => Ordering::Less,
+                                (false, true) => Ordering::Greater,
+                                _ => lexical_sort::natural_lexical_cmp(&a.name, &b.name),
+                            };
+                            check_reverse(ord, heading_sort)
+                        }),
+                        HeadingOptions::Modified => {
+                            item.sort_by(|a, b| {
+                                let get_modified = |x: &Item| match &x.metadata {
+                                    ItemMetadata::Path { metadata, .. } => metadata.modified().ok(),
+                                    ItemMetadata::Trash { .. } => None,
+                                };
+
+                                let a = get_modified(a);
+                                let b = get_modified(b);
+                                check_reverse(a.cmp(&b), heading_sort)
+                            });
+                        }
+                    }
+                }
             }
         }
         if let Some(location) = cd {
@@ -1001,18 +1080,32 @@ impl Tab {
         let modified_width = Length::Fixed(200.0);
         let size_width = Length::Fixed(100.0);
 
-        let mut children: Vec<Element<_>> = Vec::new();
+        macro_rules! heading_item {
+            ($name: literal, $width: expr, $msg: expr) => {
+                widget::row::with_children(vec![
+                    widget::text::heading(fl!($name)).into(),
+                    widget::button(widget::icon::from_name(if self.sort_map[&$msg] {
+                        "go-down-symbolic"
+                    } else {
+                        "go-up-symbolic"
+                    }))
+                    .on_press(Message::ToggleSort($msg))
+                    .style(cosmic::style::Button::Icon)
+                    .into(),
+                ])
+                .width($width)
+                .align_items(Alignment::Center)
+                .into()
+            };
+        }
 
+        let mut children: Vec<Element<_>> = Vec::new();
         children.push(
             widget::row::with_children(vec![
-                widget::text::heading(fl!("name"))
-                    .width(Length::Fill)
-                    .into(),
+                heading_item!("name", Length::Fill, HeadingOptions::Name),
                 //TODO: do not show modified column when in the trash
-                widget::text::heading(fl!("modified"))
-                    .width(modified_width)
-                    .into(),
-                widget::text::heading(fl!("size")).width(size_width).into(),
+                heading_item!("modified", modified_width, HeadingOptions::Modified),
+                heading_item!("size", size_width, HeadingOptions::Size),
             ])
             .align_items(Alignment::Center)
             .padding(space_xxs)
