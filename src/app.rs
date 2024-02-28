@@ -9,7 +9,7 @@ use cosmic::{
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers},
         subscription::{self, Subscription},
-        window, Event, Length,
+        window, Alignment, Event, Length,
     },
     style,
     widget::{self, segmented_button},
@@ -31,7 +31,6 @@ use crate::{
     menu,
     operation::Operation,
     tab::{self, ItemMetadata, Location, Tab},
-    util,
 };
 
 #[derive(Clone, Debug)]
@@ -42,6 +41,7 @@ pub struct Flags {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Action {
+    About,
     Copy,
     Cut,
     HistoryNext,
@@ -70,6 +70,7 @@ pub enum Action {
 impl Action {
     pub fn message(self, entity_opt: Option<segmented_button::Entity>) -> Message {
         match self {
+            Action::About => Message::ToggleContextPage(ContextPage::About),
             Action::Copy => Message::Copy(entity_opt),
             Action::Cut => Message::Cut(entity_opt),
             Action::HistoryNext => Message::TabMessage(None, tab::Message::GoNext),
@@ -112,6 +113,7 @@ pub enum Message {
     DialogComplete,
     DialogUpdate(DialogPage),
     Key(Modifiers, Key),
+    LaunchUrl(String),
     Modifiers(Modifiers),
     MoveToTrash(Option<segmented_button::Entity>),
     NewItem(Option<segmented_button::Entity>, bool),
@@ -139,6 +141,7 @@ pub enum Message {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ContextPage {
+    About,
     Operations,
     Properties,
     Settings,
@@ -147,6 +150,7 @@ pub enum ContextPage {
 impl ContextPage {
     fn title(&self) -> String {
         match self {
+            Self::About => fl!("about"),
             Self::Operations => fl!("operations"),
             Self::Properties => fl!("properties"),
             Self::Settings => fl!("settings"),
@@ -306,6 +310,37 @@ impl App {
 
         //TODO: should any of this run in a command?
         Command::none()
+    }
+
+    fn about(&self) -> Element<Message> {
+        let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
+        let repository = "https://github.com/pop-os/cosmic-files";
+        let hash = env!("VERGEN_GIT_SHA");
+        let date = env!("VERGEN_GIT_COMMIT_DATE");
+        widget::column::with_children(vec![
+                widget::svg(widget::svg::Handle::from_memory(
+                    &include_bytes!(
+                        "../res/icons/hicolor/128x128/apps/com.system76.CosmicFiles.svg"
+                    )[..],
+                ))
+                .into(),
+                widget::text::title3(fl!("cosmic-files")).into(),
+                widget::button::link(repository)
+                    .on_press(Message::LaunchUrl(repository.to_string()))
+                    .padding(0)
+                    .into(),
+                widget::button::link(fl!(
+                    "git-description",
+                    hash = hash,
+                    date = date
+                ))
+                    .on_press(Message::LaunchUrl(format!("{}/commits/{}", repository, hash)))
+                    .padding(0)
+                .into(),
+            ])
+        .align_items(Alignment::Center)
+        .spacing(space_xxs)
+        .into()
     }
 
     fn operations(&self) -> Element<Message> {
@@ -679,6 +714,12 @@ impl Application for App {
                     }
                 }
             }
+            Message::LaunchUrl(url) => match open::that_detached(&url) {
+                Ok(()) => {}
+                Err(err) => {
+                    log::warn!("failed to open {:?}: {}", url, err);
+                }
+            },
             Message::Modifiers(modifiers) => {
                 self.modifiers = modifiers;
             }
@@ -915,9 +956,8 @@ impl Application for App {
                             ]));
                         }
                         tab::Command::OpenFile(item_path) => {
-                            let mut command = util::open_command(&item_path);
-                            match command.spawn() {
-                                Ok(_) => (),
+                            match open::that_detached(&item_path) {
+                                Ok(()) => (),
                                 Err(err) => {
                                     log::warn!("failed to open {:?}: {}", item_path, err);
                                 }
@@ -977,6 +1017,7 @@ impl Application for App {
         }
 
         Some(match self.context_page {
+            ContextPage::About => self.about(),
             ContextPage::Operations => self.operations(),
             ContextPage::Properties => self.properties(),
             ContextPage::Settings => self.settings(),

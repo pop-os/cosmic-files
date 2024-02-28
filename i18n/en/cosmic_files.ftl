@@ -1,3 +1,4 @@
+cosmic-files = COSMIC Files
 empty-folder = Empty folder
 empty-folder-hidden = Empty folder (has hidden items)
 filesystem = Filesystem
@@ -36,6 +37,10 @@ modified = Modified
 size = Size
 
 # Context Pages
+
+## About
+about = About
+git-description = Git commit {$hash} on {$date}
 
 ## Operations
 operations = Operations
@@ -89,3 +94,4 @@ view = View
 grid-view = Grid view
 list-view = List view
 menu-settings = Settings...
+menu-about = About COSMIC Files...
