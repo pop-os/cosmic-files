@@ -150,7 +150,7 @@ pub enum ContextPage {
 impl ContextPage {
     fn title(&self) -> String {
         match self {
-            Self::About => fl!("about"),
+            Self::About => String::new(),
             Self::Operations => fl!("operations"),
             Self::Properties => fl!("properties"),
             Self::Settings => fl!("settings"),

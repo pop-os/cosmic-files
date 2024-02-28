@@ -39,7 +39,6 @@ size = Size
 # Context Pages
 
 ## About
-about = About
 git-description = Git commit {$hash} on {$date}
 
 ## Operations
