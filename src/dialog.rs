@@ -572,6 +572,9 @@ impl Application for App {
                             commands
                                 .push(Command::batch([self.update_watcher(), self.rescan_tab()]));
                         }
+                        tab::Command::FocusTextInput(id) => {
+                            commands.push(widget::text_input::focus(id));
+                        }
                         tab::Command::OpenFile(_item_path) => {
                             if self.flags.kind.save() {
                                 commands.push(self.update(Message::Save(false)));

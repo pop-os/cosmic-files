@@ -357,6 +357,7 @@ impl Location {
 pub enum Command {
     Action(Action),
     ChangeLocation(String, Location),
+    FocusTextInput(widget::Id),
     OpenFile(PathBuf),
 }
 
@@ -530,6 +531,7 @@ pub struct Tab {
     pub drag_opt: Option<Point>,
     pub scroll_opt: Option<Viewport>,
     pub edit_location: Option<Location>,
+    pub edit_location_id: widget::Id,
     pub history_i: usize,
     pub history: Vec<Location>,
     pub config: TabConfig,
@@ -551,6 +553,7 @@ impl Tab {
             drag_opt: None,
             scroll_opt: None,
             edit_location: None,
+            edit_location_id: widget::Id::unique(),
             history_i: 0,
             history,
             config,
@@ -678,6 +681,9 @@ impl Tab {
                 }
             },
             Message::EditLocation(edit_location) => {
+                if self.edit_location.is_none() && edit_location.is_some() {
+                    commands.push(Command::FocusTextInput(self.edit_location_id.clone()));
+                }
                 self.edit_location = edit_location;
             }
             Message::GoNext => {
@@ -883,6 +889,7 @@ impl Tab {
                     );
                     row = row.push(
                         widget::text_input("", path.to_string_lossy())
+                            .id(self.edit_location_id.clone())
                             .on_input(|input| {
                                 Message::EditLocation(Some(Location::Path(PathBuf::from(input))))
                             })

@@ -49,10 +49,10 @@ pub fn key_binds() -> HashMap<KeyBind, Action> {
     let mut key_binds = HashMap::new();
 
     macro_rules! bind {
-        ([$($modifier:ident),+ $(,)?], $key:expr, $action:ident) => {{
+        ([$($modifier:ident),* $(,)?], $key:expr, $action:ident) => {{
             key_binds.insert(
                 KeyBind {
-                    modifiers: vec![$(Modifier::$modifier),+],
+                    modifiers: vec![$(Modifier::$modifier),*],
                     key: $key,
                 },
                 Action::$action,
@@ -62,10 +62,12 @@ pub fn key_binds() -> HashMap<KeyBind, Action> {
 
     bind!([Ctrl], Key::Character("c".into()), Copy);
     bind!([Ctrl], Key::Character("x".into()), Cut);
+    bind!([Ctrl], Key::Character("l".into()), EditLocation);
     bind!([Alt], Key::Named(Named::ArrowRight), HistoryNext);
     bind!([Alt], Key::Named(Named::ArrowLeft), HistoryPrevious);
     bind!([Alt], Key::Named(Named::ArrowUp), LocationUp);
     bind!([Ctrl], Key::Character("v".into()), Paste);
+    bind!([], Key::Named(Named::F2), Rename);
     bind!([Ctrl], Key::Character("a".into()), SelectAll);
     bind!([Ctrl], Key::Character("w".into()), TabClose);
     bind!([Ctrl], Key::Character("t".into()), TabNew);

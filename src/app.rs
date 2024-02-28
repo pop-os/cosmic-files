@@ -44,6 +44,7 @@ pub enum Action {
     About,
     Copy,
     Cut,
+    EditLocation,
     HistoryNext,
     HistoryPrevious,
     LocationUp,
@@ -74,6 +75,7 @@ impl Action {
             Action::About => Message::ToggleContextPage(ContextPage::About),
             Action::Copy => Message::Copy(entity_opt),
             Action::Cut => Message::Cut(entity_opt),
+            Action::EditLocation => Message::EditLocation(entity_opt),
             Action::HistoryNext => Message::TabMessage(None, tab::Message::GoNext),
             Action::HistoryPrevious => Message::TabMessage(None, tab::Message::GoPrevious),
             Action::LocationUp => Message::TabMessage(None, tab::Message::LocationUp),
@@ -114,6 +116,7 @@ pub enum Message {
     DialogCancel,
     DialogComplete,
     DialogUpdate(DialogPage),
+    EditLocation(Option<segmented_button::Entity>),
     Key(Modifiers, Key),
     LaunchUrl(String),
     Modifiers(Modifiers),
@@ -739,6 +742,21 @@ impl Application for App {
                 //TODO: panicless way to do this?
                 self.dialog_pages[0] = dialog_page;
             }
+            Message::EditLocation(entity_opt) => {
+                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                if let Some(location) = self.tab_model.data::<Tab>(entity).and_then(|tab| {
+                    if tab.edit_location.is_none() {
+                        Some(tab.location.clone())
+                    } else {
+                        None
+                    }
+                }) {
+                    return self.update(Message::TabMessage(
+                        Some(entity),
+                        tab::Message::EditLocation(Some(location)),
+                    ));
+                }
+            }
             Message::Key(modifiers, key) => {
                 let entity = self.tab_model.active();
                 for (key_bind, action) in self.key_binds.iter() {
@@ -1023,6 +1041,9 @@ impl Application for App {
                                 self.update_watcher(),
                                 self.rescan_tab(entity, tab_path),
                             ]));
+                        }
+                        tab::Command::FocusTextInput(id) => {
+                            commands.push(widget::text_input::focus(id));
                         }
                         tab::Command::OpenFile(item_path) => {
                             match open::that_detached(&item_path) {
