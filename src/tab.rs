@@ -514,7 +514,7 @@ pub enum View {
     List,
 }
 #[derive(Clone, Copy, Debug, Hash, PartialEq, PartialOrd, Ord, Eq)]
-enum HeadingOptions {
+pub enum HeadingOptions {
     Name,
     Modified,
     Size,
@@ -533,6 +533,7 @@ pub struct Tab {
     pub history_i: usize,
     pub history: Vec<Location>,
     pub config: TabConfig,
+    //TODO: this no longer needs to be a map
     sort_map: HashMap<HeadingOptions, bool>,
 }
 
@@ -540,10 +541,7 @@ impl Tab {
     pub fn new(location: Location, config: TabConfig) -> Self {
         let history = vec![location.clone()];
         let mut sort_map = HashMap::new();
-
         sort_map.insert(HeadingOptions::Name, true);
-        sort_map.insert(HeadingOptions::Modified, true);
-        sort_map.insert(HeadingOptions::Size, true);
         Self {
             location,
             context_menu: None,
@@ -758,7 +756,8 @@ impl Tab {
                 self.view = view;
             }
             Message::ToggleSort(heading_option) => {
-                let heading_sort = !self.sort_map[&heading_option];
+                let heading_sort = !self.sort_map.get(&heading_option).unwrap_or(&false);
+                self.sort_map.clear();
                 self.sort_map.insert(heading_option, heading_sort);
                 let check_reverse = |ord: Ordering, sort: bool| {
                     if sort {
@@ -1084,15 +1083,16 @@ impl Tab {
             ($name: literal, $width: expr, $msg: expr) => {
                 widget::row::with_children(vec![
                     widget::text::heading(fl!($name)).into(),
-                    widget::button(widget::icon::from_name(if self.sort_map[&$msg] {
-                        "go-down-symbolic"
-                    } else {
-                        "go-up-symbolic"
+                    widget::button(widget::icon::from_name(match self.sort_map.get(&$msg) {
+                        Some(true) => "go-down-symbolic",
+                        Some(false) => "go-up-symbolic",
+                        None => "list-remove-symbolic",
                     }))
                     .on_press(Message::ToggleSort($msg))
                     .style(cosmic::style::Button::Icon)
                     .into(),
                 ])
+                .spacing(space_xxs)
                 .width($width)
                 .align_items(Alignment::Center)
                 .into()
