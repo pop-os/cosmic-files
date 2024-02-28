@@ -67,6 +67,7 @@ pub fn key_binds() -> HashMap<KeyBind, Action> {
     bind!([Alt], Key::Named(Named::ArrowLeft), HistoryPrevious);
     bind!([Alt], Key::Named(Named::ArrowUp), LocationUp);
     bind!([], Key::Named(Named::Delete), MoveToTrash);
+    bind!([Ctrl, Shift], Key::Character("N".into()), NewFolder);
     bind!([Ctrl], Key::Character("v".into()), Paste);
     bind!([], Key::Named(Named::F2), Rename);
     bind!([Ctrl], Key::Character("a".into()), SelectAll);
