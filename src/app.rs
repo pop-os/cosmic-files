@@ -53,6 +53,7 @@ pub enum Action {
     Operations,
     Paste,
     Properties,
+    Rename,
     RestoreFromTrash,
     SelectAll,
     Settings,
@@ -82,6 +83,7 @@ impl Action {
             Action::Operations => Message::ToggleContextPage(ContextPage::Operations),
             Action::Paste => Message::Paste(entity_opt),
             Action::Properties => Message::ToggleContextPage(ContextPage::Properties),
+            Action::Rename => Message::Rename(entity_opt),
             Action::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
             Action::SelectAll => Message::SelectAll(entity_opt),
             Action::Settings => Message::ToggleContextPage(ContextPage::Settings),
@@ -123,6 +125,7 @@ pub enum Message {
     PendingComplete(u64),
     PendingError(u64, String),
     PendingProgress(u64, f32),
+    Rename(Option<segmented_button::Entity>),
     RestoreFromTrash(Option<segmented_button::Entity>),
     SelectAll(Option<segmented_button::Entity>),
     SystemThemeModeChange(cosmic_theme::ThemeMode),
@@ -162,6 +165,12 @@ impl ContextPage {
 pub enum DialogPage {
     FailedOperation(u64),
     NewItem {
+        parent: PathBuf,
+        name: String,
+        dir: bool,
+    },
+    RenameItem {
+        from: PathBuf,
         parent: PathBuf,
         name: String,
         dir: bool,
@@ -717,6 +726,12 @@ impl Application for App {
                                 Operation::NewFile { path }
                             });
                         }
+                        DialogPage::RenameItem {
+                            from, parent, name, ..
+                        } => {
+                            let to = parent.join(name);
+                            self.operation(Operation::Rename { from, to });
+                        }
                     }
                 }
             }
@@ -829,6 +844,38 @@ impl Application for App {
             Message::PendingProgress(id, new_progress) => {
                 if let Some((_, progress)) = self.pending_operations.get_mut(&id) {
                     *progress = new_progress;
+                }
+            }
+            Message::Rename(entity_opt) => {
+                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                    if let Location::Path(parent) = &tab.location {
+                        if let Some(items) = &tab.items_opt {
+                            let mut selected = Vec::new();
+                            for item in items.iter() {
+                                if item.selected {
+                                    selected.push(item.path.clone());
+                                }
+                            }
+                            if !selected.is_empty() {
+                                //TODO: batch rename
+                                for path in selected {
+                                    let name = match path.file_name().and_then(|x| x.to_str()) {
+                                        Some(some) => some.to_string(),
+                                        None => continue,
+                                    };
+                                    let dir = path.is_dir();
+                                    self.dialog_pages.push_back(DialogPage::RenameItem {
+                                        from: path,
+                                        parent: parent.clone(),
+                                        name,
+                                        dir,
+                                    });
+                                }
+                                return widget::text_input::focus(self.dialog_text_input.clone());
+                            }
+                        }
+                    }
                 }
             }
             Message::RestoreFromTrash(entity_opt) => {
@@ -1125,6 +1172,81 @@ impl Application for App {
                                 .id(self.dialog_text_input.clone())
                                 .on_input(move |name| {
                                     Message::DialogUpdate(DialogPage::NewItem {
+                                        parent: parent.clone(),
+                                        name,
+                                        dir: *dir,
+                                    })
+                                })
+                                .on_submit_maybe(complete_maybe)
+                                .into(),
+                        ])
+                        .spacing(space_xxs),
+                    )
+            }
+            DialogPage::RenameItem {
+                from,
+                parent,
+                name,
+                dir,
+            } => {
+                //TODO: combine logic with NewItem
+                let mut dialog = widget::dialog(if *dir {
+                    fl!("rename-folder")
+                } else {
+                    fl!("rename-file")
+                });
+
+                let complete_maybe = if name.is_empty() {
+                    None
+                } else if name == "." || name == ".." {
+                    dialog = dialog.tertiary_action(widget::text::body(fl!(
+                        "name-invalid",
+                        filename = name.as_str()
+                    )));
+                    None
+                } else if name.contains('/') {
+                    dialog = dialog.tertiary_action(widget::text::body(fl!("name-no-slashes")));
+                    None
+                } else {
+                    let path = parent.join(name);
+                    if path.exists() {
+                        if path.is_dir() {
+                            dialog = dialog
+                                .tertiary_action(widget::text::body(fl!("folder-already-exists")));
+                        } else {
+                            dialog = dialog
+                                .tertiary_action(widget::text::body(fl!("file-already-exists")));
+                        }
+                        None
+                    } else {
+                        if name.starts_with('.') {
+                            dialog = dialog.tertiary_action(widget::text::body(fl!("name-hidden")));
+                        }
+                        Some(Message::DialogComplete)
+                    }
+                };
+
+                dialog
+                    .primary_action(
+                        widget::button::suggested(fl!("rename"))
+                            .on_press_maybe(complete_maybe.clone()),
+                    )
+                    .secondary_action(
+                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                    )
+                    .control(
+                        widget::column::with_children(vec![
+                            widget::text::body(if *dir {
+                                fl!("folder-name")
+                            } else {
+                                fl!("file-name")
+                            })
+                            .into(),
+                            widget::text_input("", name.as_str())
+                                .id(self.dialog_text_input.clone())
+                                .on_input(move |name| {
+                                    Message::DialogUpdate(DialogPage::RenameItem {
+                                        from: from.clone(),
                                         parent: parent.clone(),
                                         name,
                                         dir: *dir,

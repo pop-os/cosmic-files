@@ -26,6 +26,10 @@ open-multiple-folders = Open multiple folders
 save = Save
 save-file = Save file
 
+# Rename Dialog
+rename-file = Rename file
+rename-folder = Rename folder
+
 # Replace Dialog
 replace = Replace
 replace-title = {$filename} already exists in this location.
@@ -78,6 +82,7 @@ restore-from-trash = Restore from trash
 file = File
 new-tab = New tab
 new-window = New window
+rename = Rename
 close-tab = Close tab
 quit = Quit
 

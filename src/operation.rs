@@ -29,6 +29,10 @@ pub enum Operation {
     NewFolder {
         path: PathBuf,
     },
+    Rename {
+        from: PathBuf,
+        to: PathBuf,
+    },
     /// Restore a path from the trash
     Restore {
         paths: Vec<trash::TrashItem>,
@@ -69,6 +73,13 @@ impl Operation {
             }
             Self::NewFile { path } => {
                 tokio::task::spawn_blocking(|| fs::File::create(path))
+                    .await
+                    .map_err(err_str)?
+                    .map_err(err_str)?;
+                let _ = msg_tx.send(Message::PendingProgress(id, 100.0)).await;
+            }
+            Self::Rename { from, to } => {
+                tokio::task::spawn_blocking(|| fs::rename(from, to))
                     .await
                     .map_err(err_str)?
                     .map_err(err_str)?;

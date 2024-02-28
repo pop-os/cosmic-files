@@ -52,6 +52,7 @@ pub fn context_menu<'a>(tab: &Tab) -> Element<'a, tab::Message> {
             children.push(menu_action(fl!("new-folder"), Action::NewFolder).into());
             children.push(horizontal_rule(1).into());
             if selected > 0 {
+                children.push(menu_action(fl!("rename"), Action::Rename).into());
                 children.push(menu_action(fl!("cut"), Action::Cut).into());
                 children.push(menu_action(fl!("copy"), Action::Copy).into());
                 children.push(menu_action(fl!("paste"), Action::Paste).into());
@@ -133,9 +134,14 @@ pub fn menu_bar<'a>(key_binds: &HashMap<KeyBind, Action>) -> Element<'a, Message
                 menu_item(fl!("new-window"), Action::WindowNew),
                 menu_item(fl!("new-file"), Action::NewFile),
                 menu_item(fl!("new-folder"), Action::NewFolder),
+                //TODO: open
+                MenuTree::new(horizontal_rule(1)),
+                menu_item(fl!("rename"), Action::Rename),
+                //TOOD: add to sidebar, then divider
+                MenuTree::new(horizontal_rule(1)),
+                menu_item(fl!("move-to-trash"), Action::MoveToTrash),
                 MenuTree::new(horizontal_rule(1)),
                 menu_item(fl!("close-tab"), Action::TabClose),
-                MenuTree::new(horizontal_rule(1)),
                 menu_item(fl!("quit"), Action::WindowClose),
             ],
         ),
