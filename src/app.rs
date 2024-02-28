@@ -249,6 +249,23 @@ impl App {
         )
     }
 
+    fn rescan_trash(&mut self) -> Command<Message> {
+        let mut needs_reload = Vec::new();
+        for entity in self.tab_model.iter() {
+            if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+                if let Location::Trash = &tab.location {
+                    needs_reload.push((entity, Location::Trash));
+                }
+            }
+        }
+
+        let mut commands = Vec::with_capacity(needs_reload.len());
+        for (entity, location) in needs_reload {
+            commands.push(self.rescan_tab(entity, location));
+        }
+        Command::batch(commands)
+    }
+
     fn update_config(&mut self) -> Command<Message> {
         cosmic::app::command::set_theme(self.config.app_theme.theme())
     }
@@ -798,12 +815,16 @@ impl Application for App {
                 if let Some((op, _)) = self.pending_operations.remove(&id) {
                     self.complete_operations.insert(id, op);
                 }
+                // Manually rescan any trash tabs after any operation is completed
+                return self.rescan_trash();
             }
             Message::PendingError(id, err) => {
                 if let Some((op, _)) = self.pending_operations.remove(&id) {
                     self.failed_operations.insert(id, (op, err));
                     self.dialog_pages.push_back(DialogPage::FailedOperation(id));
                 }
+                // Manually rescan any trash tabs after any operation is completed
+                return self.rescan_trash();
             }
             Message::PendingProgress(id, new_progress) => {
                 if let Some((_, progress)) = self.pending_operations.get_mut(&id) {
