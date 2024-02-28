@@ -373,6 +373,10 @@ pub enum Message {
     EditLocation(Option<Location>),
     GoNext,
     GoPrevious,
+    ItemDown,
+    ItemLeft,
+    ItemRight,
+    ItemUp,
     Location(Location),
     LocationUp,
     Open,
@@ -702,6 +706,56 @@ impl Tab {
                     if let Some(location) = self.history.get(history_i) {
                         cd = Some(location.clone());
                         history_i_opt = Some(history_i);
+                    }
+                }
+            }
+            Message::ItemDown | Message::ItemLeft => {
+                //TODO: handle grid correctly
+                //TODO: do not wrap
+                if let Some(ref mut items) = self.items_opt {
+                    let mut last_selected_opt = None;
+                    for (i, item) in items.iter_mut().enumerate() {
+                        if item.selected {
+                            if !modifiers.contains(Modifiers::SHIFT) {
+                                item.selected = false;
+                            }
+                            last_selected_opt = Some(i);
+                        }
+                    }
+                    for (i, item) in items.iter_mut().enumerate() {
+                        if !self.config.show_hidden && item.hidden {
+                            continue;
+                        }
+
+                        if last_selected_opt.map_or(true, |last_selected| i > last_selected) {
+                            item.selected = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            Message::ItemUp | Message::ItemRight => {
+                //TODO: handle grid correctly
+                //TODO: do not wrap
+                if let Some(ref mut items) = self.items_opt {
+                    let mut last_selected_opt = None;
+                    for (i, item) in items.iter_mut().enumerate().rev() {
+                        if item.selected {
+                            if !modifiers.contains(Modifiers::SHIFT) {
+                                item.selected = false;
+                            }
+                            last_selected_opt = Some(i);
+                        }
+                    }
+                    for (i, item) in items.iter_mut().enumerate().rev() {
+                        if !self.config.show_hidden && item.hidden {
+                            continue;
+                        }
+
+                        if last_selected_opt.map_or(true, |last_selected| i < last_selected) {
+                            item.selected = true;
+                            break;
+                        }
                     }
                 }
             }

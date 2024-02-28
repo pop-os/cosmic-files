@@ -65,6 +65,16 @@ pub fn key_binds() -> HashMap<KeyBind, Action> {
     bind!([Ctrl], Key::Character("l".into()), EditLocation);
     bind!([Alt], Key::Named(Named::ArrowRight), HistoryNext);
     bind!([Alt], Key::Named(Named::ArrowLeft), HistoryPrevious);
+    // Catch arrow keys
+    bind!([], Key::Named(Named::ArrowDown), ItemDown);
+    bind!([], Key::Named(Named::ArrowLeft), ItemLeft);
+    bind!([], Key::Named(Named::ArrowRight), ItemRight);
+    bind!([], Key::Named(Named::ArrowUp), ItemUp);
+    // We also need to catch these when shift is held
+    bind!([Shift], Key::Named(Named::ArrowDown), ItemDown);
+    bind!([Shift], Key::Named(Named::ArrowLeft), ItemLeft);
+    bind!([Shift], Key::Named(Named::ArrowRight), ItemRight);
+    bind!([Shift], Key::Named(Named::ArrowUp), ItemUp);
     bind!([Alt], Key::Named(Named::ArrowUp), LocationUp);
     bind!([], Key::Named(Named::Delete), MoveToTrash);
     bind!([Ctrl, Shift], Key::Character("N".into()), NewFolder);

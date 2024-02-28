@@ -47,6 +47,10 @@ pub enum Action {
     EditLocation,
     HistoryNext,
     HistoryPrevious,
+    ItemDown,
+    ItemLeft,
+    ItemRight,
+    ItemUp,
     LocationUp,
     MoveToTrash,
     NewFile,
@@ -79,6 +83,10 @@ impl Action {
             Action::EditLocation => Message::EditLocation(entity_opt),
             Action::HistoryNext => Message::TabMessage(entity_opt, tab::Message::GoNext),
             Action::HistoryPrevious => Message::TabMessage(entity_opt, tab::Message::GoPrevious),
+            Action::ItemDown => Message::TabMessage(entity_opt, tab::Message::ItemDown),
+            Action::ItemLeft => Message::TabMessage(entity_opt, tab::Message::ItemLeft),
+            Action::ItemRight => Message::TabMessage(entity_opt, tab::Message::ItemRight),
+            Action::ItemUp => Message::TabMessage(entity_opt, tab::Message::ItemUp),
             Action::LocationUp => Message::TabMessage(entity_opt, tab::Message::LocationUp),
             Action::MoveToTrash => Message::MoveToTrash(entity_opt),
             Action::NewFile => Message::NewItem(entity_opt, false),
@@ -658,10 +666,26 @@ impl Application for App {
         // Usually, the Escape key (for example) closes menus and panes one by one instead
         // of closing everything on one press
         // TODO: Close MenuBar too
-        match self.tab_model.data_mut::<Tab>(entity) {
-            Some(tab) if tab.context_menu.is_some() => tab.context_menu = None,
-            _ => self.core.window.show_context = false,
+        if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+            if tab.context_menu.is_some() {
+                tab.context_menu = None;
+                return Command::none();
+            }
+
+            if let Some(ref mut items) = tab.items_opt {
+                let mut had_selection = false;
+                for item in items.iter_mut() {
+                    if item.selected {
+                        item.selected = false;
+                        had_selection = true;
+                    }
+                }
+                if had_selection {
+                    return Command::none();
+                }
+            }
         }
+        self.core.window.show_context = false;
 
         Command::none()
     }
