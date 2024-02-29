@@ -1282,7 +1282,7 @@ impl Tab {
 
     pub fn grid_view(&self) -> Element<Message> {
         let cosmic_theme::Spacing {
-            space_xs,
+            space_m,
             space_xxs,
             space_xxxs,
             ..
@@ -1294,16 +1294,13 @@ impl Tab {
         } = self.config;
 
         let (width, height) = match self.size_opt {
-            Some(size) => {
-                (
-                    // Hack to make room for scroll bar
-                    (size.width.floor() as usize)
-                        .checked_sub(space_xs as usize)
-                        .unwrap_or(0)
-                        .max(GRID_ITEM_WIDTH),
-                    (size.height.floor() as usize).max(GRID_ITEM_HEIGHT),
-                )
-            }
+            Some(size) => (
+                (size.width.floor() as usize)
+                    .checked_sub(2 * (space_m as usize))
+                    .unwrap_or(0)
+                    .max(GRID_ITEM_WIDTH),
+                (size.height.floor() as usize).max(GRID_ITEM_HEIGHT),
+            ),
             None => (GRID_ITEM_WIDTH, GRID_ITEM_HEIGHT),
         };
 
@@ -1322,8 +1319,7 @@ impl Tab {
         let mut grid = widget::grid()
             .column_spacing(column_spacing)
             .row_spacing(space_xxs)
-            // Hack to make room for scroll bar
-            .padding([0, space_xxs, 0, 0].into());
+            .padding([0, space_m].into());
         if let Some(ref items) = self.items_opt {
             let mut count = 0;
             let mut col = 0;
@@ -1339,7 +1335,8 @@ impl Tab {
                 item.pos_opt.set(Some((row, col)));
                 item.rect_opt.set(Some(Rectangle::new(
                     Point::new(
-                        (col * (GRID_ITEM_WIDTH + column_spacing as usize)) as f32,
+                        (col * (GRID_ITEM_WIDTH + column_spacing as usize) + space_m as usize)
+                            as f32,
                         (row * (GRID_ITEM_HEIGHT + space_xxs as usize)) as f32,
                     ),
                     Size::new(GRID_ITEM_WIDTH as f32, GRID_ITEM_HEIGHT as f32),
@@ -1427,7 +1424,9 @@ impl Tab {
     }
 
     pub fn list_view(&self) -> Element<Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+        let cosmic_theme::Spacing {
+            space_m, space_xxs, ..
+        } = theme::active().cosmic().spacing;
 
         //TODO: make adaptive?
         let size = self.size_opt.unwrap_or_else(|| Size::new(0.0, 0.0));
@@ -1492,8 +1491,8 @@ impl Tab {
                 }
                 item.pos_opt.set(Some((count, 0)));
                 item.rect_opt.set(Some(Rectangle::new(
-                    Point::new(0.0, y as f32),
-                    Size::new(size.width, row_height as f32),
+                    Point::new(space_m as f32, y as f32),
+                    Size::new(size.width - (2 * space_m) as f32, row_height as f32),
                 )));
 
                 if count > 0 {
@@ -1549,7 +1548,7 @@ impl Tab {
                 .height(Length::Fixed(row_height as f32))
                 .id(item.button_id.clone())
                 .padding(space_xxs)
-                .style(button_style(item.selected, false))
+                .style(button_style(item.selected, true))
                 .on_press(Message::Click(Some(i)));
                 if self.context_menu.is_some() {
                     children.push(button.into());
@@ -1569,14 +1568,10 @@ impl Tab {
             }
         }
 
-        widget::scrollable(
-            widget::column::with_children(children)
-                // Hack to make room for scroll bar
-                .padding([0, space_xxs, 0, 0]),
-        )
-        .on_scroll(Message::Scroll)
-        .width(Length::Fill)
-        .into()
+        widget::scrollable(widget::column::with_children(children).padding([0, space_m]))
+            .on_scroll(Message::Scroll)
+            .width(Length::Fill)
+            .into()
     }
 
     pub fn view(&self, key_binds: &HashMap<KeyBind, Action>) -> Element<Message> {
