@@ -1120,19 +1120,22 @@ impl Tab {
             icon_sizes,
         } = self.config;
 
-        let max_width = match self.size_opt {
+        let (width, height) = match self.size_opt {
             Some(size) => {
-                // Hack to make room for scroll bar
-                (size.width.floor() as usize)
-                    .checked_sub(space_xs as usize)
-                    .unwrap_or(0)
+                (
+                    // Hack to make room for scroll bar
+                    (size.width.floor() as usize)
+                        .checked_sub(space_xs as usize)
+                        .unwrap_or(0)
+                        .max(GRID_ITEM_WIDTH),
+                    (size.height.floor() as usize).max(GRID_ITEM_HEIGHT),
+                )
             }
-            None => 0,
-        }
-        .max(GRID_ITEM_WIDTH);
+            None => (GRID_ITEM_WIDTH, GRID_ITEM_HEIGHT),
+        };
 
         let (cols, column_spacing) = {
-            let width_m1 = max_width.checked_sub(GRID_ITEM_WIDTH).unwrap_or(0);
+            let width_m1 = width.checked_sub(GRID_ITEM_WIDTH).unwrap_or(0);
             let cols_m1 = width_m1 / (GRID_ITEM_WIDTH + space_xxs as usize);
             let cols = cols_m1 + 1;
             let spacing = width_m1
@@ -1213,8 +1216,30 @@ impl Tab {
             if count == 0 {
                 return self.empty_view(hidden > 0, core);
             }
+
+            //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
+            {
+                let mut max_bottom = 0;
+                for item in items.iter() {
+                    if let Some(rect) = item.rect_opt.get() {
+                        let bottom = (rect.y + rect.height).ceil() as usize;
+                        if bottom > max_bottom {
+                            max_bottom = bottom;
+                        }
+                    }
+                }
+                let spacer_height = height
+                    .checked_sub(max_bottom + 2 * (space_xxs as usize))
+                    .unwrap_or(0);
+                if spacer_height > 0 {
+                    if col != 0 {
+                        grid = grid.insert_row();
+                    }
+                    grid = grid.push(widget::vertical_space(Length::Fixed(spacer_height as f32)));
+                }
+            }
         }
-        //TODO: allow drag in empty area
+
         widget::scrollable(
             mouse_area::MouseArea::new(grid)
                 .on_drag(Message::Drag)
