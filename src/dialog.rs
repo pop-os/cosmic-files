@@ -579,6 +579,9 @@ impl Application for App {
                             commands
                                 .push(Command::batch([self.update_watcher(), self.rescan_tab()]));
                         }
+                        tab::Command::FocusButton(id) => {
+                            commands.push(widget::button::focus(id));
+                        }
                         tab::Command::FocusTextInput(id) => {
                             commands.push(widget::text_input::focus(id));
                         }

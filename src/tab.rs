@@ -260,6 +260,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                         Some(mime) if mime.type_() == "image" => None,
                         _ => Some(Err(())),
                     },
+                    button_id: widget::Id::unique(),
                     pos_opt: Cell::new(None),
                     rect_opt: Cell::new(None),
                     selected: false,
@@ -342,6 +343,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     icon_handle_grid,
                     icon_handle_list,
                     thumbnail_res_opt: Some(Err(())),
+                    button_id: widget::Id::unique(),
                     pos_opt: Cell::new(None),
                     rect_opt: Cell::new(None),
                     selected: false,
@@ -380,6 +382,7 @@ impl Location {
 pub enum Command {
     Action(Action),
     ChangeLocation(String, Location),
+    FocusButton(widget::Id),
     FocusTextInput(widget::Id),
     OpenFile(PathBuf),
 }
@@ -444,6 +447,7 @@ pub struct Item {
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
     pub thumbnail_res_opt: Option<Result<image::RgbaImage, ()>>,
+    pub button_id: widget::Id,
     pub pos_opt: Cell<Option<(usize, usize)>>,
     pub rect_opt: Cell<Option<Rectangle>>,
     pub selected: bool,
@@ -533,7 +537,11 @@ impl fmt::Debug for Item {
             .field("metadata", &self.metadata)
             .field("hidden", &self.hidden)
             .field("path", &self.path)
+            .field("mime_guess", &self.mime_guess)
             // icon_handles
+            // thumbnail_res_opt
+            .field("button_id", &self.button_id)
+            .field("pos_opt", &self.pos_opt)
             .field("rect_opt", &self.rect_opt)
             .field("selected", &self.selected)
             .field("click_time", &self.click_time)
@@ -555,6 +563,7 @@ pub enum HeadingOptions {
 
 #[derive(Clone, Debug)]
 pub struct Tab {
+    //TODO: make more items private
     pub location: Location,
     pub context_menu: Option<Point>,
     pub view: View,
@@ -721,6 +730,12 @@ impl Tab {
         }
     }
 
+    fn select_focus_id(&self) -> Option<widget::Id> {
+        let items = self.items_opt.as_ref()?;
+        let item = items.get(self.select_focus?)?;
+        Some(item.button_id.clone())
+    }
+
     fn select_focus_pos_opt(&self) -> Option<(usize, usize)> {
         let items = self.items_opt.as_ref()?;
         let item = items.get(self.select_focus?)?;
@@ -843,6 +858,9 @@ impl Tab {
                     // Select first item
                     self.select_position(0, 0, mod_shift);
                 }
+                if let Some(id) = self.select_focus_id() {
+                    commands.push(Command::FocusButton(id));
+                }
             }
             Message::ItemLeft => {
                 if let Some((row, col)) = self.select_focus_pos_opt() {
@@ -874,6 +892,9 @@ impl Tab {
                     // Select first item
                     self.select_position(0, 0, mod_shift);
                 }
+                if let Some(id) = self.select_focus_id() {
+                    commands.push(Command::FocusButton(id));
+                }
             }
             Message::ItemRight => {
                 if let Some((row, col)) = self.select_focus_pos_opt() {
@@ -888,6 +909,9 @@ impl Tab {
                 } else {
                     // Select first item
                     self.select_position(0, 0, mod_shift);
+                }
+                if let Some(id) = self.select_focus_id() {
+                    commands.push(Command::FocusButton(id));
                 }
             }
             Message::ItemUp => {
@@ -904,6 +928,9 @@ impl Tab {
                 } else {
                     // Select first item
                     self.select_position(0, 0, mod_shift);
+                }
+                if let Some(id) = self.select_focus_id() {
+                    commands.push(Command::FocusButton(id));
                 }
             }
             Message::Location(location) => {
@@ -1329,6 +1356,7 @@ impl Tab {
                     .padding(space_xxxs)
                     .style(button_style(item.selected, false)),
                     widget::button(widget::text(item.name.clone()))
+                        .id(item.button_id.clone())
                         .on_press(Message::Click(Some(i)))
                         .padding([0, space_xxs])
                         .style(button_style(item.selected, true)),
@@ -1519,6 +1547,7 @@ impl Tab {
                     .spacing(space_xxs),
                 )
                 .height(Length::Fixed(row_height as f32))
+                .id(item.button_id.clone())
                 .padding(space_xxs)
                 .style(button_style(item.selected, false))
                 .on_press(Message::Click(Some(i)));

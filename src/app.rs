@@ -1051,6 +1051,9 @@ impl Application for App {
                                 self.rescan_tab(entity, tab_path),
                             ]));
                         }
+                        tab::Command::FocusButton(id) => {
+                            commands.push(widget::button::focus(id));
+                        }
                         tab::Command::FocusTextInput(id) => {
                             commands.push(widget::text_input::focus(id));
                         }
