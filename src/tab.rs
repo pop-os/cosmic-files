@@ -552,7 +552,6 @@ pub enum HeadingOptions {
 pub struct Tab {
     pub location: Location,
     pub context_menu: Option<Point>,
-    pub items_opt: Option<Vec<Item>>,
     pub view: View,
     pub dialog: Option<DialogKind>,
     pub scroll_opt: Option<Viewport>,
@@ -562,6 +561,7 @@ pub struct Tab {
     pub history_i: usize,
     pub history: Vec<Location>,
     pub config: TabConfig,
+    items_opt: Option<Vec<Item>>,
     sort_name: HeadingOptions,
     sort_direction: bool,
 }
@@ -574,7 +574,6 @@ impl Tab {
         Self {
             location,
             context_menu: None,
-            items_opt: None,
             view: View::Grid,
             dialog: None,
             scroll_opt: None,
@@ -584,6 +583,7 @@ impl Tab {
             history_i: 0,
             history,
             config,
+            items_opt: None,
             sort_name,
             sort_direction,
         }
@@ -599,6 +599,44 @@ impl Tab {
                 fl!("trash")
             }
         }
+    }
+
+    pub fn items_opt(&self) -> Option<&Vec<Item>> {
+        self.items_opt.as_ref()
+    }
+
+    pub fn items_opt_mut(&mut self) -> Option<&mut Vec<Item>> {
+        self.items_opt.as_mut()
+    }
+
+    pub fn set_items(&mut self, items: Vec<Item>) {
+        self.items_opt = Some(items);
+    }
+
+    pub fn select_all(&mut self) {
+        if let Some(ref mut items) = self.items_opt {
+            for item in items.iter_mut() {
+                if !self.config.show_hidden && item.hidden {
+                    item.selected = false;
+                    continue;
+                }
+                item.selected = true;
+                item.click_time = None;
+            }
+        }
+    }
+
+    pub fn select_none(&mut self) -> bool {
+        let mut had_selection = false;
+        if let Some(ref mut items) = self.items_opt {
+            for item in items.iter_mut() {
+                if item.selected {
+                    item.selected = false;
+                    had_selection = true;
+                }
+            }
+        }
+        had_selection
     }
 
     fn select_by_drag(&mut self, rect: Rectangle) {

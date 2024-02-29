@@ -428,7 +428,7 @@ impl App {
         let mut children = Vec::new();
         let entity = self.tab_model.active();
         if let Some(tab) = self.tab_model.data::<Tab>(entity) {
-            if let Some(ref items) = tab.items_opt {
+            if let Some(items) = tab.items_opt() {
                 for item in items.iter() {
                     if item.selected {
                         children.push(item.property_view(tab.config.icon_sizes));
@@ -672,17 +672,8 @@ impl Application for App {
                 return Command::none();
             }
 
-            if let Some(ref mut items) = tab.items_opt {
-                let mut had_selection = false;
-                for item in items.iter_mut() {
-                    if item.selected {
-                        item.selected = false;
-                        had_selection = true;
-                    }
-                }
-                if had_selection {
-                    return Command::none();
-                }
+            if tab.select_none() {
+                return Command::none();
             }
         }
         self.core.window.show_context = false;
@@ -804,8 +795,8 @@ impl Application for App {
                 let mut paths = Vec::new();
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-                    if let Some(ref mut items) = tab.items_opt {
-                        for item in items.iter_mut() {
+                    if let Some(ref items) = tab.items_opt() {
+                        for item in items.iter() {
                             if item.selected {
                                 paths.push(item.path.clone());
                             }
@@ -894,7 +885,7 @@ impl Application for App {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
                     if let Location::Path(parent) = &tab.location {
-                        if let Some(items) = &tab.items_opt {
+                        if let Some(items) = tab.items_opt() {
                             let mut selected = Vec::new();
                             for item in items.iter() {
                                 if item.selected {
@@ -926,8 +917,8 @@ impl Application for App {
                 let mut paths = Vec::new();
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-                    if let Some(ref mut items) = tab.items_opt {
-                        for item in items.iter_mut() {
+                    if let Some(items) = tab.items_opt() {
+                        for item in items.iter() {
                             if item.selected {
                                 match &item.metadata {
                                     ItemMetadata::Trash { entry, .. } => {
@@ -948,15 +939,7 @@ impl Application for App {
             Message::SelectAll(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-                    if let Some(ref mut items) = tab.items_opt {
-                        for item in items.iter_mut() {
-                            if !tab.config.show_hidden && item.hidden {
-                                continue;
-                            }
-                            item.selected = true;
-                            item.click_time = None;
-                        }
-                    }
+                    tab.select_all();
                 }
             }
             Message::SystemThemeModeChange(_theme_mode) => {
@@ -1093,7 +1076,7 @@ impl Application for App {
             }
             Message::TabRescan(entity, items) => match self.tab_model.data_mut::<Tab>(entity) {
                 Some(tab) => {
-                    tab.items_opt = Some(items);
+                    tab.set_items(items);
                 }
                 _ => (),
             },
@@ -1680,13 +1663,10 @@ pub(crate) mod test_utils {
         let location = Location::Path(path.to_owned());
         let items = location.scan(IconSizes::default());
         let mut tab = Tab::new(location, TabConfig::default());
-        tab.items_opt = Some(items);
+        tab.set_items(items);
 
         // Ensure correct number of directories as a sanity check
-        let items = tab
-            .items_opt
-            .as_deref()
-            .expect("tab should be populated with Items");
+        let items = tab.items_opt().expect("tab should be populated with Items");
         assert_eq!(NUM_DIRS, items.len());
 
         Ok((fs, tab))
@@ -1748,17 +1728,14 @@ pub(crate) mod test_utils {
         // Check lengths.
         // `items_opt` is optional and the directory at `path` may have zero entries
         // Therefore, this doesn't panic if `items_opt` is None
-        let items_len = tab
-            .items_opt
-            .as_ref()
-            .map(|items| items.len())
-            .unwrap_or_default();
+        let items_len = tab.items_opt().map(|items| items.len()).unwrap_or_default();
         assert_eq!(entries.len(), items_len);
 
+        let empty = Vec::new();
         assert!(
             entries
                 .into_iter()
-                .zip(tab.items_opt.clone().unwrap_or_default())
+                .zip(tab.items_opt().clone().unwrap_or(&empty))
                 .all(|(a, b)| eq_path_item(&a, &b)),
             "Path ({}) and Tab path ({}) don't have equal contents",
             path.display(),

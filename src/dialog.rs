@@ -451,7 +451,7 @@ impl Application for App {
                 }
 
                 // Select based on filename
-                if let Some(items) = &mut self.tab.items_opt {
+                if let Some(items) = self.tab.items_opt_mut() {
                     for item in items.iter_mut() {
                         item.selected = item.name == new_filename;
                     }
@@ -488,8 +488,8 @@ impl Application for App {
             },
             Message::Open => {
                 let mut paths = Vec::new();
-                if let Some(ref mut items) = self.tab.items_opt {
-                    for item in items.iter_mut() {
+                if let Some(items) = self.tab.items_opt() {
+                    for item in items.iter() {
                         if item.selected {
                             paths.push(item.path.clone());
                         }
@@ -563,7 +563,7 @@ impl Application for App {
                 // Update filename box when anything is selected
                 if let DialogKind::SaveFile { filename } = &mut self.flags.kind {
                     if let Some(click_i) = click_i_opt {
-                        if let Some(items) = &self.tab.items_opt {
+                        if let Some(items) = self.tab.items_opt() {
                             if let Some(item) = items.get(click_i) {
                                 if item.selected && !item.path.is_dir() {
                                     *filename = item.name.clone();
@@ -605,7 +605,7 @@ impl Application for App {
                     }
                 }
 
-                self.tab.items_opt = Some(items);
+                self.tab.set_items(items);
 
                 // Reset focus on location change
                 return widget::text_input::focus(self.filename_id.clone());

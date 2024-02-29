@@ -58,8 +58,7 @@ pub fn context_menu<'a>(
     };
 
     let selected = tab
-        .items_opt
-        .as_ref()
+        .items_opt()
         .map_or(0, |items| items.iter().filter(|x| x.selected).count());
 
     let mut children: Vec<Element<_>> = Vec::new();
