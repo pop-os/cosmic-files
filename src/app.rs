@@ -11,7 +11,7 @@ use cosmic::{
         subscription::{self, Subscription},
         window, Alignment, Event, Length,
     },
-    style,
+    style, theme,
     widget::{self, segmented_button},
     Application, ApplicationExt, Element,
 };
@@ -352,7 +352,7 @@ impl App {
     }
 
     fn about(&self) -> Element<Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
+        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
         let repository = "https://github.com/pop-os/cosmic-files";
         let hash = env!("VERGEN_GIT_SHA");
         let short_hash: String = hash.chars().take(7).collect();
@@ -431,7 +431,7 @@ impl App {
             if let Some(ref items) = tab.items_opt {
                 for item in items.iter() {
                     if item.selected {
-                        children.push(item.property_view(&self.core, tab.config.icon_sizes));
+                        children.push(item.property_view(tab.config.icon_sizes));
                         // Only show one property view to avoid issues like hangs when generating
                         // preview images on thousands of files
                         break;
@@ -1146,7 +1146,7 @@ impl Application for App {
             None => return None,
         };
 
-        let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
+        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
 
         let dialog = match dialog_page {
             DialogPage::FailedOperation(id) => {
@@ -1320,7 +1320,7 @@ impl Application for App {
 
     /// Creates a view after each update.
     fn view(&self) -> Element<Self::Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = self.core().system_theme().cosmic().spacing;
+        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
 
         let mut tab_column = widget::column::with_capacity(1);
 
@@ -1342,7 +1342,7 @@ impl Application for App {
         match self.tab_model.data::<Tab>(entity) {
             Some(tab) => {
                 let tab_view = tab
-                    .view(self.core(), &self.key_binds)
+                    .view(&self.key_binds)
                     .map(move |message| Message::TabMessage(Some(entity), message));
                 tab_column = tab_column.push(tab_view);
             }

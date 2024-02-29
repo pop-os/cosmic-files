@@ -1,5 +1,4 @@
 use cosmic::{
-    app::Core,
     cosmic_theme,
     iced::{
         alignment::{Horizontal, Vertical},
@@ -444,8 +443,8 @@ pub struct Item {
 }
 
 impl Item {
-    pub fn property_view(&self, core: &Core, sizes: IconSizes) -> Element<crate::app::Message> {
-        let cosmic_theme::Spacing { space_xxxs, .. } = core.system_theme().cosmic().spacing;
+    pub fn property_view(&self, sizes: IconSizes) -> Element<crate::app::Message> {
+        let cosmic_theme::Spacing { space_xxxs, .. } = theme::active().cosmic().spacing;
 
         let mut column = widget::column().spacing(space_xxxs);
 
@@ -874,7 +873,7 @@ impl Tab {
         commands
     }
 
-    fn column_sort(&self) -> Option<Vec<Item>> {
+    fn column_sort(&self) -> Option<Vec<&Item>> {
         let check_reverse = |ord: Ordering, sort: bool| {
             if sort {
                 ord
@@ -882,11 +881,11 @@ impl Tab {
                 ord.reverse()
             }
         };
-        let mut item = self.items_opt.clone()?;
+        let mut items: Vec<&Item> = self.items_opt.as_ref()?.iter().collect();
         let heading_sort = self.sort_direction;
         match self.sort_name {
             HeadingOptions::Size => {
-                item.sort_by(|a, b| {
+                items.sort_by(|a, b| {
                     // entries take precedence over size
                     let get_size = |x: &Item| match &x.metadata {
                         ItemMetadata::Path { metadata, children } => {
@@ -912,7 +911,7 @@ impl Tab {
                     check_reverse(ord, heading_sort)
                 })
             }
-            HeadingOptions::Name => item.sort_by(|a, b| {
+            HeadingOptions::Name => items.sort_by(|a, b| {
                 let ord = match (a.path.is_dir(), b.path.is_dir()) {
                     (true, false) => Ordering::Less,
                     (false, true) => Ordering::Greater,
@@ -921,7 +920,7 @@ impl Tab {
                 check_reverse(ord, heading_sort)
             }),
             HeadingOptions::Modified => {
-                item.sort_by(|a, b| {
+                items.sort_by(|a, b| {
                     let get_modified = |x: &Item| match &x.metadata {
                         ItemMetadata::Path { metadata, .. } => metadata.modified().ok(),
                         ItemMetadata::Trash { .. } => None,
@@ -933,16 +932,16 @@ impl Tab {
                 });
             }
         }
-        Some(item)
+        Some(items)
     }
 
-    pub fn location_view(&self, core: &Core) -> Element<Message> {
+    pub fn location_view(&self) -> Element<Message> {
         let cosmic_theme::Spacing {
             space_xxxs,
             space_xxs,
             space_s,
             ..
-        } = core.system_theme().cosmic().spacing;
+        } = theme::active().cosmic().spacing;
 
         let mut row = widget::row::with_capacity(5).align_items(Alignment::Center);
 
@@ -1080,8 +1079,8 @@ impl Tab {
         row.into()
     }
 
-    pub fn empty_view(&self, has_hidden: bool, core: &Core) -> Element<Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = core.system_theme().cosmic().spacing;
+    pub fn empty_view(&self, has_hidden: bool) -> Element<Message> {
+        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
 
         widget::column::with_children(vec![widget::container(
             widget::column::with_children(vec![
@@ -1107,13 +1106,13 @@ impl Tab {
         .into()
     }
 
-    pub fn grid_view(&self, core: &Core) -> Element<Message> {
+    pub fn grid_view(&self) -> Element<Message> {
         let cosmic_theme::Spacing {
             space_xs,
             space_xxs,
             space_xxxs,
             ..
-        } = core.system_theme().cosmic().spacing;
+        } = theme::active().cosmic().spacing;
 
         let TabConfig {
             show_hidden,
@@ -1214,7 +1213,7 @@ impl Tab {
             }
 
             if count == 0 {
-                return self.empty_view(hidden > 0, core);
+                return self.empty_view(hidden > 0);
             }
 
             //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
@@ -1250,10 +1249,12 @@ impl Tab {
         .into()
     }
 
-    pub fn list_view(&self, core: &Core) -> Element<Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = core.system_theme().cosmic().spacing;
+    pub fn list_view(&self) -> Element<Message> {
+        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
 
         //TODO: make adaptive?
+        let size = self.size_opt.unwrap_or_else(|| Size::new(0.0, 0.0));
+        let row_height = 40;
         let modified_width = Length::Fixed(200.0);
         let size_width = Length::Fixed(100.0);
 
@@ -1288,12 +1289,15 @@ impl Tab {
                 heading_item!("size", size_width, HeadingOptions::Size),
             ])
             .align_items(Alignment::Center)
+            .height(Length::Fixed(row_height as f32))
             .padding(space_xxs)
             .spacing(space_xxs)
             .into(),
         );
+        let mut y = row_height;
 
         children.push(horizontal_rule(1).into());
+        y += 1;
 
         if let Some(ref items) = self.column_sort() {
             let mut count = 0;
@@ -1308,11 +1312,14 @@ impl Tab {
                     hidden += 1;
                     continue;
                 }
-                //TODO: correct rectangle
-                item.rect_opt.set(None);
+                item.rect_opt.set(Some(Rectangle::new(
+                    Point::new(0.0, y as f32),
+                    Size::new(size.width, row_height as f32),
+                )));
 
                 if count > 0 {
                     children.push(horizontal_rule(1).into());
+                    y += 1;
                 }
 
                 let modified_text = match &item.metadata {
@@ -1360,6 +1367,7 @@ impl Tab {
                     .align_items(Alignment::Center)
                     .spacing(space_xxs),
                 )
+                .height(Length::Fixed(row_height as f32))
                 .padding(space_xxs)
                 .style(button_style(item.selected, false))
                 .on_press(Message::Click(Some(i)));
@@ -1373,10 +1381,11 @@ impl Tab {
                     );
                 }
                 count += 1;
+                y += row_height;
             }
 
             if count == 0 {
-                return self.empty_view(hidden > 0, core);
+                return self.empty_view(hidden > 0);
             }
         }
 
@@ -1390,11 +1399,11 @@ impl Tab {
         .into()
     }
 
-    pub fn view(&self, core: &Core, key_binds: &HashMap<KeyBind, Action>) -> Element<Message> {
-        let location_view = self.location_view(core);
+    pub fn view(&self, key_binds: &HashMap<KeyBind, Action>) -> Element<Message> {
+        let location_view = self.location_view();
         let item_view = match self.view {
-            View::Grid => self.grid_view(core),
-            View::List => self.list_view(core),
+            View::Grid => self.grid_view(),
+            View::List => self.list_view(),
         };
         let mut mouse_area =
             mouse_area::MouseArea::new(widget::container(item_view).height(Length::Fill))
@@ -1428,71 +1437,87 @@ impl Tab {
             //TODO: how many thumbnail loads should be in flight at once?
             let jobs = 8;
             let mut subscriptions = Vec::with_capacity(jobs);
+
+            let visible_rect = {
+                let point = match self.scroll_opt {
+                    Some(viewport) => Point::new(0.0, viewport.absolute_offset().y),
+                    None => Point::new(0.0, 0.0),
+                };
+                let size = self.size_opt.unwrap_or_else(|| Size::new(0.0, 0.0));
+                Rectangle::new(point, size)
+            };
+
+            //TODO: HACK to ensure positions are up to date since subscription runs before view
+            let _ = match self.view {
+                View::Grid => self.grid_view(),
+                View::List => self.list_view(),
+            };
+
             for item in items.iter() {
-                match item.thumbnail_res_opt {
-                    Some(_) => continue,
+                if item.thumbnail_res_opt.is_some() {
+                    // Skip items that already have a thumbnail
+                    continue;
+                }
+
+                match item.rect_opt.get() {
+                    Some(rect) => {
+                        if !rect.intersects(&visible_rect) {
+                            // Skip items that are not visible
+                            continue;
+                        }
+                    }
                     None => {
-                        let path = item.path.clone();
-                        subscriptions.push(subscription::channel(
-                            path.clone(),
-                            1,
-                            |mut output| async move {
-                                let (path, thumbnail_res) =
-                                    tokio::task::spawn_blocking(move || {
-                                        let start = std::time::Instant::now();
-                                        let thumbnail_res = match image::io::Reader::open(&path) {
-                                            Ok(reader) => match reader.decode() {
-                                                Ok(image) => {
-                                                    //TODO: configurable thumbnail size
-                                                    let thumbnail = image.thumbnail(64, 64);
-                                                    Ok(thumbnail.to_rgba8())
-                                                }
-                                                Err(err) => {
-                                                    log::warn!(
-                                                        "failed to decode {:?}: {}",
-                                                        path,
-                                                        err
-                                                    );
-                                                    Err(())
-                                                }
-                                            },
-                                            Err(err) => {
-                                                log::warn!("failed to read {:?}: {}", path, err);
-                                                Err(())
-                                            }
-                                        };
-                                        log::info!(
-                                            "thumbnailed {:?} in {:?}",
-                                            path,
-                                            start.elapsed()
-                                        );
-                                        (path, thumbnail_res)
-                                    })
-                                    .await
-                                    .unwrap();
-
-                                match output
-                                    .send(Message::Thumbnail(path.clone(), thumbnail_res))
-                                    .await
-                                {
-                                    Ok(()) => {}
-                                    Err(err) => {
-                                        log::warn!(
-                                            "failed to send thumbnail for {:?}: {}",
-                                            path,
-                                            err
-                                        );
-                                    }
-                                }
-
-                                //TODO: how to properly kill this task?
-                                loop {
-                                    tokio::time::sleep(std::time::Duration::new(1, 0)).await;
-                                }
-                            },
-                        ));
+                        // Skip items with no determined rect (this should include hidden items)
+                        continue;
                     }
                 }
+
+                let path = item.path.clone();
+                subscriptions.push(subscription::channel(
+                    path.clone(),
+                    1,
+                    |mut output| async move {
+                        let (path, thumbnail_res) = tokio::task::spawn_blocking(move || {
+                            let start = std::time::Instant::now();
+                            let thumbnail_res = match image::io::Reader::open(&path) {
+                                Ok(reader) => match reader.decode() {
+                                    Ok(image) => {
+                                        //TODO: configurable thumbnail size
+                                        let thumbnail = image.thumbnail(64, 64);
+                                        Ok(thumbnail.to_rgba8())
+                                    }
+                                    Err(err) => {
+                                        log::warn!("failed to decode {:?}: {}", path, err);
+                                        Err(())
+                                    }
+                                },
+                                Err(err) => {
+                                    log::warn!("failed to read {:?}: {}", path, err);
+                                    Err(())
+                                }
+                            };
+                            log::info!("thumbnailed {:?} in {:?}", path, start.elapsed());
+                            (path, thumbnail_res)
+                        })
+                        .await
+                        .unwrap();
+
+                        match output
+                            .send(Message::Thumbnail(path.clone(), thumbnail_res))
+                            .await
+                        {
+                            Ok(()) => {}
+                            Err(err) => {
+                                log::warn!("failed to send thumbnail for {:?}: {}", path, err);
+                            }
+                        }
+
+                        //TODO: how to properly kill this task?
+                        loop {
+                            tokio::time::sleep(std::time::Duration::new(1, 0)).await;
+                        }
+                    },
+                ));
 
                 if subscriptions.len() >= jobs {
                     break;
