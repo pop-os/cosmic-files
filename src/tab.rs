@@ -9,6 +9,7 @@ use cosmic::{
         //TODO: export in cosmic::widget
         widget::{horizontal_rule, scrollable::Viewport},
         Alignment,
+        Color,
         ContentFit,
         Length,
         Point,
@@ -20,6 +21,7 @@ use cosmic::{
 use mime_guess::MimeGuess;
 use once_cell::sync::Lazy;
 use std::{
+    cell::Cell,
     cmp::Ordering,
     collections::HashMap,
     fmt,
@@ -40,6 +42,8 @@ use crate::{
 };
 
 const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
+const GRID_ITEM_HEIGHT: usize = 116;
+const GRID_ITEM_WIDTH: usize = 96;
 //TODO: adjust for locales?
 const TIME_FORMAT: &'static str = "%a %-d %b %-Y %r";
 static SPECIAL_DIRS: Lazy<HashMap<PathBuf, &'static str>> = Lazy::new(|| {
@@ -73,30 +77,39 @@ static SPECIAL_DIRS: Lazy<HashMap<PathBuf, &'static str>> = Lazy::new(|| {
     }
     special_dirs
 });
-fn button_style(selected: bool) -> theme::Button {
-    //TODO: move to libcosmic
+
+fn button_appearance(
+    theme: &theme::Theme,
+    selected: bool,
+    accent: bool,
+) -> widget::button::Appearance {
+    let cosmic = theme.cosmic();
+    let mut appearance = widget::button::Appearance::new();
+    if selected {
+        if accent {
+            appearance.background = Some(Color::from(cosmic.accent_color()).into());
+            appearance.icon_color = Some(Color::from(cosmic.on_accent_color()));
+            appearance.text_color = Some(Color::from(cosmic.on_accent_color()));
+        } else {
+            appearance.background = Some(Color::from(cosmic.bg_component_color()).into());
+        }
+    }
+    appearance.border_radius = cosmic.radius_s().into();
+    appearance
+}
+
+fn button_style(selected: bool, accent: bool) -> theme::Button {
+    //TODO: move to libcosmic?
     theme::Button::Custom {
         active: Box::new(move |focused, theme| {
-            let mut appearance =
-                widget::button::StyleSheet::active(theme, focused, &theme::Button::MenuItem);
-            if !selected {
-                appearance.background = None;
-            }
-            appearance
+            button_appearance(theme, selected || focused, accent)
         }),
-        disabled: Box::new(move |theme| {
-            let mut appearance =
-                widget::button::StyleSheet::disabled(theme, &theme::Button::MenuItem);
-            if !selected {
-                appearance.background = None;
-            }
-            appearance
-        }),
+        disabled: Box::new(move |theme| button_appearance(theme, selected, accent)),
         hovered: Box::new(move |focused, theme| {
-            widget::button::StyleSheet::hovered(theme, focused, &theme::Button::MenuItem)
+            button_appearance(theme, selected || focused, accent)
         }),
         pressed: Box::new(move |focused, theme| {
-            widget::button::StyleSheet::pressed(theme, focused, &theme::Button::MenuItem)
+            button_appearance(theme, selected || focused, accent)
         }),
     }
 }
@@ -243,6 +256,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                         Some(mime) if mime.type_() == "image" => None,
                         _ => Some(Err(())),
                     },
+                    rect_opt: Cell::new(None),
                     selected: false,
                     click_time: None,
                 });
@@ -323,6 +337,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     icon_handle_grid,
                     icon_handle_list,
                     thumbnail_res_opt: Some(Err(())),
+                    rect_opt: Cell::new(None),
                     selected: false,
                     click_time: None,
                 });
@@ -369,7 +384,7 @@ pub enum Message {
     Config(TabConfig),
     ContextAction(Action),
     ContextMenu(Option<Point>),
-    Drag(Option<Point>),
+    Drag(Option<Rectangle>),
     EditLocation(Option<Location>),
     GoNext,
     GoPrevious,
@@ -380,6 +395,7 @@ pub enum Message {
     Location(Location),
     LocationUp,
     Open,
+    Resize(Size),
     RightClick(usize),
     Scroll(Viewport),
     Thumbnail(PathBuf, Result<image::RgbaImage, ()>),
@@ -422,6 +438,7 @@ pub struct Item {
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
     pub thumbnail_res_opt: Option<Result<image::RgbaImage, ()>>,
+    pub rect_opt: Cell<Option<Rectangle>>,
     pub selected: bool,
     pub click_time: Option<Instant>,
 }
@@ -510,6 +527,7 @@ impl fmt::Debug for Item {
             .field("hidden", &self.hidden)
             .field("path", &self.path)
             // icon_handles
+            .field("rect_opt", &self.rect_opt)
             .field("selected", &self.selected)
             .field("click_time", &self.click_time)
             .finish()
@@ -535,8 +553,8 @@ pub struct Tab {
     pub items_opt: Option<Vec<Item>>,
     pub view: View,
     pub dialog: Option<DialogKind>,
-    pub drag_opt: Option<Point>,
     pub scroll_opt: Option<Viewport>,
+    pub size_opt: Option<Size>,
     pub edit_location: Option<Location>,
     pub edit_location_id: widget::Id,
     pub history_i: usize,
@@ -555,10 +573,10 @@ impl Tab {
             location,
             context_menu: None,
             items_opt: None,
-            view: View::List,
+            view: View::Grid,
             dialog: None,
-            drag_opt: None,
             scroll_opt: None,
+            size_opt: None,
             edit_location: None,
             edit_location_id: widget::Id::unique(),
             history_i: 0,
@@ -587,10 +605,12 @@ impl Tab {
             None => return,
         };
 
-        println!("{:?}", rect);
         for (_i, item) in items.iter_mut().enumerate() {
-            item.selected = false;
-            //TODO
+            //TODO: modifiers
+            item.selected = match item.rect_opt.get() {
+                Some(item_rect) => item_rect.intersects(&rect),
+                None => false,
+            };
         }
     }
 
@@ -661,32 +681,11 @@ impl Tab {
             Message::ContextMenu(point_opt) => {
                 self.context_menu = point_opt;
             }
-            Message::Drag(point_opt) => match point_opt {
-                Some(point) => {
-                    let drag = match self.drag_opt {
-                        Some(some) => some,
-                        None => {
-                            self.drag_opt = Some(point);
-                            point
-                        }
-                    };
-                    let min_x = drag.x.min(point.x);
-                    let max_x = drag.x.max(point.x);
-                    let min_y = drag.y.min(point.y);
-                    let max_y = drag.y.max(point.y);
-                    let offset_y = self
-                        .scroll_opt
-                        .map(|x| x.absolute_offset().y)
-                        .unwrap_or_default();
-                    let rect = Rectangle::new(
-                        Point::new(min_x, min_y + offset_y),
-                        Size::new(max_x - min_x, max_y - min_y),
-                    );
+            Message::Drag(rect_opt) => match rect_opt {
+                Some(rect) => {
                     self.select_by_drag(rect);
                 }
-                None => {
-                    self.drag_opt = None;
-                }
+                None => {}
             },
             Message::EditLocation(edit_location) => {
                 if self.edit_location.is_none() && edit_location.is_some() {
@@ -792,6 +791,9 @@ impl Tab {
                         }
                     }
                 }
+            }
+            Message::Resize(size) => {
+                self.size_opt = Some(size);
             }
             Message::RightClick(click_i) => {
                 if let Some(ref mut items) = self.items_opt {
@@ -1106,62 +1108,121 @@ impl Tab {
     }
 
     pub fn grid_view(&self, core: &Core) -> Element<Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = core.system_theme().cosmic().spacing;
+        let cosmic_theme::Spacing {
+            space_xs,
+            space_xxs,
+            space_xxxs,
+            ..
+        } = core.system_theme().cosmic().spacing;
 
-        //TODO: get from config
-        let item_width = Length::Fixed(96.0);
-        let item_height = Length::Fixed(116.0);
         let TabConfig {
             show_hidden,
             icon_sizes,
         } = self.config;
 
-        let mut children: Vec<Element<_>> = Vec::new();
+        let max_width = match self.size_opt {
+            Some(size) => {
+                // Hack to make room for scroll bar
+                (size.width.floor() as usize)
+                    .checked_sub(space_xs as usize)
+                    .unwrap_or(0)
+            }
+            None => 0,
+        }
+        .max(GRID_ITEM_WIDTH);
+
+        let (cols, column_spacing) = {
+            let width_m1 = max_width.checked_sub(GRID_ITEM_WIDTH).unwrap_or(0);
+            let cols_m1 = width_m1 / (GRID_ITEM_WIDTH + space_xxs as usize);
+            let cols = cols_m1 + 1;
+            let spacing = width_m1
+                .checked_div(cols_m1)
+                .unwrap_or(0)
+                .checked_sub(GRID_ITEM_WIDTH)
+                .unwrap_or(0);
+            (cols, spacing as u16)
+        };
+
+        let mut grid = widget::grid()
+            .column_spacing(column_spacing)
+            .row_spacing(space_xxs)
+            // Hack to make room for scroll bar
+            .padding([0, space_xxs, 0, 0].into());
         if let Some(ref items) = self.items_opt {
             let mut count = 0;
+            let mut col = 0;
+            let mut row = 0;
             let mut hidden = 0;
             for (i, item) in items.iter().enumerate() {
                 if !show_hidden && item.hidden {
+                    item.rect_opt.set(None);
                     hidden += 1;
                     continue;
                 }
+                item.rect_opt.set(Some(Rectangle::new(
+                    Point::new(
+                        (col * (GRID_ITEM_WIDTH + column_spacing as usize)) as f32,
+                        (row * (GRID_ITEM_HEIGHT + space_xxs as usize)) as f32,
+                    ),
+                    Size::new(GRID_ITEM_WIDTH as f32, GRID_ITEM_HEIGHT as f32),
+                )));
 
-                let button = widget::button(
-                    widget::column::with_children(vec![
+                //TODO: one focus group per grid item (needs custom widget)
+                let buttons = vec![
+                    widget::button(
                         widget::icon::icon(item.icon_handle_grid.clone())
                             .content_fit(ContentFit::Contain)
-                            .size(icon_sizes.grid())
-                            .into(),
-                        widget::text(item.name.clone()).into(),
-                    ])
+                            .size(icon_sizes.grid()),
+                    )
+                    .on_press(Message::Click(Some(i)))
+                    .padding(space_xxxs)
+                    .style(button_style(item.selected, false)),
+                    widget::button(widget::text(item.name.clone()))
+                        .on_press(Message::Click(Some(i)))
+                        .padding([0, space_xxs])
+                        .style(button_style(item.selected, true)),
+                ];
+
+                let mut column = widget::column::with_capacity(buttons.len())
                     .align_items(Alignment::Center)
-                    .spacing(space_xxs)
-                    .height(item_height)
-                    .width(item_width),
-                )
-                .padding(0)
-                .style(button_style(item.selected))
-                .on_press(Message::Click(Some(i)));
-                if self.context_menu.is_some() {
-                    children.push(button.into());
-                } else {
-                    children.push(
-                        mouse_area::MouseArea::new(button)
-                            .on_right_press_no_capture(move |_point_opt| Message::RightClick(i))
-                            .into(),
-                    );
+                    .height(Length::Fixed(GRID_ITEM_HEIGHT as f32))
+                    .width(Length::Fixed(GRID_ITEM_WIDTH as f32));
+                for button in buttons {
+                    if self.context_menu.is_some() {
+                        column = column.push(button)
+                    } else {
+                        column = column.push(
+                            mouse_area::MouseArea::new(button).on_right_press_no_capture(
+                                move |_point_opt| Message::RightClick(i),
+                            ),
+                        );
+                    }
                 }
+
+                grid = grid.push(column);
+
                 count += 1;
+                col += 1;
+                if col >= cols {
+                    col = 0;
+                    row += 1;
+                    grid = grid.insert_row();
+                }
             }
 
             if count == 0 {
                 return self.empty_view(hidden > 0, core);
             }
         }
-        widget::scrollable(widget::flex_row(children))
-            .on_scroll(Message::Scroll)
-            .width(Length::Fill)
-            .into()
+        //TODO: allow drag in empty area
+        widget::scrollable(
+            mouse_area::MouseArea::new(grid)
+                .on_drag(Message::Drag)
+                .show_drag_rect(true),
+        )
+        .on_scroll(Message::Scroll)
+        .width(Length::Fill)
+        .into()
     }
 
     pub fn list_view(&self, core: &Core) -> Element<Message> {
@@ -1218,9 +1279,12 @@ impl Tab {
             } = self.config;
             for (i, item) in items.iter().enumerate() {
                 if !show_hidden && item.hidden {
+                    item.rect_opt.set(None);
                     hidden += 1;
                     continue;
                 }
+                //TODO: correct rectangle
+                item.rect_opt.set(None);
 
                 if count > 0 {
                     children.push(horizontal_rule(1).into());
@@ -1272,7 +1336,7 @@ impl Tab {
                     .spacing(space_xxs),
                 )
                 .padding(space_xxs)
-                .style(button_style(item.selected))
+                .style(button_style(item.selected, false))
                 .on_press(Message::Click(Some(i)));
                 if self.context_menu.is_some() {
                     children.push(button.into());
@@ -1309,12 +1373,10 @@ impl Tab {
         };
         let mut mouse_area =
             mouse_area::MouseArea::new(widget::container(item_view).height(Length::Fill))
-                .on_drag(move |point_opt| Message::Drag(point_opt))
                 .on_press(move |_point_opt| Message::Click(None))
-                .on_release(move |_point_opt| Message::Drag(None))
                 .on_back_press(move |_point_opt| Message::GoPrevious)
                 .on_forward_press(move |_point_opt| Message::GoNext)
-                .show_drag_box(true);
+                .on_resize(Message::Resize);
         if self.context_menu.is_some() {
             mouse_area = mouse_area.on_right_press(move |_point_opt| Message::ContextMenu(None));
         } else {

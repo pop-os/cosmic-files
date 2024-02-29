@@ -17,9 +17,10 @@ use cosmic::{
 #[allow(missing_debug_implementations)]
 pub struct MouseArea<'a, Message> {
     content: Element<'a, Message>,
-    on_drag: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
+    on_drag: Option<Box<dyn Fn(Option<Rectangle>) -> Message + 'a>>,
     on_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
+    on_resize: Option<Box<dyn Fn(Size) -> Message + 'a>>,
     on_right_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_right_press_no_capture: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_right_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
@@ -29,13 +30,13 @@ pub struct MouseArea<'a, Message> {
     on_back_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_forward_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_forward_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
-    show_drag_box: bool,
+    show_drag_rect: bool,
 }
 
 impl<'a, Message> MouseArea<'a, Message> {
     /// The message to emit when a drag is initiated.
     #[must_use]
-    pub fn on_drag(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
+    pub fn on_drag(mut self, message: impl Fn(Option<Rectangle>) -> Message + 'a) -> Self {
         self.on_drag = Some(Box::new(message));
         self
     }
@@ -51,6 +52,12 @@ impl<'a, Message> MouseArea<'a, Message> {
     #[must_use]
     pub fn on_release(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
         self.on_release = Some(Box::new(message));
+        self
+    }
+
+    #[must_use]
+    pub fn on_resize(mut self, message: impl Fn(Size) -> Message + 'a) -> Self {
+        self.on_resize = Some(Box::new(message));
         self
     }
 
@@ -121,8 +128,8 @@ impl<'a, Message> MouseArea<'a, Message> {
     }
 
     #[must_use]
-    pub fn show_drag_box(mut self, show_drag_box: bool) -> Self {
-        self.show_drag_box = show_drag_box;
+    pub fn show_drag_rect(mut self, show_drag_rect: bool) -> Self {
+        self.show_drag_rect = show_drag_rect;
         self
     }
 }
@@ -130,8 +137,29 @@ impl<'a, Message> MouseArea<'a, Message> {
 /// Local state of the [`MouseArea`].
 #[derive(Default)]
 struct State {
+    last_size: Option<Size>,
     // TODO: Support on_mouse_enter and on_mouse_exit
     drag_initiated: Option<Point>,
+}
+
+impl State {
+    fn drag_rect(&self, cursor: mouse::Cursor) -> Option<Rectangle> {
+        if let Some(drag_source) = self.drag_initiated {
+            if let Some(position) = cursor.position() {
+                if position.distance(drag_source) > 1.0 {
+                    let min_x = drag_source.x.min(position.x);
+                    let max_x = drag_source.x.max(position.x);
+                    let min_y = drag_source.y.min(position.y);
+                    let max_y = drag_source.y.max(position.y);
+                    return Some(Rectangle::new(
+                        Point::new(min_x, min_y),
+                        Size::new(max_x - min_x, max_y - min_y),
+                    ));
+                }
+            }
+        }
+        None
+    }
 }
 
 impl<'a, Message> MouseArea<'a, Message> {
@@ -142,6 +170,7 @@ impl<'a, Message> MouseArea<'a, Message> {
             on_drag: None,
             on_press: None,
             on_release: None,
+            on_resize: None,
             on_right_press: None,
             on_right_press_no_capture: None,
             on_right_release: None,
@@ -151,7 +180,7 @@ impl<'a, Message> MouseArea<'a, Message> {
             on_back_release: None,
             on_forward_press: None,
             on_forward_release: None,
-            show_drag_box: false,
+            show_drag_rect: false,
         }
     }
 }
@@ -274,35 +303,25 @@ where
             viewport,
         );
 
-        if self.show_drag_box {
+        if self.show_drag_rect {
             let state = tree.state.downcast_ref::<State>();
-            if let Some(a) = state.drag_initiated {
-                if let Some(b) = cursor.position() {
-                    let min_x = a.x.min(b.x);
-                    let max_x = a.x.max(b.x);
-                    let min_y = a.y.min(b.y);
-                    let max_y = a.y.max(b.y);
-                    let bounds = Rectangle::new(
-                        Point::new(min_x, min_y),
-                        Size::new(max_x - min_x, max_y - min_y),
-                    );
-                    let cosmic = theme.cosmic();
-                    let mut bg_color = cosmic.accent_color();
-                    //TODO: get correct alpha
-                    bg_color.alpha = 0.2;
-                    renderer.fill_quad(
-                        Quad {
-                            bounds,
-                            border: Border {
-                                color: cosmic.accent_color().into(),
-                                width: 1.0,
-                                radius: cosmic.radius_xs().into(),
-                            },
-                            ..Default::default()
+            if let Some(bounds) = state.drag_rect(cursor) {
+                let cosmic = theme.cosmic();
+                let mut bg_color = cosmic.accent_color();
+                //TODO: get correct alpha
+                bg_color.alpha = 0.2;
+                renderer.fill_quad(
+                    Quad {
+                        bounds,
+                        border: Border {
+                            color: cosmic.accent_color().into(),
+                            width: 1.0,
+                            radius: cosmic.radius_xs().into(),
                         },
-                        Color::from(bg_color),
-                    );
-                }
+                        ..Default::default()
+                    },
+                    Color::from(bg_color),
+                );
             }
         }
     }
@@ -340,7 +359,17 @@ fn update<Message: Clone>(
     shell: &mut Shell<'_, Message>,
     state: &mut State,
 ) -> event::Status {
-    if state.drag_initiated.is_none() && !cursor.is_over(layout.bounds()) {
+    let layout_bounds = layout.bounds();
+
+    if let Some(message) = widget.on_resize.as_ref() {
+        let size = layout_bounds.size();
+        if state.last_size != Some(size) {
+            shell.publish(message(size));
+            state.last_size = Some(size);
+        }
+    }
+
+    if state.drag_initiated.is_none() && !cursor.is_over(layout_bounds) {
         return event::Status::Ignored;
     }
 
@@ -349,7 +378,7 @@ fn update<Message: Clone>(
     {
         state.drag_initiated = cursor.position();
         if let Some(message) = widget.on_press.as_ref() {
-            shell.publish(message(cursor.position_in(layout.bounds())));
+            shell.publish(message(cursor.position_in(layout_bounds)));
 
             return event::Status::Captured;
         }
@@ -360,7 +389,7 @@ fn update<Message: Clone>(
     {
         state.drag_initiated = None;
         if let Some(message) = widget.on_release.as_ref() {
-            shell.publish(message(cursor.position_in(layout.bounds())));
+            shell.publish(message(cursor.position_in(layout_bounds)));
 
             return event::Status::Captured;
         }
@@ -368,7 +397,7 @@ fn update<Message: Clone>(
 
     if let Some(message) = widget.on_right_press.as_ref() {
         if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)) = event {
-            shell.publish(message(cursor.position_in(layout.bounds())));
+            shell.publish(message(cursor.position_in(layout_bounds)));
 
             return event::Status::Captured;
         }
@@ -376,7 +405,7 @@ fn update<Message: Clone>(
 
     if let Some(message) = widget.on_right_press_no_capture.as_ref() {
         if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)) = event {
-            shell.publish(message(cursor.position_in(layout.bounds())));
+            shell.publish(message(cursor.position_in(layout_bounds)));
 
             return event::Status::Ignored;
         }
@@ -384,7 +413,7 @@ fn update<Message: Clone>(
 
     if let Some(message) = widget.on_right_release.as_ref() {
         if let Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Right)) = event {
-            shell.publish(message(cursor.position_in(layout.bounds())));
+            shell.publish(message(cursor.position_in(layout_bounds)));
 
             return event::Status::Captured;
         }
@@ -392,7 +421,7 @@ fn update<Message: Clone>(
 
     if let Some(message) = widget.on_middle_press.as_ref() {
         if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Middle)) = event {
-            shell.publish(message(cursor.position_in(layout.bounds())));
+            shell.publish(message(cursor.position_in(layout_bounds)));
 
             return event::Status::Captured;
         }
@@ -400,7 +429,7 @@ fn update<Message: Clone>(
 
     if let Some(message) = widget.on_middle_release.as_ref() {
         if let Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Middle)) = event {
-            shell.publish(message(cursor.position_in(layout.bounds())));
+            shell.publish(message(cursor.position_in(layout_bounds)));
 
             return event::Status::Captured;
         }
@@ -408,7 +437,7 @@ fn update<Message: Clone>(
 
     if let Some(message) = widget.on_back_press.as_ref() {
         if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Back)) = event {
-            shell.publish(message(cursor.position_in(layout.bounds())));
+            shell.publish(message(cursor.position_in(layout_bounds)));
 
             return event::Status::Captured;
         }
@@ -416,7 +445,7 @@ fn update<Message: Clone>(
 
     if let Some(message) = widget.on_back_release.as_ref() {
         if let Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Back)) = event {
-            shell.publish(message(cursor.position_in(layout.bounds())));
+            shell.publish(message(cursor.position_in(layout_bounds)));
 
             return event::Status::Captured;
         }
@@ -424,7 +453,7 @@ fn update<Message: Clone>(
 
     if let Some(message) = widget.on_forward_press.as_ref() {
         if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Forward)) = event {
-            shell.publish(message(cursor.position_in(layout.bounds())));
+            shell.publish(message(cursor.position_in(layout_bounds)));
 
             return event::Status::Captured;
         }
@@ -432,20 +461,20 @@ fn update<Message: Clone>(
 
     if let Some(message) = widget.on_forward_release.as_ref() {
         if let Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Forward)) = event {
-            shell.publish(message(cursor.position_in(layout.bounds())));
+            shell.publish(message(cursor.position_in(layout_bounds)));
 
             return event::Status::Captured;
         }
     }
 
-    if let Some((message, drag_source)) = widget.on_drag.as_ref().zip(state.drag_initiated) {
-        if let Some(position) = cursor.position() {
-            if position.distance(drag_source) > 1.0 {
-                shell.publish(message(cursor.position_in(layout.bounds())));
-
-                return event::Status::Captured;
-            }
-        }
+    if let Some((message, drag_rect)) = widget.on_drag.as_ref().zip(state.drag_rect(cursor)) {
+        shell.publish(message(drag_rect.intersection(&layout_bounds).map(
+            |mut rect| {
+                rect.x -= layout_bounds.x;
+                rect.y -= layout_bounds.y;
+                rect
+            },
+        )));
     }
 
     event::Status::Ignored
