@@ -255,6 +255,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                         Some(mime) if mime.type_() == "image" => None,
                         _ => Some(Err(())),
                     },
+                    pos_opt: Cell::new(None),
                     rect_opt: Cell::new(None),
                     selected: false,
                     click_time: None,
@@ -336,6 +337,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     icon_handle_grid,
                     icon_handle_list,
                     thumbnail_res_opt: Some(Err(())),
+                    pos_opt: Cell::new(None),
                     rect_opt: Cell::new(None),
                     selected: false,
                     click_time: None,
@@ -437,6 +439,7 @@ pub struct Item {
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
     pub thumbnail_res_opt: Option<Result<image::RgbaImage, ()>>,
+    pub pos_opt: Cell<Option<(usize, usize)>>,
     pub rect_opt: Cell<Option<Rectangle>>,
     pub selected: bool,
     pub click_time: Option<Instant>,
@@ -613,10 +616,87 @@ impl Tab {
         }
     }
 
+    fn selection_first(&self) -> Option<(usize, usize)> {
+        let items = self.items_opt.as_ref()?;
+        let mut first = None;
+        for item in items.iter() {
+            if !item.selected {
+                continue;
+            }
+
+            let (row, col) = match item.pos_opt.get() {
+                Some(some) => some,
+                None => continue,
+            };
+
+            first = Some(match first {
+                Some((first_row, first_col)) => {
+                    if row < first_row {
+                        (row, col)
+                    } else if row == first_row {
+                        (row, col.min(first_row))
+                    } else {
+                        (first_row, first_col)
+                    }
+                }
+                None => (row, col),
+            });
+        }
+        first
+    }
+
+    fn selection_last(&self) -> Option<(usize, usize)> {
+        let items = self.items_opt.as_ref()?;
+        let mut last = None;
+        for item in items.iter() {
+            if !item.selected {
+                continue;
+            }
+
+            let (row, col) = match item.pos_opt.get() {
+                Some(some) => some,
+                None => continue,
+            };
+
+            last = Some(match last {
+                Some((last_row, last_col)) => {
+                    if row > last_row {
+                        (row, col)
+                    } else if row == last_row {
+                        (row, col.max(last_row))
+                    } else {
+                        (last_row, last_col)
+                    }
+                }
+                None => (row, col),
+            });
+        }
+        last
+    }
+
+    fn select_position(&mut self, row: usize, col: usize, mod_shift: bool) -> bool {
+        let mut found = false;
+        if let Some(ref mut items) = self.items_opt {
+            for item in items.iter_mut() {
+                if item.pos_opt.get() == Some((row, col)) {
+                    item.selected = true;
+                    found = true;
+                } else if !mod_shift {
+                    item.selected = false;
+                }
+            }
+        }
+        found
+    }
+
     pub fn update(&mut self, message: Message, modifiers: Modifiers) -> Vec<Command> {
         let mut commands = Vec::new();
         let mut cd = None;
         let mut history_i_opt = None;
+        let mod_ctrl = modifiers.contains(Modifiers::CTRL)
+            && self.dialog.as_ref().map_or(true, |x| x.multiple());
+        let mod_shift = modifiers.contains(Modifiers::SHIFT)
+            && self.dialog.as_ref().map_or(true, |x| x.multiple());
         match message {
             Message::Click(click_i_opt) => {
                 if let Some(ref mut items) = self.items_opt {
@@ -655,9 +735,7 @@ impl Tab {
                             }
                             //TODO: prevent triple-click and beyond from opening file?
                             item.click_time = Some(Instant::now());
-                        } else if modifiers.contains(Modifiers::CTRL)
-                            && self.dialog.as_ref().map_or(true, |x| x.multiple())
-                        {
+                        } else if mod_ctrl {
                             // Holding control allows multiple selection
                             item.click_time = None;
                         } else {
@@ -708,54 +786,79 @@ impl Tab {
                     }
                 }
             }
-            Message::ItemDown | Message::ItemLeft => {
-                //TODO: handle grid correctly
-                //TODO: do not wrap
-                if let Some(ref mut items) = self.items_opt {
-                    let mut last_selected_opt = None;
-                    for (i, item) in items.iter_mut().enumerate() {
-                        if item.selected {
-                            if !modifiers.contains(Modifiers::SHIFT) {
-                                item.selected = false;
-                            }
-                            last_selected_opt = Some(i);
-                        }
+            Message::ItemDown => {
+                if let Some((row, col)) = self.selection_last() {
+                    //TODO: Shift modifier should select items in between
+                    // Try to select item in next row
+                    if !self.select_position(row + 1, col, mod_shift) {
+                        // Ensure current item is still selected if there are no other items
+                        self.select_position(row, col, mod_shift);
                     }
-                    for (i, item) in items.iter_mut().enumerate() {
-                        if !self.config.show_hidden && item.hidden {
-                            continue;
-                        }
-
-                        if last_selected_opt.map_or(true, |last_selected| i > last_selected) {
-                            item.selected = true;
-                            break;
-                        }
-                    }
+                } else {
+                    // Select first item
+                    self.select_position(0, 0, mod_shift);
                 }
             }
-            Message::ItemUp | Message::ItemRight => {
-                //TODO: handle grid correctly
-                //TODO: do not wrap
-                if let Some(ref mut items) = self.items_opt {
-                    let mut last_selected_opt = None;
-                    for (i, item) in items.iter_mut().enumerate().rev() {
-                        if item.selected {
-                            if !modifiers.contains(Modifiers::SHIFT) {
-                                item.selected = false;
+            Message::ItemLeft => {
+                if let Some((row, col)) = self.selection_first() {
+                    // Try to select previous item in current row
+                    if !col
+                        .checked_sub(1)
+                        .map_or(false, |col| self.select_position(row, col, mod_shift))
+                    {
+                        // Try to select last item in previous row
+                        if !row.checked_sub(1).map_or(false, |row| {
+                            let mut col = 0;
+                            if let Some(ref items) = self.items_opt {
+                                for item in items.iter() {
+                                    match item.pos_opt.get() {
+                                        Some((item_row, item_col)) if item_row == row => {
+                                            col = col.max(item_col);
+                                        }
+                                        _ => continue,
+                                    }
+                                }
                             }
-                            last_selected_opt = Some(i);
+                            self.select_position(row, col, mod_shift)
+                        }) {
+                            // Ensure current item is still selected if there are no other items
+                            self.select_position(row, col, mod_shift);
                         }
                     }
-                    for (i, item) in items.iter_mut().enumerate().rev() {
-                        if !self.config.show_hidden && item.hidden {
-                            continue;
-                        }
-
-                        if last_selected_opt.map_or(true, |last_selected| i < last_selected) {
-                            item.selected = true;
-                            break;
+                } else {
+                    // Select first item
+                    self.select_position(0, 0, mod_shift);
+                }
+            }
+            Message::ItemRight => {
+                if let Some((row, col)) = self.selection_last() {
+                    // Try to select next item in current row
+                    if !self.select_position(row, col + 1, mod_shift) {
+                        // Try to select first item in next row
+                        if !self.select_position(row + 1, 0, mod_shift) {
+                            // Ensure current item is still selected if there are no other items
+                            self.select_position(row, col, mod_shift);
                         }
                     }
+                } else {
+                    // Select first item
+                    self.select_position(0, 0, mod_shift);
+                }
+            }
+            Message::ItemUp => {
+                if let Some((row, col)) = self.selection_first() {
+                    //TODO: Shift modifier should select items in between
+                    // Try to select item in last row
+                    if !row
+                        .checked_sub(1)
+                        .map_or(false, |row| self.select_position(row, col, mod_shift))
+                    {
+                        // Ensure current item is still selected if there are no other items
+                        self.select_position(row, col, mod_shift);
+                    }
+                } else {
+                    // Select first item
+                    self.select_position(0, 0, mod_shift);
                 }
             }
             Message::Location(location) => {
@@ -801,9 +904,7 @@ impl Tab {
                         for (i, item) in items.iter_mut().enumerate() {
                             if i == click_i {
                                 item.selected = true;
-                            } else if modifiers.contains(Modifiers::CTRL)
-                                && self.dialog.as_ref().map_or(true, |x| x.multiple())
-                            {
+                            } else if mod_ctrl {
                                 // Holding control allows multiple selection
                             } else {
                                 item.selected = false;
@@ -1157,10 +1258,12 @@ impl Tab {
             let mut hidden = 0;
             for (i, item) in items.iter().enumerate() {
                 if !show_hidden && item.hidden {
+                    item.pos_opt.set(None);
                     item.rect_opt.set(None);
                     hidden += 1;
                     continue;
                 }
+                item.pos_opt.set(Some((row, col)));
                 item.rect_opt.set(Some(Rectangle::new(
                     Point::new(
                         (col * (GRID_ITEM_WIDTH + column_spacing as usize)) as f32,
@@ -1308,10 +1411,12 @@ impl Tab {
             } = self.config;
             for (i, item) in items.iter().enumerate() {
                 if !show_hidden && item.hidden {
+                    item.pos_opt.set(None);
                     item.rect_opt.set(None);
                     hidden += 1;
                     continue;
                 }
+                item.pos_opt.set(Some((count, 0)));
                 item.rect_opt.set(Some(Rectangle::new(
                     Point::new(0.0, y as f32),
                     Size::new(size.width, row_height as f32),
