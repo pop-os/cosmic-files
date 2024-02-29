@@ -446,15 +446,11 @@ impl Application for App {
                 }
             }
             Message::Filename(new_filename) => {
-                if let DialogKind::SaveFile { filename } = &mut self.flags.kind {
-                    *filename = new_filename.clone();
-                }
-
                 // Select based on filename
-                if let Some(items) = self.tab.items_opt_mut() {
-                    for item in items.iter_mut() {
-                        item.selected = item.name == new_filename;
-                    }
+                self.tab.select_by_name(&new_filename);
+
+                if let DialogKind::SaveFile { filename } = &mut self.flags.kind {
+                    *filename = new_filename;
                 }
             }
             Message::Modifiers(modifiers) => {

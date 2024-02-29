@@ -605,10 +605,6 @@ impl Tab {
         self.items_opt.as_ref()
     }
 
-    pub fn items_opt_mut(&mut self) -> Option<&mut Vec<Item>> {
-        self.items_opt.as_mut()
-    }
-
     pub fn set_items(&mut self, items: Vec<Item>) {
         self.items_opt = Some(items);
     }
@@ -639,7 +635,7 @@ impl Tab {
         had_selection
     }
 
-    fn select_by_drag(&mut self, rect: Rectangle) {
+    pub fn select_by_drag(&mut self, rect: Rectangle) {
         let items = match &mut self.items_opt {
             Some(some) => some,
             None => return,
@@ -651,6 +647,14 @@ impl Tab {
                 Some(item_rect) => item_rect.intersects(&rect),
                 None => false,
             };
+        }
+    }
+
+    pub fn select_by_name(&mut self, name: &str) {
+        if let Some(ref mut items) = self.items_opt {
+            for item in items.iter_mut() {
+                item.selected = item.name == name;
+            }
         }
     }
 
