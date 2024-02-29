@@ -80,6 +80,7 @@ static SPECIAL_DIRS: Lazy<HashMap<PathBuf, &'static str>> = Lazy::new(|| {
 fn button_appearance(
     theme: &theme::Theme,
     selected: bool,
+    focused: bool,
     accent: bool,
 ) -> widget::button::Appearance {
     let cosmic = theme.cosmic();
@@ -93,6 +94,12 @@ fn button_appearance(
             appearance.background = Some(Color::from(cosmic.bg_component_color()).into());
         }
     }
+    if focused && accent {
+        appearance.outline_width = 1.0;
+        appearance.outline_color = Color::from(cosmic.accent_color());
+        appearance.border_width = 2.0;
+        appearance.border_color = Color::TRANSPARENT;
+    }
     appearance.border_radius = cosmic.radius_s().into();
     appearance
 }
@@ -100,15 +107,13 @@ fn button_appearance(
 fn button_style(selected: bool, accent: bool) -> theme::Button {
     //TODO: move to libcosmic?
     theme::Button::Custom {
-        active: Box::new(move |focused, theme| {
-            button_appearance(theme, selected || focused, accent)
-        }),
-        disabled: Box::new(move |theme| button_appearance(theme, selected, accent)),
+        active: Box::new(move |focused, theme| button_appearance(theme, selected, focused, accent)),
+        disabled: Box::new(move |theme| button_appearance(theme, selected, false, accent)),
         hovered: Box::new(move |focused, theme| {
-            button_appearance(theme, selected || focused, accent)
+            button_appearance(theme, selected, focused, accent)
         }),
         pressed: Box::new(move |focused, theme| {
-            button_appearance(theme, selected || focused, accent)
+            button_appearance(theme, selected, focused, accent)
         }),
     }
 }
