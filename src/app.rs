@@ -9,6 +9,7 @@ use cosmic::{
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers},
         subscription::{self, Subscription},
+        widget::scrollable,
         window, Alignment, Event, Length,
     },
     style, theme,
@@ -1064,6 +1065,9 @@ impl Application for App {
                                     log::warn!("failed to open {:?}: {}", item_path, err);
                                 }
                             }
+                        }
+                        tab::Command::Scroll(id, offset) => {
+                            commands.push(scrollable::scroll_to(id, offset));
                         }
                     }
                 }

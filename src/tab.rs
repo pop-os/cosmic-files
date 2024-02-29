@@ -6,7 +6,10 @@ use cosmic::{
         keyboard::Modifiers,
         subscription::{self, Subscription},
         //TODO: export in cosmic::widget
-        widget::{horizontal_rule, scrollable::Viewport},
+        widget::{
+            horizontal_rule,
+            scrollable::{AbsoluteOffset, Viewport},
+        },
         Alignment,
         Color,
         ContentFit,
@@ -385,6 +388,7 @@ pub enum Command {
     FocusButton(widget::Id),
     FocusTextInput(widget::Id),
     OpenFile(PathBuf),
+    Scroll(widget::Id, AbsoluteOffset),
 }
 
 #[derive(Clone, Debug)]
@@ -568,7 +572,7 @@ pub struct Tab {
     pub context_menu: Option<Point>,
     pub view: View,
     pub dialog: Option<DialogKind>,
-    pub scroll_opt: Option<Viewport>,
+    pub scroll_opt: Option<AbsoluteOffset>,
     pub size_opt: Option<Size>,
     pub edit_location: Option<Location>,
     pub edit_location_id: widget::Id,
@@ -576,6 +580,7 @@ pub struct Tab {
     pub history: Vec<Location>,
     pub config: TabConfig,
     items_opt: Option<Vec<Item>>,
+    scrollable_id: widget::Id,
     select_focus: Option<usize>,
     select_shift: Option<usize>,
     sort_name: HeadingOptions,
@@ -600,6 +605,7 @@ impl Tab {
             history,
             config,
             items_opt: None,
+            scrollable_id: widget::Id::unique(),
             select_focus: None,
             select_shift: None,
             sort_name,
@@ -742,6 +748,38 @@ impl Tab {
         item.pos_opt.get()
     }
 
+    fn select_focus_scroll(&mut self) -> Option<AbsoluteOffset> {
+        let items = self.items_opt.as_ref()?;
+        let item = items.get(self.select_focus?)?;
+        let rect = item.rect_opt.get()?;
+
+        //TODO: move to function
+        let visible_rect = {
+            let point = match self.scroll_opt {
+                Some(offset) => Point::new(0.0, offset.y),
+                None => Point::new(0.0, 0.0),
+            };
+            let size = self.size_opt.unwrap_or_else(|| Size::new(0.0, 0.0));
+            Rectangle::new(point, size)
+        };
+
+        if rect.y < visible_rect.y {
+            // Scroll up to rect
+            self.scroll_opt = Some(AbsoluteOffset { x: 0.0, y: rect.y });
+            self.scroll_opt
+        } else if (rect.y + rect.height) > (visible_rect.y + visible_rect.height) {
+            // Scroll down to rect
+            self.scroll_opt = Some(AbsoluteOffset {
+                x: 0.0,
+                y: rect.y + rect.height - visible_rect.height,
+            });
+            self.scroll_opt
+        } else {
+            // Do not scroll
+            None
+        }
+    }
+
     fn select_shift_pos_opt(&self) -> Option<(usize, usize)> {
         let items = self.items_opt.as_ref()?;
         let item = items.get(self.select_shift?)?;
@@ -856,7 +894,11 @@ impl Tab {
                     }
                 } else {
                     // Select first item
+                    //TODO: select first in scroll
                     self.select_position(0, 0, mod_shift);
+                }
+                if let Some(offset) = self.select_focus_scroll() {
+                    commands.push(Command::Scroll(self.scrollable_id.clone(), offset));
                 }
                 if let Some(id) = self.select_focus_id() {
                     commands.push(Command::FocusButton(id));
@@ -890,7 +932,11 @@ impl Tab {
                     }
                 } else {
                     // Select first item
+                    //TODO: select first in scroll
                     self.select_position(0, 0, mod_shift);
+                }
+                if let Some(offset) = self.select_focus_scroll() {
+                    commands.push(Command::Scroll(self.scrollable_id.clone(), offset));
                 }
                 if let Some(id) = self.select_focus_id() {
                     commands.push(Command::FocusButton(id));
@@ -908,7 +954,11 @@ impl Tab {
                     }
                 } else {
                     // Select first item
+                    //TODO: select first in scroll
                     self.select_position(0, 0, mod_shift);
+                }
+                if let Some(offset) = self.select_focus_scroll() {
+                    commands.push(Command::Scroll(self.scrollable_id.clone(), offset));
                 }
                 if let Some(id) = self.select_focus_id() {
                     commands.push(Command::FocusButton(id));
@@ -927,7 +977,11 @@ impl Tab {
                     }
                 } else {
                     // Select first item
+                    //TODO: select first in scroll
                     self.select_position(0, 0, mod_shift);
+                }
+                if let Some(offset) = self.select_focus_scroll() {
+                    commands.push(Command::Scroll(self.scrollable_id.clone(), offset));
                 }
                 if let Some(id) = self.select_focus_id() {
                     commands.push(Command::FocusButton(id));
@@ -987,7 +1041,7 @@ impl Tab {
                 }
             }
             Message::Scroll(viewport) => {
-                self.scroll_opt = Some(viewport);
+                self.scroll_opt = Some(viewport.absolute_offset());
             }
             Message::Thumbnail(path, thumbnail_res) => {
                 if let Some(ref mut items) = self.items_opt {
@@ -1418,6 +1472,7 @@ impl Tab {
                 .on_drag(Message::Drag)
                 .show_drag_rect(true),
         )
+        .id(self.scrollable_id.clone())
         .on_scroll(Message::Scroll)
         .width(Length::Fill)
         .into()
@@ -1569,6 +1624,7 @@ impl Tab {
         }
 
         widget::scrollable(widget::column::with_children(children).padding([0, space_m]))
+            .id(self.scrollable_id.clone())
             .on_scroll(Message::Scroll)
             .width(Length::Fill)
             .into()
@@ -1613,9 +1669,10 @@ impl Tab {
             let jobs = 8;
             let mut subscriptions = Vec::with_capacity(jobs);
 
+            //TODO: move to function
             let visible_rect = {
                 let point = match self.scroll_opt {
-                    Some(viewport) => Point::new(0.0, viewport.absolute_offset().y),
+                    Some(offset) => Point::new(0.0, offset.y),
                     None => Point::new(0.0, 0.0),
                 };
                 let size = self.size_opt.unwrap_or_else(|| Size::new(0.0, 0.0));

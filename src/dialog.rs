@@ -10,6 +10,7 @@ use cosmic::{
         keyboard::{Event as KeyEvent, Modifiers},
         multi_window::Application as IcedApplication,
         subscription::{self, Subscription},
+        widget::scrollable,
         window, Event, Length, Size,
     },
     theme,
@@ -591,6 +592,9 @@ impl Application for App {
                             } else {
                                 commands.push(self.update(Message::Open));
                             }
+                        }
+                        tab::Command::Scroll(id, offset) => {
+                            commands.push(scrollable::scroll_to(id, offset));
                         }
                     }
                 }
