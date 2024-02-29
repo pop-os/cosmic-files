@@ -562,6 +562,8 @@ pub struct Tab {
     pub history: Vec<Location>,
     pub config: TabConfig,
     items_opt: Option<Vec<Item>>,
+    select_focus: Option<usize>,
+    select_shift: Option<usize>,
     sort_name: HeadingOptions,
     sort_direction: bool,
 }
@@ -584,6 +586,8 @@ impl Tab {
             history,
             config,
             items_opt: None,
+            select_focus: None,
+            select_shift: None,
             sort_name,
             sort_direction,
         }
@@ -607,9 +611,11 @@ impl Tab {
 
     pub fn set_items(&mut self, items: Vec<Item>) {
         self.items_opt = Some(items);
+        self.select_focus = None;
     }
 
     pub fn select_all(&mut self) {
+        self.select_focus = None;
         if let Some(ref mut items) = self.items_opt {
             for item in items.iter_mut() {
                 if !self.config.show_hidden && item.hidden {
@@ -623,6 +629,7 @@ impl Tab {
     }
 
     pub fn select_none(&mut self) -> bool {
+        self.select_focus = None;
         let mut had_selection = false;
         if let Some(ref mut items) = self.items_opt {
             for item in items.iter_mut() {
@@ -635,100 +642,90 @@ impl Tab {
         had_selection
     }
 
-    pub fn select_by_drag(&mut self, rect: Rectangle) {
-        let items = match &mut self.items_opt {
-            Some(some) => some,
-            None => return,
-        };
-
-        for (_i, item) in items.iter_mut().enumerate() {
-            //TODO: modifiers
-            item.selected = match item.rect_opt.get() {
-                Some(item_rect) => item_rect.intersects(&rect),
-                None => false,
-            };
-        }
-    }
-
-    pub fn select_by_name(&mut self, name: &str) {
+    pub fn select_name(&mut self, name: &str) {
+        self.select_focus = None;
         if let Some(ref mut items) = self.items_opt {
-            for item in items.iter_mut() {
-                item.selected = item.name == name;
-            }
-        }
-    }
-
-    fn selection_first(&self) -> Option<(usize, usize)> {
-        let items = self.items_opt.as_ref()?;
-        let mut first = None;
-        for item in items.iter() {
-            if !item.selected {
-                continue;
-            }
-
-            let (row, col) = match item.pos_opt.get() {
-                Some(some) => some,
-                None => continue,
-            };
-
-            first = Some(match first {
-                Some((first_row, first_col)) => {
-                    if row < first_row {
-                        (row, col)
-                    } else if row == first_row {
-                        (row, col.min(first_row))
-                    } else {
-                        (first_row, first_col)
-                    }
-                }
-                None => (row, col),
-            });
-        }
-        first
-    }
-
-    fn selection_last(&self) -> Option<(usize, usize)> {
-        let items = self.items_opt.as_ref()?;
-        let mut last = None;
-        for item in items.iter() {
-            if !item.selected {
-                continue;
-            }
-
-            let (row, col) = match item.pos_opt.get() {
-                Some(some) => some,
-                None => continue,
-            };
-
-            last = Some(match last {
-                Some((last_row, last_col)) => {
-                    if row > last_row {
-                        (row, col)
-                    } else if row == last_row {
-                        (row, col.max(last_row))
-                    } else {
-                        (last_row, last_col)
-                    }
-                }
-                None => (row, col),
-            });
-        }
-        last
-    }
-
-    fn select_position(&mut self, row: usize, col: usize, mod_shift: bool) -> bool {
-        let mut found = false;
-        if let Some(ref mut items) = self.items_opt {
-            for item in items.iter_mut() {
-                if item.pos_opt.get() == Some((row, col)) {
+            for (i, item) in items.iter_mut().enumerate() {
+                if item.name == name {
+                    self.select_focus = Some(i);
                     item.selected = true;
-                    found = true;
-                } else if !mod_shift {
+                } else {
                     item.selected = false;
                 }
             }
         }
+    }
+
+    fn select_position(&mut self, row: usize, col: usize, mod_shift: bool) -> bool {
+        let mut start = (row, col);
+        let mut end = (row, col);
+        if mod_shift {
+            if self.select_focus.is_none() || self.select_shift.is_none() {
+                // Set select shift to initial state if necessary
+                self.select_shift = self.select_focus;
+            }
+            if let Some(pos) = self.select_shift_pos_opt() {
+                if pos.0 < row || (pos.0 == row && pos.1 < col) {
+                    start = pos;
+                } else {
+                    end = pos;
+                }
+            }
+        } else {
+            // Clear select shift if the modifier is not set
+            self.select_shift = None;
+        };
+
+        let mut found = false;
+        if let Some(ref mut items) = self.items_opt {
+            for (i, item) in items.iter_mut().enumerate() {
+                item.selected = false;
+                let pos = match item.pos_opt.get() {
+                    Some(some) => some,
+                    None => continue,
+                };
+                if pos.0 < start.0 || (pos.0 == start.0 && pos.1 < start.1) {
+                    // Before start
+                    continue;
+                }
+                if pos.0 > end.0 || (pos.0 == end.0 && pos.1 > end.1) {
+                    // After end
+                    continue;
+                }
+                if pos == (row, col) {
+                    // Update focus if this is what we wanted to select
+                    self.select_focus = Some(i);
+                }
+                item.selected = true;
+                found = true;
+            }
+        }
         found
+    }
+
+    pub fn select_rect(&mut self, rect: Rectangle) {
+        self.select_focus = None;
+        if let Some(ref mut items) = self.items_opt {
+            for (_i, item) in items.iter_mut().enumerate() {
+                //TODO: modifiers
+                item.selected = match item.rect_opt.get() {
+                    Some(item_rect) => item_rect.intersects(&rect),
+                    None => false,
+                };
+            }
+        }
+    }
+
+    fn select_focus_pos_opt(&self) -> Option<(usize, usize)> {
+        let items = self.items_opt.as_ref()?;
+        let item = items.get(self.select_focus?)?;
+        item.pos_opt.get()
+    }
+
+    fn select_shift_pos_opt(&self) -> Option<(usize, usize)> {
+        let items = self.items_opt.as_ref()?;
+        let item = items.get(self.select_shift?)?;
+        item.pos_opt.get()
     }
 
     pub fn update(&mut self, message: Message, modifiers: Modifiers) -> Vec<Command> {
@@ -741,6 +738,7 @@ impl Tab {
             && self.dialog.as_ref().map_or(true, |x| x.multiple());
         match message {
             Message::Click(click_i_opt) => {
+                self.select_focus = None;
                 if let Some(ref mut items) = self.items_opt {
                     for (i, item) in items.iter_mut().enumerate() {
                         if Some(i) == click_i_opt {
@@ -756,7 +754,7 @@ impl Tab {
                                     }
                                 }
                             }
-
+                            self.select_focus = Some(i);
                             item.selected = true;
                             if let Some(click_time) = item.click_time {
                                 if click_time.elapsed() < DOUBLE_CLICK_DURATION {
@@ -802,7 +800,7 @@ impl Tab {
             }
             Message::Drag(rect_opt) => match rect_opt {
                 Some(rect) => {
-                    self.select_by_drag(rect);
+                    self.select_rect(rect);
                 }
                 None => {}
             },
@@ -829,7 +827,7 @@ impl Tab {
                 }
             }
             Message::ItemDown => {
-                if let Some((row, col)) = self.selection_last() {
+                if let Some((row, col)) = self.select_focus_pos_opt() {
                     //TODO: Shift modifier should select items in between
                     // Try to select item in next row
                     if !self.select_position(row + 1, col, mod_shift) {
@@ -842,7 +840,7 @@ impl Tab {
                 }
             }
             Message::ItemLeft => {
-                if let Some((row, col)) = self.selection_first() {
+                if let Some((row, col)) = self.select_focus_pos_opt() {
                     // Try to select previous item in current row
                     if !col
                         .checked_sub(1)
@@ -873,7 +871,7 @@ impl Tab {
                 }
             }
             Message::ItemRight => {
-                if let Some((row, col)) = self.selection_last() {
+                if let Some((row, col)) = self.select_focus_pos_opt() {
                     // Try to select next item in current row
                     if !self.select_position(row, col + 1, mod_shift) {
                         // Try to select first item in next row
@@ -888,7 +886,7 @@ impl Tab {
                 }
             }
             Message::ItemUp => {
-                if let Some((row, col)) = self.selection_first() {
+                if let Some((row, col)) = self.select_focus_pos_opt() {
                     //TODO: Shift modifier should select items in between
                     // Try to select item in last row
                     if !row
@@ -998,6 +996,7 @@ impl Tab {
             if location != self.location {
                 self.location = location.clone();
                 self.items_opt = None;
+                self.select_focus = None;
                 self.edit_location = None;
                 if let Some(history_i) = history_i_opt {
                     // Navigating in history

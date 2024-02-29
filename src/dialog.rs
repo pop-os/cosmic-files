@@ -447,7 +447,7 @@ impl Application for App {
             }
             Message::Filename(new_filename) => {
                 // Select based on filename
-                self.tab.select_by_name(&new_filename);
+                self.tab.select_name(&new_filename);
 
                 if let DialogKind::SaveFile { filename } = &mut self.flags.kind {
                     *filename = new_filename;
