@@ -429,6 +429,10 @@ impl Application for App {
         Command::none()
     }
 
+    fn on_escape(&mut self) -> Command<Message> {
+        self.update(Message::Cancel)
+    }
+
     /// Handle application events here.
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
