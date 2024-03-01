@@ -1717,16 +1717,6 @@ impl Tab {
                     };
                 }
 
-                let date_format = match &item.metadata {
-                    ItemMetadata::Path { metadata, .. } => match metadata.modified() {
-                        Ok(time) => chrono::DateTime::<chrono::Local>::from(time)
-                            .format(TIME_FORMAT)
-                            .to_string(),
-                        Err(_) => String::new(),
-                    },
-                    ItemMetadata::Trash { .. } => String::new(),
-                };
-
                 let size_text = || match &item.metadata {
                     ItemMetadata::Path { metadata, children } => {
                         if metadata.is_dir() {
@@ -1746,14 +1736,6 @@ impl Tab {
                         }
                         trash::TrashItemSize::Bytes(bytes) => format_size(bytes),
                     },
-                };
-                let column_text = |col: HeadingOptions| match col {
-                    HeadingOptions::Name => item.name.clone(),
-
-                    HeadingOptions::Size => size_text(),
-                    HeadingOptions::Modified => date_format!(modified),
-                    HeadingOptions::Accessed => date_format!(accessed),
-                    HeadingOptions::Created => date_format!(created),
                 };
 
                 let mut columns = vec![widget::icon::icon(item.icon_handle_list.clone())
