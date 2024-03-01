@@ -44,8 +44,6 @@ use crate::{
 };
 
 const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
-const GRID_ITEM_HEIGHT: usize = 116;
-const GRID_ITEM_WIDTH: usize = 96;
 //TODO: adjust for locales?
 const TIME_FORMAT: &'static str = "%a %-d %b %-Y %r";
 static SPECIAL_DIRS: Lazy<HashMap<PathBuf, &'static str>> = Lazy::new(|| {
@@ -1356,25 +1354,30 @@ impl Tab {
             icon_sizes,
         } = self.config;
 
+        let text_height = 40; // Height of two lines of text
+        let item_width = (2 * space_xxs + icon_sizes.grid() + 2 * space_xxs) as usize;
+        let item_height =
+            (space_xxxs + icon_sizes.grid() + space_xxxs + text_height + space_xxxs) as usize;
+
         let (width, height) = match self.size_opt {
             Some(size) => (
                 (size.width.floor() as usize)
                     .checked_sub(2 * (space_m as usize))
                     .unwrap_or(0)
-                    .max(GRID_ITEM_WIDTH),
-                (size.height.floor() as usize).max(GRID_ITEM_HEIGHT),
+                    .max(item_width),
+                (size.height.floor() as usize).max(item_height),
             ),
-            None => (GRID_ITEM_WIDTH, GRID_ITEM_HEIGHT),
+            None => (item_width, item_height),
         };
 
         let (cols, column_spacing) = {
-            let width_m1 = width.checked_sub(GRID_ITEM_WIDTH).unwrap_or(0);
-            let cols_m1 = width_m1 / (GRID_ITEM_WIDTH + space_xxs as usize);
+            let width_m1 = width.checked_sub(item_width).unwrap_or(0);
+            let cols_m1 = width_m1 / (item_width + space_xxs as usize);
             let cols = cols_m1 + 1;
             let spacing = width_m1
                 .checked_div(cols_m1)
                 .unwrap_or(0)
-                .checked_sub(GRID_ITEM_WIDTH)
+                .checked_sub(item_width)
                 .unwrap_or(0);
             (cols, spacing as u16)
         };
@@ -1398,11 +1401,10 @@ impl Tab {
                 item.pos_opt.set(Some((row, col)));
                 item.rect_opt.set(Some(Rectangle::new(
                     Point::new(
-                        (col * (GRID_ITEM_WIDTH + column_spacing as usize) + space_m as usize)
-                            as f32,
-                        (row * (GRID_ITEM_HEIGHT + space_xxs as usize)) as f32,
+                        (col * (item_width + column_spacing as usize) + space_m as usize) as f32,
+                        (row * (item_height + space_xxs as usize)) as f32,
                     ),
-                    Size::new(GRID_ITEM_WIDTH as f32, GRID_ITEM_HEIGHT as f32),
+                    Size::new(item_width as f32, item_height as f32),
                 )));
 
                 //TODO: one focus group per grid item (needs custom widget)
@@ -1424,8 +1426,8 @@ impl Tab {
 
                 let mut column = widget::column::with_capacity(buttons.len())
                     .align_items(Alignment::Center)
-                    .height(Length::Fixed(GRID_ITEM_HEIGHT as f32))
-                    .width(Length::Fixed(GRID_ITEM_WIDTH as f32));
+                    .height(Length::Fixed(item_height as f32))
+                    .width(Length::Fixed(item_width as f32));
                 for button in buttons {
                     if self.context_menu.is_some() {
                         column = column.push(button)

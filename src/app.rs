@@ -472,7 +472,7 @@ impl App {
                     widget::settings::item::builder(fl!("icon-size-list"))
                         .description(format!("{}%", list))
                         .control(
-                            widget::slider(100..=500, list, move |list| {
+                            widget::slider(50..=500, list, move |list| {
                                 Message::TabConfig(TabConfig {
                                     icon_sizes: IconSizes {
                                         list: NonZeroU16::new(list).unwrap(),
@@ -481,6 +481,7 @@ impl App {
                                     ..tab_config
                                 })
                             })
+                            .step(25u16)
                             .width(Length::Fixed(100.0)),
                         )
                 })
@@ -490,7 +491,7 @@ impl App {
                     widget::settings::item::builder(fl!("icon-size-grid"))
                         .description(format!("{}%", grid))
                         .control(
-                            widget::slider(100..=500, grid, move |grid| {
+                            widget::slider(50..=500, grid, move |grid| {
                                 Message::TabConfig(TabConfig {
                                     icon_sizes: IconSizes {
                                         grid: NonZeroU16::new(grid).unwrap(),
@@ -499,6 +500,7 @@ impl App {
                                     ..tab_config
                                 })
                             })
+                            .step(25u16)
                             .width(Length::Fixed(100.0)),
                         )
                 })
