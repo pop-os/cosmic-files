@@ -46,7 +46,8 @@ features = ["serde"]
 git = "https://github.com/jackpot51/systemicons"
 
 [features]
-default = ["wgpu"]
+default = ["xdg", "wgpu"]
+xdg = ["libcosmic/desktop"]
 wgpu = ["libcosmic/wgpu"]
 
 [profile.release-with-debug]

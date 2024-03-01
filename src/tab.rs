@@ -32,6 +32,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(feature = "xdg")]
+use crate::xdg::{mime_apps, DesktopEntryData};
 use crate::{
     app::Action,
     config::{IconSizes, TabConfig},
@@ -261,6 +263,11 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                     icon_handle_grid,
                     icon_handle_list,
                     icon_handle_list_condensed,
+                    #[cfg(feature = "xdg")]
+                    open_with: mime_guess
+                        .first()
+                        .map(|mime| mime_apps(&mime))
+                        .unwrap_or_default(),
                     thumbnail_res_opt: match mime_guess.first() {
                         Some(mime) if mime.type_() == "image" => None,
                         _ => Some(Err(())),
@@ -295,7 +302,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
         not(target_os = "android")
     )
 )))]
-pub fn scan_trash() -> Vec<Item> {
+pub fn scan_trash(_sizes: IconSizes) -> Vec<Item> {
     log::warn!("viewing trash not supported on this platform");
     Vec::new()
 }
@@ -351,6 +358,8 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     icon_handle_grid,
                     icon_handle_list,
                     icon_handle_list_condensed,
+                    #[cfg(feature = "xdg")]
+                    open_with: Vec::new(),
                     thumbnail_res_opt: Some(Err(())),
                     button_id: widget::Id::unique(),
                     pos_opt: Cell::new(None),
@@ -458,6 +467,8 @@ pub struct Item {
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
     pub icon_handle_list_condensed: widget::icon::Handle,
+    #[cfg(feature = "xdg")]
+    pub open_with: Vec<DesktopEntryData>,
     pub thumbnail_res_opt: Option<Result<image::RgbaImage, ()>>,
     pub button_id: widget::Id,
     pub pos_opt: Cell<Option<(usize, usize)>>,
@@ -544,20 +555,22 @@ impl Item {
 
 impl fmt::Debug for Item {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Item")
-            .field("name", &self.name)
-            .field("metadata", &self.metadata)
-            .field("hidden", &self.hidden)
-            .field("path", &self.path)
-            .field("mime_guess", &self.mime_guess)
-            // icon_handles
-            // thumbnail_res_opt
-            .field("button_id", &self.button_id)
-            .field("pos_opt", &self.pos_opt)
-            .field("rect_opt", &self.rect_opt)
-            .field("selected", &self.selected)
-            .field("click_time", &self.click_time)
-            .finish()
+        let mut d = f.debug_struct("Item");
+        d.field("name", &self.name);
+        d.field("metadata", &self.metadata);
+        d.field("hidden", &self.hidden);
+        d.field("path", &self.path);
+        d.field("mime_guess", &self.mime_guess);
+        // icon_handles
+        #[cfg(feature = "xdg")]
+        d.field("open_with", &self.open_with);
+        // thumbnail_res_opt
+        d.field("button_id", &self.button_id);
+        d.field("pos_opt", &self.pos_opt);
+        d.field("rect_opt", &self.rect_opt);
+        d.field("selected", &self.selected);
+        d.field("click_time", &self.click_time);
+        d.finish()
     }
 }
 
