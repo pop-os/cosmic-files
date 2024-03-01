@@ -1757,40 +1757,26 @@ impl Tab {
                         .width(get_column_width(col.heading))
                         .into()
                 });
-                columns.extend(columns_content);
 
-                // let row = if condensed {
-                //     widget::row::with_children(vec![
-                //         widget::icon::icon(item.icon_handle_list_condensed.clone())
-                //             .content_fit(ContentFit::Contain)
-                //             .size(icon_size)
-                //             .into(),
-                //         widget::column::with_children(vec![
-                //             widget::text(item.name.clone()).into(),
-                //             //TODO: translate?
-                //             widget::text(format!("{} - {}", date_format, size_text())).into(),
-                //         ])
-                //         .into(),
-                //     ])
-                //     .align_items(Alignment::Center)
-                //     .spacing(space_xxs)
-                // } else {
-                //     widget::row::with_children(vec![
-                //         widget::icon::icon(item.icon_handle_list.clone())
-                //             .content_fit(ContentFit::Contain)
-                //             .size(icon_size)
-                //             .into(),
-                //         widget::text(item.name.clone()).width(Length::Fill).into(),
-                //         widget::text(date_format)
-                //             .width(Length::Fixed(modified_width))
-                //             .into(),
-                //         widget::text(size_text())
-                //             .width(Length::Fixed(size_width))
-                //             .into(),
-                //     ])
-                //     .align_items(Alignment::Center)
-                //     .spacing(space_xxs)
-                // };
+                let condensed_view = || {
+                    visible_columns
+                        .iter()
+                        .filter(|col| col.active)
+                        .map(|col| column_text(col.heading))
+                        .collect::<Vec<_>>()
+                        .join(" - ")
+                };
+
+                if condensed {
+                    columns.push(
+                        widget::column::with_capacity(1)
+                            .push(widget::text(condensed_view()))
+                            .into(),
+                    )
+                } else {
+                    columns.extend(columns_content)
+                }
+                //TODO: translate?
 
                 let button = widget::button(
                     widget::row::with_children(columns)
