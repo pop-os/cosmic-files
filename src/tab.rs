@@ -743,7 +743,7 @@ impl Tab {
         }
     }
 
-    fn select_focus_id(&self) -> Option<widget::Id> {
+    pub fn select_focus_id(&self) -> Option<widget::Id> {
         let items = self.items_opt.as_ref()?;
         let item = items.get(self.select_focus?)?;
         Some(item.button_id.clone())

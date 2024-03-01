@@ -677,7 +677,12 @@ impl Application for App {
                 return Command::none();
             }
 
+            let had_focused_button = tab.select_focus_id().is_some();
             if tab.select_none() {
+                if had_focused_button {
+                    // Unfocus if there was a focused button
+                    return widget::button::focus(widget::Id::unique());
+                }
                 return Command::none();
             }
         }
