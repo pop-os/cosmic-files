@@ -71,6 +71,7 @@ light = Light
 # Context menu
 new-file = New file
 new-folder = New folder
+open-with = Open with
 move-to-trash = Move to trash
 restore-from-trash = Restore from trash
 

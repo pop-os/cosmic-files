@@ -52,13 +52,16 @@ check-json: (check '--message-format=json')
 # Developer target
 dev *args:
     cargo fmt
-    cargo test
     just run {{args}}
 
 # Run with debug logs
 run *args:
     cargo build --release
     env RUST_LOG=cosmic_files=debug RUST_BACKTRACE=full target/release/cosmic-files {{args}}
+
+# Run tests
+test *args:
+    cargo test {{args}}
 
 # Installs files
 install:

@@ -20,20 +20,17 @@ use cosmic::{
     },
     theme, widget, Element,
 };
-use mime_guess::MimeGuess;
+use mime_guess::{mime, Mime, MimeGuess};
 use once_cell::sync::Lazy;
 use std::{
     cell::Cell,
     cmp::Ordering,
     collections::HashMap,
-    fmt,
     fs::{self, Metadata},
     path::PathBuf,
     time::{Duration, Instant},
 };
 
-#[cfg(feature = "xdg")]
-use crate::xdg::{mime_apps, DesktopEntryData};
 use crate::{
     app::Action,
     config::{IconSizes, TabConfig},
@@ -41,6 +38,7 @@ use crate::{
     fl,
     key_bind::KeyBind,
     menu,
+    mime_app::{mime_apps, MimeApp},
     mime_icon::mime_icon,
     mouse_area,
 };
@@ -224,22 +222,38 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
 
                 let path = entry.path();
 
-                let mime_guess = MimeGuess::from_path(&path);
-
-                let (icon_handle_grid, icon_handle_list, icon_handle_list_condensed) =
+                let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) =
                     if metadata.is_dir() {
                         (
+                            //TODO: make this a static
+                            "inode/directory".parse().unwrap(),
                             folder_icon(&path, sizes.grid()),
                             folder_icon(&path, sizes.list()),
                             folder_icon(&path, sizes.list_condensed()),
                         )
                     } else {
                         (
+                            //TODO: best fallback mime for files?
+                            MimeGuess::from_path(&path).first_or_octet_stream(),
                             mime_icon(&path, sizes.grid()),
                             mime_icon(&path, sizes.list()),
                             mime_icon(&path, sizes.list_condensed()),
                         )
                     };
+
+                let mut open_with = mime_apps(&mime);
+                if open_with.is_empty() {
+                    //TODO: more fallbacks
+                    if mime.type_() == "text" {
+                        open_with = mime_apps(&mime::TEXT_PLAIN);
+                    }
+                }
+
+                let thumbnail_res_opt = if mime.type_() == "image" {
+                    None
+                } else {
+                    Some(Err(()))
+                };
 
                 let children = if metadata.is_dir() {
                     //TODO: calculate children in the background (and make it cancellable?)
@@ -259,19 +273,12 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                     metadata: ItemMetadata::Path { metadata, children },
                     hidden,
                     path,
-                    mime_guess,
+                    mime,
                     icon_handle_grid,
                     icon_handle_list,
                     icon_handle_list_condensed,
-                    #[cfg(feature = "xdg")]
-                    open_with: mime_guess
-                        .first()
-                        .map(|mime| mime_apps(&mime))
-                        .unwrap_or_default(),
-                    thumbnail_res_opt: match mime_guess.first() {
-                        Some(mime) if mime.type_() == "image" => None,
-                        _ => Some(Err(())),
-                    },
+                    open_with,
+                    thumbnail_res_opt,
                     button_id: widget::Id::unique(),
                     pos_opt: Cell::new(None),
                     rect_opt: Cell::new(None),
@@ -333,16 +340,18 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                 let path = entry.original_path();
                 let name = entry.name.clone();
 
-                let mime_guess = MimeGuess::from_path(&path);
-
-                let (icon_handle_grid, icon_handle_list, icon_handle_list_condensed) =
+                let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) =
                     match metadata.size {
                         trash::TrashItemSize::Entries(_) => (
+                            //TODO: make this a static
+                            "inode/directory".parse().unwrap(),
                             folder_icon(&path, sizes.grid()),
                             folder_icon(&path, sizes.list()),
                             folder_icon(&path, sizes.list_condensed()),
                         ),
                         trash::TrashItemSize::Bytes(_) => (
+                            //TODO: best fallback mime for files?
+                            MimeGuess::from_path(&path).first_or_octet_stream(),
                             mime_icon(&path, sizes.grid()),
                             mime_icon(&path, sizes.list()),
                             mime_icon(&path, sizes.list_condensed()),
@@ -354,11 +363,10 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     metadata: ItemMetadata::Trash { metadata, entry },
                     hidden: false,
                     path,
-                    mime_guess,
+                    mime,
                     icon_handle_grid,
                     icon_handle_list,
                     icon_handle_list_condensed,
-                    #[cfg(feature = "xdg")]
                     open_with: Vec::new(),
                     thumbnail_res_opt: Some(Err(())),
                     button_id: widget::Id::unique(),
@@ -457,18 +465,17 @@ impl ItemMetadata {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Item {
     pub name: String,
     pub metadata: ItemMetadata,
     pub hidden: bool,
     pub path: PathBuf,
-    pub mime_guess: MimeGuess,
+    pub mime: Mime,
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
     pub icon_handle_list_condensed: widget::icon::Handle,
-    #[cfg(feature = "xdg")]
-    pub open_with: Vec<DesktopEntryData>,
+    pub open_with: Vec<MimeApp>,
     pub thumbnail_res_opt: Option<Result<image::RgbaImage, ()>>,
     pub button_id: widget::Id,
     pub pos_opt: Cell<Option<(usize, usize)>>,
@@ -478,20 +485,47 @@ pub struct Item {
 }
 
 impl Item {
+    pub fn open_with_view(&self, sizes: IconSizes) -> Element<crate::app::Message> {
+        let cosmic_theme::Spacing {
+            space_xs,
+            space_xxxs,
+            ..
+        } = theme::active().cosmic().spacing;
+
+        let mut column = widget::column().spacing(space_xxxs);
+
+        column = column.push(widget::text::heading(&self.name));
+
+        for app in self.open_with.iter() {
+            column = column.push(
+                widget::button(
+                    widget::row::with_children(vec![
+                        widget::icon(app.icon.clone()).into(),
+                        widget::text(&app.name).into(),
+                    ])
+                    .spacing(space_xs),
+                )
+                .padding(space_xs)
+                .width(Length::Fill),
+            );
+        }
+
+        column.into()
+    }
+
     pub fn property_view(&self, sizes: IconSizes) -> Element<crate::app::Message> {
         let cosmic_theme::Spacing { space_xxxs, .. } = theme::active().cosmic().spacing;
 
         let mut column = widget::column().spacing(space_xxxs);
 
-        let is_image = if let Some(mime) = self.mime_guess.first() {
-            mime.type_() == "image" && self.path.is_file()
-        } else {
-            false
-        };
-
         column = column.push(widget::row::with_children(vec![
             widget::horizontal_space(Length::Fill).into(),
-            if is_image {
+            // This loads the image only if thumbnailing worked
+            if self
+                .thumbnail_res_opt
+                .as_ref()
+                .map_or(false, |res| res.is_ok())
+            {
                 widget::image::viewer(widget::image::Handle::from_path(&self.path))
                     .min_scale(1.0)
                     .into()
@@ -506,9 +540,7 @@ impl Item {
 
         column = column.push(widget::text::heading(self.name.clone()));
 
-        if let Some(mime) = self.mime_guess.first() {
-            column = column.push(widget::text(format!("Type: {}", mime)));
-        }
+        column = column.push(widget::text(format!("Type: {}", self.mime)));
 
         //TODO: translate!
         //TODO: correct display of folder size?
@@ -550,27 +582,6 @@ impl Item {
         }
 
         column.into()
-    }
-}
-
-impl fmt::Debug for Item {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut d = f.debug_struct("Item");
-        d.field("name", &self.name);
-        d.field("metadata", &self.metadata);
-        d.field("hidden", &self.hidden);
-        d.field("path", &self.path);
-        d.field("mime_guess", &self.mime_guess);
-        // icon_handles
-        #[cfg(feature = "xdg")]
-        d.field("open_with", &self.open_with);
-        // thumbnail_res_opt
-        d.field("button_id", &self.button_id);
-        d.field("pos_opt", &self.pos_opt);
-        d.field("rect_opt", &self.rect_opt);
-        d.field("selected", &self.selected);
-        d.field("click_time", &self.click_time);
-        d.finish()
     }
 }
 

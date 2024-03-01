@@ -16,12 +16,11 @@ pub mod dialog;
 mod key_bind;
 mod localize;
 mod menu;
+mod mime_app;
 mod mime_icon;
 mod mouse_area;
 mod operation;
 mod tab;
-#[cfg(feature = "xdg")]
-mod xdg;
 
 pub fn home_dir() -> PathBuf {
     match dirs::home_dir() {

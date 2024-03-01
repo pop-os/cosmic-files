@@ -66,7 +66,9 @@ pub fn context_menu<'a>(
         Location::Path(_) => {
             if selected > 0 {
                 children.push(menu_item(fl!("open"), Action::Open).into());
-                //TODO: Open with
+                if selected == 1 {
+                    children.push(menu_item(fl!("open-with"), Action::OpenWith).into());
+                }
                 children.push(horizontal_rule(1).into());
                 children.push(menu_item(fl!("rename"), Action::Rename).into());
                 children.push(menu_item(fl!("cut"), Action::Cut).into());

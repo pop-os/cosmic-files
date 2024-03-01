@@ -58,6 +58,7 @@ pub enum Action {
     NewFile,
     NewFolder,
     Open,
+    OpenWith,
     Operations,
     Paste,
     Properties,
@@ -94,6 +95,7 @@ impl Action {
             Action::NewFile => Message::NewItem(entity_opt, false),
             Action::NewFolder => Message::NewItem(entity_opt, true),
             Action::Open => Message::TabMessage(entity_opt, tab::Message::Open),
+            Action::OpenWith => Message::ToggleContextPage(ContextPage::OpenWith),
             Action::Operations => Message::ToggleContextPage(ContextPage::Operations),
             Action::Paste => Message::Paste(entity_opt),
             Action::Properties => Message::ToggleContextPage(ContextPage::Properties),
@@ -159,6 +161,7 @@ pub enum Message {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ContextPage {
     About,
+    OpenWith,
     Operations,
     Properties,
     Settings,
@@ -168,6 +171,7 @@ impl ContextPage {
     fn title(&self) -> String {
         match self {
             Self::About => String::new(),
+            Self::OpenWith => fl!("open-with"),
             Self::Operations => fl!("operations"),
             Self::Properties => fl!("properties"),
             Self::Settings => fl!("settings"),
@@ -378,6 +382,24 @@ impl App {
         .align_items(Alignment::Center)
         .spacing(space_xxs)
         .into()
+    }
+
+    fn open_with(&self) -> Element<Message> {
+        let mut children = Vec::new();
+        let entity = self.tab_model.active();
+        if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+            if let Some(items) = tab.items_opt() {
+                for item in items.iter() {
+                    if item.selected {
+                        children.push(item.open_with_view(tab.config.icon_sizes));
+                        // Only show one property view to avoid issues like hangs when generating
+                        // preview images on thousands of files
+                        break;
+                    }
+                }
+            }
+        }
+        widget::settings::view_column(children).into()
     }
 
     fn operations(&self) -> Element<Message> {
@@ -1101,6 +1123,7 @@ impl Application for App {
 
         Some(match self.context_page {
             ContextPage::About => self.about(),
+            ContextPage::OpenWith => self.open_with(),
             ContextPage::Operations => self.operations(),
             ContextPage::Properties => self.properties(),
             ContextPage::Settings => self.settings(),
