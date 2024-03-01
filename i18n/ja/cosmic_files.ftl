@@ -32,7 +32,7 @@ rename-folder = フォルダ名を変更
 
 # Replace Dialog
 replace = 置き換える
-replace-title = {$filename}はすでにこの場所に存在します。 
+replace-title = {$filename}はすでにこの場所に存在します。
 replace-warning = 保存するファイルで置き換えますか？置き換えると、内容を上書きます。
 
 # List view
@@ -57,11 +57,9 @@ properties = プロパティ
 ## Settings
 settings = 設定
 settings-tab = タブ
-settings-hidden = 隠しファイル
 settings-show-hidden = 隠しファイルを表示
 icon-size-list = アイコンサイズ（リスト）
 icon-size-grid = アイコンサイズ（グリッド）
-icon-zoom = ズーム
 
 ### Appearance
 appearance = 外観

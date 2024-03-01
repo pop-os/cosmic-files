@@ -21,6 +21,7 @@ use std::{
     any::TypeId,
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
     env, fs,
+    num::NonZeroU16,
     path::PathBuf,
     process, time,
 };
@@ -444,17 +445,15 @@ impl App {
     }
 
     fn settings(&self) -> Element<Message> {
-        let app_theme_selected = match self.config.app_theme {
-            AppTheme::Dark => 1,
-            AppTheme::Light => 2,
-            AppTheme::System => 0,
-        };
-        let hidden_selected = self.config.tab.show_hidden;
         // TODO: Should dialog be updated here too?
-        let IconSizes { list, grid, .. } = self.config.tab.icon_sizes;
         widget::settings::view_column(vec![
             widget::settings::view_section(fl!("appearance"))
-                .add(
+                .add({
+                    let app_theme_selected = match self.config.app_theme {
+                        AppTheme::Dark => 1,
+                        AppTheme::Light => 2,
+                        AppTheme::System => 0,
+                    };
                     widget::settings::item::builder(fl!("theme")).control(widget::dropdown(
                         &self.app_themes,
                         Some(app_theme_selected),
@@ -465,58 +464,58 @@ impl App {
                                 _ => AppTheme::System,
                             })
                         },
-                    )),
-                )
-                .add(
-                    widget::settings::item::builder(fl!("icon-size-list")).control(
-                        widget::text_input(fl!("icon-zoom"), list.to_string()).on_input(|s| {
-                            s.parse()
-                                .map(|list_next| {
-                                    Message::TabConfig(TabConfig {
-                                        icon_sizes: IconSizes {
-                                            list: list_next,
-                                            ..self.config.tab.icon_sizes
-                                        },
-                                        ..self.config.tab
-                                    })
+                    ))
+                })
+                .add({
+                    let tab_config = self.config.tab.clone();
+                    let list: u16 = tab_config.icon_sizes.list.into();
+                    widget::settings::item::builder(fl!("icon-size-list"))
+                        .description(format!("{}%", list))
+                        .control(
+                            widget::slider(100..=500, list, move |list| {
+                                Message::TabConfig(TabConfig {
+                                    icon_sizes: IconSizes {
+                                        list: NonZeroU16::new(list).unwrap(),
+                                        ..tab_config.icon_sizes
+                                    },
+                                    ..tab_config
                                 })
-                                .unwrap_or_else(|_| Message::TabConfig(self.config.tab))
-                        }),
-                    ),
-                )
-                .add(
-                    widget::settings::item::builder(fl!("icon-size-grid")).control(
-                        widget::text_input(fl!("icon-zoom"), grid.to_string()).on_input(|s| {
-                            s.parse()
-                                .map(|grid_next| {
-                                    Message::TabConfig(TabConfig {
-                                        icon_sizes: IconSizes {
-                                            grid: grid_next,
-                                            ..self.config.tab.icon_sizes
-                                        },
-                                        ..self.config.tab
-                                    })
+                            })
+                            .width(Length::Fixed(100.0)),
+                        )
+                })
+                .add({
+                    let tab_config = self.config.tab.clone();
+                    let grid: u16 = tab_config.icon_sizes.grid.into();
+                    widget::settings::item::builder(fl!("icon-size-grid"))
+                        .description(format!("{}%", grid))
+                        .control(
+                            widget::slider(100..=500, grid, move |grid| {
+                                Message::TabConfig(TabConfig {
+                                    icon_sizes: IconSizes {
+                                        grid: NonZeroU16::new(grid).unwrap(),
+                                        ..tab_config.icon_sizes
+                                    },
+                                    ..tab_config
                                 })
-                                .unwrap_or_else(|_| Message::TabConfig(self.config.tab))
-                        }),
-                    ),
-                )
+                            })
+                            .width(Length::Fixed(100.0)),
+                        )
+                })
                 .into(),
             widget::settings::view_section(fl!("settings-tab"))
-                .add(
-                    widget::settings::item::builder(fl!("settings-hidden")).control(
-                        widget::checkbox(
-                            fl!("settings-show-hidden"),
-                            hidden_selected,
-                            |show_hidden| {
-                                Message::TabConfig(TabConfig {
-                                    show_hidden,
-                                    ..self.config.tab
-                                })
-                            },
-                        ),
-                    ),
-                )
+                .add({
+                    let tab_config = self.config.tab.clone();
+                    widget::settings::item::builder(fl!("settings-show-hidden")).toggler(
+                        tab_config.show_hidden,
+                        move |show_hidden| {
+                            Message::TabConfig(TabConfig {
+                                show_hidden,
+                                ..tab_config
+                            })
+                        },
+                    )
+                })
                 .into(),
         ])
         .into()
