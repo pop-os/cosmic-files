@@ -8,6 +8,8 @@ use cosmic::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::tab::HeadingOptions;
+
 pub const CONFIG_VERSION: u64 = 1;
 
 // Default icon sizes
@@ -54,7 +56,7 @@ impl Default for Config {
 /// [`TabConfig`] contains options that are passed to each instance of [`crate::tab::Tab`].
 /// These options are set globally through the main config, but each tab may change options
 /// locally. Local changes aren't saved to the main config.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
 pub struct TabConfig {
     /// Show hidden files and folders
     pub show_hidden: bool,
@@ -62,6 +64,7 @@ pub struct TabConfig {
     // pub sort_by: fn(&PathBuf, &PathBuf) -> Ordering,
     // Icon zoom
     pub icon_sizes: IconSizes,
+    pub visible_columns: Vec<VisibleColumns>,
 }
 
 impl Default for TabConfig {
@@ -69,6 +72,7 @@ impl Default for TabConfig {
         Self {
             show_hidden: false,
             icon_sizes: IconSizes::default(),
+            visible_columns: VisibleColumns::default(),
         }
     }
 }
@@ -91,6 +95,26 @@ impl Default for IconSizes {
             list: 100.try_into().unwrap(),
             grid: 100.try_into().unwrap(),
         }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct VisibleColumns {
+    pub active: bool,
+    pub heading: HeadingOptions,
+}
+impl VisibleColumns {
+    pub fn new(active: bool, heading: HeadingOptions) -> Self {
+        Self { active, heading }
+    }
+    fn default() -> Vec<Self> {
+        vec![
+            VisibleColumns::new(true, HeadingOptions::Name),
+            VisibleColumns::new(true, HeadingOptions::Modified),
+            VisibleColumns::new(false, HeadingOptions::Accessed),
+            VisibleColumns::new(false, HeadingOptions::Created),
+            VisibleColumns::new(true, HeadingOptions::Size),
+        ]
     }
 }
 

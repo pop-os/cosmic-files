@@ -3,7 +3,9 @@
 
 use cosmic::{
     app::{message, Command, Core},
-    cosmic_config, cosmic_theme, executor,
+    cosmic_config,
+    cosmic_theme::{self, Spacing},
+    executor,
     iced::{
         event,
         futures::{self, SinkExt},
@@ -12,6 +14,7 @@ use cosmic::{
         widget::scrollable,
         window, Alignment, Event, Length,
     },
+    iced_widget::horizontal_rule,
     style, theme,
     widget::{self, segmented_button},
     Application, ApplicationExt, Element,
@@ -27,12 +30,12 @@ use std::{
 };
 
 use crate::{
-    config::{AppTheme, Config, IconSizes, TabConfig, CONFIG_VERSION},
+    config::{AppTheme, Config, IconSizes, TabConfig, VisibleColumns, CONFIG_VERSION},
     fl, home_dir,
     key_bind::{key_binds, KeyBind},
     menu,
     operation::Operation,
-    tab::{self, ItemMetadata, Location, Tab},
+    tab::{self, HeadingOptions, ItemMetadata, Location, Tab},
 };
 
 #[derive(Clone, Debug)]
@@ -74,6 +77,7 @@ pub enum Action {
     ToggleShowHidden,
     WindowClose,
     WindowNew,
+    VisibleColumns,
 }
 
 impl Action {
@@ -114,6 +118,7 @@ impl Action {
             Action::ToggleShowHidden => Message::TabMessage(None, tab::Message::ToggleShowHidden),
             Action::WindowClose => Message::WindowClose,
             Action::WindowNew => Message::WindowNew,
+            Action::VisibleColumns => Message::ToggleContextPage(ContextPage::VisibleColumns),
         }
     }
 }
@@ -124,6 +129,7 @@ pub enum Message {
     AppTheme(AppTheme),
     Config(Config),
     Copy(Option<segmented_button::Entity>),
+    ChangeVisibleColumnPopover(bool, HeadingOptions),
     Cut(Option<segmented_button::Entity>),
     DialogCancel,
     DialogComplete,
@@ -162,6 +168,7 @@ pub enum ContextPage {
     Operations,
     Properties,
     Settings,
+    VisibleColumns,
 }
 
 impl ContextPage {
@@ -171,6 +178,7 @@ impl ContextPage {
             Self::Operations => fl!("operations"),
             Self::Properties => fl!("properties"),
             Self::Settings => fl!("settings"),
+            Self::VisibleColumns => fl!("visible-columns"),
         }
     }
 }
@@ -226,6 +234,7 @@ pub struct App {
     complete_operations: BTreeMap<u64, Operation>,
     failed_operations: BTreeMap<u64, (Operation, String)>,
     watcher_opt: Option<(notify::RecommendedWatcher, HashSet<PathBuf>)>,
+    visible_column_move_selected: Option<HeadingOptions>,
 }
 
 impl App {
@@ -477,7 +486,7 @@ impl App {
                                         list: NonZeroU16::new(list).unwrap(),
                                         ..tab_config.icon_sizes
                                     },
-                                    ..tab_config
+                                    ..tab_config.clone()
                                 })
                             })
                             .step(25u16)
@@ -496,7 +505,7 @@ impl App {
                                         grid: NonZeroU16::new(grid).unwrap(),
                                         ..tab_config.icon_sizes
                                     },
-                                    ..tab_config
+                                    ..tab_config.clone()
                                 })
                             })
                             .step(25u16)
@@ -512,7 +521,7 @@ impl App {
                         move |show_hidden| {
                             Message::TabConfig(TabConfig {
                                 show_hidden,
-                                ..tab_config
+                                ..tab_config.clone()
                             })
                         },
                     )
@@ -520,6 +529,84 @@ impl App {
                 .into(),
         ])
         .into()
+    }
+    fn visible_columns(&self) -> Element<Message> {
+        let column_options = &self.config.tab.visible_columns;
+        let Spacing { space_xxs, .. } = self.core.system_theme().cosmic().spacing;
+        let column_item = |col: VisibleColumns, idx: usize| -> Element<Message> {
+            let is_selected = self
+                .visible_column_move_selected
+                .is_some_and(|c| c == col.heading);
+            let mut popover = widget::popover(
+                widget::button(widget::icon::from_name("open-menu-symbolic"))
+                    .on_press(Message::ChangeVisibleColumnPopover(
+                        !is_selected,
+                        col.heading,
+                    ))
+                    .style(cosmic::style::Button::Icon),
+            );
+
+            let move_item = |mut config: TabConfig, direction: bool| {
+                if direction && idx < config.visible_columns.len() - 1 {
+                    config.visible_columns.swap(idx, idx + 1)
+                } else if !direction && idx != 0 {
+                    config.visible_columns.swap(idx, idx - 1)
+                }
+                config
+            };
+
+            if is_selected {
+                popover = popover
+                    .popup(
+                        widget::container(
+                            widget::column::with_children(vec![
+                                widget::button(widget::text(fl!("move-up")))
+                                    .on_press(Message::TabConfig(move_item(
+                                        self.config.tab.clone(),
+                                        false,
+                                    )))
+                                    .padding(space_xxs)
+                                    .style(theme::Button::Text)
+                                    .into(),
+                                horizontal_rule(1).into(),
+                                widget::button(widget::text(fl!("move-down")))
+                                    .on_press(Message::TabConfig(move_item(
+                                        self.config.tab.clone(),
+                                        true,
+                                    )))
+                                    .padding(space_xxs)
+                                    .style(theme::Button::Text)
+                                    .into(),
+                            ])
+                            .width(Length::Shrink),
+                        )
+                        .style(theme::Container::Background),
+                    )
+                    .position(widget::popover::Position::Bottom)
+                    .into()
+            }
+
+            widget::settings::item::builder(col.heading.to_string())
+                .control(
+                    widget::row::with_children(vec![
+                        widget::toggler(None, col.active, move |t| {
+                            let mut config = self.config.tab.clone();
+                            config.visible_columns[idx].active = t;
+                            Message::TabConfig(config)
+                        })
+                        .into(),
+                        popover.into(),
+                    ])
+                    .align_items(Alignment::Center),
+                )
+                .into()
+        };
+
+        let mut view_section = widget::settings::view_section("");
+        for (idx, col) in column_options.iter().enumerate() {
+            view_section = view_section.add(column_item(col.clone(), idx));
+        }
+        widget::settings::view_column(vec![view_section.into()]).into()
     }
 }
 
@@ -601,6 +688,7 @@ impl Application for App {
             complete_operations: BTreeMap::new(),
             failed_operations: BTreeMap::new(),
             watcher_opt: None,
+            visible_column_move_selected: None,
         };
 
         let mut commands = Vec::new();
@@ -734,6 +822,9 @@ impl Application for App {
             }
             Message::Copy(_entity_opt) => {
                 log::warn!("TODO: COPY");
+            }
+            Message::ChangeVisibleColumnPopover(active, column) => {
+                self.visible_column_move_selected = active.then_some(column);
             }
             Message::Cut(_entity_opt) => {
                 log::warn!("TODO: CUT");
@@ -1129,6 +1220,7 @@ impl Application for App {
             ContextPage::Operations => self.operations(),
             ContextPage::Properties => self.properties(),
             ContextPage::Settings => self.settings(),
+            ContextPage::VisibleColumns => self.visible_columns(),
         })
     }
 

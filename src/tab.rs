@@ -22,6 +22,7 @@ use cosmic::{
 };
 use mime_guess::MimeGuess;
 use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 use std::{
     cell::Cell,
     cmp::Ordering,
@@ -566,11 +567,28 @@ pub enum View {
     Grid,
     List,
 }
-#[derive(Clone, Copy, Debug, Hash, PartialEq, PartialOrd, Ord, Eq)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, PartialOrd, Ord, Eq, Serialize, Deserialize)]
 pub enum HeadingOptions {
     Name,
     Modified,
+    Accessed,
+    Created,
     Size,
+}
+impl fmt::Display for HeadingOptions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                HeadingOptions::Name => fl!("name"),
+                HeadingOptions::Modified => fl!("modified"),
+                HeadingOptions::Size => fl!("size"),
+                HeadingOptions::Accessed => fl!("accessed"),
+                HeadingOptions::Created => fl!("created"),
+            }
+        )
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1197,6 +1215,20 @@ impl Tab {
         };
         let mut items: Vec<_> = self.items_opt.as_ref()?.iter().enumerate().collect();
         let heading_sort = self.sort_direction;
+        macro_rules! date_sort {
+            ($name: ident) => {
+                items.sort_by(|a, b| {
+                    let get_field = |x: &Item| match &x.metadata {
+                        ItemMetadata::Path { metadata, .. } => metadata.$name().ok(),
+                        ItemMetadata::Trash { .. } => None,
+                    };
+                    let a = get_field(a.1);
+                    let b = get_field(b.1);
+                    check_reverse(a.cmp(&b), heading_sort)
+                })
+            };
+        }
+
         match self.sort_name {
             HeadingOptions::Size => {
                 items.sort_by(|a, b| {
@@ -1234,16 +1266,13 @@ impl Tab {
                 check_reverse(ord, heading_sort)
             }),
             HeadingOptions::Modified => {
-                items.sort_by(|a, b| {
-                    let get_modified = |x: &Item| match &x.metadata {
-                        ItemMetadata::Path { metadata, .. } => metadata.modified().ok(),
-                        ItemMetadata::Trash { .. } => None,
-                    };
-
-                    let a = get_modified(a.1);
-                    let b = get_modified(b.1);
-                    check_reverse(a.cmp(&b), heading_sort)
-                });
+                date_sort!(modified);
+            }
+            HeadingOptions::Accessed => {
+                date_sort!(accessed)
+            }
+            HeadingOptions::Created => {
+                date_sort!(created)
             }
         }
         Some(items)
@@ -1431,6 +1460,7 @@ impl Tab {
         let TabConfig {
             show_hidden,
             icon_sizes,
+            ..
         } = self.config;
 
         let text_height = 40; // Height of two lines of text
@@ -1576,7 +1606,8 @@ impl Tab {
         let TabConfig {
             show_hidden,
             icon_sizes,
-        } = self.config;
+            visible_columns,
+        } = &self.config;
 
         let size = self.size_opt.unwrap_or_else(|| Size::new(0.0, 0.0));
         //TODO: allow resizing?
@@ -1613,24 +1644,38 @@ impl Tab {
         };
 
         let mut children: Vec<Element<_>> = Vec::new();
+
+        let get_column_width = |col: HeadingOptions| match col {
+            HeadingOptions::Name => Length::Fill,
+            HeadingOptions::Modified => Length::Fixed(modified_width),
+            HeadingOptions::Size | HeadingOptions::Accessed | HeadingOptions::Created => {
+                Length::Fixed(size_width)
+            }
+        };
+
+        let heading = self
+            .config
+            .visible_columns
+            .iter()
+            .filter(|col| col.active)
+            .map(|col| {
+                heading_item(
+                    col.heading.to_string(),
+                    get_column_width(col.heading),
+                    col.heading,
+                )
+            })
+            .collect();
+
         let mut y = 0;
         if !condensed {
             children.push(
-                widget::row::with_children(vec![
-                    heading_item(fl!("name"), Length::Fill, HeadingOptions::Name),
-                    //TODO: do not show modified column when in the trash
-                    heading_item(
-                        fl!("modified"),
-                        Length::Fixed(modified_width),
-                        HeadingOptions::Modified,
-                    ),
-                    heading_item(fl!("size"), Length::Fixed(size_width), HeadingOptions::Size),
-                ])
-                .align_items(Alignment::Center)
-                .height(Length::Fixed(row_height as f32))
-                .padding(space_xxs)
-                .spacing(space_xxs)
-                .into(),
+                widget::row::with_children(heading)
+                    .align_items(Alignment::Center)
+                    .height(Length::Fixed(row_height as f32))
+                    .padding(space_xxs)
+                    .spacing(space_xxs)
+                    .into(),
             );
             y += row_height;
             children.push(horizontal_rule(1).into());
@@ -1658,7 +1703,21 @@ impl Tab {
                     y += 1;
                 }
 
-                let modified_text = match &item.metadata {
+                macro_rules! date_format {
+                    ($name: ident) => {
+                        match &item.metadata {
+                            ItemMetadata::Path { metadata, .. } => match metadata.$name() {
+                                Ok(time) => chrono::DateTime::<chrono::Local>::from(time)
+                                    .format(TIME_FORMAT)
+                                    .to_string(),
+                                Err(_) => String::new(),
+                            },
+                            ItemMetadata::Trash { .. } => String::new(),
+                        }
+                    };
+                }
+
+                let date_format = match &item.metadata {
                     ItemMetadata::Path { metadata, .. } => match metadata.modified() {
                         Ok(time) => chrono::DateTime::<chrono::Local>::from(time)
                             .format(TIME_FORMAT)
@@ -1668,7 +1727,7 @@ impl Tab {
                     ItemMetadata::Trash { .. } => String::new(),
                 };
 
-                let size_text = match &item.metadata {
+                let size_text = || match &item.metadata {
                     ItemMetadata::Path { metadata, children } => {
                         if metadata.is_dir() {
                             format!("{} items", children)
@@ -1688,47 +1747,80 @@ impl Tab {
                         trash::TrashItemSize::Bytes(bytes) => format_size(bytes),
                     },
                 };
+                let column_text = |col: HeadingOptions| match col {
+                    HeadingOptions::Name => item.name.clone(),
 
-                let row = if condensed {
-                    widget::row::with_children(vec![
-                        widget::icon::icon(item.icon_handle_list_condensed.clone())
-                            .content_fit(ContentFit::Contain)
-                            .size(icon_size)
-                            .into(),
-                        widget::column::with_children(vec![
-                            widget::text(item.name.clone()).into(),
-                            //TODO: translate?
-                            widget::text(format!("{} - {}", modified_text, size_text)).into(),
-                        ])
-                        .into(),
-                    ])
-                    .align_items(Alignment::Center)
-                    .spacing(space_xxs)
-                } else {
-                    widget::row::with_children(vec![
-                        widget::icon::icon(item.icon_handle_list.clone())
-                            .content_fit(ContentFit::Contain)
-                            .size(icon_size)
-                            .into(),
-                        widget::text(item.name.clone()).width(Length::Fill).into(),
-                        widget::text(modified_text)
-                            .width(Length::Fixed(modified_width))
-                            .into(),
-                        widget::text(size_text)
-                            .width(Length::Fixed(size_width))
-                            .into(),
-                    ])
-                    .align_items(Alignment::Center)
-                    .spacing(space_xxs)
+                    HeadingOptions::Size => size_text(),
+                    HeadingOptions::Modified => date_format!(modified),
+                    HeadingOptions::Accessed => date_format!(accessed),
+                    HeadingOptions::Created => date_format!(created),
                 };
 
-                let button = widget::button(row)
-                    .width(Length::Fill)
-                    .height(Length::Fixed(row_height as f32))
-                    .id(item.button_id.clone())
-                    .padding(space_xxs)
-                    .style(button_style(item.selected, true))
-                    .on_press(Message::Click(Some(i)));
+                let mut columns = vec![widget::icon::icon(item.icon_handle_list.clone())
+                    .content_fit(ContentFit::Contain)
+                    .size(icon_sizes.list())
+                    .into()];
+
+                let column_text = |col: HeadingOptions| match col {
+                    HeadingOptions::Name => item.name.clone(),
+
+                    HeadingOptions::Size => size_text(),
+                    HeadingOptions::Modified => date_format!(modified),
+                    HeadingOptions::Accessed => date_format!(accessed),
+                    HeadingOptions::Created => date_format!(created),
+                };
+
+                let columns_content = visible_columns.iter().filter(|col| col.active).map(|col| {
+                    widget::text(column_text(col.heading))
+                        .width(get_column_width(col.heading))
+                        .into()
+                });
+                columns.extend(columns_content);
+
+                // let row = if condensed {
+                //     widget::row::with_children(vec![
+                //         widget::icon::icon(item.icon_handle_list_condensed.clone())
+                //             .content_fit(ContentFit::Contain)
+                //             .size(icon_size)
+                //             .into(),
+                //         widget::column::with_children(vec![
+                //             widget::text(item.name.clone()).into(),
+                //             //TODO: translate?
+                //             widget::text(format!("{} - {}", date_format, size_text())).into(),
+                //         ])
+                //         .into(),
+                //     ])
+                //     .align_items(Alignment::Center)
+                //     .spacing(space_xxs)
+                // } else {
+                //     widget::row::with_children(vec![
+                //         widget::icon::icon(item.icon_handle_list.clone())
+                //             .content_fit(ContentFit::Contain)
+                //             .size(icon_size)
+                //             .into(),
+                //         widget::text(item.name.clone()).width(Length::Fill).into(),
+                //         widget::text(date_format)
+                //             .width(Length::Fixed(modified_width))
+                //             .into(),
+                //         widget::text(size_text())
+                //             .width(Length::Fixed(size_width))
+                //             .into(),
+                //     ])
+                //     .align_items(Alignment::Center)
+                //     .spacing(space_xxs)
+                // };
+
+                let button = widget::button(
+                    widget::row::with_children(columns)
+                        .align_items(Alignment::Center)
+                        .spacing(space_xxs),
+                )
+                .width(Length::Fill)
+                .height(Length::Fixed(row_height as f32))
+                .id(item.button_id.clone())
+                .padding(space_xxs)
+                .style(button_style(item.selected, true))
+                .on_press(Message::Click(Some(i)));
                 if self.context_menu.is_some() {
                     children.push(button.into());
                 } else {

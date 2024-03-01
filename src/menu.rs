@@ -190,6 +190,8 @@ pub fn menu_bar<'a>(key_binds: &HashMap<KeyBind, Action>) -> Element<'a, Message
                 MenuTree::new(horizontal_rule(1)),
                 menu_item(fl!("menu-settings"), Action::Settings),
                 MenuTree::new(horizontal_rule(1)),
+                menu_item(fl!("visible-columns"), Action::VisibleColumns),
+                MenuTree::new(horizontal_rule(1)),
                 menu_item(fl!("menu-about"), Action::About),
             ],
         ),
