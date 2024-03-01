@@ -472,7 +472,7 @@ impl App {
                     widget::settings::item::builder(fl!("icon-size-list"))
                         .description(format!("{}%", list))
                         .control(
-                            widget::slider(50..=500, list, move |list| {
+                            widget::slider(100..=500, list, move |list| {
                                 Message::TabConfig(TabConfig {
                                     icon_sizes: IconSizes {
                                         list: NonZeroU16::new(list).unwrap(),
