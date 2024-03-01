@@ -417,6 +417,7 @@ pub enum Message {
     Resize(Size),
     RightClick(usize),
     Scroll(Viewport),
+    SelectAll,
     Thumbnail(PathBuf, Result<image::RgbaImage, ()>),
     ToggleShowHidden,
     View(View),
@@ -669,7 +670,7 @@ impl Tab {
 
     pub fn select_name(&mut self, name: &str) {
         if let Some(ref mut items) = self.items_opt {
-            for (i, item) in items.iter_mut().enumerate() {
+            for item in items.iter_mut() {
                 if item.name == name {
                     item.selected = true;
                 } else {
@@ -788,6 +789,64 @@ impl Tab {
         item.pos_opt.get()
     }
 
+    fn select_first_pos_opt(&self) -> Option<(usize, usize)> {
+        let items = self.items_opt.as_ref()?;
+        let mut first = None;
+        for item in items.iter() {
+            if !item.selected {
+                continue;
+            }
+
+            let (row, col) = match item.pos_opt.get() {
+                Some(some) => some,
+                None => continue,
+            };
+
+            first = Some(match first {
+                Some((first_row, first_col)) => {
+                    if row < first_row {
+                        (row, col)
+                    } else if row == first_row {
+                        (row, col.min(first_row))
+                    } else {
+                        (first_row, first_col)
+                    }
+                }
+                None => (row, col),
+            });
+        }
+        first
+    }
+
+    fn select_last_pos_opt(&self) -> Option<(usize, usize)> {
+        let items = self.items_opt.as_ref()?;
+        let mut last = None;
+        for item in items.iter() {
+            if !item.selected {
+                continue;
+            }
+
+            let (row, col) = match item.pos_opt.get() {
+                Some(some) => some,
+                None => continue,
+            };
+
+            last = Some(match last {
+                Some((last_row, last_col)) => {
+                    if row > last_row {
+                        (row, col)
+                    } else if row == last_row {
+                        (row, col.max(last_row))
+                    } else {
+                        (last_row, last_col)
+                    }
+                }
+                None => (row, col),
+            });
+        }
+        last
+    }
+
     pub fn update(&mut self, message: Message, modifiers: Modifiers) -> Vec<Command> {
         let mut commands = Vec::new();
         let mut cd = None;
@@ -843,6 +902,10 @@ impl Tab {
                     }
                 }
                 self.context_menu = None;
+                if self.select_focus.take().is_some() {
+                    // Unfocus currently focused button
+                    commands.push(Command::FocusButton(widget::Id::unique()));
+                }
             }
             Message::Config(config) => {
                 self.config = config;
@@ -859,6 +922,10 @@ impl Tab {
             Message::Drag(rect_opt) => match rect_opt {
                 Some(rect) => {
                     self.select_rect(rect);
+                    if self.select_focus.take().is_some() {
+                        // Unfocus currently focused button
+                        commands.push(Command::FocusButton(widget::Id::unique()));
+                    }
                 }
                 None => {}
             },
@@ -892,6 +959,9 @@ impl Tab {
                         // Ensure current item is still selected if there are no other items
                         self.select_position(row, col, mod_shift);
                     }
+                } else if let Some((row, col)) = self.select_last_pos_opt() {
+                    // Select last item in current selection to focus it
+                    self.select_position(row, col, mod_shift);
                 } else {
                     // Select first item
                     //TODO: select first in scroll
@@ -930,6 +1000,9 @@ impl Tab {
                             self.select_position(row, col, mod_shift);
                         }
                     }
+                } else if let Some((row, col)) = self.select_first_pos_opt() {
+                    // Select first item in current selection to focus it
+                    self.select_position(row, col, mod_shift);
                 } else {
                     // Select first item
                     //TODO: select first in scroll
@@ -952,6 +1025,9 @@ impl Tab {
                             self.select_position(row, col, mod_shift);
                         }
                     }
+                } else if let Some((row, col)) = self.select_last_pos_opt() {
+                    // Select last item in current selection to focus it
+                    self.select_position(row, col, mod_shift);
                 } else {
                     // Select first item
                     //TODO: select first in scroll
@@ -975,6 +1051,9 @@ impl Tab {
                         // Ensure current item is still selected if there are no other items
                         self.select_position(row, col, mod_shift);
                     }
+                } else if let Some((row, col)) = self.select_first_pos_opt() {
+                    // Select first item in current selection to focus it
+                    self.select_position(row, col, mod_shift);
                 } else {
                     // Select first item
                     //TODO: select first in scroll
@@ -1042,6 +1121,13 @@ impl Tab {
             }
             Message::Scroll(viewport) => {
                 self.scroll_opt = Some(viewport.absolute_offset());
+            }
+            Message::SelectAll => {
+                self.select_all();
+                if self.select_focus.take().is_some() {
+                    // Unfocus currently focused button
+                    commands.push(Command::FocusButton(widget::Id::unique()));
+                }
             }
             Message::Thumbnail(path, thumbnail_res) => {
                 if let Some(ref mut items) = self.items_opt {

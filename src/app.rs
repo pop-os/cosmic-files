@@ -99,7 +99,7 @@ impl Action {
             Action::Properties => Message::ToggleContextPage(ContextPage::Properties),
             Action::Rename => Message::Rename(entity_opt),
             Action::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
-            Action::SelectAll => Message::SelectAll(entity_opt),
+            Action::SelectAll => Message::TabMessage(entity_opt, tab::Message::SelectAll),
             Action::Settings => Message::ToggleContextPage(ContextPage::Settings),
             Action::TabClose => Message::TabClose(entity_opt),
             Action::TabNew => Message::TabNew,
@@ -142,7 +142,6 @@ pub enum Message {
     PendingProgress(u64, f32),
     Rename(Option<segmented_button::Entity>),
     RestoreFromTrash(Option<segmented_button::Entity>),
-    SelectAll(Option<segmented_button::Entity>),
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     TabActivate(segmented_button::Entity),
     TabNext,
@@ -944,12 +943,6 @@ impl Application for App {
                 }
                 if !paths.is_empty() {
                     self.operation(Operation::Restore { paths });
-                }
-            }
-            Message::SelectAll(entity_opt) => {
-                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
-                if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-                    tab.select_all();
                 }
             }
             Message::SystemThemeModeChange(_theme_mode) => {
