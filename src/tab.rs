@@ -1101,7 +1101,7 @@ impl Tab {
         commands
     }
 
-    fn column_sort(&self) -> Option<Vec<&Item>> {
+    fn column_sort(&self) -> Option<Vec<(usize, &Item)>> {
         let check_reverse = |ord: Ordering, sort: bool| {
             if sort {
                 ord
@@ -1109,7 +1109,7 @@ impl Tab {
                 ord.reverse()
             }
         };
-        let mut items: Vec<&Item> = self.items_opt.as_ref()?.iter().collect();
+        let mut items: Vec<_> = self.items_opt.as_ref()?.iter().enumerate().collect();
         let heading_sort = self.sort_direction;
         match self.sort_name {
             HeadingOptions::Size => {
@@ -1128,8 +1128,8 @@ impl Tab {
                             trash::TrashItemSize::Bytes(bytes) => (false, bytes),
                         },
                     };
-                    let (a_is_entry, a_size) = get_size(a);
-                    let (b_is_entry, b_size) = get_size(b);
+                    let (a_is_entry, a_size) = get_size(a.1);
+                    let (b_is_entry, b_size) = get_size(b.1);
 
                     let ord = match (a_is_entry, b_is_entry) {
                         (true, false) => Ordering::Less,
@@ -1140,10 +1140,10 @@ impl Tab {
                 })
             }
             HeadingOptions::Name => items.sort_by(|a, b| {
-                let ord = match (a.path.is_dir(), b.path.is_dir()) {
+                let ord = match (a.1.path.is_dir(), b.1.path.is_dir()) {
                     (true, false) => Ordering::Less,
                     (false, true) => Ordering::Greater,
-                    _ => lexical_sort::natural_lexical_cmp(&a.name, &b.name),
+                    _ => lexical_sort::natural_lexical_cmp(&a.1.name, &b.1.name),
                 };
                 check_reverse(ord, heading_sort)
             }),
@@ -1154,8 +1154,8 @@ impl Tab {
                         ItemMetadata::Trash { .. } => None,
                     };
 
-                    let a = get_modified(a);
-                    let b = get_modified(b);
+                    let a = get_modified(a.1);
+                    let b = get_modified(b.1);
                     check_reverse(a.cmp(&b), heading_sort)
                 });
             }
@@ -1530,14 +1530,14 @@ impl Tab {
         children.push(horizontal_rule(1).into());
         y += 1;
 
-        if let Some(ref items) = self.column_sort() {
+        if let Some(items) = self.column_sort() {
             let mut count = 0;
             let mut hidden = 0;
             let TabConfig {
                 show_hidden,
                 icon_sizes,
             } = self.config;
-            for (i, item) in items.iter().enumerate() {
+            for (i, item) in items {
                 if !show_hidden && item.hidden {
                     item.pos_opt.set(None);
                     item.rect_opt.set(None);
