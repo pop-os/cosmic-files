@@ -1752,11 +1752,13 @@ impl Tab {
                     HeadingOptions::Created => date_format!(created),
                 };
 
-                let columns_content = visible_columns.iter().filter(|col| col.active).map(|col| {
-                    widget::text(column_text(col.heading))
-                        .width(get_column_width(col.heading))
-                        .into()
-                });
+                let columns_content = || {
+                    visible_columns.iter().filter(|col| col.active).map(|col| {
+                        widget::text(column_text(col.heading))
+                            .width(get_column_width(col.heading))
+                            .into()
+                    })
+                };
 
                 let condensed_view = || {
                     visible_columns
@@ -1774,7 +1776,7 @@ impl Tab {
                             .into(),
                     )
                 } else {
-                    columns.extend(columns_content)
+                    columns.extend(columns_content())
                 }
                 //TODO: translate?
 
