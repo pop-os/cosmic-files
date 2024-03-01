@@ -638,11 +638,9 @@ impl Tab {
 
     pub fn set_items(&mut self, items: Vec<Item>) {
         self.items_opt = Some(items);
-        self.select_focus = None;
     }
 
     pub fn select_all(&mut self) {
-        self.select_focus = None;
         if let Some(ref mut items) = self.items_opt {
             for item in items.iter_mut() {
                 if !self.config.show_hidden && item.hidden {
@@ -670,11 +668,9 @@ impl Tab {
     }
 
     pub fn select_name(&mut self, name: &str) {
-        self.select_focus = None;
         if let Some(ref mut items) = self.items_opt {
             for (i, item) in items.iter_mut().enumerate() {
                 if item.name == name {
-                    self.select_focus = Some(i);
                     item.selected = true;
                 } else {
                     item.selected = false;
@@ -731,7 +727,6 @@ impl Tab {
     }
 
     pub fn select_rect(&mut self, rect: Rectangle) {
-        self.select_focus = None;
         if let Some(ref mut items) = self.items_opt {
             for (_i, item) in items.iter_mut().enumerate() {
                 //TODO: modifiers
@@ -803,7 +798,6 @@ impl Tab {
             && self.dialog.as_ref().map_or(true, |x| x.multiple());
         match message {
             Message::Click(click_i_opt) => {
-                self.select_focus = None;
                 if let Some(ref mut items) = self.items_opt {
                     for (i, item) in items.iter_mut().enumerate() {
                         if Some(i) == click_i_opt {
@@ -819,7 +813,6 @@ impl Tab {
                                     }
                                 }
                             }
-                            self.select_focus = Some(i);
                             item.selected = true;
                             if let Some(click_time) = item.click_time {
                                 if click_time.elapsed() < DOUBLE_CLICK_DURATION {
