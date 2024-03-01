@@ -1483,41 +1483,40 @@ impl Tab {
             space_m, space_xxs, ..
         } = theme::active().cosmic().spacing;
 
-        //TODO: make adaptive?
         let size = self.size_opt.unwrap_or_else(|| Size::new(0.0, 0.0));
         let row_height = 40;
+        //TODO: make adaptive?
         let modified_width = Length::Fixed(200.0);
         let size_width = Length::Fixed(100.0);
 
-        macro_rules! heading_item {
-            ($name: literal, $width: expr, $msg: expr) => {
-                widget::row::with_children(vec![
-                    widget::text::heading(fl!($name)).into(),
-                    widget::button(widget::icon::from_name(
-                        match (self.sort_name == $msg, self.sort_direction) {
-                            (true, true) => "go-down-symbolic",
-                            (true, false) => "go-up-symbolic",
-                            _ => "list-remove-symbolic",
-                        },
-                    ))
-                    .on_press(Message::ToggleSort($msg))
-                    .style(cosmic::style::Button::Icon)
-                    .into(),
-                ])
-                .spacing(space_xxs)
-                .width($width)
+        let heading_item = |name, width, msg| {
+            let mut row = widget::row::with_capacity(2)
                 .align_items(Alignment::Center)
+                .spacing(space_xxs)
+                .width(width);
+            row = row.push(widget::text::heading(name));
+            match (self.sort_name == msg, self.sort_direction) {
+                (true, true) => {
+                    row = row.push(widget::icon::from_name("pan-down-symbolic").size(16));
+                }
+                (true, false) => {
+                    row = row.push(widget::icon::from_name("pan-up-symbolic").size(16));
+                }
+                _ => {}
+            }
+            //TODO: make it possible to resize with the mouse
+            mouse_area::MouseArea::new(row)
+                .on_press(move |_point_opt| Message::ToggleSort(msg))
                 .into()
-            };
-        }
+        };
 
         let mut children: Vec<Element<_>> = Vec::new();
         children.push(
             widget::row::with_children(vec![
-                heading_item!("name", Length::Fill, HeadingOptions::Name),
+                heading_item(fl!("name"), Length::Fill, HeadingOptions::Name),
                 //TODO: do not show modified column when in the trash
-                heading_item!("modified", modified_width, HeadingOptions::Modified),
-                heading_item!("size", size_width, HeadingOptions::Size),
+                heading_item(fl!("modified"), modified_width, HeadingOptions::Modified),
+                heading_item(fl!("size"), size_width, HeadingOptions::Size),
             ])
             .align_items(Alignment::Center)
             .height(Length::Fixed(row_height as f32))
