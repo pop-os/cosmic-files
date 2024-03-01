@@ -294,14 +294,10 @@ impl App {
     }
 
     fn update_title(&mut self) -> Command<Message> {
-        let (header_title, window_title) = match self.tab_model.text(self.tab_model.active()) {
-            Some(tab_title) => (
-                tab_title.to_string(),
-                format!("{tab_title} — COSMIC File Manager"),
-            ),
-            None => (String::new(), "COSMIC File Manager".to_string()),
+        let window_title = match self.tab_model.text(self.tab_model.active()) {
+            Some(tab_title) => format!("{tab_title} — {}", fl!("cosmic-files")),
+            None => fl!("cosmic-files"),
         };
-        self.set_header_title(header_title);
         self.set_window_title(window_title, window::Id::MAIN)
     }
 
@@ -480,8 +476,7 @@ impl App {
                                     ..tab_config
                                 })
                             })
-                            .step(25u16)
-                            .width(Length::Fixed(100.0)),
+                            .step(25u16),
                         )
                 })
                 .add({
@@ -499,8 +494,7 @@ impl App {
                                     ..tab_config
                                 })
                             })
-                            .step(25u16)
-                            .width(Length::Fixed(100.0)),
+                            .step(25u16),
                         )
                 })
                 .into(),

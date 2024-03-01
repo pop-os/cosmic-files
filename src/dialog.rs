@@ -96,7 +96,7 @@ impl<M: Send + 'static> Dialog<M> {
         settings.transparent = true;
 
         //TODO: allow resize!
-        settings.size = Size::new(800.0, 600.0);
+        settings.size = Size::new(1024.0, 640.0);
         settings.resizable = false;
 
         #[cfg(target_os = "linux")]

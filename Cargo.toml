@@ -33,7 +33,8 @@ i18n-embed-fl = "0.7"
 rust-embed = "8"
 
 [dependencies.libcosmic]
-git = "https://github.com/pop-os/libcosmic.git"
+#git = "https://github.com/pop-os/libcosmic.git"
+path = "../libcosmic"
 default-features = false
 features = ["multi-window", "tokio", "winit"]
 
