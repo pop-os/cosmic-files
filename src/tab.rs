@@ -1647,10 +1647,10 @@ impl Tab {
 
         let get_column_width = |col: HeadingOptions| match col {
             HeadingOptions::Name => Length::Fill,
-            HeadingOptions::Modified => Length::Fixed(modified_width),
-            HeadingOptions::Size | HeadingOptions::Accessed | HeadingOptions::Created => {
-                Length::Fixed(size_width)
+            HeadingOptions::Modified | HeadingOptions::Accessed | HeadingOptions::Created => {
+                Length::Fixed(modified_width)
             }
+            HeadingOptions::Size => Length::Fixed(size_width),
         };
 
         let heading = self
