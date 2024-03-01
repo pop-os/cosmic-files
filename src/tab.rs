@@ -226,17 +226,20 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
 
                 let mime_guess = MimeGuess::from_path(&path);
 
-                let (icon_handle_grid, icon_handle_list) = if metadata.is_dir() {
-                    (
-                        folder_icon(&path, sizes.grid()),
-                        folder_icon(&path, sizes.list()),
-                    )
-                } else {
-                    (
-                        mime_icon(&path, sizes.grid()),
-                        mime_icon(&path, sizes.list()),
-                    )
-                };
+                let (icon_handle_grid, icon_handle_list, icon_handle_list_condensed) =
+                    if metadata.is_dir() {
+                        (
+                            folder_icon(&path, sizes.grid()),
+                            folder_icon(&path, sizes.list()),
+                            folder_icon(&path, sizes.list_condensed()),
+                        )
+                    } else {
+                        (
+                            mime_icon(&path, sizes.grid()),
+                            mime_icon(&path, sizes.list()),
+                            mime_icon(&path, sizes.list_condensed()),
+                        )
+                    };
 
                 let children = if metadata.is_dir() {
                     //TODO: calculate children in the background (and make it cancellable?)
@@ -259,6 +262,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                     mime_guess,
                     icon_handle_grid,
                     icon_handle_list,
+                    icon_handle_list_condensed,
                     thumbnail_res_opt: match mime_guess.first() {
                         Some(mime) if mime.type_() == "image" => None,
                         _ => Some(Err(())),
@@ -326,16 +330,19 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
 
                 let mime_guess = MimeGuess::from_path(&path);
 
-                let (icon_handle_grid, icon_handle_list) = match metadata.size {
-                    trash::TrashItemSize::Entries(_) => (
-                        folder_icon(&path, sizes.grid()),
-                        folder_icon(&path, sizes.list()),
-                    ),
-                    trash::TrashItemSize::Bytes(_) => (
-                        mime_icon(&path, sizes.grid()),
-                        mime_icon(&path, sizes.list()),
-                    ),
-                };
+                let (icon_handle_grid, icon_handle_list, icon_handle_list_condensed) =
+                    match metadata.size {
+                        trash::TrashItemSize::Entries(_) => (
+                            folder_icon(&path, sizes.grid()),
+                            folder_icon(&path, sizes.list()),
+                            folder_icon(&path, sizes.list_condensed()),
+                        ),
+                        trash::TrashItemSize::Bytes(_) => (
+                            mime_icon(&path, sizes.grid()),
+                            mime_icon(&path, sizes.list()),
+                            mime_icon(&path, sizes.list_condensed()),
+                        ),
+                    };
 
                 items.push(Item {
                     name,
@@ -345,6 +352,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     mime_guess,
                     icon_handle_grid,
                     icon_handle_list,
+                    icon_handle_list_condensed,
                     thumbnail_res_opt: Some(Err(())),
                     button_id: widget::Id::unique(),
                     pos_opt: Cell::new(None),
@@ -450,6 +458,7 @@ pub struct Item {
     pub mime_guess: MimeGuess,
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
+    pub icon_handle_list_condensed: widget::icon::Handle,
     pub thumbnail_res_opt: Option<Result<image::RgbaImage, ()>>,
     pub button_id: widget::Id,
     pub pos_opt: Cell<Option<(usize, usize)>>,
@@ -1483,11 +1492,23 @@ impl Tab {
             space_m, space_xxs, ..
         } = theme::active().cosmic().spacing;
 
+        let TabConfig {
+            show_hidden,
+            icon_sizes,
+        } = self.config;
+
         let size = self.size_opt.unwrap_or_else(|| Size::new(0.0, 0.0));
-        let row_height = 40;
-        //TODO: make adaptive?
-        let modified_width = Length::Fixed(200.0);
-        let size_width = Length::Fixed(100.0);
+        //TODO: allow resizing?
+        let name_width = 300.0;
+        let modified_width = 200.0;
+        let size_width = 100.0;
+        let condensed = size.width < (name_width + modified_width + size_width);
+        let icon_size = if condensed {
+            icon_sizes.list_condensed()
+        } else {
+            icon_sizes.list()
+        };
+        let row_height = icon_size + 2 * space_xxs;
 
         let heading_item = |name, width, msg| {
             let mut row = widget::row::with_capacity(2)
@@ -1511,31 +1532,33 @@ impl Tab {
         };
 
         let mut children: Vec<Element<_>> = Vec::new();
-        children.push(
-            widget::row::with_children(vec![
-                heading_item(fl!("name"), Length::Fill, HeadingOptions::Name),
-                //TODO: do not show modified column when in the trash
-                heading_item(fl!("modified"), modified_width, HeadingOptions::Modified),
-                heading_item(fl!("size"), size_width, HeadingOptions::Size),
-            ])
-            .align_items(Alignment::Center)
-            .height(Length::Fixed(row_height as f32))
-            .padding(space_xxs)
-            .spacing(space_xxs)
-            .into(),
-        );
-        let mut y = row_height;
-
-        children.push(horizontal_rule(1).into());
-        y += 1;
+        let mut y = 0;
+        if !condensed {
+            children.push(
+                widget::row::with_children(vec![
+                    heading_item(fl!("name"), Length::Fill, HeadingOptions::Name),
+                    //TODO: do not show modified column when in the trash
+                    heading_item(
+                        fl!("modified"),
+                        Length::Fixed(modified_width),
+                        HeadingOptions::Modified,
+                    ),
+                    heading_item(fl!("size"), Length::Fixed(size_width), HeadingOptions::Size),
+                ])
+                .align_items(Alignment::Center)
+                .height(Length::Fixed(row_height as f32))
+                .padding(space_xxs)
+                .spacing(space_xxs)
+                .into(),
+            );
+            y += row_height;
+            children.push(horizontal_rule(1).into());
+            y += 1;
+        }
 
         if let Some(items) = self.column_sort() {
             let mut count = 0;
             let mut hidden = 0;
-            let TabConfig {
-                show_hidden,
-                icon_sizes,
-            } = self.config;
             for (i, item) in items {
                 if !show_hidden && item.hidden {
                     item.pos_opt.set(None);
@@ -1585,25 +1608,46 @@ impl Tab {
                     },
                 };
 
-                //TODO: align columns
-                let button = widget::button(
+                let row = if condensed {
+                    widget::row::with_children(vec![
+                        widget::icon::icon(item.icon_handle_list_condensed.clone())
+                            .content_fit(ContentFit::Contain)
+                            .size(icon_size)
+                            .into(),
+                        widget::column::with_children(vec![
+                            widget::text(item.name.clone()).into(),
+                            //TODO: translate?
+                            widget::text(format!("{} - {}", modified_text, size_text)).into(),
+                        ])
+                        .into(),
+                    ])
+                    .align_items(Alignment::Center)
+                    .spacing(space_xxs)
+                } else {
                     widget::row::with_children(vec![
                         widget::icon::icon(item.icon_handle_list.clone())
                             .content_fit(ContentFit::Contain)
-                            .size(icon_sizes.list())
+                            .size(icon_size)
                             .into(),
                         widget::text(item.name.clone()).width(Length::Fill).into(),
-                        widget::text(modified_text).width(modified_width).into(),
-                        widget::text(size_text).width(size_width).into(),
+                        widget::text(modified_text)
+                            .width(Length::Fixed(modified_width))
+                            .into(),
+                        widget::text(size_text)
+                            .width(Length::Fixed(size_width))
+                            .into(),
                     ])
                     .align_items(Alignment::Center)
-                    .spacing(space_xxs),
-                )
-                .height(Length::Fixed(row_height as f32))
-                .id(item.button_id.clone())
-                .padding(space_xxs)
-                .style(button_style(item.selected, true))
-                .on_press(Message::Click(Some(i)));
+                    .spacing(space_xxs)
+                };
+
+                let button = widget::button(row)
+                    .width(Length::Fill)
+                    .height(Length::Fixed(row_height as f32))
+                    .id(item.button_id.clone())
+                    .padding(space_xxs)
+                    .style(button_style(item.selected, true))
+                    .on_press(Message::Click(Some(i)));
                 if self.context_menu.is_some() {
                     children.push(button.into());
                 } else {

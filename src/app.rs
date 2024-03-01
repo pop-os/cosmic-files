@@ -546,7 +546,10 @@ impl Application for App {
     }
 
     /// Creates the application, and optionally emits command on initialize.
-    fn init(core: Core, flags: Self::Flags) -> (Self, Command<Self::Message>) {
+    fn init(mut core: Core, flags: Self::Flags) -> (Self, Command<Self::Message>) {
+        //TODO: make set_nav_bar_toggle_condensed pub
+        core.nav_bar_toggle_condensed();
+
         let app_themes = vec![fl!("match-desktop"), fl!("dark"), fl!("light")];
 
         let mut nav_model = segmented_button::ModelBuilder::default();

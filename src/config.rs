@@ -12,6 +12,7 @@ pub const CONFIG_VERSION: u64 = 1;
 
 // Default icon sizes
 const ICON_SIZE_LIST: u16 = 24;
+const ICON_SIZE_LIST_CONDENSED: u16 = 48;
 const ICON_SIZE_GRID: u16 = 64;
 // TODO: 5 is an arbitrary number. Maybe there's a better icon size max
 const ICON_SCALE_MAX: u16 = 5;
@@ -96,6 +97,10 @@ impl Default for IconSizes {
 impl IconSizes {
     pub fn list(&self) -> u16 {
         percent!(self.list, ICON_SIZE_LIST) as _
+    }
+
+    pub fn list_condensed(&self) -> u16 {
+        percent!(self.list, ICON_SIZE_LIST_CONDENSED) as _
     }
 
     pub fn grid(&self) -> u16 {

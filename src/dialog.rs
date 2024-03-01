@@ -312,6 +312,8 @@ impl Application for App {
     fn init(mut core: Core, flags: Self::Flags) -> (Self, Command<Message>) {
         core.window.show_maximize = false;
         core.window.show_minimize = false;
+        //TODO: make set_nav_bar_toggle_condensed pub
+        core.nav_bar_toggle_condensed();
 
         let mut nav_model = segmented_button::ModelBuilder::default();
         if let Some(dir) = dirs::home_dir() {
