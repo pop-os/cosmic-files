@@ -38,6 +38,8 @@ replace-warning = Do you want to replace it with the one you are saving? Replaci
 # List view
 name = Name
 modified = Modified
+accessed = Accessed
+created = Created
 size = Size
 
 # Context Pages
@@ -98,3 +100,8 @@ grid-view = Grid view
 list-view = List view
 menu-settings = Settings...
 menu-about = About COSMIC Files...
+
+## Visible columns
+visible-columns = Visible columns
+move-up = Move up
+move-down = Move down
