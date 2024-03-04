@@ -17,7 +17,7 @@ mod key_bind;
 mod localize;
 mod menu;
 mod mime_app;
-mod mime_icon;
+pub mod mime_icon;
 mod mouse_area;
 mod operation;
 mod spawn_detached;
