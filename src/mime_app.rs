@@ -192,7 +192,7 @@ impl MimeAppCache {
                                 {
                                     apps.push(MimeApp::from(app));
                                 } else {
-                                    log::warn!("failed to add association for {:?}: application {:?} not found", mime, filename);
+                                    log::debug!("failed to add association for {:?}: application {:?} not found", mime, filename);
                                 }
                             }
                         }
@@ -231,7 +231,7 @@ impl MimeAppCache {
                                 if found {
                                     break;
                                 } else {
-                                    log::warn!("failed to set default for {:?}: application {:?} not found", mime, filename);
+                                    log::debug!("failed to set default for {:?}: application {:?} not found", mime, filename);
                                 }
                             }
                         }
