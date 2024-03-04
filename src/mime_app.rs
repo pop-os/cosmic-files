@@ -6,7 +6,7 @@ use cosmic::desktop;
 use cosmic::widget;
 pub use mime_guess::Mime;
 use once_cell::sync::Lazy;
-use std::{collections::HashMap, path::PathBuf, sync::Mutex, time::Instant};
+use std::{collections::HashMap, path::PathBuf, process, sync::Mutex, time::Instant};
 
 #[derive(Clone, Debug)]
 pub struct MimeApp {
@@ -16,6 +16,33 @@ pub struct MimeApp {
     pub exec: Option<String>,
     pub icon: widget::icon::Handle,
     pub is_default: bool,
+}
+
+impl MimeApp {
+    //TODO: move to libcosmic, support multiple files
+    pub fn command(&self, path_opt: Option<PathBuf>) -> Option<process::Command> {
+        let args_vec: Vec<String> = self.exec.as_deref().and_then(shlex::split)?;
+        let mut args = args_vec.iter();
+        let mut command = process::Command::new(args.next()?);
+        for arg in args {
+            if arg.starts_with('%') {
+                match arg.as_str() {
+                    "%f" | "%F" | "%u" | "%U" => {
+                        if let Some(path) = &path_opt {
+                            command.arg(path);
+                        }
+                    }
+                    _ => {
+                        log::warn!("unsupported Exec code {:?} in {:?}", arg, self.id);
+                        return None;
+                    }
+                }
+            } else {
+                command.arg(arg);
+            }
+        }
+        Some(command)
+    }
 }
 
 #[cfg(feature = "desktop")]
@@ -46,12 +73,14 @@ fn filename_eq(path_opt: &Option<PathBuf>, filename: &str) -> bool {
 
 pub struct MimeAppCache {
     cache: HashMap<Mime, Vec<MimeApp>>,
+    terminals: Vec<MimeApp>,
 }
 
 impl MimeAppCache {
     pub fn new() -> Self {
         let mut mime_app_cache = Self {
             cache: HashMap::new(),
+            terminals: Vec::new(),
         };
         mime_app_cache.reload();
         mime_app_cache
@@ -66,6 +95,7 @@ impl MimeAppCache {
         let start = Instant::now();
 
         self.cache.clear();
+        self.terminals.clear();
 
         //TODO: get proper locale?
         let locale = None;
@@ -81,6 +111,12 @@ impl MimeAppCache {
                     .or_insert_with(|| Vec::with_capacity(1));
                 if apps.iter().find(|x| x.id == app.id).is_none() {
                     apps.push(MimeApp::from(app));
+                }
+            }
+            for category in app.categories.iter() {
+                if category == "TerminalEmulator" {
+                    self.terminals.push(MimeApp::from(app));
+                    break;
                 }
             }
         }
@@ -201,4 +237,23 @@ static MIME_APP_CACHE: Lazy<Mutex<MimeAppCache>> = Lazy::new(|| Mutex::new(MimeA
 pub fn mime_apps(mime: &Mime) -> Vec<MimeApp> {
     let mime_app_cache = MIME_APP_CACHE.lock().unwrap();
     mime_app_cache.get(mime)
+}
+
+pub fn terminal() -> Option<MimeApp> {
+    let mime_app_cache = MIME_APP_CACHE.lock().unwrap();
+
+    //TODO: consider rules in https://github.com/Vladimir-csp/xdg-terminal-exec
+
+    // Look for and return preferred terminals
+    //TODO: fallback order beyond cosmic-term?
+    for id in &["com.system76.CosmicTerm"] {
+        for terminal in mime_app_cache.terminals.iter() {
+            if &terminal.id == id {
+                return Some(terminal.clone());
+            }
+        }
+    }
+
+    // Return whatever was the first terminal found
+    mime_app_cache.terminals.first().map(|x| x.clone())
 }

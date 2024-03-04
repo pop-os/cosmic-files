@@ -20,6 +20,7 @@ mod mime_app;
 mod mime_icon;
 mod mouse_area;
 mod operation;
+mod spawn_detached;
 mod tab;
 
 pub fn home_dir() -> PathBuf {

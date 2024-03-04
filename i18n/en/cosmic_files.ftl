@@ -72,6 +72,7 @@ light = Light
 new-file = New file
 new-folder = New folder
 open-with = Open with
+open-in-terminal = Open in terminal
 move-to-trash = Move to trash
 restore-from-trash = Restore from trash
 

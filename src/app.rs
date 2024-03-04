@@ -13,7 +13,10 @@ use cosmic::{
         window, Alignment, Event, Length,
     },
     style, theme,
-    widget::{self, segmented_button},
+    widget::{
+        self,
+        segmented_button::{self, Entity},
+    },
     Application, ApplicationExt, Element,
 };
 use notify::Watcher;
@@ -30,8 +33,9 @@ use crate::{
     config::{AppTheme, Config, IconSizes, TabConfig, CONFIG_VERSION},
     fl, home_dir,
     key_bind::{key_binds, KeyBind},
-    menu,
+    menu, mime_app,
     operation::Operation,
+    spawn_detached::spawn_detached,
     tab::{self, ItemMetadata, Location, Tab},
 };
 
@@ -58,6 +62,7 @@ pub enum Action {
     NewFile,
     NewFolder,
     Open,
+    OpenTerminal,
     OpenWith,
     Operations,
     Paste,
@@ -78,7 +83,7 @@ pub enum Action {
 }
 
 impl Action {
-    pub fn message(self, entity_opt: Option<segmented_button::Entity>) -> Message {
+    pub fn message(self, entity_opt: Option<Entity>) -> Message {
         match self {
             Action::About => Message::ToggleContextPage(ContextPage::About),
             Action::Copy => Message::Copy(entity_opt),
@@ -95,6 +100,7 @@ impl Action {
             Action::NewFile => Message::NewItem(entity_opt, false),
             Action::NewFolder => Message::NewItem(entity_opt, true),
             Action::Open => Message::TabMessage(entity_opt, tab::Message::Open),
+            Action::OpenTerminal => Message::OpenTerminal(entity_opt),
             Action::OpenWith => Message::ToggleContextPage(ContextPage::OpenWith),
             Action::Operations => Message::ToggleContextPage(ContextPage::Operations),
             Action::Paste => Message::Paste(entity_opt),
@@ -125,34 +131,35 @@ impl Action {
 pub enum Message {
     AppTheme(AppTheme),
     Config(Config),
-    Copy(Option<segmented_button::Entity>),
-    Cut(Option<segmented_button::Entity>),
+    Copy(Option<Entity>),
+    Cut(Option<Entity>),
     DialogCancel,
     DialogComplete,
     DialogUpdate(DialogPage),
-    EditLocation(Option<segmented_button::Entity>),
+    EditLocation(Option<Entity>),
     Key(Modifiers, Key),
     LaunchUrl(String),
     Modifiers(Modifiers),
-    MoveToTrash(Option<segmented_button::Entity>),
-    NewItem(Option<segmented_button::Entity>, bool),
+    MoveToTrash(Option<Entity>),
+    NewItem(Option<Entity>, bool),
     NotifyEvent(notify::Event),
     NotifyWatcher(WatcherWrapper),
-    Paste(Option<segmented_button::Entity>),
+    OpenTerminal(Option<Entity>),
+    Paste(Option<Entity>),
     PendingComplete(u64),
     PendingError(u64, String),
     PendingProgress(u64, f32),
-    Rename(Option<segmented_button::Entity>),
-    RestoreFromTrash(Option<segmented_button::Entity>),
+    Rename(Option<Entity>),
+    RestoreFromTrash(Option<Entity>),
     SystemThemeModeChange(cosmic_theme::ThemeMode),
-    TabActivate(segmented_button::Entity),
+    TabActivate(Entity),
     TabNext,
     TabPrev,
-    TabClose(Option<segmented_button::Entity>),
+    TabClose(Option<Entity>),
     TabConfig(TabConfig),
-    TabMessage(Option<segmented_button::Entity>, tab::Message),
+    TabMessage(Option<Entity>, tab::Message),
     TabNew,
-    TabRescan(segmented_button::Entity, Vec<tab::Item>),
+    TabRescan(Entity, Vec<tab::Item>),
     ToggleContextPage(ContextPage),
     WindowClose,
     WindowNew,
@@ -256,11 +263,7 @@ impl App {
         self.pending_operations.insert(id, (operation, 0.0));
     }
 
-    fn rescan_tab(
-        &mut self,
-        entity: segmented_button::Entity,
-        location: Location,
-    ) -> Command<Message> {
+    fn rescan_tab(&mut self, entity: Entity, location: Location) -> Command<Message> {
         let icon_sizes = self.config.tab.icon_sizes;
         Command::perform(
             async move {
@@ -643,7 +646,7 @@ impl Application for App {
         Some(&self.nav_model)
     }
 
-    fn on_nav_select(&mut self, entity: segmented_button::Entity) -> Command<Self::Message> {
+    fn on_nav_select(&mut self, entity: Entity) -> Command<Self::Message> {
         let location_opt = self.nav_model.data::<Location>(entity).clone();
 
         if let Some(location) = location_opt {
@@ -864,6 +867,44 @@ impl Application for App {
                     log::warn!("message did not contain notify watcher");
                 }
             },
+            Message::OpenTerminal(entity_opt) => {
+                if let Some(terminal) = mime_app::terminal() {
+                    let mut paths = Vec::new();
+                    let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                    if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                        if let Location::Path(path) = &tab.location {
+                            if let Some(items) = tab.items_opt() {
+                                for item in items.iter() {
+                                    if item.selected {
+                                        paths.push(item.path.clone());
+                                    }
+                                }
+                            }
+                            if paths.is_empty() {
+                                paths.push(path.clone());
+                            }
+                        }
+                    }
+                    for path in paths {
+                        if let Some(mut command) = terminal.command(None) {
+                            command.current_dir(&path);
+                            match spawn_detached(&mut command) {
+                                Ok(()) => {}
+                                Err(err) => {
+                                    log::warn!(
+                                        "failed to launch terminal {:?} in {:?}: {}",
+                                        terminal.id,
+                                        path,
+                                        err
+                                    )
+                                }
+                            }
+                        } else {
+                            log::warn!("failed to get command for {:?}", terminal.id);
+                        }
+                    }
+                }
+            }
             Message::Paste(_entity_opt) => {
                 log::warn!("TODO: PASTE");
             }

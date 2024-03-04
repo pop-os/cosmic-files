@@ -57,9 +57,18 @@ pub fn context_menu<'a>(
         .on_press(tab::Message::ContextAction(action))
     };
 
-    let selected = tab
-        .items_opt()
-        .map_or(0, |items| items.iter().filter(|x| x.selected).count());
+    let mut selected_dir = 0;
+    let mut selected = 0;
+    tab.items_opt().map(|items| {
+        for item in items.iter() {
+            if item.selected {
+                selected += 1;
+                if item.metadata.is_dir() {
+                    selected_dir += 1;
+                }
+            }
+        }
+    });
 
     let mut children: Vec<Element<_>> = Vec::new();
     match tab.location {
@@ -68,6 +77,10 @@ pub fn context_menu<'a>(
                 children.push(menu_item(fl!("open"), Action::Open).into());
                 if selected == 1 {
                     children.push(menu_item(fl!("open-with"), Action::OpenWith).into());
+                    if selected_dir == 1 {
+                        children
+                            .push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
+                    }
                 }
                 children.push(horizontal_rule(1).into());
                 children.push(menu_item(fl!("rename"), Action::Rename).into());
@@ -85,6 +98,7 @@ pub fn context_menu<'a>(
                 //TODO: have things like properties but they apply to the folder?
                 children.push(menu_item(fl!("new-file"), Action::NewFile).into());
                 children.push(menu_item(fl!("new-folder"), Action::NewFolder).into());
+                children.push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
                 children.push(horizontal_rule(1).into());
                 children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
                 children.push(menu_item(fl!("paste"), Action::Paste).into());
