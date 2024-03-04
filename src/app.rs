@@ -636,7 +636,11 @@ impl Application for App {
         }
 
         if app.tab_model.iter().next().is_none() {
-            commands.push(app.open_tab(Location::Path(home_dir())));
+            if let Ok(current_dir) = env::current_dir() {
+                commands.push(app.open_tab(Location::Path(current_dir)));
+            } else {
+                commands.push(app.open_tab(Location::Path(home_dir())));
+            }
         }
 
         (app, Command::batch(commands))
