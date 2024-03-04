@@ -525,7 +525,11 @@ impl Item {
                 widget::button(
                     widget::row::with_children(vec![
                         widget::icon(app.icon.clone()).into(),
-                        widget::text(&app.name).into(),
+                        if app.is_default {
+                            widget::text(fl!("default-app", name = app.name.as_str())).into()
+                        } else {
+                            widget::text(&app.name).into()
+                        },
                     ])
                     .spacing(space_xs),
                 )

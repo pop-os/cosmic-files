@@ -51,6 +51,10 @@ pending = Pending
 failed = Failed
 complete = Complete
 
+## Open with
+open-with = Open with
+default-app = {$name} (default)
+
 ## Properties
 properties = Properties
 
@@ -71,7 +75,6 @@ light = Light
 # Context menu
 new-file = New file
 new-folder = New folder
-open-with = Open with
 open-in-terminal = Open in terminal
 move-to-trash = Move to trash
 restore-from-trash = Restore from trash

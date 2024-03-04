@@ -6,7 +6,9 @@ use cosmic::desktop;
 use cosmic::widget;
 pub use mime_guess::Mime;
 use once_cell::sync::Lazy;
-use std::{collections::HashMap, path::PathBuf, process, sync::Mutex, time::Instant};
+use std::{
+    cmp::Ordering, collections::HashMap, path::PathBuf, process, sync::Mutex, time::Instant,
+};
 
 #[derive(Clone, Debug)]
 pub struct MimeApp {
@@ -218,7 +220,11 @@ impl MimeAppCache {
 
         // Sort apps by name
         for apps in self.cache.values_mut() {
-            apps.sort_by(|a, b| lexical_sort::natural_lexical_cmp(&a.name, &b.name));
+            apps.sort_by(|a, b| match (a.is_default, b.is_default) {
+                (true, false) => Ordering::Less,
+                (false, true) => Ordering::Greater,
+                _ => lexical_sort::natural_lexical_cmp(&a.name, &b.name),
+            });
         }
 
         let elapsed = start.elapsed();
