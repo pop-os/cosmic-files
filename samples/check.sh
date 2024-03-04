@@ -2,6 +2,8 @@
 
 set -e
 
+cd "$(dirname "$0")"
+
 for file in */*
 do
     filetype="$(xdg-mime query filetype "${file}")"
@@ -17,11 +19,10 @@ do
     fi
 
     default="$(xdg-mime query default "${filetype}")"
-    if [ -z "${default}" ]
+    if [ -n "${default}" ]
     then
+        echo "${file}: ${filetype}: ${default}"
+    else
         echo "${file}: ${filetype}: no default application found"
-        exit 1
     fi
-
-    echo "${file}: ${filetype}: ${default}"
 done
