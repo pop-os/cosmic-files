@@ -20,7 +20,7 @@ use cosmic::{
     },
     theme, widget, Element,
 };
-use mime_guess::{mime, Mime, MimeGuess};
+use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
 use std::{
     cell::Cell,
@@ -39,7 +39,7 @@ use crate::{
     key_bind::KeyBind,
     menu,
     mime_app::{mime_apps, MimeApp},
-    mime_icon::mime_icon,
+    mime_icon::{mime_for_path, mime_icon},
     mouse_area,
 };
 
@@ -232,12 +232,12 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                             folder_icon(&path, sizes.list_condensed()),
                         )
                     } else {
+                        let mime = mime_for_path(&path);
                         (
-                            //TODO: best fallback mime for files?
-                            MimeGuess::from_path(&path).first_or_octet_stream(),
-                            mime_icon(&path, sizes.grid()),
-                            mime_icon(&path, sizes.list()),
-                            mime_icon(&path, sizes.list_condensed()),
+                            mime.clone(),
+                            mime_icon(mime.clone(), sizes.grid()),
+                            mime_icon(mime.clone(), sizes.list()),
+                            mime_icon(mime, sizes.list_condensed()),
                         )
                     };
 
@@ -349,13 +349,15 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                             folder_icon(&path, sizes.list()),
                             folder_icon(&path, sizes.list_condensed()),
                         ),
-                        trash::TrashItemSize::Bytes(_) => (
-                            //TODO: best fallback mime for files?
-                            MimeGuess::from_path(&path).first_or_octet_stream(),
-                            mime_icon(&path, sizes.grid()),
-                            mime_icon(&path, sizes.list()),
-                            mime_icon(&path, sizes.list_condensed()),
-                        ),
+                        trash::TrashItemSize::Bytes(_) => {
+                            let mime = mime_for_path(&path);
+                            (
+                                mime.clone(),
+                                mime_icon(mime.clone(), sizes.grid()),
+                                mime_icon(mime.clone(), sizes.list()),
+                                mime_icon(mime, sizes.list_condensed()),
+                            )
+                        }
                     };
 
                 items.push(Item {
