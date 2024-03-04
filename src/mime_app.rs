@@ -123,7 +123,7 @@ impl MimeAppCache {
             }
         }
 
-        let mut desktops: Vec<String> = env::var("XDG_CURRENT_DESKTOP")
+        let desktops: Vec<String> = env::var("XDG_CURRENT_DESKTOP")
             .unwrap_or_default()
             .split(':')
             .map(|x| x.to_ascii_lowercase())
@@ -169,11 +169,15 @@ impl MimeAppCache {
                 }
             };
 
-            for attr in entry.section("Added Associations").attrs() {
+            for attr in entry
+                .section("Added Associations")
+                .attrs()
+                .chain(entry.section("Default Applications").attrs())
+            {
                 if let Ok(mime) = attr.name.parse::<Mime>() {
                     if let Some(filenames) = attr.value {
                         for filename in filenames.split_terminator(';') {
-                            println!("Add {}={}", mime, filename);
+                            log::trace!("add {}={}", mime, filename);
                             let apps = self
                                 .cache
                                 .entry(mime.clone())
@@ -188,7 +192,7 @@ impl MimeAppCache {
                                 {
                                     apps.push(MimeApp::from(app));
                                 } else {
-                                    log::warn!("failed to find application {:?}", filename);
+                                    log::warn!("failed to add association for {:?}: application {:?} not found", mime, filename);
                                 }
                             }
                         }
@@ -200,7 +204,7 @@ impl MimeAppCache {
                 if let Ok(mime) = attr.name.parse::<Mime>() {
                     if let Some(filenames) = attr.value {
                         for filename in filenames.split_terminator(';') {
-                            println!("Remove {}={}", mime, filename);
+                            log::trace!("remove {}={}", mime, filename);
                             if let Some(apps) = self.cache.get_mut(&mime) {
                                 apps.retain(|x| !filename_eq(&x.path, filename));
                             }
@@ -213,7 +217,7 @@ impl MimeAppCache {
                 if let Ok(mime) = attr.name.parse::<Mime>() {
                     if let Some(filenames) = attr.value {
                         for filename in filenames.split_terminator(';') {
-                            println!("Default {}={}", mime, filename);
+                            log::trace!("default {}={}", mime, filename);
                             if let Some(apps) = self.cache.get_mut(&mime) {
                                 let mut found = false;
                                 for app in apps.iter_mut() {
@@ -227,7 +231,7 @@ impl MimeAppCache {
                                 if found {
                                     break;
                                 } else {
-                                    log::warn!("failed to find application {:?}", filename);
+                                    log::warn!("failed to set default for {:?}: application {:?} not found", mime, filename);
                                 }
                             }
                         }
