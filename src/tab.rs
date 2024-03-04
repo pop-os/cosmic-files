@@ -241,13 +241,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                         )
                     };
 
-                let mut open_with = mime_apps(&mime);
-                if open_with.is_empty() {
-                    //TODO: more fallbacks
-                    if mime.type_() == "text" {
-                        open_with = mime_apps(&mime::TEXT_PLAIN);
-                    }
-                }
+                let open_with = mime_apps(&mime);
 
                 let thumbnail_res_opt = if mime.type_() == "image" {
                     None
