@@ -7,7 +7,7 @@ use cosmic::widget;
 pub use mime_guess::Mime;
 use once_cell::sync::Lazy;
 use std::{
-    cmp::Ordering, collections::HashMap, path::PathBuf, process, sync::Mutex, time::Instant,
+    cmp::Ordering, collections::HashMap, env, path::PathBuf, process, sync::Mutex, time::Instant,
 };
 
 #[derive(Clone, Debug)]
@@ -123,17 +123,35 @@ impl MimeAppCache {
             }
         }
 
+        let mut desktops: Vec<String> = env::var("XDG_CURRENT_DESKTOP")
+            .unwrap_or_default()
+            .split(':')
+            .map(|x| x.to_ascii_lowercase())
+            .collect();
+
         // Load mimeapps.list files
         // https://specifications.freedesktop.org/mime-apps-spec/mime-apps-spec-latest.html
-        //TODO: support lookup by desktop (colon separated list in $XDG_CURRENT_DESKTOP, converted to lowercase)
+        //TODO: ensure correct lookup order
         let mut mimeapps_paths = Vec::new();
         match xdg::BaseDirectories::new() {
             Ok(xdg_dirs) => {
                 for path in xdg_dirs.find_data_files("applications/mimeapps.list") {
                     mimeapps_paths.push(path);
                 }
+                for desktop in desktops.iter().rev() {
+                    for path in
+                        xdg_dirs.find_data_files(format!("applications/{desktop}-mimeapps.list"))
+                    {
+                        mimeapps_paths.push(path);
+                    }
+                }
                 for path in xdg_dirs.find_config_files("mimeapps.list") {
                     mimeapps_paths.push(path);
+                }
+                for desktop in desktops.iter().rev() {
+                    for path in xdg_dirs.find_config_files(format!("{desktop}-mimeapps.list")) {
+                        mimeapps_paths.push(path);
+                    }
                 }
             }
             Err(err) => {
