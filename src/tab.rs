@@ -496,7 +496,29 @@ impl Item {
 
         let mut column = widget::column().spacing(space_xxxs);
 
+        column = column.push(widget::row::with_children(vec![
+            widget::horizontal_space(Length::Fill).into(),
+            // This loads the image only if thumbnailing worked
+            if self
+                .thumbnail_res_opt
+                .as_ref()
+                .map_or(false, |res| res.is_ok())
+            {
+                widget::image::viewer(widget::image::Handle::from_path(&self.path))
+                    .min_scale(1.0)
+                    .into()
+            } else {
+                widget::icon::icon(self.icon_handle_grid.clone())
+                    .content_fit(ContentFit::Contain)
+                    .size(sizes.grid())
+                    .into()
+            },
+            widget::horizontal_space(Length::Fill).into(),
+        ]));
+
         column = column.push(widget::text::heading(&self.name));
+
+        column = column.push(widget::text(format!("Type: {}", self.mime)));
 
         for app in self.open_with.iter() {
             column = column.push(
