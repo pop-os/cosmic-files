@@ -243,10 +243,14 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
 
                 let open_with = mime_apps(&mime);
 
-                let thumbnail_res_opt = if mime.type_() == "image" {
-                    None
+                let thumbnail_opt = if mime.type_() == mime::IMAGE {
+                    if mime.subtype() == mime::SVG {
+                        Some(ItemThumbnail::Svg)
+                    } else {
+                        None
+                    }
                 } else {
-                    Some(Err(()))
+                    Some(ItemThumbnail::NotImage)
                 };
 
                 let children = if metadata.is_dir() {
@@ -272,7 +276,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                     icon_handle_list,
                     icon_handle_list_condensed,
                     open_with,
-                    thumbnail_res_opt,
+                    thumbnail_opt,
                     button_id: widget::Id::unique(),
                     pos_opt: Cell::new(None),
                     rect_opt: Cell::new(None),
@@ -364,7 +368,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     icon_handle_list,
                     icon_handle_list_condensed,
                     open_with: Vec::new(),
-                    thumbnail_res_opt: Some(Err(())),
+                    thumbnail_opt: Some(ItemThumbnail::NotImage),
                     button_id: widget::Id::unique(),
                     pos_opt: Cell::new(None),
                     rect_opt: Cell::new(None),
@@ -431,7 +435,7 @@ pub enum Message {
     RightClick(usize),
     Scroll(Viewport),
     SelectAll,
-    Thumbnail(PathBuf, Result<image::RgbaImage, ()>),
+    Thumbnail(PathBuf, ItemThumbnail),
     ToggleShowHidden,
     View(View),
     ToggleSort(HeadingOptions),
@@ -462,6 +466,13 @@ impl ItemMetadata {
 }
 
 #[derive(Clone, Debug)]
+pub enum ItemThumbnail {
+    NotImage,
+    Rgba(image::RgbaImage),
+    Svg,
+}
+
+#[derive(Clone, Debug)]
 pub struct Item {
     pub name: String,
     pub metadata: ItemMetadata,
@@ -472,7 +483,7 @@ pub struct Item {
     pub icon_handle_list: widget::icon::Handle,
     pub icon_handle_list_condensed: widget::icon::Handle,
     pub open_with: Vec<MimeApp>,
-    pub thumbnail_res_opt: Option<Result<image::RgbaImage, ()>>,
+    pub thumbnail_opt: Option<ItemThumbnail>,
     pub button_id: widget::Id,
     pub pos_opt: Cell<Option<(usize, usize)>>,
     pub rect_opt: Cell<Option<Rectangle>>,
@@ -481,6 +492,26 @@ pub struct Item {
 }
 
 impl Item {
+    fn preview(&self, sizes: IconSizes) -> Element<app::Message> {
+        // This loads the image only if thumbnailing worked
+        match self
+            .thumbnail_opt
+            .as_ref()
+            .unwrap_or(&ItemThumbnail::NotImage)
+        {
+            ItemThumbnail::NotImage => widget::icon::icon(self.icon_handle_grid.clone())
+                .content_fit(ContentFit::Contain)
+                .size(sizes.grid())
+                .into(),
+            ItemThumbnail::Rgba(_) => {
+                widget::image::viewer(widget::image::Handle::from_path(&self.path))
+                    .min_scale(1.0)
+                    .into()
+            }
+            ItemThumbnail::Svg => widget::Svg::from_path(&self.path).into(),
+        }
+    }
+
     pub fn open_with_view(&self, sizes: IconSizes) -> Element<app::Message> {
         let cosmic_theme::Spacing {
             space_xs,
@@ -492,21 +523,7 @@ impl Item {
 
         column = column.push(widget::row::with_children(vec![
             widget::horizontal_space(Length::Fill).into(),
-            // This loads the image only if thumbnailing worked
-            if self
-                .thumbnail_res_opt
-                .as_ref()
-                .map_or(false, |res| res.is_ok())
-            {
-                widget::image::viewer(widget::image::Handle::from_path(&self.path))
-                    .min_scale(1.0)
-                    .into()
-            } else {
-                widget::icon::icon(self.icon_handle_grid.clone())
-                    .content_fit(ContentFit::Contain)
-                    .size(sizes.grid())
-                    .into()
-            },
+            self.preview(sizes),
             widget::horizontal_space(Length::Fill).into(),
         ]));
 
@@ -544,21 +561,7 @@ impl Item {
 
         column = column.push(widget::row::with_children(vec![
             widget::horizontal_space(Length::Fill).into(),
-            // This loads the image only if thumbnailing worked
-            if self
-                .thumbnail_res_opt
-                .as_ref()
-                .map_or(false, |res| res.is_ok())
-            {
-                widget::image::viewer(widget::image::Handle::from_path(&self.path))
-                    .min_scale(1.0)
-                    .into()
-            } else {
-                widget::icon::icon(self.icon_handle_grid.clone())
-                    .content_fit(ContentFit::Contain)
-                    .size(sizes.grid())
-                    .into()
-            },
+            self.preview(sizes),
             widget::horizontal_space(Length::Fill).into(),
         ]));
 
@@ -1177,21 +1180,21 @@ impl Tab {
                     commands.push(Command::FocusButton(widget::Id::unique()));
                 }
             }
-            Message::Thumbnail(path, thumbnail_res) => {
+            Message::Thumbnail(path, thumbnail) => {
                 if let Some(ref mut items) = self.items_opt {
                     for item in items.iter_mut() {
                         if item.path == path {
-                            if let Ok(thumbnail) = &thumbnail_res {
+                            if let ItemThumbnail::Rgba(rgba) = &thumbnail {
                                 //TODO: pass handles already generated to avoid blocking main thread
                                 let handle = widget::icon::from_raster_pixels(
-                                    thumbnail.width(),
-                                    thumbnail.height(),
-                                    thumbnail.as_raw().clone(),
+                                    rgba.width(),
+                                    rgba.height(),
+                                    rgba.as_raw().clone(),
                                 );
                                 item.icon_handle_grid = handle.clone();
                                 item.icon_handle_list = handle;
                             }
-                            item.thumbnail_res_opt = Some(thumbnail_res);
+                            item.thumbnail_opt = Some(thumbnail);
                             break;
                         }
                     }
@@ -1858,7 +1861,7 @@ impl Tab {
             };
 
             for item in items.iter() {
-                if item.thumbnail_res_opt.is_some() {
+                if item.thumbnail_opt.is_some() {
                     // Skip items that already have a thumbnail
                     continue;
                 }
@@ -1881,33 +1884,33 @@ impl Tab {
                     path.clone(),
                     1,
                     |mut output| async move {
-                        let (path, thumbnail_res) = tokio::task::spawn_blocking(move || {
+                        let (path, thumbnail) = tokio::task::spawn_blocking(move || {
                             let start = std::time::Instant::now();
-                            let thumbnail_res = match image::io::Reader::open(&path) {
+                            let thumbnail = match image::io::Reader::open(&path) {
                                 Ok(reader) => match reader.decode() {
                                     Ok(image) => {
-                                        //TODO: configurable thumbnail size
+                                        //TODO: configurable thumbnail size?
                                         let thumbnail = image.thumbnail(64, 64);
-                                        Ok(thumbnail.to_rgba8())
+                                        ItemThumbnail::Rgba(thumbnail.to_rgba8())
                                     }
                                     Err(err) => {
                                         log::warn!("failed to decode {:?}: {}", path, err);
-                                        Err(())
+                                        ItemThumbnail::NotImage
                                     }
                                 },
                                 Err(err) => {
                                     log::warn!("failed to read {:?}: {}", path, err);
-                                    Err(())
+                                    ItemThumbnail::NotImage
                                 }
                             };
                             log::info!("thumbnailed {:?} in {:?}", path, start.elapsed());
-                            (path, thumbnail_res)
+                            (path, thumbnail)
                         })
                         .await
                         .unwrap();
 
                         match output
-                            .send(Message::Thumbnail(path.clone(), thumbnail_res))
+                            .send(Message::Thumbnail(path.clone(), thumbnail))
                             .await
                         {
                             Ok(()) => {}
