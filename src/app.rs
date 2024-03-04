@@ -145,6 +145,7 @@ pub enum Message {
     NotifyEvent(notify::Event),
     NotifyWatcher(WatcherWrapper),
     OpenTerminal(Option<Entity>),
+    OpenWith(PathBuf, mime_app::MimeApp),
     Paste(Option<Entity>),
     PendingComplete(u64),
     PendingError(u64, String),
@@ -896,9 +897,9 @@ impl Application for App {
                                 Ok(()) => {}
                                 Err(err) => {
                                     log::warn!(
-                                        "failed to launch terminal {:?} in {:?}: {}",
-                                        terminal.id,
+                                        "failed to open {:?} with terminal {:?}: {}",
                                         path,
+                                        terminal.id,
                                         err
                                     )
                                 }
@@ -908,6 +909,21 @@ impl Application for App {
                         }
                     }
                 }
+            }
+            Message::OpenWith(path, app) => {
+                if let Some(mut command) = app.command(Some(path.clone())) {
+                    match spawn_detached(&mut command) {
+                        Ok(()) => {}
+                        Err(err) => {
+                            log::warn!("failed to open {:?} with {:?}: {}", path, app.id, err)
+                        }
+                    }
+                } else {
+                    log::warn!("failed to get command for {:?}", app.id);
+                }
+
+                // Close Open With context view
+                self.core.window.show_context = false;
             }
             Message::Paste(_entity_opt) => {
                 log::warn!("TODO: PASTE");

@@ -32,7 +32,7 @@ use std::{
 };
 
 use crate::{
-    app::Action,
+    app::{self, Action},
     config::{IconSizes, TabConfig},
     dialog::DialogKind,
     fl,
@@ -485,7 +485,7 @@ pub struct Item {
 }
 
 impl Item {
-    pub fn open_with_view(&self, sizes: IconSizes) -> Element<crate::app::Message> {
+    pub fn open_with_view(&self, sizes: IconSizes) -> Element<app::Message> {
         let cosmic_theme::Spacing {
             space_xs,
             space_xxxs,
@@ -505,6 +505,8 @@ impl Item {
                     ])
                     .spacing(space_xs),
                 )
+                //TODO: do not clone so much?
+                .on_press(app::Message::OpenWith(self.path.clone(), app.clone()))
                 .padding(space_xs)
                 .width(Length::Fill),
             );
@@ -513,7 +515,7 @@ impl Item {
         column.into()
     }
 
-    pub fn property_view(&self, sizes: IconSizes) -> Element<crate::app::Message> {
+    pub fn property_view(&self, sizes: IconSizes) -> Element<app::Message> {
         let cosmic_theme::Spacing { space_xxxs, .. } = theme::active().cosmic().spacing;
 
         let mut column = widget::column().spacing(space_xxxs);
