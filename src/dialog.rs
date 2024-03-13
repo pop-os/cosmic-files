@@ -666,11 +666,16 @@ impl Application for App {
                             move |event_res: Result<notify::Event, notify::Error>| match event_res {
                                 Ok(event) => {
                                     match &event.kind {
-                                        notify::EventKind::Access(_)
-                                        | notify::EventKind::Modify(
-                                            notify::event::ModifyKind::Metadata(_),
-                                        ) => {
+                                        notify::EventKind::Access(_) => {
                                             // Data not mutated
+                                            return;
+                                        }
+                                        notify::EventKind::Modify(
+                                            notify::event::ModifyKind::Metadata(e),
+                                        ) if (*e != notify::event::MetadataKind::Any
+                                            && *e != notify::event::MetadataKind::WriteTime) =>
+                                        {
+                                            // Data not mutated nor modify time changed
                                             return;
                                         }
                                         _ => {}
