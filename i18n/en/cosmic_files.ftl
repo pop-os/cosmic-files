@@ -64,6 +64,10 @@ settings-tab = Tab
 settings-show-hidden = Show hidden files
 icon-size-list = Icon size (list)
 icon-size-grid = Icon size (grid)
+sorting-name = Sort by
+direction = Direction
+ascending = Ascending
+descending = Descending
 
 ### Appearance
 appearance = Appearance
