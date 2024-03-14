@@ -36,7 +36,7 @@ use crate::{
     menu, mime_app,
     operation::Operation,
     spawn_detached::spawn_detached,
-    tab::{self, ItemMetadata, Location, Tab},
+    tab::{self, HeadingOptions, ItemMetadata, Location, Tab},
 };
 
 #[derive(Clone, Debug)]
@@ -228,6 +228,7 @@ pub struct App {
     config_handler: Option<cosmic_config::Config>,
     config: Config,
     app_themes: Vec<String>,
+    sort_by_names: Vec<String>,
     context_page: ContextPage,
     dialog_pages: VecDeque<DialogPage>,
     dialog_text_input: widget::Id,
@@ -523,6 +524,28 @@ impl App {
                             .step(25u16),
                         )
                 })
+                .add({
+                    let tab_config = self.config.tab;
+                    let sort_by_selected = tab_config.sort_name as _;
+
+                    widget::settings::item::builder(fl!("sorting-name"))
+                        .description(format!("{}", tab_config.sort_name))
+                        .control(widget::dropdown(
+                            &self.sort_by_names,
+                            Some(sort_by_selected),
+                            move |index| {
+                                Message::TabConfig(TabConfig {
+                                    sort_name: match index {
+                                        0 => HeadingOptions::Name,
+                                        1 => HeadingOptions::Modified,
+                                        2 => HeadingOptions::Size,
+                                        _ => HeadingOptions::Name,
+                                    },
+                                    ..tab_config
+                                })
+                            },
+                        ))
+                })
                 .into(),
             widget::settings::view_section(fl!("settings-tab"))
                 .add({
@@ -611,6 +634,7 @@ impl Application for App {
             config_handler: flags.config_handler,
             config: flags.config,
             app_themes,
+            sort_by_names: HeadingOptions::names(),
             context_page: ContextPage::Settings,
             dialog_pages: VecDeque::new(),
             dialog_text_input: widget::Id::unique(),

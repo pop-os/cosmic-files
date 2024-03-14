@@ -27,6 +27,7 @@ use std::{
     cell::Cell,
     cmp::Ordering,
     collections::HashMap,
+    fmt,
     fs::{self, Metadata},
     path::PathBuf,
     time::{Duration, Instant},
@@ -620,9 +621,29 @@ pub enum View {
 }
 #[derive(Clone, Copy, Debug, Hash, PartialEq, PartialOrd, Ord, Eq, Deserialize, Serialize)]
 pub enum HeadingOptions {
-    Name,
+    Name = 0,
     Modified,
     Size,
+}
+
+impl fmt::Display for HeadingOptions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HeadingOptions::Name => write!(f, "{}", fl!("name")),
+            HeadingOptions::Modified => write!(f, "{}", fl!("modified")),
+            HeadingOptions::Size => write!(f, "{}", fl!("size")),
+        }
+    }
+}
+
+impl HeadingOptions {
+    pub fn names() -> Vec<String> {
+        vec![
+            HeadingOptions::Name.to_string(),
+            HeadingOptions::Modified.to_string(),
+            HeadingOptions::Size.to_string(),
+        ]
+    }
 }
 
 #[derive(Clone, Debug)]
