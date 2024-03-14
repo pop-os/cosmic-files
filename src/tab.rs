@@ -22,6 +22,7 @@ use cosmic::{
 };
 use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 use std::{
     cell::Cell,
     cmp::Ordering,
@@ -617,7 +618,7 @@ pub enum View {
     Grid,
     List,
 }
-#[derive(Clone, Copy, Debug, Hash, PartialEq, PartialOrd, Ord, Eq)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, PartialOrd, Ord, Eq, Deserialize, Serialize)]
 pub enum HeadingOptions {
     Name,
     Modified,
@@ -642,15 +643,11 @@ pub struct Tab {
     scrollable_id: widget::Id,
     select_focus: Option<usize>,
     select_shift: Option<usize>,
-    sort_name: HeadingOptions,
-    sort_direction: bool,
 }
 
 impl Tab {
     pub fn new(location: Location, config: TabConfig) -> Self {
         let history = vec![location.clone()];
-        let sort_name = HeadingOptions::Name;
-        let sort_direction = true;
         Self {
             location,
             context_menu: None,
@@ -667,8 +664,6 @@ impl Tab {
             scrollable_id: widget::Id::unique(),
             select_focus: None,
             select_shift: None,
-            sort_name,
-            sort_direction,
         }
     }
 
@@ -1206,13 +1201,13 @@ impl Tab {
                 self.view = view;
             }
             Message::ToggleSort(heading_option) => {
-                let heading_sort = if self.sort_name == heading_option {
-                    !self.sort_direction
+                let heading_sort = if self.config.sort_name == heading_option {
+                    !self.config.sort_direction
                 } else {
                     true
                 };
-                self.sort_direction = heading_sort;
-                self.sort_name = heading_option;
+                self.config.sort_direction = heading_sort;
+                self.config.sort_name = heading_option;
             }
         }
         if let Some(location) = cd {
@@ -1247,8 +1242,8 @@ impl Tab {
             }
         };
         let mut items: Vec<_> = self.items_opt.as_ref()?.iter().enumerate().collect();
-        let heading_sort = self.sort_direction;
-        match self.sort_name {
+        let heading_sort = self.config.sort_direction;
+        match self.config.sort_name {
             HeadingOptions::Size => {
                 items.sort_by(|a, b| {
                     // entries take precedence over size
@@ -1482,6 +1477,7 @@ impl Tab {
         let TabConfig {
             show_hidden,
             icon_sizes,
+            ..
         } = self.config;
 
         let text_height = 40; // Height of two lines of text
@@ -1627,6 +1623,8 @@ impl Tab {
         let TabConfig {
             show_hidden,
             icon_sizes,
+            sort_name,
+            sort_direction,
         } = self.config;
 
         let size = self.size_opt.unwrap_or_else(|| Size::new(0.0, 0.0));
@@ -1648,7 +1646,7 @@ impl Tab {
                 .spacing(space_xxs)
                 .width(width);
             row = row.push(widget::text::heading(name));
-            match (self.sort_name == msg, self.sort_direction) {
+            match (sort_name == msg, sort_direction) {
                 (true, true) => {
                     row = row.push(widget::icon::from_name("pan-down-symbolic").size(16));
                 }
