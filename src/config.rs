@@ -8,6 +8,8 @@ use cosmic::{
 };
 use serde::{Deserialize, Serialize};
 
+use super::tab::HeadingOptions;
+
 pub const CONFIG_VERSION: u64 = 1;
 
 // Default icon sizes
@@ -58,9 +60,10 @@ impl Default for Config {
 pub struct TabConfig {
     /// Show hidden files and folders
     pub show_hidden: bool,
-    // TODO: Other possible options
-    // pub sort_by: fn(&PathBuf, &PathBuf) -> Ordering,
-    // Icon zoom
+    /// Sorter
+    pub sort_name: HeadingOptions,
+    pub sort_direction: bool,
+    /// Icon zoom
     pub icon_sizes: IconSizes,
 }
 
@@ -68,6 +71,8 @@ impl Default for TabConfig {
     fn default() -> Self {
         Self {
             show_hidden: false,
+            sort_name: HeadingOptions::Name,
+            sort_direction: true,
             icon_sizes: IconSizes::default(),
         }
     }
