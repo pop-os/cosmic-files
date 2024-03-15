@@ -1533,12 +1533,12 @@ impl Tab {
             .column_spacing(column_spacing)
             .row_spacing(space_xxs)
             .padding([0, space_m].into());
-        if let Some(ref items) = self.items_opt {
+        if let Some(items) = self.column_sort() {
             let mut count = 0;
             let mut col = 0;
             let mut row = 0;
             let mut hidden = 0;
-            for (i, item) in items.iter().enumerate() {
+            for &(i, item) in items.iter() {
                 if !show_hidden && item.hidden {
                     item.pos_opt.set(None);
                     item.rect_opt.set(None);
@@ -1606,7 +1606,7 @@ impl Tab {
             {
                 let mut max_bottom = 0;
                 for item in items.iter() {
-                    if let Some(rect) = item.rect_opt.get() {
+                    if let Some(rect) = item.1.rect_opt.get() {
                         let bottom = (rect.y + rect.height).ceil() as usize;
                         if bottom > max_bottom {
                             max_bottom = bottom;
