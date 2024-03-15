@@ -78,6 +78,7 @@ pub enum Action {
     TabViewGrid,
     TabViewList,
     ToggleShowHidden,
+    ToggleSort(HeadingOptions),
     WindowClose,
     WindowNew,
 }
@@ -120,6 +121,7 @@ impl Action {
                 Message::TabMessage(entity_opt, tab::Message::View(tab::View::List))
             }
             Action::ToggleShowHidden => Message::TabMessage(None, tab::Message::ToggleShowHidden),
+            Action::ToggleSort(sort) => Message::TabMessage(None, tab::Message::ToggleSort(sort)),
             Action::WindowClose => Message::WindowClose,
             Action::WindowNew => Message::WindowNew,
         }

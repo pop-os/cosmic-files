@@ -16,7 +16,7 @@ use crate::{
     app::{Action, Message},
     fl,
     key_bind::KeyBind,
-    tab::{self, Location, Tab},
+    tab::{self, HeadingOptions, Location, Tab},
 };
 
 macro_rules! menu_button {
@@ -102,6 +102,28 @@ pub fn context_menu<'a>(
                 children.push(horizontal_rule(1).into());
                 children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
                 children.push(menu_item(fl!("paste"), Action::Paste).into());
+                children.push(horizontal_rule(1).into());
+                children.push(
+                    menu_item(
+                        fl!("sort-by-name"),
+                        Action::ToggleSort(HeadingOptions::Name),
+                    )
+                    .into(),
+                );
+                children.push(
+                    menu_item(
+                        fl!("sort-by-modified"),
+                        Action::ToggleSort(HeadingOptions::Modified),
+                    )
+                    .into(),
+                );
+                children.push(
+                    menu_item(
+                        fl!("sort-by-size"),
+                        Action::ToggleSort(HeadingOptions::Size),
+                    )
+                    .into(),
+                );
             }
         }
         Location::Trash => {
@@ -113,6 +135,28 @@ pub fn context_menu<'a>(
                 children
                     .push(menu_item(fl!("restore-from-trash"), Action::RestoreFromTrash).into());
             }
+            children.push(horizontal_rule(1).into());
+            children.push(
+                menu_item(
+                    fl!("sort-by-name"),
+                    Action::ToggleSort(HeadingOptions::Name),
+                )
+                .into(),
+            );
+            children.push(
+                menu_item(
+                    fl!("sort-by-modified"),
+                    Action::ToggleSort(HeadingOptions::Modified),
+                )
+                .into(),
+            );
+            children.push(
+                menu_item(
+                    fl!("sort-by-size"),
+                    Action::ToggleSort(HeadingOptions::Size),
+                )
+                .into(),
+            );
         }
     }
 

@@ -82,6 +82,9 @@ new-folder = New folder
 open-in-terminal = Open in terminal
 move-to-trash = Move to trash
 restore-from-trash = Restore from trash
+sort-by-name = Sort by name
+sort-by-modified = Sort by modified
+sort-by-size = Sort by size
 
 # Menu
 
