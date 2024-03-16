@@ -1605,8 +1605,8 @@ impl Tab {
             //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
             {
                 let mut max_bottom = 0;
-                for item in items.iter() {
-                    if let Some(rect) = item.1.rect_opt.get() {
+                for (_, item) in items {
+                    if let Some(rect) = item.rect_opt.get() {
                         let bottom = (rect.y + rect.height).ceil() as usize;
                         if bottom > max_bottom {
                             max_bottom = bottom;

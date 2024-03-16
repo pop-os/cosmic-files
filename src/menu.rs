@@ -14,6 +14,7 @@ use std::collections::HashMap;
 
 use crate::{
     app::{Action, Message},
+    config::TabConfig,
     fl,
     key_bind::KeyBind,
     tab::{self, HeadingOptions, Location, Tab},
@@ -55,6 +56,27 @@ pub fn context_menu<'a>(
             widget::text(key)
         )
         .on_press(tab::Message::ContextAction(action))
+    };
+
+    let TabConfig {
+        sort_name,
+        sort_direction,
+        ..
+    } = tab.config;
+    let sort_item = |label, variant| {
+        menu_item(
+            format!(
+                "{} {}",
+                label,
+                match (sort_name == variant, sort_direction) {
+                    (true, true) => "\u{2B07}",
+                    (true, false) => "\u{2B06}",
+                    _ => "",
+                }
+            ),
+            Action::ToggleSort(variant),
+        )
+        .into()
     };
 
     let mut selected_dir = 0;
@@ -103,27 +125,10 @@ pub fn context_menu<'a>(
                 children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
                 children.push(menu_item(fl!("paste"), Action::Paste).into());
                 children.push(horizontal_rule(1).into());
-                children.push(
-                    menu_item(
-                        fl!("sort-by-name"),
-                        Action::ToggleSort(HeadingOptions::Name),
-                    )
-                    .into(),
-                );
-                children.push(
-                    menu_item(
-                        fl!("sort-by-modified"),
-                        Action::ToggleSort(HeadingOptions::Modified),
-                    )
-                    .into(),
-                );
-                children.push(
-                    menu_item(
-                        fl!("sort-by-size"),
-                        Action::ToggleSort(HeadingOptions::Size),
-                    )
-                    .into(),
-                );
+                // TODO: Nested menu
+                children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
+                children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
+                children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
             }
         }
         Location::Trash => {
@@ -136,27 +141,10 @@ pub fn context_menu<'a>(
                     .push(menu_item(fl!("restore-from-trash"), Action::RestoreFromTrash).into());
             }
             children.push(horizontal_rule(1).into());
-            children.push(
-                menu_item(
-                    fl!("sort-by-name"),
-                    Action::ToggleSort(HeadingOptions::Name),
-                )
-                .into(),
-            );
-            children.push(
-                menu_item(
-                    fl!("sort-by-modified"),
-                    Action::ToggleSort(HeadingOptions::Modified),
-                )
-                .into(),
-            );
-            children.push(
-                menu_item(
-                    fl!("sort-by-size"),
-                    Action::ToggleSort(HeadingOptions::Size),
-                )
-                .into(),
-            );
+            // TODO: Nested menu
+            children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
+            children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
+            children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
         }
     }
 
