@@ -231,6 +231,7 @@ pub struct App {
     config: Config,
     app_themes: Vec<String>,
     sort_by_names: Vec<String>,
+    sort_direction: Vec<String>,
     context_page: ContextPage,
     dialog_pages: VecDeque<DialogPage>,
     dialog_text_input: widget::Id,
@@ -530,23 +531,37 @@ impl App {
                     let tab_config = self.config.tab;
                     let sort_by_selected = tab_config.sort_name as _;
 
-                    widget::settings::item::builder(fl!("sorting-name"))
-                        .description(format!("{}", tab_config.sort_name))
-                        .control(widget::dropdown(
-                            &self.sort_by_names,
-                            Some(sort_by_selected),
-                            move |index| {
-                                Message::TabConfig(TabConfig {
-                                    sort_name: match index {
-                                        0 => HeadingOptions::Name,
-                                        1 => HeadingOptions::Modified,
-                                        2 => HeadingOptions::Size,
-                                        _ => HeadingOptions::Name,
-                                    },
-                                    ..tab_config
-                                })
-                            },
-                        ))
+                    widget::settings::item::builder(fl!("sorting-name")).control(widget::dropdown(
+                        &self.sort_by_names,
+                        Some(sort_by_selected),
+                        move |index| {
+                            Message::TabConfig(TabConfig {
+                                sort_name: match index {
+                                    0 => HeadingOptions::Name,
+                                    1 => HeadingOptions::Modified,
+                                    2 => HeadingOptions::Size,
+                                    _ => HeadingOptions::Name,
+                                },
+                                ..tab_config
+                            })
+                        },
+                    ))
+                })
+                .add({
+                    let tab_config = self.config.tab;
+                    // Ascending is true. Descending is false
+                    let direction = tab_config.sort_direction.into();
+
+                    widget::settings::item::builder(fl!("direction")).control(widget::dropdown(
+                        &self.sort_direction,
+                        Some(direction),
+                        move |index| {
+                            Message::TabConfig(TabConfig {
+                                sort_direction: index == 1,
+                                ..tab_config
+                            })
+                        },
+                    ))
                 })
                 .into(),
             widget::settings::view_section(fl!("settings-tab"))
@@ -637,6 +652,7 @@ impl Application for App {
             config: flags.config,
             app_themes,
             sort_by_names: HeadingOptions::names(),
+            sort_direction: vec![fl!("descending"), fl!("ascending")],
             context_page: ContextPage::Settings,
             dialog_pages: VecDeque::new(),
             dialog_text_input: widget::Id::unique(),
