@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
+use cosmic::widget::menu::key_bind::KeyBind;
+use cosmic::widget::menu::menu_tree::{menu_items, menu_root, MenuItem};
 use cosmic::{
     //TODO: export iced::widget::horizontal_rule in cosmic::widget
     iced::{widget::horizontal_rule, Alignment, Background, Border, Length},
@@ -16,7 +18,6 @@ use crate::{
     app::{Action, Message},
     config::TabConfig,
     fl,
-    key_bind::KeyBind,
     tab::{self, HeadingOptions, Location, Tab},
 };
 
@@ -171,75 +172,56 @@ pub fn context_menu<'a>(
 }
 
 pub fn menu_bar<'a>(key_binds: &HashMap<KeyBind, Action>) -> Element<'a, Message> {
-    //TODO: port to libcosmic
-    let menu_root = |label| {
-        widget::button(widget::text(label))
-            .padding([4, 12])
-            .style(theme::Button::MenuRoot)
-    };
-
-    let find_key = |action: &Action| -> String {
-        for (key_bind, key_action) in key_binds.iter() {
-            if action == key_action {
-                return key_bind.to_string();
-            }
-        }
-        String::new()
-    };
-
-    let menu_item = |label, action| {
-        let key = find_key(&action);
-        MenuTree::new(
-            menu_button!(
-                widget::text(label),
-                widget::horizontal_space(Length::Fill),
-                widget::text(key)
-            )
-            .on_press(action.message(None)),
-        )
-    };
-
     MenuBar::new(vec![
         MenuTree::with_children(
             menu_root(fl!("file")),
-            vec![
-                menu_item(fl!("new-tab"), Action::TabNew),
-                menu_item(fl!("new-window"), Action::WindowNew),
-                menu_item(fl!("new-file"), Action::NewFile),
-                menu_item(fl!("new-folder"), Action::NewFolder),
-                menu_item(fl!("open"), Action::Open),
-                MenuTree::new(horizontal_rule(1)),
-                menu_item(fl!("rename"), Action::Rename),
-                //TOOD: add to sidebar, then divider
-                MenuTree::new(horizontal_rule(1)),
-                menu_item(fl!("move-to-trash"), Action::MoveToTrash),
-                MenuTree::new(horizontal_rule(1)),
-                menu_item(fl!("close-tab"), Action::TabClose),
-                menu_item(fl!("quit"), Action::WindowClose),
-            ],
+            menu_items(
+                key_binds,
+                vec![
+                    MenuItem::Action(fl!("new-tab"), Action::TabNew),
+                    MenuItem::Action(fl!("new-window"), Action::WindowNew),
+                    MenuItem::Action(fl!("new-file"), Action::NewFile),
+                    MenuItem::Action(fl!("new-folder"), Action::NewFolder),
+                    MenuItem::Action(fl!("open"), Action::Open),
+                    MenuItem::Separator,
+                    MenuItem::Action(fl!("rename"), Action::Rename),
+                    //TOOD: add to sidebar, then divider
+                    MenuItem::Separator,
+                    MenuItem::Action(fl!("move-to-trash"), Action::MoveToTrash),
+                    MenuItem::Separator,
+                    MenuItem::Action(fl!("close-tab"), Action::TabClose),
+                    MenuItem::Action(fl!("quit"), Action::WindowClose),
+                ],
+            ),
         ),
         MenuTree::with_children(
             menu_root(fl!("edit")),
-            vec![
-                menu_item(fl!("cut"), Action::Cut),
-                menu_item(fl!("copy"), Action::Copy),
-                menu_item(fl!("paste"), Action::Paste),
-                menu_item(fl!("select-all"), Action::SelectAll),
-                MenuTree::new(horizontal_rule(1)),
-                //TODO: edit history
-                menu_item(fl!("operations"), Action::Operations),
-            ],
+            menu_items(
+                key_binds,
+                vec![
+                    MenuItem::Action(fl!("cut"), Action::Cut),
+                    MenuItem::Action(fl!("copy"), Action::Copy),
+                    MenuItem::Action(fl!("paste"), Action::Paste),
+                    MenuItem::Action(fl!("select-all"), Action::SelectAll),
+                    MenuItem::Separator,
+                    //TODO: edit history
+                    MenuItem::Action(fl!("operations"), Action::Operations),
+                ],
+            ),
         ),
         MenuTree::with_children(
             menu_root(fl!("view")),
-            vec![
-                menu_item(fl!("grid-view"), Action::TabViewGrid),
-                menu_item(fl!("list-view"), Action::TabViewList),
-                MenuTree::new(horizontal_rule(1)),
-                menu_item(fl!("menu-settings"), Action::Settings),
-                MenuTree::new(horizontal_rule(1)),
-                menu_item(fl!("menu-about"), Action::About),
-            ],
+            menu_items(
+                key_binds,
+                vec![
+                    MenuItem::Action(fl!("grid-view"), Action::TabViewGrid),
+                    MenuItem::Action(fl!("list-view"), Action::TabViewList),
+                    MenuItem::Separator,
+                    MenuItem::Action(fl!("menu-settings"), Action::Settings),
+                    MenuItem::Separator,
+                    MenuItem::Action(fl!("menu-about"), Action::About),
+                ],
+            ),
         ),
     ])
     .item_height(ItemHeight::Dynamic(40))
