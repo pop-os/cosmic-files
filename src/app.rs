@@ -668,11 +668,15 @@ impl Application for App {
         let mut commands = Vec::new();
 
         for arg in env::args().skip(1) {
-            let location = match fs::canonicalize(&arg) {
-                Ok(absolute) => Location::Path(absolute),
-                Err(err) => {
-                    log::warn!("failed to canonicalize {:?}: {}", arg, err);
-                    continue;
+            let location = if &arg == "--trash" {
+                Location::Trash
+            } else {
+                match fs::canonicalize(&arg) {
+                    Ok(absolute) => Location::Path(absolute),
+                    Err(err) => {
+                        log::warn!("failed to canonicalize {:?}: {}", arg, err);
+                        continue;
+                    }
                 }
             };
             commands.push(app.open_tab(location));
