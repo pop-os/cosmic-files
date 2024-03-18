@@ -1233,22 +1233,29 @@ impl Tab {
         }
         if let Some(location) = cd {
             if location != self.location {
-                self.location = location.clone();
-                self.items_opt = None;
-                self.select_focus = None;
-                self.edit_location = None;
-                if let Some(history_i) = history_i_opt {
-                    // Navigating in history
-                    self.history_i = history_i;
-                } else {
-                    // Truncate history to remove next entries
-                    self.history.truncate(self.history_i + 1);
+                if match &location {
+                    Location::Path(path) => path.is_dir(),
+                    Location::Trash => true,
+                } {
+                    self.location = location.clone();
+                    self.items_opt = None;
+                    self.select_focus = None;
+                    self.edit_location = None;
+                    if let Some(history_i) = history_i_opt {
+                        // Navigating in history
+                        self.history_i = history_i;
+                    } else {
+                        // Truncate history to remove next entries
+                        self.history.truncate(self.history_i + 1);
 
-                    // Push to the front of history
-                    self.history_i = self.history.len();
-                    self.history.push(location.clone());
+                        // Push to the front of history
+                        self.history_i = self.history.len();
+                        self.history.push(location.clone());
+                    }
+                    commands.push(Command::ChangeLocation(self.title(), location));
+                } else {
+                    log::warn!("tried to cd to {:?} which is not a directory", location);
                 }
-                commands.push(Command::ChangeLocation(self.title(), location));
             }
         }
         commands
