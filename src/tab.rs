@@ -1,3 +1,4 @@
+use cosmic::widget::menu::key_bind::KeyBind;
 use cosmic::{
     cosmic_theme,
     iced::{
@@ -37,9 +38,7 @@ use crate::{
     app::{self, Action},
     config::{IconSizes, TabConfig},
     dialog::DialogKind,
-    fl,
-    key_bind::KeyBind,
-    menu,
+    fl, menu,
     mime_app::{mime_apps, MimeApp},
     mime_icon::{mime_for_path, mime_icon},
     mouse_area,

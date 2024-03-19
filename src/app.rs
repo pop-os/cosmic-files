@@ -1,6 +1,8 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
+use cosmic::widget::menu::action::MenuAction;
+use cosmic::widget::menu::key_bind::KeyBind;
 use cosmic::{
     app::{message, Command, Core},
     cosmic_config, cosmic_theme, executor,
@@ -32,7 +34,7 @@ use std::{
 use crate::{
     config::{AppTheme, Config, IconSizes, TabConfig, CONFIG_VERSION},
     fl, home_dir,
-    key_bind::{key_binds, KeyBind},
+    key_bind::key_binds,
     menu, mime_app,
     operation::Operation,
     spawn_detached::spawn_detached,
@@ -83,8 +85,10 @@ pub enum Action {
     WindowNew,
 }
 
-impl Action {
-    pub fn message(self, entity_opt: Option<Entity>) -> Message {
+impl MenuAction for Action {
+    type Message = Message;
+
+    fn message(&self, entity_opt: Option<Entity>) -> Message {
         match self {
             Action::About => Message::ToggleContextPage(ContextPage::About),
             Action::Copy => Message::Copy(entity_opt),
@@ -121,7 +125,7 @@ impl Action {
                 Message::TabMessage(entity_opt, tab::Message::View(tab::View::List))
             }
             Action::ToggleShowHidden => Message::TabMessage(None, tab::Message::ToggleShowHidden),
-            Action::ToggleSort(sort) => Message::TabMessage(None, tab::Message::ToggleSort(sort)),
+            Action::ToggleSort(sort) => Message::TabMessage(None, tab::Message::ToggleSort(*sort)),
             Action::WindowClose => Message::WindowClose,
             Action::WindowNew => Message::WindowNew,
         }
