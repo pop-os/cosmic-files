@@ -1577,8 +1577,8 @@ impl Application for App {
                     let watcher_res = {
                         let mut output = output.clone();
                         new_debouncer(
-                            time::Duration::from_secs(1),
-                            None,
+                            time::Duration::from_millis(250),
+                            Some(time::Duration::from_millis(250)),
                             move |events_res: notify_debouncer_full::DebounceEventResult| {
                                 match events_res {
                                     Ok(mut events) => {
