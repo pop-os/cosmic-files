@@ -1567,6 +1567,7 @@ impl Application for App {
         struct ConfigSubscription;
         struct ThemeSubscription;
         struct WatcherSubscription;
+        struct TrashWatcherSubscription;
 
         let mut subscriptions = vec![
             event::listen_with(|event, status| match event {
@@ -1685,6 +1686,44 @@ impl Application for App {
                     loop {
                         tokio::time::sleep(time::Duration::new(1, 0)).await;
                     }
+                },
+            ),
+            subscription::channel(
+                TypeId::of::<TrashWatcherSubscription>(),
+                25,
+                |mut output| async move {
+                    let watcher_res = notify::recommended_watcher(|event_res| match event_res {
+                        Ok(event) => {
+                            log::info!("Trash event: {event:?}");
+                        }
+                        Err(e) => log::warn!("failed watching trash bin for changes: {e:?}"),
+                    });
+
+                    match (watcher_res, trash::os_limited::trash_folders()) {
+                        (Ok(mut watcher), Ok(trash_bins)) => {
+                            for path in trash_bins {
+                                if let Err(e) =
+                                    watcher.watch(&path, notify::RecursiveMode::Recursive)
+                                {
+                                    log::warn!(
+                                        "failed to add trash bin `{}` to watcher: {e:?}",
+                                        path.display()
+                                    );
+                                }
+                            }
+
+                            // Don't drop the watcher
+                            std::future::pending().await
+                        }
+                        (Err(e), _) => {
+                            log::warn!("failed to create new watcher for trash bin: {e:?}")
+                        }
+                        (_, Err(e)) => {
+                            log::warn!("could not find any valid trash bins to watch: {e:?}")
+                        }
+                    }
+
+                    std::future::pending().await
                 },
             ),
         ];
