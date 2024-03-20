@@ -29,6 +29,7 @@ tokio = { version = "1" }
 trash = "3.2.0"
 xdg = { version = "2.5.2", optional = true }
 xdg-mime = "0.3"
+url = "2.5"
 # Internationalization
 i18n-embed = { version = "0.14", features = [
     "fluent-system",

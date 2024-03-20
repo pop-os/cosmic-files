@@ -14,6 +14,7 @@ use cosmic::{
         widget::scrollable,
         window, Alignment, Event, Length,
     },
+    iced_runtime::clipboard,
     style, theme,
     widget::{
         self,
@@ -32,6 +33,7 @@ use std::{
 };
 
 use crate::{
+    clipboard::ClipboardContents,
     config::{AppTheme, Config, IconSizes, TabConfig, CONFIG_VERSION},
     fl, home_dir,
     key_bind::key_binds,
@@ -787,8 +789,20 @@ impl Application for App {
                     return self.update_config();
                 }
             }
-            Message::Copy(_entity_opt) => {
-                log::warn!("TODO: COPY");
+            Message::Copy(entity_opt) => {
+                let mut paths = Vec::new();
+                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                    if let Some(ref items) = tab.items_opt() {
+                        for item in items.iter() {
+                            if item.selected {
+                                paths.push(item.path.clone());
+                            }
+                        }
+                    }
+                }
+                let contents = ClipboardContents::new(&paths);
+                return clipboard::write_data(contents);
             }
             Message::Cut(_entity_opt) => {
                 log::warn!("TODO: CUT");
