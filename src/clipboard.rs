@@ -61,13 +61,13 @@ impl ClipboardCopy {
 
             match Url::from_file_path(path) {
                 Ok(url) => {
-                    let url_str = url.to_string();
+                    let url_str = url.as_ref();
 
-                    text_uri_list.push_str(&url_str);
+                    text_uri_list.push_str(url_str);
                     text_uri_list.push_str(cr_nl);
 
                     x_special_gnome_copied_files.push('\n');
-                    x_special_gnome_copied_files.push_str(&url_str);
+                    x_special_gnome_copied_files.push_str(url_str);
                 }
                 Err(()) => {
                     log::warn!(

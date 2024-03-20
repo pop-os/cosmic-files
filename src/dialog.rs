@@ -17,11 +17,15 @@ use cosmic::{
     widget::{self, segmented_button},
     Application, ApplicationExt, Element,
 };
-use notify::Watcher;
+use notify_debouncer_full::{
+    new_debouncer,
+    notify::{self, RecommendedWatcher, Watcher},
+    DebouncedEvent, Debouncer, FileIdMap,
+};
 use std::{
     any::TypeId,
     collections::{HashMap, HashSet},
-    env, fs,
+    env, fmt, fs,
     path::PathBuf,
     time,
 };
@@ -180,7 +184,7 @@ enum Message {
     Cancel,
     Filename(String),
     Modifiers(Modifiers),
-    NotifyEvent(notify::Event),
+    NotifyEvents(Vec<DebouncedEvent>),
     NotifyWatcher(WatcherWrapper),
     Open,
     Save(bool),
@@ -188,14 +192,19 @@ enum Message {
     TabRescan(Vec<tab::Item>),
 }
 
-#[derive(Debug)]
 struct WatcherWrapper {
-    watcher_opt: Option<notify::RecommendedWatcher>,
+    watcher_opt: Option<Debouncer<RecommendedWatcher, FileIdMap>>,
 }
 
 impl Clone for WatcherWrapper {
     fn clone(&self) -> Self {
         Self { watcher_opt: None }
+    }
+}
+
+impl fmt::Debug for WatcherWrapper {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WatcherWrapper").finish()
     }
 }
 
@@ -215,7 +224,7 @@ struct App {
     result_opt: Option<DialogResult>,
     replace_dialog: bool,
     tab: Tab,
-    watcher_opt: Option<(notify::RecommendedWatcher, HashSet<PathBuf>)>,
+    watcher_opt: Option<(Debouncer<RecommendedWatcher, FileIdMap>, HashSet<PathBuf>)>,
 }
 
 impl App {
@@ -252,7 +261,7 @@ impl App {
             // Unwatch paths no longer used
             for path in old_paths.iter() {
                 if !new_paths.contains(path) {
-                    match watcher.unwatch(path) {
+                    match watcher.watcher().unwatch(path) {
                         Ok(()) => {
                             log::debug!("unwatching {:?}", path);
                         }
@@ -267,7 +276,10 @@ impl App {
             for path in new_paths.iter() {
                 if !old_paths.contains(path) {
                     //TODO: should this be recursive?
-                    match watcher.watch(path, notify::RecursiveMode::NonRecursive) {
+                    match watcher
+                        .watcher()
+                        .watch(path, notify::RecursiveMode::NonRecursive)
+                    {
                         Ok(()) => {
                             log::debug!("watching {:?}", path);
                         }
@@ -440,15 +452,17 @@ impl Application for App {
             Message::Modifiers(modifiers) => {
                 self.modifiers = modifiers;
             }
-            Message::NotifyEvent(event) => {
-                log::debug!("{:?}", event);
+            Message::NotifyEvents(events) => {
+                log::debug!("{:?}", events);
 
                 if let Location::Path(path) = &self.tab.location {
                     let mut contains_change = false;
-                    for event_path in event.paths.iter() {
-                        if event_path.starts_with(&path) {
-                            contains_change = true;
-                            break;
+                    for event in events.iter() {
+                        for event_path in event.paths.iter() {
+                            if event_path.starts_with(&path) {
+                                contains_change = true;
+                                break;
+                            }
                         }
                     }
                     if contains_change {
@@ -663,37 +677,48 @@ impl Application for App {
                 |mut output| async move {
                     let watcher_res = {
                         let mut output = output.clone();
-                        //TODO: debounce
-                        notify::recommended_watcher(
-                            move |event_res: Result<notify::Event, notify::Error>| match event_res {
-                                Ok(event) => {
-                                    match &event.kind {
-                                        notify::EventKind::Access(_) => {
-                                            // Data not mutated
-                                            return;
-                                        }
-                                        notify::EventKind::Modify(
-                                            notify::event::ModifyKind::Metadata(e),
-                                        ) if (*e != notify::event::MetadataKind::Any
-                                            && *e != notify::event::MetadataKind::WriteTime) =>
-                                        {
-                                            // Data not mutated nor modify time changed
-                                            return;
-                                        }
-                                        _ => {}
-                                    }
+                        new_debouncer(
+                            time::Duration::from_secs(1),
+                            None,
+                            move |events_res: notify_debouncer_full::DebounceEventResult| {
+                                match events_res {
+                                    Ok(mut events) => {
+                                        events.retain(|event| {
+                                            match &event.kind {
+                                                notify::EventKind::Access(_) => {
+                                                    // Data not mutated
+                                                    false
+                                                }
+                                                notify::EventKind::Modify(
+                                                    notify::event::ModifyKind::Metadata(e),
+                                                ) if (*e != notify::event::MetadataKind::Any
+                                                    && *e
+                                                        != notify::event::MetadataKind::WriteTime) =>
+                                                {
+                                                    // Data not mutated nor modify time changed
+                                                    false
+                                                }
+                                                _ => true
+                                            }
+                                        });
 
-                                    match futures::executor::block_on(async {
-                                        output.send(Message::NotifyEvent(event)).await
-                                    }) {
-                                        Ok(()) => {}
-                                        Err(err) => {
-                                            log::warn!("failed to send notify event: {:?}", err);
+                                        if !events.is_empty() {
+                                            match futures::executor::block_on(async {
+                                                output.send(Message::NotifyEvents(events)).await
+                                            }) {
+                                                Ok(()) => {}
+                                                Err(err) => {
+                                                    log::warn!(
+                                                        "failed to send notify events: {:?}",
+                                                        err
+                                                    );
+                                                }
+                                            }
                                         }
                                     }
-                                }
-                                Err(err) => {
-                                    log::warn!("failed to watch files: {:?}", err);
+                                    Err(err) => {
+                                        log::warn!("failed to watch files: {:?}", err);
+                                    }
                                 }
                             },
                         )

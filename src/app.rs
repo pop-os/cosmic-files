@@ -22,14 +22,20 @@ use cosmic::{
     },
     Application, ApplicationExt, Element,
 };
-use notify::Watcher;
+use notify_debouncer_full::{
+    new_debouncer,
+    notify::{self, RecommendedWatcher, Watcher},
+    DebouncedEvent, Debouncer, FileIdMap,
+};
 use std::{
     any::TypeId,
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
-    env, fs,
+    env, fmt, fs,
     num::NonZeroU16,
     path::PathBuf,
-    process, time,
+    process,
+    sync::Arc,
+    time,
 };
 
 use crate::{
@@ -150,12 +156,12 @@ pub enum Message {
     Modifiers(Modifiers),
     MoveToTrash(Option<Entity>),
     NewItem(Option<Entity>, bool),
-    NotifyEvent(notify::Event),
+    NotifyEvents(Vec<DebouncedEvent>),
     NotifyWatcher(WatcherWrapper),
     OpenTerminal(Option<Entity>),
     OpenWith(PathBuf, mime_app::MimeApp),
     Paste(Option<Entity>),
-    PasteContents(Option<Entity>, ClipboardPaste),
+    PasteContents(PathBuf, ClipboardPaste),
     PendingComplete(u64),
     PendingError(u64, String),
     PendingProgress(u64, f32),
@@ -212,14 +218,19 @@ pub enum DialogPage {
     },
 }
 
-#[derive(Debug)]
 pub struct WatcherWrapper {
-    watcher_opt: Option<notify::RecommendedWatcher>,
+    watcher_opt: Option<Debouncer<RecommendedWatcher, FileIdMap>>,
 }
 
 impl Clone for WatcherWrapper {
     fn clone(&self) -> Self {
         Self { watcher_opt: None }
+    }
+}
+
+impl fmt::Debug for WatcherWrapper {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WatcherWrapper").finish()
     }
 }
 
@@ -248,7 +259,7 @@ pub struct App {
     pending_operations: BTreeMap<u64, (Operation, f32)>,
     complete_operations: BTreeMap<u64, Operation>,
     failed_operations: BTreeMap<u64, (Operation, String)>,
-    watcher_opt: Option<(notify::RecommendedWatcher, HashSet<PathBuf>)>,
+    watcher_opt: Option<(Debouncer<RecommendedWatcher, FileIdMap>, HashSet<PathBuf>)>,
 }
 
 impl App {
@@ -351,7 +362,7 @@ impl App {
             // Unwatch paths no longer used
             for path in old_paths.iter() {
                 if !new_paths.contains(path) {
-                    match watcher.unwatch(path) {
+                    match watcher.watcher().unwatch(path) {
                         Ok(()) => {
                             log::debug!("unwatching {:?}", path);
                         }
@@ -366,7 +377,10 @@ impl App {
             for path in new_paths.iter() {
                 if !old_paths.contains(path) {
                     //TODO: should this be recursive?
-                    match watcher.watch(path, notify::RecursiveMode::NonRecursive) {
+                    match watcher
+                        .watcher()
+                        .watch(path, notify::RecursiveMode::NonRecursive)
+                    {
                         Ok(()) => {
                             log::debug!("watching {:?}", path);
                         }
@@ -898,8 +912,8 @@ impl Application for App {
                     }
                 }
             }
-            Message::NotifyEvent(event) => {
-                log::debug!("{:?}", event);
+            Message::NotifyEvents(events) => {
+                log::debug!("{:?}", events);
 
                 let mut needs_reload = Vec::new();
                 for entity in self.tab_model.iter() {
@@ -907,10 +921,12 @@ impl Application for App {
                         //TODO: support reloading trash, somehow
                         if let Location::Path(path) = &tab.location {
                             let mut contains_change = false;
-                            for event_path in event.paths.iter() {
-                                if event_path.starts_with(&path) {
-                                    contains_change = true;
-                                    break;
+                            for event in events.iter() {
+                                for event_path in event.paths.iter() {
+                                    if event_path.starts_with(&path) {
+                                        contains_change = true;
+                                        break;
+                                    }
                                 }
                             }
                             if contains_change {
@@ -992,17 +1008,38 @@ impl Application for App {
                 self.core.window.show_context = false;
             }
             Message::Paste(entity_opt) => {
-                return clipboard::read_data::<ClipboardPaste, _>(move |contents_opt| {
-                    match contents_opt {
-                        Some(contents) => {
-                            message::app(Message::PasteContents(entity_opt, contents))
-                        }
-                        None => message::none(),
+                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                    if let Location::Path(path) = &tab.location {
+                        let to = path.clone();
+                        return clipboard::read_data::<ClipboardPaste, _>(move |contents_opt| {
+                            match contents_opt {
+                                Some(contents) => {
+                                    message::app(Message::PasteContents(to.clone(), contents))
+                                }
+                                None => message::none(),
+                            }
+                        });
                     }
-                });
+                }
             }
-            Message::PasteContents(entity_opt, contents) => {
-                println!("{:?}", contents);
+            Message::PasteContents(to, contents) => {
+                if !contents.paths.is_empty() {
+                    match contents.kind {
+                        ClipboardKind::Copy => {
+                            self.operation(Operation::Copy {
+                                paths: contents.paths,
+                                to,
+                            });
+                        }
+                        ClipboardKind::Cut => {
+                            self.operation(Operation::Move {
+                                paths: contents.paths,
+                                to,
+                            });
+                        }
+                    }
+                }
             }
             Message::PendingComplete(id) => {
                 if let Some((op, _)) = self.pending_operations.remove(&id) {
@@ -1539,37 +1576,48 @@ impl Application for App {
                 |mut output| async move {
                     let watcher_res = {
                         let mut output = output.clone();
-                        //TODO: debounce
-                        notify::recommended_watcher(
-                            move |event_res: Result<notify::Event, notify::Error>| match event_res {
-                                Ok(event) => {
-                                    match &event.kind {
-                                        notify::EventKind::Access(_) => {
-                                            // Data not mutated
-                                            return;
-                                        }
-                                        notify::EventKind::Modify(
-                                            notify::event::ModifyKind::Metadata(e),
-                                        ) if (*e != notify::event::MetadataKind::Any
-                                            && *e != notify::event::MetadataKind::WriteTime) =>
-                                        {
-                                            // Data not mutated nor modify time changed
-                                            return;
-                                        }
-                                        _ => {}
-                                    }
+                        new_debouncer(
+                            time::Duration::from_secs(1),
+                            None,
+                            move |events_res: notify_debouncer_full::DebounceEventResult| {
+                                match events_res {
+                                    Ok(mut events) => {
+                                        events.retain(|event| {
+                                            match &event.kind {
+                                                notify::EventKind::Access(_) => {
+                                                    // Data not mutated
+                                                    false
+                                                }
+                                                notify::EventKind::Modify(
+                                                    notify::event::ModifyKind::Metadata(e),
+                                                ) if (*e != notify::event::MetadataKind::Any
+                                                    && *e
+                                                        != notify::event::MetadataKind::WriteTime) =>
+                                                {
+                                                    // Data not mutated nor modify time changed
+                                                    false
+                                                }
+                                                _ => true
+                                            }
+                                        });
 
-                                    match futures::executor::block_on(async {
-                                        output.send(Message::NotifyEvent(event)).await
-                                    }) {
-                                        Ok(()) => {}
-                                        Err(err) => {
-                                            log::warn!("failed to send notify event: {:?}", err);
+                                        if !events.is_empty() {
+                                            match futures::executor::block_on(async {
+                                                output.send(Message::NotifyEvents(events)).await
+                                            }) {
+                                                Ok(()) => {}
+                                                Err(err) => {
+                                                    log::warn!(
+                                                        "failed to send notify events: {:?}",
+                                                        err
+                                                    );
+                                                }
+                                            }
                                         }
                                     }
-                                }
-                                Err(err) => {
-                                    log::warn!("failed to watch files: {:?}", err);
+                                    Err(err) => {
+                                        log::warn!("failed to watch files: {:?}", err);
+                                    }
                                 }
                             },
                         )
@@ -1606,26 +1654,25 @@ impl Application for App {
             //TODO: use recipe?
             let id = *id;
             let pending_operation = pending_operation.clone();
-            subscriptions.push(subscription::channel(
-                id,
-                16,
-                move |mut msg_tx| async move {
-                    match pending_operation.perform(id, &mut msg_tx).await {
-                        Ok(()) => {
-                            let _ = msg_tx.send(Message::PendingComplete(id)).await;
-                        }
-                        Err(err) => {
-                            let _ = msg_tx
-                                .send(Message::PendingError(id, err.to_string()))
-                                .await;
-                        }
+            subscriptions.push(subscription::channel(id, 16, move |msg_tx| async move {
+                let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
+                match pending_operation.perform(id, &msg_tx).await {
+                    Ok(()) => {
+                        let _ = msg_tx.lock().await.send(Message::PendingComplete(id)).await;
                     }
+                    Err(err) => {
+                        let _ = msg_tx
+                            .lock()
+                            .await
+                            .send(Message::PendingError(id, err.to_string()))
+                            .await;
+                    }
+                }
 
-                    loop {
-                        tokio::time::sleep(time::Duration::new(1, 0)).await;
-                    }
-                },
-            ));
+                loop {
+                    tokio::time::sleep(time::Duration::new(1, 0)).await;
+                }
+            }));
         }
 
         for entity in self.tab_model.iter() {
