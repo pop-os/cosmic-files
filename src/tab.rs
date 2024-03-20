@@ -271,7 +271,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                     name,
                     metadata: ItemMetadata::Path { metadata, children },
                     hidden,
-                    path,
+                    path_opt: Some(path),
                     mime,
                     icon_handle_grid,
                     icon_handle_list,
@@ -336,7 +336,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     }
                 };
 
-                let path = entry.original_path();
+                let original_path = entry.original_path();
                 let name = entry.name.clone();
 
                 let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) =
@@ -344,12 +344,13 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                         trash::TrashItemSize::Entries(_) => (
                             //TODO: make this a static
                             "inode/directory".parse().unwrap(),
-                            folder_icon(&path, sizes.grid()),
-                            folder_icon(&path, sizes.list()),
-                            folder_icon(&path, sizes.list_condensed()),
+                            folder_icon(&original_path, sizes.grid()),
+                            folder_icon(&original_path, sizes.list()),
+                            folder_icon(&original_path, sizes.list_condensed()),
                         ),
                         trash::TrashItemSize::Bytes(_) => {
-                            let mime = mime_for_path(&path);
+                            //TODO: do not use original path
+                            let mime = mime_for_path(&original_path);
                             (
                                 mime.clone(),
                                 mime_icon(mime.clone(), sizes.grid()),
@@ -363,7 +364,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     name,
                     metadata: ItemMetadata::Trash { metadata, entry },
                     hidden: false,
-                    path,
+                    path_opt: None,
                     mime,
                     icon_handle_grid,
                     icon_handle_list,
@@ -478,7 +479,7 @@ pub struct Item {
     pub name: String,
     pub metadata: ItemMetadata,
     pub hidden: bool,
-    pub path: PathBuf,
+    pub path_opt: Option<PathBuf>,
     pub mime: Mime,
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
@@ -495,21 +496,32 @@ pub struct Item {
 impl Item {
     fn preview(&self, sizes: IconSizes) -> Element<app::Message> {
         // This loads the image only if thumbnailing worked
+        let icon = widget::icon::icon(self.icon_handle_grid.clone())
+            .content_fit(ContentFit::Contain)
+            .size(sizes.grid())
+            .into();
         match self
             .thumbnail_opt
             .as_ref()
             .unwrap_or(&ItemThumbnail::NotImage)
         {
-            ItemThumbnail::NotImage => widget::icon::icon(self.icon_handle_grid.clone())
-                .content_fit(ContentFit::Contain)
-                .size(sizes.grid())
-                .into(),
+            ItemThumbnail::NotImage => icon,
             ItemThumbnail::Rgba(_) => {
-                widget::image::viewer(widget::image::Handle::from_path(&self.path))
-                    .min_scale(1.0)
-                    .into()
+                if let Some(path) = &self.path_opt {
+                    widget::image::viewer(widget::image::Handle::from_path(path))
+                        .min_scale(1.0)
+                        .into()
+                } else {
+                    icon
+                }
             }
-            ItemThumbnail::Svg => widget::Svg::from_path(&self.path).into(),
+            ItemThumbnail::Svg => {
+                if let Some(path) = &self.path_opt {
+                    widget::Svg::from_path(path).into()
+                } else {
+                    icon
+                }
+            }
         }
     }
 
@@ -532,24 +544,26 @@ impl Item {
 
         column = column.push(widget::text(format!("Type: {}", self.mime)));
 
-        for app in self.open_with.iter() {
-            column = column.push(
-                widget::button(
-                    widget::row::with_children(vec![
-                        widget::icon(app.icon.clone()).into(),
-                        if app.is_default {
-                            widget::text(fl!("default-app", name = app.name.as_str())).into()
-                        } else {
-                            widget::text(&app.name).into()
-                        },
-                    ])
-                    .spacing(space_xs),
-                )
-                //TODO: do not clone so much?
-                .on_press(app::Message::OpenWith(self.path.clone(), app.clone()))
-                .padding(space_xs)
-                .width(Length::Fill),
-            );
+        if let Some(path) = &self.path_opt {
+            for app in self.open_with.iter() {
+                column = column.push(
+                    widget::button(
+                        widget::row::with_children(vec![
+                            widget::icon(app.icon.clone()).into(),
+                            if app.is_default {
+                                widget::text(fl!("default-app", name = app.name.as_str())).into()
+                            } else {
+                                widget::text(&app.name).into()
+                            },
+                        ])
+                        .spacing(space_xs),
+                    )
+                    //TODO: do not clone so much?
+                    .on_press(app::Message::OpenWith(path.clone(), app.clone()))
+                    .padding(space_xs)
+                    .width(Length::Fill),
+                );
+            }
         }
 
         column.into()
@@ -928,7 +942,7 @@ impl Tab {
                         if Some(i) == click_i_opt {
                             // Filter out selection if it does not match dialog kind
                             if let Some(dialog) = &self.dialog {
-                                let item_is_dir = item.path.is_dir();
+                                let item_is_dir = item.metadata.is_dir();
                                 if item_is_dir != dialog.is_dir() {
                                     // Allow selecting folder if dialog is for files to make it
                                     // possible to double click
@@ -941,18 +955,15 @@ impl Tab {
                             item.selected = true;
                             if let Some(click_time) = item.click_time {
                                 if click_time.elapsed() < DOUBLE_CLICK_DURATION {
-                                    match self.location {
-                                        Location::Path(_) => {
-                                            if item.path.is_dir() {
-                                                //TODO: allow opening multiple tabs?
-                                                cd = Some(Location::Path(item.path.clone()));
-                                            } else {
-                                                commands.push(Command::OpenFile(item.path.clone()));
-                                            }
+                                    if let Some(path) = &item.path_opt {
+                                        if path.is_dir() {
+                                            //TODO: allow opening multiple tabs?
+                                            cd = Some(Location::Path(path.clone()));
+                                        } else {
+                                            commands.push(Command::OpenFile(path.clone()));
                                         }
-                                        Location::Trash => {
-                                            //TODO: open properties?
-                                        }
+                                    } else {
+                                        //TODO: open properties?
                                     }
                                 }
                             }
@@ -1148,18 +1159,15 @@ impl Tab {
                 if let Some(ref mut items) = self.items_opt {
                     for item in items.iter() {
                         if item.selected {
-                            match self.location {
-                                Location::Path(_) => {
-                                    if item.path.is_dir() {
-                                        //TODO: allow opening multiple tabs?
-                                        cd = Some(Location::Path(item.path.clone()));
-                                    } else {
-                                        commands.push(Command::OpenFile(item.path.clone()));
-                                    }
+                            if let Some(path) = &item.path_opt {
+                                if path.is_dir() {
+                                    //TODO: allow opening multiple tabs?
+                                    cd = Some(Location::Path(path.clone()));
+                                } else {
+                                    commands.push(Command::OpenFile(path.clone()));
                                 }
-                                Location::Trash => {
-                                    //TODO: open properties?
-                                }
+                            } else {
+                                //TODO: open properties?
                             }
                         }
                     }
@@ -1198,7 +1206,7 @@ impl Tab {
             Message::Thumbnail(path, thumbnail) => {
                 if let Some(ref mut items) = self.items_opt {
                     for item in items.iter_mut() {
-                        if item.path == path {
+                        if item.path_opt.as_ref() == Some(&path) {
                             if let ItemThumbnail::Rgba(rgba) = &thumbnail {
                                 //TODO: pass handles already generated to avoid blocking main thread
                                 let handle = widget::icon::from_raster_pixels(
@@ -1299,7 +1307,7 @@ impl Tab {
                 })
             }
             HeadingOptions::Name => items.sort_by(|a, b| {
-                let ord = match (a.1.path.is_dir(), b.1.path.is_dir()) {
+                let ord = match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
                     (true, false) => Ordering::Less,
                     (false, true) => Ordering::Greater,
                     _ => lexical_sort::natural_lexical_cmp(&a.1.name, &b.1.name),
@@ -1904,52 +1912,53 @@ impl Tab {
                     }
                 }
 
-                let path = item.path.clone();
-                subscriptions.push(subscription::channel(
-                    path.clone(),
-                    1,
-                    |mut output| async move {
-                        let (path, thumbnail) = tokio::task::spawn_blocking(move || {
-                            let start = std::time::Instant::now();
-                            let thumbnail = match image::io::Reader::open(&path) {
-                                Ok(reader) => match reader.decode() {
-                                    Ok(image) => {
-                                        //TODO: configurable thumbnail size?
-                                        let thumbnail = image.thumbnail(64, 64);
-                                        ItemThumbnail::Rgba(thumbnail.to_rgba8())
-                                    }
+                if let Some(path) = item.path_opt.clone() {
+                    subscriptions.push(subscription::channel(
+                        path.clone(),
+                        1,
+                        |mut output| async move {
+                            let (path, thumbnail) = tokio::task::spawn_blocking(move || {
+                                let start = std::time::Instant::now();
+                                let thumbnail = match image::io::Reader::open(&path) {
+                                    Ok(reader) => match reader.decode() {
+                                        Ok(image) => {
+                                            //TODO: configurable thumbnail size?
+                                            let thumbnail = image.thumbnail(64, 64);
+                                            ItemThumbnail::Rgba(thumbnail.to_rgba8())
+                                        }
+                                        Err(err) => {
+                                            log::warn!("failed to decode {:?}: {}", path, err);
+                                            ItemThumbnail::NotImage
+                                        }
+                                    },
                                     Err(err) => {
-                                        log::warn!("failed to decode {:?}: {}", path, err);
+                                        log::warn!("failed to read {:?}: {}", path, err);
                                         ItemThumbnail::NotImage
                                     }
-                                },
-                                Err(err) => {
-                                    log::warn!("failed to read {:?}: {}", path, err);
-                                    ItemThumbnail::NotImage
-                                }
-                            };
-                            log::info!("thumbnailed {:?} in {:?}", path, start.elapsed());
-                            (path, thumbnail)
-                        })
-                        .await
-                        .unwrap();
-
-                        match output
-                            .send(Message::Thumbnail(path.clone(), thumbnail))
+                                };
+                                log::info!("thumbnailed {:?} in {:?}", path, start.elapsed());
+                                (path, thumbnail)
+                            })
                             .await
-                        {
-                            Ok(()) => {}
-                            Err(err) => {
-                                log::warn!("failed to send thumbnail for {:?}: {}", path, err);
-                            }
-                        }
+                            .unwrap();
 
-                        //TODO: how to properly kill this task?
-                        loop {
-                            tokio::time::sleep(std::time::Duration::new(1, 0)).await;
-                        }
-                    },
-                ));
+                            match output
+                                .send(Message::Thumbnail(path.clone(), thumbnail))
+                                .await
+                            {
+                                Ok(()) => {}
+                                Err(err) => {
+                                    log::warn!("failed to send thumbnail for {:?}: {}", path, err);
+                                }
+                            }
+
+                            //TODO: how to properly kill this task?
+                            loop {
+                                tokio::time::sleep(std::time::Duration::new(1, 0)).await;
+                            }
+                        },
+                    ));
+                }
 
                 if subscriptions.len() >= jobs {
                     break;

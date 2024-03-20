@@ -471,7 +471,9 @@ impl Application for App {
                 if let Some(items) = self.tab.items_opt() {
                     for item in items.iter() {
                         if item.selected {
-                            paths.push(item.path.clone());
+                            if let Some(path) = &item.path_opt {
+                                paths.push(path.clone());
+                            }
                         }
                     }
                 }
@@ -545,7 +547,7 @@ impl Application for App {
                     if let Some(click_i) = click_i_opt {
                         if let Some(items) = self.tab.items_opt() {
                             if let Some(item) = items.get(click_i) {
-                                if item.selected && !item.path.is_dir() {
+                                if item.selected && !item.metadata.is_dir() {
                                     *filename = item.name.clone();
                                 }
                             }

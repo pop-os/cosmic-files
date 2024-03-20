@@ -307,6 +307,23 @@ impl App {
         Command::batch(commands)
     }
 
+    fn selected_paths(&self, entity_opt: Option<Entity>) -> Vec<PathBuf> {
+        let mut paths = Vec::new();
+        let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+        if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+            if let Some(ref items) = tab.items_opt() {
+                for item in items.iter() {
+                    if item.selected {
+                        if let Some(path) = &item.path_opt {
+                            paths.push(path.clone());
+                        }
+                    }
+                }
+            }
+        }
+        paths
+    }
+
     fn update_config(&mut self) -> Command<Message> {
         cosmic::app::command::set_theme(self.config.app_theme.theme())
     }
@@ -790,32 +807,12 @@ impl Application for App {
                 }
             }
             Message::Copy(entity_opt) => {
-                let mut paths = Vec::new();
-                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
-                if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-                    if let Some(ref items) = tab.items_opt() {
-                        for item in items.iter() {
-                            if item.selected {
-                                paths.push(item.path.clone());
-                            }
-                        }
-                    }
-                }
+                let paths = self.selected_paths(entity_opt);
                 let contents = ClipboardContents::new(ClipboardKind::Copy, &paths);
                 return clipboard::write_data(contents);
             }
             Message::Cut(entity_opt) => {
-                let mut paths = Vec::new();
-                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
-                if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-                    if let Some(ref items) = tab.items_opt() {
-                        for item in items.iter() {
-                            if item.selected {
-                                paths.push(item.path.clone());
-                            }
-                        }
-                    }
-                }
+                let paths = self.selected_paths(entity_opt);
                 let contents = ClipboardContents::new(ClipboardKind::Cut, &paths);
                 return clipboard::write_data(contents);
             }
@@ -882,17 +879,7 @@ impl Application for App {
                 self.modifiers = modifiers;
             }
             Message::MoveToTrash(entity_opt) => {
-                let mut paths = Vec::new();
-                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
-                if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-                    if let Some(ref items) = tab.items_opt() {
-                        for item in items.iter() {
-                            if item.selected {
-                                paths.push(item.path.clone());
-                            }
-                        }
-                    }
-                }
+                let paths = self.selected_paths(entity_opt);
                 if !paths.is_empty() {
                     self.operation(Operation::Delete { paths });
                 }
@@ -957,7 +944,9 @@ impl Application for App {
                             if let Some(items) = tab.items_opt() {
                                 for item in items.iter() {
                                     if item.selected {
-                                        paths.push(item.path.clone());
+                                        if let Some(path) = &item.path_opt {
+                                            paths.push(path.clone());
+                                        }
                                     }
                                 }
                             }
@@ -1032,7 +1021,9 @@ impl Application for App {
                             let mut selected = Vec::new();
                             for item in items.iter() {
                                 if item.selected {
-                                    selected.push(item.path.clone());
+                                    if let Some(path) = &item.path_opt {
+                                        selected.push(path.clone());
+                                    }
                                 }
                             }
                             if !selected.is_empty() {
