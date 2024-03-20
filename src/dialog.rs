@@ -33,7 +33,7 @@ use std::{
 use crate::{
     config::TabConfig,
     fl, home_dir,
-    tab::{self, Location, Tab},
+    tab::{self, ItemMetadata, Location, Tab},
 };
 
 #[derive(Clone, Debug)]
@@ -460,8 +460,44 @@ impl Application for App {
                     for event in events.iter() {
                         for event_path in event.paths.iter() {
                             if event_path.starts_with(&path) {
-                                contains_change = true;
-                                break;
+                                match event.kind {
+                                    notify::EventKind::Modify(
+                                        notify::event::ModifyKind::Metadata(_),
+                                    )
+                                    | notify::EventKind::Modify(notify::event::ModifyKind::Data(
+                                        _,
+                                    )) => {
+                                        // If metadata or data changed, find the matching item and reload it
+                                        //TODO: this could be further optimized by looking at what exactly changed
+                                        if let Some(items) = &mut self.tab.items_opt {
+                                            for item in items.iter_mut() {
+                                                if item.path_opt.as_ref() == Some(event_path) {
+                                                    //TODO: reload more, like mime types?
+                                                    match fs::metadata(&event_path) {
+                                                        Ok(new_metadata) => {
+                                                            match &mut item.metadata {
+                                                                ItemMetadata::Path {
+                                                                    metadata,
+                                                                    ..
+                                                                } => *metadata = new_metadata,
+                                                                _ => {}
+                                                            }
+                                                        }
+                                                        Err(err) => {
+                                                            log::warn!("failed to reload metadata for {:?}: {}", path, err);
+                                                        }
+                                                    }
+                                                    //TODO item.thumbnail_opt =
+                                                }
+                                            }
+                                        }
+                                    }
+                                    _ => {
+                                        // Any other events reload the whole tab
+                                        contains_change = true;
+                                        break;
+                                    }
+                                }
                             }
                         }
                     }

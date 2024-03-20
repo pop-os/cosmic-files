@@ -673,7 +673,7 @@ pub struct Tab {
     pub history_i: usize,
     pub history: Vec<Location>,
     pub config: TabConfig,
-    items_opt: Option<Vec<Item>>,
+    pub(crate) items_opt: Option<Vec<Item>>,
     scrollable_id: widget::Id,
     select_focus: Option<usize>,
     select_shift: Option<usize>,

@@ -916,16 +916,55 @@ impl Application for App {
                 log::debug!("{:?}", events);
 
                 let mut needs_reload = Vec::new();
-                for entity in self.tab_model.iter() {
-                    if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+                let entities: Vec<_> = self.tab_model.iter().collect();
+                for entity in entities {
+                    if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
                         //TODO: support reloading trash, somehow
                         if let Location::Path(path) = &tab.location {
                             let mut contains_change = false;
                             for event in events.iter() {
                                 for event_path in event.paths.iter() {
                                     if event_path.starts_with(&path) {
-                                        contains_change = true;
-                                        break;
+                                        match event.kind {
+                                            notify::EventKind::Modify(
+                                                notify::event::ModifyKind::Metadata(_),
+                                            )
+                                            | notify::EventKind::Modify(
+                                                notify::event::ModifyKind::Data(_),
+                                            ) => {
+                                                // If metadata or data changed, find the matching item and reload it
+                                                //TODO: this could be further optimized by looking at what exactly changed
+                                                if let Some(items) = &mut tab.items_opt {
+                                                    for item in items.iter_mut() {
+                                                        if item.path_opt.as_ref()
+                                                            == Some(event_path)
+                                                        {
+                                                            //TODO: reload more, like mime types?
+                                                            match fs::metadata(&event_path) {
+                                                                Ok(new_metadata) => match &mut item
+                                                                    .metadata
+                                                                {
+                                                                    ItemMetadata::Path {
+                                                                        metadata,
+                                                                        ..
+                                                                    } => *metadata = new_metadata,
+                                                                    _ => {}
+                                                                },
+                                                                Err(err) => {
+                                                                    log::warn!("failed to reload metadata for {:?}: {}", path, err);
+                                                                }
+                                                            }
+                                                            //TODO item.thumbnail_opt =
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            _ => {
+                                                // Any other events reload the whole tab
+                                                contains_change = true;
+                                                break;
+                                            }
+                                        }
                                     }
                                 }
                             }
