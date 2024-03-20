@@ -33,7 +33,7 @@ use std::{
 };
 
 use crate::{
-    clipboard::{ClipboardContents, ClipboardKind},
+    clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{AppTheme, Config, IconSizes, TabConfig, CONFIG_VERSION},
     fl, home_dir,
     key_bind::key_binds,
@@ -155,6 +155,7 @@ pub enum Message {
     OpenTerminal(Option<Entity>),
     OpenWith(PathBuf, mime_app::MimeApp),
     Paste(Option<Entity>),
+    PasteContents(Option<Entity>, ClipboardPaste),
     PendingComplete(u64),
     PendingError(u64, String),
     PendingProgress(u64, f32),
@@ -808,12 +809,12 @@ impl Application for App {
             }
             Message::Copy(entity_opt) => {
                 let paths = self.selected_paths(entity_opt);
-                let contents = ClipboardContents::new(ClipboardKind::Copy, &paths);
+                let contents = ClipboardCopy::new(ClipboardKind::Copy, &paths);
                 return clipboard::write_data(contents);
             }
             Message::Cut(entity_opt) => {
                 let paths = self.selected_paths(entity_opt);
-                let contents = ClipboardContents::new(ClipboardKind::Cut, &paths);
+                let contents = ClipboardCopy::new(ClipboardKind::Cut, &paths);
                 return clipboard::write_data(contents);
             }
             Message::DialogCancel => {
@@ -990,8 +991,18 @@ impl Application for App {
                 // Close Open With context view
                 self.core.window.show_context = false;
             }
-            Message::Paste(_entity_opt) => {
-                log::warn!("TODO: PASTE");
+            Message::Paste(entity_opt) => {
+                return clipboard::read_data::<ClipboardPaste, _>(move |contents_opt| {
+                    match contents_opt {
+                        Some(contents) => {
+                            message::app(Message::PasteContents(entity_opt, contents))
+                        }
+                        None => message::none(),
+                    }
+                });
+            }
+            Message::PasteContents(entity_opt, contents) => {
+                println!("{:?}", contents);
             }
             Message::PendingComplete(id) => {
                 if let Some((op, _)) = self.pending_operations.remove(&id) {
