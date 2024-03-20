@@ -33,7 +33,7 @@ use std::{
 };
 
 use crate::{
-    clipboard::ClipboardContents,
+    clipboard::{ClipboardContents, ClipboardKind},
     config::{AppTheme, Config, IconSizes, TabConfig, CONFIG_VERSION},
     fl, home_dir,
     key_bind::key_binds,
@@ -801,11 +801,23 @@ impl Application for App {
                         }
                     }
                 }
-                let contents = ClipboardContents::new(&paths);
+                let contents = ClipboardContents::new(ClipboardKind::Copy, &paths);
                 return clipboard::write_data(contents);
             }
-            Message::Cut(_entity_opt) => {
-                log::warn!("TODO: CUT");
+            Message::Cut(entity_opt) => {
+                let mut paths = Vec::new();
+                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                    if let Some(ref items) = tab.items_opt() {
+                        for item in items.iter() {
+                            if item.selected {
+                                paths.push(item.path.clone());
+                            }
+                        }
+                    }
+                }
+                let contents = ClipboardContents::new(ClipboardKind::Cut, &paths);
+                return clipboard::write_data(contents);
             }
             Message::DialogCancel => {
                 self.dialog_pages.pop_front();
