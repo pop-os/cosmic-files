@@ -36,7 +36,7 @@ use std::{
 
 use crate::{
     app::{self, Action},
-    config::{IconSizes, TabConfig},
+    config::{IconSizes, TabConfig, ICON_SCALE_MAX, ICON_SIZE_GRID},
     dialog::DialogKind,
     fl, menu,
     mime_app::{mime_apps, MimeApp},
@@ -1923,7 +1923,10 @@ impl Tab {
                                     Ok(reader) => match reader.decode() {
                                         Ok(image) => {
                                             //TODO: configurable thumbnail size?
-                                            let thumbnail = image.thumbnail(64, 64);
+                                            let thumbnail_size =
+                                                (ICON_SIZE_GRID * ICON_SCALE_MAX) as u32;
+                                            let thumbnail =
+                                                image.thumbnail(thumbnail_size, thumbnail_size);
                                             ItemThumbnail::Rgba(thumbnail.to_rgba8())
                                         }
                                         Err(err) => {

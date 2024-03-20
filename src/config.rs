@@ -13,11 +13,11 @@ use super::tab::HeadingOptions;
 pub const CONFIG_VERSION: u64 = 1;
 
 // Default icon sizes
-const ICON_SIZE_LIST: u16 = 24;
-const ICON_SIZE_LIST_CONDENSED: u16 = 48;
-const ICON_SIZE_GRID: u16 = 64;
+pub const ICON_SIZE_LIST: u16 = 24;
+pub const ICON_SIZE_LIST_CONDENSED: u16 = 48;
+pub const ICON_SIZE_GRID: u16 = 64;
 // TODO: 5 is an arbitrary number. Maybe there's a better icon size max
-const ICON_SCALE_MAX: u16 = 5;
+pub const ICON_SCALE_MAX: u16 = 5;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum AppTheme {
