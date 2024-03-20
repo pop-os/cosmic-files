@@ -51,6 +51,10 @@ pending = Pendentes
 failed = Falhadas
 complete = Concluídas
 
+## Open with
+open-with = Abrir com
+default-app = {$name} (predefinição)
+
 ## Properties
 properties = Propriedades
 
@@ -60,6 +64,10 @@ settings-tab = Separador
 settings-show-hidden = Mostrar ficheiros ocultos
 icon-size-list = Tamanho dos ícones (lista)
 icon-size-grid = Tamanho dos ícones (grelha)
+sorting-name = Ordenar por
+direction = Direção
+ascending = Ascendente
+descending = Descendente
 
 ### Appearance
 appearance = Aparência
@@ -74,6 +82,9 @@ new-folder = Nova pasta
 open-with = Abrir com
 move-to-trash = Mover para o lixo
 restore-from-trash = Restaurar do lixo
+sort-by-name = Ordenar por nome
+sort-by-modified = Ordenar por data de modificação
+sort-by-size = Ordenar por tamanho
 
 # Menu
 
