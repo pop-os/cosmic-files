@@ -1101,7 +1101,22 @@ impl Application for App {
                     *progress = new_progress;
                 }
             }
-            Message::RescanTrash => return self.rescan_trash(),
+            Message::RescanTrash => {
+                // Update trash icon if empty/full
+                let maybe_entity = self.nav_model.iter().find(|&entity| {
+                    self.nav_model
+                        .data::<Location>(entity)
+                        .map(|loc| *loc == Location::Trash)
+                        .unwrap_or_default()
+                });
+                if let Some(entity) = maybe_entity {
+                    self.nav_model
+                        .icon_set(entity, widget::icon::icon(tab::trash_icon_symbolic(16)));
+                }
+
+                return self.rescan_trash();
+            }
+
             Message::Rename(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
