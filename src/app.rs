@@ -165,6 +165,7 @@ pub enum Message {
     PendingComplete(u64),
     PendingError(u64, String),
     PendingProgress(u64, f32),
+    RescanTrash,
     Rename(Option<Entity>),
     RestoreFromTrash(Option<Entity>),
     SystemThemeModeChange(cosmic_theme::ThemeMode),
@@ -1100,6 +1101,22 @@ impl Application for App {
                     *progress = new_progress;
                 }
             }
+            Message::RescanTrash => {
+                // Update trash icon if empty/full
+                let maybe_entity = self.nav_model.iter().find(|&entity| {
+                    self.nav_model
+                        .data::<Location>(entity)
+                        .map(|loc| *loc == Location::Trash)
+                        .unwrap_or_default()
+                });
+                if let Some(entity) = maybe_entity {
+                    self.nav_model
+                        .icon_set(entity, widget::icon::icon(tab::trash_icon_symbolic(16)));
+                }
+
+                return self.rescan_trash();
+            }
+
             Message::Rename(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
@@ -1567,6 +1584,7 @@ impl Application for App {
         struct ConfigSubscription;
         struct ThemeSubscription;
         struct WatcherSubscription;
+        struct TrashWatcherSubscription;
 
         let mut subscriptions = vec![
             event::listen_with(|event, status| match event {
@@ -1685,6 +1703,72 @@ impl Application for App {
                     loop {
                         tokio::time::sleep(time::Duration::new(1, 0)).await;
                     }
+                },
+            ),
+            subscription::channel(
+                TypeId::of::<TrashWatcherSubscription>(),
+                25,
+                |mut output| async move {
+                    let watcher_res = new_debouncer(
+                        time::Duration::from_millis(250),
+                        Some(time::Duration::from_millis(250)),
+                        move |event_res: notify_debouncer_full::DebounceEventResult| match event_res
+                        {
+                            Ok(mut events) => {
+                                events.retain(|event| {
+                                    matches!(
+                                        event.kind,
+                                        notify::EventKind::Create(_) | notify::EventKind::Remove(_)
+                                    )
+                                });
+
+                                if !events.is_empty() {
+                                    if let Err(e) = futures::executor::block_on(async {
+                                        output.send(Message::RescanTrash).await
+                                    }) {
+                                        log::warn!("trash needs to be rescanned but sending message failed: {e:?}");
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log::warn!("failed to watch trash bin for changes: {e:?}")
+                            }
+                        },
+                    );
+
+                    // TODO: Trash watching support for Windows, macOS, and other OSes
+                    #[cfg(all(
+                        unix,
+                        not(target_os = "macos"),
+                        not(target_os = "ios"),
+                        not(target_os = "android")
+                    ))]
+                    match (watcher_res, trash::os_limited::trash_folders()) {
+                        (Ok(mut watcher), Ok(trash_bins)) => {
+                            for path in trash_bins {
+                                if let Err(e) = watcher
+                                    .watcher()
+                                    .watch(&path, notify::RecursiveMode::Recursive)
+                                {
+                                    log::warn!(
+                                        "failed to add trash bin `{}` to watcher: {e:?}",
+                                        path.display()
+                                    );
+                                }
+                            }
+
+                            // Don't drop the watcher
+                            std::future::pending().await
+                        }
+                        (Err(e), _) => {
+                            log::warn!("failed to create new watcher for trash bin: {e:?}")
+                        }
+                        (_, Err(e)) => {
+                            log::warn!("could not find any valid trash bins to watch: {e:?}")
+                        }
+                    }
+
+                    std::future::pending().await
                 },
             ),
         ];
