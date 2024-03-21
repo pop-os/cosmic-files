@@ -165,6 +165,7 @@ pub enum Message {
     PendingComplete(u64),
     PendingError(u64, String),
     PendingProgress(u64, f32),
+    RescanTrash,
     Rename(Option<Entity>),
     RestoreFromTrash(Option<Entity>),
     SystemThemeModeChange(cosmic_theme::ThemeMode),
@@ -1100,6 +1101,7 @@ impl Application for App {
                     *progress = new_progress;
                 }
             }
+            Message::RescanTrash => return self.rescan_trash(),
             Message::Rename(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
@@ -1692,13 +1694,34 @@ impl Application for App {
                 TypeId::of::<TrashWatcherSubscription>(),
                 25,
                 |mut output| async move {
-                    let watcher_res = notify::recommended_watcher(|event_res| match event_res {
-                        Ok(event) => {
-                            log::info!("Trash event: {event:?}");
-                        }
-                        Err(e) => log::warn!("failed watching trash bin for changes: {e:?}"),
-                    });
+                    let watcher_res = notify::recommended_watcher(
+                        move |event_res: Result<notify::Event, _>| match event_res {
+                            Ok(event)
+                                if matches!(
+                                    event.kind,
+                                    notify::EventKind::Create(_) | notify::EventKind::Remove(_)
+                                ) =>
+                            {
+                                if let Err(e) = futures::executor::block_on(async {
+                                    output.send(Message::RescanTrash).await
+                                }) {
+                                    log::warn!("trash needs to be rescanned but sending message failed: {e:?}");
+                                }
+                            }
+                            Ok(_) => {}
+                            Err(e) => {
+                                log::warn!("failed watching trash bin for changes: {e:?}")
+                            }
+                        },
+                    );
 
+                    // TODO: Trash watching support for Windows, macOS, and other OSes
+                    #[cfg(all(
+                        unix,
+                        not(target_os = "macos"),
+                        not(target_os = "ios"),
+                        not(target_os = "android")
+                    ))]
                     match (watcher_res, trash::os_limited::trash_folders()) {
                         (Ok(mut watcher), Ok(trash_bins)) => {
                             for path in trash_bins {
