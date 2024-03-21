@@ -1694,23 +1694,29 @@ impl Application for App {
                 TypeId::of::<TrashWatcherSubscription>(),
                 25,
                 |mut output| async move {
-                    let watcher_res = notify::recommended_watcher(
-                        move |event_res: Result<notify::Event, _>| match event_res {
-                            Ok(event)
-                                if matches!(
-                                    event.kind,
-                                    notify::EventKind::Create(_) | notify::EventKind::Remove(_)
-                                ) =>
-                            {
-                                if let Err(e) = futures::executor::block_on(async {
-                                    output.send(Message::RescanTrash).await
-                                }) {
-                                    log::warn!("trash needs to be rescanned but sending message failed: {e:?}");
+                    let watcher_res = new_debouncer(
+                        time::Duration::from_millis(250),
+                        Some(time::Duration::from_millis(250)),
+                        move |event_res: notify_debouncer_full::DebounceEventResult| match event_res
+                        {
+                            Ok(mut events) => {
+                                events.retain(|event| {
+                                    matches!(
+                                        event.kind,
+                                        notify::EventKind::Create(_) | notify::EventKind::Remove(_)
+                                    )
+                                });
+
+                                if !events.is_empty() {
+                                    if let Err(e) = futures::executor::block_on(async {
+                                        output.send(Message::RescanTrash).await
+                                    }) {
+                                        log::warn!("trash needs to be rescanned but sending message failed: {e:?}");
+                                    }
                                 }
                             }
-                            Ok(_) => {}
                             Err(e) => {
-                                log::warn!("failed watching trash bin for changes: {e:?}")
+                                log::warn!("failed to watch trash bin for changes: {e:?}")
                             }
                         },
                     );
@@ -1725,8 +1731,9 @@ impl Application for App {
                     match (watcher_res, trash::os_limited::trash_folders()) {
                         (Ok(mut watcher), Ok(trash_bins)) => {
                             for path in trash_bins {
-                                if let Err(e) =
-                                    watcher.watch(&path, notify::RecursiveMode::Recursive)
+                                if let Err(e) = watcher
+                                    .watcher()
+                                    .watch(&path, notify::RecursiveMode::Recursive)
                                 {
                                     log::warn!(
                                         "failed to add trash bin `{}` to watcher: {e:?}",
