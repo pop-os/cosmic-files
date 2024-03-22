@@ -2017,7 +2017,7 @@ pub(crate) mod test_utils {
 
         name == item.name
             && is_dir == item.metadata.is_dir()
-            && path == item.path
+            && path == item.path_opt.as_ref().expect("item should have path")
             && is_hidden == item.hidden
     }
 
