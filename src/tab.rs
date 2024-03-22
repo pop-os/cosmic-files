@@ -38,7 +38,7 @@ use crate::{
     app::{self, Action},
     config::{IconSizes, TabConfig, ICON_SCALE_MAX, ICON_SIZE_GRID},
     dialog::DialogKind,
-    fl, menu,
+    fl, home_dir, menu,
     mime_app::{mime_apps, MimeApp},
     mime_icon::{mime_for_path, mime_icon},
     mouse_area,
@@ -78,6 +78,32 @@ static SPECIAL_DIRS: Lazy<HashMap<PathBuf, &'static str>> = Lazy::new(|| {
     }
     special_dirs
 });
+
+pub fn rewrite_special_dir(path: &PathBuf) -> PathBuf {
+    let home = home_dir();
+
+    let Ok(base) = path.strip_prefix(home) else {
+        return path.to_path_buf();
+    };
+
+    let base_buf: PathBuf = base.into();
+    let Some(base) = base_buf.to_str() else {
+        return path.to_path_buf();
+    };
+
+    let default_path_buf = path.to_path_buf();
+    match base {
+        "Desktop" => dirs::desktop_dir().unwrap_or(default_path_buf),
+        "Downloads" => dirs::download_dir().unwrap_or(default_path_buf),
+        "Templates" => dirs::template_dir().unwrap_or(default_path_buf),
+        "Public" => dirs::public_dir().unwrap_or(default_path_buf),
+        "Documents" => dirs::document_dir().unwrap_or(default_path_buf),
+        "Music" => dirs::audio_dir().unwrap_or(default_path_buf),
+        "Pictures" => dirs::picture_dir().unwrap_or(default_path_buf),
+        "Videos" => dirs::picture_dir().unwrap_or(default_path_buf),
+        _ => default_path_buf,
+    }
+}
 
 fn button_appearance(
     theme: &theme::Theme,
@@ -221,7 +247,11 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
 
                 let hidden = name.starts_with(".") || hidden_attribute(&metadata);
 
-                let path = entry.path();
+                let mut path = entry.path();
+                // Overwrite xdg user dirs for HOME
+                if home_dir().eq(tab_path) {
+                    path = rewrite_special_dir(&entry.path());
+                }
 
                 let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) =
                     if metadata.is_dir() {
