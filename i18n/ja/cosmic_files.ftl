@@ -51,6 +51,10 @@ pending = 保留中
 failed = 失敗
 complete = 完了
 
+## Open with
+open-with = で開く
+default-app = {$name} (デフォルト)
+
 ## Properties
 properties = プロパティ
 
@@ -60,6 +64,10 @@ settings-tab = タブ
 settings-show-hidden = 隠しファイルを表示
 icon-size-list = アイコンサイズ（リスト）
 icon-size-grid = アイコンサイズ（グリッド）
+sorting-name = 並べ替え
+direction = 順
+ascending = 昇順
+descending = 降順
 
 ### Appearance
 appearance = 外観
@@ -71,8 +79,12 @@ light = ライト
 # Context menu
 new-file = 新しいファイル
 new-folder = 新しいフォルダ
+open-in-terminal = 端末で開く
 move-to-trash = ゴミ箱に移動
 restore-from-trash = ゴミ箱から復元
+sort-by-name = 名前で並べ替え
+sort-by-modified = 更新日で並べ替え
+sort-by-size = サイズで並べ替え
 
 # Menu
 
