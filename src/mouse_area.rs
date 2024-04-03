@@ -10,12 +10,14 @@ use cosmic::{
         widget::{tree, Operation, OperationOutputWrapper, Tree},
         Clipboard, Color, Layout, Length, Point, Rectangle, Shell, Size, Widget,
     },
+    widget::Id,
     Element, Renderer, Theme,
 };
 
 /// Emit messages on mouse events.
 #[allow(missing_debug_implementations)]
 pub struct MouseArea<'a, Message> {
+    id: Id,
     content: Element<'a, Message>,
     on_drag: Option<Box<dyn Fn(Option<Rectangle>) -> Message + 'a>>,
     on_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
@@ -166,6 +168,7 @@ impl<'a, Message> MouseArea<'a, Message> {
     /// Creates a [`MouseArea`] with the given content.
     pub fn new(content: impl Into<Element<'a, Message>>) -> Self {
         MouseArea {
+            id: Id::unique(),
             content: content.into(),
             on_drag: None,
             on_press: None,

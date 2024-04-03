@@ -66,3 +66,11 @@ fork = "0.1"
 fastrand = "2"
 tempfile = "3"
 test-log = "0.2"
+
+[patch.'https://github.com/pop-os/libcosmic']
+libcosmic = { path = "../libcosmic" }
+cosmic-config = { path = "../libcosmic/cosmic-config" }
+cosmic-theme = { path = "../libcosmic/cosmic-theme" }
+
+[patch.'https://github.com/pop-os/smithay-clipboard']
+smithay-clipboard = { path = "../smithay-clipboard" }

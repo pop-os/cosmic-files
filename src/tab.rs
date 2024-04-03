@@ -1,4 +1,8 @@
+use cosmic::iced_core::widget::tree;
+use cosmic::iced_runtime::dnd;
+use cosmic::widget::list::container;
 use cosmic::widget::menu::key_bind::KeyBind;
+use cosmic::widget::{text, vertical_space, Id, Widget};
 use cosmic::{
     cosmic_theme,
     iced::{
@@ -24,6 +28,9 @@ use cosmic::{
 use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::{
     cell::Cell,
     cmp::Ordering,
@@ -34,6 +41,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::clipboard::ClipboardCopy;
+use crate::dnd_source::DndSourceWrapper;
 use crate::{
     app::{self, Action},
     config::{IconSizes, TabConfig, ICON_SCALE_MAX, ICON_SIZE_GRID},
@@ -659,7 +668,9 @@ impl HeadingOptions {
     }
 }
 
-#[derive(Clone, Debug)]
+// TODO when creating items, pass <Arc<SelectedItems>> to each item
+// as a drag data, so that when dnd is initiated, they are all included
+#[derive(Clone)]
 pub struct Tab {
     //TODO: make more items private
     pub location: Location,
@@ -677,6 +688,9 @@ pub struct Tab {
     scrollable_id: widget::Id,
     select_focus: Option<usize>,
     select_shift: Option<usize>,
+    cached_selected: RefCell<Option<bool>>,
+    cached_drag_element:
+        RefCell<Option<ArcElementWrapper<cosmic::app::Message<crate::app::Message>>>>,
 }
 
 impl Tab {
@@ -698,7 +712,22 @@ impl Tab {
             scrollable_id: widget::Id::unique(),
             select_focus: None,
             select_shift: None,
+            cached_selected: RefCell::new(None),
+            cached_drag_element: RefCell::new(None),
         }
+    }
+
+    pub fn cached_selected(&self) -> bool {
+        if let Some(selected) = self.cached_selected.borrow().as_ref() {
+            return Some(selected).filter(|l| **l).cloned().unwrap_or_default();
+        }
+
+        let selected: Option<bool> = self.column_sort().map(|c| c.iter().any(|i| i.1.selected));
+
+        let mut g = self.cached_selected.borrow_mut();
+        *g = selected.clone();
+
+        selected.filter(|l| *l).unwrap_or_default()
     }
 
     pub fn title(&self) -> String {
@@ -722,6 +751,7 @@ impl Tab {
     }
 
     pub fn select_all(&mut self) {
+        *self.cached_selected.borrow_mut() = None;
         if let Some(ref mut items) = self.items_opt {
             for item in items.iter_mut() {
                 if !self.config.show_hidden && item.hidden {
@@ -735,6 +765,7 @@ impl Tab {
     }
 
     pub fn select_none(&mut self) -> bool {
+        *self.cached_selected.borrow_mut() = None;
         self.select_focus = None;
         let mut had_selection = false;
         if let Some(ref mut items) = self.items_opt {
@@ -749,6 +780,7 @@ impl Tab {
     }
 
     pub fn select_name(&mut self, name: &str) {
+        *self.cached_selected.borrow_mut() = None;
         if let Some(ref mut items) = self.items_opt {
             for item in items.iter_mut() {
                 if item.name == name {
@@ -761,6 +793,7 @@ impl Tab {
     }
 
     fn select_position(&mut self, row: usize, col: usize, mod_shift: bool) -> bool {
+        *self.cached_selected.borrow_mut() = None;
         let mut start = (row, col);
         let mut end = (row, col);
         if mod_shift {
@@ -808,6 +841,7 @@ impl Tab {
     }
 
     pub fn select_rect(&mut self, rect: Rectangle) {
+        *self.cached_selected.borrow_mut() = None;
         if let Some(ref mut items) = self.items_opt {
             for (_i, item) in items.iter_mut().enumerate() {
                 //TODO: modifiers
@@ -870,6 +904,7 @@ impl Tab {
     }
 
     fn select_first_pos_opt(&self) -> Option<(usize, usize)> {
+        *self.cached_selected.borrow_mut() = None;
         let items = self.items_opt.as_ref()?;
         let mut first = None;
         for item in items.iter() {
@@ -899,6 +934,7 @@ impl Tab {
     }
 
     fn select_last_pos_opt(&self) -> Option<(usize, usize)> {
+        *self.cached_selected.borrow_mut() = None;
         let items = self.items_opt.as_ref()?;
         let mut last = None;
         for item in items.iter() {
@@ -937,6 +973,7 @@ impl Tab {
             && self.dialog.as_ref().map_or(true, |x| x.multiple());
         match message {
             Message::Click(click_i_opt) => {
+                *self.cached_selected.borrow_mut() = None;
                 if let Some(ref mut items) = self.items_opt {
                     for (i, item) in items.iter_mut().enumerate() {
                         if Some(i) == click_i_opt {
@@ -1177,6 +1214,7 @@ impl Tab {
                 self.size_opt = Some(size);
             }
             Message::RightClick(click_i) => {
+                *self.cached_selected.borrow_mut() = None;
                 if let Some(ref mut items) = self.items_opt {
                     if !items.get(click_i).map_or(false, |x| x.selected) {
                         // If item not selected, clear selection on other items
@@ -1501,7 +1539,12 @@ impl Tab {
         .into()
     }
 
-    pub fn grid_view(&self) -> Element<Message> {
+    pub fn grid_view(
+        &self,
+    ) -> (
+        Option<Element<'static, cosmic::app::Message<crate::app::Message>>>,
+        Element<Message>,
+    ) {
         let cosmic_theme::Spacing {
             space_m,
             space_xxs,
@@ -1547,6 +1590,12 @@ impl Tab {
             .column_spacing(column_spacing)
             .row_spacing(space_xxs)
             .padding([0, space_m].into());
+        let mut dnd_items: Vec<(usize, (usize, usize), &Item)> = Vec::new();
+        let mut drag_w_i = usize::MAX;
+        let mut drag_n_i = usize::MAX;
+        let mut drag_e_i = 0;
+        let mut drag_s_i = 0;
+
         if let Some(items) = self.column_sort() {
             let mut count = 0;
             let mut col = 0;
@@ -1601,6 +1650,14 @@ impl Tab {
                     }
                 }
 
+                if item.selected {
+                    dnd_items.push((i, (row, col), item));
+                    drag_w_i = drag_w_i.min(col);
+                    drag_n_i = drag_n_i.min(row);
+                    drag_e_i = drag_e_i.max(col);
+                    drag_s_i = drag_s_i.max(row);
+                }
+
                 grid = grid.push(column);
 
                 count += 1;
@@ -1613,7 +1670,7 @@ impl Tab {
             }
 
             if count == 0 {
-                return self.empty_view(hidden > 0);
+                return (None, self.empty_view(hidden > 0));
             }
 
             //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
@@ -1639,18 +1696,76 @@ impl Tab {
             }
         }
 
-        widget::scrollable(
-            mouse_area::MouseArea::new(grid)
-                .on_drag(Message::Drag)
-                .show_drag_rect(true),
+        (
+            (!dnd_items.is_empty()).then(|| {
+                let mut dnd_grid = widget::grid()
+                    .column_spacing(column_spacing)
+                    .row_spacing(space_xxs)
+                    .padding([0, space_m].into());
+
+                let mut dnd_item_i = 0;
+                for r in drag_n_i..=drag_s_i {
+                    dnd_grid = dnd_grid.insert_row();
+                    for c in drag_w_i..=drag_e_i {
+                        let Some((i, (row, col), item)) = dnd_items.get(dnd_item_i) else {
+                            break;
+                        };
+                        if *row == r && *col == c {
+                            let buttons = vec![
+                                widget::button(
+                                    widget::icon::icon(item.icon_handle_grid.clone())
+                                        .content_fit(ContentFit::Contain)
+                                        .size(icon_sizes.grid()),
+                                )
+                                .on_press(Message::Click(Some(*i)))
+                                .padding(space_xxxs)
+                                .style(button_style(item.selected, false)),
+                                widget::button(widget::text(item.name.clone()))
+                                    .id(item.button_id.clone())
+                                    .on_press(Message::Click(Some(*i)))
+                                    .padding([0, space_xxs])
+                                    .style(button_style(item.selected, true)),
+                            ];
+
+                            let mut column = widget::column::with_capacity(buttons.len())
+                                .align_items(Alignment::Center)
+                                .height(Length::Fixed(item_height as f32))
+                                .width(Length::Fixed(item_width as f32));
+                            for button in buttons {
+                                column = column.push(button)
+                            }
+
+                            dnd_grid = dnd_grid.push(column);
+                            dnd_item_i += 1;
+                        } else {
+                            dnd_grid = dnd_grid.push(
+                                widget::container(vertical_space(item_width as f32))
+                                    .height(Length::Fixed(item_height as f32)),
+                            );
+                        }
+                    }
+                }
+                Element::from(dnd_grid)
+                    .map(|m| cosmic::app::Message::App(crate::app::Message::TabMessage(None, m)))
+            }),
+            widget::scrollable(
+                mouse_area::MouseArea::new(grid)
+                    .on_drag(Message::Drag)
+                    .show_drag_rect(true),
+            )
+            .id(self.scrollable_id.clone())
+            .on_scroll(Message::Scroll)
+            .width(Length::Fill)
+            .into(),
         )
-        .id(self.scrollable_id.clone())
-        .on_scroll(Message::Scroll)
-        .width(Length::Fill)
-        .into()
     }
 
-    pub fn list_view(&self) -> Element<Message> {
+    pub fn list_view(
+        &self,
+    ) -> (
+        Option<Element<'static, cosmic::app::Message<crate::app::Message>>>,
+        Element<Message>,
+    ) {
         let cosmic_theme::Spacing {
             space_m, space_xxs, ..
         } = theme::active().cosmic().spacing;
@@ -1721,7 +1836,9 @@ impl Tab {
             y += 1;
         }
 
-        if let Some(items) = self.column_sort() {
+        let items = self.column_sort();
+        let mut drag_items = Vec::new();
+        if let Some(items) = items {
             let mut count = 0;
             let mut hidden = 0;
             for (i, item) in items {
@@ -1795,10 +1912,10 @@ impl Tab {
                             .size(icon_size)
                             .into(),
                         widget::text(item.name.clone()).width(Length::Fill).into(),
-                        widget::text(modified_text)
+                        widget::text(modified_text.clone())
                             .width(Length::Fixed(modified_width))
                             .into(),
-                        widget::text(size_text)
+                        widget::text(size_text.clone())
                             .width(Length::Fixed(size_width))
                             .into(),
                     ])
@@ -1806,43 +1923,129 @@ impl Tab {
                     .spacing(space_xxs)
                 };
 
-                let button = widget::button(row)
-                    .width(Length::Fill)
-                    .height(Length::Fixed(row_height as f32))
-                    .id(item.button_id.clone())
-                    .padding(space_xxs)
-                    .style(button_style(item.selected, true))
-                    .on_press(Message::Click(Some(i)));
+                let button = |row| {
+                    widget::button(row)
+                        .width(Length::Fill)
+                        .height(Length::Fixed(row_height as f32))
+                        .id(item.button_id.clone())
+                        .padding(space_xxs)
+                        .style(button_style(item.selected, true))
+                        .on_press(Message::Click(Some(i)))
+                };
+
                 if self.context_menu.is_some() {
-                    children.push(button.into());
+                    children.push(button(row.into()).into());
                 } else {
                     children.push(
-                        mouse_area::MouseArea::new(button)
+                        mouse_area::MouseArea::new(button(row.into()))
                             .on_right_press_no_capture(move |_point_opt| Message::RightClick(i))
                             .into(),
                     );
                 }
+
+                if item.selected || !drag_items.is_empty() {
+                    let dnd_row = if !item.selected {
+                        Element::from(vertical_space(Length::Fixed(row_height as f32)))
+                    } else if condensed {
+                        widget::row::with_children(vec![
+                            widget::icon::icon(item.icon_handle_list_condensed.clone())
+                                .content_fit(ContentFit::Contain)
+                                .size(icon_size)
+                                .into(),
+                            widget::column::with_children(vec![
+                                widget::text(item.name.clone()).into(),
+                                //TODO: translate?
+                                widget::text(format!("{} - {}", modified_text, size_text)).into(),
+                            ])
+                            .into(),
+                        ])
+                        .align_items(Alignment::Center)
+                        .spacing(space_xxs)
+                        .into()
+                    } else {
+                        widget::row::with_children(vec![
+                            widget::icon::icon(item.icon_handle_list.clone())
+                                .content_fit(ContentFit::Contain)
+                                .size(icon_size)
+                                .into(),
+                            widget::text(item.name.clone()).width(Length::Fill).into(),
+                            widget::text(modified_text)
+                                .width(Length::Fixed(modified_width))
+                                .into(),
+                            widget::text(size_text)
+                                .width(Length::Fixed(size_width))
+                                .into(),
+                        ])
+                        .align_items(Alignment::Center)
+                        .spacing(space_xxs)
+                        .into()
+                    };
+                    if item.selected {
+                        drag_items.push(
+                            widget::container(button(dnd_row))
+                                .width(Length::Shrink)
+                                .into(),
+                        );
+                    } else {
+                        drag_items.push(dnd_row);
+                    }
+                }
+
                 count += 1;
                 y += row_height;
             }
 
             if count == 0 {
-                return self.empty_view(hidden > 0);
+                return (None, self.empty_view(hidden > 0));
             }
         }
+        let drag_col = Element::from(widget::column::with_children(drag_items));
 
-        widget::scrollable(widget::column::with_children(children).padding([0, space_m]))
-            .id(self.scrollable_id.clone())
-            .on_scroll(Message::Scroll)
-            .width(Length::Fill)
-            .into()
+        (
+            Some(
+                drag_col
+                    .map(|m| cosmic::app::Message::App(crate::app::Message::TabMessage(None, m))),
+            ),
+            widget::scrollable(widget::column::with_children(children).padding([0, space_m]))
+                .id(self.scrollable_id.clone())
+                .on_scroll(Message::Scroll)
+                .width(Length::Fill)
+                .into(),
+        )
     }
 
     pub fn view(&self, key_binds: &HashMap<KeyBind, Action>) -> Element<Message> {
         let location_view = self.location_view();
-        let item_view = match self.view {
+        let (drag_list, mut item_view) = match self.view {
             View::Grid => self.grid_view(),
             View::List => self.list_view(),
+        };
+        let files = self
+            .items_opt
+            .as_ref()
+            .map(|items| {
+                items
+                    .iter()
+                    .filter(|item| item.selected)
+                    .filter_map(|item| item.path_opt.clone())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if let Some(cached_drag_list) = drag_list {
+            let cached_drag_list = ArcElementWrapper(Arc::new(Mutex::new(cached_drag_list)));
+            item_view = DndSourceWrapper::<_, cosmic::app::Message<app::Message>>::with_id(
+                item_view,
+                Id::new("tab-view"),
+            )
+            .with_drag_content(move || {
+                ClipboardCopy::new(crate::clipboard::ClipboardKind::Copy, &files)
+            })
+            .with_drag_icon(move || {
+                let state: tree::State =
+                    Widget::<cosmic::app::Message<app::Message>, _, _>::state(&cached_drag_list);
+                (cached_drag_list.clone().into(), state)
+            })
+            .into();
         };
         let mut mouse_area =
             mouse_area::MouseArea::new(widget::container(item_view).height(Length::Fill))
@@ -1888,9 +2091,9 @@ impl Tab {
             };
 
             //TODO: HACK to ensure positions are up to date since subscription runs before view
-            let _ = match self.view {
-                View::Grid => self.grid_view(),
-                View::List => self.list_view(),
+            match self.view {
+                View::Grid => _ = self.grid_view(),
+                View::List => _ = self.list_view(),
             };
 
             for item in items.iter() {
@@ -2257,5 +2460,146 @@ mod tests {
         }
 
         Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub struct ArcElementWrapper<M>(pub Arc<Mutex<Element<'static, M>>>);
+
+impl<M> Widget<M, cosmic::Theme, cosmic::Renderer> for ArcElementWrapper<M> {
+    fn size(&self) -> Size<Length> {
+        self.0.lock().unwrap().as_widget().size()
+    }
+
+    fn size_hint(&self) -> Size<Length> {
+        self.0.lock().unwrap().as_widget().size_hint()
+    }
+
+    fn layout(
+        &self,
+        tree: &mut tree::Tree,
+        renderer: &cosmic::Renderer,
+        limits: &cosmic::iced_core::layout::Limits,
+    ) -> cosmic::iced_core::layout::Node {
+        self.0
+            .lock()
+            .unwrap()
+            .as_widget_mut()
+            .layout(tree, renderer, limits)
+    }
+
+    fn draw(
+        &self,
+        tree: &tree::Tree,
+        renderer: &mut cosmic::Renderer,
+        theme: &cosmic::Theme,
+        style: &cosmic::iced_core::renderer::Style,
+        layout: cosmic::iced_core::Layout<'_>,
+        cursor: cosmic::iced_core::mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        self.0
+            .lock()
+            .unwrap()
+            .as_widget()
+            .draw(tree, renderer, theme, style, layout, cursor, viewport)
+    }
+
+    fn tag(&self) -> tree::Tag {
+        self.0.lock().unwrap().as_widget().tag()
+    }
+
+    fn state(&self) -> tree::State {
+        self.0.lock().unwrap().as_widget().state()
+    }
+
+    fn children(&self) -> Vec<tree::Tree> {
+        self.0.lock().unwrap().as_widget().children()
+    }
+
+    fn diff(&mut self, tree: &mut tree::Tree) {
+        self.0.lock().unwrap().as_widget_mut().diff(tree)
+    }
+
+    fn operate(
+        &self,
+        state: &mut tree::Tree,
+        layout: cosmic::iced_core::Layout<'_>,
+        renderer: &cosmic::Renderer,
+        operation: &mut dyn widget::Operation<cosmic::iced_core::widget::OperationOutputWrapper<M>>,
+    ) {
+        self.0
+            .lock()
+            .unwrap()
+            .as_widget()
+            .operate(state, layout, renderer, operation)
+    }
+
+    fn on_event(
+        &mut self,
+        _state: &mut tree::Tree,
+        _event: cosmic::iced::Event,
+        _layout: cosmic::iced_core::Layout<'_>,
+        _cursor: cosmic::iced_core::mouse::Cursor,
+        _renderer: &cosmic::Renderer,
+        _clipboard: &mut dyn cosmic::iced_core::Clipboard,
+        _shell: &mut cosmic::iced_core::Shell<'_, M>,
+        _viewport: &Rectangle,
+    ) -> cosmic::iced_core::event::Status {
+        self.0.lock().unwrap().as_widget_mut().on_event(
+            _state, _event, _layout, _cursor, _renderer, _clipboard, _shell, _viewport,
+        )
+    }
+
+    fn mouse_interaction(
+        &self,
+        _state: &tree::Tree,
+        _layout: cosmic::iced_core::Layout<'_>,
+        _cursor: cosmic::iced_core::mouse::Cursor,
+        _viewport: &Rectangle,
+        _renderer: &cosmic::Renderer,
+    ) -> cosmic::iced_core::mouse::Interaction {
+        self.0
+            .lock()
+            .unwrap()
+            .as_widget()
+            .mouse_interaction(_state, _layout, _cursor, _viewport, _renderer)
+    }
+
+    fn overlay<'a>(
+        &'a mut self,
+        _state: &'a mut tree::Tree,
+        _layout: cosmic::iced_core::Layout<'_>,
+        _renderer: &cosmic::Renderer,
+    ) -> Option<cosmic::iced_core::overlay::Element<'a, M, cosmic::Theme, cosmic::Renderer>> {
+        // TODO
+        None
+    }
+
+    fn id(&self) -> Option<Id> {
+        self.0.lock().unwrap().as_widget().id()
+    }
+
+    fn set_id(&mut self, _id: Id) {
+        self.0.lock().unwrap().as_widget_mut().set_id(_id)
+    }
+
+    fn drag_destinations(
+        &self,
+        _state: &tree::Tree,
+        _layout: cosmic::iced_core::Layout<'_>,
+        _dnd_rectangles: &mut cosmic::iced_core::clipboard::DndDestinationRectangles,
+    ) {
+        self.0
+            .lock()
+            .unwrap()
+            .as_widget()
+            .drag_destinations(_state, _layout, _dnd_rectangles)
+    }
+}
+
+impl<Message: 'static> From<ArcElementWrapper<Message>> for Element<'static, Message> {
+    fn from(wrapper: ArcElementWrapper<Message>) -> Self {
+        Element::new(wrapper)
     }
 }

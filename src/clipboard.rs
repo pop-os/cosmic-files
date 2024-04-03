@@ -16,6 +16,7 @@ pub enum ClipboardKind {
     Cut,
 }
 
+#[derive(Clone, Debug)]
 pub struct ClipboardCopy {
     pub available: Cow<'static, [String]>,
     pub text_plain: Cow<'static, [u8]>,
