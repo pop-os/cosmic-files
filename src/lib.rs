@@ -71,6 +71,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut settings = Settings::default();
     settings = settings.theme(config.app_theme.theme());
     settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
+    if let Some(fallback_theme) = crate::mime_icon::fallback_theme() {
+        settings = settings.default_icon_theme(fallback_theme);
+    }
 
     let flags = Flags {
         config_handler,
