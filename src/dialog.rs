@@ -634,6 +634,9 @@ impl Application for App {
                         tab::Command::Scroll(id, offset) => {
                             commands.push(scrollable::scroll_to(id, offset));
                         }
+                        tab::Command::Timeout(_, _) => {
+                            log::warn!("Timeout not supported in dialog");
+                        }
                     }
                 }
                 return Command::batch(commands);

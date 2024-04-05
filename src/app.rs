@@ -1305,6 +1305,20 @@ impl Application for App {
                         tab::Command::DropFiles(to, from) => {
                             commands.push(self.update(Message::PasteContents(to, from)));
                         }
+                        tab::Command::Timeout(d, tab_msg) => {
+                            commands.push(Command::perform(
+                                async move {
+                                    tokio::time::sleep(d).await;
+                                    tab_msg
+                                },
+                                move |msg| {
+                                    cosmic::app::Message::App(Message::TabMessage(
+                                        Some(entity),
+                                        msg,
+                                    ))
+                                },
+                            ));
+                        }
                     }
                 }
                 return Command::batch(commands);

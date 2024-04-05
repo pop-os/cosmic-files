@@ -424,6 +424,7 @@ pub enum Command {
     OpenFile(PathBuf),
     Scroll(widget::Id, AbsoluteOffset),
     DropFiles(PathBuf, ClipboardPaste),
+    Timeout(Duration, Message),
 }
 
 #[derive(Clone, Debug)]
@@ -692,7 +693,7 @@ pub struct Tab {
     pub history: Vec<Location>,
     pub config: TabConfig,
     pub(crate) items_opt: Option<Vec<Item>>,
-    pub dnd_hovered: Option<Location>,
+    pub dnd_hovered: Option<(Location, Instant)>,
     scrollable_id: widget::Id,
     select_focus: Option<usize>,
     select_shift: Option<usize>,
@@ -1309,13 +1310,23 @@ impl Tab {
                 self.dnd_hovered = None;
             }
             Message::DndHover(loc) => {
-                commands.push(Command::ChangeLocation(self.title(), loc));
+                if self.dnd_hovered.as_ref().is_some_and(|(l, i)| {
+                    *l == loc && Instant::now().duration_since(*i) > Duration::from_millis(1600)
+                }) {
+                    cd = Some(loc);
+                }
             }
             Message::DndEnter(loc) => {
-                self.dnd_hovered = Some(loc);
+                self.dnd_hovered = Some((loc.clone(), Instant::now()));
+                if loc != self.location {
+                    commands.push(Command::Timeout(
+                        Duration::from_millis(1600),
+                        Message::DndHover(loc),
+                    ));
+                }
             }
             Message::DndLeave(loc) => {
-                if Some(loc) == self.dnd_hovered {
+                if Some(&loc) == self.dnd_hovered.as_ref().map(|(l, _)| l) {
                     self.dnd_hovered = None;
                 }
             }
@@ -1707,7 +1718,8 @@ impl Tab {
                     let tab_location = Location::Path(item.path_opt.clone().unwrap());
                     let tab_location_enter = tab_location.clone();
                     let tab_location_leave = tab_location.clone();
-                    let is_dnd_hovered = self.dnd_hovered.as_ref() == Some(&tab_location);
+                    let is_dnd_hovered =
+                        self.dnd_hovered.as_ref().map(|(l, _)| l) == Some(&tab_location);
                     cosmic::widget::container(
                         DndDestinationWrapper::with_data::<ClipboardPaste>(
                             column,
@@ -2047,7 +2059,8 @@ impl Tab {
                     let tab_location = Location::Path(item.path_opt.clone().unwrap());
                     let tab_location_enter = tab_location.clone();
                     let tab_location_leave = tab_location.clone();
-                    let is_dnd_hovered = self.dnd_hovered.as_ref() == Some(&tab_location);
+                    let is_dnd_hovered =
+                        self.dnd_hovered.as_ref().map(|(l, _)| l) == Some(&tab_location);
                     cosmic::widget::container(
                         DndDestinationWrapper::with_data(button_row, move |data, action| {
                             if let Some(data) = data {
@@ -2241,7 +2254,7 @@ impl Tab {
         .height(Length::Fill)
         .width(Length::Fill);
 
-        if self.dnd_hovered.as_ref() == Some(&self.location) {
+        if self.dnd_hovered.as_ref().map(|(l, _)| l) == Some(&tab_location) {
             tab_view = tab_view.style(cosmic::theme::Container::custom(|t| {
                 let mut a = cosmic::iced_style::container::StyleSheet::appearance(
                     t,
