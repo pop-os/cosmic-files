@@ -300,14 +300,13 @@ impl<'a, Message: 'static> Widget<Message, cosmic::Theme, cosmic::Renderer>
                 }
                 return event::Status::Captured;
             }
-            Event::Dnd(DndEvent::Offer(_, OfferEvent::Leave)) => {
+            Event::Dnd(DndEvent::Offer(id, OfferEvent::Leave)) if id == Some(my_id) => {
                 if let Some(f) = &self.on_leave {
-                    state.drag_offer = None;
                     shell.publish(f());
                 }
 
                 // If the offer was dropped, we don't want to send a leave event.
-                if !state.drag_offer.as_ref().is_some_and(|d| d.dropped) {
+                if state.drag_offer.as_ref().is_some_and(|d| d.dropped) {
                     state.drag_offer = None;
                 }
 
@@ -366,7 +365,7 @@ impl<'a, Message: 'static> Widget<Message, cosmic::Theme, cosmic::Renderer>
                 return event::Status::Captured;
             }
             Event::Dnd(DndEvent::Offer(id, OfferEvent::LeaveDestination)) if id == Some(my_id) => {
-                if state.drag_offer.take().is_some() {
+                if state.drag_offer.take().is_some_and(|d| !d.dropped) {
                     if let Some(f) = &self.on_leave {
                         shell.publish(f());
                     }
@@ -407,7 +406,6 @@ impl<'a, Message: 'static> Widget<Message, cosmic::Theme, cosmic::Renderer>
                     }
                     state.drag_offer = Some(dnd);
                 } else {
-                    // send finish message
                     if let Some(f) = &self.on_finish {
                         shell.publish(f(mime_type, data, dnd.selected_action));
                     }

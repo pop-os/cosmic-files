@@ -1289,20 +1289,22 @@ impl Tab {
                 self.config.sort_direction = heading_sort;
                 self.config.sort_name = heading_option;
             }
-            Message::Drop(Some((to, from))) => {
+            Message::Drop(Some((to, mut from))) => {
                 self.dnd_hovered = None;
-                if to == self.location
-                    && from.paths.iter().all(|dropped| {
-                        self.items_opt.as_ref().is_some_and(|l| {
-                            l.iter().any(|item| item.path_opt.as_ref() == Some(dropped))
-                        })
-                    })
-                {
-                    // Do not drop files on the same location
-                    return commands;
-                }
                 match to {
-                    Location::Path(to) => commands.push(Command::DropFiles(to, from)),
+                    Location::Path(to) => {
+                        if let Ok(entries) = fs::read_dir(&to) {
+                            for i in entries.into_iter().filter_map(|e| e.ok()) {
+                                let i = i.path();
+                                from.paths.retain(|p| &i != p);
+                                if from.paths.is_empty() {
+                                    log::info!("All dropped files already in target directory.");
+                                    return commands;
+                                }
+                            }
+                        }
+                        commands.push(Command::DropFiles(to, from))
+                    }
                     Location::Trash => {}
                 };
             }
@@ -1724,10 +1726,11 @@ impl Tab {
                         DndDestinationWrapper::with_data::<ClipboardPaste>(
                             column,
                             move |data, action| {
-                                if let Some(data) = data {
+                                if let Some(mut data) = data {
                                     if action == DndAction::Copy {
                                         Message::Drop(Some((tab_location.clone(), data)))
                                     } else if action == DndAction::Move {
+                                        data.kind = ClipboardKind::Cut;
                                         Message::Drop(Some((tab_location.clone(), data)))
                                     } else {
                                         log::warn!("unsupported action: {:?}", action);
@@ -2063,10 +2066,11 @@ impl Tab {
                         self.dnd_hovered.as_ref().map(|(l, _)| l) == Some(&tab_location);
                     cosmic::widget::container(
                         DndDestinationWrapper::with_data(button_row, move |data, action| {
-                            if let Some(data) = data {
+                            if let Some(mut data) = data {
                                 if action == DndAction::Copy {
                                     Message::Drop(Some((tab_location.clone(), data)))
                                 } else if action == DndAction::Move {
+                                    data.kind = ClipboardKind::Cut;
                                     Message::Drop(Some((tab_location.clone(), data)))
                                 } else {
                                     log::warn!("unsupported action: {:?}", action);
@@ -2273,10 +2277,11 @@ impl Tab {
         let tab_location_2 = self.location.clone();
         let tab_location_3 = self.location.clone();
         let dnd_dest = DndDestinationWrapper::with_data(tab_view, move |data, action| {
-            if let Some(data) = data {
+            if let Some(mut data) = data {
                 if action == DndAction::Copy {
                     Message::Drop(Some((tab_location.clone(), data)))
                 } else if action == DndAction::Move {
+                    data.kind = ClipboardKind::Cut;
                     Message::Drop(Some((tab_location.clone(), data)))
                 } else {
                     log::warn!("unsupported action: {:?}", action);
