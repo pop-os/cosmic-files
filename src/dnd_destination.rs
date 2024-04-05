@@ -15,7 +15,6 @@ use cosmic::{
         widget::{tree, Tree},
         Clipboard, Shell,
     },
-    iced_widget::shader::wgpu::hal::auxil::db,
     widget::{Id, Widget},
     Element,
 };
@@ -31,7 +30,7 @@ pub struct DndDestinationWrapper<'a, Message> {
     on_hold: Option<Box<dyn Fn(u32, u32) -> Message>>,
     on_drop: Option<Box<dyn Fn(u32, u32) -> Message>>,
     on_enter: Option<Box<dyn Fn(u32, u32, Vec<String>) -> Message>>,
-    on_leave: Option<fn() -> Message>,
+    on_leave: Option<Box<dyn Fn() -> Message>>,
     on_motion: Option<Box<dyn Fn(u32, u32) -> Message>>,
     on_action_selected: Option<Box<dyn Fn(DndAction) -> Message>>,
     on_data_received: Option<Box<dyn Fn(String, Vec<u8>) -> Message>>,
@@ -153,8 +152,8 @@ impl<'a, Message: 'static> DndDestinationWrapper<'a, Message> {
         self
     }
 
-    pub fn on_leave(mut self, m: fn() -> Message) -> Self {
-        self.on_leave = Some(m);
+    pub fn on_leave(mut self, m: impl Fn() -> Message + 'static) -> Self {
+        self.on_leave = Some(Box::new(m));
         self
     }
 
@@ -301,7 +300,7 @@ impl<'a, Message: 'static> Widget<Message, cosmic::Theme, cosmic::Renderer>
                 }
                 return event::Status::Captured;
             }
-            Event::Dnd(DndEvent::Offer(id, OfferEvent::Leave)) if id == Some(my_id) => {
+            Event::Dnd(DndEvent::Offer(_, OfferEvent::Leave)) => {
                 if let Some(f) = &self.on_leave {
                     state.drag_offer = None;
                     shell.publish(f());
@@ -329,13 +328,25 @@ impl<'a, Message: 'static> Widget<Message, cosmic::Theme, cosmic::Renderer>
                 return event::Status::Captured;
             }
             Event::Dnd(DndEvent::Offer(id, OfferEvent::Motion { x, y })) if id == Some(my_id) => {
-                if let Some(f) = &self.on_motion {
-                    shell.publish(f(x as u32, y as u32));
-                }
                 if let Some(s) = state.drag_offer.as_mut() {
                     s.x = x;
                     s.y = y;
+                } else {
+                    state.drag_offer = Some(DragOffer {
+                        x,
+                        y,
+                        dropped: false,
+                        selected_action: DndAction::empty(),
+                    });
+                    if let Some(f) = &self.on_enter {
+                        shell.publish(f(x as u32, y as u32, vec![]));
+                    }
                 }
+
+                if let Some(f) = &self.on_motion {
+                    shell.publish(f(x as u32, y as u32));
+                }
+
                 if self.forward_drag_as_cursor {
                     let drag_cursor = mouse::Cursor::Available((x as f32, y as f32).into());
                     let event = Event::Mouse(mouse::Event::CursorMoved {
@@ -354,9 +365,16 @@ impl<'a, Message: 'static> Widget<Message, cosmic::Theme, cosmic::Renderer>
                 }
                 return event::Status::Captured;
             }
+            Event::Dnd(DndEvent::Offer(id, OfferEvent::LeaveDestination)) if id == Some(my_id) => {
+                if state.drag_offer.take().is_some() {
+                    if let Some(f) = &self.on_leave {
+                        shell.publish(f());
+                    }
+                }
+            }
             Event::Dnd(DndEvent::Offer(id, OfferEvent::Drop)) if id == Some(my_id) => {
                 if let Some(offer) = &state.drag_offer {
-                    if let Some(f) = &self.on_hold {
+                    if let Some(f) = &self.on_drop {
                         shell.publish(f(offer.x as u32, offer.y as u32));
                     }
                 }

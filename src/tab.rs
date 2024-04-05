@@ -1,4 +1,5 @@
 use cosmic::iced::clipboard::dnd::DndAction;
+use cosmic::iced::Border;
 use cosmic::iced_core::widget::tree;
 use cosmic::widget::menu::key_bind::KeyBind;
 use cosmic::widget::{vertical_space, Id, Widget};
@@ -454,6 +455,8 @@ pub enum Message {
     ToggleSort(HeadingOptions),
     Drop(Option<(Location, ClipboardPaste)>),
     DndHover(Location),
+    DndEnter(Location),
+    DndLeave(Location),
 }
 
 #[derive(Clone, Debug)]
@@ -689,6 +692,7 @@ pub struct Tab {
     pub history: Vec<Location>,
     pub config: TabConfig,
     pub(crate) items_opt: Option<Vec<Item>>,
+    pub dnd_hovered: Option<Location>,
     scrollable_id: widget::Id,
     select_focus: Option<usize>,
     select_shift: Option<usize>,
@@ -717,6 +721,7 @@ impl Tab {
             select_shift: None,
             cached_selected: RefCell::new(None),
             clicked: None,
+            dnd_hovered: None,
         }
     }
 
@@ -1283,15 +1288,36 @@ impl Tab {
                 self.config.sort_direction = heading_sort;
                 self.config.sort_name = heading_option;
             }
-            Message::Drop(Some((from, to))) => {
-                match from {
-                    Location::Path(from) => commands.push(Command::DropFiles(from, to)),
+            Message::Drop(Some((to, from))) => {
+                self.dnd_hovered = None;
+                if to == self.location
+                    && from.paths.iter().all(|dropped| {
+                        self.items_opt.as_ref().is_some_and(|l| {
+                            l.iter().any(|item| item.path_opt.as_ref() == Some(dropped))
+                        })
+                    })
+                {
+                    // Do not drop files on the same location
+                    return commands;
+                }
+                match to {
+                    Location::Path(to) => commands.push(Command::DropFiles(to, from)),
                     Location::Trash => {}
                 };
             }
-            Message::Drop(None) => {}
+            Message::Drop(None) => {
+                self.dnd_hovered = None;
+            }
             Message::DndHover(loc) => {
                 commands.push(Command::ChangeLocation(self.title(), loc));
+            }
+            Message::DndEnter(loc) => {
+                self.dnd_hovered = Some(loc);
+            }
+            Message::DndLeave(loc) => {
+                if Some(loc) == self.dnd_hovered {
+                    self.dnd_hovered = None;
+                }
             }
         }
         if let Some(location) = cd {
@@ -1675,27 +1701,55 @@ impl Tab {
                         );
                     }
                 }
-                let tab_location = self.location.clone();
-                let tab_location_change = self.location.clone();
-                let column: Element<Message> = if item.metadata.is_dir() {
-                    DndDestinationWrapper::with_data::<ClipboardPaste>(
-                        column,
-                        move |data, action| {
-                            if let Some(data) = data {
-                                if action == DndAction::Copy {
-                                    Message::Drop(Some((tab_location.clone(), data)))
-                                } else if action == DndAction::Move {
-                                    Message::Drop(Some((tab_location.clone(), data)))
+
+                let column: Element<Message> = if item.metadata.is_dir() && item.path_opt.is_some()
+                {
+                    let tab_location = Location::Path(item.path_opt.clone().unwrap());
+                    let tab_location_enter = tab_location.clone();
+                    let tab_location_leave = tab_location.clone();
+                    let is_dnd_hovered = self.dnd_hovered.as_ref() == Some(&tab_location);
+                    cosmic::widget::container(
+                        DndDestinationWrapper::with_data::<ClipboardPaste>(
+                            column,
+                            move |data, action| {
+                                if let Some(data) = data {
+                                    if action == DndAction::Copy {
+                                        Message::Drop(Some((tab_location.clone(), data)))
+                                    } else if action == DndAction::Move {
+                                        Message::Drop(Some((tab_location.clone(), data)))
+                                    } else {
+                                        log::warn!("unsupported action: {:?}", action);
+                                        Message::Drop(None)
+                                    }
                                 } else {
-                                    log::warn!("unsupported action: {:?}", action);
                                     Message::Drop(None)
                                 }
-                            } else {
-                                Message::Drop(None)
-                            }
-                        },
+                            },
+                        )
+                        .on_enter(move |_, _, _| Message::DndEnter(tab_location_enter.clone()))
+                        .on_leave(move || Message::DndLeave(tab_location_leave.clone())),
                     )
-                    .on_hold(move |_, _| Message::DndHover(tab_location_change.clone()))
+                    .style(if is_dnd_hovered {
+                        theme::Container::custom(|t| {
+                            let mut a = cosmic::iced_style::container::StyleSheet::appearance(
+                                t,
+                                &theme::Container::default(),
+                            );
+                            let t = t.cosmic();
+                            // todo use theme drop target color
+                            let mut bg = t.accent_color();
+                            bg.alpha = 0.2;
+                            a.background = Some(Color::from(bg).into());
+                            a.border = Border {
+                                color: t.accent_color().into(),
+                                width: 1.0,
+                                radius: t.radius_s().into(),
+                            };
+                            a
+                        })
+                    } else {
+                        theme::Container::default()
+                    })
                     .into()
                 } else {
                     column.into()
@@ -1987,26 +2041,54 @@ impl Tab {
                     .on_double_click(move |_| Message::DoubleClick(Some(i)))
                     .on_release(move |_| Message::ClickRelease(Some(i)))
                 };
-                let tab_location = self.location.clone();
-                let tab_location_change = tab_location.clone();
+
                 let mut button_row: Element<Message> = button(row.into()).into();
-                button_row = if item.metadata.is_dir() {
-                    DndDestinationWrapper::with_data(button_row, move |data, action| {
-                        if let Some(data) = data {
-                            if action == DndAction::Copy {
-                                Message::Drop(Some((tab_location.clone(), data)))
-                            } else if action == DndAction::Move {
-                                Message::Drop(Some((tab_location.clone(), data)))
+                button_row = if item.metadata.is_dir() && item.path_opt.is_some() {
+                    let tab_location = Location::Path(item.path_opt.clone().unwrap());
+                    let tab_location_enter = tab_location.clone();
+                    let tab_location_leave = tab_location.clone();
+                    let is_dnd_hovered = self.dnd_hovered.as_ref() == Some(&tab_location);
+                    cosmic::widget::container(
+                        DndDestinationWrapper::with_data(button_row, move |data, action| {
+                            if let Some(data) = data {
+                                if action == DndAction::Copy {
+                                    Message::Drop(Some((tab_location.clone(), data)))
+                                } else if action == DndAction::Move {
+                                    Message::Drop(Some((tab_location.clone(), data)))
+                                } else {
+                                    log::warn!("unsupported action: {:?}", action);
+                                    Message::Drop(None)
+                                }
                             } else {
-                                log::warn!("unsupported action: {:?}", action);
+                                log::warn!("No data for drop.");
                                 Message::Drop(None)
                             }
-                        } else {
-                            log::warn!("No data for drop.");
-                            Message::Drop(None)
-                        }
+                        })
+                        .on_enter(move |_, _, _| Message::DndEnter(tab_location_enter.clone()))
+                        .on_leave(move || Message::DndLeave(tab_location_leave.clone())),
+                    )
+                    // todo refactor into the dnd destination wrapper
+                    .style(if is_dnd_hovered {
+                        theme::Container::custom(|t| {
+                            let mut a = cosmic::iced_style::container::StyleSheet::appearance(
+                                t,
+                                &theme::Container::default(),
+                            );
+                            let t = t.cosmic();
+                            // todo use theme drop target color
+                            let mut bg = t.accent_color();
+                            bg.alpha = 0.2;
+                            a.background = Some(Color::from(bg).into());
+                            a.border = Border {
+                                color: t.accent_color().into(),
+                                width: 1.0,
+                                radius: t.radius_s().into(),
+                            };
+                            a
+                        })
+                    } else {
+                        theme::Container::default()
                     })
-                    .on_hold(move |_, _| Message::DndHover(tab_location_change.clone()))
                     .into()
                 } else {
                     button_row
@@ -2143,7 +2225,41 @@ impl Tab {
             mouse_area =
                 mouse_area.on_right_press(move |point_opt| Message::ContextMenu(point_opt));
         }
-        let dnd_dest = DndDestinationWrapper::with_data(mouse_area, move |data, action| {
+
+        let mut popover = widget::popover(mouse_area);
+
+        if let Some(point) = self.context_menu {
+            popover = popover
+                .popup(menu::context_menu(&self, &key_binds))
+                .position(widget::popover::Position::Point(point));
+        }
+
+        let mut tab_view = widget::container(widget::column::with_children(vec![
+            location_view,
+            popover.into(),
+        ]))
+        .height(Length::Fill)
+        .width(Length::Fill);
+
+        if self.dnd_hovered.as_ref() == Some(&self.location) {
+            tab_view = tab_view.style(cosmic::theme::Container::custom(|t| {
+                let mut a = cosmic::iced_style::container::StyleSheet::appearance(
+                    t,
+                    &cosmic::theme::Container::default(),
+                );
+                let c = t.cosmic();
+                a.border = cosmic::iced_core::Border {
+                    color: (c.accent_color()).into(),
+                    width: 1.,
+                    radius: c.radius_0().into(),
+                };
+                a
+            }));
+        }
+
+        let tab_location_2 = self.location.clone();
+        let tab_location_3 = self.location.clone();
+        let dnd_dest = DndDestinationWrapper::with_data(tab_view, move |data, action| {
             if let Some(data) = data {
                 if action == DndAction::Copy {
                     Message::Drop(Some((tab_location.clone(), data)))
@@ -2156,23 +2272,11 @@ impl Tab {
             } else {
                 Message::Drop(None)
             }
-        });
+        })
+        .on_enter(move |_, _, _| Message::DndEnter(tab_location_2.clone()))
+        .on_leave(move || Message::DndLeave(tab_location_3.clone()));
 
-        let mut popover = widget::popover(dnd_dest);
-
-        if let Some(point) = self.context_menu {
-            popover = popover
-                .popup(menu::context_menu(&self, &key_binds))
-                .position(widget::popover::Position::Point(point));
-        }
-        widget::container(widget::column::with_children(vec![
-            location_view,
-            popover.into(),
-        ]))
-        .id(Id::new("tab-view-container"))
-        .height(Length::Fill)
-        .width(Length::Fill)
-        .into()
+        dnd_dest.into()
     }
 
     pub fn subscription(&self) -> Subscription<Message> {

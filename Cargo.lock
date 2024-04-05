@@ -1065,7 +1065,6 @@ dependencies = [
 [[package]]
 name = "cosmic-config"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git#fa31f42cd8e3a055b25e654ed51fb6bc732a18aa"
 dependencies = [
  "atomicwrites",
  "cosmic-config-derive",
@@ -1082,7 +1081,6 @@ dependencies = [
 [[package]]
 name = "cosmic-config-derive"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git#fa31f42cd8e3a055b25e654ed51fb6bc732a18aa"
 dependencies = [
  "quote",
  "syn 1.0.109",
@@ -1150,7 +1148,6 @@ dependencies = [
 [[package]]
 name = "cosmic-theme"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git#fa31f42cd8e3a055b25e654ed51fb6bc732a18aa"
 dependencies = [
  "almost",
  "cosmic-config",
@@ -2535,7 +2532,6 @@ dependencies = [
 [[package]]
 name = "iced"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#fa31f42cd8e3a055b25e654ed51fb6bc732a18aa"
 dependencies = [
  "dnd",
  "iced_accessibility",
@@ -2553,7 +2549,6 @@ dependencies = [
 [[package]]
 name = "iced_accessibility"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git#fa31f42cd8e3a055b25e654ed51fb6bc732a18aa"
 dependencies = [
  "accesskit",
  "accesskit_winit",
@@ -2562,7 +2557,6 @@ dependencies = [
 [[package]]
 name = "iced_core"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#fa31f42cd8e3a055b25e654ed51fb6bc732a18aa"
 dependencies = [
  "bitflags 1.3.2",
  "dnd",
@@ -2582,7 +2576,6 @@ dependencies = [
 [[package]]
 name = "iced_futures"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#fa31f42cd8e3a055b25e654ed51fb6bc732a18aa"
 dependencies = [
  "futures",
  "iced_core",
@@ -2595,7 +2588,6 @@ dependencies = [
 [[package]]
 name = "iced_graphics"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#fa31f42cd8e3a055b25e654ed51fb6bc732a18aa"
 dependencies = [
  "bitflags 1.3.2",
  "bytemuck",
@@ -2619,7 +2611,6 @@ dependencies = [
 [[package]]
 name = "iced_renderer"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#fa31f42cd8e3a055b25e654ed51fb6bc732a18aa"
 dependencies = [
  "iced_graphics",
  "iced_tiny_skia",
@@ -2631,7 +2622,6 @@ dependencies = [
 [[package]]
 name = "iced_runtime"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#fa31f42cd8e3a055b25e654ed51fb6bc732a18aa"
 dependencies = [
  "dnd",
  "iced_core",
@@ -2643,7 +2633,6 @@ dependencies = [
 [[package]]
 name = "iced_style"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#fa31f42cd8e3a055b25e654ed51fb6bc732a18aa"
 dependencies = [
  "iced_core",
  "once_cell",
@@ -2653,7 +2642,6 @@ dependencies = [
 [[package]]
 name = "iced_tiny_skia"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#fa31f42cd8e3a055b25e654ed51fb6bc732a18aa"
 dependencies = [
  "bytemuck",
  "cosmic-text",
@@ -2670,7 +2658,6 @@ dependencies = [
 [[package]]
 name = "iced_wgpu"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#fa31f42cd8e3a055b25e654ed51fb6bc732a18aa"
 dependencies = [
  "bitflags 1.3.2",
  "bytemuck",
@@ -2689,7 +2676,6 @@ dependencies = [
 [[package]]
 name = "iced_widget"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#fa31f42cd8e3a055b25e654ed51fb6bc732a18aa"
 dependencies = [
  "dnd",
  "iced_renderer",
@@ -2705,7 +2691,6 @@ dependencies = [
 [[package]]
 name = "iced_winit"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#fa31f42cd8e3a055b25e654ed51fb6bc732a18aa"
 dependencies = [
  "dnd",
  "iced_graphics",
@@ -3031,7 +3016,6 @@ checksum = "9c198f91728a82281a64e1f4f9eeb25d82cb32a5de251c6bd1b5154d63a8e7bd"
 [[package]]
 name = "libcosmic"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git#fa31f42cd8e3a055b25e654ed51fb6bc732a18aa"
 dependencies = [
  "apply",
  "ashpd 0.7.0",
@@ -4663,7 +4647,7 @@ dependencies = [
 [[package]]
 name = "smithay-clipboard"
 version = "0.8.0"
-source = "git+https://github.com/pop-os/smithay-clipboard?tag=pop-dnd-2#c9e17341ad61b89e4e04315fe34d66d5403b77ef"
+source = "git+https://github.com/pop-os/smithay-clipboard//?rev=3017f73#3017f7333aa821cd63f4c5a8d959897b648df7c3"
 dependencies = [
  "libc",
  "raw-window-handle 0.6.0",

@@ -1,18 +1,14 @@
 use cosmic::{
     iced::{
         clipboard::dnd::{DndAction, DndEvent, SourceEvent},
-        event,
-        keyboard::key::Named,
-        mouse, overlay, Event, Length, Point, Rectangle,
+        event, mouse, overlay, Event, Length, Point, Rectangle,
     },
     iced_core::{
-        self, keyboard, layout, renderer,
+        self, layout, renderer,
         widget::{tree, Tree},
         Clipboard, Shell,
     },
     iced_style,
-    iced_widget::shader::wgpu::hal::auxil::db,
-    iced_winit::winit::keyboard::NamedKey,
     widget::{container, Id, Widget},
     Element,
 };
