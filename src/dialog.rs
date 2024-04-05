@@ -615,6 +615,9 @@ impl Application for App {
                             commands
                                 .push(Command::batch([self.update_watcher(), self.rescan_tab()]));
                         }
+                        tab::Command::DropFiles(_, _) => {
+                            log::warn!("DropFiles not supported in dialog");
+                        }
                         tab::Command::FocusButton(id) => {
                             commands.push(widget::button::focus(id));
                         }

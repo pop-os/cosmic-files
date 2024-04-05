@@ -3,6 +3,7 @@
 
 use cosmic::widget::menu::action::MenuAction;
 use cosmic::widget::menu::key_bind::KeyBind;
+use cosmic::widget::Id;
 use cosmic::{
     app::{message, Command, Core},
     cosmic_config, cosmic_theme, executor,
@@ -180,6 +181,7 @@ pub enum Message {
     ToggleContextPage(ContextPage),
     WindowClose,
     WindowNew,
+    DndHover(Location),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1300,6 +1302,9 @@ impl Application for App {
                         tab::Command::Scroll(id, offset) => {
                             commands.push(scrollable::scroll_to(id, offset));
                         }
+                        tab::Command::DropFiles(to, from) => {
+                            commands.push(self.update(Message::PasteContents(to, from)));
+                        }
                     }
                 }
                 return Command::batch(commands);
@@ -1343,6 +1348,19 @@ impl Application for App {
                     log::error!("failed to get current executable path: {}", err);
                 }
             },
+            Message::DndHover(loc) => {
+                // Update the tab with the current location
+                let Some(e) = self.tab_model.iter().find(|tab| {
+                    self.tab_model
+                        .data::<Tab>(*tab)
+                        .map(|tab| tab.location == loc)
+                        .unwrap_or_default()
+                }) else {
+                    log::warn!("failed to find tab for location: {:?}", loc);
+                    return Command::none();
+                };
+                return self.update(Message::TabActivate(e));
+            }
         }
 
         Command::none()

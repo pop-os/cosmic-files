@@ -71,6 +71,3 @@ test-log = "0.2"
 libcosmic = { path = "../libcosmic" }
 cosmic-config = { path = "../libcosmic/cosmic-config" }
 cosmic-theme = { path = "../libcosmic/cosmic-theme" }
-
-[patch.'https://github.com/pop-os/smithay-clipboard']
-smithay-clipboard = { path = "../smithay-clipboard" }

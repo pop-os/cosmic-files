@@ -1,8 +1,7 @@
+use cosmic::iced::clipboard::dnd::DndAction;
 use cosmic::iced_core::widget::tree;
-use cosmic::iced_runtime::dnd;
-use cosmic::widget::list::container;
 use cosmic::widget::menu::key_bind::KeyBind;
-use cosmic::widget::{text, vertical_space, Id, Widget};
+use cosmic::widget::{vertical_space, Id, Widget};
 use cosmic::{
     cosmic_theme,
     iced::{
@@ -29,7 +28,6 @@ use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::{
     cell::Cell,
@@ -41,7 +39,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::clipboard::ClipboardCopy;
+use crate::clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste};
+use crate::dnd_destination::DndDestinationWrapper;
 use crate::dnd_source::DndSourceWrapper;
 use crate::{
     app::{self, Action},
@@ -53,7 +52,7 @@ use crate::{
     mouse_area,
 };
 
-const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
+pub const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 //TODO: adjust for locales?
 const TIME_FORMAT: &'static str = "%a %-d %b %-Y %r";
 static SPECIAL_DIRS: Lazy<HashMap<PathBuf, &'static str>> = Lazy::new(|| {
@@ -423,11 +422,14 @@ pub enum Command {
     FocusTextInput(widget::Id),
     OpenFile(PathBuf),
     Scroll(widget::Id, AbsoluteOffset),
+    DropFiles(PathBuf, ClipboardPaste),
 }
 
 #[derive(Clone, Debug)]
 pub enum Message {
     Click(Option<usize>),
+    DoubleClick(Option<usize>),
+    ClickRelease(Option<usize>),
     Config(TabConfig),
     ContextAction(Action),
     ContextMenu(Option<Point>),
@@ -450,6 +452,8 @@ pub enum Message {
     ToggleShowHidden,
     View(View),
     ToggleSort(HeadingOptions),
+    Drop(Option<(Location, ClipboardPaste)>),
+    DndHover(Location),
 }
 
 #[derive(Clone, Debug)]
@@ -689,8 +693,7 @@ pub struct Tab {
     select_focus: Option<usize>,
     select_shift: Option<usize>,
     cached_selected: RefCell<Option<bool>>,
-    cached_drag_element:
-        RefCell<Option<ArcElementWrapper<cosmic::app::Message<crate::app::Message>>>>,
+    clicked: Option<usize>,
 }
 
 impl Tab {
@@ -713,21 +716,8 @@ impl Tab {
             select_focus: None,
             select_shift: None,
             cached_selected: RefCell::new(None),
-            cached_drag_element: RefCell::new(None),
+            clicked: None,
         }
-    }
-
-    pub fn cached_selected(&self) -> bool {
-        if let Some(selected) = self.cached_selected.borrow().as_ref() {
-            return Some(selected).filter(|l| **l).cloned().unwrap_or_default();
-        }
-
-        let selected: Option<bool> = self.column_sort().map(|c| c.iter().any(|i| i.1.selected));
-
-        let mut g = self.cached_selected.borrow_mut();
-        *g = selected.clone();
-
-        selected.filter(|l| *l).unwrap_or_default()
     }
 
     pub fn title(&self) -> String {
@@ -972,7 +962,45 @@ impl Tab {
         let mod_shift = modifiers.contains(Modifiers::SHIFT)
             && self.dialog.as_ref().map_or(true, |x| x.multiple());
         match message {
+            Message::ClickRelease(click_i_opt) => {
+                if click_i_opt != self.clicked.take() {
+                    return commands;
+                }
+                if let Some(l) = self.items_opt.as_mut() {
+                    for item in l.iter_mut().enumerate() {
+                        if Some(item.0) != click_i_opt {
+                            item.1.selected = false;
+                        }
+                    }
+                }
+            }
+            Message::DoubleClick(click_i_opt) => {
+                if let Some(clicked_item) = self
+                    .items_opt
+                    .as_ref()
+                    .and_then(|items| click_i_opt.and_then(|click_i| items.get(click_i)))
+                {
+                    if let Some(path) = &clicked_item.path_opt {
+                        if clicked_item.metadata.is_dir() {
+                            cd = Some(Location::Path(path.clone()));
+                        } else {
+                            commands.push(Command::OpenFile(path.clone()));
+                        }
+                    } else {
+                        log::warn!("no path for item {:?}", clicked_item);
+                    }
+                } else {
+                    log::warn!("no item for click index {:?}", click_i_opt);
+                }
+            }
             Message::Click(click_i_opt) => {
+                if !mod_ctrl {
+                    self.clicked = click_i_opt;
+                }
+                let dont_unset = mod_ctrl
+                    || self
+                        .column_sort()
+                        .is_some_and(|l| l.iter().filter(|(_, e)| e.selected).count() > 1);
                 *self.cached_selected.borrow_mut() = None;
                 if let Some(ref mut items) = self.items_opt {
                     for (i, item) in items.iter_mut().enumerate() {
@@ -990,28 +1018,8 @@ impl Tab {
                                 }
                             }
                             item.selected = true;
-                            if let Some(click_time) = item.click_time {
-                                if click_time.elapsed() < DOUBLE_CLICK_DURATION {
-                                    if let Some(path) = &item.path_opt {
-                                        if path.is_dir() {
-                                            //TODO: allow opening multiple tabs?
-                                            cd = Some(Location::Path(path.clone()));
-                                        } else {
-                                            commands.push(Command::OpenFile(path.clone()));
-                                        }
-                                    } else {
-                                        //TODO: open properties?
-                                    }
-                                }
-                            }
-                            //TODO: prevent triple-click and beyond from opening file?
-                            item.click_time = Some(Instant::now());
-                        } else if mod_ctrl {
-                            // Holding control allows multiple selection
-                            item.click_time = None;
-                        } else {
+                        } else if !dont_unset {
                             item.selected = false;
-                            item.click_time = None;
                         }
                     }
                 }
@@ -1274,6 +1282,16 @@ impl Tab {
                 };
                 self.config.sort_direction = heading_sort;
                 self.config.sort_name = heading_option;
+            }
+            Message::Drop(Some((from, to))) => {
+                match from {
+                    Location::Path(from) => commands.push(Command::DropFiles(from, to)),
+                    Location::Trash => {}
+                };
+            }
+            Message::Drop(None) => {}
+            Message::DndHover(loc) => {
+                commands.push(Command::ChangeLocation(self.title(), loc));
             }
         }
         if let Some(location) = cd {
@@ -1619,19 +1637,27 @@ impl Tab {
 
                 //TODO: one focus group per grid item (needs custom widget)
                 let buttons = vec![
-                    widget::button(
-                        widget::icon::icon(item.icon_handle_grid.clone())
-                            .content_fit(ContentFit::Contain)
-                            .size(icon_sizes.grid()),
+                    crate::mouse_area::MouseArea::new(
+                        widget::button(
+                            widget::icon::icon(item.icon_handle_grid.clone())
+                                .content_fit(ContentFit::Contain)
+                                .size(icon_sizes.grid()),
+                        )
+                        .style(button_style(item.selected, false))
+                        .padding(space_xxxs),
                     )
-                    .on_press(Message::Click(Some(i)))
-                    .padding(space_xxxs)
-                    .style(button_style(item.selected, false)),
-                    widget::button(widget::text(item.name.clone()))
-                        .id(item.button_id.clone())
-                        .on_press(Message::Click(Some(i)))
-                        .padding([0, space_xxs])
-                        .style(button_style(item.selected, true)),
+                    .on_press(move |_| Message::Click(Some(i)))
+                    .on_double_click(move |_| Message::DoubleClick(Some(i)))
+                    .on_release(move |_| Message::ClickRelease(Some(i))),
+                    crate::mouse_area::MouseArea::new(
+                        widget::button(widget::text(item.name.clone()))
+                            .id(item.button_id.clone())
+                            .style(button_style(item.selected, true))
+                            .padding([0, space_xxs]),
+                    )
+                    .on_release(move |_| Message::ClickRelease(Some(i)))
+                    .on_double_click(move |_| Message::DoubleClick(Some(i)))
+                    .on_press(move |_| Message::Click(Some(i))),
                 ];
 
                 let mut column = widget::column::with_capacity(buttons.len())
@@ -1649,6 +1675,31 @@ impl Tab {
                         );
                     }
                 }
+                let tab_location = self.location.clone();
+                let tab_location_change = self.location.clone();
+                let column: Element<Message> = if item.metadata.is_dir() {
+                    DndDestinationWrapper::with_data::<ClipboardPaste>(
+                        column,
+                        move |data, action| {
+                            if let Some(data) = data {
+                                if action == DndAction::Copy {
+                                    Message::Drop(Some((tab_location.clone(), data)))
+                                } else if action == DndAction::Move {
+                                    Message::Drop(Some((tab_location.clone(), data)))
+                                } else {
+                                    log::warn!("unsupported action: {:?}", action);
+                                    Message::Drop(None)
+                                }
+                            } else {
+                                Message::Drop(None)
+                            }
+                        },
+                    )
+                    .on_hold(move |_, _| Message::DndHover(tab_location_change.clone()))
+                    .into()
+                } else {
+                    column.into()
+                };
 
                 if item.selected {
                     dnd_items.push((i, (row, col), item));
@@ -1924,20 +1975,48 @@ impl Tab {
                 };
 
                 let button = |row| {
-                    widget::button(row)
-                        .width(Length::Fill)
-                        .height(Length::Fixed(row_height as f32))
-                        .id(item.button_id.clone())
-                        .padding(space_xxs)
-                        .style(button_style(item.selected, true))
-                        .on_press(Message::Click(Some(i)))
+                    crate::mouse_area::MouseArea::new(
+                        widget::button(row)
+                            .width(Length::Fill)
+                            .height(Length::Fixed(row_height as f32))
+                            .id(item.button_id.clone())
+                            .padding(space_xxs)
+                            .style(button_style(item.selected, true)),
+                    )
+                    .on_press(move |_| Message::Click(Some(i)))
+                    .on_double_click(move |_| Message::DoubleClick(Some(i)))
+                    .on_release(move |_| Message::ClickRelease(Some(i)))
+                };
+                let tab_location = self.location.clone();
+                let tab_location_change = tab_location.clone();
+                let mut button_row: Element<Message> = button(row.into()).into();
+                button_row = if item.metadata.is_dir() {
+                    DndDestinationWrapper::with_data(button_row, move |data, action| {
+                        if let Some(data) = data {
+                            if action == DndAction::Copy {
+                                Message::Drop(Some((tab_location.clone(), data)))
+                            } else if action == DndAction::Move {
+                                Message::Drop(Some((tab_location.clone(), data)))
+                            } else {
+                                log::warn!("unsupported action: {:?}", action);
+                                Message::Drop(None)
+                            }
+                        } else {
+                            log::warn!("No data for drop.");
+                            Message::Drop(None)
+                        }
+                    })
+                    .on_hold(move |_, _| Message::DndHover(tab_location_change.clone()))
+                    .into()
+                } else {
+                    button_row
                 };
 
                 if self.context_menu.is_some() {
-                    children.push(button(row.into()).into());
+                    children.push(button_row.into());
                 } else {
                     children.push(
-                        mouse_area::MouseArea::new(button(row.into()))
+                        mouse_area::MouseArea::new(button_row)
                             .on_right_press_no_capture(move |_point_opt| Message::RightClick(i))
                             .into(),
                     );
@@ -2020,6 +2099,7 @@ impl Tab {
             View::Grid => self.grid_view(),
             View::List => self.list_view(),
         };
+        item_view = widget::container(item_view).height(Length::Fill).into();
         let files = self
             .items_opt
             .as_ref()
@@ -2031,35 +2111,55 @@ impl Tab {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
-        if let Some(cached_drag_list) = drag_list {
+        let item_view = DndSourceWrapper::<_, cosmic::app::Message<app::Message>>::with_id(
+            item_view,
+            Id::new("tab-view"),
+        );
+        let item_view = if let Some(cached_drag_list) = drag_list {
             let cached_drag_list = ArcElementWrapper(Arc::new(Mutex::new(cached_drag_list)));
-            item_view = DndSourceWrapper::<_, cosmic::app::Message<app::Message>>::with_id(
-                item_view,
-                Id::new("tab-view"),
-            )
-            .with_drag_content(move || {
-                ClipboardCopy::new(crate::clipboard::ClipboardKind::Copy, &files)
-            })
-            .with_drag_icon(move || {
-                let state: tree::State =
-                    Widget::<cosmic::app::Message<app::Message>, _, _>::state(&cached_drag_list);
-                (cached_drag_list.clone().into(), state)
-            })
-            .into();
+            item_view
+                .with_drag_content(move || {
+                    ClipboardCopy::new(crate::clipboard::ClipboardKind::Copy, &files)
+                })
+                .with_drag_icon(move || {
+                    let state: tree::State =
+                        Widget::<cosmic::app::Message<app::Message>, _, _>::state(
+                            &cached_drag_list,
+                        );
+                    (cached_drag_list.clone().into(), state)
+                })
+        } else {
+            item_view
         };
-        let mut mouse_area =
-            mouse_area::MouseArea::new(widget::container(item_view).height(Length::Fill))
-                .on_press(move |_point_opt| Message::Click(None))
-                .on_back_press(move |_point_opt| Message::GoPrevious)
-                .on_forward_press(move |_point_opt| Message::GoNext)
-                .on_resize(Message::Resize);
+        let tab_location = self.location.clone();
+        let mut mouse_area = mouse_area::MouseArea::new(item_view)
+            .on_press(move |_point_opt| Message::Click(None))
+            .on_back_press(move |_point_opt| Message::GoPrevious)
+            .on_forward_press(move |_point_opt| Message::GoNext)
+            .on_resize(Message::Resize);
         if self.context_menu.is_some() {
             mouse_area = mouse_area.on_right_press(move |_point_opt| Message::ContextMenu(None));
         } else {
             mouse_area =
                 mouse_area.on_right_press(move |point_opt| Message::ContextMenu(point_opt));
         }
-        let mut popover = widget::popover(mouse_area);
+        let dnd_dest = DndDestinationWrapper::with_data(mouse_area, move |data, action| {
+            if let Some(data) = data {
+                if action == DndAction::Copy {
+                    Message::Drop(Some((tab_location.clone(), data)))
+                } else if action == DndAction::Move {
+                    Message::Drop(Some((tab_location.clone(), data)))
+                } else {
+                    log::warn!("unsupported action: {:?}", action);
+                    Message::Drop(None)
+                }
+            } else {
+                Message::Drop(None)
+            }
+        });
+
+        let mut popover = widget::popover(dnd_dest);
+
         if let Some(point) = self.context_menu {
             popover = popover
                 .popup(menu::context_menu(&self, &key_binds))
@@ -2069,6 +2169,7 @@ impl Tab {
             location_view,
             popover.into(),
         ]))
+        .id(Id::new("tab-view-container"))
         .height(Length::Fill)
         .width(Length::Fill)
         .into()

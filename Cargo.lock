@@ -874,7 +874,7 @@ dependencies = [
 [[package]]
 name = "clipboard_macos"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/window_clipboard.git?tag=pop-dnd#c9e7a8e2fae144336dd45835545216b521d1d2ac"
+source = "git+https://github.com/pop-os/window_clipboard.git?tag=pop-dnd-2#f290a4fc8674172cd3f221040a73a143138fc8d7"
 dependencies = [
  "objc",
  "objc-foundation",
@@ -884,7 +884,7 @@ dependencies = [
 [[package]]
 name = "clipboard_wayland"
 version = "0.2.2"
-source = "git+https://github.com/pop-os/window_clipboard.git?tag=pop-dnd#c9e7a8e2fae144336dd45835545216b521d1d2ac"
+source = "git+https://github.com/pop-os/window_clipboard.git?tag=pop-dnd-2#f290a4fc8674172cd3f221040a73a143138fc8d7"
 dependencies = [
  "dnd",
  "mime 0.1.0",
@@ -894,7 +894,7 @@ dependencies = [
 [[package]]
 name = "clipboard_x11"
 version = "0.4.2"
-source = "git+https://github.com/pop-os/window_clipboard.git?tag=pop-dnd#c9e7a8e2fae144336dd45835545216b521d1d2ac"
+source = "git+https://github.com/pop-os/window_clipboard.git?tag=pop-dnd-2#f290a4fc8674172cd3f221040a73a143138fc8d7"
 dependencies = [
  "thiserror",
  "x11rb",
@@ -1466,7 +1466,7 @@ dependencies = [
 [[package]]
 name = "dnd"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/window_clipboard.git?tag=pop-dnd#c9e7a8e2fae144336dd45835545216b521d1d2ac"
+source = "git+https://github.com/pop-os/window_clipboard.git?tag=pop-dnd-2#f290a4fc8674172cd3f221040a73a143138fc8d7"
 dependencies = [
  "bitflags 2.5.0",
  "mime 0.1.0",
@@ -3268,7 +3268,7 @@ dependencies = [
 [[package]]
 name = "mime"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/window_clipboard.git?tag=pop-dnd#c9e7a8e2fae144336dd45835545216b521d1d2ac"
+source = "git+https://github.com/pop-os/window_clipboard.git?tag=pop-dnd-2#f290a4fc8674172cd3f221040a73a143138fc8d7"
 dependencies = [
  "smithay-clipboard",
 ]
@@ -4647,6 +4647,7 @@ dependencies = [
 [[package]]
 name = "smithay-clipboard"
 version = "0.8.0"
+source = "git+https://github.com/pop-os/smithay-clipboard?tag=pop-dnd-2#c9e17341ad61b89e4e04315fe34d66d5403b77ef"
 dependencies = [
  "libc",
  "raw-window-handle 0.6.0",
@@ -5771,7 +5772,7 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 [[package]]
 name = "window_clipboard"
 version = "0.4.1"
-source = "git+https://github.com/pop-os/window_clipboard.git?tag=pop-dnd#c9e7a8e2fae144336dd45835545216b521d1d2ac"
+source = "git+https://github.com/pop-os/window_clipboard.git?tag=pop-dnd-2#f290a4fc8674172cd3f221040a73a143138fc8d7"
 dependencies = [
  "clipboard-win",
  "clipboard_macos",
