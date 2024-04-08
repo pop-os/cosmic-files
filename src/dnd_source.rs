@@ -178,14 +178,18 @@ impl<'a, Message: 'static, AppMessage: 'static> Widget<Message, cosmic::Theme, c
                 mouse::Event::ButtonPressed(mouse::Button::Left) => {
                     if let Some(position) = cursor.position() {
                         if !state.hovered {
-                            return event::Status::Ignored;
+                            return ret;
                         }
 
                         state.left_pressed_position = Some(position);
+                        return event::Status::Captured;
                     }
                 }
-                mouse::Event::ButtonReleased(mouse::Button::Left) => {
+                mouse::Event::ButtonReleased(mouse::Button::Left)
+                    if state.left_pressed_position.is_some() =>
+                {
                     state.left_pressed_position = None;
+                    return event::Status::Captured;
                 }
                 mouse::Event::CursorMoved { .. } => {
                     if let Some(position) = cursor.position() {
@@ -205,6 +209,7 @@ impl<'a, Message: 'static, AppMessage: 'static> Widget<Message, cosmic::Theme, c
                         } else if cursor.is_over(layout.bounds()) {
                             state.hovered = true;
                         }
+                        return event::Status::Captured;
                     }
                 }
                 _ => return ret,
@@ -214,11 +219,13 @@ impl<'a, Message: 'static, AppMessage: 'static> Widget<Message, cosmic::Theme, c
             ) => {
                 if state.is_dragging {
                     state.is_dragging = false;
+                    return event::Status::Captured;
                 }
+                return ret;
             }
             _ => return ret,
         }
-        event::Status::Captured
+        ret
     }
 
     fn mouse_interaction(
