@@ -109,6 +109,10 @@ impl<'a, Message: 'static, AppMessage: 'static> Widget<Message, cosmic::Theme, c
     }
 
     fn diff(&mut self, tree: &mut Tree) {
+        let state = tree.state.downcast_mut::<State>();
+        if self.drag_content.is_none() {
+            state.left_pressed_position = None;
+        }
         self.container.as_widget_mut().diff(&mut tree.children[0]);
     }
 
@@ -174,7 +178,7 @@ impl<'a, Message: 'static, AppMessage: 'static> Widget<Message, cosmic::Theme, c
         let state = tree.state.downcast_mut::<State>();
 
         match event {
-            Event::Mouse(mouse_event) => match mouse_event {
+            Event::Mouse(mouse_event) if self.drag_content.is_some() => match mouse_event {
                 mouse::Event::ButtonPressed(mouse::Button::Left) => {
                     if let Some(position) = cursor.position() {
                         if !state.hovered {
@@ -236,6 +240,10 @@ impl<'a, Message: 'static, AppMessage: 'static> Widget<Message, cosmic::Theme, c
         viewport: &Rectangle,
         renderer: &cosmic::Renderer,
     ) -> mouse::Interaction {
+        let state = tree.state.downcast_ref::<State>();
+        if state.is_dragging {
+            return mouse::Interaction::Grabbing;
+        }
         self.container.as_widget().mouse_interaction(
             &tree.children[0],
             layout,

@@ -28,6 +28,7 @@ pub struct MouseArea<'a, Message> {
     on_drag: Option<Box<dyn Fn(Option<Rectangle>) -> Message + 'a>>,
     on_double_click: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
+    on_drag_end: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_resize: Option<Box<dyn Fn(Size) -> Message + 'a>>,
     on_right_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
@@ -47,6 +48,13 @@ impl<'a, Message> MouseArea<'a, Message> {
     #[must_use]
     pub fn on_drag(mut self, message: impl Fn(Option<Rectangle>) -> Message + 'a) -> Self {
         self.on_drag = Some(Box::new(message));
+        self
+    }
+
+    /// The message to emit when a drag ends.
+    #[must_use]
+    pub fn on_drag_end(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
+        self.on_drag_end = Some(Box::new(message));
         self
     }
 
@@ -207,6 +215,7 @@ impl<'a, Message> MouseArea<'a, Message> {
             id: Id::unique(),
             content: content.into(),
             on_drag: None,
+            on_drag_end: None,
             on_double_click: None,
             on_press: None,
             on_release: None,
@@ -454,7 +463,10 @@ fn update<Message: Clone>(
                 }
             }
         }
-        state.drag_initiated = cursor.position();
+        if widget.on_drag.is_some() {
+            state.drag_initiated = cursor.position();
+        }
+
         if let Some(message) = widget.on_press.as_ref() {
             shell.publish(message(cursor.position_in(layout_bounds)));
 
@@ -462,12 +474,38 @@ fn update<Message: Clone>(
         }
     }
 
+    let distance_dragged = state
+        .drag_initiated
+        .map(|initiated| initiated.distance(cursor.position().unwrap_or_default()))
+        .unwrap_or_default();
     if matches!(
         event,
         Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
             | Event::Touch(touch::Event::FingerLifted { .. })
-    ) && state.drag_initiated.is_some()
+    ) && distance_dragged > 1.0
     {
+        state.drag_initiated = None;
+        state.prev_click = None;
+        if let Some(message) = widget.on_drag_end.as_ref() {
+            shell.publish(message(cursor.position_in(layout_bounds)));
+        }
+    }
+
+    let recent_click = state
+        .prev_click
+        .as_ref()
+        .map(|(_, i)| Instant::now().duration_since(*i) <= DOUBLE_CLICK_DURATION)
+        .unwrap_or_default();
+    if matches!(
+        event,
+        Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
+            | Event::Touch(touch::Event::FingerLifted { .. })
+    ) && state.prev_click.is_some()
+    {
+        if !recent_click {
+            state.prev_click = None;
+            return event::Status::Ignored;
+        }
         state.drag_initiated = None;
         if let Some(message) = widget.on_release.as_ref() {
             shell.publish(message(cursor.position_in(layout_bounds)));

@@ -2,7 +2,7 @@ use cosmic::iced::clipboard::dnd::DndAction;
 use cosmic::iced::Border;
 use cosmic::iced_core::widget::tree;
 use cosmic::widget::menu::key_bind::KeyBind;
-use cosmic::widget::{vertical_space, Id, Widget};
+use cosmic::widget::{vertical_space, Id, MouseArea, Widget};
 use cosmic::{
     cosmic_theme,
     iced::{
@@ -432,6 +432,7 @@ pub enum Message {
     Click(Option<usize>),
     DoubleClick(Option<usize>),
     ClickRelease(Option<usize>),
+    DragEnd(Option<usize>),
     Config(TabConfig),
     ContextAction(Action),
     ContextMenu(Option<Point>),
@@ -980,6 +981,9 @@ impl Tab {
                     }
                 }
             }
+            Message::DragEnd(_) => {
+                self.clicked = None;
+            }
             Message::DoubleClick(click_i_opt) => {
                 if let Some(clicked_item) = self
                     .items_opt
@@ -1004,9 +1008,10 @@ impl Tab {
                     self.clicked = click_i_opt;
                 }
                 let dont_unset = mod_ctrl
-                    || self
-                        .column_sort()
-                        .is_some_and(|l| l.iter().filter(|(_, e)| e.selected).count() > 1);
+                    || self.column_sort().is_some_and(|l| {
+                        l.iter()
+                            .any(|(e_i, e)| Some(e_i) == click_i_opt.as_ref() && e.selected)
+                    });
                 *self.cached_selected.borrow_mut() = None;
                 if let Some(ref mut items) = self.items_opt {
                     for (i, item) in items.iter_mut().enumerate() {
@@ -1676,27 +1681,17 @@ impl Tab {
 
                 //TODO: one focus group per grid item (needs custom widget)
                 let buttons = vec![
-                    crate::mouse_area::MouseArea::new(
-                        widget::button(
-                            widget::icon::icon(item.icon_handle_grid.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_sizes.grid()),
-                        )
-                        .style(button_style(item.selected, false))
-                        .padding(space_xxxs),
+                    widget::button(
+                        widget::icon::icon(item.icon_handle_grid.clone())
+                            .content_fit(ContentFit::Contain)
+                            .size(icon_sizes.grid()),
                     )
-                    .on_press(move |_| Message::Click(Some(i)))
-                    .on_double_click(move |_| Message::DoubleClick(Some(i)))
-                    .on_release(move |_| Message::ClickRelease(Some(i))),
-                    crate::mouse_area::MouseArea::new(
-                        widget::button(widget::text(item.name.clone()))
-                            .id(item.button_id.clone())
-                            .style(button_style(item.selected, true))
-                            .padding([0, space_xxs]),
-                    )
-                    .on_release(move |_| Message::ClickRelease(Some(i)))
-                    .on_double_click(move |_| Message::DoubleClick(Some(i)))
-                    .on_press(move |_| Message::Click(Some(i))),
+                    .style(button_style(item.selected, false))
+                    .padding(space_xxxs),
+                    widget::button(widget::text(item.name.clone()))
+                        .id(item.button_id.clone())
+                        .style(button_style(item.selected, true))
+                        .padding([0, space_xxs]),
                 ];
 
                 let mut column = widget::column::with_capacity(buttons.len())
@@ -1777,8 +1772,11 @@ impl Tab {
                     drag_e_i = drag_e_i.max(col);
                     drag_s_i = drag_s_i.max(row);
                 }
-
-                grid = grid.push(column);
+                let mouse_area = crate::mouse_area::MouseArea::new(column)
+                    .on_press(move |_| Message::Click(Some(i)))
+                    .on_double_click(move |_| Message::DoubleClick(Some(i)))
+                    .on_release(move |_| Message::ClickRelease(Some(i)));
+                grid = grid.push(mouse_area);
 
                 count += 1;
                 col += 1;
@@ -1868,15 +1866,12 @@ impl Tab {
                 Element::from(dnd_grid)
                     .map(|m| cosmic::app::Message::App(crate::app::Message::TabMessage(None, m)))
             }),
-            widget::scrollable(
-                mouse_area::MouseArea::new(grid)
-                    .on_drag(Message::Drag)
-                    .show_drag_rect(true),
-            )
-            .id(self.scrollable_id.clone())
-            .on_scroll(Message::Scroll)
-            .width(Length::Fill)
-            .into(),
+            mouse_area::MouseArea::new(grid)
+                .on_drag(Message::Drag)
+                .on_drag_end(|_| Message::DragEnd(None))
+                .show_drag_rect(true)
+                .on_release(|_| Message::ClickRelease(None))
+                .into(),
         )
     }
 
@@ -2052,6 +2047,8 @@ impl Tab {
                             .padding(space_xxs)
                             .style(button_style(item.selected, true)),
                     )
+                    .on_drag(Message::Drag)
+                    .on_drag_end(move |_| Message::DragEnd(Some(i)))
                     .on_press(move |_| Message::Click(Some(i)))
                     .on_double_click(move |_| Message::DoubleClick(Some(i)))
                     .on_release(move |_| Message::ClickRelease(Some(i)))
@@ -2184,10 +2181,8 @@ impl Tab {
                 drag_col
                     .map(|m| cosmic::app::Message::App(crate::app::Message::TabMessage(None, m))),
             ),
-            widget::scrollable(widget::column::with_children(children).padding([0, space_m]))
-                .id(self.scrollable_id.clone())
-                .on_scroll(Message::Scroll)
-                .width(Length::Fill)
+            widget::column::with_children(children)
+                .padding([0, space_m])
                 .into(),
         )
     }
@@ -2198,7 +2193,10 @@ impl Tab {
             View::Grid => self.grid_view(),
             View::List => self.list_view(),
         };
-        item_view = widget::container(item_view).height(Length::Fill).into();
+        item_view = widget::container(item_view)
+            .height(Length::Fill)
+            .width(Length::Fill)
+            .into();
         let files = self
             .items_opt
             .as_ref()
@@ -2233,9 +2231,11 @@ impl Tab {
         let tab_location = self.location.clone();
         let mut mouse_area = mouse_area::MouseArea::new(item_view)
             .on_press(move |_point_opt| Message::Click(None))
+            .on_release(|_| Message::ClickRelease(None))
             .on_back_press(move |_point_opt| Message::GoPrevious)
             .on_forward_press(move |_point_opt| Message::GoNext)
             .on_resize(Message::Resize);
+
         if self.context_menu.is_some() {
             mouse_area = mouse_area.on_right_press(move |_point_opt| Message::ContextMenu(None));
         } else {
@@ -2250,10 +2250,14 @@ impl Tab {
                 .popup(menu::context_menu(&self, &key_binds))
                 .position(widget::popover::Position::Point(point));
         }
-
+        let scrollable = widget::scrollable(popover)
+            .id(self.scrollable_id.clone())
+            .on_scroll(Message::Scroll)
+            .width(Length::Fill)
+            .height(Length::Fill);
         let mut tab_view = widget::container(widget::column::with_children(vec![
             location_view,
-            popover.into(),
+            scrollable.into(),
         ]))
         .height(Length::Fill)
         .width(Length::Fill);
