@@ -2177,7 +2177,7 @@ impl Tab {
         }
         //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
         {
-            let spacer_height = size.height as u16 - y;
+            let spacer_height = size.height as i32 - y as i32;
             if spacer_height > 0 {
                 children.push(
                     widget::container(vertical_space(Length::Fixed(spacer_height as f32))).into(),
