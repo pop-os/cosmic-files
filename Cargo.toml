@@ -70,13 +70,13 @@ fastrand = "2"
 tempfile = "3"
 test-log = "0.2"
 
-[patch.'https://github.com/pop-os/libcosmic']
+# [patch.'https://github.com/pop-os/libcosmic']
 # libcosmic = { path = "../libcosmic" }
 # cosmic-config = { path = "../libcosmic/cosmic-config" }
 # cosmic-theme = { path = "../libcosmic/cosmic-theme" }
-libcosmic = { git = "https://github.com/pop-os/libcosmic//", branch = "dnd" }
-cosmic-config = { git = "https://github.com/pop-os/libcosmic//", branch = "dnd" }
-cosmic-theme = { git = "https://github.com/pop-os/libcosmic//", branch = "dnd" }
+# libcosmic = { git = "https://github.com/pop-os/libcosmic//", branch = "dnd" }
+# cosmic-config = { git = "https://github.com/pop-os/libcosmic//", branch = "dnd" }
+# cosmic-theme = { git = "https://github.com/pop-os/libcosmic//", branch = "dnd" }
 
 # [patch.'https://github.com/pop-os/smithay-clipboard']
 # smithay-clipboard = { git = "https://github.com/pop-os/smithay-clipboard//", rev = "2f2430b" }
