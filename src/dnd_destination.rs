@@ -19,7 +19,7 @@ use cosmic::{
     Element,
 };
 
-pub struct DndDestinationWrapper<'a, Message> {
+pub struct DndDestination<'a, Message> {
     id: Id,
     drag_id: Option<u64>,
     preferred_action: DndAction,
@@ -37,7 +37,7 @@ pub struct DndDestinationWrapper<'a, Message> {
     on_finish: Option<Box<dyn Fn(String, Vec<u8>, DndAction) -> Message>>,
 }
 
-impl<'a, Message: 'static> DndDestinationWrapper<'a, Message> {
+impl<'a, Message: 'static> DndDestination<'a, Message> {
     pub fn new(child: impl Into<Element<'a, Message>>, mimes: Vec<Cow<'static, str>>) -> Self {
         Self {
             id: Id::unique(),
@@ -190,7 +190,7 @@ impl<'a, Message: 'static> DndDestinationWrapper<'a, Message> {
 }
 
 impl<'a, Message: 'static> Widget<Message, cosmic::Theme, cosmic::Renderer>
-    for DndDestinationWrapper<'a, Message>
+    for DndDestination<'a, Message>
 {
     fn children(&self) -> Vec<Tree> {
         vec![Tree::new(&self.container)]
@@ -519,8 +519,8 @@ impl State {
     }
 }
 
-impl<'a, Message: 'static> From<DndDestinationWrapper<'a, Message>> for Element<'a, Message> {
-    fn from(wrapper: DndDestinationWrapper<'a, Message>) -> Self {
+impl<'a, Message: 'static> From<DndDestination<'a, Message>> for Element<'a, Message> {
+    fn from(wrapper: DndDestination<'a, Message>) -> Self {
         Element::new(wrapper)
     }
 }

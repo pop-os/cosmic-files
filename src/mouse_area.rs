@@ -1,6 +1,6 @@
 //! A container for capturing mouse events.
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use cosmic::{
     iced_core::{
@@ -154,6 +154,13 @@ impl<'a, Message> MouseArea<'a, Message> {
     #[must_use]
     pub fn show_drag_rect(mut self, show_drag_rect: bool) -> Self {
         self.show_drag_rect = show_drag_rect;
+        self
+    }
+
+    /// Sets the widget's unique identifier.
+    #[must_use]
+    pub fn with_id(mut self, id: Id) -> Self {
+        self.id = id;
         self
     }
 }

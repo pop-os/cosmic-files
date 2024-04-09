@@ -15,7 +15,7 @@ use cosmic::{
 
 use crate::clipboard::ClipboardCopy;
 
-pub struct DndSourceWrapper<'a, Message, AppMessage> {
+pub struct DndSource<'a, Message, AppMessage> {
     id: Id,
     action: DndAction,
     container: Element<'a, Message>,
@@ -25,7 +25,7 @@ pub struct DndSourceWrapper<'a, Message, AppMessage> {
     _phantom: std::marker::PhantomData<AppMessage>,
 }
 
-impl<'a, Message: 'static, AppMessage: 'static> DndSourceWrapper<'a, Message, AppMessage> {
+impl<'a, Message: 'static, AppMessage: 'static> DndSource<'a, Message, AppMessage> {
     pub fn new(child: impl Into<Element<'a, Message>>) -> Self {
         Self {
             id: Id::unique(),
@@ -98,7 +98,7 @@ impl<'a, Message: 'static, AppMessage: 'static> DndSourceWrapper<'a, Message, Ap
 }
 
 impl<'a, Message: 'static, AppMessage: 'static> Widget<Message, cosmic::Theme, cosmic::Renderer>
-    for DndSourceWrapper<'a, Message, AppMessage>
+    for DndSource<'a, Message, AppMessage>
 {
     fn children(&self) -> Vec<Tree> {
         vec![Tree::new(&self.container)]
@@ -305,10 +305,10 @@ impl<'a, Message: 'static, AppMessage: 'static> Widget<Message, cosmic::Theme, c
     }
 }
 
-impl<'a, Message: 'static, AppMessage: 'static> From<DndSourceWrapper<'a, Message, AppMessage>>
+impl<'a, Message: 'static, AppMessage: 'static> From<DndSource<'a, Message, AppMessage>>
     for Element<'a, Message>
 {
-    fn from(e: DndSourceWrapper<'a, Message, AppMessage>) -> Element<'a, Message> {
+    fn from(e: DndSource<'a, Message, AppMessage>) -> Element<'a, Message> {
         Element::new(e)
     }
 }

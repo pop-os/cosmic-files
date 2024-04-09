@@ -1,9 +1,10 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
+use cosmic::iced::clipboard::dnd::DndAction;
+use cosmic::widget::dnd_destination::DragId;
 use cosmic::widget::menu::action::MenuAction;
 use cosmic::widget::menu::key_bind::KeyBind;
-use cosmic::widget::Id;
 use cosmic::{
     app::{message, Command, Core},
     cosmic_config, cosmic_theme, executor,
@@ -28,6 +29,7 @@ use notify_debouncer_full::{
     notify::{self, RecommendedWatcher, Watcher},
     DebouncedEvent, Debouncer, FileIdMap,
 };
+use std::time::Instant;
 use std::{
     any::TypeId,
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
@@ -39,6 +41,7 @@ use std::{
     time,
 };
 
+use crate::tab::HOVER_DURATION;
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{AppTheme, Config, IconSizes, TabConfig, CONFIG_VERSION},
@@ -181,7 +184,14 @@ pub enum Message {
     ToggleContextPage(ContextPage),
     WindowClose,
     WindowNew,
-    DndHover(Location),
+    DndHoverLocTimeout(Location),
+    DndHoverTabTimeout(Entity),
+    DndEnterNav(Entity),
+    DndExitNav,
+    DndEnterTab(Entity),
+    DndExitTab,
+    DndDropTab(Entity, Option<ClipboardPaste>, DndAction),
+    DndDropNav(Entity, Option<ClipboardPaste>, DndAction),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -263,6 +273,10 @@ pub struct App {
     complete_operations: BTreeMap<u64, Operation>,
     failed_operations: BTreeMap<u64, (Operation, String)>,
     watcher_opt: Option<(Debouncer<RecommendedWatcher, FileIdMap>, HashSet<PathBuf>)>,
+    nav_dnd_hover: Option<(Location, Instant)>,
+    tab_dnd_hover: Option<(Entity, Instant)>,
+    nav_drag_id: DragId,
+    tab_drag_id: DragId,
 }
 
 impl App {
@@ -646,6 +660,34 @@ impl Application for App {
         &mut self.core
     }
 
+    fn nav_bar(&self) -> Option<Element<message::Message<Self::Message>>> {
+        if !self.core().nav_bar_active() {
+            return None;
+        }
+
+        let nav_model = self.nav_model()?;
+
+        let mut nav = cosmic::widget::nav_bar_dnd(
+            nav_model,
+            |entity| cosmic::app::Message::Cosmic(cosmic::app::cosmic::Message::NavBar(entity)),
+            |entity, _| cosmic::app::Message::App(Message::DndEnterNav(entity)),
+            |_| cosmic::app::Message::App(Message::DndExitNav),
+            |entity, data, action| {
+                cosmic::app::Message::App(Message::DndDropNav(entity, data, action))
+            },
+            self.nav_drag_id,
+        );
+
+        if !self.core().is_condensed() {
+            nav = nav.max_width(280);
+        }
+
+        Some(Element::from(
+            // XXX both must be shrink to avoid flex layout from ignoring it
+            nav.width(Length::Shrink).height(Length::Shrink),
+        ))
+    }
+
     /// Creates the application, and optionally emits command on initialize.
     fn init(mut core: Core, flags: Self::Flags) -> (Self, Command<Self::Message>) {
         //TODO: make set_nav_bar_toggle_condensed pub
@@ -704,6 +746,10 @@ impl Application for App {
             complete_operations: BTreeMap::new(),
             failed_operations: BTreeMap::new(),
             watcher_opt: None,
+            nav_dnd_hover: None,
+            tab_dnd_hover: None,
+            nav_drag_id: DragId::new(),
+            tab_drag_id: DragId::new(),
         };
 
         let mut commands = Vec::new();
@@ -1362,18 +1408,99 @@ impl Application for App {
                     log::error!("failed to get current executable path: {}", err);
                 }
             },
-            Message::DndHover(loc) => {
-                // Update the tab with the current location
-                let Some(e) = self.tab_model.iter().find(|tab| {
-                    self.tab_model
-                        .data::<Tab>(*tab)
-                        .map(|tab| tab.location == loc)
-                        .unwrap_or_default()
-                }) else {
-                    log::warn!("failed to find tab for location: {:?}", loc);
-                    return Command::none();
-                };
-                return self.update(Message::TabActivate(e));
+            Message::DndEnterNav(entity) => {
+                if let Some(location) = self.nav_model.data::<Location>(entity) {
+                    self.nav_dnd_hover = Some((location.clone(), Instant::now()));
+                    let location = location.clone();
+                    return Command::perform(tokio::time::sleep(HOVER_DURATION), move |_| {
+                        cosmic::app::Message::App(Message::DndHoverLocTimeout(location))
+                    });
+                }
+            }
+            Message::DndExitNav => {
+                self.nav_dnd_hover = None;
+            }
+            Message::DndDropNav(entity, data, action) => {
+                self.nav_dnd_hover = None;
+                if let Some((location, data)) = self.nav_model.data::<Location>(entity).zip(data) {
+                    let kind = match action {
+                        DndAction::Move => ClipboardKind::Cut,
+                        _ => ClipboardKind::Copy,
+                    };
+                    let ret = match location {
+                        Location::Path(p) => self.update(Message::PasteContents(
+                            p.clone(),
+                            ClipboardPaste {
+                                kind,
+                                paths: data.paths,
+                            },
+                        )),
+                        Location::Trash => {
+                            // TODO move to trash if action is cut
+                            return Command::none();
+                        }
+                    };
+                    return ret;
+                }
+            }
+            Message::DndHoverLocTimeout(location) => {
+                if self
+                    .nav_dnd_hover
+                    .as_ref()
+                    .is_some_and(|(loc, i)| *loc == location && i.elapsed() >= HOVER_DURATION)
+                {
+                    self.nav_dnd_hover = None;
+                    let entity = self.tab_model.active();
+                    let title = location.to_string();
+                    self.tab_model.text_set(entity, title);
+                    return Command::batch([
+                        self.update_title(),
+                        self.update_watcher(),
+                        self.rescan_tab(entity, location),
+                    ]);
+                }
+            }
+            Message::DndEnterTab(entity) => {
+                self.tab_dnd_hover = Some((entity, Instant::now()));
+                return Command::perform(tokio::time::sleep(HOVER_DURATION), move |_| {
+                    cosmic::app::Message::App(Message::DndHoverTabTimeout(entity))
+                });
+            }
+            Message::DndExitTab => {
+                self.nav_dnd_hover = None;
+            }
+            Message::DndDropTab(entity, data, action) => {
+                self.nav_dnd_hover = None;
+                if let Some((tab, data)) = self.tab_model.data::<Tab>(entity).zip(data) {
+                    let kind = match action {
+                        DndAction::Move => ClipboardKind::Cut,
+                        _ => ClipboardKind::Copy,
+                    };
+                    let ret = match &tab.location {
+                        Location::Path(p) => self.update(Message::PasteContents(
+                            p.clone(),
+                            ClipboardPaste {
+                                kind,
+                                paths: data.paths,
+                            },
+                        )),
+                        Location::Trash => {
+                            // TODO move to trash if action is cut
+                            return Command::none();
+                        }
+                    };
+                    return ret;
+                }
+            }
+            Message::DndHoverTabTimeout(entity) => {
+                if self
+                    .tab_dnd_hover
+                    .as_ref()
+                    .is_some_and(|(e, i)| *e == entity && i.elapsed() >= HOVER_DURATION)
+                {
+                    self.tab_dnd_hover = None;
+                    return self.update(Message::TabActivate(entity));
+                }
             }
         }
 
@@ -1585,7 +1712,13 @@ impl Application for App {
                         .button_height(32)
                         .button_spacing(space_xxs)
                         .on_activate(Message::TabActivate)
-                        .on_close(|entity| Message::TabClose(Some(entity))),
+                        .on_close(|entity| Message::TabClose(Some(entity)))
+                        .on_dnd_enter(|entity, _| Message::DndEnterTab(entity))
+                        .on_dnd_leave(|_| Message::DndExitTab)
+                        .on_dnd_drop(|entity, data, action| {
+                            Message::DndDropTab(entity, data, action)
+                        })
+                        .drag_id(self.tab_drag_id),
                 )
                 .style(style::Container::Background)
                 .width(Length::Fill),
