@@ -14,8 +14,6 @@ mod clipboard;
 use config::{Config, CONFIG_VERSION};
 mod config;
 pub mod dialog;
-mod dnd_destination;
-mod dnd_source;
 mod key_bind;
 mod localize;
 mod menu;
