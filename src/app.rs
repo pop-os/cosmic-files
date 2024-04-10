@@ -1111,7 +1111,8 @@ impl Application for App {
                     }
                 }
             }
-            Message::PasteContents(to, contents) => {
+            Message::PasteContents(to, mut contents) => {
+                contents.paths.retain(|p| p != &to);
                 if !contents.paths.is_empty() {
                     match contents.kind {
                         ClipboardKind::Copy => {
