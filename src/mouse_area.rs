@@ -1,24 +1,34 @@
 //! A container for capturing mouse events.
 
+use std::time::Instant;
+
 use cosmic::{
     iced_core::{
         border::Border,
         event::{self, Event},
-        layout, mouse, overlay,
+        layout,
+        mouse::{self, click},
+        overlay,
         renderer::{self, Quad, Renderer as _},
         touch,
         widget::{tree, Operation, OperationOutputWrapper, Tree},
         Clipboard, Color, Layout, Length, Point, Rectangle, Shell, Size, Widget,
     },
+    widget::Id,
     Element, Renderer, Theme,
 };
+
+use crate::tab::DOUBLE_CLICK_DURATION;
 
 /// Emit messages on mouse events.
 #[allow(missing_debug_implementations)]
 pub struct MouseArea<'a, Message> {
+    id: Id,
     content: Element<'a, Message>,
     on_drag: Option<Box<dyn Fn(Option<Rectangle>) -> Message + 'a>>,
+    on_double_click: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
+    on_drag_end: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_resize: Option<Box<dyn Fn(Size) -> Message + 'a>>,
     on_right_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
@@ -38,6 +48,20 @@ impl<'a, Message> MouseArea<'a, Message> {
     #[must_use]
     pub fn on_drag(mut self, message: impl Fn(Option<Rectangle>) -> Message + 'a) -> Self {
         self.on_drag = Some(Box::new(message));
+        self
+    }
+
+    /// The message to emit when a drag ends.
+    #[must_use]
+    pub fn on_drag_end(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
+        self.on_drag_end = Some(Box::new(message));
+        self
+    }
+
+    /// The message to emit on a double click.
+    #[must_use]
+    pub fn on_double_click(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
+        self.on_double_click = Some(Box::new(message));
         self
     }
 
@@ -132,6 +156,13 @@ impl<'a, Message> MouseArea<'a, Message> {
         self.show_drag_rect = show_drag_rect;
         self
     }
+
+    /// Sets the widget's unique identifier.
+    #[must_use]
+    pub fn with_id(mut self, id: Id) -> Self {
+        self.id = id;
+        self
+    }
 }
 
 /// Local state of the [`MouseArea`].
@@ -140,6 +171,8 @@ struct State {
     last_size: Option<Size>,
     // TODO: Support on_mouse_enter and on_mouse_exit
     drag_initiated: Option<Point>,
+
+    prev_click: Option<(mouse::Click, Instant)>,
 }
 
 impl State {
@@ -160,14 +193,37 @@ impl State {
         }
         None
     }
+
+    fn click(&mut self, pos: Point) -> mouse::Click {
+        let now = Instant::now();
+
+        let new = if let Some((prev_click, prev_time)) = self.prev_click.take() {
+            if now.duration_since(prev_time) < DOUBLE_CLICK_DURATION {
+                match prev_click.kind() {
+                    mouse::click::Kind::Single => mouse::Click::new(pos, Some(prev_click)),
+                    mouse::click::Kind::Double => mouse::Click::new(pos, Some(prev_click)),
+                    mouse::click::Kind::Triple => mouse::Click::new(pos, Some(prev_click)),
+                }
+            } else {
+                mouse::Click::new(pos, None)
+            }
+        } else {
+            mouse::Click::new(pos, None)
+        };
+        self.prev_click = Some((new.clone(), now));
+        new
+    }
 }
 
 impl<'a, Message> MouseArea<'a, Message> {
     /// Creates a [`MouseArea`] with the given content.
     pub fn new(content: impl Into<Element<'a, Message>>) -> Self {
         MouseArea {
+            id: Id::unique(),
             content: content.into(),
             on_drag: None,
+            on_drag_end: None,
+            on_double_click: None,
             on_press: None,
             on_release: None,
             on_resize: None,
@@ -336,6 +392,25 @@ where
             .as_widget_mut()
             .overlay(&mut tree.children[0], layout, renderer)
     }
+
+    fn drag_destinations(
+        &self,
+        state: &Tree,
+        layout: Layout<'_>,
+        dnd_rectangles: &mut cosmic::iced_core::clipboard::DndDestinationRectangles,
+    ) {
+        self.content
+            .as_widget()
+            .drag_destinations(&state.children[0], layout, dnd_rectangles);
+    }
+
+    fn id(&self) -> Option<Id> {
+        Some(self.id.clone())
+    }
+
+    fn set_id(&mut self, id: Id) {
+        self.id = id;
+    }
 }
 
 impl<'a, Message> From<MouseArea<'a, Message>> for Element<'a, Message>
@@ -376,7 +451,29 @@ fn update<Message: Clone>(
     if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
     | Event::Touch(touch::Event::FingerPressed { .. }) = event
     {
-        state.drag_initiated = cursor.position();
+        let click = state.click(cursor.position_in(layout_bounds).unwrap_or_default());
+        match click.kind() {
+            click::Kind::Single => {
+                if let Some(message) = widget.on_press.as_ref() {
+                    shell.publish(message(cursor.position_in(layout_bounds)));
+                }
+            }
+            click::Kind::Double => {
+                if let Some(message) = widget.on_double_click.as_ref() {
+                    shell.publish(message(cursor.position_in(layout_bounds)));
+                }
+            }
+            click::Kind::Triple => {
+                // TODO what to do here
+                if let Some(message) = widget.on_press.as_ref() {
+                    shell.publish(message(cursor.position_in(layout_bounds)));
+                }
+            }
+        }
+        if widget.on_drag.is_some() {
+            state.drag_initiated = cursor.position();
+        }
+
         if let Some(message) = widget.on_press.as_ref() {
             shell.publish(message(cursor.position_in(layout_bounds)));
 
@@ -384,9 +481,38 @@ fn update<Message: Clone>(
         }
     }
 
-    if let Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
-    | Event::Touch(touch::Event::FingerLifted { .. }) = event
+    let distance_dragged = state
+        .drag_initiated
+        .map(|initiated| initiated.distance(cursor.position().unwrap_or_default()))
+        .unwrap_or_default();
+    if matches!(
+        event,
+        Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
+            | Event::Touch(touch::Event::FingerLifted { .. })
+    ) && distance_dragged > 1.0
     {
+        state.drag_initiated = None;
+        state.prev_click = None;
+        if let Some(message) = widget.on_drag_end.as_ref() {
+            shell.publish(message(cursor.position_in(layout_bounds)));
+        }
+    }
+
+    let recent_click = state
+        .prev_click
+        .as_ref()
+        .map(|(_, i)| Instant::now().duration_since(*i) <= DOUBLE_CLICK_DURATION)
+        .unwrap_or_default();
+    if matches!(
+        event,
+        Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
+            | Event::Touch(touch::Event::FingerLifted { .. })
+    ) && state.prev_click.is_some()
+    {
+        if !recent_click {
+            state.prev_click = None;
+            return event::Status::Ignored;
+        }
         state.drag_initiated = None;
         if let Some(message) = widget.on_release.as_ref() {
             shell.publish(message(cursor.position_in(layout_bounds)));
