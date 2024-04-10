@@ -1366,6 +1366,9 @@ impl Application for App {
                                 },
                             ));
                         }
+                        tab::Command::MoveToTrash(paths) => {
+                            self.operation(Operation::Delete { paths });
+                        }
                     }
                 }
                 return Command::batch(commands);
@@ -1436,9 +1439,13 @@ impl Application for App {
                                 paths: data.paths,
                             },
                         )),
-                        Location::Trash => {
-                            // TODO move to trash if action is cut
-                            return Command::none();
+                        Location::Trash if matches!(action, DndAction::Move) => {
+                            self.operation(Operation::Delete { paths: data.paths });
+                            Command::none()
+                        }
+                        _ => {
+                            log::warn!("Copy to trash is not supported.");
+                            Command::none()
                         }
                     };
                     return ret;
@@ -1485,9 +1492,13 @@ impl Application for App {
                                 paths: data.paths,
                             },
                         )),
-                        Location::Trash => {
-                            // TODO move to trash if action is cut
-                            return Command::none();
+                        Location::Trash if matches!(action, DndAction::Move) => {
+                            self.operation(Operation::Delete { paths: data.paths });
+                            Command::none()
+                        }
+                        _ => {
+                            log::warn!("Copy to trash is not supported.");
+                            Command::none()
                         }
                     };
                     return ret;

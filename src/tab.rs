@@ -435,6 +435,7 @@ pub enum Command {
     Scroll(widget::Id, AbsoluteOffset),
     DropFiles(PathBuf, ClipboardPaste),
     Timeout(Duration, Message),
+    MoveToTrash(Vec<PathBuf>),
 }
 
 #[derive(Clone, Debug)]
@@ -1322,8 +1323,11 @@ impl Tab {
                         }
                         commands.push(Command::DropFiles(to, from))
                     }
+                    Location::Trash if matches!(from.kind, ClipboardKind::Cut) => {
+                        commands.push(Command::MoveToTrash(from.paths))
+                    }
                     Location::Trash => {
-                        // TODO
+                        log::warn!("Copy to trash is not supported.");
                     }
                 };
             }
