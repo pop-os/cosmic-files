@@ -6,6 +6,7 @@ Build-Depends:
     debhelper-compat (=13),
     git,
     just (>= 1.13.0),
+    libglib2.0-dev,
     pkg-config,
     rust-all,
 Standards-Version: 4.6.2

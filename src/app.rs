@@ -48,6 +48,7 @@ use crate::{
     fl, home_dir,
     key_bind::key_binds,
     menu, mime_app,
+    mounter::{mounters, Mounters},
     operation::Operation,
     spawn_detached::spawn_detached,
     tab::{self, HeadingOptions, ItemMetadata, Location, Tab},
@@ -268,6 +269,7 @@ pub struct App {
     dialog_text_input: widget::Id,
     key_binds: HashMap<KeyBind, Action>,
     modifiers: Modifiers,
+    mounters: Mounters,
     pending_operation_id: u64,
     pending_operations: BTreeMap<u64, (Operation, f32)>,
     complete_operations: BTreeMap<u64, Operation>,
@@ -727,6 +729,34 @@ impl Application for App {
                 .data(Location::Trash)
         });
 
+        //TODO: dynamic mount list
+        let mounters = mounters();
+        for (mounter_name, mounter) in mounters.iter() {
+            println!("Mounter {}", mounter_name);
+            match mounter.items() {
+                Ok(items) => {
+                    for item in items {
+                        let name = item.name();
+                        println!("  - {}", name);
+                        let icon = item.icon(16);
+                        let dir_opt = item.path();
+                        nav_model = nav_model.insert(move |mut b| {
+                            b = b
+                                .text(name.clone())
+                                .icon(widget::icon::icon(icon.clone()).size(16));
+                            match &dir_opt {
+                                Some(dir) => b.data(Location::Path(dir.clone())),
+                                None => b,
+                            }
+                        });
+                    }
+                }
+                Err(err) => {
+                    log::warn!("failed to get items: {}", err);
+                }
+            }
+        }
+
         let mut app = App {
             core,
             nav_model: nav_model.build(),
@@ -741,6 +771,7 @@ impl Application for App {
             dialog_text_input: widget::Id::unique(),
             key_binds: key_binds(),
             modifiers: Modifiers::empty(),
+            mounters,
             pending_operation_id: 0,
             pending_operations: BTreeMap::new(),
             complete_operations: BTreeMap::new(),
