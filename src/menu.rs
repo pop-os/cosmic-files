@@ -1,15 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::widget::menu::key_bind::KeyBind;
-use cosmic::widget::menu::menu_tree::{menu_items, menu_root, MenuItem};
+use cosmic::widget::menu::{self, ItemHeight, ItemWidth, MenuBar};
 use cosmic::{
     //TODO: export iced::widget::horizontal_rule in cosmic::widget
     iced::{widget::horizontal_rule, Alignment, Background, Border, Length},
     theme,
-    widget::{
-        self,
-        menu::{ItemHeight, ItemWidth, MenuBar, MenuTree},
-    },
+    widget,
     Element,
 };
 use std::collections::HashMap;
@@ -173,53 +170,53 @@ pub fn context_menu<'a>(
 
 pub fn menu_bar<'a>(key_binds: &HashMap<KeyBind, Action>) -> Element<'a, Message> {
     MenuBar::new(vec![
-        MenuTree::with_children(
-            menu_root(fl!("file")),
-            menu_items(
+        menu::Tree::with_children(
+            menu::root(fl!("file")),
+            menu::items(
                 key_binds,
                 vec![
-                    MenuItem::Button(fl!("new-tab"), Action::TabNew),
-                    MenuItem::Button(fl!("new-window"), Action::WindowNew),
-                    MenuItem::Button(fl!("new-file"), Action::NewFile),
-                    MenuItem::Button(fl!("new-folder"), Action::NewFolder),
-                    MenuItem::Button(fl!("open"), Action::Open),
-                    MenuItem::Divider,
-                    MenuItem::Button(fl!("rename"), Action::Rename),
+                    menu::Item::Button(fl!("new-tab"), Action::TabNew),
+                    menu::Item::Button(fl!("new-window"), Action::WindowNew),
+                    menu::Item::Button(fl!("new-file"), Action::NewFile),
+                    menu::Item::Button(fl!("new-folder"), Action::NewFolder),
+                    menu::Item::Button(fl!("open"), Action::Open),
+                    menu::Item::Divider,
+                    menu::Item::Button(fl!("rename"), Action::Rename),
                     //TOOD: add to sidebar, then divider
-                    MenuItem::Divider,
-                    MenuItem::Button(fl!("move-to-trash"), Action::MoveToTrash),
-                    MenuItem::Divider,
-                    MenuItem::Button(fl!("close-tab"), Action::TabClose),
-                    MenuItem::Button(fl!("quit"), Action::WindowClose),
+                    menu::Item::Divider,
+                    menu::Item::Button(fl!("move-to-trash"), Action::MoveToTrash),
+                    menu::Item::Divider,
+                    menu::Item::Button(fl!("close-tab"), Action::TabClose),
+                    menu::Item::Button(fl!("quit"), Action::WindowClose),
                 ],
             ),
         ),
-        MenuTree::with_children(
-            menu_root(fl!("edit")),
-            menu_items(
+        menu::Tree::with_children(
+            menu::root(fl!("edit")),
+            menu::items(
                 key_binds,
                 vec![
-                    MenuItem::Button(fl!("cut"), Action::Cut),
-                    MenuItem::Button(fl!("copy"), Action::Copy),
-                    MenuItem::Button(fl!("paste"), Action::Paste),
-                    MenuItem::Button(fl!("select-all"), Action::SelectAll),
-                    MenuItem::Divider,
+                    menu::Item::Button(fl!("cut"), Action::Cut),
+                    menu::Item::Button(fl!("copy"), Action::Copy),
+                    menu::Item::Button(fl!("paste"), Action::Paste),
+                    menu::Item::Button(fl!("select-all"), Action::SelectAll),
+                    menu::Item::Divider,
                     //TODO: edit history
-                    MenuItem::Button(fl!("operations"), Action::Operations),
+                    menu::Item::Button(fl!("operations"), Action::Operations),
                 ],
             ),
         ),
-        MenuTree::with_children(
-            menu_root(fl!("view")),
-            menu_items(
+        menu::Tree::with_children(
+            menu::root(fl!("view")),
+            menu::items(
                 key_binds,
                 vec![
-                    MenuItem::Button(fl!("grid-view"), Action::TabViewGrid),
-                    MenuItem::Button(fl!("list-view"), Action::TabViewList),
-                    MenuItem::Divider,
-                    MenuItem::Button(fl!("menu-settings"), Action::Settings),
-                    MenuItem::Divider,
-                    MenuItem::Button(fl!("menu-about"), Action::About),
+                    menu::Item::Button(fl!("grid-view"), Action::TabViewGrid),
+                    menu::Item::Button(fl!("list-view"), Action::TabViewList),
+                    menu::Item::Divider,
+                    menu::Item::Button(fl!("menu-settings"), Action::Settings),
+                    menu::Item::Divider,
+                    menu::Item::Button(fl!("menu-about"), Action::About),
                 ],
             ),
         ),
