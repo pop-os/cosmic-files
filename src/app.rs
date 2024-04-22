@@ -29,7 +29,6 @@ use notify_debouncer_full::{
     notify::{self, RecommendedWatcher, Watcher},
     DebouncedEvent, Debouncer, FileIdMap,
 };
-use std::time::Instant;
 use std::{
     any::TypeId,
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
@@ -38,7 +37,7 @@ use std::{
     path::PathBuf,
     process,
     sync::Arc,
-    time,
+    time::{self, Instant},
 };
 
 use crate::tab::HOVER_DURATION;
@@ -48,7 +47,7 @@ use crate::{
     fl, home_dir,
     key_bind::key_binds,
     menu, mime_app,
-    mounter::{mounters, Mounters},
+    mounter::{mounters, MounterItem, MounterItems, MounterKey, Mounters},
     operation::Operation,
     spawn_detached::spawn_detached,
     tab::{self, HeadingOptions, ItemMetadata, Location, Tab},
@@ -160,6 +159,7 @@ pub enum Message {
     LaunchUrl(String),
     Modifiers(Modifiers),
     MoveToTrash(Option<Entity>),
+    MounterItems(MounterKey, MounterItems),
     NewItem(Option<Entity>, bool),
     NotifyEvents(Vec<DebouncedEvent>),
     NotifyWatcher(WatcherWrapper),
@@ -232,6 +232,8 @@ pub enum DialogPage {
     },
 }
 
+pub struct MounterData(MounterKey, MounterItem);
+
 pub struct WatcherWrapper {
     watcher_opt: Option<Debouncer<RecommendedWatcher, FileIdMap>>,
 }
@@ -270,6 +272,7 @@ pub struct App {
     key_binds: HashMap<KeyBind, Action>,
     modifiers: Modifiers,
     mounters: Mounters,
+    mounter_items: HashMap<MounterKey, MounterItems>,
     pending_operation_id: u64,
     pending_operations: BTreeMap<u64, (Operation, f32)>,
     complete_operations: BTreeMap<u64, Operation>,
@@ -729,34 +732,6 @@ impl Application for App {
                 .data(Location::Trash)
         });
 
-        //TODO: dynamic mount list
-        let mounters = mounters();
-        for (mounter_name, mounter) in mounters.iter() {
-            println!("Mounter {}", mounter_name);
-            match mounter.items() {
-                Ok(items) => {
-                    for item in items {
-                        let name = item.name();
-                        println!("  - {}", name);
-                        let icon = item.icon(16);
-                        let dir_opt = item.path();
-                        nav_model = nav_model.insert(move |mut b| {
-                            b = b
-                                .text(name.clone())
-                                .icon(widget::icon::icon(icon.clone()).size(16));
-                            match &dir_opt {
-                                Some(dir) => b.data(Location::Path(dir.clone())),
-                                None => b,
-                            }
-                        });
-                    }
-                }
-                Err(err) => {
-                    log::warn!("failed to get items: {}", err);
-                }
-            }
-        }
-
         let mut app = App {
             core,
             nav_model: nav_model.build(),
@@ -771,7 +746,8 @@ impl Application for App {
             dialog_text_input: widget::Id::unique(),
             key_binds: key_binds(),
             modifiers: Modifiers::empty(),
-            mounters,
+            mounters: mounters(),
+            mounter_items: HashMap::new(),
             pending_operation_id: 0,
             pending_operations: BTreeMap::new(),
             complete_operations: BTreeMap::new(),
@@ -816,11 +792,15 @@ impl Application for App {
     }
 
     fn on_nav_select(&mut self, entity: Entity) -> Command<Self::Message> {
-        let location_opt = self.nav_model.data::<Location>(entity).clone();
-
-        if let Some(location) = location_opt {
+        if let Some(location) = self.nav_model.data::<Location>(entity) {
             let message = Message::TabMessage(None, tab::Message::Location(location.clone()));
             return self.update(message);
+        }
+
+        if let Some(data) = self.nav_model.data::<MounterData>(entity).clone() {
+            if let Some(mounter) = self.mounters.get(&data.0) {
+                return mounter.mount(data.1.clone()).map(|_| message::none());
+            }
         }
 
         Command::none()
@@ -977,6 +957,51 @@ impl Application for App {
                 let paths = self.selected_paths(entity_opt);
                 if !paths.is_empty() {
                     self.operation(Operation::Delete { paths });
+                }
+            }
+            Message::MounterItems(mounter_key, mounter_items) => {
+                // Insert new items
+                self.mounter_items.insert(mounter_key, mounter_items);
+
+                // Remove any items with mounter data from nav model
+                let entities: Vec<Entity> = self.nav_model.iter().collect();
+                for entity in entities {
+                    if self.nav_model.data::<MounterData>(entity).is_some() {
+                        self.nav_model.remove(entity);
+                    }
+                }
+
+                // Collect all mounter items
+                let mut nav_items = Vec::new();
+                for (key, items) in self.mounter_items.iter() {
+                    for item in items.iter() {
+                        nav_items.push((*key, item));
+                    }
+                }
+                // Sort by name lexically
+                nav_items
+                    .sort_by(|a, b| lexical_sort::natural_lexical_cmp(&a.1.name(), &b.1.name()));
+                // Add items to nav model
+                for (key, item) in nav_items {
+                    let mut entity = self
+                        .nav_model
+                        .insert()
+                        .text(format!(
+                            "{} ({})",
+                            item.name(),
+                            if item.is_mounted() {
+                                "mounted"
+                            } else {
+                                "not mounted"
+                            }
+                        ))
+                        .data(MounterData(key, item.clone()));
+                    if let Some(path) = item.path() {
+                        entity = entity.data(Location::Path(path.clone()));
+                    }
+                    if let Some(icon) = item.icon() {
+                        entity = entity.icon(widget::icon::icon(icon).size(16));
+                    }
                 }
             }
             Message::NewItem(entity_opt, dir) => {
@@ -1907,10 +1932,7 @@ impl Application for App {
                         }
                     }
 
-                    //TODO: how to properly kill this task?
-                    loop {
-                        tokio::time::sleep(time::Duration::new(1, 0)).await;
-                    }
+                    std::future::pending().await
                 },
             ),
             subscription::channel(
@@ -1981,6 +2003,15 @@ impl Application for App {
             ),
         ];
 
+        for (key, mounter) in self.mounters.iter() {
+            let key = *key;
+            subscriptions.push(
+                mounter
+                    .subscription()
+                    .map(move |items| Message::MounterItems(key, items)),
+            );
+        }
+
         for (id, (pending_operation, _)) in self.pending_operations.iter() {
             //TODO: use recipe?
             let id = *id;
@@ -2000,9 +2031,7 @@ impl Application for App {
                     }
                 }
 
-                loop {
-                    tokio::time::sleep(time::Duration::new(1, 0)).await;
-                }
+                std::future::pending().await
             }));
         }
 

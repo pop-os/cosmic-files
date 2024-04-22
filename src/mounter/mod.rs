@@ -1,23 +1,55 @@
-use cosmic::widget;
-use std::error::Error;
+use cosmic::{iced::subscription, widget, Command};
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
 #[cfg(feature = "gvfs")]
 mod gvfs;
 
-pub trait MounterItem {
-    fn name(&self) -> String;
-    fn icon(&self, size: u16) -> widget::icon::Handle;
-    fn path(&self) -> Option<PathBuf>;
+#[derive(Clone, Debug)]
+pub enum MounterItem {
+    #[cfg(feature = "gvfs")]
+    Gvfs(gvfs::Item),
 }
 
-pub type MounterItems = Vec<Box<dyn MounterItem>>;
+impl MounterItem {
+    pub fn name(&self) -> String {
+        match self {
+            #[cfg(feature = "gvfs")]
+            Self::Gvfs(item) => item.name(),
+        }
+    }
+
+    pub fn is_mounted(&self) -> bool {
+        match self {
+            #[cfg(feature = "gvfs")]
+            Self::Gvfs(item) => item.is_mounted(),
+        }
+    }
+
+    pub fn icon(&self) -> Option<widget::icon::Handle> {
+        match self {
+            #[cfg(feature = "gvfs")]
+            Self::Gvfs(item) => item.icon(),
+        }
+    }
+
+    pub fn path(&self) -> Option<PathBuf> {
+        match self {
+            #[cfg(feature = "gvfs")]
+            Self::Gvfs(item) => item.path(),
+        }
+    }
+}
+
+pub type MounterItems = Vec<MounterItem>;
 
 pub trait Mounter {
-    fn items(&self) -> Result<MounterItems, Box<dyn Error>>;
+    //TODO: send result
+    fn mount(&self, item: MounterItem) -> Command<()>;
+    fn subscription(&self) -> subscription::Subscription<MounterItems>;
 }
 
-pub type MounterKey = &'static str;
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct MounterKey(pub &'static str);
 pub type MounterMap = BTreeMap<MounterKey, Box<dyn Mounter>>;
 pub type Mounters = Arc<MounterMap>;
 
@@ -26,7 +58,7 @@ pub fn mounters() -> Mounters {
 
     #[cfg(feature = "gvfs")]
     {
-        mounters.insert("gvfs", Box::new(gvfs::Gvfs::new()));
+        mounters.insert(MounterKey("gvfs"), Box::new(gvfs::Gvfs::new()));
     }
 
     Mounters::new(mounters)
