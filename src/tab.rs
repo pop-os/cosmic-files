@@ -523,7 +523,7 @@ pub struct Item {
 }
 
 impl Item {
-    fn preview(&self, sizes: IconSizes) -> Element<app::Message> {
+    fn preview(&self, sizes: IconSizes) -> Element<'static, app::Message> {
         // This loads the image only if thumbnailing worked
         let icon = widget::icon::icon(self.icon_handle_grid.clone())
             .content_fit(ContentFit::Contain)
@@ -598,7 +598,7 @@ impl Item {
         column.into()
     }
 
-    pub fn property_view(&self, sizes: IconSizes) -> Element<app::Message> {
+    pub fn property_view(&self, sizes: IconSizes) -> Element<'static, app::Message> {
         let cosmic_theme::Spacing { space_xxxs, .. } = theme::active().cosmic().spacing;
 
         let mut column = widget::column().spacing(space_xxxs);

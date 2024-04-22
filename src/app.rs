@@ -29,6 +29,7 @@ use notify_debouncer_full::{
     notify::{self, RecommendedWatcher, Watcher},
     DebouncedEvent, Debouncer, FileIdMap,
 };
+use slotmap::Key as SlotMapKey;
 use std::{
     any::TypeId,
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
@@ -121,7 +122,7 @@ impl MenuAction for Action {
             Action::OpenWith => Message::ToggleContextPage(ContextPage::OpenWith),
             Action::Operations => Message::ToggleContextPage(ContextPage::Operations),
             Action::Paste => Message::Paste(entity_opt),
-            Action::Properties => Message::ToggleContextPage(ContextPage::Properties),
+            Action::Properties => Message::ToggleContextPage(ContextPage::Properties(None)),
             Action::Rename => Message::Rename(entity_opt),
             Action::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
             Action::SelectAll => Message::TabMessage(entity_opt, tab::Message::SelectAll),
@@ -144,6 +145,27 @@ impl MenuAction for Action {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ContextItem {
+    NavBar(segmented_button::Entity),
+    TabBar(segmented_button::Entity),
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum NavMenuAction {
+    OpenInNewTab(segmented_button::Entity),
+    OpenInNewWindow(segmented_button::Entity),
+    Properties(segmented_button::Entity),
+}
+
+impl MenuAction for NavMenuAction {
+    type Message = cosmic::app::Message<Message>;
+
+    fn message(&self, _entity: Option<Entity>) -> Self::Message {
+        cosmic::app::Message::App(Message::NavMenuAction(*self))
+    }
+}
+
 /// Messages that are used specifically by our [`App`].
 #[derive(Clone, Debug)]
 pub enum Message {
@@ -160,6 +182,8 @@ pub enum Message {
     Modifiers(Modifiers),
     MoveToTrash(Option<Entity>),
     MounterItems(MounterKey, MounterItems),
+    NavBarContext(Entity),
+    NavMenuAction(NavMenuAction),
     NewItem(Option<Entity>, bool),
     NotifyEvents(Vec<DebouncedEvent>),
     NotifyWatcher(WatcherWrapper),
@@ -200,7 +224,7 @@ pub enum ContextPage {
     About,
     OpenWith,
     Operations,
-    Properties,
+    Properties(Option<ContextItem>),
     Settings,
 }
 
@@ -210,7 +234,7 @@ impl ContextPage {
             Self::About => String::new(),
             Self::OpenWith => fl!("open-with"),
             Self::Operations => fl!("operations"),
-            Self::Properties => fl!("properties"),
+            Self::Properties(..) => fl!("properties"),
             Self::Settings => fl!("settings"),
         }
     }
@@ -259,6 +283,7 @@ impl PartialEq for WatcherWrapper {
 /// The [`App`] stores application-specific state.
 pub struct App {
     core: Core,
+    nav_bar_context_id: segmented_button::Entity,
     nav_model: segmented_button::SingleSelectModel,
     tab_model: segmented_button::Model<segmented_button::SingleSelect>,
     config_handler: Option<cosmic_config::Config>,
@@ -511,9 +536,35 @@ impl App {
         widget::settings::view_column(children).into()
     }
 
-    fn properties(&self) -> Element<Message> {
+    fn properties(&self, entity: Option<ContextItem>) -> Element<Message> {
+        match entity {
+            None => self.tab_properties(self.tab_model.active()),
+
+            Some(ContextItem::TabBar(entity)) => self.tab_properties(entity),
+
+            Some(ContextItem::NavBar(item)) => {
+                let mut children = Vec::new();
+
+                if let Some(location) = self.nav_model.data::<Location>(item) {
+                    if let Location::Path(path) = location {
+                        let parent = path.parent().unwrap_or(path);
+
+                        for item in Location::Path(parent.to_owned()).scan(IconSizes::default()) {
+                            if item.path_opt.as_deref() == Some(path) {
+                                children.push(item.property_view(IconSizes::default()));
+                            }
+                        }
+                    };
+                }
+
+                widget::settings::view_column(children).into()
+            }
+        }
+    }
+
+    fn tab_properties(&self, entity: segmented_button::Entity) -> Element<Message> {
         let mut children = Vec::new();
-        let entity = self.tab_model.active();
+
         if let Some(tab) = self.tab_model.data::<Tab>(entity) {
             if let Some(items) = tab.items_opt() {
                 for item in items.iter() {
@@ -526,6 +577,7 @@ impl App {
                 }
             }
         }
+
         widget::settings::view_column(children).into()
     }
 
@@ -672,16 +724,18 @@ impl Application for App {
 
         let nav_model = self.nav_model()?;
 
-        let mut nav = cosmic::widget::nav_bar_dnd(
-            nav_model,
-            |entity| cosmic::app::Message::Cosmic(cosmic::app::cosmic::Message::NavBar(entity)),
-            |entity, _| cosmic::app::Message::App(Message::DndEnterNav(entity)),
-            |_| cosmic::app::Message::App(Message::DndExitNav),
-            |entity, data, action| {
-                cosmic::app::Message::App(Message::DndDropNav(entity, data, action))
-            },
-            self.nav_drag_id,
-        );
+        let mut nav = cosmic::widget::nav_bar(nav_model, |entity| {
+            cosmic::app::Message::Cosmic(cosmic::app::cosmic::Message::NavBar(entity))
+        })
+        .drag_id(self.nav_drag_id)
+        .on_dnd_enter(|entity, _| cosmic::app::Message::App(Message::DndEnterNav(entity)))
+        .on_dnd_leave(|_| cosmic::app::Message::App(Message::DndExitNav))
+        .on_dnd_drop(|entity, data, action| {
+            cosmic::app::Message::App(Message::DndDropNav(entity, data, action))
+        })
+        .on_context(|entity| cosmic::app::Message::App(Message::NavBarContext(entity)))
+        .context_menu(self.nav_context_menu(self.nav_bar_context_id))
+        .into_container();
 
         if !self.core().is_condensed() {
             nav = nav.max_width(280);
@@ -734,6 +788,7 @@ impl Application for App {
 
         let mut app = App {
             core,
+            nav_bar_context_id: segmented_button::Entity::null(),
             nav_model: nav_model.build(),
             tab_model: segmented_button::ModelBuilder::default().build(),
             config_handler: flags.config_handler,
@@ -785,6 +840,30 @@ impl Application for App {
         }
 
         (app, Command::batch(commands))
+    }
+
+    fn nav_context_menu(
+        &self,
+        id: widget::nav_bar::Id,
+    ) -> Option<Vec<widget::menu::Tree<cosmic::app::Message<Self::Message>>>> {
+        Some(cosmic::widget::menu::items(
+            &HashMap::new(),
+            vec![
+                cosmic::widget::menu::Item::Button(
+                    fl!("open-in-new-tab"),
+                    NavMenuAction::OpenInNewTab(id),
+                ),
+                cosmic::widget::menu::Item::Button(
+                    fl!("open-in-new-window"),
+                    NavMenuAction::OpenInNewWindow(id),
+                ),
+                cosmic::widget::menu::Item::Divider,
+                cosmic::widget::menu::Item::Button(
+                    fl!("properties"),
+                    NavMenuAction::Properties(id),
+                ),
+            ],
+        ))
     }
 
     fn nav_model(&self) -> Option<&segmented_button::SingleSelectModel> {
@@ -1570,6 +1649,47 @@ impl Application for App {
                     return self.update(Message::TabActivate(entity));
                 }
             }
+
+            // Tracks which nav bar item to show a context menu for.
+            Message::NavBarContext(entity) => {
+                self.nav_bar_context_id = entity;
+            }
+
+            // Applies selected nav bar context menu operation.
+            Message::NavMenuAction(action) => match action {
+                NavMenuAction::OpenInNewTab(entity) => {
+                    match self.nav_model.data::<Location>(entity) {
+                        Some(Location::Path(ref path)) => {
+                            return self.open_tab(Location::Path(path.clone()));
+                        }
+                        _ => {}
+                    }
+                }
+
+                // Open the selected path in a new cosmic-files window.
+                NavMenuAction::OpenInNewWindow(entity) => {
+                    if let Some(&Location::Path(ref path)) = self.nav_model.data::<Location>(entity)
+                    {
+                        match env::current_exe() {
+                            Ok(exe) => match process::Command::new(&exe).arg(path).spawn() {
+                                Ok(_child) => {}
+                                Err(err) => {
+                                    log::error!("failed to execute {:?}: {}", exe, err);
+                                }
+                            },
+                            Err(err) => {
+                                log::error!("failed to get current executable path: {}", err);
+                            }
+                        }
+                    }
+                }
+
+                NavMenuAction::Properties(entity) => {
+                    self.context_page = ContextPage::Properties(Some(ContextItem::NavBar(entity)));
+                    self.core.window.show_context = true;
+                    self.set_context_title(self.context_page.title());
+                }
+            },
         }
 
         Command::none()
@@ -1584,7 +1704,7 @@ impl Application for App {
             ContextPage::About => self.about(),
             ContextPage::OpenWith => self.open_with(),
             ContextPage::Operations => self.operations(),
-            ContextPage::Properties => self.properties(),
+            ContextPage::Properties(entity) => self.properties(entity),
             ContextPage::Settings => self.settings(),
         })
     }
