@@ -163,7 +163,6 @@ impl Gvfs {
                             event_tx.send(Event::Items(items)).unwrap();
                         }
                         Cmd::Mount(mounter_item) => {
-                            #[allow(irrefutable_let_patterns)]
                             let MounterItem::Gvfs(item) = mounter_item else { continue };
                             let ItemKind::Volume = item.kind else { continue };
                             for (i, volume) in monitor.volumes().into_iter().enumerate() {

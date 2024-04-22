@@ -8,6 +8,8 @@ mod gvfs;
 pub enum MounterItem {
     #[cfg(feature = "gvfs")]
     Gvfs(gvfs::Item),
+    #[allow(dead_code)]
+    None,
 }
 
 impl MounterItem {
@@ -15,6 +17,7 @@ impl MounterItem {
         match self {
             #[cfg(feature = "gvfs")]
             Self::Gvfs(item) => item.name(),
+            Self::None => unreachable!(),
         }
     }
 
@@ -22,6 +25,7 @@ impl MounterItem {
         match self {
             #[cfg(feature = "gvfs")]
             Self::Gvfs(item) => item.is_mounted(),
+            Self::None => unreachable!(),
         }
     }
 
@@ -29,6 +33,7 @@ impl MounterItem {
         match self {
             #[cfg(feature = "gvfs")]
             Self::Gvfs(item) => item.icon(),
+            Self::None => unreachable!(),
         }
     }
 
@@ -36,6 +41,7 @@ impl MounterItem {
         match self {
             #[cfg(feature = "gvfs")]
             Self::Gvfs(item) => item.path(),
+            Self::None => unreachable!(),
         }
     }
 }
@@ -54,6 +60,7 @@ pub type MounterMap = BTreeMap<MounterKey, Box<dyn Mounter>>;
 pub type Mounters = Arc<MounterMap>;
 
 pub fn mounters() -> Mounters {
+    #[allow(unused_mut)]
     let mut mounters = MounterMap::new();
 
     #[cfg(feature = "gvfs")]
