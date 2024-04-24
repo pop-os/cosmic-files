@@ -24,6 +24,7 @@ fn gio_icon_to_path(icon: &gio::Icon, size: u16) -> Option<PathBuf> {
 enum Cmd {
     Rescan,
     Mount(MounterItem),
+    Unmount(MounterItem),
 }
 
 enum Event {
@@ -189,6 +190,34 @@ impl Gvfs {
                                 );
                             }
                         }
+                        Cmd::Unmount(mounter_item) => {
+                            let MounterItem::Gvfs(item) = mounter_item else { continue };
+                            let ItemKind::Mount = item.kind else { continue };
+                            for (i, mount) in monitor.mounts().into_iter().enumerate() {
+                                if i != item.index {
+                                    continue;
+                                }
+
+                                let name = MountExt::name(&mount);
+                                if item.name != name {
+                                    log::warn!("trying to unmount mount {} failed: name is {:?} when {:?} was expected", i, name, item.name);
+                                    continue;
+                                }
+
+                                //TODO: do eject instead of unmount?
+                                log::info!("unmount {}", name);
+                                MountExt::unmount_with_operation(
+                                    &mount,
+                                    gio::MountUnmountFlags::NONE,
+                                    //TODO: gio::MountOperation needed for network shares with auth
+                                    gio::MountOperation::NONE,
+                                    gio::Cancellable::NONE,
+                                    move |result| {
+                                        log::info!("unmount {}: result {:?}", name, result);
+                                    },
+                                );
+                            }
+                        }
                     }
                 }
             });
@@ -207,6 +236,17 @@ impl Mounter for Gvfs {
         Command::perform(
             async move {
                 command_tx.send(Cmd::Mount(item)).unwrap();
+                ()
+            },
+            |x| x,
+        )
+    }
+
+    fn unmount(&self, item: MounterItem) -> Command<()> {
+        let command_tx = self.command_tx.clone();
+        Command::perform(
+            async move {
+                command_tx.send(Cmd::Unmount(item)).unwrap();
                 ()
             },
             |x| x,

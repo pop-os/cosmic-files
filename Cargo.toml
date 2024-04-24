@@ -43,6 +43,7 @@ slotmap = "1.0.7"
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
+branch = "nav-bar-close-icon"
 default-features = false
 features = ["multi-window", "tokio", "winit"]
 
@@ -77,10 +78,6 @@ test-log = "0.2"
 # libcosmic = { path = "../libcosmic" }
 # cosmic-config = { path = "../libcosmic/cosmic-config" }
 # cosmic-theme = { path = "../libcosmic/cosmic-theme" }
-# libcosmic = { git = "https://github.com/pop-os/libcosmic//", branch = "dnd" }
-# cosmic-config = { git = "https://github.com/pop-os/libcosmic//", branch = "dnd" }
-# cosmic-theme = { git = "https://github.com/pop-os/libcosmic//", branch = "dnd" }
 
 # [patch.'https://github.com/pop-os/smithay-clipboard']
-# smithay-clipboard = { git = "https://github.com/pop-os/smithay-clipboard//", rev = "2f2430b" }
 # smithay-clipboard = { path = "../smithay-clipboard" }

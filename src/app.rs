@@ -182,6 +182,7 @@ pub enum Message {
     Modifiers(Modifiers),
     MoveToTrash(Option<Entity>),
     MounterItems(MounterKey, MounterItems),
+    NavBarClose(Entity),
     NavBarContext(Entity),
     NavMenuAction(NavMenuAction),
     NewItem(Option<Entity>, bool),
@@ -734,7 +735,13 @@ impl Application for App {
             cosmic::app::Message::App(Message::DndDropNav(entity, data, action))
         })
         .on_context(|entity| cosmic::app::Message::App(Message::NavBarContext(entity)))
+        .on_close(|entity| cosmic::app::Message::App(Message::NavBarClose(entity)))
         .context_menu(self.nav_context_menu(self.nav_bar_context_id))
+        .close_icon(
+            widget::icon::from_name("media-eject-symbolic")
+                .size(16)
+                .icon(),
+        )
         .into_container();
 
         if !self.core().is_condensed() {
@@ -1065,21 +1072,16 @@ impl Application for App {
                     let mut entity = self
                         .nav_model
                         .insert()
-                        .text(format!(
-                            "{} ({})",
-                            item.name(),
-                            if item.is_mounted() {
-                                "mounted"
-                            } else {
-                                "not mounted"
-                            }
-                        ))
+                        .text(item.name())
                         .data(MounterData(key, item.clone()));
                     if let Some(path) = item.path() {
                         entity = entity.data(Location::Path(path.clone()));
                     }
                     if let Some(icon) = item.icon() {
                         entity = entity.icon(widget::icon::icon(icon).size(16));
+                    }
+                    if item.is_mounted() {
+                        entity = entity.closable();
                     }
                 }
             }
@@ -1647,6 +1649,14 @@ impl Application for App {
                 {
                     self.tab_dnd_hover = None;
                     return self.update(Message::TabActivate(entity));
+                }
+            }
+
+            Message::NavBarClose(entity) => {
+                if let Some(data) = self.nav_model.data::<MounterData>(entity) {
+                    if let Some(mounter) = self.mounters.get(&data.0) {
+                        return mounter.unmount(data.1.clone()).map(|_| message::none());
+                    }
                 }
             }
 

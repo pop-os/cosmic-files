@@ -51,6 +51,7 @@ pub type MounterItems = Vec<MounterItem>;
 pub trait Mounter {
     //TODO: send result
     fn mount(&self, item: MounterItem) -> Command<()>;
+    fn unmount(&self, item: MounterItem) -> Command<()>;
     fn subscription(&self) -> subscription::Subscription<MounterItems>;
 }
 
