@@ -43,7 +43,6 @@ slotmap = "1.0.7"
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
-branch = "nav-bar-close-icon"
 default-features = false
 features = ["multi-window", "tokio", "winit"]
 

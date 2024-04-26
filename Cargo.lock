@@ -459,9 +459,9 @@ dependencies = [
 
 [[package]]
 name = "async-recursion"
-version = "1.1.0"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30c5ef0ede93efbf733c1a727f3b6b5a1060bbedd5600183e66f6e4be4af0ec5"
+checksum = "3b43422f69d8ff38f95f1b2bb76517c91589a924d1559a0e935d7c8ce0274c11"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1065,7 +1065,7 @@ dependencies = [
 [[package]]
 name = "cosmic-config"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git?branch=nav-bar-close-icon#62c139f7f8154d5ac6ded6d53ada853c0aece0d8"
+source = "git+https://github.com/pop-os/libcosmic.git#d138c86a11af3993e4f3c2136dd5100e7b2bc51a"
 dependencies = [
  "atomicwrites",
  "cosmic-config-derive",
@@ -1082,7 +1082,7 @@ dependencies = [
 [[package]]
 name = "cosmic-config-derive"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git?branch=nav-bar-close-icon#62c139f7f8154d5ac6ded6d53ada853c0aece0d8"
+source = "git+https://github.com/pop-os/libcosmic.git#d138c86a11af3993e4f3c2136dd5100e7b2bc51a"
 dependencies = [
  "quote",
  "syn 1.0.109",
@@ -1152,7 +1152,7 @@ dependencies = [
 [[package]]
 name = "cosmic-theme"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git?branch=nav-bar-close-icon#62c139f7f8154d5ac6ded6d53ada853c0aece0d8"
+source = "git+https://github.com/pop-os/libcosmic.git#d138c86a11af3993e4f3c2136dd5100e7b2bc51a"
 dependencies = [
  "almost",
  "cosmic-config",
@@ -1320,7 +1320,7 @@ dependencies = [
  "hashbrown",
  "lock_api",
  "once_cell",
- "parking_lot_core 0.9.9",
+ "parking_lot_core 0.9.10",
 ]
 
 [[package]]
@@ -2557,7 +2557,7 @@ dependencies = [
  "lazy_static",
  "locale_config",
  "log",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.2",
  "rust-embed",
  "thiserror",
  "unic-langid",
@@ -2624,7 +2624,7 @@ dependencies = [
 [[package]]
 name = "iced"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git?branch=nav-bar-close-icon#62c139f7f8154d5ac6ded6d53ada853c0aece0d8"
+source = "git+https://github.com/pop-os/libcosmic.git#d138c86a11af3993e4f3c2136dd5100e7b2bc51a"
 dependencies = [
  "dnd",
  "iced_accessibility",
@@ -2642,7 +2642,7 @@ dependencies = [
 [[package]]
 name = "iced_accessibility"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git?branch=nav-bar-close-icon#62c139f7f8154d5ac6ded6d53ada853c0aece0d8"
+source = "git+https://github.com/pop-os/libcosmic.git#d138c86a11af3993e4f3c2136dd5100e7b2bc51a"
 dependencies = [
  "accesskit",
  "accesskit_winit",
@@ -2651,7 +2651,7 @@ dependencies = [
 [[package]]
 name = "iced_core"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git?branch=nav-bar-close-icon#62c139f7f8154d5ac6ded6d53ada853c0aece0d8"
+source = "git+https://github.com/pop-os/libcosmic.git#d138c86a11af3993e4f3c2136dd5100e7b2bc51a"
 dependencies = [
  "bitflags 2.5.0",
  "dnd",
@@ -2671,7 +2671,7 @@ dependencies = [
 [[package]]
 name = "iced_futures"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git?branch=nav-bar-close-icon#62c139f7f8154d5ac6ded6d53ada853c0aece0d8"
+source = "git+https://github.com/pop-os/libcosmic.git#d138c86a11af3993e4f3c2136dd5100e7b2bc51a"
 dependencies = [
  "futures",
  "iced_core",
@@ -2684,7 +2684,7 @@ dependencies = [
 [[package]]
 name = "iced_graphics"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git?branch=nav-bar-close-icon#62c139f7f8154d5ac6ded6d53ada853c0aece0d8"
+source = "git+https://github.com/pop-os/libcosmic.git#d138c86a11af3993e4f3c2136dd5100e7b2bc51a"
 dependencies = [
  "bitflags 2.5.0",
  "bytemuck",
@@ -2708,7 +2708,7 @@ dependencies = [
 [[package]]
 name = "iced_renderer"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git?branch=nav-bar-close-icon#62c139f7f8154d5ac6ded6d53ada853c0aece0d8"
+source = "git+https://github.com/pop-os/libcosmic.git#d138c86a11af3993e4f3c2136dd5100e7b2bc51a"
 dependencies = [
  "iced_graphics",
  "iced_tiny_skia",
@@ -2720,7 +2720,7 @@ dependencies = [
 [[package]]
 name = "iced_runtime"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git?branch=nav-bar-close-icon#62c139f7f8154d5ac6ded6d53ada853c0aece0d8"
+source = "git+https://github.com/pop-os/libcosmic.git#d138c86a11af3993e4f3c2136dd5100e7b2bc51a"
 dependencies = [
  "dnd",
  "iced_core",
@@ -2732,7 +2732,7 @@ dependencies = [
 [[package]]
 name = "iced_style"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git?branch=nav-bar-close-icon#62c139f7f8154d5ac6ded6d53ada853c0aece0d8"
+source = "git+https://github.com/pop-os/libcosmic.git#d138c86a11af3993e4f3c2136dd5100e7b2bc51a"
 dependencies = [
  "iced_core",
  "once_cell",
@@ -2742,7 +2742,7 @@ dependencies = [
 [[package]]
 name = "iced_tiny_skia"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git?branch=nav-bar-close-icon#62c139f7f8154d5ac6ded6d53ada853c0aece0d8"
+source = "git+https://github.com/pop-os/libcosmic.git#d138c86a11af3993e4f3c2136dd5100e7b2bc51a"
 dependencies = [
  "bytemuck",
  "cosmic-text",
@@ -2759,7 +2759,7 @@ dependencies = [
 [[package]]
 name = "iced_wgpu"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git?branch=nav-bar-close-icon#62c139f7f8154d5ac6ded6d53ada853c0aece0d8"
+source = "git+https://github.com/pop-os/libcosmic.git#d138c86a11af3993e4f3c2136dd5100e7b2bc51a"
 dependencies = [
  "bitflags 2.5.0",
  "bytemuck",
@@ -2778,7 +2778,7 @@ dependencies = [
 [[package]]
 name = "iced_widget"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git?branch=nav-bar-close-icon#62c139f7f8154d5ac6ded6d53ada853c0aece0d8"
+source = "git+https://github.com/pop-os/libcosmic.git#d138c86a11af3993e4f3c2136dd5100e7b2bc51a"
 dependencies = [
  "dnd",
  "iced_renderer",
@@ -2794,7 +2794,7 @@ dependencies = [
 [[package]]
 name = "iced_winit"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git?branch=nav-bar-close-icon#62c139f7f8154d5ac6ded6d53ada853c0aece0d8"
+source = "git+https://github.com/pop-os/libcosmic.git#d138c86a11af3993e4f3c2136dd5100e7b2bc51a"
 dependencies = [
  "dnd",
  "iced_graphics",
@@ -3120,7 +3120,7 @@ checksum = "9c198f91728a82281a64e1f4f9eeb25d82cb32a5de251c6bd1b5154d63a8e7bd"
 [[package]]
 name = "libcosmic"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git?branch=nav-bar-close-icon#62c139f7f8154d5ac6ded6d53ada853c0aece0d8"
+source = "git+https://github.com/pop-os/libcosmic.git#d138c86a11af3993e4f3c2136dd5100e7b2bc51a"
 dependencies = [
  "apply",
  "ashpd 0.7.0",
@@ -3238,9 +3238,9 @@ dependencies = [
 
 [[package]]
 name = "lock_api"
-version = "0.4.11"
+version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c168f8615b12bc01f9c17e2eb0cc07dcae1940121185446edc3744920e8ef45"
+checksum = "07af8b9cdd281b7915f413fa73f29ebd5d55d0d3f0155584dade1ff18cea1b17"
 dependencies = [
  "autocfg",
  "scopeguard",
@@ -3551,7 +3551,7 @@ dependencies = [
  "file-id",
  "log",
  "notify",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.2",
  "walkdir",
 ]
 
@@ -3903,12 +3903,12 @@ dependencies = [
 
 [[package]]
 name = "parking_lot"
-version = "0.12.1"
+version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3742b2c103b9f06bc9fff0a37ff4912935851bee6d36f3c02bcc755bcfec228f"
+checksum = "7e4af0ca4f6caed20e900d564c242b8e5d4903fdacf31d3daf527b66fe6f42fb"
 dependencies = [
  "lock_api",
- "parking_lot_core 0.9.9",
+ "parking_lot_core 0.9.10",
 ]
 
 [[package]]
@@ -3927,15 +3927,15 @@ dependencies = [
 
 [[package]]
 name = "parking_lot_core"
-version = "0.9.9"
+version = "0.9.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c42a9226546d68acdd9c0a280d17ce19bfe27a46bf68784e4066115788d008e"
+checksum = "1e401f977ab385c9e4e3ab30627d6f26d00e2c73eef317493c4ec6d468726cf8"
 dependencies = [
  "cfg-if",
  "libc",
- "redox_syscall 0.4.1",
+ "redox_syscall 0.5.1",
  "smallvec",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.5",
 ]
 
 [[package]]
@@ -4301,6 +4301,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4722d768eff46b75989dd134e5c353f0d6296e5aaa3132e776cbdb56be7731aa"
 dependencies = [
  "bitflags 1.3.2",
+]
+
+[[package]]
+name = "redox_syscall"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "469052894dcb553421e483e4209ee581a45100d31b4018de03e5a7ad86374a7e"
+dependencies = [
+ "bitflags 2.5.0",
 ]
 
 [[package]]
@@ -5746,7 +5755,7 @@ dependencies = [
  "js-sys",
  "log",
  "naga",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.2",
  "profiling",
  "raw-window-handle 0.6.1",
  "smallvec",
@@ -5773,7 +5782,7 @@ dependencies = [
  "log",
  "naga",
  "once_cell",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.2",
  "profiling",
  "raw-window-handle 0.6.1",
  "rustc-hash",
@@ -5813,7 +5822,7 @@ dependencies = [
  "naga",
  "objc",
  "once_cell",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.2",
  "profiling",
  "range-alloc",
  "raw-window-handle 0.6.1",
@@ -5861,11 +5870,11 @@ checksum = "ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6"
 
 [[package]]
 name = "winapi-util"
-version = "0.1.6"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f29e6f9198ba0d26b4c9f07dbe6f9ed633e1f3d5b8b414090084349e46a52596"
+checksum = "4d4cc384e1e73b93bafa6fb4f1df8c41695c8a91cf9c4c64358067d15a7b6c6b"
 dependencies = [
- "winapi",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
