@@ -2604,12 +2604,10 @@ mod tests {
     fn tab_click_double_opens_folder() -> io::Result<()> {
         let (fs, mut tab) = tab_click_new(NUM_FILES, NUM_NESTED, NUM_DIRS, NUM_NESTED, NAME_LEN)?;
         let path = fs.path();
-
+        
         // Simulate double clicking second directory
-        debug!("Emitting first Message::Click(Some(1))");
-        tab.update(Message::Click(Some(1)), Modifiers::empty());
-        debug!("Emitting second Message::Click(Some(1))");
-        tab.update(Message::Click(Some(1)), Modifiers::empty());
+        debug!("Emitting double click Message::DoubleClick(Some(1))");
+        tab.update(Message::DoubleClick(Some(1)), Modifiers::empty());
 
         // Path to second directory
         let second_dir = read_dir_sorted(path)?
