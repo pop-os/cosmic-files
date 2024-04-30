@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::num::NonZeroU16;
+use std::{num::NonZeroU16, path::PathBuf};
 
 use cosmic::{
     cosmic_config::{self, cosmic_config_derive::CosmicConfigEntry, CosmicConfigEntry},
@@ -36,9 +36,35 @@ impl AppTheme {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum Favorite {
+    Home,
+    Documents,
+    Downloads,
+    Music,
+    Pictures,
+    Videos,
+    Path(PathBuf),
+}
+
+impl Favorite {
+    pub fn path_opt(&self) -> Option<PathBuf> {
+        match self {
+            Self::Home => dirs::home_dir(),
+            Self::Documents => dirs::document_dir(),
+            Self::Downloads => dirs::download_dir(),
+            Self::Music => dirs::audio_dir(),
+            Self::Pictures => dirs::picture_dir(),
+            Self::Videos => dirs::video_dir(),
+            Self::Path(path) => Some(path.clone()),
+        }
+    }
+}
+
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Config {
     pub app_theme: AppTheme,
+    pub favorites: Vec<Favorite>,
     pub tab: TabConfig,
 }
 
@@ -46,6 +72,14 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             app_theme: AppTheme::System,
+            favorites: vec![
+                Favorite::Home,
+                Favorite::Documents,
+                Favorite::Downloads,
+                Favorite::Music,
+                Favorite::Pictures,
+                Favorite::Videos,
+            ],
             tab: TabConfig::default(),
         }
     }

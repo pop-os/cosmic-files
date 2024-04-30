@@ -44,7 +44,7 @@ use std::{
 use crate::tab::HOVER_DURATION;
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
-    config::{AppTheme, Config, IconSizes, TabConfig, CONFIG_VERSION},
+    config::{AppTheme, Config, Favorite, IconSizes, TabConfig, CONFIG_VERSION},
     fl, home_dir,
     key_bind::key_binds,
     menu, mime_app,
@@ -762,24 +762,16 @@ impl Application for App {
         let app_themes = vec![fl!("match-desktop"), fl!("dark"), fl!("light")];
 
         let mut nav_model = segmented_button::ModelBuilder::default();
-        if let Some(dir) = dirs::home_dir() {
-            nav_model = nav_model.insert(move |b| {
-                b.text(fl!("home"))
-                    .icon(widget::icon::icon(tab::folder_icon_symbolic(&dir, 16)).size(16))
-                    .data(Location::Path(dir.clone()))
-            });
-        }
-        //TODO: Sort by name?
-        for dir_opt in &[
-            dirs::document_dir(),
-            dirs::download_dir(),
-            dirs::audio_dir(),
-            dirs::picture_dir(),
-            dirs::video_dir(),
-        ] {
-            if let Some(dir) = dir_opt {
-                if let Some(file_name) = dir.file_name().and_then(|x| x.to_str()) {
+        for favorite in flags.config.favorites.iter() {
+            if let Some(dir) = favorite.path_opt() {
+                if matches!(favorite, Favorite::Home) {
                     nav_model = nav_model.insert(move |b| {
+                        b.text(fl!("home"))
+                            .icon(widget::icon::icon(tab::folder_icon_symbolic(&dir, 16)).size(16))
+                            .data(Location::Path(dir.clone()))
+                    });
+                } else if let Some(file_name) = dir.file_name().and_then(|x| x.to_str()) {
+                    nav_model = nav_model.insert(|b| {
                         b.text(file_name.to_string())
                             .icon(widget::icon::icon(tab::folder_icon_symbolic(&dir, 16)).size(16))
                             .data(Location::Path(dir.clone()))
