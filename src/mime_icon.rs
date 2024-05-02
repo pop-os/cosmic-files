@@ -31,11 +31,7 @@ impl MimeIconCache {
             .entry(key)
             .or_insert_with_key(|key| {
                 for icon_name in self.shared_mime_info.lookup_icon_names(&key.mime) {
-                    if let Some(path) = icon::from_name(icon_name)
-                        .prefer_svg(true)
-                        .size(key.size)
-                        .path()
-                    {
+                    if let Some(path) = icon::from_name(icon_name).size(key.size).path() {
                         return Some(icon::from_path(path));
                     }
                 }
