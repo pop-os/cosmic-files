@@ -30,12 +30,20 @@ impl MimeIconCache {
         self.cache
             .entry(key)
             .or_insert_with_key(|key| {
-                for icon_name in self.shared_mime_info.lookup_icon_names(&key.mime) {
-                    if let Some(path) = icon::from_name(icon_name).size(key.size).path() {
-                        return Some(icon::from_path(path));
-                    }
+                let mut icon_names = self.shared_mime_info.lookup_icon_names(&key.mime);
+                if icon_names.is_empty() {
+                    return None;
                 }
-                None
+                let icon_name = icon_names.remove(0);
+                let mut named = icon::from_name(icon_name).size(key.size);
+                let mut fallback_names = Vec::new();
+                for fallback_name in icon_names {
+                    fallback_names.push(fallback_name.into());
+                }
+                if fallback_names.is_empty() {
+                    named = named.fallback(Some(icon::IconFallback::Names(fallback_names)));
+                }
+                Some(named.handle())
             })
             .clone()
     }
