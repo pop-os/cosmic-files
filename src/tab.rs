@@ -1626,6 +1626,7 @@ impl Tab {
     ) -> (
         Option<Element<'static, cosmic::app::Message<crate::app::Message>>>,
         Element<Message>,
+        bool,
     ) {
         let cosmic_theme::Spacing {
             space_m,
@@ -1805,7 +1806,7 @@ impl Tab {
             }
 
             if count == 0 {
-                return (None, self.empty_view(hidden > 0));
+                return (None, self.empty_view(hidden > 0), false);
             }
 
             //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
@@ -1889,6 +1890,7 @@ impl Tab {
                 .show_drag_rect(true)
                 .on_release(|_| Message::ClickRelease(None))
                 .into(),
+            true,
         )
     }
 
@@ -1897,6 +1899,7 @@ impl Tab {
     ) -> (
         Option<Element<'static, cosmic::app::Message<crate::app::Message>>>,
         Element<Message>,
+        bool,
     ) {
         let cosmic_theme::Spacing {
             space_m, space_xxs, ..
@@ -2181,7 +2184,7 @@ impl Tab {
             }
 
             if count == 0 {
-                return (None, self.empty_view(hidden > 0));
+                return (None, self.empty_view(hidden > 0), false);
             }
         }
         //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
@@ -2209,12 +2212,13 @@ impl Tab {
             .show_drag_rect(true)
             .on_release(|_| Message::ClickRelease(None))
             .into(),
+            true,
         )
     }
 
     pub fn view(&self, key_binds: &HashMap<KeyBind, Action>) -> Element<Message> {
         let location_view = self.location_view();
-        let (drag_list, mut item_view) = match self.view {
+        let (drag_list, mut item_view, can_scroll) = match self.view {
             View::Grid => self.grid_view(),
             View::List => self.list_view(),
         };
@@ -2270,12 +2274,19 @@ impl Tab {
                 .popup(menu::context_menu(&self, &key_binds))
                 .position(widget::popover::Position::Point(point));
         }
-        let scrollable = widget::scrollable(popover)
-            .id(self.scrollable_id.clone())
-            .on_scroll(Message::Scroll)
-            .width(Length::Fill)
-            .height(Length::Fill);
-        let mut tab_column = widget::column::with_children(vec![location_view, scrollable.into()]);
+        let mut tab_column = widget::column::with_capacity(3);
+        tab_column = tab_column.push(location_view);
+        if can_scroll {
+            tab_column = tab_column.push(
+                widget::scrollable(popover)
+                    .id(self.scrollable_id.clone())
+                    .on_scroll(Message::Scroll)
+                    .width(Length::Fill)
+                    .height(Length::Fill),
+            );
+        } else {
+            tab_column = tab_column.push(popover);
+        }
         if let Location::Trash = self.location {
             if let Some(items) = self.items_opt() {
                 if !items.is_empty() {
