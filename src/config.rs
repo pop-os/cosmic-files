@@ -48,6 +48,25 @@ pub enum Favorite {
 }
 
 impl Favorite {
+    pub fn from_path(path: PathBuf) -> Self {
+        // Ensure that special folders are handled properly
+        for favorite in &[
+            Self::Home,
+            Self::Documents,
+            Self::Downloads,
+            Self::Music,
+            Self::Pictures,
+            Self::Videos,
+        ] {
+            if let Some(favorite_path) = favorite.path_opt() {
+                if &favorite_path == &path {
+                    return favorite.clone();
+                }
+            }
+        }
+        Self::Path(path)
+    }
+
     pub fn path_opt(&self) -> Option<PathBuf> {
         match self {
             Self::Home => dirs::home_dir(),

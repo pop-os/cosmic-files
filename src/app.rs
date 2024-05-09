@@ -63,6 +63,7 @@ pub struct Flags {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Action {
     About,
+    AddToSidebar,
     Copy,
     Cut,
     EditLocation,
@@ -104,6 +105,7 @@ impl MenuAction for Action {
     fn message(&self, entity_opt: Option<Entity>) -> Message {
         match self {
             Action::About => Message::ToggleContextPage(ContextPage::About),
+            Action::AddToSidebar => Message::AddToSidebar(entity_opt),
             Action::Copy => Message::Copy(entity_opt),
             Action::Cut => Message::Cut(entity_opt),
             Action::EditLocation => Message::EditLocation(entity_opt),
@@ -170,6 +172,7 @@ impl MenuAction for NavMenuAction {
 /// Messages that are used specifically by our [`App`].
 #[derive(Clone, Debug)]
 pub enum Message {
+    AddToSidebar(Option<Entity>),
     AppTheme(AppTheme),
     Config(Config),
     Copy(Option<Entity>),
@@ -395,18 +398,27 @@ impl App {
     fn update_nav_model(&mut self) {
         let mut nav_model = segmented_button::ModelBuilder::default();
         for (favorite_i, favorite) in self.config.favorites.iter().enumerate() {
-            if let Some(dir) = favorite.path_opt() {
+            if let Some(path) = favorite.path_opt() {
                 let name = if matches!(favorite, Favorite::Home) {
                     fl!("home")
-                } else if let Some(file_name) = dir.file_name().and_then(|x| x.to_str()) {
+                } else if let Some(file_name) = path.file_name().and_then(|x| x.to_str()) {
                     file_name.to_string()
                 } else {
                     continue;
                 };
                 nav_model = nav_model.insert(move |b| {
                     b.text(name.clone())
-                        .icon(widget::icon::icon(tab::folder_icon_symbolic(&dir, 16)).size(16))
-                        .data(Location::Path(dir.clone()))
+                        .icon(
+                            widget::icon::icon(if path.is_dir() {
+                                tab::folder_icon_symbolic(&path, 16)
+                            } else {
+                                widget::icon::from_name("text-x-generic-symbolic")
+                                    .size(16)
+                                    .handle()
+                            })
+                            .size(16),
+                        )
+                        .data(Location::Path(path.clone()))
                         .data(FavoriteIndex(favorite_i))
                 });
             }
@@ -986,6 +998,14 @@ impl Application for App {
         }
 
         match message {
+            Message::AddToSidebar(entity_opt) => {
+                let mut favorites = self.config.favorites.clone();
+                for path in self.selected_paths(entity_opt) {
+                    favorites.push(Favorite::from_path(path));
+                }
+                config_set!(favorites, favorites);
+                return self.update_config();
+            }
             Message::AppTheme(app_theme) => {
                 config_set!(app_theme, app_theme);
                 return self.update_config();
@@ -1081,6 +1101,7 @@ impl Application for App {
                 self.mounter_items.insert(mounter_key, mounter_items);
 
                 // Update nav bar
+                //TODO: this could change favorites IDs while they are in use
                 self.update_nav_model();
             }
             Message::NewItem(entity_opt, dir) => {

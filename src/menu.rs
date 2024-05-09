@@ -110,7 +110,8 @@ pub fn context_menu<'a>(
                 children.push(horizontal_rule(1).into());
                 //TODO: change to Show details
                 children.push(menu_item(fl!("properties"), Action::Properties).into());
-                //TODO: Add to sidebar
+                children.push(horizontal_rule(1).into());
+                children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
                 children.push(horizontal_rule(1).into());
                 children.push(menu_item(fl!("move-to-trash"), Action::MoveToTrash).into());
             } else {
