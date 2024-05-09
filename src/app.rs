@@ -156,6 +156,7 @@ pub enum NavMenuAction {
     OpenInNewTab(segmented_button::Entity),
     OpenInNewWindow(segmented_button::Entity),
     Properties(segmented_button::Entity),
+    RemoveFromSidebar(segmented_button::Entity),
 }
 
 impl MenuAction for NavMenuAction {
@@ -256,6 +257,8 @@ pub enum DialogPage {
         dir: bool,
     },
 }
+
+pub struct FavoriteIndex(usize);
 
 pub struct MounterData(MounterKey, MounterItem);
 
@@ -385,7 +388,64 @@ impl App {
     }
 
     fn update_config(&mut self) -> Command<Message> {
+        self.update_nav_model();
         cosmic::app::command::set_theme(self.config.app_theme.theme())
+    }
+
+    fn update_nav_model(&mut self) {
+        let mut nav_model = segmented_button::ModelBuilder::default();
+        for (favorite_i, favorite) in self.config.favorites.iter().enumerate() {
+            if let Some(dir) = favorite.path_opt() {
+                let name = if matches!(favorite, Favorite::Home) {
+                    fl!("home")
+                } else if let Some(file_name) = dir.file_name().and_then(|x| x.to_str()) {
+                    file_name.to_string()
+                } else {
+                    continue;
+                };
+                nav_model = nav_model.insert(move |b| {
+                    b.text(name.clone())
+                        .icon(widget::icon::icon(tab::folder_icon_symbolic(&dir, 16)).size(16))
+                        .data(Location::Path(dir.clone()))
+                        .data(FavoriteIndex(favorite_i))
+                });
+            }
+        }
+        nav_model = nav_model.insert(|b| {
+            b.text(fl!("trash"))
+                .icon(widget::icon::icon(tab::trash_icon_symbolic(16)))
+                .data(Location::Trash)
+        });
+
+        // Collect all mounter items
+        let mut nav_items = Vec::new();
+        for (key, items) in self.mounter_items.iter() {
+            for item in items.iter() {
+                nav_items.push((*key, item));
+            }
+        }
+        // Sort by name lexically
+        nav_items
+            .sort_by(|a, b| lexical_sort::natural_lexical_cmp(&a.1.name(), &b.1.name()));
+        // Add items to nav model
+        for (key, item) in nav_items {
+            nav_model = nav_model.insert(|mut b| {
+                b = b.text(item.name())
+                .data(MounterData(key, item.clone()));
+            if let Some(path) = item.path() {
+                b = b.data(Location::Path(path.clone()));
+            }
+            if let Some(icon) = item.icon() {
+                b = b.icon(widget::icon::icon(icon).size(16));
+            }
+            if item.is_mounted() {
+                b = b.closable();
+            }
+            b
+            });
+        }
+
+        self.nav_model = nav_model.build();
     }
 
     fn update_title(&mut self) -> Command<Message> {
@@ -761,34 +821,10 @@ impl Application for App {
 
         let app_themes = vec![fl!("match-desktop"), fl!("dark"), fl!("light")];
 
-        let mut nav_model = segmented_button::ModelBuilder::default();
-        for favorite in flags.config.favorites.iter() {
-            if let Some(dir) = favorite.path_opt() {
-                if matches!(favorite, Favorite::Home) {
-                    nav_model = nav_model.insert(move |b| {
-                        b.text(fl!("home"))
-                            .icon(widget::icon::icon(tab::folder_icon_symbolic(&dir, 16)).size(16))
-                            .data(Location::Path(dir.clone()))
-                    });
-                } else if let Some(file_name) = dir.file_name().and_then(|x| x.to_str()) {
-                    nav_model = nav_model.insert(|b| {
-                        b.text(file_name.to_string())
-                            .icon(widget::icon::icon(tab::folder_icon_symbolic(&dir, 16)).size(16))
-                            .data(Location::Path(dir.clone()))
-                    });
-                }
-            }
-        }
-        nav_model = nav_model.insert(|b| {
-            b.text(fl!("trash"))
-                .icon(widget::icon::icon(tab::trash_icon_symbolic(16)))
-                .data(Location::Trash)
-        });
-
         let mut app = App {
             core,
             nav_bar_context_id: segmented_button::Entity::null(),
-            nav_model: nav_model.build(),
+            nav_model: segmented_button::ModelBuilder::default().build(),
             tab_model: segmented_button::ModelBuilder::default().build(),
             config_handler: flags.config_handler,
             config: flags.config,
@@ -813,7 +849,7 @@ impl Application for App {
             tab_drag_id: DragId::new(),
         };
 
-        let mut commands = Vec::new();
+        let mut commands = vec![app.update_config()];
 
         for arg in env::args().skip(1) {
             let location = if &arg == "--trash" {
@@ -860,6 +896,11 @@ impl Application for App {
                 cosmic::widget::menu::Item::Button(
                     fl!("properties"),
                     NavMenuAction::Properties(id),
+                ),
+                cosmic::widget::menu::Item::Divider,
+                cosmic::widget::menu::Item::Button(
+                    fl!("remove-from-sidebar"),
+                    NavMenuAction::RemoveFromSidebar(id),
                 ),
             ],
         ))
@@ -1041,41 +1082,8 @@ impl Application for App {
                 // Insert new items
                 self.mounter_items.insert(mounter_key, mounter_items);
 
-                // Remove any items with mounter data from nav model
-                let entities: Vec<Entity> = self.nav_model.iter().collect();
-                for entity in entities {
-                    if self.nav_model.data::<MounterData>(entity).is_some() {
-                        self.nav_model.remove(entity);
-                    }
-                }
-
-                // Collect all mounter items
-                let mut nav_items = Vec::new();
-                for (key, items) in self.mounter_items.iter() {
-                    for item in items.iter() {
-                        nav_items.push((*key, item));
-                    }
-                }
-                // Sort by name lexically
-                nav_items
-                    .sort_by(|a, b| lexical_sort::natural_lexical_cmp(&a.1.name(), &b.1.name()));
-                // Add items to nav model
-                for (key, item) in nav_items {
-                    let mut entity = self
-                        .nav_model
-                        .insert()
-                        .text(item.name())
-                        .data(MounterData(key, item.clone()));
-                    if let Some(path) = item.path() {
-                        entity = entity.data(Location::Path(path.clone()));
-                    }
-                    if let Some(icon) = item.icon() {
-                        entity = entity.icon(widget::icon::icon(icon).size(16));
-                    }
-                    if item.is_mounted() {
-                        entity = entity.closable();
-                    }
-                }
+                // Update nav bar
+                self.update_nav_model();
             }
             Message::NewItem(entity_opt, dir) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
@@ -1690,6 +1698,16 @@ impl Application for App {
                     self.context_page = ContextPage::Properties(Some(ContextItem::NavBar(entity)));
                     self.core.window.show_context = true;
                     self.set_context_title(self.context_page.title());
+                }
+
+                NavMenuAction::RemoveFromSidebar(entity) => {
+                    if let Some(FavoriteIndex(favorite_i)) = self.nav_model.data::<FavoriteIndex>(entity)
+                    {
+                        let mut favorites = self.config.favorites.clone();
+                        favorites.remove(*favorite_i);
+                        config_set!(favorites, favorites);
+                        return self.update_config();
+                    }
                 }
             },
         }

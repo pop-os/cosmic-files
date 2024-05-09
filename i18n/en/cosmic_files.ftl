@@ -79,11 +79,13 @@ dark = Dark
 light = Light
 
 # Context menu
+add-to-sidebar = Add to sidebar
 new-file = New file
 new-folder = New folder
 open-in-terminal = Open in terminal
 move-to-trash = Move to trash
 restore-from-trash = Restore from trash
+remove-from-sidebar = Remove from sidebar
 sort-by-name = Sort by name
 sort-by-modified = Sort by modified
 sort-by-size = Sort by size
