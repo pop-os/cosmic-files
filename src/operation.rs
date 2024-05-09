@@ -18,6 +18,8 @@ pub enum Operation {
     Delete {
         paths: Vec<PathBuf>,
     },
+    /// Empty the trash
+    EmptyTrash,
     /// Move items
     Move {
         paths: Vec<PathBuf>,
@@ -99,6 +101,31 @@ impl Operation {
                         ))
                         .await;
                 }
+            }
+            Self::EmptyTrash => {
+                #[cfg(any(
+                    target_os = "windows",
+                    all(
+                        unix,
+                        not(target_os = "macos"),
+                        not(target_os = "ios"),
+                        not(target_os = "android")
+                    )
+                ))]
+                {
+                    tokio::task::spawn_blocking(|| {
+                        let items = trash::os_limited::list()?;
+                        trash::os_limited::purge_all(items)
+                    })
+                    .await
+                    .map_err(err_str)?
+                    .map_err(err_str)?;
+                }
+                let _ = msg_tx
+                    .lock()
+                    .await
+                    .send(Message::PendingProgress(id, 100.0))
+                    .await;
             }
             Self::Move { paths, to } => {
                 let msg_tx = msg_tx.clone();

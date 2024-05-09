@@ -5,7 +5,18 @@ filesystem = Filesystem
 home = Home
 trash = Trash
 
-# New File/Folder Dialog
+# List view
+name = Name
+modified = Modified
+size = Size
+
+# Dialogs
+
+## Empty Trash Dialog
+empty-trash = Empty trash
+empty-trash-warning = Are you sure you want to permanently delete all the items in Trash?
+
+## New File/Folder Dialog
 create-new-file = Create new file
 create-new-folder = Create new folder
 file-name = File name
@@ -16,7 +27,7 @@ name-hidden = Names starting with "." will be hidden.
 name-invalid = Name cannot be "{$filename}".
 name-no-slashes = Name cannot contain slashes.
 
-# Open/Save Dialog
+## Open/Save Dialog
 cancel = Cancel
 open = Open
 open-file = Open file
@@ -28,19 +39,14 @@ open-multiple-folders = Open multiple folders
 save = Save
 save-file = Save file
 
-# Rename Dialog
+## Rename Dialog
 rename-file = Rename file
 rename-folder = Rename folder
 
-# Replace Dialog
+## Replace Dialog
 replace = Replace
 replace-title = {$filename} already exists in this location.
 replace-warning = Do you want to replace it with the one you are saving? Replacing it will overwrite its content.
-
-# List view
-name = Name
-modified = Modified
-size = Size
 
 # Context Pages
 

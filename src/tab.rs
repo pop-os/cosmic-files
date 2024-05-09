@@ -429,6 +429,7 @@ impl Location {
 pub enum Command {
     Action(Action),
     ChangeLocation(String, Location),
+    EmptyTrash,
     FocusButton(widget::Id),
     FocusTextInput(widget::Id),
     OpenFile(PathBuf),
@@ -449,6 +450,7 @@ pub enum Message {
     ContextMenu(Option<Point>),
     Drag(Option<Rectangle>),
     EditLocation(Option<Location>),
+    EmptyTrash,
     GoNext,
     GoPrevious,
     ItemDown,
@@ -1080,6 +1082,9 @@ impl Tab {
                     commands.push(Command::FocusTextInput(self.edit_location_id.clone()));
                 }
                 self.edit_location = edit_location;
+            }
+            Message::EmptyTrash => {
+                commands.push(Command::EmptyTrash);
             }
             Message::GoNext => {
                 if let Some(history_i) = self.history_i.checked_add(1) {
@@ -2270,12 +2275,32 @@ impl Tab {
             .on_scroll(Message::Scroll)
             .width(Length::Fill)
             .height(Length::Fill);
-        let mut tab_view = widget::container(widget::column::with_children(vec![
-            location_view,
-            scrollable.into(),
-        ]))
-        .height(Length::Fill)
-        .width(Length::Fill);
+        let mut tab_column = widget::column::with_children(vec![location_view, scrollable.into()]);
+        if let Location::Trash = self.location {
+            if let Some(items) = self.items_opt() {
+                if !items.is_empty() {
+                    let cosmic_theme::Spacing {
+                        space_xxs,
+                        space_xs,
+                        ..
+                    } = theme::active().cosmic().spacing;
+
+                    tab_column = tab_column.push(
+                        widget::layer_container(widget::row::with_children(vec![
+                            widget::horizontal_space(Length::Fill).into(),
+                            widget::button::standard(fl!("empty-trash"))
+                                .on_press(Message::EmptyTrash)
+                                .into(),
+                        ]))
+                        .padding([space_xxs, space_xs])
+                        .layer(cosmic_theme::Layer::Primary),
+                    );
+                }
+            }
+        }
+        let mut tab_view = widget::container(tab_column)
+            .height(Length::Fill)
+            .width(Length::Fill);
 
         if self.dnd_hovered.as_ref().map(|(l, _)| l) == Some(&tab_location) {
             tab_view = tab_view.style(cosmic::theme::Container::custom(|t| {

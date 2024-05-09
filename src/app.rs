@@ -247,6 +247,7 @@ impl ContextPage {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DialogPage {
+    EmptyTrash,
     FailedOperation(u64),
     NewItem {
         parent: PathBuf,
@@ -1034,6 +1035,9 @@ impl Application for App {
             Message::DialogComplete => {
                 if let Some(dialog_page) = self.dialog_pages.pop_front() {
                     match dialog_page {
+                        DialogPage::EmptyTrash => {
+                            self.operation(Operation::EmptyTrash);
+                        }
                         DialogPage::FailedOperation(id) => {
                             log::warn!("TODO: retry operation {}", id);
                         }
@@ -1488,6 +1492,9 @@ impl Application for App {
                                 self.rescan_tab(entity, tab_path),
                             ]));
                         }
+                        tab::Command::EmptyTrash => {
+                            self.dialog_pages.push_back(DialogPage::EmptyTrash);
+                        }
                         tab::Command::FocusButton(id) => {
                             commands.push(widget::button::focus(id));
                         }
@@ -1758,6 +1765,14 @@ impl Application for App {
         let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
 
         let dialog = match dialog_page {
+            DialogPage::EmptyTrash => widget::dialog(fl!("empty-trash"))
+                .body(fl!("empty-trash-warning"))
+                .primary_action(
+                    widget::button::suggested(fl!("empty-trash")).on_press(Message::DialogComplete),
+                )
+                .secondary_action(
+                    widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                ),
             DialogPage::FailedOperation(id) => {
                 //TODO: try next dialog page (making sure index is used by Dialog messages)?
                 let (operation, err) = self.failed_operations.get(id)?;

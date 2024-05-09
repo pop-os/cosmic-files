@@ -618,6 +618,9 @@ impl Application for App {
                         tab::Command::DropFiles(_, _) => {
                             log::warn!("DropFiles not supported in dialog");
                         }
+                        tab::Command::EmptyTrash => {
+                            log::warn!("EmptyTrash not supported in dialog");
+                        }
                         tab::Command::FocusButton(id) => {
                             commands.push(widget::button::focus(id));
                         }
