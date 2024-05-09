@@ -425,23 +425,21 @@ impl App {
             }
         }
         // Sort by name lexically
-        nav_items
-            .sort_by(|a, b| lexical_sort::natural_lexical_cmp(&a.1.name(), &b.1.name()));
+        nav_items.sort_by(|a, b| lexical_sort::natural_lexical_cmp(&a.1.name(), &b.1.name()));
         // Add items to nav model
         for (key, item) in nav_items {
             nav_model = nav_model.insert(|mut b| {
-                b = b.text(item.name())
-                .data(MounterData(key, item.clone()));
-            if let Some(path) = item.path() {
-                b = b.data(Location::Path(path.clone()));
-            }
-            if let Some(icon) = item.icon() {
-                b = b.icon(widget::icon::icon(icon).size(16));
-            }
-            if item.is_mounted() {
-                b = b.closable();
-            }
-            b
+                b = b.text(item.name()).data(MounterData(key, item.clone()));
+                if let Some(path) = item.path() {
+                    b = b.data(Location::Path(path.clone()));
+                }
+                if let Some(icon) = item.icon() {
+                    b = b.icon(widget::icon::icon(icon).size(16));
+                }
+                if item.is_mounted() {
+                    b = b.closable();
+                }
+                b
             });
         }
 
@@ -1701,7 +1699,8 @@ impl Application for App {
                 }
 
                 NavMenuAction::RemoveFromSidebar(entity) => {
-                    if let Some(FavoriteIndex(favorite_i)) = self.nav_model.data::<FavoriteIndex>(entity)
+                    if let Some(FavoriteIndex(favorite_i)) =
+                        self.nav_model.data::<FavoriteIndex>(entity)
                     {
                         let mut favorites = self.config.favorites.clone();
                         favorites.remove(*favorite_i);
