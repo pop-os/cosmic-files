@@ -948,7 +948,10 @@ impl Application for App {
         // Why: It'd be weird to close everything all at once
         // Usually, the Escape key (for example) closes menus and panes one by one instead
         // of closing everything on one press
-        // TODO: Close MenuBar too
+        if self.core.window.show_context {
+            self.core.window.show_context = false;
+            return Command::none();
+        }
         if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
             if tab.context_menu.is_some() {
                 tab.context_menu = None;
@@ -964,7 +967,6 @@ impl Application for App {
                 return Command::none();
             }
         }
-        self.core.window.show_context = false;
 
         Command::none()
     }
