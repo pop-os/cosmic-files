@@ -1218,7 +1218,19 @@ impl Tab {
                 }
             }
             Message::Location(location) => {
-                cd = Some(location);
+                // Workaround to support favorited files
+                match &location {
+                    Location::Path(path) => {
+                        if path.is_dir() {
+                            cd = Some(location);
+                        } else {
+                            commands.push(Command::OpenFile(path.clone()));
+                        }
+                    }
+                    Location::Trash => {
+                        cd = Some(location);
+                    }
+                }
             }
             Message::LocationUp => {
                 // Sets location to the path's parent

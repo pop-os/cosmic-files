@@ -148,7 +148,7 @@ impl MenuAction for Action {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum ContextItem {
+pub enum ContextItem {
     NavBar(segmented_button::Entity),
     TabBar(segmented_button::Entity),
 }
