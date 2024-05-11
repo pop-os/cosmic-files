@@ -46,7 +46,6 @@ rename-folder = Renombrar carpeta
 ## Replace Dialog
 replace = Reemplazar
 replace-title = {$filename} ya existe en esta ruta.
-replace-warning = Do you want to replace it with the one you are saving? Replacing it will overwrite its content.
 replace-warning = Quieres remplazarlo con el que estas guardando? Reemplazarlo sobre-escribirá su contenido.
 
 # Context Pages
