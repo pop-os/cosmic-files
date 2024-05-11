@@ -5,6 +5,17 @@ filesystem = System plików
 home = Katalog Domowy
 trash = Kosz
 
+# List view
+name = Nazwa
+modified = Zmodyfikowany
+size = Rozmiar
+
+# Dialogs
+
+## Empty Trash Dialog
+empty-trash = Opróżnij kosz
+empty-trash-warning = Czy chcesz bezpowrotnie usunąć wszystko z Kosza?
+
 # New File/Folder Dialog
 create-new-file = Utwórz nowy plik
 create-new-folder = Utwórz nowy katalog
@@ -36,11 +47,6 @@ rename-folder = Zmień nazwę katalogu
 replace = Zastąp
 replace-title = {$filename} już istnieje w tym miejscu.
 replace-warning = Czy chcesz by obecny plik został zastąpiony? To nadpisze jego zawartość.
-
-# List view
-name = Nazwa
-modified = Zmodyfikowany
-size = Rozmiar
 
 # Context Pages
 
@@ -79,11 +85,13 @@ dark = Ciemny
 light = Jasny
 
 # Context menu
+add-to-sidebar = Dodaj do bocznego panelu
 new-file = Nowy plik
 new-folder = Nowy katalog
 open-in-terminal = Otwórz w terminalu
 move-to-trash = Przenieś do kosza
 restore-from-trash = Przywróć z kosza
+remove-from-sidebar = Usuń z bocznego panelu
 sort-by-name = Uszereguj według nazwy
 sort-by-modified = Uszereguj według czasu modyfikacji
 sort-by-size = Uszereguj według rozmiaru
@@ -110,4 +118,5 @@ view = Widok
 grid-view = Widok siatki
 list-view = Widok listy
 menu-settings = Ustawienia...
+menu-about = O Plikach COSMIC...
 menu-about = O Plikach COSMIC...
