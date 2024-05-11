@@ -79,44 +79,44 @@ ascending = Ascendiente
 descending = Descendiente
 
 ### Appearance
-appearance = Appearance
-theme = Theme
+appearance = Apariencia
+theme = Tema
 match-desktop = Match desktop
-dark = Dark
-light = Light
+dark = Oscuro
+light = Claro
 
 # Context menu
-add-to-sidebar = Add to sidebar
-new-file = New file
-new-folder = New folder
-open-in-terminal = Open in terminal
-move-to-trash = Move to trash
-restore-from-trash = Restore from trash
-remove-from-sidebar = Remove from sidebar
-sort-by-name = Sort by name
-sort-by-modified = Sort by modified
-sort-by-size = Sort by size
+add-to-sidebar = Añadir a barra lateral
+new-file = Nuevo archivo
+new-folder = Nueva carpeta
+open-in-terminal = Abrir en terminal
+move-to-trash = Mover a papelera
+restore-from-trash = Recuperar desde papelera
+remove-from-sidebar = Quitar de barra lateral
+sort-by-name = Ordenar por nombre
+sort-by-modified = Ordenar por modificado
+sort-by-size = Ordenar por tamaño
 
 # Menu
 
 ## File
-file = File
-new-tab = New tab
-new-window = New window
-rename = Rename
-close-tab = Close tab
-quit = Quit
+file = Archivo
+new-tab = Nueva tab
+new-window = Nueva ventana
+rename = Renombrar
+close-tab = Cerrar tab
+quit = Cerrar
 
 ## Edit
-edit = Edit
-cut = Cut
-copy = Copy
-paste = Paste
-select-all = Select all
+edit = Editar
+cut = Cortar
+copy = Copiar
+paste = Pegar
+select-all = Seleccionar Todo
 
 ## View
-view = View
-grid-view = Grid view
-list-view = List view
-menu-settings = Settings...
-menu-about = About COSMIC Files...
+view = Vista
+grid-view = Vista de grilla
+list-view = Vista de lista
+menu-settings = Configuración...
+menu-about = Acerca de Archivos COSMIC...
