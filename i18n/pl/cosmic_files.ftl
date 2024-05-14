@@ -58,6 +58,7 @@ operations = Operacje
 pending = Oczekujące
 failed = Nieudane
 complete = Ukończone
+copy_noun = Kopiuj
 
 ## Open with
 open-with = Otwórz za pomocą
@@ -118,5 +119,4 @@ view = Widok
 grid-view = Widok siatki
 list-view = Widok listy
 menu-settings = Ustawienia...
-menu-about = O Plikach COSMIC...
 menu-about = O Plikach COSMIC...
