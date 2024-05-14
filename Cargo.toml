@@ -73,6 +73,7 @@ fork = "0.1"
 fastrand = "2"
 tempfile = "3"
 test-log = "0.2"
+tokio = { version = "1", features = ["rt", "macros"] }
 
 # [patch.'https://github.com/pop-os/libcosmic']
 # libcosmic = { path = "../libcosmic" }

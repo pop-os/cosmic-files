@@ -52,6 +52,7 @@ operations = Operations
 pending = Pending
 failed = Failed
 complete = Complete
+copy_noun = Copy
 
 ## Open with
 open-with = Open with
