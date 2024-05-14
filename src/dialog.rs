@@ -411,8 +411,9 @@ impl Application for App {
         Some(&self.nav_model)
     }
 
-    fn on_app_exit(&mut self) {
+    fn on_app_exit(&mut self) -> Option<Message> {
         self.result_opt = Some(DialogResult::Cancel);
+        None
     }
 
     fn on_nav_select(&mut self, entity: segmented_button::Entity) -> Command<Message> {
@@ -791,10 +792,7 @@ impl Application for App {
                         }
                     }
 
-                    //TODO: how to properly kill this task?
-                    loop {
-                        tokio::time::sleep(time::Duration::new(1, 0)).await;
-                    }
+                    std::future::pending().await
                 },
             ),
             self.tab.subscription().map(Message::TabMessage),

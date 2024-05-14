@@ -292,7 +292,6 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                     pos_opt: Cell::new(None),
                     rect_opt: Cell::new(None),
                     selected: false,
-                    click_time: None,
                 });
             }
         }
@@ -385,7 +384,6 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     pos_opt: Cell::new(None),
                     rect_opt: Cell::new(None),
                     selected: false,
-                    click_time: None,
                 });
             }
         }
@@ -521,7 +519,6 @@ pub struct Item {
     pub pos_opt: Cell<Option<(usize, usize)>>,
     pub rect_opt: Cell<Option<Rectangle>>,
     pub selected: bool,
-    pub click_time: Option<Instant>,
 }
 
 impl Item {
@@ -769,7 +766,6 @@ impl Tab {
                     continue;
                 }
                 item.selected = true;
-                item.click_time = None;
             }
         }
     }
@@ -1275,7 +1271,6 @@ impl Tab {
                             } else {
                                 item.selected = false;
                             }
-                            item.click_time = None;
                         }
                     }
                 }
