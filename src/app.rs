@@ -2383,6 +2383,16 @@ pub(crate) mod test_utils {
         }))
     }
 
+    // Filter `path` for files
+    pub fn filter_files(path: &Path) -> io::Result<impl Iterator<Item = PathBuf>> {
+        Ok(path.read_dir()?.filter_map(|entry| {
+            entry.ok().and_then(|entry| {
+                let path = entry.path();
+                path.is_file().then_some(path)
+            })
+        }))
+    }
+
     /// Boiler plate for Tab tests
     pub fn tab_click_new(
         files: usize,
