@@ -2407,7 +2407,9 @@ impl Tab {
                         |mut output| async move {
                             let (path, thumbnail) = tokio::task::spawn_blocking(move || {
                                 let start = std::time::Instant::now();
-                                let thumbnail = match image::io::Reader::open(&path) {
+                                let thumbnail = match image::io::Reader::open(&path)
+                                    .and_then(|img| img.with_guessed_format())
+                                {
                                     Ok(reader) => match reader.decode() {
                                         Ok(image) => {
                                             //TODO: configurable thumbnail size?
