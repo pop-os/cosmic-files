@@ -5,6 +5,17 @@ filesystem = Файлавая сістэма
 home = Хатняя папка
 trash = Сметніца
 
+# List view
+name = Назва
+modified = Зменена
+size = Памер
+
+# Dialogs
+
+## Empty Trash Dialog
+empty-trash = Ачысціць сметніцу
+empty-trash-warning = Вы сапраўды хочаце назаўсёды выдаліць усе элементы з сметніцы?
+
 # New File/Folder Dialog
 create-new-file = Стварыць новы файл
 create-new-folder = Стварыць новую папку
@@ -21,6 +32,8 @@ cancel = Скасаваць
 open = Адкрыць
 open-file = Адкрыць файл
 open-folder = Адкрыць папку
+open-in-new-tab = Адкрыць у новай укладцы
+open-in-new-window = Адкрыць у навым акне
 open-multiple-files = Адкрыць некалькі файлаў
 open-multiple-folders = Адкрыць некалькі папак
 save = Захаваць
@@ -33,7 +46,7 @@ rename-folder = Перайменаваць папку
 # Replace Dialog
 replace = Замяніць
 replace-title = {$filename} ужо існуе ў гэтым месцы.
-replace-warning = Вы сапраўды хаціце замяніць яго на той, які вы захоўваеце? Пры замене яго змесціва будзе перапісана.
+replace-warning = Вы сапраўды хочыце замяніць яго на той, які вы захоўваеце? Пры замене яго змесціва будзе перапісана.
 
 # List view
 name = Назва
@@ -77,11 +90,13 @@ dark = Цёмная
 light = Светлая
 
 # Context menu
+add-to-sidebar = Дадаць на бакавую панэль
 new-file = Новы файл
 new-folder = Новая папка
 open-in-terminal = Адкрыць у кансолі
 move-to-trash = Перамясціць у сметніцу
 restore-from-trash = Аднавіць са сметніцы
+remove-from-sidebar = Выдаліць з бакавой панэлі
 sort-by-name = Сартаваць па назве
 sort-by-modified = Сартаваць па змяненні
 sort-by-size = Сартаваць па памеры
@@ -92,6 +107,7 @@ sort-by-size = Сартаваць па памеры
 file = Файл
 new-tab = Новая ўкладка
 new-window = Новае акно
+rename = Перайменаваць
 close-tab = Закрыць укладку
 quit = Выйсці
 
