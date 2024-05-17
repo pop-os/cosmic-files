@@ -2264,8 +2264,7 @@ impl Tab {
             .on_press(move |_point_opt| Message::Click(None))
             .on_release(|_| Message::ClickRelease(None))
             .on_back_press(move |_point_opt| Message::GoPrevious)
-            .on_forward_press(move |_point_opt| Message::GoNext)
-            .on_resize(Message::Resize);
+            .on_forward_press(move |_point_opt| Message::GoNext);
 
         if self.context_menu.is_some() {
             mouse_area = mouse_area.on_right_press(move |_point_opt| Message::ContextMenu(None));
@@ -2285,11 +2284,14 @@ impl Tab {
         tab_column = tab_column.push(location_view);
         if can_scroll {
             tab_column = tab_column.push(
-                widget::scrollable(popover)
-                    .id(self.scrollable_id.clone())
-                    .on_scroll(Message::Scroll)
-                    .width(Length::Fill)
-                    .height(Length::Fill),
+                mouse_area::MouseArea::new(
+                    widget::scrollable(popover)
+                        .id(self.scrollable_id.clone())
+                        .on_scroll(Message::Scroll)
+                        .width(Length::Fill)
+                        .height(Length::Fill),
+                )
+                .on_resize(Message::Resize),
             );
         } else {
             tab_column = tab_column.push(popover);
