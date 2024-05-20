@@ -99,9 +99,7 @@ pub enum Action {
     WindowNew,
 }
 
-impl MenuAction for Action {
-    type Message = Message;
-
+impl Action {
     fn message(&self, entity_opt: Option<Entity>) -> Message {
         match self {
             Action::About => Message::ToggleContextPage(ContextPage::About),
@@ -147,6 +145,14 @@ impl MenuAction for Action {
     }
 }
 
+impl MenuAction for Action {
+    type Message = Message;
+
+    fn message(&self) -> Message {
+        self.message(None)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ContextItem {
     NavBar(segmented_button::Entity),
@@ -164,7 +170,7 @@ pub enum NavMenuAction {
 impl MenuAction for NavMenuAction {
     type Message = cosmic::app::Message<Message>;
 
-    fn message(&self, _entity: Option<Entity>) -> Self::Message {
+    fn message(&self) -> Self::Message {
         cosmic::app::Message::App(Message::NavMenuAction(*self))
     }
 }
