@@ -10,7 +10,7 @@ use std::{path::PathBuf, process};
 
 use app::{App, Flags};
 mod app;
-mod clipboard;
+pub mod clipboard;
 use config::{Config, CONFIG_VERSION};
 mod config;
 pub mod dialog;
