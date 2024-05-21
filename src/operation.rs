@@ -86,7 +86,7 @@ impl Operation {
                                         .unwrap_or_default(),
                                 ) {
                                     // '.' needs to be re-added for paths with extensions.
-                                    let dot = ext.is_empty().then_some("").unwrap_or(".");
+                                    let dot = if ext.is_empty() { "" } else { "." };
                                     let mut n = 0u32;
                                     // Loop until a valid `copy n` variant is found
                                     loop {
@@ -112,6 +112,11 @@ impl Operation {
                                     to
                                 };
 
+                                (from, to)
+                            } else if let Some(name) =
+                                from.is_file().then(|| from.file_name()).flatten()
+                            {
+                                let to = to.join(name);
                                 (from, to)
                             } else {
                                 (from, to.to_owned())
@@ -316,7 +321,11 @@ impl Operation {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, io, path::PathBuf};
+    use std::{
+        fs::{self, File},
+        io,
+        path::PathBuf,
+    };
 
     use cosmic::iced::futures::channel::mpsc;
     use log::{debug, trace};
@@ -506,6 +515,28 @@ mod tests {
             second_dir.join(base_name).exists(),
             "Second file should still exist"
         );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn copy_file_with_diff_name_to_diff_dir() -> io::Result<()> {
+        let fs = empty_fs()?;
+        let path = fs.path();
+
+        let dir_path = path.join("cosmic");
+        fs::create_dir(&dir_path)?;
+        let file_path = path.join("ferris");
+        File::create(&file_path)?;
+        let expected = dir_path.join("ferris");
+
+        debug!("Copying {} to {}", file_path.display(), expected.display());
+        operation_copy(vec![file_path.clone()], dir_path.clone())
+            .await
+            .expect("Copy operation should have succeeded");
+
+        assert!(file_path.exists(), "Original file should still exist");
+        assert!(expected.exists(), "File should have been copied");
 
         Ok(())
     }
