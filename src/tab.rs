@@ -710,7 +710,7 @@ pub struct Tab {
     pub dnd_hovered: Option<(Location, Instant)>,
     scrollable_id: widget::Id,
     select_focus: Option<usize>,
-    select_shift: Option<usize>,
+    select_range: Option<(usize, usize)>,
     cached_selected: RefCell<Option<bool>>,
     clicked: Option<usize>,
     selected_clicked: bool,
@@ -734,7 +734,7 @@ impl Tab {
             items_opt: None,
             scrollable_id: widget::Id::unique(),
             select_focus: None,
-            select_shift: None,
+            select_range: None,
             cached_selected: RefCell::new(None),
             clicked: None,
             dnd_hovered: None,
@@ -808,21 +808,19 @@ impl Tab {
         let mut start = (row, col);
         let mut end = (row, col);
         if mod_shift {
-            if self.select_focus.is_none() || self.select_shift.is_none() {
-                // Set select shift to initial state if necessary
-                self.select_shift = self.select_focus;
+            if self.select_focus.is_none() || self.select_range.is_none() {
+                // Set select range to initial state if necessary
+                self.select_range = self.select_focus.map(|i| (i, i));
             }
-            if let Some(pos) = self.select_shift_pos_opt() {
+
+            if let Some(pos) = self.select_range_start_pos_opt() {
                 if pos.0 < row || (pos.0 == row && pos.1 < col) {
                     start = pos;
                 } else {
                     end = pos;
                 }
             }
-        } else {
-            // Clear select shift if the modifier is not set
-            self.select_shift = None;
-        };
+        }
 
         let mut found = false;
         if let Some(ref mut items) = self.items_opt {
@@ -843,6 +841,11 @@ impl Tab {
                 if pos == (row, col) {
                     // Update focus if this is what we wanted to select
                     self.select_focus = Some(i);
+                    self.select_range = if mod_shift {
+                        self.select_range.map(|r| (r.0, i))
+                    } else {
+                        Some((i, i))
+                    };
                     found = true;
                 }
                 item.selected = true;
@@ -919,9 +922,9 @@ impl Tab {
         }
     }
 
-    fn select_shift_pos_opt(&self) -> Option<(usize, usize)> {
+    fn select_range_start_pos_opt(&self) -> Option<(usize, usize)> {
         let items = self.items_opt.as_ref()?;
-        let item = items.get(self.select_shift?)?;
+        let item = items.get(self.select_range.map(|r| r.0)?)?;
         item.pos_opt.get()
     }
 
@@ -1004,6 +1007,7 @@ impl Tab {
                         if mod_ctrl {
                             if Some(i) == click_i_opt && item.selected {
                                 item.selected = false;
+                                self.select_range = None;
                             }
                         } else if Some(i) != click_i_opt {
                             item.selected = false;
@@ -1044,43 +1048,64 @@ impl Tab {
                 if click_i_opt.is_none() {
                     self.clicked = click_i_opt;
                 }
-                let dont_unset = mod_ctrl
-                    || mod_shift
-                    || self.column_sort().is_some_and(|l| {
-                        l.iter()
-                            .any(|(e_i, e)| Some(e_i) == click_i_opt.as_ref() && e.selected)
-                    });
-                *self.cached_selected.borrow_mut() = None;
-                if let Some(ref mut items) = self.items_opt {
-                    for (i, item) in items.iter_mut().enumerate() {
-                        if Some(i) == click_i_opt {
-                            // Filter out selection if it does not match dialog kind
-                            if let Some(dialog) = &self.dialog {
-                                let item_is_dir = item.metadata.is_dir();
-                                if item_is_dir != dialog.is_dir() {
-                                    // Allow selecting folder if dialog is for files to make it
-                                    // possible to double click
-                                    //TODO: clear any other selection when selecting a folder
-                                    if !item_is_dir {
-                                        continue;
-                                    }
+
+                if mod_shift {
+                    if let Some(click_i) = click_i_opt {
+                        self.select_range = self
+                            .select_range
+                            .map_or(Some((click_i, click_i)), |r| Some((r.0, click_i)));
+                        if let Some(range) = self.select_range {
+                            let min = range.0.min(range.1);
+                            let max = range.0.max(range.1);
+                            if let Some(ref mut items) = self.items_opt {
+                                for (i, item) in items.iter_mut().enumerate() {
+                                    item.selected = i >= min && i <= max;
                                 }
                             }
-                            if !item.selected {
-                                self.clicked = click_i_opt;
-                                item.selected = true;
-                            }
+                        }
+                        self.clicked = click_i_opt;
+                        self.select_focus = click_i_opt;
+                        self.selected_clicked = true;
+                    }
+                } else {
+                    let dont_unset = mod_ctrl
+                        || self.column_sort().is_some_and(|l| {
+                            l.iter()
+                                .any(|(e_i, e)| Some(e_i) == click_i_opt.as_ref() && e.selected)
+                        });
+                    *self.cached_selected.borrow_mut() = None;
+                    if let Some(ref mut items) = self.items_opt {
+                        for (i, item) in items.iter_mut().enumerate() {
+                            if Some(i) == click_i_opt {
+                                // Filter out selection if it does not match dialog kind
+                                if let Some(dialog) = &self.dialog {
+                                    let item_is_dir = item.metadata.is_dir();
+                                    if item_is_dir != dialog.is_dir() {
+                                        // Allow selecting folder if dialog is for files to make it
+                                        // possible to double click
+                                        //TODO: clear any other selection when selecting a folder
+                                        if !item_is_dir {
+                                            continue;
+                                        }
+                                    }
+                                }
+                                if !item.selected {
+                                    self.clicked = click_i_opt;
+                                    item.selected = true;
+                                    self.select_range = Some((i, i));
+                                }
 
-                            self.selected_clicked = true;
-                        } else if !dont_unset && item.selected {
-                            self.clicked = click_i_opt;
-                            item.selected = false;
+                                self.selected_clicked = true;
+                            } else if !dont_unset && item.selected {
+                                self.clicked = click_i_opt;
+                                item.selected = false;
+                            }
                         }
                     }
-                }
-                if self.select_focus.take().is_some() {
-                    // Unfocus currently focused button
-                    commands.push(Command::FocusButton(widget::Id::unique()));
+                    if self.select_focus.take().is_some() {
+                        // Unfocus currently focused button
+                        commands.push(Command::FocusButton(widget::Id::unique()));
+                    }
                 }
             }
             Message::Config(config) => {
