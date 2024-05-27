@@ -474,9 +474,7 @@ fn update<Message: Clone>(
             state.drag_initiated = cursor.position();
         }
 
-        if let Some(message) = widget.on_press.as_ref() {
-            shell.publish(message(cursor.position_in(layout_bounds)));
-
+        if widget.on_press.is_some() {
             return event::Status::Captured;
         }
     }
