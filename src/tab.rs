@@ -292,6 +292,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                     pos_opt: Cell::new(None),
                     rect_opt: Cell::new(None),
                     selected: false,
+                    overlaps_drag_rect: false,
                 });
             }
         }
@@ -384,6 +385,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     pos_opt: Cell::new(None),
                     rect_opt: Cell::new(None),
                     selected: false,
+                    overlaps_drag_rect: false,
                 });
             }
         }
@@ -519,6 +521,7 @@ pub struct Item {
     pub pos_opt: Cell<Option<(usize, usize)>>,
     pub rect_opt: Cell<Option<Rectangle>>,
     pub selected: bool,
+    pub overlaps_drag_rect: bool,
 }
 
 impl Item {
@@ -710,6 +713,7 @@ pub struct Tab {
     select_shift: Option<usize>,
     cached_selected: RefCell<Option<bool>>,
     clicked: Option<usize>,
+    selected_clicked: bool,
 }
 
 impl Tab {
@@ -734,6 +738,7 @@ impl Tab {
             cached_selected: RefCell::new(None),
             clicked: None,
             dnd_hovered: None,
+            selected_clicked: false,
         }
     }
 
@@ -838,22 +843,33 @@ impl Tab {
                 if pos == (row, col) {
                     // Update focus if this is what we wanted to select
                     self.select_focus = Some(i);
+                    found = true;
                 }
                 item.selected = true;
-                found = true;
             }
         }
         found
     }
 
-    pub fn select_rect(&mut self, rect: Rectangle) {
+    pub fn select_rect(&mut self, rect: Rectangle, mod_ctrl: bool, mod_shift: bool) {
         *self.cached_selected.borrow_mut() = None;
         if let Some(ref mut items) = self.items_opt {
-            for (_i, item) in items.iter_mut().enumerate() {
-                //TODO: modifiers
-                item.selected = match item.rect_opt.get() {
-                    Some(item_rect) => item_rect.intersects(&rect),
-                    None => false,
+            for item in items.iter_mut() {
+                let was_overlapped = item.overlaps_drag_rect;
+                item.overlaps_drag_rect = item
+                    .rect_opt
+                    .get()
+                    .map(|r| r.intersects(&rect))
+                    .unwrap_or(false);
+
+                item.selected = if mod_ctrl || mod_shift {
+                    if was_overlapped == item.overlaps_drag_rect {
+                        item.selected
+                    } else {
+                        !item.selected
+                    }
+                } else {
+                    item.overlaps_drag_rect
                 };
             }
         }
@@ -997,6 +1013,11 @@ impl Tab {
             }
             Message::DragEnd(_) => {
                 self.clicked = None;
+                if let Some(ref mut items) = self.items_opt {
+                    for item in items.iter_mut() {
+                        item.overlaps_drag_rect = false;
+                    }
+                }
             }
             Message::DoubleClick(click_i_opt) => {
                 if let Some(clicked_item) = self
@@ -1018,11 +1039,13 @@ impl Tab {
                 }
             }
             Message::Click(click_i_opt) => {
+                self.selected_clicked = false;
                 self.context_menu = None;
                 if click_i_opt.is_none() {
                     self.clicked = click_i_opt;
                 }
                 let dont_unset = mod_ctrl
+                    || mod_shift
                     || self.column_sort().is_some_and(|l| {
                         l.iter()
                             .any(|(e_i, e)| Some(e_i) == click_i_opt.as_ref() && e.selected)
@@ -1075,7 +1098,7 @@ impl Tab {
             Message::Drag(rect_opt) => match rect_opt {
                 Some(rect) => {
                     self.context_menu = None;
-                    self.select_rect(rect);
+                    self.select_rect(rect, mod_ctrl, mod_shift);
                     if self.select_focus.take().is_some() {
                         // Unfocus currently focused button
                         commands.push(Command::FocusButton(widget::Id::unique()));
@@ -1902,6 +1925,7 @@ impl Tab {
                     .map(|m| cosmic::app::Message::App(crate::app::Message::TabMessage(None, m)))
             }),
             mouse_area::MouseArea::new(grid)
+                .on_press(|_| Message::Click(None))
                 .on_drag(Message::Drag)
                 .on_drag_end(|_| Message::DragEnd(None))
                 .show_drag_rect(true)
@@ -2255,20 +2279,23 @@ impl Tab {
             item_view,
             Id::new("tab-view"),
         );
-        let item_view = if let Some(drag_list) = drag_list {
-            let drag_list = ArcElementWrapper(Arc::new(Mutex::new(drag_list)));
-            item_view
-                .drag_content(move || {
-                    ClipboardCopy::new(crate::clipboard::ClipboardKind::Copy, &files)
-                })
-                .drag_icon(move || {
-                    let state: tree::State =
-                        Widget::<cosmic::app::Message<app::Message>, _, _>::state(&drag_list);
-                    (drag_list.clone().into(), state)
-                })
-        } else {
-            item_view
+
+        let item_view = match drag_list {
+            Some(drag_list) if self.selected_clicked => {
+                let drag_list = ArcElementWrapper(Arc::new(Mutex::new(drag_list)));
+                item_view
+                    .drag_content(move || {
+                        ClipboardCopy::new(crate::clipboard::ClipboardKind::Copy, &files)
+                    })
+                    .drag_icon(move || {
+                        let state: tree::State =
+                            Widget::<cosmic::app::Message<app::Message>, _, _>::state(&drag_list);
+                        (drag_list.clone().into(), state)
+                    })
+            }
+            _ => item_view,
         };
+
         let tab_location = self.location.clone();
         let mut mouse_area = mouse_area::MouseArea::new(item_view)
             .on_press(move |_point_opt| Message::Click(None))
