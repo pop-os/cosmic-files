@@ -2286,6 +2286,7 @@ impl Tab {
                 widget::column::with_children(children).padding([0, space_m]),
             )
             .with_id(Id::new("list-view"))
+            .on_press(|_| Message::Click(None))
             .on_drag(Message::Drag)
             .on_drag_end(|_| Message::DragEnd(None))
             .show_drag_rect(true)
