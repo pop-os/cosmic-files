@@ -1157,16 +1157,19 @@ impl Tab {
                 }
             }
             Message::ItemDown => {
-                if let Some((row, col)) = self.select_focus_pos_opt() {
+                if let Some((row, col)) = self.select_focus_pos_opt().or(self.select_last_pos_opt())
+                {
+                    if self.select_focus.is_none() {
+                        // Select last item in current selection to focus it.
+                        self.select_position(row, col, mod_shift);
+                    }
+
                     //TODO: Shift modifier should select items in between
                     // Try to select item in next row
                     if !self.select_position(row + 1, col, mod_shift) {
                         // Ensure current item is still selected if there are no other items
                         self.select_position(row, col, mod_shift);
                     }
-                } else if let Some((row, col)) = self.select_last_pos_opt() {
-                    // Select last item in current selection to focus it
-                    self.select_position(row, col, mod_shift);
                 } else {
                     // Select first item
                     //TODO: select first in scroll
@@ -1180,7 +1183,14 @@ impl Tab {
                 }
             }
             Message::ItemLeft => {
-                if let Some((row, col)) = self.select_focus_pos_opt() {
+                if let Some((row, col)) =
+                    self.select_focus_pos_opt().or(self.select_first_pos_opt())
+                {
+                    if self.select_focus.is_none() {
+                        // Select first item in current selection to focus it.
+                        self.select_position(row, col, mod_shift);
+                    }
+
                     // Try to select previous item in current row
                     if !col
                         .checked_sub(1)
@@ -1205,9 +1215,6 @@ impl Tab {
                             self.select_position(row, col, mod_shift);
                         }
                     }
-                } else if let Some((row, col)) = self.select_first_pos_opt() {
-                    // Select first item in current selection to focus it
-                    self.select_position(row, col, mod_shift);
                 } else {
                     // Select first item
                     //TODO: select first in scroll
@@ -1221,7 +1228,12 @@ impl Tab {
                 }
             }
             Message::ItemRight => {
-                if let Some((row, col)) = self.select_focus_pos_opt() {
+                if let Some((row, col)) = self.select_focus_pos_opt().or(self.select_last_pos_opt())
+                {
+                    if self.select_focus.is_none() {
+                        // Select last item in current selection to focus it.
+                        self.select_position(row, col, mod_shift);
+                    }
                     // Try to select next item in current row
                     if !self.select_position(row, col + 1, mod_shift) {
                         // Try to select first item in next row
@@ -1230,9 +1242,6 @@ impl Tab {
                             self.select_position(row, col, mod_shift);
                         }
                     }
-                } else if let Some((row, col)) = self.select_last_pos_opt() {
-                    // Select last item in current selection to focus it
-                    self.select_position(row, col, mod_shift);
                 } else {
                     // Select first item
                     //TODO: select first in scroll
@@ -1246,7 +1255,14 @@ impl Tab {
                 }
             }
             Message::ItemUp => {
-                if let Some((row, col)) = self.select_focus_pos_opt() {
+                if let Some((row, col)) =
+                    self.select_focus_pos_opt().or(self.select_first_pos_opt())
+                {
+                    if self.select_focus.is_none() {
+                        // Select first item in current selection to focus it.
+                        self.select_position(row, col, mod_shift);
+                    }
+
                     //TODO: Shift modifier should select items in between
                     // Try to select item in last row
                     if !row
@@ -1256,9 +1272,6 @@ impl Tab {
                         // Ensure current item is still selected if there are no other items
                         self.select_position(row, col, mod_shift);
                     }
-                } else if let Some((row, col)) = self.select_first_pos_opt() {
-                    // Select first item in current selection to focus it
-                    self.select_position(row, col, mod_shift);
                 } else {
                     // Select first item
                     //TODO: select first in scroll
