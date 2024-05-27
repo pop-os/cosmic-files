@@ -979,14 +979,18 @@ impl Tab {
             && self.dialog.as_ref().map_or(true, |x| x.multiple());
         match message {
             Message::ClickRelease(click_i_opt) => {
-                if click_i_opt != self.clicked.take() {
+                if click_i_opt == self.clicked.take() {
                     return commands;
                 }
                 self.context_menu = None;
-                if let Some(l) = self.items_opt.as_mut() {
-                    for item in l.iter_mut().enumerate() {
-                        if Some(item.0) != click_i_opt {
-                            item.1.selected = false;
+                if let Some(ref mut items) = self.items_opt {
+                    for (i, item) in items.iter_mut().enumerate() {
+                        if mod_ctrl {
+                            if Some(i) == click_i_opt && item.selected {
+                                item.selected = false;
+                            }
+                        } else if Some(i) != click_i_opt {
+                            item.selected = false;
                         }
                     }
                 }
@@ -1015,7 +1019,7 @@ impl Tab {
             }
             Message::Click(click_i_opt) => {
                 self.context_menu = None;
-                if !mod_ctrl {
+                if click_i_opt.is_none() {
                     self.clicked = click_i_opt;
                 }
                 let dont_unset = mod_ctrl
@@ -1039,8 +1043,14 @@ impl Tab {
                                     }
                                 }
                             }
-                            item.selected = true;
-                        } else if !dont_unset {
+                            if !item.selected {
+                                self.clicked = click_i_opt;
+                                item.selected = true;
+                            }
+
+                            self.selected_clicked = true;
+                        } else if !dont_unset && item.selected {
+                            self.clicked = click_i_opt;
                             item.selected = false;
                         }
                     }
