@@ -169,7 +169,10 @@ pub fn context_menu<'a>(
         .into()
 }
 
-pub fn menu_bar<'a>(key_binds: &HashMap<KeyBind, Action>) -> Element<'a, Message> {
+pub fn menu_bar<'a>(
+    tab_opt: Option<&Tab>,
+    key_binds: &HashMap<KeyBind, Action>,
+) -> Element<'a, Message> {
     MenuBar::new(vec![
         menu::Tree::with_children(
             menu::root(fl!("file")),
@@ -212,8 +215,31 @@ pub fn menu_bar<'a>(key_binds: &HashMap<KeyBind, Action>) -> Element<'a, Message
             menu::items(
                 key_binds,
                 vec![
-                    menu::Item::Button(fl!("grid-view"), Action::TabViewGrid),
-                    menu::Item::Button(fl!("list-view"), Action::TabViewList),
+                    menu::Item::Button(fl!("zoom-in"), Action::ZoomIn),
+                    menu::Item::Button(fl!("default-size"), Action::ZoomDefault),
+                    menu::Item::Button(fl!("zoom-out"), Action::ZoomOut),
+                    menu::Item::Divider,
+                    menu::Item::CheckBox(
+                        fl!("grid-view"),
+                        tab_opt.map_or(false, |tab| matches!(tab.view, tab::View::Grid)),
+                        Action::TabViewGrid,
+                    ),
+                    menu::Item::CheckBox(
+                        fl!("list-view"),
+                        tab_opt.map_or(false, |tab| matches!(tab.view, tab::View::List)),
+                        Action::TabViewList,
+                    ),
+                    menu::Item::Divider,
+                    menu::Item::CheckBox(
+                        fl!("show-hidden-files"),
+                        tab_opt.map_or(false, |tab| tab.config.show_hidden),
+                        Action::ToggleShowHidden,
+                    ),
+                    menu::Item::CheckBox(
+                        fl!("list-directories-first"),
+                        tab_opt.map_or(false, |tab| tab.config.folders_first),
+                        Action::ToggleFoldersFirst,
+                    ),
                     menu::Item::Divider,
                     menu::Item::Button(fl!("menu-settings"), Action::Settings),
                     menu::Item::Divider,

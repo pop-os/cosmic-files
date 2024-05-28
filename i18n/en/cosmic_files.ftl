@@ -115,8 +115,13 @@ paste = Paste
 select-all = Select all
 
 ## View
+zoom-in = Zoom in
+default-size = Default size
+zoom-out = Zoom out
 view = View
 grid-view = Grid view
 list-view = List view
+show-hidden-files = Show hidden files
+list-directories-first = List directories first
 menu-settings = Settings...
 menu-about = About COSMIC Files...

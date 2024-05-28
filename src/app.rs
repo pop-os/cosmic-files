@@ -93,10 +93,14 @@ pub enum Action {
     TabPrev,
     TabViewGrid,
     TabViewList,
+    ToggleFoldersFirst,
     ToggleShowHidden,
     ToggleSort(HeadingOptions),
     WindowClose,
     WindowNew,
+    ZoomDefault,
+    ZoomIn,
+    ZoomOut,
 }
 
 impl Action {
@@ -137,10 +141,20 @@ impl Action {
             Action::TabViewList => {
                 Message::TabMessage(entity_opt, tab::Message::View(tab::View::List))
             }
-            Action::ToggleShowHidden => Message::TabMessage(None, tab::Message::ToggleShowHidden),
-            Action::ToggleSort(sort) => Message::TabMessage(None, tab::Message::ToggleSort(*sort)),
+            Action::ToggleFoldersFirst => {
+                Message::TabMessage(entity_opt, tab::Message::ToggleFoldersFirst)
+            }
+            Action::ToggleShowHidden => {
+                Message::TabMessage(entity_opt, tab::Message::ToggleShowHidden)
+            }
+            Action::ToggleSort(sort) => {
+                Message::TabMessage(entity_opt, tab::Message::ToggleSort(*sort))
+            }
             Action::WindowClose => Message::WindowClose,
             Action::WindowNew => Message::WindowNew,
+            Action::ZoomDefault => Message::TabMessage(entity_opt, tab::Message::ZoomDefault),
+            Action::ZoomIn => Message::TabMessage(entity_opt, tab::Message::ZoomIn),
+            Action::ZoomOut => Message::TabMessage(entity_opt, tab::Message::ZoomOut),
         }
     }
 }
@@ -1951,7 +1965,7 @@ impl Application for App {
     }
 
     fn header_start(&self) -> Vec<Element<Self::Message>> {
-        vec![menu::menu_bar(&self.key_binds).into()]
+        vec![menu::menu_bar(self.tab_model.active_data::<Tab>(), &self.key_binds).into()]
     }
 
     fn header_end(&self) -> Vec<Element<Self::Message>> {

@@ -111,6 +111,8 @@ impl Default for Config {
 /// locally. Local changes aren't saved to the main config.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
 pub struct TabConfig {
+    /// Show folders before files
+    pub folders_first: bool,
     /// Show hidden files and folders
     pub show_hidden: bool,
     /// Sorter
@@ -123,6 +125,7 @@ pub struct TabConfig {
 impl Default for TabConfig {
     fn default() -> Self {
         Self {
+            folders_first: true,
             show_hidden: false,
             sort_name: HeadingOptions::Name,
             sort_direction: true,

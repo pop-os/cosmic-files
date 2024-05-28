@@ -36,6 +36,7 @@ use std::{
     collections::HashMap,
     fmt,
     fs::{self, Metadata},
+    num::NonZeroU16,
     path::PathBuf,
     time::{Duration, Instant},
 };
@@ -465,6 +466,7 @@ pub enum Message {
     Scroll(Viewport),
     SelectAll,
     Thumbnail(PathBuf, ItemThumbnail),
+    ToggleFoldersFirst,
     ToggleShowHidden,
     View(View),
     ToggleSort(HeadingOptions),
@@ -472,6 +474,9 @@ pub enum Message {
     DndHover(Location),
     DndEnter(Location),
     DndLeave(Location),
+    ZoomDefault,
+    ZoomIn,
+    ZoomOut,
 }
 
 #[derive(Clone, Debug)]
@@ -1394,6 +1399,7 @@ impl Tab {
                     }
                 }
             }
+            Message::ToggleFoldersFirst => self.config.folders_first = !self.config.folders_first,
             Message::ToggleShowHidden => self.config.show_hidden = !self.config.show_hidden,
 
             Message::View(view) => {
@@ -1453,6 +1459,48 @@ impl Tab {
                     self.dnd_hovered = None;
                 }
             }
+            Message::ZoomDefault => match self.view {
+                View::List => self.config.icon_sizes.list = 100.try_into().unwrap(),
+                View::Grid => self.config.icon_sizes.grid = 100.try_into().unwrap(),
+            },
+            Message::ZoomIn => {
+                let zoom_in = |size: &mut NonZeroU16, min: u16, max: u16| {
+                    let mut step = min;
+                    while step <= max {
+                        if size.get() < step {
+                            *size = step.try_into().unwrap();
+                            break;
+                        }
+                        step += 25;
+                    }
+                    if size.get() > step {
+                        *size = step.try_into().unwrap();
+                    }
+                };
+                match self.view {
+                    View::List => zoom_in(&mut self.config.icon_sizes.list, 100, 500),
+                    View::Grid => zoom_in(&mut self.config.icon_sizes.grid, 50, 500),
+                }
+            }
+            Message::ZoomOut => {
+                let zoom_out = |size: &mut NonZeroU16, min: u16, max: u16| {
+                    let mut step = max;
+                    while step >= min {
+                        if size.get() > step {
+                            *size = step.try_into().unwrap();
+                            break;
+                        }
+                        step -= 25;
+                    }
+                    if size.get() < step {
+                        *size = step.try_into().unwrap();
+                    }
+                };
+                match self.view {
+                    View::List => zoom_out(&mut self.config.icon_sizes.list, 100, 500),
+                    View::Grid => zoom_out(&mut self.config.icon_sizes.grid, 50, 500),
+                }
+            }
         }
         if let Some(location) = cd {
             if location != self.location {
@@ -1509,10 +1557,14 @@ impl Tab {
                 })
             }
             HeadingOptions::Name => items.sort_by(|a, b| {
-                let ord = match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
-                    (true, false) => Ordering::Less,
-                    (false, true) => Ordering::Greater,
-                    _ => lexical_sort::natural_lexical_cmp(&a.1.name, &b.1.name),
+                let ord = if self.config.folders_first {
+                    match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
+                        (true, false) => Ordering::Less,
+                        (false, true) => Ordering::Greater,
+                        _ => lexical_sort::natural_lexical_cmp(&a.1.name, &b.1.name),
+                    }
+                } else {
+                    lexical_sort::natural_lexical_cmp(&a.1.name, &b.1.name)
                 };
                 check_reverse(ord, heading_sort)
             }),
@@ -1993,6 +2045,7 @@ impl Tab {
             icon_sizes,
             sort_name,
             sort_direction,
+            ..
         } = self.config;
 
         let size = self.size_opt.unwrap_or_else(|| Size::new(0.0, 0.0));
