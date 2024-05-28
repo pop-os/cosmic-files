@@ -1630,13 +1630,21 @@ impl Application for App {
                 {
                     self.nav_dnd_hover = None;
                     let entity = self.tab_model.active();
-                    let title = location.to_string();
-                    self.tab_model.text_set(entity, title);
-                    return Command::batch([
-                        self.update_title(),
-                        self.update_watcher(),
-                        self.rescan_tab(entity, location),
-                    ]);
+                    let title_opt = match self.tab_model.data_mut::<Tab>(entity) {
+                        Some(tab) => {
+                            tab.change_location(&location, None);
+                            Some(tab.title())
+                        }
+                        None => None,
+                    };
+                    if let Some(title) = title_opt {
+                        self.tab_model.text_set(entity, title);
+                        return Command::batch([
+                            self.update_title(),
+                            self.update_watcher(),
+                            self.rescan_tab(entity, location),
+                        ]);
+                    }
                 }
             }
             Message::DndEnterTab(entity) => {

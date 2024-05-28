@@ -988,6 +988,24 @@ impl Tab {
         last
     }
 
+    pub fn change_location(&mut self, location: &Location, history_i_opt: Option<usize>) {
+        self.location = location.clone();
+        self.items_opt = None;
+        self.select_focus = None;
+        self.edit_location = None;
+        if let Some(history_i) = history_i_opt {
+            // Navigating in history
+            self.history_i = history_i;
+        } else {
+            // Truncate history to remove next entries
+            self.history.truncate(self.history_i + 1);
+
+            // Push to the front of history
+            self.history_i = self.history.len();
+            self.history.push(location.clone());
+        }
+    }
+
     pub fn update(&mut self, message: Message, modifiers: Modifiers) -> Vec<Command> {
         let mut commands = Vec::new();
         let mut cd = None;
@@ -1442,21 +1460,7 @@ impl Tab {
                     Location::Path(path) => path.is_dir(),
                     Location::Trash => true,
                 } {
-                    self.location = location.clone();
-                    self.items_opt = None;
-                    self.select_focus = None;
-                    self.edit_location = None;
-                    if let Some(history_i) = history_i_opt {
-                        // Navigating in history
-                        self.history_i = history_i;
-                    } else {
-                        // Truncate history to remove next entries
-                        self.history.truncate(self.history_i + 1);
-
-                        // Push to the front of history
-                        self.history_i = self.history.len();
-                        self.history.push(location.clone());
-                    }
+                    self.change_location(&location, history_i_opt);
                     commands.push(Command::ChangeLocation(self.title(), location));
                 } else {
                     log::warn!("tried to cd to {:?} which is not a directory", location);
