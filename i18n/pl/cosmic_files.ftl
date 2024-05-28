@@ -115,8 +115,13 @@ paste = Wklej
 select-all = Zaznacz wszystko
 
 ## View
+zoom-in = Przybliż
+default-size = Domyślny rozmiar
+zoom-out = Oddal
 view = Widok
 grid-view = Widok siatki
 list-view = Widok listy
+show-hidden-files = Pokaż ukryte pliki
+list-directories-first = Najpierw wyświetlaj katalogi
 menu-settings = Ustawienia...
 menu-about = O Plikach COSMIC...
