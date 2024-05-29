@@ -221,12 +221,12 @@ pub fn menu_bar<'a>(
                     menu::Item::Divider,
                     menu::Item::CheckBox(
                         fl!("grid-view"),
-                        tab_opt.map_or(false, |tab| matches!(tab.view, tab::View::Grid)),
+                        tab_opt.map_or(false, |tab| matches!(tab.config.view, tab::View::Grid)),
                         Action::TabViewGrid,
                     ),
                     menu::Item::CheckBox(
                         fl!("list-view"),
-                        tab_opt.map_or(false, |tab| matches!(tab.view, tab::View::List)),
+                        tab_opt.map_or(false, |tab| matches!(tab.config.view, tab::View::List)),
                         Action::TabViewList,
                     ),
                     menu::Item::Divider,

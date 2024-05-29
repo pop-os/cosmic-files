@@ -364,7 +364,7 @@ impl Application for App {
 
         let mut tab = Tab::new(location, TabConfig::default());
         tab.dialog = Some(flags.kind.clone());
-        tab.view = tab::View::List;
+        tab.config.view = tab::View::List;
 
         let mut app = App {
             core,

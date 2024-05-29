@@ -663,7 +663,7 @@ impl Item {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
 pub enum View {
     Grid,
     List,
@@ -702,7 +702,6 @@ pub struct Tab {
     //TODO: make more items private
     pub location: Location,
     pub context_menu: Option<Point>,
-    pub view: View,
     pub dialog: Option<DialogKind>,
     pub scroll_opt: Option<AbsoluteOffset>,
     pub size_opt: Option<Size>,
@@ -727,7 +726,6 @@ impl Tab {
         Self {
             location,
             context_menu: None,
-            view: View::Grid,
             dialog: None,
             scroll_opt: None,
             size_opt: None,
@@ -1403,7 +1401,7 @@ impl Tab {
             Message::ToggleShowHidden => self.config.show_hidden = !self.config.show_hidden,
 
             Message::View(view) => {
-                self.view = view;
+                self.config.view = view;
             }
             Message::ToggleSort(heading_option) => {
                 let heading_sort = if self.config.sort_name == heading_option {
@@ -1459,7 +1457,7 @@ impl Tab {
                     self.dnd_hovered = None;
                 }
             }
-            Message::ZoomDefault => match self.view {
+            Message::ZoomDefault => match self.config.view {
                 View::List => self.config.icon_sizes.list = 100.try_into().unwrap(),
                 View::Grid => self.config.icon_sizes.grid = 100.try_into().unwrap(),
             },
@@ -1477,7 +1475,7 @@ impl Tab {
                         *size = step.try_into().unwrap();
                     }
                 };
-                match self.view {
+                match self.config.view {
                     View::List => zoom_in(&mut self.config.icon_sizes.list, 100, 500),
                     View::Grid => zoom_in(&mut self.config.icon_sizes.grid, 50, 500),
                 }
@@ -1496,7 +1494,7 @@ impl Tab {
                         *size = step.try_into().unwrap();
                     }
                 };
-                match self.view {
+                match self.config.view {
                     View::List => zoom_out(&mut self.config.icon_sizes.list, 100, 500),
                     View::Grid => zoom_out(&mut self.config.icon_sizes.grid, 50, 500),
                 }
@@ -2355,7 +2353,7 @@ impl Tab {
 
     pub fn view(&self, key_binds: &HashMap<KeyBind, Action>) -> Element<Message> {
         let location_view = self.location_view();
-        let (drag_list, mut item_view, can_scroll) = match self.view {
+        let (drag_list, mut item_view, can_scroll) = match self.config.view {
             View::Grid => self.grid_view(),
             View::List => self.list_view(),
         };
@@ -2511,7 +2509,7 @@ impl Tab {
             };
 
             //TODO: HACK to ensure positions are up to date since subscription runs before view
-            match self.view {
+            match self.config.view {
                 View::Grid => _ = self.grid_view(),
                 View::List => _ = self.list_view(),
             };
