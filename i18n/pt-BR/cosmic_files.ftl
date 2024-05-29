@@ -7,7 +7,7 @@ trash = Lixeira
 
 # List view
 name = Nome
-modified = Modificado
+modified = Modificação
 size = Tamanho
 
 # Dialogs
@@ -74,9 +74,9 @@ settings-show-hidden = Mostrar arquivos ocultos
 icon-size-list = Tamanho do ícone (lista)
 icon-size-grid = Tamanho do ícone (grade)
 sorting-name = Ordenar por
-direction = Direção
-ascending = Ascendente
-descending = Descendente
+direction = Classificar
+ascending = Crescente
+descending = Decrescente
 
 ### Appearance
 appearance = Aparência
