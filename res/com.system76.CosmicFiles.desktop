@@ -1,6 +1,7 @@
 #TODO: more build-out, desktop actions, translations?
 [Desktop Entry]
 Name=COSMIC Files
+Name[pl]=Pliki COSMIC
 Exec=cosmic-files %F
 Terminal=false
 Type=Application
@@ -8,4 +9,5 @@ StartupNotify=true
 Icon=com.system76.CosmicFiles
 Categories=COSMIC;Utility;FileManager;
 Keywords=Folder;Manager;
+Keywords[pl]=Katalogi;Pliki;Menedżer;
 MimeType=inode/directory;
