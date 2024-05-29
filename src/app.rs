@@ -942,6 +942,7 @@ impl Application for App {
     }
 
     fn on_nav_select(&mut self, entity: Entity) -> Command<Self::Message> {
+        self.nav_model.activate(entity);
         if let Some(location) = self.nav_model.data::<Location>(entity) {
             let message = Message::TabMessage(None, tab::Message::Location(location.clone()));
             return self.update(message);
