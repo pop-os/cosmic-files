@@ -317,6 +317,7 @@ pub struct App {
     config_handler: Option<cosmic_config::Config>,
     config: Config,
     app_themes: Vec<String>,
+    default_view: Vec<String>,
     sort_by_names: Vec<String>,
     sort_direction: Vec<String>,
     context_page: ContextPage,
@@ -697,6 +698,25 @@ impl App {
                 })
                 .add({
                     let tab_config = self.config.tab.clone();
+                    widget::settings::item::builder(fl!("default-view")).control(widget::dropdown(
+                        &self.default_view,
+                        match tab_config.view {
+                            tab::View::Grid => Some(0),
+                            tab::View::List => Some(1),
+                        },
+                        move |index| {
+                            Message::TabConfig(TabConfig {
+                                view: match index {
+                                    0 => tab::View::Grid,
+                                    _ => tab::View::List,
+                                },
+                                ..tab_config
+                            })
+                        },
+                    ))
+                })
+                .add({
+                    let tab_config = self.config.tab.clone();
                     let list: u16 = tab_config.icon_sizes.list.into();
                     widget::settings::item::builder(fl!("icon-size-list"))
                         .description(format!("{}%", list))
@@ -860,6 +880,7 @@ impl Application for App {
             config_handler: flags.config_handler,
             config: flags.config,
             app_themes,
+            default_view: vec![fl!("grid-view"), fl!("list-view")],
             sort_by_names: HeadingOptions::names(),
             sort_direction: vec![fl!("descending"), fl!("ascending")],
             context_page: ContextPage::Settings,

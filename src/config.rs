@@ -8,6 +8,8 @@ use cosmic::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::tab::View;
+
 use super::tab::HeadingOptions;
 
 pub const CONFIG_VERSION: u64 = 1;
@@ -111,6 +113,7 @@ impl Default for Config {
 /// locally. Local changes aren't saved to the main config.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
 pub struct TabConfig {
+    pub view: View,
     /// Show folders before files
     pub folders_first: bool,
     /// Show hidden files and folders
@@ -125,6 +128,7 @@ pub struct TabConfig {
 impl Default for TabConfig {
     fn default() -> Self {
         Self {
+            view: View::Grid,
             folders_first: true,
             show_hidden: false,
             sort_name: HeadingOptions::Name,
