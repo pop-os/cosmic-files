@@ -1546,25 +1546,30 @@ impl Tab {
                     let (a_is_entry, a_size) = get_size(a.1);
                     let (b_is_entry, b_size) = get_size(b.1);
 
-                    let ord = match (a_is_entry, b_is_entry) {
+                    //TODO: use folders_first?
+                    match (a_is_entry, b_is_entry) {
                         (true, false) => Ordering::Less,
                         (false, true) => Ordering::Greater,
-                        _ => a_size.cmp(&b_size),
-                    };
-                    check_reverse(ord, heading_sort)
+                        _ => check_reverse(a_size.cmp(&b_size), heading_sort),
+                    }
                 })
             }
             HeadingOptions::Name => items.sort_by(|a, b| {
-                let ord = if self.config.folders_first {
+                if self.config.folders_first {
                     match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
                         (true, false) => Ordering::Less,
                         (false, true) => Ordering::Greater,
-                        _ => lexical_sort::natural_lexical_cmp(&a.1.name, &b.1.name),
+                        _ => check_reverse(
+                            lexical_sort::natural_lexical_cmp(&a.1.name, &b.1.name),
+                            heading_sort,
+                        ),
                     }
                 } else {
-                    lexical_sort::natural_lexical_cmp(&a.1.name, &b.1.name)
-                };
-                check_reverse(ord, heading_sort)
+                    check_reverse(
+                        lexical_sort::natural_lexical_cmp(&a.1.name, &b.1.name),
+                        heading_sort,
+                    )
+                }
             }),
             HeadingOptions::Modified => {
                 items.sort_by(|a, b| {
@@ -1573,9 +1578,17 @@ impl Tab {
                         ItemMetadata::Trash { .. } => None,
                     };
 
-                    let a = get_modified(a.1);
-                    let b = get_modified(b.1);
-                    check_reverse(a.cmp(&b), heading_sort)
+                    let a_modified = get_modified(a.1);
+                    let b_modified = get_modified(b.1);
+                    if self.config.folders_first {
+                        match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
+                            (true, false) => Ordering::Less,
+                            (false, true) => Ordering::Greater,
+                            _ => check_reverse(a_modified.cmp(&b_modified), heading_sort),
+                        }
+                    } else {
+                        check_reverse(a_modified.cmp(&b_modified), heading_sort)
+                    }
                 });
             }
         }
