@@ -1,9 +1,9 @@
-cosmic-files = COSMIC Files
+cosmic-files = COSMIC Dateien
 empty-folder = Leerer Ordner
 empty-folder-hidden = Leerer Ordner (hat versteckte Dateien)
 filesystem = Dateisystem
 home = Home
-trash = Eimer
+trash = Papierkorb
 
 # New File/Folder Dialog
 create-new-file = Neue Datei erstellen
@@ -80,8 +80,8 @@ light = Hell
 new-file = Neue Datei
 new-folder = Neuer Ordner
 open-in-terminal = Im Terminal öffnen
-move-to-trash = In den Eimer verschieben
-restore-from-trash = Vom Eimer wiederherstellen
+move-to-trash = In den Papierkorb verschieben
+restore-from-trash = Vom Papierkorb wiederherstellen
 sort-by-name = Nach Name sortieren
 sort-by-modified = Nach Datum sortieren (verändert)
 sort-by-size = Nach Größe sortieren
@@ -97,7 +97,7 @@ close-tab = Tab schließen
 quit = Beenden
 
 ## Edit
-edit = Ändern
+edit = Bearbeiten
 cut = Ausschneiden
 copy = Kopieren
 paste = Einfügen
