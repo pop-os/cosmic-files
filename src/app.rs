@@ -1145,12 +1145,67 @@ impl Application for App {
                 }
             }
             Message::MounterItems(mounter_key, mounter_items) => {
+                // Check for unmounted folders
+                let mut unmounted = Vec::new();
+                if let Some(old_items) = self.mounter_items.get(&mounter_key) {
+                    for old_item in old_items.iter() {
+                        if let Some(old_path) = old_item.path() {
+                            if old_item.is_mounted() {
+                                let mut still_mounted = false;
+                                for item in mounter_items.iter() {
+                                    if let Some(path) = item.path() {
+                                        if path == old_path {
+                                            if item.is_mounted() {
+                                                still_mounted = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                                if !still_mounted {
+                                    unmounted.push(Location::Path(old_path));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Go back to home in any tabs that were unmounted
+                let mut commands = Vec::new();
+                {
+                    let home_location = Location::Path(home_dir());
+                    let entities: Vec<_> = self.tab_model.iter().collect();
+                    for entity in entities {
+                        let title_opt = match self.tab_model.data_mut::<Tab>(entity) {
+                            Some(tab) => {
+                                if unmounted.contains(&tab.location) {
+                                    tab.change_location(&home_location, None);
+                                    Some(tab.title())
+                                } else {
+                                    None
+                                }
+                            }
+                            None => None,
+                        };
+                        if let Some(title) = title_opt {
+                            self.tab_model.text_set(entity, title);
+                            commands.push(self.rescan_tab(entity, home_location.clone()));
+                        }
+                    }
+                    if !commands.is_empty() {
+                        commands.push(self.update_title());
+                        commands.push(self.update_watcher());
+                    }
+                }
+
                 // Insert new items
                 self.mounter_items.insert(mounter_key, mounter_items);
 
                 // Update nav bar
                 //TODO: this could change favorites IDs while they are in use
                 self.update_nav_model();
+
+                return Command::batch(commands);
             }
             Message::NewItem(entity_opt, dir) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
@@ -1172,7 +1227,6 @@ impl Application for App {
                 let entities: Vec<_> = self.tab_model.iter().collect();
                 for entity in entities {
                     if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-                        //TODO: support reloading trash, somehow
                         if let Location::Path(path) = &tab.location {
                             let mut contains_change = false;
                             for event in events.iter() {
@@ -2099,6 +2153,8 @@ impl Application for App {
                             move |events_res: notify_debouncer_full::DebounceEventResult| {
                                 match events_res {
                                     Ok(mut events) => {
+                                        eprintln!("{:?}", events);
+
                                         events.retain(|event| {
                                             match &event.kind {
                                                 notify::EventKind::Access(_) => {

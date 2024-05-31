@@ -86,21 +86,21 @@ impl Gvfs {
                 {
                     let event_tx = event_tx.clone();
                     monitor.connect_mount_changed(move |_monitor, mount| {
-                        eprintln!("mount changed {}", MountExt::name(mount));
+                        log::info!("mount changed {}", MountExt::name(mount));
                         event_tx.send(Event::Changed).unwrap();
                     });
                 }
                 {
                     let event_tx = event_tx.clone();
                     monitor.connect_mount_added(move |_monitor, mount| {
-                        eprintln!("mount added {}", MountExt::name(mount));
+                        log::info!("mount added {}", MountExt::name(mount));
                         event_tx.send(Event::Changed).unwrap();
                     });
                 }
                 {
                     let event_tx = event_tx.clone();
                     monitor.connect_mount_removed(move |_monitor, mount| {
-                        eprintln!("mount removed {}", MountExt::name(mount));
+                        log::info!("mount removed {}", MountExt::name(mount));
                         event_tx.send(Event::Changed).unwrap();
                     });
                 }
@@ -108,21 +108,21 @@ impl Gvfs {
                 {
                     let event_tx = event_tx.clone();
                     monitor.connect_volume_changed(move |_monitor, volume| {
-                        eprintln!("volume changed {}", VolumeExt::name(volume));
+                        log::info!("volume changed {}", VolumeExt::name(volume));
                         event_tx.send(Event::Changed).unwrap();
                     });
                 }
                 {
                     let event_tx = event_tx.clone();
                     monitor.connect_volume_added(move |_monitor, volume| {
-                        eprintln!("volume added {}", VolumeExt::name(volume));
+                        log::info!("volume added {}", VolumeExt::name(volume));
                         event_tx.send(Event::Changed).unwrap();
                     });
                 }
                 {
                     let event_tx = event_tx.clone();
                     monitor.connect_volume_removed(move |_monitor, volume| {
-                        eprintln!("volume removed {}", VolumeExt::name(volume));
+                        log::info!("volume removed {}", VolumeExt::name(volume));
                         event_tx.send(Event::Changed).unwrap();
                     });
                 }
