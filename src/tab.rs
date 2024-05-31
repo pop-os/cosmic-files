@@ -1933,6 +1933,8 @@ impl Tab {
         let mut drag_e_i = 0;
         let mut drag_s_i = 0;
 
+        let mut children = Vec::new();
+
         if let Some(items) = self.column_sort() {
             let mut count = 0;
             let mut col = 0;
@@ -2063,6 +2065,8 @@ impl Tab {
                 return (None, self.empty_view(hidden > 0), false);
             }
 
+            children.push(grid.into());
+
             //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
             {
                 let mut max_bottom = 0;
@@ -2078,10 +2082,10 @@ impl Tab {
                     .checked_sub(max_bottom + 2 * (space_xxs as usize))
                     .unwrap_or(0);
                 if spacer_height > 0 {
-                    if col != 0 {
-                        grid = grid.insert_row();
-                    }
-                    grid = grid.push(widget::vertical_space(Length::Fixed(spacer_height as f32)));
+                    children.push(
+                        widget::container(vertical_space(Length::Fixed(spacer_height as f32)))
+                            .into(),
+                    )
                 }
             }
         }
@@ -2138,7 +2142,7 @@ impl Tab {
                 Element::from(dnd_grid)
                     .map(|m| cosmic::app::Message::App(crate::app::Message::TabMessage(None, m)))
             }),
-            mouse_area::MouseArea::new(grid)
+            mouse_area::MouseArea::new(widget::column::with_children(children))
                 .on_press(|_| Message::Click(None))
                 .on_drag(Message::Drag)
                 .on_drag_end(|_| Message::DragEnd(None))
