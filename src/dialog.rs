@@ -14,7 +14,7 @@ use cosmic::{
         window, Event, Length, Size,
     },
     theme,
-    widget::{self, segmented_button},
+    widget::{self, menu::KeyBind, segmented_button},
     Application, ApplicationExt, Element,
 };
 use notify_debouncer_full::{
@@ -31,6 +31,7 @@ use std::{
 };
 
 use crate::{
+    app::Action,
     config::TabConfig,
     fl, home_dir,
     tab::{self, ItemMetadata, Location, Tab},
@@ -224,6 +225,7 @@ struct App {
     result_opt: Option<DialogResult>,
     replace_dialog: bool,
     tab: Tab,
+    key_binds: HashMap<KeyBind, Action>,
     watcher_opt: Option<(Debouncer<RecommendedWatcher, FileIdMap>, HashSet<PathBuf>)>,
 }
 
@@ -375,6 +377,7 @@ impl Application for App {
             result_opt: None,
             replace_dialog: false,
             tab,
+            key_binds: HashMap::new(),
             watcher_opt: None,
         };
 
@@ -674,7 +677,7 @@ impl Application for App {
         tab_column = tab_column.push(
             //TODO: key binds for dialog
             self.tab
-                .view(&HashMap::new())
+                .view(&self.key_binds)
                 .map(move |message| Message::TabMessage(message)),
         );
 

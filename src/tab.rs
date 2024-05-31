@@ -461,7 +461,6 @@ pub enum Message {
     Location(Location),
     LocationUp,
     Open,
-    Resize(Size),
     RightClick(usize),
     Scroll(Viewport),
     SelectAll,
@@ -704,7 +703,7 @@ pub struct Tab {
     pub context_menu: Option<Point>,
     pub dialog: Option<DialogKind>,
     pub scroll_opt: Option<AbsoluteOffset>,
-    pub size_opt: Option<Size>,
+    pub size_opt: Cell<Option<Size>>,
     pub edit_location: Option<Location>,
     pub edit_location_id: widget::Id,
     pub history_i: usize,
@@ -728,7 +727,7 @@ impl Tab {
             context_menu: None,
             dialog: None,
             scroll_opt: None,
-            size_opt: None,
+            size_opt: Cell::new(None),
             edit_location: None,
             edit_location_id: widget::Id::unique(),
             history_i: 0,
@@ -904,7 +903,7 @@ impl Tab {
                 Some(offset) => Point::new(0.0, offset.y),
                 None => Point::new(0.0, 0.0),
             };
-            let size = self.size_opt.unwrap_or_else(|| Size::new(0.0, 0.0));
+            let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
             Rectangle::new(point, size)
         };
 
@@ -1347,9 +1346,6 @@ impl Tab {
                     }
                 }
             }
-            Message::Resize(size) => {
-                self.size_opt = Some(size);
-            }
             Message::RightClick(click_i) => {
                 *self.cached_selected.borrow_mut() = None;
                 if let Some(ref mut items) = self.items_opt {
@@ -1791,7 +1787,7 @@ impl Tab {
         let item_height =
             (space_xxxs + icon_sizes.grid() + space_xxxs + text_height + space_xxxs) as usize;
 
-        let (width, height) = match self.size_opt {
+        let (width, height) = match self.size_opt.get() {
             Some(size) => (
                 (size.width.floor() as usize)
                     .checked_sub(2 * (space_m as usize))
@@ -2059,7 +2055,7 @@ impl Tab {
             ..
         } = self.config;
 
-        let size = self.size_opt.unwrap_or_else(|| Size::new(0.0, 0.0));
+        let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
         //TODO: allow resizing?
         let name_width = 300.0;
         let modified_width = 200.0;
@@ -2364,7 +2360,14 @@ impl Tab {
         )
     }
 
-    pub fn view(&self, key_binds: &HashMap<KeyBind, Action>) -> Element<Message> {
+    pub fn view_responsive(
+        &self,
+        key_binds: &HashMap<KeyBind, Action>,
+        size: Size,
+    ) -> Element<Message> {
+        // Update cached size
+        self.size_opt.set(Some(size));
+
         let location_view = self.location_view();
         let (drag_list, mut item_view, can_scroll) = match self.config.view {
             View::Grid => self.grid_view(),
@@ -2428,14 +2431,11 @@ impl Tab {
         tab_column = tab_column.push(location_view);
         if can_scroll {
             tab_column = tab_column.push(
-                mouse_area::MouseArea::new(
-                    widget::scrollable(popover)
-                        .id(self.scrollable_id.clone())
-                        .on_scroll(Message::Scroll)
-                        .width(Length::Fill)
-                        .height(Length::Fill),
-                )
-                .on_resize(Message::Resize),
+                widget::scrollable(popover)
+                    .id(self.scrollable_id.clone())
+                    .on_scroll(Message::Scroll)
+                    .width(Length::Fill)
+                    .height(Length::Fill),
             );
         } else {
             tab_column = tab_column.push(popover);
@@ -2505,6 +2505,10 @@ impl Tab {
         dnd_dest.into()
     }
 
+    pub fn view<'a>(&'a self, key_binds: &'a HashMap<KeyBind, Action>) -> Element<Message> {
+        widget::responsive(|size| self.view_responsive(key_binds, size)).into()
+    }
+
     pub fn subscription(&self) -> Subscription<Message> {
         if let Some(items) = &self.items_opt {
             //TODO: how many thumbnail loads should be in flight at once?
@@ -2517,7 +2521,7 @@ impl Tab {
                     Some(offset) => Point::new(0.0, offset.y),
                     None => Point::new(0.0, 0.0),
                 };
-                let size = self.size_opt.unwrap_or_else(|| Size::new(0.0, 0.0));
+                let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
                 Rectangle::new(point, size)
             };
 
