@@ -3138,13 +3138,15 @@ impl<M> Widget<M, cosmic::Theme, cosmic::Renderer> for ArcElementWrapper<M> {
         &self,
         _state: &tree::Tree,
         _layout: cosmic::iced_core::Layout<'_>,
+        renderer: &cosmic::Renderer,
         _dnd_rectangles: &mut cosmic::iced_core::clipboard::DndDestinationRectangles,
     ) {
-        self.0
-            .lock()
-            .unwrap()
-            .as_widget()
-            .drag_destinations(_state, _layout, _dnd_rectangles)
+        self.0.lock().unwrap().as_widget().drag_destinations(
+            _state,
+            _layout,
+            renderer,
+            _dnd_rectangles,
+        )
     }
 }
 
