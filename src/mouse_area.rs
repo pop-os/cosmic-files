@@ -388,11 +388,15 @@ where
         &self,
         state: &Tree,
         layout: Layout<'_>,
+        renderer: &Renderer,
         dnd_rectangles: &mut cosmic::iced_core::clipboard::DndDestinationRectangles,
     ) {
-        self.content
-            .as_widget()
-            .drag_destinations(&state.children[0], layout, dnd_rectangles);
+        self.content.as_widget().drag_destinations(
+            &state.children[0],
+            layout,
+            renderer,
+            dnd_rectangles,
+        );
     }
 
     fn id(&self) -> Option<Id> {
