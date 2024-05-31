@@ -29,7 +29,6 @@ use notify_debouncer_full::{
     notify::{self, RecommendedWatcher, Watcher},
     DebouncedEvent, Debouncer, FileIdMap,
 };
-use rayon::slice::ParallelSliceMut;
 use slotmap::Key as SlotMapKey;
 use std::{
     any::TypeId,
@@ -228,7 +227,6 @@ pub enum Message {
     SearchActivate,
     SearchClear,
     SearchInput(String),
-    SearchResults(String, Vec<tab::Item>),
     SearchSubmit,
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     TabActivate(Entity),
@@ -342,7 +340,6 @@ pub struct App {
     search_active: bool,
     search_id: widget::Id,
     search_input: String,
-    search_results: Option<Vec<tab::Item>>,
     watcher_opt: Option<(Debouncer<RecommendedWatcher, FileIdMap>, HashSet<PathBuf>)>,
     nav_dnd_hover: Option<(Location, Instant)>,
     tab_dnd_hover: Option<(Entity, Instant)>,
@@ -407,103 +404,8 @@ impl App {
         Command::batch(commands)
     }
 
-    fn search(&self) -> Command<Message> {
-        let input = self.search_input.clone();
-        let pattern = regex::escape(&input);
-        let regex = match regex::RegexBuilder::new(&pattern)
-            .case_insensitive(true)
-            .build()
-        {
-            Ok(ok) => ok,
-            Err(err) => {
-                log::warn!("failed to parse regex {:?}: {}", pattern, err);
-                return Command::none();
-            }
-        };
-        Command::perform(
-            async move {
-                tokio::task::spawn_blocking(move || {
-                    let start = Instant::now();
-
-                    let results_arc = Arc::new(Mutex::new(Vec::new()));
-                    //TODO: do we want to ignore files?
-                    ignore::WalkBuilder::new(home_dir())
-                        //TODO: only use this on supported targets
-                        .same_file_system(true)
-                        .build_parallel()
-                        .run(|| {
-                            Box::new(|entry_res| {
-                                let Ok(entry) = entry_res else {
-                                    // Skip invalid entries
-                                    return ignore::WalkState::Skip;
-                                };
-
-                                let Some(file_name) = entry.file_name().to_str() else {
-                                    // Skip anything with an invalid name
-                                    return ignore::WalkState::Skip;
-                                };
-
-                                if regex.is_match(file_name) {
-                                    let path = entry.path();
-
-                                    let metadata = match entry.metadata() {
-                                        Ok(ok) => ok,
-                                        Err(err) => {
-                                            log::warn!(
-                                                "failed to read metadata for entry at {:?}: {}",
-                                                path,
-                                                err
-                                            );
-                                            return ignore::WalkState::Continue;
-                                        }
-                                    };
-
-                                    let mut results = results_arc.lock().unwrap();
-                                    results.push(tab::item_from_entry(
-                                        path.to_path_buf(),
-                                        file_name.to_string(),
-                                        metadata,
-                                        IconSizes::default(),
-                                    ));
-                                }
-
-                                ignore::WalkState::Continue
-                            })
-                        });
-
-                    let mut results = Arc::into_inner(results_arc).unwrap().into_inner().unwrap();
-                    let duration = start.elapsed();
-                    log::info!(
-                        "searched for {:?} in {:?}, found {} results",
-                        input,
-                        duration,
-                        results.len()
-                    );
-
-                    let start = Instant::now();
-
-                    results.par_sort_unstable_by(|a, b| {
-                        let get_modified = |x: &tab::Item| match &x.metadata {
-                            ItemMetadata::Path { metadata, .. } => metadata.modified().ok(),
-                            ItemMetadata::Trash { .. } => None,
-                        };
-
-                        // Sort with latest modified first
-                        let a_modified = get_modified(a);
-                        let b_modified = get_modified(b);
-                        b_modified.cmp(&a_modified)
-                    });
-
-                    let duration = start.elapsed();
-                    log::info!("sorted results in {:?}", duration);
-
-                    message::app(Message::SearchResults(input, results))
-                })
-                .await
-                .unwrap_or(message::none())
-            },
-            |x| x,
-        )
+    fn search(&mut self) -> Command<Message> {
+        self.open_tab(Location::Search(home_dir(), self.search_input.clone()))
     }
 
     fn selected_paths(&self, entity_opt: Option<Entity>) -> Vec<PathBuf> {
@@ -1008,7 +910,6 @@ impl Application for App {
             search_active: false,
             search_id: widget::Id::unique(),
             search_input: String::new(),
-            search_results: None,
             watcher_opt: None,
             nav_dnd_hover: None,
             tab_dnd_hover: None,
@@ -1112,7 +1013,6 @@ impl Application for App {
         if self.search_active {
             // Close search if open
             self.search_active = false;
-            self.search_results = None;
             return Command::none();
         }
         if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
@@ -1609,7 +1509,6 @@ impl Application for App {
             Message::SearchClear => {
                 self.search_active = false;
                 self.search_input.clear();
-                self.search_results = None;
             }
             Message::SearchInput(input) => {
                 if input != self.search_input {
@@ -1620,11 +1519,6 @@ impl Application for App {
                         return self.search();
                     }
                     */
-                }
-            }
-            Message::SearchResults(input, results) => {
-                if input == self.search_input {
-                    self.search_results = Some(results);
                 }
             }
             Message::SearchSubmit => {
@@ -2214,20 +2108,6 @@ impl Application for App {
     /// Creates a view after each update.
     fn view(&self) -> Element<Self::Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
-
-        if let Some(results) = &self.search_results {
-            //TODO: pages?
-            let count = results.len().min(100);
-            if count == 0 {
-                //TODO: make it nicer
-                return widget::text("NO RESULTS").into();
-            }
-            let mut column = widget::column::with_capacity(count);
-            for item in results.iter().take(count) {
-                column = column.push(widget::text(&item.name));
-            }
-            return widget::scrollable(column.width(Length::Fill)).into();
-        }
 
         let mut tab_column = widget::column::with_capacity(1);
 

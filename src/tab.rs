@@ -314,6 +314,97 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
     items
 }
 
+pub fn scan_search(tab_path: &PathBuf, term: &str, sizes: IconSizes) -> Vec<Item> {
+    use rayon::prelude::ParallelSliceMut;
+
+    let start = Instant::now();
+
+    let pattern = regex::escape(&term);
+    let regex = match regex::RegexBuilder::new(&pattern)
+        .case_insensitive(true)
+        .build()
+    {
+        Ok(ok) => ok,
+        Err(err) => {
+            log::warn!("failed to parse regex {:?}: {}", pattern, err);
+            return Vec::new();
+        }
+    };
+
+    let items_arc = Arc::new(Mutex::new(Vec::new()));
+    //TODO: do we want to ignore files?
+    ignore::WalkBuilder::new(tab_path)
+        //TODO: only use this on supported targets
+        .same_file_system(true)
+        .build_parallel()
+        .run(|| {
+            Box::new(|entry_res| {
+                let Ok(entry) = entry_res else {
+                    // Skip invalid entries
+                    return ignore::WalkState::Skip;
+                };
+
+                let Some(file_name) = entry.file_name().to_str() else {
+                    // Skip anything with an invalid name
+                    return ignore::WalkState::Skip;
+                };
+
+                if regex.is_match(file_name) {
+                    let path = entry.path();
+
+                    let metadata = match entry.metadata() {
+                        Ok(ok) => ok,
+                        Err(err) => {
+                            log::warn!("failed to read metadata for entry at {:?}: {}", path, err);
+                            return ignore::WalkState::Continue;
+                        }
+                    };
+
+                    let mut items = items_arc.lock().unwrap();
+                    items.push(item_from_entry(
+                        path.to_path_buf(),
+                        file_name.to_string(),
+                        metadata,
+                        IconSizes::default(),
+                    ));
+                }
+
+                ignore::WalkState::Continue
+            })
+        });
+
+    let mut items = Arc::into_inner(items_arc).unwrap().into_inner().unwrap();
+    let duration = start.elapsed();
+    log::info!(
+        "searched for {:?} in {:?}, found {} items",
+        term,
+        duration,
+        items.len()
+    );
+
+    let start = Instant::now();
+
+    items.par_sort_unstable_by(|a, b| {
+        let get_modified = |x: &Item| match &x.metadata {
+            ItemMetadata::Path { metadata, .. } => metadata.modified().ok(),
+            ItemMetadata::Trash { .. } => None,
+        };
+
+        // Sort with latest modified first
+        let a_modified = get_modified(a);
+        let b_modified = get_modified(b);
+        b_modified.cmp(&a_modified)
+    });
+
+    let duration = start.elapsed();
+    log::info!("sorted {} items in {:?}", items.len(), duration);
+
+    //TODO: ideal number of search results, pages?
+    items.truncate(100);
+
+    items
+}
+
 // This config statement is from trash::os_limited, inverted
 #[cfg(not(any(
     target_os = "windows",
@@ -410,6 +501,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Location {
     Path(PathBuf),
+    Search(PathBuf, String),
     Trash,
 }
 
@@ -417,6 +509,7 @@ impl std::fmt::Display for Location {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Path(path) => write!(f, "{}", path.display()),
+            Self::Search(path, term) => write!(f, "search {} for {}", path.display(), term),
             Self::Trash => write!(f, "trash"),
         }
     }
@@ -426,6 +519,7 @@ impl Location {
     pub fn scan(&self, sizes: IconSizes) -> Vec<Item> {
         match self {
             Self::Path(path) => scan_path(path, sizes),
+            Self::Search(path, term) => scan_search(path, term, sizes),
             Self::Trash => scan_trash(sizes),
         }
     }
@@ -754,6 +848,10 @@ impl Tab {
         match &self.location {
             Location::Path(path) => {
                 format!("{}", path.display())
+            }
+            Location::Search(path, term) => {
+                //TODO: translate
+                format!("Search for {} in {}", term, path.display())
             }
             Location::Trash => {
                 fl!("trash")
@@ -1319,6 +1417,9 @@ impl Tab {
                             commands.push(Command::OpenFile(path.clone()));
                         }
                     }
+                    Location::Search(path, term) => {
+                        cd = Some(location);
+                    }
                     Location::Trash => {
                         cd = Some(location);
                     }
@@ -1429,6 +1530,9 @@ impl Tab {
                         }
                         commands.push(Command::DropFiles(to, from))
                     }
+                    Location::Search(_, _) => {
+                        log::warn!(" Copy/cut to search not supported.");
+                    }
                     Location::Trash if matches!(from.kind, ClipboardKind::Cut) => {
                         commands.push(Command::MoveToTrash(from.paths))
                     }
@@ -1505,6 +1609,7 @@ impl Tab {
             if location != self.location {
                 if match &location {
                     Location::Path(path) => path.is_dir(),
+                    Location::Search(path, _term) => path.is_dir(),
                     Location::Trash => true,
                 } {
                     self.change_location(&location, history_i_opt);
@@ -1596,7 +1701,7 @@ impl Tab {
         Some(items)
     }
 
-    pub fn location_view(&self) -> Element<Message> {
+    pub fn location_view(&self) -> Option<Element<Message>> {
         let cosmic_theme::Spacing {
             space_xxxs,
             space_xxs,
@@ -1642,7 +1747,7 @@ impl Tab {
                             })
                             .on_submit(Message::Location(location.clone())),
                     );
-                    return row.into();
+                    return Some(row.into());
                 }
                 _ => {
                     //TODO: allow editing other locations
@@ -1717,6 +1822,9 @@ impl Tab {
                 }
                 children.reverse();
             }
+            Location::Search(path, term) => {
+                return None;
+            }
             Location::Trash => {
                 let mut row = widget::row::with_capacity(2)
                     .align_items(Alignment::Center)
@@ -1737,7 +1845,7 @@ impl Tab {
         for child in children {
             row = row.push(child);
         }
-        row.into()
+        Some(row.into())
     }
 
     pub fn empty_view(&self, has_hidden: bool) -> Element<Message> {
@@ -2373,7 +2481,7 @@ impl Tab {
         // Update cached size
         self.size_opt.set(Some(size));
 
-        let location_view = self.location_view();
+        let location_view_opt = self.location_view();
         let (drag_list, mut item_view, can_scroll) = match self.config.view {
             View::Grid => self.grid_view(),
             View::List => self.list_view(),
@@ -2433,7 +2541,9 @@ impl Tab {
                 .position(widget::popover::Position::Point(point));
         }
         let mut tab_column = widget::column::with_capacity(3);
-        tab_column = tab_column.push(location_view);
+        if let Some(location_view) = location_view_opt {
+            tab_column = tab_column.push(location_view);
+        }
         if can_scroll {
             tab_column = tab_column.push(
                 widget::scrollable(popover)
