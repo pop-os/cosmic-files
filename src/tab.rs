@@ -193,6 +193,77 @@ fn hidden_attribute(metadata: &Metadata) -> bool {
     metadata.file_attributes() & FILE_ATTRIBUTE_HIDDEN == FILE_ATTRIBUTE_HIDDEN
 }
 
+pub fn item_from_entry(
+    path: PathBuf,
+    name: String,
+    metadata: fs::Metadata,
+    sizes: IconSizes,
+) -> Item {
+    let hidden = name.starts_with(".") || hidden_attribute(&metadata);
+
+    let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) =
+        if metadata.is_dir() {
+            (
+                //TODO: make this a static
+                "inode/directory".parse().unwrap(),
+                folder_icon(&path, sizes.grid()),
+                folder_icon(&path, sizes.list()),
+                folder_icon(&path, sizes.list_condensed()),
+            )
+        } else {
+            let mime = mime_for_path(&path);
+            (
+                mime.clone(),
+                mime_icon(mime.clone(), sizes.grid()),
+                mime_icon(mime.clone(), sizes.list()),
+                mime_icon(mime, sizes.list_condensed()),
+            )
+        };
+
+    let open_with = mime_apps(&mime);
+
+    let thumbnail_opt = if mime.type_() == mime::IMAGE {
+        if mime.subtype() == mime::SVG {
+            Some(ItemThumbnail::Svg)
+        } else {
+            None
+        }
+    } else {
+        Some(ItemThumbnail::NotImage)
+    };
+
+    let children = if metadata.is_dir() {
+        //TODO: calculate children in the background (and make it cancellable?)
+        match fs::read_dir(&path) {
+            Ok(entries) => entries.count(),
+            Err(err) => {
+                log::warn!("failed to read directory {:?}: {}", path, err);
+                0
+            }
+        }
+    } else {
+        0
+    };
+
+    Item {
+        name,
+        metadata: ItemMetadata::Path { metadata, children },
+        hidden,
+        path_opt: Some(path),
+        mime,
+        icon_handle_grid,
+        icon_handle_list,
+        icon_handle_list_condensed,
+        open_with,
+        thumbnail_opt,
+        button_id: widget::Id::unique(),
+        pos_opt: Cell::new(None),
+        rect_opt: Cell::new(None),
+        selected: false,
+        overlaps_drag_rect: false,
+    }
+}
+
 pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
     let mut items = Vec::new();
     match fs::read_dir(tab_path) {
@@ -206,12 +277,14 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                     }
                 };
 
+                let path = entry.path();
+
                 let name = match entry.file_name().into_string() {
                     Ok(ok) => ok,
                     Err(name_os) => {
                         log::warn!(
-                            "failed to parse entry in {:?}: {:?} is not valid UTF-8",
-                            tab_path,
+                            "failed to parse entry at {:?}: {:?} is not valid UTF-8",
+                            path,
                             name_os,
                         );
                         continue;
@@ -221,80 +294,12 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                 let metadata = match entry.metadata() {
                     Ok(ok) => ok,
                     Err(err) => {
-                        log::warn!(
-                            "failed to read metadata for entry in {:?}: {}",
-                            tab_path,
-                            err
-                        );
+                        log::warn!("failed to read metadata for entry at {:?}: {}", path, err);
                         continue;
                     }
                 };
 
-                let hidden = name.starts_with(".") || hidden_attribute(&metadata);
-
-                let path = entry.path();
-
-                let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) =
-                    if metadata.is_dir() {
-                        (
-                            //TODO: make this a static
-                            "inode/directory".parse().unwrap(),
-                            folder_icon(&path, sizes.grid()),
-                            folder_icon(&path, sizes.list()),
-                            folder_icon(&path, sizes.list_condensed()),
-                        )
-                    } else {
-                        let mime = mime_for_path(&path);
-                        (
-                            mime.clone(),
-                            mime_icon(mime.clone(), sizes.grid()),
-                            mime_icon(mime.clone(), sizes.list()),
-                            mime_icon(mime, sizes.list_condensed()),
-                        )
-                    };
-
-                let open_with = mime_apps(&mime);
-
-                let thumbnail_opt = if mime.type_() == mime::IMAGE {
-                    if mime.subtype() == mime::SVG {
-                        Some(ItemThumbnail::Svg)
-                    } else {
-                        None
-                    }
-                } else {
-                    Some(ItemThumbnail::NotImage)
-                };
-
-                let children = if metadata.is_dir() {
-                    //TODO: calculate children in the background (and make it cancellable?)
-                    match fs::read_dir(&path) {
-                        Ok(entries) => entries.count(),
-                        Err(err) => {
-                            log::warn!("failed to read directory {:?}: {}", path, err);
-                            0
-                        }
-                    }
-                } else {
-                    0
-                };
-
-                items.push(Item {
-                    name,
-                    metadata: ItemMetadata::Path { metadata, children },
-                    hidden,
-                    path_opt: Some(path),
-                    mime,
-                    icon_handle_grid,
-                    icon_handle_list,
-                    icon_handle_list_condensed,
-                    open_with,
-                    thumbnail_opt,
-                    button_id: widget::Id::unique(),
-                    pos_opt: Cell::new(None),
-                    rect_opt: Cell::new(None),
-                    selected: false,
-                    overlaps_drag_rect: false,
-                });
+                items.push(item_from_entry(path, name, metadata, sizes));
             }
         }
         Err(err) => {
