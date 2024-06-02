@@ -1628,6 +1628,18 @@ impl Application for App {
                             commands.push(self.update(action.message(Some(entity))));
                         }
                         tab::Command::ChangeLocation(tab_title, tab_path) => {
+                            // Activate nav bar item with matching location.
+                            let nav_bar_id = self.nav_model.iter().find(|&id| {
+                                self.nav_model
+                                    .data::<Location>(id)
+                                    .map(|location| &tab_path == location)
+                                    .unwrap_or_default()
+                            });
+
+                            if let Some(id) = nav_bar_id {
+                                self.nav_model.activate(id);
+                            }
+
                             self.tab_model.text_set(entity, tab_title);
                             commands.push(Command::batch([
                                 self.update_title(),
