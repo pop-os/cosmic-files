@@ -5,6 +5,17 @@ filesystem = Файловая система
 home = Домашняя папка
 trash = Корзина
 
+# List view
+name = Имя
+modified = Изменено
+size = Размер
+
+# Dialogs
+
+## Empty Trash Dialog
+empty-trash = Очистить корзину
+empty-trash-warning = Вы уверены, что хотите навсегда удалить все элементы в корзине?
+
 # New File/Folder Dialog
 create-new-file = Создать новый файл
 create-new-folder = Создать новую папку
@@ -21,6 +32,8 @@ cancel = Отменить
 open = Открыть
 open-file = Открыть файл
 open-folder = Открыть папку
+open-in-new-tab = Открыть в новой вкладке
+open-in-new-window = Открыть в новом окне
 open-multiple-files = Открыть несколько файлов
 open-multiple-folders = Открыть несколько папок
 save = Сохранить
@@ -32,13 +45,8 @@ rename-folder = Переименовать папку
 
 # Replace Dialog
 replace = Заменить
-replace-title = {$filename} уже существует в данной директории.
-replace-warning = Действительно ли вы хотите заменить файл на тот, что вы сохраняете? Замена перезапишет все данные файла.
-
-# List view
-name = Имя
-modified = Изменено
-size = Размер
+replace-title = {$filename} уже существует в данном каталоге.
+replace-warning = Действительно ли Вы хотите заменить файл на тот, что Вы сохраняете? Замена перезапишет все данные файла.
 
 # Context Pages
 
@@ -50,6 +58,7 @@ operations = Операции
 pending = В ожидании
 failed = Сбой
 complete = Завершено
+copy_noun = Копирование
 
 ## Open with
 open-with = Открыть с помощью
@@ -61,8 +70,9 @@ properties = Свойства
 ## Settings
 settings = Параметры
 settings-tab = Вкладка
-settings-show-hidden = Показать скрытые файлы
-icon-size-list = Размер иконок (лист)
+settings-show-hidden = Показывать скрытые файлы
+default-view = Вид по умолчанию
+icon-size-list = Размер иконок (список)
 icon-size-grid = Размер иконок (сетка)
 sorting-name = Отсортировать
 direction = Направление
@@ -77,11 +87,13 @@ dark = Темная
 light = Светлая
 
 # Context menu
+add-to-sidebar = Добавить на боковую панель
 new-file = Новый файл
 new-folder = Новая папка
 open-in-terminal = Открыть в терминале
 move-to-trash = Переместить в корзину
 restore-from-trash = Восстановить из корзины
+remove-from-sidebar = Убрать из боковой панели
 sort-by-name = Разместить по имени
 sort-by-modified = Разместить по дате изменения
 sort-by-size = Разместить по размеру
@@ -92,6 +104,7 @@ sort-by-size = Разместить по размеру
 file = Файл
 new-tab = Новая вкладка
 new-window = Новое окно
+rename =  Переименовать
 close-tab = Закрыть вкладку
 quit = Завершить
 
@@ -103,8 +116,13 @@ paste = Вставить
 select-all = Выбрать все
 
 ## View
+zoom-in = Увеличить
+default-size = Размер по умолчанию
+zoom-out = Уменьшить
 view = Вид
 grid-view = Сетка
 list-view = Список
+show-hidden-files = Показывать скрытые файлы
+list-directories-first = Показывать сначала папки
 menu-settings = Параметры...
-menu-about = Про Файлы COSMIC...
+menu-about = О приложении Файлы COSMIC...
