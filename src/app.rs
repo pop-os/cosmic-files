@@ -181,6 +181,7 @@ pub enum NavMenuAction {
     OpenInNewWindow(segmented_button::Entity),
     Properties(segmented_button::Entity),
     RemoveFromSidebar(segmented_button::Entity),
+    EmptyTrash(segmented_button::Entity),
 }
 
 impl MenuAction for NavMenuAction {
@@ -949,6 +950,16 @@ impl Application for App {
         &self,
         id: widget::nav_bar::Id,
     ) -> Option<Vec<widget::menu::Tree<cosmic::app::Message<Self::Message>>>> {
+        let maybe_trash_entity = self.nav_model.iter().find(|&entity| {
+            self.nav_model
+                .data::<Location>(entity)
+                .map(|loc| *loc == Location::Trash)
+                .unwrap_or_default()
+        });
+        let mut is_context_trash = false;
+        if let Some(trash_id) = maybe_trash_entity {
+            is_context_trash = trash_id == id;
+        }
         Some(cosmic::widget::menu::items(
             &HashMap::new(),
             vec![
@@ -966,10 +977,17 @@ impl Application for App {
                     NavMenuAction::Properties(id),
                 ),
                 cosmic::widget::menu::Item::Divider,
-                cosmic::widget::menu::Item::Button(
-                    fl!("remove-from-sidebar"),
-                    NavMenuAction::RemoveFromSidebar(id),
-                ),
+                if is_context_trash  {
+                    cosmic ::widget::menu::Item::Button(
+                        fl!("empty-trash"),
+                        NavMenuAction::EmptyTrash(id),
+                    )
+                } else {
+                    cosmic::widget::menu::Item::Button(
+                        fl!("remove-from-sidebar"),
+                        NavMenuAction::RemoveFromSidebar(id),
+                    )
+                },
             ],
         ))
     }
@@ -1898,6 +1916,11 @@ impl Application for App {
                         config_set!(favorites, favorites);
                         return self.update_config();
                     }
+                }
+
+                NavMenuAction::EmptyTrash(_) => {
+                    self.dialog_pages.push_front(DialogPage::EmptyTrash);
+                    self.dialog();
                 }
             },
         }
