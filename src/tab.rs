@@ -376,10 +376,11 @@ pub fn scan_search(tab_path: &PathBuf, term: &str, sizes: IconSizes) -> Vec<Item
     let mut items = Arc::into_inner(items_arc).unwrap().into_inner().unwrap();
     let duration = start.elapsed();
     log::info!(
-        "searched for {:?} in {:?}, found {} items",
+        "searched for {:?} inside {:?} in {:?}, found {} items",
         term,
+        tab_path,
         duration,
-        items.len()
+        items.len(),
     );
 
     let start = Instant::now();
@@ -1417,7 +1418,7 @@ impl Tab {
                             commands.push(Command::OpenFile(path.clone()));
                         }
                     }
-                    Location::Search(path, term) => {
+                    Location::Search(_path, _term) => {
                         cd = Some(location);
                     }
                     Location::Trash => {
@@ -1701,7 +1702,7 @@ impl Tab {
         Some(items)
     }
 
-    pub fn location_view(&self) -> Option<Element<Message>> {
+    pub fn location_view(&self) -> Element<Message> {
         let cosmic_theme::Spacing {
             space_xxxs,
             space_xxs,
@@ -1747,7 +1748,7 @@ impl Tab {
                             })
                             .on_submit(Message::Location(location.clone())),
                     );
-                    return Some(row.into());
+                    return row.into();
                 }
                 _ => {
                     //TODO: allow editing other locations
@@ -1760,11 +1761,25 @@ impl Tab {
                     .padding(space_xxs)
                     .style(theme::Button::Icon),
             );
+        } else if let Location::Search(_, term) = &self.location {
+            row = row.push(
+                widget::button(
+                    widget::row::with_children(vec![
+                        widget::icon::from_name("system-search-symbolic")
+                            .size(16)
+                            .into(),
+                        widget::text(term).into(),
+                    ])
+                    .spacing(space_xxs),
+                )
+                .padding(space_xxs)
+                .style(theme::Button::Icon),
+            );
         }
 
         let mut children: Vec<Element<_>> = Vec::new();
         match &self.location {
-            Location::Path(path) => {
+            Location::Path(path) | Location::Search(path, ..) => {
                 let home_dir = crate::home_dir();
                 for ancestor in path.ancestors() {
                     let ancestor = ancestor.to_path_buf();
@@ -1811,7 +1826,13 @@ impl Tab {
                     children.push(
                         widget::button(row)
                             .padding(space_xxxs)
-                            .on_press(Message::Location(Location::Path(ancestor)))
+                            .on_press(Message::Location(match &self.location {
+                                Location::Path(_) => Location::Path(ancestor),
+                                Location::Search(_, term) => {
+                                    Location::Search(ancestor, term.clone())
+                                }
+                                other => other.clone(),
+                            }))
                             .style(theme::Button::Link)
                             .into(),
                     );
@@ -1821,9 +1842,6 @@ impl Tab {
                     }
                 }
                 children.reverse();
-            }
-            Location::Search(path, term) => {
-                return None;
             }
             Location::Trash => {
                 let mut row = widget::row::with_capacity(2)
@@ -1845,7 +1863,7 @@ impl Tab {
         for child in children {
             row = row.push(child);
         }
-        Some(row.into())
+        row.into()
     }
 
     pub fn empty_view(&self, has_hidden: bool) -> Element<Message> {
@@ -2485,7 +2503,7 @@ impl Tab {
         // Update cached size
         self.size_opt.set(Some(size));
 
-        let location_view_opt = self.location_view();
+        let location_view = self.location_view();
         let (drag_list, mut item_view, can_scroll) = match self.config.view {
             View::Grid => self.grid_view(),
             View::List => self.list_view(),
@@ -2545,9 +2563,7 @@ impl Tab {
                 .position(widget::popover::Position::Point(point));
         }
         let mut tab_column = widget::column::with_capacity(3);
-        if let Some(location_view) = location_view_opt {
-            tab_column = tab_column.push(location_view);
-        }
+        tab_column = tab_column.push(location_view);
         if can_scroll {
             tab_column = tab_column.push(
                 widget::scrollable(popover)
