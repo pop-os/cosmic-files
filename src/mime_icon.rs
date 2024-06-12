@@ -36,11 +36,11 @@ impl MimeIconCache {
                 }
                 let icon_name = icon_names.remove(0);
                 let mut named = icon::from_name(icon_name).size(key.size);
-                let mut fallback_names = Vec::new();
-                for fallback_name in icon_names {
-                    fallback_names.push(fallback_name.into());
-                }
-                if fallback_names.is_empty() {
+                if !icon_names.is_empty() {
+                    let mut fallback_names = Vec::with_capacity(icon_names.len());
+                    for fallback_name in icon_names {
+                        fallback_names.push(fallback_name.into());
+                    }
                     named = named.fallback(Some(icon::IconFallback::Names(fallback_names)));
                 }
                 Some(named.handle())
