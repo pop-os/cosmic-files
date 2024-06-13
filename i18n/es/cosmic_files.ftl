@@ -14,7 +14,7 @@ size = Tamaño
 
 ## Empty Trash Dialog
 empty-trash = Vaciar papelera
-empty-trash-warning = Seguro quieres borrar permanentemente todos los elementos de la Papelera?
+empty-trash-warning = ¿Seguro quiere borrar permanentemente todos los elementos de la Papelera?
 
 ## New File/Folder Dialog
 create-new-file = Crear nuevo archivo
@@ -46,7 +46,7 @@ rename-folder = Renombrar carpeta
 ## Replace Dialog
 replace = Reemplazar
 replace-title = {$filename} ya existe en esta ruta.
-replace-warning = Quieres remplazarlo con el que estas guardando? Reemplazarlo sobre-escribirá su contenido.
+replace-warning = ¿Quiere remplazarlo con el que está guardando? Reemplazarlo sobre-escribirá su contenido.
 
 # Context Pages
 
@@ -58,10 +58,11 @@ operations = Operaciones
 pending = Pendiente
 failed = Fallidas
 complete = Completadas
+copy_noun = Copia
 
 ## Open with
 open-with = Abrir con
-default-app = {$name} (default)
+default-app = {$name} (por defecto)
 
 ## Properties
 properties = Propiedades
@@ -69,6 +70,7 @@ properties = Propiedades
 ## Settings
 settings = Configuración
 settings-tab = Tab
+default-view = Vista por defecto
 settings-show-hidden = Mostrar archivos escondidos
 icon-size-list = Tamaño de iconos (lista)
 icon-size-grid = Tamaño de iconos (grilla)
@@ -111,11 +113,16 @@ edit = Editar
 cut = Cortar
 copy = Copiar
 paste = Pegar
-select-all = Seleccionar Todo
+select-all = Seleccionar todo
 
 ## View
+zoom-in = Aumentar
+default-size = Tamaño por defecto
+zoom-out = Diminuir
 view = Vista
 grid-view = Vista de grilla
 list-view = Vista de lista
+show-hidden-files = Mostrar archivos escondidos
+list-directories-first = Enumerar los directorios primero
 menu-settings = Configuración...
 menu-about = Acerca de Archivos COSMIC...
