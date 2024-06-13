@@ -63,7 +63,7 @@ failed = 失敗
 complete = 完了
 
 ## Open with
-open-with = で開く
+open-with = 別のアプリケーションで開く
 default-app = {$name} (デフォルト)
 
 ## Properties
