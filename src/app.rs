@@ -37,7 +37,7 @@ use std::{
     num::NonZeroU16,
     path::PathBuf,
     process,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{self, Instant},
 };
 
@@ -181,7 +181,7 @@ pub enum NavMenuAction {
     OpenInNewWindow(segmented_button::Entity),
     Properties(segmented_button::Entity),
     RemoveFromSidebar(segmented_button::Entity),
-    EmptyTrash(segmented_button::Entity),
+    EmptyTrash,
 }
 
 impl MenuAction for NavMenuAction {
@@ -237,7 +237,7 @@ pub enum Message {
     TabConfig(TabConfig),
     TabMessage(Option<Entity>, tab::Message),
     TabNew,
-    TabRescan(Entity, Vec<tab::Item>),
+    TabRescan(Entity, Location, Vec<tab::Item>),
     ToggleContextPage(ContextPage),
     WindowClose,
     WindowNew,
@@ -376,8 +376,9 @@ impl App {
         let icon_sizes = self.config.tab.icon_sizes;
         Command::perform(
             async move {
-                match tokio::task::spawn_blocking(move || location.scan(icon_sizes)).await {
-                    Ok(items) => message::app(Message::TabRescan(entity, items)),
+                let location2 = location.clone();
+                match tokio::task::spawn_blocking(move || location2.scan(icon_sizes)).await {
+                    Ok(items) => message::app(Message::TabRescan(entity, location, items)),
                     Err(err) => {
                         log::warn!("failed to rescan: {}", err);
                         message::none()
@@ -406,7 +407,29 @@ impl App {
     }
 
     fn search(&mut self) -> Command<Message> {
-        self.open_tab(Location::Search(home_dir(), self.search_input.clone()))
+        let entity = self.tab_model.active();
+        let mut title_location_opt = None;
+        if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+            match &tab.location {
+                Location::Path(path) | Location::Search(path, ..) => {
+                    tab.change_location(
+                        &Location::Search(path.clone(), self.search_input.clone()),
+                        None,
+                    );
+                    title_location_opt = Some((tab.title(), tab.location.clone()));
+                }
+                _ => {}
+            }
+        }
+        if let Some((title, location)) = title_location_opt {
+            self.tab_model.text_set(entity, title);
+            return Command::batch([
+                self.update_title(),
+                self.update_watcher(),
+                self.rescan_tab(entity, location),
+            ]);
+        }
+        Command::none()
     }
 
     fn selected_paths(&self, entity_opt: Option<Entity>) -> Vec<PathBuf> {
@@ -977,10 +1000,10 @@ impl Application for App {
                     NavMenuAction::Properties(id),
                 ),
                 cosmic::widget::menu::Item::Divider,
-                if is_context_trash  {
-                    cosmic ::widget::menu::Item::Button(
+                if is_context_trash {
+                    cosmic::widget::menu::Item::Button(                        
                         fl!("empty-trash"),
-                        NavMenuAction::EmptyTrash(id),
+                        NavMenuAction::EmptyTrash,
                     )
                 } else {
                     cosmic::widget::menu::Item::Button(
@@ -1717,12 +1740,16 @@ impl Application for App {
                 };
                 return self.open_tab(location);
             }
-            Message::TabRescan(entity, items) => match self.tab_model.data_mut::<Tab>(entity) {
-                Some(tab) => {
-                    tab.set_items(items);
+            Message::TabRescan(entity, location, items) => {
+                match self.tab_model.data_mut::<Tab>(entity) {
+                    Some(tab) => {
+                        if location == tab.location {
+                            tab.set_items(items);
+                        }
+                    }
+                    _ => (),
                 }
-                _ => (),
-            },
+            }
             //TODO: TABRELOAD
             Message::ToggleContextPage(context_page) => {
                 //TODO: ensure context menus are closed
@@ -1918,9 +1945,8 @@ impl Application for App {
                     }
                 }
 
-                NavMenuAction::EmptyTrash(_) => {
+                NavMenuAction::EmptyTrash => {
                     self.dialog_pages.push_front(DialogPage::EmptyTrash);
-                    self.dialog();
                 }
             },
         }

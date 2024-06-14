@@ -5,6 +5,17 @@ filesystem = Système de fichiers
 home = Dossier personnel
 trash = Corbeille
 
+# List view
+name = Nom
+modified = Modifié
+size = Taille
+
+# Dialogs
+
+## Empty Trash Dialog
+empty-trash = Vider la Corbeille
+empty-trash-warning = Voulez-vous vraiement effacer definitivement tous les éléments dans la Corbeille ?
+
 # New File/Folder Dialog
 create-new-file = Créer un nouveau fichier
 create-new-folder = Créer un nouveau dossier
@@ -21,6 +32,7 @@ cancel = Annuler
 open = Ouvrir
 open-file = Ouvrir fichier
 open-folder = Ouvrir dossier
+open-in-new-tab = Ouvrir dans un nouveau onglet
 open-multiple-files = Ouvrir plusieurs fichiers
 open-multiple-folders = Ouvrir plusieurs dossiers
 save = Enregistrer
@@ -104,8 +116,13 @@ paste = Coller
 select-all = Sélectionner tout
 
 ## View
+zoom-in = Zoomer
+default-size = Taille par défaut
+zoom-out = Dézoomer
 view = Vue
 grid-view = Vue en grille
 list-view = Vue en liste
+show-hidden-files = Montrer fichiers cachés
+list-directories-first = Montrer répertoires en premier
 menu-settings = Paramètres...
 menu-about = À propos de Fichiers COSMIC...

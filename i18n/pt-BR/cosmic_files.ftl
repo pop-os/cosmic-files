@@ -71,6 +71,7 @@ properties = Propriedades
 settings = Configurações
 settings-tab = Aba
 settings-show-hidden = Mostrar arquivos ocultos
+default-view = Visualização padrão
 icon-size-list = Tamanho do ícone (lista)
 icon-size-grid = Tamanho do ícone (grade)
 sorting-name = Ordenar por

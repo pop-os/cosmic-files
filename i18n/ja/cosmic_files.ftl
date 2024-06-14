@@ -3,7 +3,18 @@ empty-folder = 空のフォルダ
 empty-folder-hidden = 空のフォルダ（隠しファイルあり）
 filesystem = ファイルシステム
 home = ホーム
-trash = ゴミ
+trash = ゴミ箱
+
+# List view
+name = 名前
+modified = 更新日
+size = サイズ
+
+# Dialogs
+
+## Empty Trash Dialog
+empty-trash = ゴミ箱を空にする
+empty-trash-warning = ゴミ箱のアイテムをすべて完全に削除してもよろしいですか？
 
 # New File/Folder Dialog
 create-new-file = 新しいファイルを作成
@@ -43,7 +54,7 @@ size = サイズ
 # Context Pages
 
 ## About
-git-description = {$date}に{$hash}といGitコミット
+git-description = {$date}に{$hash}というGitコミット
 
 ## Operations
 operations = 操作
@@ -52,7 +63,7 @@ failed = 失敗
 complete = 完了
 
 ## Open with
-open-with = で開く
+open-with = 別のアプリケーションで開く
 default-app = {$name} (デフォルト)
 
 ## Properties
@@ -62,6 +73,7 @@ properties = プロパティ
 settings = 設定
 settings-tab = タブ
 settings-show-hidden = 隠しファイルを表示
+default-view = デフォルトの表示
 icon-size-list = アイコンサイズ（リスト）
 icon-size-grid = アイコンサイズ（グリッド）
 sorting-name = 並べ替え
@@ -104,8 +116,13 @@ paste = 貼り付け
 select-all = すべてを選択
 
 ## View
+zoom-in = ズームイン
+default-size = デフォルトサイズ
+zoom-out = ズームアウト
 view = 表示
 grid-view = グリッドの表示
 list-view = リストの表示
+show-hidden-files = 隠しファイルを表示
+list-directories-first = ダイレクトリーを最初に表示
 menu-settings = 設定...
 menu-about = COSMICファイルについて...
