@@ -147,6 +147,9 @@ pub fn folder_icon_symbolic(path: &PathBuf, icon_size: u16) -> widget::icon::Han
 }
 
 pub fn trash_icon_symbolic(icon_size: u16) -> widget::icon::Handle {
+    #[cfg(target_os = "macos")]
+    let full = false; // TODO: add support for macos
+    #[cfg(not(target_os = "macos"))]
     let full = match trash::os_limited::list() {
         Ok(entries) => !entries.is_empty(),
         Err(_err) => false,

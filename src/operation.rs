@@ -288,6 +288,12 @@ impl Operation {
                     .send(Message::PendingProgress(id, 100.0))
                     .await;
             }
+            #[cfg(target_os = "macos")]
+            Self::Restore { .. } => {
+                // TODO: add support for macos
+                return Err("Restoring from trash is not supported on macos".to_string());
+            }
+            #[cfg(not(target_os = "macos"))]
             Self::Restore { paths } => {
                 let total = paths.len();
                 let mut count = 0;
