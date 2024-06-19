@@ -448,7 +448,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                 };
 
                 let original_path = entry.original_path();
-                let name = entry.name.clone();
+                let name = entry.name.to_string_lossy().to_string();
 
                 let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) =
                     match metadata.size {
