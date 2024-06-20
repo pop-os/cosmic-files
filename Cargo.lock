@@ -1578,6 +1578,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3d8a32ae18130a3c84dd492d4215c3d913c3b07c6b63c2eb3eb7ff1101ab7bf"
 
 [[package]]
+name = "enum-repr"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bad30c9c0fa1aaf1ae5010dab11f1117b15d35faf62cda4bbbc53b9987950f18"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "enumflags2"
 version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1791,6 +1802,9 @@ name = "float-cmp"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "float_next_after"
@@ -2587,6 +2601,7 @@ dependencies = [
  "iced_core",
  "iced_futures",
  "iced_renderer",
+ "iced_sctk",
  "iced_widget",
  "iced_winit",
  "image",
@@ -2601,6 +2616,7 @@ version = "0.1.0"
 source = "git+https://github.com/pop-os/libcosmic.git#d2b35319842869bfa89b1fd2fa0d3a6f7b5e8dd9"
 dependencies = [
  "accesskit",
+ "accesskit_unix",
  "accesskit_winit",
 ]
 
@@ -2611,12 +2627,14 @@ source = "git+https://github.com/pop-os/libcosmic.git#d2b35319842869bfa89b1fd2fa
 dependencies = [
  "bitflags 2.5.0",
  "dnd",
+ "iced_accessibility",
  "log",
  "mime 0.1.0",
  "num-traits",
  "palette",
  "raw-window-handle",
  "serde",
+ "smithay-client-toolkit 0.19.1",
  "smol_str",
  "thiserror",
  "web-time",
@@ -2679,10 +2697,39 @@ version = "0.12.0"
 source = "git+https://github.com/pop-os/libcosmic.git#d2b35319842869bfa89b1fd2fa0d3a6f7b5e8dd9"
 dependencies = [
  "dnd",
+ "iced_accessibility",
  "iced_core",
  "iced_futures",
+ "smithay-client-toolkit 0.19.1",
  "thiserror",
  "window_clipboard",
+]
+
+[[package]]
+name = "iced_sctk"
+version = "0.1.0"
+source = "git+https://github.com/pop-os/libcosmic.git#d2b35319842869bfa89b1fd2fa0d3a6f7b5e8dd9"
+dependencies = [
+ "enum-repr",
+ "float-cmp",
+ "futures",
+ "iced_accessibility",
+ "iced_futures",
+ "iced_graphics",
+ "iced_runtime",
+ "iced_style",
+ "itertools",
+ "lazy_static",
+ "raw-window-handle",
+ "smithay-client-toolkit 0.19.1",
+ "thiserror",
+ "tracing",
+ "wayland-backend",
+ "wayland-protocols 0.32.1",
+ "window_clipboard",
+ "xkbcommon",
+ "xkbcommon-dl",
+ "xkeysym",
 ]
 
 [[package]]
@@ -2744,6 +2791,7 @@ version = "0.12.0"
 source = "git+https://github.com/pop-os/libcosmic.git#d2b35319842869bfa89b1fd2fa0d3a6f7b5e8dd9"
 dependencies = [
  "dnd",
+ "iced_accessibility",
  "iced_renderer",
  "iced_runtime",
  "iced_style",
@@ -2760,6 +2808,7 @@ version = "0.12.0"
 source = "git+https://github.com/pop-os/libcosmic.git#d2b35319842869bfa89b1fd2fa0d3a6f7b5e8dd9"
 dependencies = [
  "dnd",
+ "iced_accessibility",
  "iced_graphics",
  "iced_runtime",
  "iced_style",
@@ -3064,6 +3113,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8478577c03552c21db0e2724ffb8986a5ce7af88107e6be5d2ee6e158c12800"
 
 [[package]]
+name = "itertools"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3238,6 +3296,7 @@ dependencies = [
  "freedesktop-desktop-entry",
  "freedesktop-icons",
  "iced",
+ "iced_accessibility",
  "iced_core",
  "iced_futures",
  "iced_renderer",

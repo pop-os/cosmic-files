@@ -47,7 +47,7 @@ slotmap = "1.0.7"
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
 default-features = false
-features = ["multi-window", "tokio", "winit"]
+features = ["a11y", "multi-window", "tokio", "winit"]
 
 [dependencies.smol_str]
 version = "0.2.1"
