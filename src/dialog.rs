@@ -1,6 +1,10 @@
-// Copyright 2023 System76 <inflist_o@system76.com>
+// Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
+#[cfg(feature = "winit")]
+use cosmic::iced::multi_window::Application as IcedApplication;
+#[cfg(feature = "wayland")]
+use cosmic::iced::Application as IcedApplication;
 use cosmic::{
     app::{self, cosmic::Cosmic, message, Command, Core},
     cosmic_theme, executor,
@@ -8,7 +12,6 @@ use cosmic::{
         event,
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Modifiers},
-        multi_window::Application as IcedApplication,
         subscription::{self, Subscription},
         widget::scrollable,
         window, Event, Length, Size,
