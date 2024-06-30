@@ -177,6 +177,7 @@ impl MenuAction for Action {
 pub enum ContextItem {
     NavBar(segmented_button::Entity),
     TabBar(segmented_button::Entity),
+    BreadCrumbs(usize),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -683,6 +684,31 @@ impl App {
 
                 if let Some(location) = self.nav_model.data::<Location>(item) {
                     if let Location::Path(path) = location {
+                        let parent = path.parent().unwrap_or(path);
+
+                        for item in Location::Path(parent.to_owned()).scan(IconSizes::default()) {
+                            if item.path_opt.as_deref() == Some(path) {
+                                children.push(item.property_view(IconSizes::default()));
+                            }
+                        }
+                    };
+                }
+
+                widget::settings::view_column(children).into()
+            }
+
+            Some(ContextItem::BreadCrumbs(index)) => {
+                let mut children = Vec::new();
+
+                if let Some(tab) = self.tab_model.active_data::<Tab>() {
+                    let path = match tab.location {
+                        Location::Path(ref path) => Some(path),
+                        Location::Search(ref path, _) => Some(path),
+                        _ => None,
+                    }
+                    .and_then(|path| path.ancestors().nth(index))
+                    .map(|path| path.to_path_buf());
+                    if let Some(ref path) = path {
                         let parent = path.parent().unwrap_or(path);
 
                         for item in Location::Path(parent.to_owned()).scan(IconSizes::default()) {
@@ -1751,6 +1777,12 @@ impl Application for App {
                                 log::error!("failed to get current executable path: {}", err);
                             }
                         },
+                        tab::Command::LocationProperties(index) => {
+                            self.context_page =
+                                ContextPage::Properties(Some(ContextItem::BreadCrumbs(index)));
+                            self.core.window.show_context = true;
+                            self.set_context_title(self.context_page.title());
+                        }
                         tab::Command::Scroll(id, offset) => {
                             commands.push(scrollable::scroll_to(id, offset));
                         }

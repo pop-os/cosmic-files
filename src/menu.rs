@@ -275,6 +275,12 @@ pub fn location_context_menu<'a>(ancestor_index: usize) -> Element<'a, tab::Mess
                 LocationMenuAction::OpenInNewWindow(ancestor_index),
             ))
             .into(),
+        horizontal_rule(1).into(),
+        menu_button!(widget::text(fl!("properties")))
+            .on_press(tab::Message::LocationMenuAction(
+                LocationMenuAction::Properties(ancestor_index),
+            ))
+            .into(),
     ];
 
     widget::container(widget::column::with_children(children))

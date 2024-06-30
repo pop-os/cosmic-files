@@ -540,6 +540,7 @@ pub enum Command {
     OpenFile(PathBuf),
     OpenInNewTab(PathBuf),
     OpenInNewWindow(PathBuf),
+    LocationProperties(usize),
     Scroll(widget::Id, AbsoluteOffset),
     DropFiles(PathBuf, ClipboardPaste),
     Timeout(Duration, Message),
@@ -592,6 +593,7 @@ pub enum Message {
 pub enum LocationMenuAction {
     OpenInNewTab(usize),
     OpenInNewWindow(usize),
+    Properties(usize),
 }
 
 impl MenuAction for LocationMenuAction {
@@ -1296,6 +1298,9 @@ impl Tab {
                         if let Some(path) = path_for_index(ancestor_index) {
                             commands.push(Command::OpenInNewWindow(path));
                         }
+                    }
+                    LocationMenuAction::Properties(ancestor_index) => {
+                        commands.push(Command::LocationProperties(ancestor_index));
                     }
                 }
             }
