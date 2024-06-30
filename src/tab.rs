@@ -571,7 +571,7 @@ pub enum Message {
     Location(Location),
     LocationUp,
     Open,
-    RightClick(usize),
+    RightClick(Option<usize>),
     MiddleClick(usize),
     Scroll(Viewport),
     SelectAll,
@@ -1272,7 +1272,9 @@ impl Tab {
                 commands.push(Command::Action(action));
             }
             Message::ContextMenu(point_opt) => {
-                self.context_menu = point_opt;
+                if point_opt.is_none() || !mod_shift {
+                    self.context_menu = point_opt;
+                }
             }
             Message::LocationContextMenu(point_path_opt) => {
                 self.location_context_menu = point_path_opt;
@@ -1517,33 +1519,28 @@ impl Tab {
                     }
                 }
             }
-            Message::RightClick(click_i) => {
+            Message::RightClick(click_i_opt) => {
+                self.update(Message::Click(click_i_opt), modifiers);
                 *self.cached_selected.borrow_mut() = None;
                 if let Some(ref mut items) = self.items_opt {
-                    if !items.get(click_i).map_or(false, |x| x.selected) {
+                    if !click_i_opt.map_or(false, |click_i| {
+                        items.get(click_i).map_or(false, |x| x.selected)
+                    }) {
                         // If item not selected, clear selection on other items
                         for (i, item) in items.iter_mut().enumerate() {
-                            if i == click_i {
-                                item.selected = true;
-                            } else if mod_ctrl {
-                                // Holding control allows multiple selection
-                            } else {
-                                item.selected = false;
-                            }
+                            item.selected = Some(i) == click_i_opt;
                         }
                     }
                 }
             }
             Message::MiddleClick(click_i) => {
-                if mod_ctrl || mod_shift {
-                    self.update(Message::Click(Some(click_i)), modifiers);
-                } else {
-                    *self.cached_selected.borrow_mut() = None;
+                self.update(Message::Click(Some(click_i)), modifiers);
+                if !mod_ctrl && !mod_shift {
                     if let Some(ref mut items) = self.items_opt {
                         for (i, item) in items.iter_mut().enumerate() {
                             item.selected = i == click_i;
                         }
-                        self.select_range = None;
+                        self.select_range = Some((click_i, click_i));
                     }
                     if let Some(clicked_item) =
                         self.items_opt.as_ref().and_then(|items| items.get(click_i))
@@ -2124,7 +2121,7 @@ impl Tab {
                     } else {
                         column = column.push(
                             mouse_area::MouseArea::new(button).on_right_press_no_capture(
-                                move |_point_opt| Message::RightClick(i),
+                                move |_point_opt| Message::RightClick(Some(i)),
                             ),
                         );
                     }
@@ -2463,7 +2460,7 @@ impl Tab {
                 };
 
                 let button = |row| {
-                    crate::mouse_area::MouseArea::new(
+                    let mouse_area = crate::mouse_area::MouseArea::new(
                         widget::button(row)
                             .width(Length::Fill)
                             .height(Length::Fixed(row_height as f32))
@@ -2474,14 +2471,18 @@ impl Tab {
                     .on_press(move |_| Message::Click(Some(i)))
                     .on_double_click(move |_| Message::DoubleClick(Some(i)))
                     .on_release(move |_| Message::ClickRelease(Some(i)))
-                    .on_middle_press(move |_| Message::MiddleClick(i))
+                    .on_middle_press(move |_| Message::MiddleClick(i));
+
+                    if self.context_menu.is_some() {
+                        mouse_area
+                    } else {
+                        mouse_area.on_right_press_no_capture(move |_point_opt| {
+                            Message::RightClick(Some(i))
+                        })
+                    }
                 };
 
-                let mut button_row = button(row.into());
-                if self.context_menu.is_some() {
-                    button_row =
-                        button_row.on_right_press(move |_point_opt| Message::RightClick(i));
-                }
+                let button_row = button(row.into());
                 let button_row: Element<_> = if item.metadata.is_dir() && item.path_opt.is_some() {
                     let tab_location = Location::Path(item.path_opt.clone().unwrap());
                     let tab_location_enter = tab_location.clone();
@@ -2678,8 +2679,7 @@ impl Tab {
         if self.context_menu.is_some() {
             mouse_area = mouse_area.on_right_press(move |_point_opt| Message::ContextMenu(None));
         } else {
-            mouse_area =
-                mouse_area.on_right_press(move |point_opt| Message::ContextMenu(point_opt));
+            mouse_area = mouse_area.on_right_press(Message::ContextMenu);
         }
 
         let mut popover = widget::popover(mouse_area);
