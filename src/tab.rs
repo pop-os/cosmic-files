@@ -556,7 +556,8 @@ pub enum Message {
     Config(TabConfig),
     ContextAction(Action),
     ContextMenu(Option<Point>),
-    LocationContextMenu(Option<(Point, usize)>),
+    LocationContextMenuPoint(Option<Point>),
+    LocationContextMenuIndex(Option<usize>),
     LocationMenuAction(LocationMenuAction),
     Drag(Option<Rectangle>),
     EditLocation(Option<Location>),
@@ -826,7 +827,8 @@ impl HeadingOptions {
 pub struct Tab {
     //TODO: make more items private
     pub location: Location,
-    pub location_context_menu: Option<(Point, usize)>,
+    pub location_context_menu_point: Option<Point>,
+    pub location_context_menu_index: Option<usize>,
     pub context_menu: Option<Point>,
     pub dialog: Option<DialogKind>,
     pub scroll_opt: Option<AbsoluteOffset>,
@@ -852,7 +854,8 @@ impl Tab {
         Self {
             location,
             context_menu: None,
-            location_context_menu: None,
+            location_context_menu_point: None,
+            location_context_menu_index: None,
             dialog: None,
             scroll_opt: None,
             size_opt: Cell::new(None),
@@ -1154,7 +1157,7 @@ impl Tab {
                     return commands;
                 }
                 self.context_menu = None;
-                self.location_context_menu = None;
+                self.location_context_menu_index = None;
                 if let Some(ref mut items) = self.items_opt {
                     for (i, item) in items.iter_mut().enumerate() {
                         if mod_ctrl {
@@ -1198,7 +1201,7 @@ impl Tab {
             Message::Click(click_i_opt) => {
                 self.selected_clicked = false;
                 self.context_menu = None;
-                self.location_context_menu = None;
+                self.location_context_menu_index = None;
                 if click_i_opt.is_none() {
                     self.clicked = click_i_opt;
                 }
@@ -1276,11 +1279,14 @@ impl Tab {
                     self.context_menu = point_opt;
                 }
             }
-            Message::LocationContextMenu(point_path_opt) => {
-                self.location_context_menu = point_path_opt;
+            Message::LocationContextMenuPoint(point_opt) => {
+                self.location_context_menu_point = point_opt;
+            }
+            Message::LocationContextMenuIndex(index_opt) => {
+                self.location_context_menu_index = index_opt;
             }
             Message::LocationMenuAction(action) => {
-                self.location_context_menu = None;
+                self.location_context_menu_index = None;
                 let path_for_index = |ancestor_index| {
                     match self.location {
                         Location::Path(ref path) => Some(path),
@@ -1309,7 +1315,7 @@ impl Tab {
             Message::Drag(rect_opt) => match rect_opt {
                 Some(rect) => {
                     self.context_menu = None;
-                    self.location_context_menu = None;
+                    self.location_context_menu_index = None;
                     self.select_rect(rect, mod_ctrl, mod_shift);
                     if self.select_focus.take().is_some() {
                         // Unfocus currently focused button
@@ -1933,12 +1939,13 @@ impl Tab {
                         })
                     });
 
-                    if self.location_context_menu.is_some() {
-                        mouse_area = mouse_area
-                            .on_right_press(move |_point_opt| Message::LocationContextMenu(None))
+                    if self.location_context_menu_index.is_some() {
+                        mouse_area = mouse_area.on_right_press(move |_point_opt| {
+                            Message::LocationContextMenuIndex(None)
+                        })
                     } else {
-                        mouse_area = mouse_area.on_right_press(move |point_opt| {
-                            Message::LocationContextMenu(point_opt.map(|point| (point, index)))
+                        mouse_area = mouse_area.on_right_press_no_capture(move |point_opt| {
+                            Message::LocationContextMenuIndex(Some(index))
                         })
                     }
 
@@ -1978,10 +1985,16 @@ impl Tab {
             row = row.push(child);
         }
 
-        let mut popover = widget::popover(row);
-        if let Some((point, ancestor_index)) = self.location_context_menu {
+        let mouse_area = crate::mouse_area::MouseArea::new(row)
+            .on_right_press(Message::LocationContextMenuPoint);
+
+        let mut popover = widget::popover(mouse_area);
+        if let (Some(point), Some(index)) = (
+            self.location_context_menu_point,
+            self.location_context_menu_index,
+        ) {
             popover = popover
-                .popup(menu::location_context_menu(ancestor_index))
+                .popup(menu::location_context_menu(index))
                 .position(widget::popover::Position::Point(point))
         }
 
