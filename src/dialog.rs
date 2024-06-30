@@ -641,6 +641,9 @@ impl Application for App {
                         tab::Command::OpenInNewTab(_path) => {
                             log::warn!("OpenInNewTab not supported in dialog");
                         }
+                        tab::Command::OpenInNewWindow(_path) => {
+                            log::warn!("OpenInNewWindow not supported in dialog");
+                        }
                         tab::Command::Scroll(id, offset) => {
                             commands.push(scrollable::scroll_to(id, offset));
                         }

@@ -1740,6 +1740,17 @@ impl Application for App {
                         tab::Command::OpenInNewTab(path) => {
                             commands.push(self.open_tab(Location::Path(path.clone())));
                         }
+                        tab::Command::OpenInNewWindow(path) => match env::current_exe() {
+                            Ok(exe) => match process::Command::new(&exe).arg(path).spawn() {
+                                Ok(_child) => {}
+                                Err(err) => {
+                                    log::error!("failed to execute {:?}: {}", exe, err);
+                                }
+                            },
+                            Err(err) => {
+                                log::error!("failed to get current executable path: {}", err);
+                            }
+                        },
                         tab::Command::Scroll(id, offset) => {
                             commands.push(scrollable::scroll_to(id, offset));
                         }

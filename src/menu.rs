@@ -11,6 +11,7 @@ use cosmic::{
 };
 use std::collections::HashMap;
 
+use crate::tab::LocationMenuAction;
 use crate::{
     app::{Action, Message},
     config::TabConfig,
@@ -94,7 +95,9 @@ pub fn context_menu<'a>(
     match tab.location {
         Location::Path(_) | Location::Search(_, _) => {
             if selected > 0 {
-                children.push(menu_item(fl!("open"), Action::Open).into());
+                if selected_dir == 1 && selected == 1 || selected_dir == 0 {
+                    children.push(menu_item(fl!("open"), Action::Open).into());
+                }
                 if selected == 1 {
                     children.push(menu_item(fl!("open-with"), Action::OpenWith).into());
                     if selected_dir == 1 {
@@ -102,8 +105,12 @@ pub fn context_menu<'a>(
                             .push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
                     }
                 }
-                children.push(menu_item(fl!("open-in-new-tab"), Action::OpenInNewTab).into());
-                children.push(menu_item(fl!("open-in-new-window"), Action::OpenInNewWindow).into());
+                // All selected items are directories
+                if selected == selected_dir {
+                    children.push(menu_item(fl!("open-in-new-tab"), Action::OpenInNewTab).into());
+                    children
+                        .push(menu_item(fl!("open-in-new-window"), Action::OpenInNewWindow).into());
+                }
                 children.push(horizontal_rule(1).into());
                 children.push(menu_item(fl!("rename"), Action::Rename).into());
                 children.push(menu_item(fl!("cut"), Action::Cut).into());
@@ -254,4 +261,39 @@ pub fn menu_bar<'a>(
     .item_width(ItemWidth::Uniform(240))
     .spacing(4.0)
     .into()
+}
+
+pub fn location_context_menu<'a>(ancestor_index: usize) -> Element<'a, tab::Message> {
+    let children = vec![
+        menu_button!(widget::text(fl!("open-in-new-tab")))
+            .on_press(tab::Message::LocationMenuAction(
+                LocationMenuAction::OpenInNewTab(ancestor_index),
+            ))
+            .into(),
+        menu_button!(widget::text(fl!("open-in-new-window")))
+            .on_press(tab::Message::LocationMenuAction(
+                LocationMenuAction::OpenInNewWindow(ancestor_index),
+            ))
+            .into(),
+    ];
+
+    widget::container(widget::column::with_children(children))
+        .padding(1)
+        .style(theme::Container::custom(|theme| {
+            let cosmic = theme.cosmic();
+            let component = &cosmic.background.component;
+            widget::container::Appearance {
+                icon_color: Some(component.on.into()),
+                text_color: Some(component.on.into()),
+                background: Some(Background::Color(component.base.into())),
+                border: Border {
+                    radius: 8.0.into(),
+                    width: 1.0,
+                    color: component.divider.into(),
+                },
+                ..Default::default()
+            }
+        }))
+        .width(Length::Fixed(240.0))
+        .into()
 }
