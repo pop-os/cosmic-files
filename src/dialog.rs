@@ -644,6 +644,9 @@ impl Application for App {
                         tab::Command::OpenInNewWindow(_path) => {
                             log::warn!("OpenInNewWindow not supported in dialog");
                         }
+                        tab::Command::LocationProperties(_path) => {
+                            log::warn!("LocationProperties not supported in dialog");
+                        }
                         tab::Command::Scroll(id, offset) => {
                             commands.push(scrollable::scroll_to(id, offset));
                         }
