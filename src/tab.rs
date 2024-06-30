@@ -1,6 +1,7 @@
 use cosmic::iced::clipboard::dnd::DndAction;
 use cosmic::iced::Border;
 use cosmic::iced_core::widget::tree;
+use cosmic::widget::menu::action::MenuAction;
 use cosmic::widget::menu::key_bind::KeyBind;
 use cosmic::widget::{vertical_space, Id, Widget};
 use cosmic::{
@@ -538,6 +539,7 @@ pub enum Command {
     FocusTextInput(widget::Id),
     OpenFile(PathBuf),
     OpenInNewTab(PathBuf),
+    OpenInNewWindow(PathBuf),
     Scroll(widget::Id, AbsoluteOffset),
     DropFiles(PathBuf, ClipboardPaste),
     Timeout(Duration, Message),
@@ -553,8 +555,11 @@ pub enum Message {
     Config(TabConfig),
     ContextAction(Action),
     ContextMenu(Option<Point>),
+    LocationContextMenu(Option<(Point, usize)>),
+    LocationMenuAction(LocationMenuAction),
     Drag(Option<Rectangle>),
     EditLocation(Option<Location>),
+    OpenInNewTab(PathBuf),
     EmptyTrash,
     GoNext,
     GoPrevious,
@@ -581,6 +586,20 @@ pub enum Message {
     ZoomDefault,
     ZoomIn,
     ZoomOut,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum LocationMenuAction {
+    OpenInNewTab(usize),
+    OpenInNewWindow(usize),
+}
+
+impl MenuAction for LocationMenuAction {
+    type Message = Message;
+
+    fn message(&self) -> Self::Message {
+        Message::LocationMenuAction(*self)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -805,6 +824,7 @@ impl HeadingOptions {
 pub struct Tab {
     //TODO: make more items private
     pub location: Location,
+    pub location_context_menu: Option<(Point, usize)>,
     pub context_menu: Option<Point>,
     pub dialog: Option<DialogKind>,
     pub scroll_opt: Option<AbsoluteOffset>,
@@ -830,6 +850,7 @@ impl Tab {
         Self {
             location,
             context_menu: None,
+            location_context_menu: None,
             dialog: None,
             scroll_opt: None,
             size_opt: Cell::new(None),
@@ -1131,6 +1152,7 @@ impl Tab {
                     return commands;
                 }
                 self.context_menu = None;
+                self.location_context_menu = None;
                 if let Some(ref mut items) = self.items_opt {
                     for (i, item) in items.iter_mut().enumerate() {
                         if mod_ctrl {
@@ -1174,6 +1196,7 @@ impl Tab {
             Message::Click(click_i_opt) => {
                 self.selected_clicked = false;
                 self.context_menu = None;
+                self.location_context_menu = None;
                 if click_i_opt.is_none() {
                     self.clicked = click_i_opt;
                 }
@@ -1249,9 +1272,37 @@ impl Tab {
             Message::ContextMenu(point_opt) => {
                 self.context_menu = point_opt;
             }
+            Message::LocationContextMenu(point_path_opt) => {
+                self.location_context_menu = point_path_opt;
+            }
+            Message::LocationMenuAction(action) => {
+                self.location_context_menu = None;
+                let path_for_index = |ancestor_index| {
+                    match self.location {
+                        Location::Path(ref path) => Some(path),
+                        Location::Search(ref path, _) => Some(path),
+                        _ => None,
+                    }
+                    .and_then(|path| path.ancestors().nth(ancestor_index))
+                    .map(|path| path.to_path_buf())
+                };
+                match action {
+                    LocationMenuAction::OpenInNewTab(ancestor_index) => {
+                        if let Some(path) = path_for_index(ancestor_index) {
+                            commands.push(Command::OpenInNewTab(path));
+                        }
+                    }
+                    LocationMenuAction::OpenInNewWindow(ancestor_index) => {
+                        if let Some(path) = path_for_index(ancestor_index) {
+                            commands.push(Command::OpenInNewWindow(path));
+                        }
+                    }
+                }
+            }
             Message::Drag(rect_opt) => match rect_opt {
                 Some(rect) => {
                     self.context_menu = None;
+                    self.location_context_menu = None;
                     self.select_rect(rect, mod_ctrl, mod_shift);
                     if self.select_focus.take().is_some() {
                         // Unfocus currently focused button
@@ -1265,6 +1316,9 @@ impl Tab {
                     commands.push(Command::FocusTextInput(self.edit_location_id.clone()));
                 }
                 self.edit_location = edit_location;
+            }
+            Message::OpenInNewTab(path) => {
+                commands.push(Command::OpenInNewTab(path));
             }
             Message::EmptyTrash => {
                 commands.push(Command::EmptyTrash);
@@ -1788,12 +1842,15 @@ impl Tab {
                     //TODO: allow editing other locations
                 }
             }
-        } else if let Location::Path(_) = &self.location {
+        } else if let Location::Path(path) = &self.location {
             row = row.push(
-                widget::button(widget::icon::from_name("edit-symbolic").size(16))
-                    .on_press(Message::EditLocation(Some(self.location.clone())))
-                    .padding(space_xxs)
-                    .style(theme::Button::Icon),
+                crate::mouse_area::MouseArea::new(
+                    widget::button(widget::icon::from_name("edit-symbolic").size(16))
+                        .padding(space_xxs)
+                        .style(theme::Button::Icon),
+                )
+                .on_press(move |_| Message::EditLocation(Some(self.location.clone())))
+                .on_middle_press(move |_| Message::OpenInNewTab(path.clone())),
             );
         } else if let Location::Search(_, term) = &self.location {
             row = row.push(
@@ -1815,8 +1872,7 @@ impl Tab {
         match &self.location {
             Location::Path(path) | Location::Search(path, ..) => {
                 let home_dir = crate::home_dir();
-                for ancestor in path.ancestors() {
-                    let ancestor = ancestor.to_path_buf();
+                for (index, ancestor) in path.ancestors().enumerate() {
                     let mut found_home = false;
                     let mut row = widget::row::with_capacity(2)
                         .align_items(Alignment::Center)
@@ -1826,8 +1882,11 @@ impl Tab {
                         Some(name) => {
                             if ancestor == home_dir {
                                 row = row.push(
-                                    widget::icon::icon(folder_icon_symbolic(&ancestor, 16))
-                                        .size(16),
+                                    widget::icon::icon(folder_icon_symbolic(
+                                        &ancestor.to_path_buf(),
+                                        16,
+                                    ))
+                                    .size(16),
                                 );
                                 found_home = true;
                                 fl!("home")
@@ -1857,19 +1916,31 @@ impl Tab {
                         row = row.push(widget::text(name));
                     }
 
-                    children.push(
+                    let mut mouse_area = crate::mouse_area::MouseArea::new(
                         widget::button(row)
                             .padding(space_xxxs)
-                            .on_press(Message::Location(match &self.location {
-                                Location::Path(_) => Location::Path(ancestor),
-                                Location::Search(_, term) => {
-                                    Location::Search(ancestor, term.clone())
-                                }
-                                other => other.clone(),
-                            }))
-                            .style(theme::Button::Link)
-                            .into(),
-                    );
+                            .style(theme::Button::Link),
+                    )
+                    .on_press(move |_| {
+                        Message::Location(match &self.location {
+                            Location::Path(_) => Location::Path(ancestor.to_path_buf()),
+                            Location::Search(_, term) => {
+                                Location::Search(ancestor.to_path_buf(), term.clone())
+                            }
+                            other => other.clone(),
+                        })
+                    });
+
+                    if self.location_context_menu.is_some() {
+                        mouse_area = mouse_area
+                            .on_right_press(move |_point_opt| Message::LocationContextMenu(None))
+                    } else {
+                        mouse_area = mouse_area.on_right_press(move |point_opt| {
+                            Message::LocationContextMenu(point_opt.map(|point| (point, index)))
+                        })
+                    }
+
+                    children.push(mouse_area.into());
 
                     if found_home {
                         break;
@@ -1897,7 +1968,15 @@ impl Tab {
         for child in children {
             row = row.push(child);
         }
-        row.into()
+
+        let mut popover = widget::popover(row);
+        if let Some((point, ancestor_index)) = self.location_context_menu {
+            popover = popover
+                .popup(menu::location_context_menu(ancestor_index))
+                .position(widget::popover::Position::Point(point))
+        }
+
+        popover.into()
     }
 
     pub fn empty_view(&self, has_hidden: bool) -> Element<Message> {
