@@ -174,7 +174,7 @@ pub fn context_menu<'a>(
                 ..Default::default()
             }
         }))
-        .width(Length::Fixed(240.0))
+        .width(Length::Fixed(260.0))
         .into()
 }
 
