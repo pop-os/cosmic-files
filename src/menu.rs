@@ -102,6 +102,8 @@ pub fn context_menu<'a>(
                             .push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
                     }
                 }
+                children.push(menu_item(fl!("open-in-new-tab"), Action::OpenInNewTab).into());
+                children.push(menu_item(fl!("open-in-new-window"), Action::OpenInNewWindow).into());
                 children.push(horizontal_rule(1).into());
                 children.push(menu_item(fl!("rename"), Action::Rename).into());
                 children.push(menu_item(fl!("cut"), Action::Cut).into());
