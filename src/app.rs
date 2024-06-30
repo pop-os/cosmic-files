@@ -78,6 +78,8 @@ pub enum Action {
     NewFile,
     NewFolder,
     Open,
+    OpenInNewTab,
+    OpenInNewWindow,
     OpenTerminal,
     OpenWith,
     Operations,
@@ -123,6 +125,8 @@ impl Action {
             Action::NewFile => Message::NewItem(entity_opt, false),
             Action::NewFolder => Message::NewItem(entity_opt, true),
             Action::Open => Message::TabMessage(entity_opt, tab::Message::Open),
+            Action::OpenInNewTab => Message::OpenInNewTab(entity_opt),
+            Action::OpenInNewWindow => Message::OpenInNewWindow(entity_opt),
             Action::OpenTerminal => Message::OpenTerminal(entity_opt),
             Action::OpenWith => Message::ToggleContextPage(ContextPage::OpenWith),
             Action::Operations => Message::ToggleContextPage(ContextPage::Operations),
@@ -217,6 +221,8 @@ pub enum Message {
     NotifyWatcher(WatcherWrapper),
     OpenTerminal(Option<Entity>),
     OpenWith(PathBuf, mime_app::MimeApp),
+    OpenInNewTab(Option<Entity>),
+    OpenInNewWindow(Option<Entity>),
     Paste(Option<Entity>),
     PasteContents(PathBuf, ClipboardPaste),
     PendingComplete(u64),
@@ -1415,6 +1421,32 @@ impl Application for App {
                 // Close Open With context view
                 self.core.window.show_context = false;
             }
+            Message::OpenInNewTab(entity_opt) => {
+                return Command::batch(self.selected_paths(entity_opt).into_iter().filter_map(
+                    |path| {
+                        if path.is_dir() {
+                            Some(self.open_tab(Location::Path(path)))
+                        } else {
+                            None
+                        }
+                    },
+                ))
+            }
+            Message::OpenInNewWindow(entity_opt) => match env::current_exe() {
+                Ok(exe) => self
+                    .selected_paths(entity_opt)
+                    .into_iter()
+                    .filter(|p| p.is_dir())
+                    .for_each(|path| match process::Command::new(&exe).arg(path).spawn() {
+                        Ok(_child) => {}
+                        Err(err) => {
+                            log::error!("failed to execute {:?}: {}", exe, err);
+                        }
+                    }),
+                Err(err) => {
+                    log::error!("failed to get current executable path: {}", err);
+                }
+            },
             Message::Paste(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
