@@ -537,6 +537,7 @@ pub enum Command {
     FocusButton(widget::Id),
     FocusTextInput(widget::Id),
     OpenFile(PathBuf),
+    OpenInNewTab(PathBuf),
     Scroll(widget::Id, AbsoluteOffset),
     DropFiles(PathBuf, ClipboardPaste),
     Timeout(Duration, Message),
@@ -565,6 +566,7 @@ pub enum Message {
     LocationUp,
     Open,
     RightClick(usize),
+    MiddleClick(usize),
     Scroll(Viewport),
     SelectAll,
     Thumbnail(PathBuf, ItemThumbnail),
@@ -1473,6 +1475,35 @@ impl Tab {
                     }
                 }
             }
+            Message::MiddleClick(click_i) => {
+                if mod_ctrl || mod_shift {
+                    self.update(Message::Click(Some(click_i)), modifiers);
+                } else {
+                    *self.cached_selected.borrow_mut() = None;
+                    if let Some(ref mut items) = self.items_opt {
+                        for (i, item) in items.iter_mut().enumerate() {
+                            item.selected = i == click_i;
+                        }
+                        self.select_range = None;
+                    }
+                    if let Some(clicked_item) =
+                        self.items_opt.as_ref().and_then(|items| items.get(click_i))
+                    {
+                        if let Some(path) = &clicked_item.path_opt {
+                            if clicked_item.metadata.is_dir() {
+                                //cd = Some(Location::Path(path.clone()));
+                                commands.push(Command::OpenInNewTab(path.clone()))
+                            } else {
+                                commands.push(Command::OpenFile(path.clone()));
+                            }
+                        } else {
+                            log::warn!("no path for item {:?}", clicked_item);
+                        }
+                    } else {
+                        log::warn!("no item for click index {:?}", click_i);
+                    }
+                }
+            }
             Message::Scroll(viewport) => {
                 self.scroll_opt = Some(viewport.absolute_offset());
             }
@@ -2070,7 +2101,8 @@ impl Tab {
                 let mouse_area = crate::mouse_area::MouseArea::new(column)
                     .on_press(move |_| Message::Click(Some(i)))
                     .on_double_click(move |_| Message::DoubleClick(Some(i)))
-                    .on_release(move |_| Message::ClickRelease(Some(i)));
+                    .on_release(move |_| Message::ClickRelease(Some(i)))
+                    .on_middle_press(move |_| Message::MiddleClick(i));
                 grid = grid.push(mouse_area);
 
                 count += 1;
@@ -2351,6 +2383,7 @@ impl Tab {
                     .on_press(move |_| Message::Click(Some(i)))
                     .on_double_click(move |_| Message::DoubleClick(Some(i)))
                     .on_release(move |_| Message::ClickRelease(Some(i)))
+                    .on_middle_press(move |_| Message::MiddleClick(i))
                 };
 
                 let mut button_row = button(row.into());

@@ -1737,6 +1737,9 @@ impl Application for App {
                                 }
                             }
                         }
+                        tab::Command::OpenInNewTab(path) => {
+                            commands.push(self.open_tab(Location::Path(path.clone())));
+                        }
                         tab::Command::Scroll(id, offset) => {
                             commands.push(scrollable::scroll_to(id, offset));
                         }

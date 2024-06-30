@@ -638,6 +638,9 @@ impl Application for App {
                                 commands.push(self.update(Message::Open));
                             }
                         }
+                        tab::Command::OpenInNewTab(_path) => {
+                            log::warn!("OpenInNewTab not supported in dialog");
+                        }
                         tab::Command::Scroll(id, offset) => {
                             commands.push(scrollable::scroll_to(id, offset));
                         }
