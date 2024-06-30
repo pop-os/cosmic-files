@@ -1940,6 +1940,13 @@ impl Tab {
                         })
                     }
 
+                    let mouse_area = if let Location::Path(_) = &self.location {
+                        mouse_area
+                            .on_middle_press(move |_| Message::OpenInNewTab(ancestor.to_path_buf()))
+                    } else {
+                        mouse_area
+                    };
+
                     children.push(mouse_area.into());
 
                     if found_home {
