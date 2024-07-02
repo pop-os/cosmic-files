@@ -186,7 +186,7 @@ pub enum NavMenuAction {
     OpenInNewWindow(segmented_button::Entity),
     Properties(segmented_button::Entity),
     RemoveFromSidebar(segmented_button::Entity),
-    EmptyTrash(segmented_button::Entity),
+    EmptyTrash,
 }
 
 impl MenuAction for NavMenuAction {
@@ -1036,9 +1036,9 @@ impl Application for App {
                 ),
                 cosmic::widget::menu::Item::Divider,
                 if is_context_trash {
-                    cosmic::widget::menu::Item::Button(
+                    cosmic::widget::menu::Item::Button(                        
                         fl!("empty-trash"),
-                        NavMenuAction::EmptyTrash(id),
+                        NavMenuAction::EmptyTrash,
                     )
                 } else {
                     cosmic::widget::menu::Item::Button(
@@ -2029,9 +2029,8 @@ impl Application for App {
                     }
                 }
 
-                NavMenuAction::EmptyTrash(_) => {
+                NavMenuAction::EmptyTrash => {
                     self.dialog_pages.push_front(DialogPage::EmptyTrash);
-                    self.dialog();
                 }
             },
         }
