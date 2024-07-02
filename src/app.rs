@@ -916,6 +916,9 @@ impl Application for App {
         })
         .on_context(|entity| cosmic::app::Message::App(Message::NavBarContext(entity)))
         .on_close(|entity| cosmic::app::Message::App(Message::NavBarClose(entity)))
+        .on_middle_press(|entity| {
+            cosmic::app::Message::App(Message::NavMenuAction(NavMenuAction::OpenInNewTab(entity)))
+        })
         .context_menu(self.nav_context_menu(self.nav_bar_context_id))
         .close_icon(
             widget::icon::from_name("media-eject-symbolic")
@@ -1983,6 +1986,9 @@ impl Application for App {
                     match self.nav_model.data::<Location>(entity) {
                         Some(Location::Path(ref path)) => {
                             return self.open_tab(Location::Path(path.clone()));
+                        }
+                        Some(Location::Trash) => {
+                            return self.open_tab(Location::Trash);
                         }
                         _ => {}
                     }
