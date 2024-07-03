@@ -1036,7 +1036,7 @@ impl Application for App {
                 ),
                 cosmic::widget::menu::Item::Divider,
                 if is_context_trash {
-                    cosmic::widget::menu::Item::Button(                        
+                    cosmic::widget::menu::Item::Button(
                         fl!("empty-trash"),
                         NavMenuAction::EmptyTrash,
                     )

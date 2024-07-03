@@ -267,6 +267,10 @@ impl<M: Send + 'static> Dialog<M> {
             .map(DialogMessage)
             .map(self.mapper)
     }
+
+    pub fn window_id(&self) -> window::Id {
+        self.cosmic.app.main_window_id()
+    }
 }
 
 #[derive(Clone, Debug)]
