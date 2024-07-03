@@ -2296,13 +2296,15 @@ impl Tab {
                 Element::from(dnd_grid)
                     .map(|m| cosmic::app::Message::App(crate::app::Message::TabMessage(None, m)))
             }),
-            mouse_area::MouseArea::new(widget::column::with_children(children))
-                .on_press(|_| Message::Click(None))
-                .on_drag(Message::Drag)
-                .on_drag_end(|_| Message::DragEnd(None))
-                .show_drag_rect(true)
-                .on_release(|_| Message::ClickRelease(None))
-                .into(),
+            mouse_area::MouseArea::new(
+                widget::container(widget::column::with_children(children)).width(Length::Fill),
+            )
+            .on_press(|_| Message::Click(None))
+            .on_drag(Message::Drag)
+            .on_drag_end(|_| Message::DragEnd(None))
+            .show_drag_rect(true)
+            .on_release(|_| Message::ClickRelease(None))
+            .into(),
             true,
         )
     }
