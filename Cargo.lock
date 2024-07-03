@@ -1156,6 +1156,7 @@ dependencies = [
  "freedesktop_entry_parser",
  "fs_extra",
  "gio",
+ "glob",
  "i18n-embed",
  "i18n-embed-fl",
  "ignore",

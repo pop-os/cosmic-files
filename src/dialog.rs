@@ -30,6 +30,7 @@ use std::{
     collections::{HashMap, HashSet},
     env, fmt, fs,
     path::PathBuf,
+    str::FromStr,
     time,
 };
 
@@ -89,6 +90,7 @@ impl DialogKind {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct DialogChoiceOption {
     pub id: String,
     pub label: String,
@@ -100,6 +102,7 @@ impl AsRef<str> for DialogChoiceOption {
     }
 }
 
+#[derive(Clone, Debug)]
 pub enum DialogChoice {
     CheckBox {
         id: String,
@@ -112,6 +115,24 @@ pub enum DialogChoice {
         options: Vec<DialogChoiceOption>,
         selected: Option<usize>,
     },
+}
+
+#[derive(Clone, Debug)]
+pub enum DialogFilterPattern {
+    Glob(String),
+    Mime(String),
+}
+
+#[derive(Clone, Debug)]
+pub struct DialogFilter {
+    pub label: String,
+    pub patterns: Vec<DialogFilterPattern>,
+}
+
+impl AsRef<str> for DialogFilter {
+    fn as_ref(&self) -> &str {
+        &self.label
+    }
 }
 
 pub struct Dialog<M> {
@@ -196,6 +217,25 @@ impl<M: Send + 'static> Dialog<M> {
         self.cosmic.app.choices = choices.into();
     }
 
+    pub fn filters(&self) -> (&[DialogFilter], Option<usize>) {
+        (&self.cosmic.app.filters, self.cosmic.app.filter_selected)
+    }
+
+    pub fn set_filters(
+        &mut self,
+        filters: impl Into<Vec<DialogFilter>>,
+        filter_selected: Option<usize>,
+    ) -> Command<M> {
+        let mapper = self.mapper;
+        self.cosmic.app.filters = filters.into();
+        self.cosmic.app.filter_selected = filter_selected;
+        self.cosmic
+            .app
+            .rescan_tab()
+            .map(DialogMessage)
+            .map(move |message| app::Message::App(mapper(message)))
+    }
+
     pub fn subscription(&self) -> Subscription<M> {
         self.cosmic
             .subscription()
@@ -242,6 +282,7 @@ enum Message {
     Cancel,
     Choice(usize, usize),
     Filename(String),
+    Filter(usize),
     Modifiers(Modifiers),
     NotifyEvents(Vec<DebouncedEvent>),
     NotifyWatcher(WatcherWrapper),
@@ -280,6 +321,8 @@ struct App {
     title: String,
     accept_label: String,
     choices: Vec<DialogChoice>,
+    filters: Vec<DialogFilter>,
+    filter_selected: Option<usize>,
     filename_id: widget::Id,
     modifiers: Modifiers,
     nav_model: segmented_button::SingleSelectModel,
@@ -437,6 +480,8 @@ impl Application for App {
             title,
             accept_label,
             choices: Vec::new(),
+            filters: Vec::new(),
+            filter_selected: None,
             filename_id: widget::Id::unique(),
             modifiers: Modifiers::empty(),
             nav_model: nav_model.build(),
@@ -534,6 +579,14 @@ impl Application for App {
                 if let DialogKind::SaveFile { filename } = &mut self.flags.kind {
                     *filename = new_filename;
                 }
+            }
+            Message::Filter(filter_i) => {
+                if filter_i < self.filters.len() {
+                    self.filter_selected = Some(filter_i);
+                } else {
+                    self.filter_selected = None;
+                }
+                return self.rescan_tab();
             }
             Message::Modifiers(modifiers) => {
                 self.modifiers = modifiers;
@@ -743,6 +796,59 @@ impl Application for App {
                 return Command::batch(commands);
             }
             Message::TabRescan(mut items) => {
+                // Filter
+                if let Some(filter_i) = self.filter_selected {
+                    if let Some(filter) = self.filters.get(filter_i) {
+                        // Parse filters
+                        let mut parsed_globs = Vec::new();
+                        let mut parsed_mimes = Vec::new();
+                        for pattern in filter.patterns.iter() {
+                            match pattern {
+                                DialogFilterPattern::Glob(value) => {
+                                    match glob::Pattern::new(value) {
+                                        Ok(glob) => parsed_globs.push(glob),
+                                        Err(err) => {
+                                            log::warn!("failed to parse glob {:?}: {}", value, err);
+                                        }
+                                    }
+                                }
+                                DialogFilterPattern::Mime(value) => {
+                                    match mime_guess::Mime::from_str(value) {
+                                        Ok(mime) => parsed_mimes.push(mime),
+                                        Err(err) => {
+                                            log::warn!("failed to parse mime {:?}: {}", value, err);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        items.retain(|item| {
+                            if item.metadata.is_dir() {
+                                // Directories are always shown
+                                return true;
+                            }
+
+                            // Check for mime type match (first because it is faster)
+                            for mime in parsed_mimes.iter() {
+                                if mime == &item.mime {
+                                    return true;
+                                }
+                            }
+
+                            // Check for glob match (last because it is slower)
+                            for glob in parsed_globs.iter() {
+                                if glob.matches(&item.name) {
+                                    return true;
+                                }
+                            }
+
+                            // No filters matched
+                            false
+                        });
+                    }
+                }
+
                 // Select based on filename
                 if let DialogKind::SaveFile { filename } = &self.flags.kind {
                     for item in items.iter_mut() {
@@ -772,10 +878,19 @@ impl Application for App {
                 .map(move |message| Message::TabMessage(message)),
         );
 
-        let mut row = widget::row::with_capacity(self.choices.len() * 2 + 3)
-            .align_items(Alignment::Center)
-            .padding(space_xxs)
-            .spacing(space_xxs);
+        let mut row = widget::row::with_capacity(
+            if !self.filters.is_empty() { 1 } else { 0 } + self.choices.len() * 2 + 3,
+        )
+        .align_items(Alignment::Center)
+        .padding(space_xxs)
+        .spacing(space_xxs);
+        if !self.filters.is_empty() {
+            row = row.push(widget::dropdown(
+                &self.filters,
+                self.filter_selected,
+                Message::Filter,
+            ));
+        }
         if let DialogKind::SaveFile { filename } = &self.flags.kind {
             row = row.push(
                 widget::text_input("", filename)
