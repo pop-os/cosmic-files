@@ -895,21 +895,10 @@ impl Application for App {
                 Message::Filter,
             ));
         }
-        if let DialogKind::SaveFile { filename } = &self.flags.kind {
-            row = row.push(
-                widget::text_input("", filename)
-                    .id(self.filename_id.clone())
-                    .on_input(Message::Filename)
-                    .on_submit(Message::Save(false)),
-            );
-        } else {
-            row = row.push(widget::horizontal_space(Length::Fill));
-        }
         for (choice_i, choice) in self.choices.iter().enumerate() {
             match choice {
                 DialogChoice::CheckBox { label, value, .. } => {
-                    row = row.push(widget::text::body(label));
-                    row = row.push(widget::checkbox("", *value, move |checked| {
+                    row = row.push(widget::checkbox(label, *value, move |checked| {
                         Message::Choice(choice_i, if checked { 1 } else { 0 })
                     }));
                 }
@@ -919,12 +908,22 @@ impl Application for App {
                     selected,
                     ..
                 } => {
-                    row = row.push(widget::text::body(label));
+                    row = row.push(widget::text::heading(label));
                     row = row.push(widget::dropdown(options, *selected, move |option_i| {
                         Message::Choice(choice_i, option_i)
                     }));
                 }
             }
+        }
+        if let DialogKind::SaveFile { filename } = &self.flags.kind {
+            row = row.push(
+                widget::text_input("", filename)
+                    .id(self.filename_id.clone())
+                    .on_input(Message::Filename)
+                    .on_submit(Message::Save(false)),
+            );
+        } else {
+            row = row.push(widget::horizontal_space(Length::Fill));
         }
         row = row.push(widget::button::standard(fl!("cancel")).on_press(Message::Cancel));
         row = row.push(if self.flags.kind.save() {
