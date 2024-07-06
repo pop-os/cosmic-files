@@ -55,6 +55,7 @@ pub fn key_binds() -> HashMap<KeyBind, Action> {
     bind!([Ctrl], Key::Character("q".into()), WindowClose);
     bind!([Ctrl], Key::Character("n".into()), WindowNew);
     bind!([Ctrl], Key::Character("=".into()), ZoomIn);
+    bind!([Ctrl], Key::Character("+".into()), ZoomIn);
     bind!([Ctrl], Key::Character("0".into()), ZoomDefault);
     bind!([Ctrl], Key::Character("-".into()), ZoomOut);
 
