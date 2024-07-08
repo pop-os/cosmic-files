@@ -28,15 +28,16 @@ pub static LANGUAGE_LOADER: Lazy<FluentLanguageLoader> = Lazy::new(|| {
 pub static LANGUAGE_SORTER: Lazy<Collator> = Lazy::new(|| {
     let mut options = CollatorOptions::new();
     options.numeric = Some(Numeric::On);
-    let collator = {
-        let current = LANGUAGE_LOADER.current_language().to_string();
 
-        let locale = DataLocale::from_str(&current).unwrap();
-        let collator = Collator::try_new(&locale, options).unwrap();
-        collator
-    };
-
-    collator
+    DataLocale::from_str(&LANGUAGE_LOADER.current_language().to_string())
+        .or_else(|_| DataLocale::from_str(&LANGUAGE_LOADER.fallback_language().to_string()))
+        .ok()
+        .and_then(|locale| Collator::try_new(&locale, options).ok())
+        .or_else(|| {
+            let locale = DataLocale::from_str("en-US").expect("en-US is a valid BCP-47 tag");
+            Collator::try_new(&locale, options).ok()
+        })
+        .expect("Creating a collator from the system's current language, the fallback language, or American English should succeed")
 });
 
 #[macro_export]
