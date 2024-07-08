@@ -50,6 +50,9 @@ replace-warning = Do you want to replace it with the one you are saving? Replaci
 replace-warning-operation = Do you want to replace it? Replacing it will overwrite its content.
 original-file = Original file
 replace-with = Replace with
+apply-to-all = Apply to all
+keep-both = Keep both
+skip = Skip
 
 # Context Pages
 

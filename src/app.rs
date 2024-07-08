@@ -234,6 +234,7 @@ pub enum Message {
     PendingProgress(u64, f32),
     RescanTrash,
     Rename(Option<Entity>),
+    ReplaceResult(ReplaceResult),
     RestoreFromTrash(Option<Entity>),
     SearchActivate,
     SearchClear,
@@ -300,6 +301,8 @@ pub enum DialogPage {
     Replace {
         from: tab::Item,
         to: tab::Item,
+        multiple: bool,
+        apply_to_all: bool,
         tx: mpsc::Sender<ReplaceResult>,
     },
 }
@@ -1204,14 +1207,8 @@ impl Application for App {
                             let to = parent.join(name);
                             self.operation(Operation::Rename { from, to });
                         }
-                        DialogPage::Replace { tx, .. } => {
-                            return Command::perform(
-                                async move {
-                                    let _ = tx.send(ReplaceResult::Replace).await;
-                                    message::none()
-                                },
-                                |x| x,
-                            );
+                        DialogPage::Replace { .. } => {
+                            log::warn!("replace dialog should be completed with replace result");
                         }
                     }
                 }
@@ -1598,6 +1595,25 @@ impl Application for App {
                                 }
                                 return widget::text_input::focus(self.dialog_text_input.clone());
                             }
+                        }
+                    }
+                }
+            }
+            Message::ReplaceResult(replace_result) => {
+                if let Some(dialog_page) = self.dialog_pages.pop_front() {
+                    match dialog_page {
+                        DialogPage::Replace { tx, .. } => {
+                            return Command::perform(
+                                async move {
+                                    let _ = tx.send(replace_result).await;
+                                    message::none()
+                                },
+                                |x| x,
+                            );
+                        }
+                        other => {
+                            log::warn!("tried to send replace result to the wrong dialog");
+                            self.dialog_pages.push_front(other);
                         }
                     }
                 }
@@ -2246,17 +2262,55 @@ impl Application for App {
                         .spacing(space_xxs),
                     )
             }
-            DialogPage::Replace { from, to, .. } => {
-                widget::dialog(fl!("replace-title", filename = to.name.as_str()))
+            DialogPage::Replace {
+                from,
+                to,
+                multiple,
+                apply_to_all,
+                tx,
+            } => {
+                let dialog = widget::dialog(fl!("replace-title", filename = to.name.as_str()))
                     .body(fl!("replace-warning-operation"))
                     .control(to.replace_view(fl!("original-file"), IconSizes::default()))
                     .control(from.replace_view(fl!("replace-with"), IconSizes::default()))
-                    .primary_action(
-                        widget::button::suggested(fl!("replace")).on_press(Message::DialogComplete),
-                    )
-                    .secondary_action(
-                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
-                    )
+                    .primary_action(widget::button::suggested(fl!("replace")).on_press(
+                        Message::ReplaceResult(ReplaceResult::Replace(*apply_to_all)),
+                    ));
+                if *multiple {
+                    dialog
+                        .control(widget::checkbox(
+                            fl!("apply-to-all"),
+                            *apply_to_all,
+                            |apply_to_all| {
+                                Message::DialogUpdate(DialogPage::Replace {
+                                    from: from.clone(),
+                                    to: to.clone(),
+                                    multiple: *multiple,
+                                    apply_to_all,
+                                    tx: tx.clone(),
+                                })
+                            },
+                        ))
+                        .secondary_action(
+                            widget::button::standard(fl!("skip")).on_press(Message::ReplaceResult(
+                                ReplaceResult::Skip(*apply_to_all),
+                            )),
+                        )
+                        .tertiary_action(
+                            widget::button::text(fl!("cancel"))
+                                .on_press(Message::ReplaceResult(ReplaceResult::Cancel)),
+                        )
+                } else {
+                    dialog
+                        .secondary_action(
+                            widget::button::standard(fl!("cancel"))
+                                .on_press(Message::ReplaceResult(ReplaceResult::Cancel)),
+                        )
+                        .tertiary_action(
+                            widget::button::text(fl!("keep-both"))
+                                .on_press(Message::ReplaceResult(ReplaceResult::KeepBoth)),
+                        )
+                }
             }
         };
 

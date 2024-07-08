@@ -1,7 +1,7 @@
 use cosmic::iced::futures::{channel::mpsc::Sender, executor, SinkExt};
 use std::{
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         atomic::{self, AtomicU64},
         Arc,
@@ -23,6 +23,7 @@ fn handle_replace(
     msg_tx: &Arc<Mutex<Sender<Message>>>,
     file_from: PathBuf,
     file_to: PathBuf,
+    multiple: bool,
 ) -> ReplaceResult {
     let item_from = match tab::item_from_path(file_from, IconSizes::default()) {
         Ok(ok) => ok,
@@ -48,6 +49,8 @@ fn handle_replace(
             .send(Message::DialogPush(DialogPage::Replace {
                 from: item_from,
                 to: item_to,
+                multiple,
+                apply_to_all: false,
                 tx,
             }))
             .await;
@@ -73,7 +76,12 @@ fn handle_progress_state(
                 return fs_extra::dir::TransitProcessResult::Abort;
             };
 
-            handle_replace(msg_tx, file_from, file_to).into()
+            if file_from == file_to {
+                log::warn!("trying to copy {:?} to itself", file_from);
+                return fs_extra::dir::TransitProcessResult::Abort;
+            }
+
+            handle_replace(msg_tx, file_from, file_to, true).into()
         }
         fs_extra::dir::TransitState::NoAccess => {
             //TODO: permission error dialog
@@ -84,16 +92,33 @@ fn handle_progress_state(
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ReplaceResult {
-    Replace,
-    Skip,
+    Replace(bool),
+    KeepBoth,
+    Skip(bool),
     Cancel,
 }
 
 impl From<ReplaceResult> for fs_extra::dir::TransitProcessResult {
     fn from(f: ReplaceResult) -> fs_extra::dir::TransitProcessResult {
         match f {
-            ReplaceResult::Replace => fs_extra::dir::TransitProcessResult::Overwrite,
-            ReplaceResult::Skip => fs_extra::dir::TransitProcessResult::Skip,
+            ReplaceResult::Replace(apply_to_all) => {
+                if apply_to_all {
+                    fs_extra::dir::TransitProcessResult::OverwriteAll
+                } else {
+                    fs_extra::dir::TransitProcessResult::Overwrite
+                }
+            }
+            ReplaceResult::KeepBoth => {
+                log::warn!("tried to keep both when replacing multiple files");
+                fs_extra::dir::TransitProcessResult::Abort
+            }
+            ReplaceResult::Skip(apply_to_all) => {
+                if apply_to_all {
+                    fs_extra::dir::TransitProcessResult::SkipAll
+                } else {
+                    fs_extra::dir::TransitProcessResult::Skip
+                }
+            }
             ReplaceResult::Cancel => fs_extra::dir::TransitProcessResult::Abort,
         }
     }
@@ -133,6 +158,45 @@ pub enum Operation {
     },
 }
 
+fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
+    let mut to = to.to_owned();
+    // Separate the full file name into its file name plus extension.
+    // `[Path::file_stem]` returns the full name for dotfiles (e.g.
+    // .someconf is the file name)
+    if let (Some(stem), ext) = (
+        // FIXME: Replace `[Path::file_stem]` with `[Path::file_prefix]` when stablized to handle .tar.gz et al. better
+        from.file_stem().and_then(|name| name.to_str()),
+        from.extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or_default(),
+    ) {
+        // '.' needs to be re-added for paths with extensions.
+        let dot = if ext.is_empty() { "" } else { "." };
+        let mut n = 0u32;
+        // Loop until a valid `copy n` variant is found
+        loop {
+            n = if let Some(n) = n.checked_add(1) {
+                n
+            } else {
+                // TODO: Return error? fs_extra will handle it anyway
+                break to;
+            };
+
+            // Rebuild file name
+            let new_name = format!("{stem} ({} {n}){dot}{ext}", fl!("copy_noun"));
+            to = to.join(new_name);
+
+            if !matches!(to.try_exists(), Ok(true)) {
+                break to;
+            }
+            // Continue if a copy with index exists
+            to.pop();
+        }
+    } else {
+        to
+    }
+}
+
 impl Operation {
     /// Perform the operation
     pub async fn perform(
@@ -159,44 +223,7 @@ impl Operation {
                             if matches!(from.parent(), Some(parent) if parent == to) {
                                 // `from`'s parent is equal to `to` which means we're copying to the same
                                 // directory (duplicating files)
-                                let mut to = to.to_owned();
-                                // Separate the full file name into its file name plus extension.
-                                // `[Path::file_stem]` returns the full name for dotfiles (e.g.
-                                // .someconf is the file name)
-                                let to = if let (Some(stem), ext) = (
-                                    // FIXME: Replace `[Path::file_stem]` with `[Path::file_prefix]` when stablized to handle .tar.gz et al. better
-                                    from.file_stem().and_then(|name| name.to_str()),
-                                    from.extension()
-                                        .and_then(|ext| ext.to_str())
-                                        .unwrap_or_default(),
-                                ) {
-                                    // '.' needs to be re-added for paths with extensions.
-                                    let dot = if ext.is_empty() { "" } else { "." };
-                                    let mut n = 0u32;
-                                    // Loop until a valid `copy n` variant is found
-                                    loop {
-                                        n = if let Some(n) = n.checked_add(1) {
-                                            n
-                                        } else {
-                                            // TODO: Return error? fs_extra will handle it anyway
-                                            break to;
-                                        };
-
-                                        // Rebuild file name
-                                        let new_name =
-                                            format!("{stem} ({} {n}){dot}{ext}", fl!("copy_noun"));
-                                        to = to.join(new_name);
-
-                                        if !matches!(to.try_exists(), Ok(true)) {
-                                            break to;
-                                        }
-                                        // Continue if a copy with index exists
-                                        to.pop();
-                                    }
-                                } else {
-                                    to
-                                };
-
+                                let to = copy_unique_path(&from, &to);
                                 (from, to)
                             } else if let Some(name) =
                                 from.is_file().then(|| from.file_name()).flatten()
@@ -243,26 +270,34 @@ impl Operation {
                         handler();
                         handle_progress_state(&msg_tx, &progress)
                     };
-                    for (from, to) in paths.into_iter().zip(to.into_iter()) {
+                    for (from, mut to) in paths.into_iter().zip(to.into_iter()) {
                         if from.is_dir() {
                             let options = fs_extra::dir::CopyOptions::default().copy_inside(true);
                             fs_extra::copy_items_with_progress(&[from], to, &options, dir_handler)?;
                         } else {
                             let mut options = fs_extra::file::CopyOptions::default();
                             if to.exists() {
-                                match handle_replace(&msg_tx, from.clone(), to.clone()) {
-                                    ReplaceResult::Replace => {
+                                match handle_replace(&msg_tx, from.clone(), to.clone(), false) {
+                                    ReplaceResult::Replace(_) => {
                                         options.overwrite = true;
                                     }
-                                    ReplaceResult::Skip => {
+                                    ReplaceResult::KeepBoth => {
+                                        match to.parent() {
+                                            Some(to_parent) => {
+                                                to = copy_unique_path(&from, &to_parent);
+                                            }
+                                            None => {
+                                                log::warn!("failed to get parent of {:?}", to);
+                                                //TODO: error?
+                                            }
+                                        }
+                                    }
+                                    ReplaceResult::Skip(_) => {
                                         options.skip_exist = true;
                                     }
                                     ReplaceResult::Cancel => {
                                         //TODO: be silent, but collect actual changes made for undo
-                                        return Err(fs_extra::error::Error::new(
-                                            fs_extra::error::ErrorKind::Interrupted,
-                                            "operation cancelled",
-                                        ));
+                                        continue;
                                     }
                                 }
                             }
