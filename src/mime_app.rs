@@ -94,6 +94,8 @@ impl MimeAppCache {
     // Only available when using desktop feature of libcosmic, which only works on Unix-likes
     #[cfg(feature = "desktop")]
     pub fn reload(&mut self) {
+        use crate::localize::LANGUAGE_SORTER;
+
         let start = Instant::now();
 
         self.cache.clear();
@@ -245,7 +247,7 @@ impl MimeAppCache {
             apps.sort_by(|a, b| match (a.is_default, b.is_default) {
                 (true, false) => Ordering::Less,
                 (false, true) => Ordering::Greater,
-                _ => lexical_sort::natural_lexical_cmp(&a.name, &b.name),
+                _ => LANGUAGE_SORTER.compare(&a.name, &b.name),
             });
         }
 
