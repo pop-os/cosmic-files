@@ -47,6 +47,9 @@ rename-folder = Rename folder
 replace = Replace
 replace-title = {$filename} already exists in this location.
 replace-warning = Do you want to replace it with the one you are saving? Replacing it will overwrite its content.
+replace-warning-operation = Do you want to replace it? Replacing it will overwrite its content.
+original-file = Original file
+replace-with = Replace with
 
 # Context Pages
 

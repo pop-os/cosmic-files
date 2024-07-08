@@ -1,4 +1,4 @@
-use cosmic::iced::futures::{channel::mpsc, executor, SinkExt};
+use cosmic::iced::futures::{channel::mpsc::Sender, executor, SinkExt};
 use std::{
     fs,
     path::PathBuf,
@@ -7,8 +7,13 @@ use std::{
         Arc,
     },
 };
+use tokio::sync::{mpsc, Mutex};
 
-use crate::{app::Message, fl};
+use crate::{
+    app::{DialogPage, Message},
+    config::IconSizes,
+    fl, tab,
+};
 
 fn err_str<T: ToString>(err: T) -> String {
     err.to_string()
@@ -53,7 +58,7 @@ impl Operation {
     pub async fn perform(
         self,
         id: u64,
-        msg_tx: &Arc<tokio::sync::Mutex<mpsc::Sender<Message>>>,
+        msg_tx: &Arc<Mutex<Sender<Message>>>,
     ) -> Result<(), String> {
         let _ = msg_tx
             .lock()
@@ -247,8 +252,59 @@ impl Operation {
                                 ))
                                 .await;
                         });
-                        //TODO: handle exceptions
-                        fs_extra::dir::TransitProcessResult::ContinueOrAbort
+
+                        match progress.state {
+                            fs_extra::dir::TransitState::Normal => {
+                                fs_extra::dir::TransitProcessResult::ContinueOrAbort
+                            }
+                            fs_extra::dir::TransitState::Exists => {
+                                let Some(file_from) = progress.file_from.clone() else {
+                                    log::warn!("missing file_from in progress");
+                                    return fs_extra::dir::TransitProcessResult::Abort;
+                                };
+                                let item_from =
+                                    match tab::item_from_path(file_from, IconSizes::default()) {
+                                        Ok(ok) => ok,
+                                        Err(err) => {
+                                            log::warn!("{}", err);
+                                            return fs_extra::dir::TransitProcessResult::Abort;
+                                        }
+                                    };
+
+                                let Some(file_to) = progress.file_to.clone() else {
+                                    log::warn!("missing file_to in progress");
+                                    return fs_extra::dir::TransitProcessResult::Abort;
+                                };
+                                let item_to =
+                                    match tab::item_from_path(file_to, IconSizes::default()) {
+                                        Ok(ok) => ok,
+                                        Err(err) => {
+                                            log::warn!("{}", err);
+                                            return fs_extra::dir::TransitProcessResult::Abort;
+                                        }
+                                    };
+
+                                executor::block_on(async {
+                                    let (tx, mut rx) = mpsc::channel(1);
+                                    let _ = msg_tx
+                                        .lock()
+                                        .await
+                                        .send(Message::DialogPush(DialogPage::Replace {
+                                            from: item_from,
+                                            to: item_to,
+                                            tx,
+                                        }))
+                                        .await;
+                                    rx.recv()
+                                        .await
+                                        .unwrap_or(fs_extra::dir::TransitProcessResult::Abort)
+                                })
+                            }
+                            fs_extra::dir::TransitState::NoAccess => {
+                                //TODO: permission error dialog
+                                fs_extra::dir::TransitProcessResult::ContinueOrAbort
+                            }
+                        }
                     })
                 })
                 .await

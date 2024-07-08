@@ -269,6 +269,25 @@ pub fn item_from_entry(
     }
 }
 
+pub fn item_from_path<P: Into<PathBuf>>(path: P, sizes: IconSizes) -> Result<Item, String> {
+    let path = path.into();
+    let name_os = path
+        .file_name()
+        .ok_or_else(|| format!("failed to get file name from path {:?}", path))?;
+    let name = name_os
+        .to_str()
+        .ok_or_else(|| {
+            format!(
+                "failed to parse file name for {:?}: {:?} is not valid UTF-8",
+                path, name_os
+            )
+        })?
+        .to_string();
+    let metadata = fs::metadata(&path)
+        .map_err(|err| format!("failed to read metadata for {:?}: {}", path, err))?;
+    Ok(item_from_entry(path, name, metadata, sizes))
+}
+
 pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
     let mut items = Vec::new();
     match fs::read_dir(tab_path) {
@@ -787,6 +806,47 @@ impl Item {
         }
 
         column.into()
+    }
+
+    pub fn replace_view(
+        &self,
+        heading: String,
+        sizes: IconSizes,
+    ) -> Element<'static, app::Message> {
+        let cosmic_theme::Spacing { space_xxxs, .. } = theme::active().cosmic().spacing;
+
+        let mut row = widget::row().spacing(space_xxxs);
+        row = row.push(self.preview(sizes));
+
+        let mut column = widget::column().spacing(space_xxxs);
+        column = column.push(widget::text::heading(heading));
+
+        //TODO: translate!
+        //TODO: correct display of folder size?
+        match &self.metadata {
+            ItemMetadata::Path { metadata, children } => {
+                if metadata.is_dir() {
+                    column = column.push(widget::text(format!("Items: {}", children)));
+                } else {
+                    column = column.push(widget::text(format!(
+                        "Size: {}",
+                        format_size(metadata.len())
+                    )));
+                }
+                if let Ok(time) = metadata.modified() {
+                    column = column.push(widget::text(format!(
+                        "Last modified: {}",
+                        chrono::DateTime::<chrono::Local>::from(time).format(TIME_FORMAT)
+                    )));
+                }
+            }
+            ItemMetadata::Trash { .. } => {
+                //TODO: trash metadata
+            }
+        }
+
+        row = row.push(column);
+        row.into()
     }
 }
 

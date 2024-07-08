@@ -40,6 +40,7 @@ use std::{
     sync::Arc,
     time::{self, Instant},
 };
+use tokio::sync::mpsc;
 
 use crate::localize::LANGUAGE_SORTER;
 use crate::tab::HOVER_DURATION;
@@ -208,6 +209,7 @@ pub enum Message {
     Cut(Option<Entity>),
     DialogCancel,
     DialogComplete,
+    DialogPush(DialogPage),
     DialogUpdate(DialogPage),
     EditLocation(Option<Entity>),
     Key(Modifiers, Key),
@@ -280,7 +282,7 @@ impl ContextPage {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum DialogPage {
     EmptyTrash,
     FailedOperation(u64),
@@ -294,6 +296,11 @@ pub enum DialogPage {
         parent: PathBuf,
         name: String,
         dir: bool,
+    },
+    Replace {
+        from: tab::Item,
+        to: tab::Item,
+        tx: mpsc::Sender<fs_extra::dir::TransitProcessResult>,
     },
 }
 
@@ -1197,12 +1204,27 @@ impl Application for App {
                             let to = parent.join(name);
                             self.operation(Operation::Rename { from, to });
                         }
+                        DialogPage::Replace { tx, .. } => {
+                            return Command::perform(
+                                async move {
+                                    let _ = tx
+                                        .send(fs_extra::dir::TransitProcessResult::Overwrite)
+                                        .await;
+                                    message::none()
+                                },
+                                |x| x,
+                            );
+                        }
                     }
                 }
             }
+            Message::DialogPush(dialog_page) => {
+                self.dialog_pages.push_back(dialog_page);
+            }
             Message::DialogUpdate(dialog_page) => {
-                //TODO: panicless way to do this?
-                self.dialog_pages[0] = dialog_page;
+                if !self.dialog_pages.is_empty() {
+                    self.dialog_pages[0] = dialog_page;
+                }
             }
             Message::EditLocation(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
@@ -2224,6 +2246,18 @@ impl Application for App {
                                 .into(),
                         ])
                         .spacing(space_xxs),
+                    )
+            }
+            DialogPage::Replace { from, to, .. } => {
+                widget::dialog(fl!("replace-title", filename = to.name.as_str()))
+                    .body(fl!("replace-warning-operation"))
+                    .control(to.replace_view(fl!("original-file"), IconSizes::default()))
+                    .control(from.replace_view(fl!("replace-with"), IconSizes::default()))
+                    .primary_action(
+                        widget::button::suggested(fl!("replace")).on_press(Message::DialogComplete),
+                    )
+                    .secondary_action(
+                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
                     )
             }
         };
