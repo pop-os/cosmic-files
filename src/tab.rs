@@ -43,6 +43,7 @@ use std::{
 };
 
 use crate::clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste};
+use crate::localize::LANGUAGE_SORTER;
 use crate::{
     app::{self, Action},
     config::{IconSizes, TabConfig, ICON_SCALE_MAX, ICON_SIZE_GRID},
@@ -313,7 +314,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
     items.sort_by(|a, b| match (a.metadata.is_dir(), b.metadata.is_dir()) {
         (true, false) => Ordering::Less,
         (false, true) => Ordering::Greater,
-        _ => lexical_sort::natural_lexical_cmp(&a.name, &b.name),
+        _ => LANGUAGE_SORTER.compare(&a.name, &b.name),
     });
     items
 }
@@ -498,7 +499,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
     items.sort_by(|a, b| match (a.metadata.is_dir(), b.metadata.is_dir()) {
         (true, false) => Ordering::Less,
         (false, true) => Ordering::Greater,
-        _ => lexical_sort::natural_lexical_cmp(&a.name, &b.name),
+        _ => LANGUAGE_SORTER.compare(&a.name, &b.name),
     });
     items
 }
@@ -1763,15 +1764,12 @@ impl Tab {
                         (true, false) => Ordering::Less,
                         (false, true) => Ordering::Greater,
                         _ => check_reverse(
-                            lexical_sort::natural_lexical_cmp(&a.1.name, &b.1.name),
+                            LANGUAGE_SORTER.compare(&a.1.name, &b.1.name),
                             heading_sort,
                         ),
                     }
                 } else {
-                    check_reverse(
-                        lexical_sort::natural_lexical_cmp(&a.1.name, &b.1.name),
-                        heading_sort,
-                    )
+                    check_reverse(LANGUAGE_SORTER.compare(&a.1.name, &b.1.name), heading_sort)
                 }
             }),
             HeadingOptions::Modified => {
@@ -2893,7 +2891,7 @@ impl Tab {
 
 #[cfg(test)]
 mod tests {
-    use std::{io, path::PathBuf};
+    use std::{fs, io, path::PathBuf};
 
     use cosmic::iced_runtime::keyboard::Modifiers;
     use log::{debug, trace};
@@ -3170,6 +3168,33 @@ mod tests {
             tab.update(Message::LocationUp, Modifiers::empty());
             assert_eq_tab_path(&tab, &next_dir);
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn sort_long_number_file_names() -> io::Result<()> {
+        let fs = empty_fs()?;
+        let path = fs.path();
+
+        // Create files with names 255 characters long that only contain a single number
+        // Example: 0000...0 for 255 characters
+        // https://en.wikipedia.org/wiki/Filename#Comparison_of_filename_limitations
+        let mut base_nums: Vec<_> = ('0'..'9').collect();
+        fastrand::shuffle(&mut base_nums);
+        debug!("Shuffled numbers for paths: {base_nums:?}");
+        let paths: Vec<_> = base_nums
+            .iter()
+            .map(|&base| path.join(std::iter::repeat(base).take(255).collect::<String>()))
+            .collect();
+
+        for (file, &base) in paths.iter().zip(base_nums.iter()) {
+            trace!("Creating long file name for {base}");
+            fs::File::create(file)?;
+        }
+
+        debug!("Creating tab for directory of long file names");
+        Tab::new(Location::Path(path.into()), TabConfig::default());
 
         Ok(())
     }

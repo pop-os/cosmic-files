@@ -41,6 +41,7 @@ use std::{
     time::{self, Instant},
 };
 
+use crate::localize::LANGUAGE_SORTER;
 use crate::tab::HOVER_DURATION;
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
@@ -503,7 +504,7 @@ impl App {
             }
         }
         // Sort by name lexically
-        nav_items.sort_by(|a, b| lexical_sort::natural_lexical_cmp(&a.1.name(), &b.1.name()));
+        nav_items.sort_by(|a, b| LANGUAGE_SORTER.compare(&a.1.name(), &b.1.name()));
         // Add items to nav model
         for (key, item) in nav_items {
             nav_model = nav_model.insert(|mut b| {
@@ -2653,7 +2654,7 @@ pub(crate) mod test_utils {
         match (a.is_dir(), b.is_dir()) {
             (true, false) => Ordering::Less,
             (false, true) => Ordering::Greater,
-            _ => lexical_sort::natural_lexical_cmp(
+            _ => LANGUAGE_SORTER.compare(
                 a.file_name()
                     .expect("temp entries should have names")
                     .to_str()
