@@ -19,6 +19,86 @@ fn err_str<T: ToString>(err: T) -> String {
     err.to_string()
 }
 
+fn handle_replace(
+    msg_tx: &Arc<Mutex<Sender<Message>>>,
+    file_from: PathBuf,
+    file_to: PathBuf,
+) -> ReplaceResult {
+    let item_from = match tab::item_from_path(file_from, IconSizes::default()) {
+        Ok(ok) => ok,
+        Err(err) => {
+            log::warn!("{}", err);
+            return ReplaceResult::Cancel;
+        }
+    };
+
+    let item_to = match tab::item_from_path(file_to, IconSizes::default()) {
+        Ok(ok) => ok,
+        Err(err) => {
+            log::warn!("{}", err);
+            return ReplaceResult::Cancel;
+        }
+    };
+
+    executor::block_on(async {
+        let (tx, mut rx) = mpsc::channel(1);
+        let _ = msg_tx
+            .lock()
+            .await
+            .send(Message::DialogPush(DialogPage::Replace {
+                from: item_from,
+                to: item_to,
+                tx,
+            }))
+            .await;
+        rx.recv().await.unwrap_or(ReplaceResult::Cancel)
+    })
+}
+
+fn handle_progress_state(
+    msg_tx: &Arc<Mutex<Sender<Message>>>,
+    progress: &fs_extra::TransitProcess,
+) -> fs_extra::dir::TransitProcessResult {
+    log::warn!("{:?}", progress);
+    match progress.state {
+        fs_extra::dir::TransitState::Normal => fs_extra::dir::TransitProcessResult::ContinueOrAbort,
+        fs_extra::dir::TransitState::Exists => {
+            let Some(file_from) = progress.file_from.clone() else {
+                log::warn!("missing file_from in progress");
+                return fs_extra::dir::TransitProcessResult::Abort;
+            };
+
+            let Some(file_to) = progress.file_to.clone() else {
+                log::warn!("missing file_to in progress");
+                return fs_extra::dir::TransitProcessResult::Abort;
+            };
+
+            handle_replace(msg_tx, file_from, file_to).into()
+        }
+        fs_extra::dir::TransitState::NoAccess => {
+            //TODO: permission error dialog
+            fs_extra::dir::TransitProcessResult::ContinueOrAbort
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ReplaceResult {
+    Replace,
+    Skip,
+    Cancel,
+}
+
+impl From<ReplaceResult> for fs_extra::dir::TransitProcessResult {
+    fn from(f: ReplaceResult) -> fs_extra::dir::TransitProcessResult {
+        match f {
+            ReplaceResult::Replace => fs_extra::dir::TransitProcessResult::Overwrite,
+            ReplaceResult::Skip => fs_extra::dir::TransitProcessResult::Skip,
+            ReplaceResult::Cancel => fs_extra::dir::TransitProcessResult::Abort,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Operation {
     /// Copy items
@@ -135,9 +215,6 @@ impl Operation {
                 let msg_tx = msg_tx.clone();
                 tokio::task::spawn_blocking(move || -> fs_extra::error::Result<()> {
                     log::info!("Copy {:?} to {:?}", paths, to);
-                    //TODO: set options as desired
-                    let dir_options = fs_extra::dir::CopyOptions::default().copy_inside(true);
-                    let file_options = fs_extra::file::CopyOptions::default();
                     let copied_bytes = AtomicU64::default();
                     let total_bytes = paths
                         .iter()
@@ -164,24 +241,32 @@ impl Operation {
                     let dir_handler = |progress: fs_extra::TransitProcess| {
                         copied_bytes.fetch_add(progress.copied_bytes, atomic::Ordering::Relaxed);
                         handler();
-                        //TODO: handle exceptions
-                        fs_extra::dir::TransitProcessResult::ContinueOrAbort
+                        handle_progress_state(&msg_tx, &progress)
                     };
                     for (from, to) in paths.into_iter().zip(to.into_iter()) {
                         if from.is_dir() {
-                            fs_extra::copy_items_with_progress(
-                                &[from],
-                                to,
-                                &dir_options,
-                                dir_handler,
-                            )?;
+                            let options = fs_extra::dir::CopyOptions::default().copy_inside(true);
+                            fs_extra::copy_items_with_progress(&[from], to, &options, dir_handler)?;
                         } else {
-                            fs_extra::file::copy_with_progress(
-                                from,
-                                to,
-                                &file_options,
-                                file_handler,
-                            )?;
+                            let mut options = fs_extra::file::CopyOptions::default();
+                            if to.exists() {
+                                match handle_replace(&msg_tx, from.clone(), to.clone()) {
+                                    ReplaceResult::Replace => {
+                                        options.overwrite = true;
+                                    }
+                                    ReplaceResult::Skip => {
+                                        options.skip_exist = true;
+                                    }
+                                    ReplaceResult::Cancel => {
+                                        //TODO: be silent, but collect actual changes made for undo
+                                        return Err(fs_extra::error::Error::new(
+                                            fs_extra::error::ErrorKind::Interrupted,
+                                            "operation cancelled",
+                                        ));
+                                    }
+                                }
+                            }
+                            fs_extra::file::copy_with_progress(from, to, &options, file_handler)?;
                         }
                     }
                     Ok(())
@@ -239,7 +324,6 @@ impl Operation {
                 tokio::task::spawn_blocking(move || {
                     log::info!("Move {:?} to {:?}", paths, to);
                     let options = fs_extra::dir::CopyOptions::default();
-                    //TODO: set options as desired
                     fs_extra::move_items_with_progress(&paths, &to, &options, |progress| {
                         executor::block_on(async {
                             let _ = msg_tx
@@ -252,59 +336,7 @@ impl Operation {
                                 ))
                                 .await;
                         });
-
-                        match progress.state {
-                            fs_extra::dir::TransitState::Normal => {
-                                fs_extra::dir::TransitProcessResult::ContinueOrAbort
-                            }
-                            fs_extra::dir::TransitState::Exists => {
-                                let Some(file_from) = progress.file_from.clone() else {
-                                    log::warn!("missing file_from in progress");
-                                    return fs_extra::dir::TransitProcessResult::Abort;
-                                };
-                                let item_from =
-                                    match tab::item_from_path(file_from, IconSizes::default()) {
-                                        Ok(ok) => ok,
-                                        Err(err) => {
-                                            log::warn!("{}", err);
-                                            return fs_extra::dir::TransitProcessResult::Abort;
-                                        }
-                                    };
-
-                                let Some(file_to) = progress.file_to.clone() else {
-                                    log::warn!("missing file_to in progress");
-                                    return fs_extra::dir::TransitProcessResult::Abort;
-                                };
-                                let item_to =
-                                    match tab::item_from_path(file_to, IconSizes::default()) {
-                                        Ok(ok) => ok,
-                                        Err(err) => {
-                                            log::warn!("{}", err);
-                                            return fs_extra::dir::TransitProcessResult::Abort;
-                                        }
-                                    };
-
-                                executor::block_on(async {
-                                    let (tx, mut rx) = mpsc::channel(1);
-                                    let _ = msg_tx
-                                        .lock()
-                                        .await
-                                        .send(Message::DialogPush(DialogPage::Replace {
-                                            from: item_from,
-                                            to: item_to,
-                                            tx,
-                                        }))
-                                        .await;
-                                    rx.recv()
-                                        .await
-                                        .unwrap_or(fs_extra::dir::TransitProcessResult::Abort)
-                                })
-                            }
-                            fs_extra::dir::TransitState::NoAccess => {
-                                //TODO: permission error dialog
-                                fs_extra::dir::TransitProcessResult::ContinueOrAbort
-                            }
-                        }
+                        handle_progress_state(&msg_tx, &progress)
                     })
                 })
                 .await

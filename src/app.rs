@@ -51,7 +51,7 @@ use crate::{
     key_bind::key_binds,
     menu, mime_app,
     mounter::{mounters, MounterItem, MounterItems, MounterKey, Mounters},
-    operation::Operation,
+    operation::{Operation, ReplaceResult},
     spawn_detached::spawn_detached,
     tab::{self, HeadingOptions, ItemMetadata, Location, Tab},
 };
@@ -300,7 +300,7 @@ pub enum DialogPage {
     Replace {
         from: tab::Item,
         to: tab::Item,
-        tx: mpsc::Sender<fs_extra::dir::TransitProcessResult>,
+        tx: mpsc::Sender<ReplaceResult>,
     },
 }
 
@@ -1207,9 +1207,7 @@ impl Application for App {
                         DialogPage::Replace { tx, .. } => {
                             return Command::perform(
                                 async move {
-                                    let _ = tx
-                                        .send(fs_extra::dir::TransitProcessResult::Overwrite)
-                                        .await;
+                                    let _ = tx.send(ReplaceResult::Replace).await;
                                     message::none()
                                 },
                                 |x| x,
