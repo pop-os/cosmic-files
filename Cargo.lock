@@ -1218,7 +1218,7 @@ dependencies = [
 [[package]]
 name = "cosmic-text"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/cosmic-text.git#a03ec6b75f0ea8fd6264d6cd05afcec3c2213f8f"
+source = "git+https://github.com/pop-os/cosmic-text.git#0e2d050a8d87c2e97e94ae205c9beda5858123b6"
 dependencies = [
  "bitflags 2.6.0",
  "fontdb",
