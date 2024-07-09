@@ -7,6 +7,7 @@ use cosmic::widget::{vertical_space, Id, Widget};
 use cosmic::{
     cosmic_theme,
     iced::{
+        advanced::text,
         alignment::{Horizontal, Vertical},
         futures::SinkExt,
         keyboard::Modifiers,
@@ -1971,7 +1972,7 @@ impl Tab {
                     };
 
                     if children.is_empty() {
-                        row = row.push(widget::text::heading(name));
+                        row = row.push(widget::text::heading(name).wrap(text::Wrap::None));
                     } else {
                         children.push(
                             widget::icon::from_name("go-next-symbolic")
@@ -1979,7 +1980,7 @@ impl Tab {
                                 .icon()
                                 .into(),
                         );
-                        row = row.push(widget::text(name));
+                        row = row.push(widget::text::body(name).wrap(text::Wrap::None));
                     }
 
                     let mut mouse_area = crate::mouse_area::MouseArea::new(

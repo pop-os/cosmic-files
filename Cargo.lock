@@ -1132,7 +1132,7 @@ dependencies = [
 [[package]]
 name = "cosmic-config"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git#48f5966eaf54b6c2102018c151e38eab0e339e7b"
+source = "git+https://github.com/pop-os/libcosmic.git?branch=text-wrap#e0776c2fc6067cac939d21e9b83aaf6fc64a6e4a"
 dependencies = [
  "atomicwrites",
  "cosmic-config-derive",
@@ -1151,7 +1151,7 @@ dependencies = [
 [[package]]
 name = "cosmic-config-derive"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git#48f5966eaf54b6c2102018c151e38eab0e339e7b"
+source = "git+https://github.com/pop-os/libcosmic.git?branch=text-wrap#e0776c2fc6067cac939d21e9b83aaf6fc64a6e4a"
 dependencies = [
  "quote",
  "syn 1.0.109",
@@ -1240,7 +1240,7 @@ dependencies = [
 [[package]]
 name = "cosmic-theme"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git#48f5966eaf54b6c2102018c151e38eab0e339e7b"
+source = "git+https://github.com/pop-os/libcosmic.git?branch=text-wrap#e0776c2fc6067cac939d21e9b83aaf6fc64a6e4a"
 dependencies = [
  "almost",
  "cosmic-config",
@@ -2655,7 +2655,7 @@ dependencies = [
 [[package]]
 name = "iced"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#48f5966eaf54b6c2102018c151e38eab0e339e7b"
+source = "git+https://github.com/pop-os/libcosmic.git?branch=text-wrap#e0776c2fc6067cac939d21e9b83aaf6fc64a6e4a"
 dependencies = [
  "dnd",
  "iced_accessibility",
@@ -2674,7 +2674,7 @@ dependencies = [
 [[package]]
 name = "iced_accessibility"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git#48f5966eaf54b6c2102018c151e38eab0e339e7b"
+source = "git+https://github.com/pop-os/libcosmic.git?branch=text-wrap#e0776c2fc6067cac939d21e9b83aaf6fc64a6e4a"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -2684,7 +2684,7 @@ dependencies = [
 [[package]]
 name = "iced_core"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#48f5966eaf54b6c2102018c151e38eab0e339e7b"
+source = "git+https://github.com/pop-os/libcosmic.git?branch=text-wrap#e0776c2fc6067cac939d21e9b83aaf6fc64a6e4a"
 dependencies = [
  "bitflags 2.6.0",
  "dnd",
@@ -2706,7 +2706,7 @@ dependencies = [
 [[package]]
 name = "iced_futures"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#48f5966eaf54b6c2102018c151e38eab0e339e7b"
+source = "git+https://github.com/pop-os/libcosmic.git?branch=text-wrap#e0776c2fc6067cac939d21e9b83aaf6fc64a6e4a"
 dependencies = [
  "futures",
  "iced_core",
@@ -2719,7 +2719,7 @@ dependencies = [
 [[package]]
 name = "iced_graphics"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#48f5966eaf54b6c2102018c151e38eab0e339e7b"
+source = "git+https://github.com/pop-os/libcosmic.git?branch=text-wrap#e0776c2fc6067cac939d21e9b83aaf6fc64a6e4a"
 dependencies = [
  "bitflags 2.6.0",
  "bytemuck",
@@ -2743,7 +2743,7 @@ dependencies = [
 [[package]]
 name = "iced_renderer"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#48f5966eaf54b6c2102018c151e38eab0e339e7b"
+source = "git+https://github.com/pop-os/libcosmic.git?branch=text-wrap#e0776c2fc6067cac939d21e9b83aaf6fc64a6e4a"
 dependencies = [
  "iced_graphics",
  "iced_tiny_skia",
@@ -2755,7 +2755,7 @@ dependencies = [
 [[package]]
 name = "iced_runtime"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#48f5966eaf54b6c2102018c151e38eab0e339e7b"
+source = "git+https://github.com/pop-os/libcosmic.git?branch=text-wrap#e0776c2fc6067cac939d21e9b83aaf6fc64a6e4a"
 dependencies = [
  "dnd",
  "iced_accessibility",
@@ -2769,7 +2769,7 @@ dependencies = [
 [[package]]
 name = "iced_sctk"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git#48f5966eaf54b6c2102018c151e38eab0e339e7b"
+source = "git+https://github.com/pop-os/libcosmic.git?branch=text-wrap#e0776c2fc6067cac939d21e9b83aaf6fc64a6e4a"
 dependencies = [
  "enum-repr",
  "float-cmp",
@@ -2796,7 +2796,7 @@ dependencies = [
 [[package]]
 name = "iced_style"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#48f5966eaf54b6c2102018c151e38eab0e339e7b"
+source = "git+https://github.com/pop-os/libcosmic.git?branch=text-wrap#e0776c2fc6067cac939d21e9b83aaf6fc64a6e4a"
 dependencies = [
  "iced_core",
  "once_cell",
@@ -2806,7 +2806,7 @@ dependencies = [
 [[package]]
 name = "iced_tiny_skia"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#48f5966eaf54b6c2102018c151e38eab0e339e7b"
+source = "git+https://github.com/pop-os/libcosmic.git?branch=text-wrap#e0776c2fc6067cac939d21e9b83aaf6fc64a6e4a"
 dependencies = [
  "bytemuck",
  "cosmic-text",
@@ -2823,7 +2823,7 @@ dependencies = [
 [[package]]
 name = "iced_wgpu"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#48f5966eaf54b6c2102018c151e38eab0e339e7b"
+source = "git+https://github.com/pop-os/libcosmic.git?branch=text-wrap#e0776c2fc6067cac939d21e9b83aaf6fc64a6e4a"
 dependencies = [
  "bitflags 2.6.0",
  "bytemuck",
@@ -2849,7 +2849,7 @@ dependencies = [
 [[package]]
 name = "iced_widget"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#48f5966eaf54b6c2102018c151e38eab0e339e7b"
+source = "git+https://github.com/pop-os/libcosmic.git?branch=text-wrap#e0776c2fc6067cac939d21e9b83aaf6fc64a6e4a"
 dependencies = [
  "dnd",
  "iced_accessibility",
@@ -2867,7 +2867,7 @@ dependencies = [
 [[package]]
 name = "iced_winit"
 version = "0.12.0"
-source = "git+https://github.com/pop-os/libcosmic.git#48f5966eaf54b6c2102018c151e38eab0e339e7b"
+source = "git+https://github.com/pop-os/libcosmic.git?branch=text-wrap#e0776c2fc6067cac939d21e9b83aaf6fc64a6e4a"
 dependencies = [
  "dnd",
  "iced_accessibility",
@@ -3615,7 +3615,7 @@ checksum = "97b3888a4aecf77e811145cadf6eef5901f4782c53886191b2f693f24761847c"
 [[package]]
 name = "libcosmic"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git#48f5966eaf54b6c2102018c151e38eab0e339e7b"
+source = "git+https://github.com/pop-os/libcosmic.git?branch=text-wrap#e0776c2fc6067cac939d21e9b83aaf6fc64a6e4a"
 dependencies = [
  "apply",
  "ashpd",
@@ -5865,7 +5865,7 @@ dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "toml_edit 0.22.14",
+ "toml_edit 0.22.15",
 ]
 
 [[package]]
@@ -5901,9 +5901,9 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.22.14"
+version = "0.22.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f21c7aaf97f1bd9ca9d4f9e73b0a6c74bd5afef56f2bc931943a6e1c37e04e38"
+checksum = "d59a3a72298453f564e2b111fa896f8d07fabb36f51f06d7e875fc5e0b5a3ef1"
 dependencies = [
  "indexmap",
  "serde",

@@ -48,6 +48,7 @@ slotmap = "1.0.7"
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
+branch = "text-wrap"
 default-features = false
 features = ["a11y", "multi-window", "tokio"]
 
