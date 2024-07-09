@@ -5,9 +5,12 @@ use cosmic::widget::menu::action::MenuAction;
 use cosmic::widget::menu::key_bind::KeyBind;
 use cosmic::widget::{vertical_space, Id, Widget};
 use cosmic::{
-    cosmic_theme,
+    cosmic_theme, font,
     iced::{
-        advanced::text,
+        advanced::{
+            graphics,
+            text::{self, Paragraph},
+        },
         alignment::{Horizontal, Vertical},
         futures::SinkExt,
         keyboard::Modifiers,
@@ -1858,14 +1861,46 @@ impl Tab {
     }
 
     pub fn location_view(&self) -> Element<Message> {
+        //TODO: responsiveness is done in a hacky way, potentially move this to a custom widget?
+        fn text_width<'a>(
+            content: &'a str,
+            font: font::Font,
+            font_size: f32,
+            line_height: f32,
+        ) -> f32 {
+            let text: text::Text<'a, font::Font> = text::Text {
+                content,
+                bounds: Size::INFINITY,
+                size: font_size.into(),
+                line_height: text::LineHeight::Absolute(line_height.into()),
+                font,
+                horizontal_alignment: Horizontal::Left,
+                vertical_alignment: Vertical::Top,
+                shaping: text::Shaping::default(),
+                wrap: text::Wrap::None,
+            };
+            graphics::text::Paragraph::with_text(text)
+                .min_bounds()
+                .width
+        }
+        fn text_width_body<'a>(content: &'a str) -> f32 {
+            //TODO: should libcosmic set the font when using widget::text::body?
+            text_width(content, font::Font::DEFAULT, 14.0, 20.0)
+        }
+        fn text_width_heading<'a>(content: &'a str) -> f32 {
+            text_width(content, font::FONT_SEMIBOLD, 14.0, 20.0)
+        }
+
         let cosmic_theme::Spacing {
             space_xxxs,
             space_xxs,
             space_s,
             ..
         } = theme::active().cosmic().spacing;
+        let size = self.size_opt.get().unwrap_or(Size::new(0.0, 0.0));
 
         let mut row = widget::row::with_capacity(5).align_items(Alignment::Center);
+        let mut w = 0.0;
 
         let mut prev_button =
             widget::button(widget::icon::from_name("go-previous-symbolic").size(16))
@@ -1875,6 +1910,7 @@ impl Tab {
             prev_button = prev_button.on_press(Message::GoPrevious);
         }
         row = row.push(prev_button);
+        w += 16.0 + 2.0 * space_xxs as f32;
 
         let mut next_button = widget::button(widget::icon::from_name("go-next-symbolic").size(16))
             .padding(space_xxs)
@@ -1883,8 +1919,10 @@ impl Tab {
             next_button = next_button.on_press(Message::GoNext);
         }
         row = row.push(next_button);
+        w += 16.0 + 2.0 * space_xxs as f32;
 
         row = row.push(widget::horizontal_space(Length::Fixed(space_s.into())));
+        w += space_s as f32;
 
         if let Some(location) = &self.edit_location {
             match location {
@@ -1919,6 +1957,7 @@ impl Tab {
                 .on_press(move |_| Message::EditLocation(Some(self.location.clone())))
                 .on_middle_press(move |_| Message::OpenInNewTab(path.clone())),
             );
+            w += 16.0 + 2.0 * space_xxs as f32;
         } else if let Location::Search(_, term) = &self.location {
             row = row.push(
                 widget::button(
@@ -1926,53 +1965,56 @@ impl Tab {
                         widget::icon::from_name("system-search-symbolic")
                             .size(16)
                             .into(),
-                        widget::text(term).into(),
+                        widget::text::body(term).wrap(text::Wrap::None).into(),
                     ])
                     .spacing(space_xxs),
                 )
                 .padding(space_xxs)
                 .style(theme::Button::Icon),
             );
+            w += text_width_body(term) + 16.0 + 3.0 * space_xxs as f32;
         }
 
         let mut children: Vec<Element<_>> = Vec::new();
         match &self.location {
             Location::Path(path) | Location::Search(path, ..) => {
                 let home_dir = crate::home_dir();
+                let excess_str = "...";
+                let excess_width = text_width_body(excess_str);
                 for (index, ancestor) in path.ancestors().enumerate() {
                     let mut found_home = false;
-                    let mut row = widget::row::with_capacity(2)
-                        .align_items(Alignment::Center)
-                        .spacing(space_xxxs);
-
-                    let name = match ancestor.file_name() {
+                    let (name, icon_opt) = match ancestor.file_name() {
                         Some(name) => {
                             if ancestor == home_dir {
-                                row = row.push(
-                                    widget::icon::icon(folder_icon_symbolic(
-                                        &ancestor.to_path_buf(),
-                                        16,
-                                    ))
-                                    .size(16),
-                                );
+                                let icon = widget::icon::icon(folder_icon_symbolic(
+                                    &ancestor.to_path_buf(),
+                                    16,
+                                ))
+                                .size(16);
                                 found_home = true;
-                                fl!("home")
+                                (fl!("home"), Some(icon))
                             } else {
-                                name.to_string_lossy().to_string()
+                                (name.to_string_lossy().to_string(), None)
                             }
                         }
                         None => {
-                            row = row.push(
-                                widget::icon::from_name("drive-harddisk-system-symbolic")
-                                    .size(16)
-                                    .icon(),
-                            );
-                            fl!("filesystem")
+                            let icon = widget::icon::from_name("drive-harddisk-system-symbolic")
+                                .size(16)
+                                .icon();
+                            (fl!("filesystem"), Some(icon))
                         }
                     };
+                    let icon_width = if icon_opt.is_some() {
+                        16.0 + space_xxxs as f32
+                    } else {
+                        0.0
+                    };
 
-                    if children.is_empty() {
-                        row = row.push(widget::text::heading(name).wrap(text::Wrap::None));
+                    let (name_width, name_text) = if children.is_empty() {
+                        (
+                            text_width_heading(&name),
+                            widget::text::heading(name).wrap(text::Wrap::None),
+                        )
                     } else {
                         children.push(
                             widget::icon::from_name("go-next-symbolic")
@@ -1980,7 +2022,33 @@ impl Tab {
                                 .icon()
                                 .into(),
                         );
-                        row = row.push(widget::text::body(name).wrap(text::Wrap::None));
+                        w += 16.0;
+                        (
+                            text_width_body(&name),
+                            widget::text::body(name).wrap(text::Wrap::None),
+                        )
+                    };
+
+                    // Add padding for mouse area
+                    w += 2.0 * space_xxxs as f32;
+
+                    let mut row = widget::row::with_capacity(2)
+                        .align_items(Alignment::Center)
+                        .spacing(space_xxxs);
+                    //TODO: figure out why this hardcoded offset is needed after the first item is ellipsed
+                    let overflow_offset = if icon_opt.is_some() { 0.0 } else { 32.0 };
+                    let overflow =
+                        w + icon_width + name_width + overflow_offset > size.width && index > 0;
+                    if overflow {
+                        row = row.push(widget::text::body(excess_str));
+                        w += excess_width;
+                    } else {
+                        if let Some(icon) = icon_opt {
+                            row = row.push(icon);
+                            w += icon_width;
+                        }
+                        row = row.push(name_text);
+                        w += name_width;
                     }
 
                     let mut mouse_area = crate::mouse_area::MouseArea::new(
@@ -2017,7 +2085,7 @@ impl Tab {
 
                     children.push(mouse_area.into());
 
-                    if found_home {
+                    if found_home || overflow {
                         break;
                     }
                 }
