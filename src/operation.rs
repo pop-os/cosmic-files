@@ -307,7 +307,7 @@ impl Operation {
 
     pub fn toast(&self) -> Option<String> {
         match self {
-            Self::Delete { paths } => Some(self.completed_text()),
+            Self::Delete { .. } => Some(self.completed_text()),
             //TODO: more toasts
             _ => None,
         }
@@ -432,10 +432,11 @@ impl Operation {
                 let total = paths.len();
                 let mut count = 0;
                 for path in paths {
-                    tokio::task::spawn_blocking(|| trash::delete(path))
+                    let items_opt = tokio::task::spawn_blocking(|| trash::delete(path))
                         .await
                         .map_err(err_str)?
                         .map_err(err_str)?;
+                    //TODO: items_opt allows for easy restore
                     count += 1;
                     let _ = msg_tx
                         .lock()
