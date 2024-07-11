@@ -250,38 +250,34 @@ impl Operation {
                 let msg_tx = msg_tx.clone();
                 tokio::task::spawn_blocking(move || -> fs_extra::error::Result<()> {
                     log::info!("Copy {:?} to {:?}", paths, to);
-                    let copied_bytes = AtomicU64::default();
-                    let total_bytes = paths
-                        .iter()
-                        .map(fs_extra::dir::get_size)
-                        .sum::<Result<u64, _>>()?;
-                    let handler = || {
-                        executor::block_on(async {
-                            let _ = msg_tx
-                                .lock()
-                                .await
-                                .send(Message::PendingProgress(
-                                    id,
-                                    100.0 * copied_bytes.load(atomic::Ordering::Relaxed) as f32
-                                        / total_bytes as f32,
-                                ))
-                                .await;
-                        })
-                    };
-                    // Files and directory progress are handled separately
-                    let file_handler = |progress: fs_extra::file::TransitProcess| {
-                        copied_bytes.fetch_add(progress.copied_bytes, atomic::Ordering::Relaxed);
-                        handler();
-                    };
-                    let dir_handler = |progress: fs_extra::TransitProcess| {
-                        copied_bytes.fetch_add(progress.copied_bytes, atomic::Ordering::Relaxed);
-                        handler();
-                        handle_progress_state(&msg_tx, &progress)
-                    };
-                    for (from, mut to) in paths.into_iter().zip(to.into_iter()) {
+                    let total_paths = paths.len();
+                    for (path_i, (from, mut to)) in
+                        paths.into_iter().zip(to.into_iter()).enumerate()
+                    {
+                        let handler = |copied_bytes, total_bytes| {
+                            let item_progress = copied_bytes as f32 / total_bytes as f32;
+                            let total_progress =
+                                (item_progress + path_i as f32) / total_paths as f32;
+                            executor::block_on(async {
+                                let _ = msg_tx
+                                    .lock()
+                                    .await
+                                    .send(Message::PendingProgress(id, 100.0 * total_progress))
+                                    .await;
+                            })
+                        };
+
                         if from.is_dir() {
                             let options = fs_extra::dir::CopyOptions::default().copy_inside(true);
-                            fs_extra::copy_items_with_progress(&[from], to, &options, dir_handler)?;
+                            fs_extra::copy_items_with_progress(
+                                &[from],
+                                to,
+                                &options,
+                                |progress: fs_extra::TransitProcess| {
+                                    handler(progress.copied_bytes, progress.total_bytes);
+                                    handle_progress_state(&msg_tx, &progress)
+                                },
+                            )?;
                         } else {
                             let mut options = fs_extra::file::CopyOptions::default();
                             if to.exists() {
@@ -309,7 +305,14 @@ impl Operation {
                                     }
                                 }
                             }
-                            fs_extra::file::copy_with_progress(from, to, &options, file_handler)?;
+                            fs_extra::file::copy_with_progress(
+                                from,
+                                to,
+                                &options,
+                                |progress: fs_extra::file::TransitProcess| {
+                                    handler(progress.copied_bytes, progress.total_bytes);
+                                },
+                            )?;
                         }
                     }
                     Ok(())
