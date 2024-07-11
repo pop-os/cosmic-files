@@ -2528,7 +2528,7 @@ impl Tab {
                     heading_item(fl!("size"), Length::Fixed(size_width), HeadingOptions::Size),
                 ])
                 .align_items(Alignment::Center)
-                .height(Length::Fixed(row_height as f32))
+                .height(Length::Fixed(32.0))
                 .padding(space_xxs)
                 .spacing(space_xxs)
                 .into(),
