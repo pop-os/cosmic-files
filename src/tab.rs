@@ -101,6 +101,7 @@ fn button_appearance(
     selected: bool,
     focused: bool,
     accent: bool,
+    condensed_radius: bool,
 ) -> widget::button::Appearance {
     let cosmic = theme.cosmic();
     let mut appearance = widget::button::Appearance::new();
@@ -119,20 +120,28 @@ fn button_appearance(
         appearance.border_width = 2.0;
         appearance.border_color = Color::TRANSPARENT;
     }
-    appearance.border_radius = cosmic.radius_s().into();
+    if condensed_radius {
+        appearance.border_radius = cosmic.radius_xs().into();
+    } else {
+        appearance.border_radius = cosmic.radius_s().into();
+    }
     appearance
 }
 
-fn button_style(selected: bool, accent: bool) -> theme::Button {
+fn button_style(selected: bool, accent: bool, condensed_radius: bool) -> theme::Button {
     //TODO: move to libcosmic?
     theme::Button::Custom {
-        active: Box::new(move |focused, theme| button_appearance(theme, selected, focused, accent)),
-        disabled: Box::new(move |theme| button_appearance(theme, selected, false, accent)),
+        active: Box::new(move |focused, theme| {
+            button_appearance(theme, selected, focused, accent, condensed_radius)
+        }),
+        disabled: Box::new(move |theme| {
+            button_appearance(theme, selected, false, accent, condensed_radius)
+        }),
         hovered: Box::new(move |focused, theme| {
-            button_appearance(theme, selected, focused, accent)
+            button_appearance(theme, selected, focused, accent, condensed_radius)
         }),
         pressed: Box::new(move |focused, theme| {
-            button_appearance(theme, selected, focused, accent)
+            button_appearance(theme, selected, focused, accent, condensed_radius)
         }),
     }
 }
@@ -208,6 +217,8 @@ pub fn item_from_entry(
     metadata: fs::Metadata,
     sizes: IconSizes,
 ) -> Item {
+    let grid_name = Item::grid_name(&name);
+
     let hidden = name.starts_with(".") || hidden_attribute(&metadata);
 
     let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) =
@@ -256,6 +267,7 @@ pub fn item_from_entry(
 
     Item {
         name,
+        grid_name,
         metadata: ItemMetadata::Path { metadata, children },
         hidden,
         path_opt: Some(path),
@@ -474,6 +486,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
 
                 let original_path = entry.original_path();
                 let name = entry.name.to_string_lossy().to_string();
+                let grid_name = Item::grid_name(&name);
 
                 let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) =
                     match metadata.size {
@@ -498,6 +511,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
 
                 items.push(Item {
                     name,
+                    grid_name,
                     metadata: ItemMetadata::Trash { metadata, entry },
                     hidden: false,
                     path_opt: None,
@@ -663,6 +677,7 @@ pub enum ItemThumbnail {
 #[derive(Clone, Debug)]
 pub struct Item {
     pub name: String,
+    pub grid_name: String,
     pub metadata: ItemMetadata,
     pub hidden: bool,
     pub path_opt: Option<PathBuf>,
@@ -680,6 +695,11 @@ pub struct Item {
 }
 
 impl Item {
+    fn grid_name(name: &str) -> String {
+        // In order to wrap at periods and underscores, add a zero width space after each one
+        name.replace(".", ".\u{200B}").replace("_", "_\u{200B}")
+    }
+
     fn preview(&self, sizes: IconSizes) -> Element<'static, app::Message> {
         // This loads the image only if thumbnailing worked
         let icon = widget::icon::icon(self.icon_handle_grid.clone())
@@ -2175,8 +2195,8 @@ impl Tab {
             ..
         } = self.config;
 
-        let text_height = 40; // Height of two lines of text
-        let item_width = (2 * space_xxs + icon_sizes.grid() + 2 * space_xxs) as usize;
+        let text_height = 3 * 20; // 3 lines of text
+        let item_width = (3 * space_xxs + icon_sizes.grid() + 3 * space_xxs) as usize;
         let item_height =
             (space_xxxs + icon_sizes.grid() + space_xxxs + text_height + space_xxxs) as usize;
 
@@ -2243,12 +2263,12 @@ impl Tab {
                             .content_fit(ContentFit::Contain)
                             .size(icon_sizes.grid()),
                     )
-                    .style(button_style(item.selected, false))
-                    .padding(space_xxxs),
-                    widget::button(widget::text(item.name.clone()))
+                    .padding(space_xxxs)
+                    .style(button_style(item.selected, false, false)),
+                    widget::button(widget::text::body(&item.grid_name))
                         .id(item.button_id.clone())
-                        .style(button_style(item.selected, true))
-                        .padding([0, space_xxs]),
+                        .padding([0, space_xxxs])
+                        .style(button_style(item.selected, true, true)),
                 ];
 
                 let mut column = widget::column::with_capacity(buttons.len())
@@ -2394,12 +2414,16 @@ impl Tab {
                                 )
                                 .on_press(Message::Click(Some(*i)))
                                 .padding(space_xxxs)
-                                .style(button_style(item.selected, false)),
-                                widget::button(widget::text(item.name.clone()))
+                                .style(button_style(
+                                    item.selected,
+                                    false,
+                                    false,
+                                )),
+                                widget::button(widget::text(item.grid_name.clone()))
                                     .id(item.button_id.clone())
                                     .on_press(Message::Click(Some(*i)))
-                                    .padding([0, space_xxs])
-                                    .style(button_style(item.selected, true)),
+                                    .padding([0, space_xxxs])
+                                    .style(button_style(item.selected, true, true)),
                             ];
 
                             let mut column = widget::column::with_capacity(buttons.len())
@@ -2608,7 +2632,7 @@ impl Tab {
                             .height(Length::Fixed(row_height as f32))
                             .id(item.button_id.clone())
                             .padding(space_xxs)
-                            .style(button_style(item.selected, true)),
+                            .style(button_style(item.selected, true, false)),
                     )
                     .on_press(move |_| Message::Click(Some(i)))
                     .on_double_click(move |_| Message::DoubleClick(Some(i)))
