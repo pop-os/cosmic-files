@@ -198,6 +198,14 @@ fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
 }
 
 impl Operation {
+    pub fn toast(&self) -> Option<String> {
+        match self {
+            Self::Delete { paths } => Some(fl!("moved-to-trash", items = paths.len())),
+            //TODO: more toasts
+            _ => None,
+        }
+    }
+
     /// Perform the operation
     pub async fn perform(
         self,

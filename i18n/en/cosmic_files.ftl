@@ -65,6 +65,12 @@ pending = Pending
 failed = Failed
 complete = Complete
 copy_noun = Copy
+moved-to-trash =
+    {$items ->
+        [one] 1 item has been moved to {trash}.
+        *[other] {$items} items have been moved to {trash}.
+    }
+undo = Undo
 
 ## Open with
 open-with = Open with
