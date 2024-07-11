@@ -214,8 +214,7 @@ pub fn menu_bar<'a>(
                     menu::Item::Button(fl!("paste"), Action::Paste),
                     menu::Item::Button(fl!("select-all"), Action::SelectAll),
                     menu::Item::Divider,
-                    //TODO: edit history
-                    menu::Item::Button(fl!("operations"), Action::Operations),
+                    menu::Item::Button(fl!("history"), Action::EditHistory),
                 ],
             ),
         ),
