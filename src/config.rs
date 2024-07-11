@@ -15,7 +15,7 @@ use super::tab::HeadingOptions;
 pub const CONFIG_VERSION: u64 = 1;
 
 // Default icon sizes
-pub const ICON_SIZE_LIST: u16 = 24;
+pub const ICON_SIZE_LIST: u16 = 32;
 pub const ICON_SIZE_LIST_CONDENSED: u16 = 48;
 pub const ICON_SIZE_GRID: u16 = 64;
 // TODO: 5 is an arbitrary number. Maybe there's a better icon size max
