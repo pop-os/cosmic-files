@@ -1915,12 +1915,15 @@ impl Tab {
             space_xxxs,
             space_xxs,
             space_s,
+            space_m,
             ..
         } = theme::active().cosmic().spacing;
         let size = self.size_opt.get().unwrap_or(Size::new(0.0, 0.0));
 
-        let mut row = widget::row::with_capacity(5).align_items(Alignment::Center);
+        let mut row = widget::row::with_capacity(7).align_items(Alignment::Center);
         let mut w = 0.0;
+
+        row = row.push(widget::horizontal_space(Length::Fixed(space_m.into())));
 
         let mut prev_button =
             widget::button(widget::icon::from_name("go-previous-symbolic").size(16))
@@ -1961,6 +1964,7 @@ impl Tab {
                             })
                             .on_submit(Message::Location(location.clone())),
                     );
+                    row = row.push(widget::horizontal_space(Length::Fixed(space_m.into())));
                     return row.into();
                 }
                 _ => {
