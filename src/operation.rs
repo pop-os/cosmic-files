@@ -1,5 +1,6 @@
 use cosmic::iced::futures::{channel::mpsc::Sender, executor, SinkExt};
 use std::{
+    borrow::Cow,
     fs,
     path::{Path, PathBuf},
     sync::{
@@ -197,10 +198,116 @@ fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
     }
 }
 
+fn file_name<'a>(path: &'a Path) -> Cow<'a, str> {
+    path.file_name()
+        .map_or_else(|| fl!("unknown-folder").into(), |x| x.to_string_lossy())
+}
+
+fn parent_name<'a>(path: &'a Path) -> Cow<'a, str> {
+    let Some(parent) = path.parent() else {
+        return fl!("unknown-folder").into();
+    };
+
+    file_name(parent)
+}
+
+fn paths_parent_name<'a>(paths: &'a Vec<PathBuf>) -> Cow<'a, str> {
+    let Some(first_path) = paths.first() else {
+        return fl!("unknown-folder").into();
+    };
+
+    let Some(parent) = first_path.parent() else {
+        return fl!("unknown-folder").into();
+    };
+
+    for path in paths.iter() {
+        //TODO: is it possible to have different parents, and what should be returned?
+        if path.parent() != Some(parent) {
+            return fl!("unknown-folder").into();
+        }
+    }
+
+    file_name(parent)
+}
+
 impl Operation {
+    pub fn pending_text(&self) -> String {
+        match self {
+            Self::Copy { paths, to } => fl!(
+                "copying",
+                items = paths.len(),
+                from = paths_parent_name(paths),
+                to = file_name(to)
+            ),
+            Self::Delete { paths } => fl!(
+                "moving",
+                items = paths.len(),
+                from = paths_parent_name(paths),
+                to = fl!("trash")
+            ),
+            Self::EmptyTrash => fl!("emptying-trash"),
+            Self::Move { paths, to } => fl!(
+                "moving",
+                items = paths.len(),
+                from = paths_parent_name(paths),
+                to = file_name(to)
+            ),
+            Self::NewFile { path } => fl!(
+                "creating",
+                name = file_name(path),
+                parent = parent_name(path)
+            ),
+            Self::NewFolder { path } => fl!(
+                "creating",
+                name = file_name(path),
+                parent = parent_name(path)
+            ),
+            Self::Rename { from, to } => {
+                fl!("renaming", from = file_name(from), to = file_name(to))
+            }
+            Self::Restore { paths } => fl!("restoring", items = paths.len()),
+        }
+    }
+
+    pub fn completed_text(&self) -> String {
+        match self {
+            Self::Copy { paths, to } => fl!(
+                "copied",
+                items = paths.len(),
+                from = paths_parent_name(paths),
+                to = file_name(to)
+            ),
+            Self::Delete { paths } => fl!(
+                "moved",
+                items = paths.len(),
+                from = paths_parent_name(paths),
+                to = fl!("trash")
+            ),
+            Self::EmptyTrash => fl!("emptied-trash"),
+            Self::Move { paths, to } => fl!(
+                "moved",
+                items = paths.len(),
+                from = paths_parent_name(paths),
+                to = file_name(to)
+            ),
+            Self::NewFile { path } => fl!(
+                "created",
+                name = file_name(path),
+                parent = parent_name(path)
+            ),
+            Self::NewFolder { path } => fl!(
+                "created",
+                name = file_name(path),
+                parent = parent_name(path)
+            ),
+            Self::Rename { from, to } => fl!("renamed", from = file_name(from), to = file_name(to)),
+            Self::Restore { paths } => fl!("restored", items = paths.len()),
+        }
+    }
+
     pub fn toast(&self) -> Option<String> {
         match self {
-            Self::Delete { paths } => Some(fl!("moved-to-trash", items = paths.len())),
+            Self::Delete { paths } => Some(self.completed_text()),
             //TODO: more toasts
             _ => None,
         }
