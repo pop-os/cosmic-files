@@ -2494,7 +2494,7 @@ impl Application for App {
                             move |events_res: notify_debouncer_full::DebounceEventResult| {
                                 match events_res {
                                     Ok(mut events) => {
-                                        eprintln!("{:?}", events);
+                                        log::debug!("{:?}", events);
 
                                         events.retain(|event| {
                                             match &event.kind {
