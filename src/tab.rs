@@ -1,9 +1,3 @@
-use cosmic::iced::clipboard::dnd::DndAction;
-use cosmic::iced::Border;
-use cosmic::iced_core::widget::tree;
-use cosmic::widget::menu::action::MenuAction;
-use cosmic::widget::menu::key_bind::KeyBind;
-use cosmic::widget::{vertical_space, Id, Widget};
 use cosmic::{
     cosmic_theme, font,
     iced::{
@@ -12,6 +6,7 @@ use cosmic::{
             text::{self, Paragraph},
         },
         alignment::{Horizontal, Vertical},
+        clipboard::dnd::DndAction,
         futures::SinkExt,
         keyboard::Modifiers,
         subscription::{self, Subscription},
@@ -21,6 +16,7 @@ use cosmic::{
             scrollable::{AbsoluteOffset, Viewport},
         },
         Alignment,
+        Border,
         Color,
         ContentFit,
         Length,
@@ -28,36 +24,42 @@ use cosmic::{
         Rectangle,
         Size,
     },
-    theme, widget, Element,
+    iced_core::widget::tree,
+    theme, widget,
+    widget::{
+        menu::{action::MenuAction, key_bind::KeyBind},
+        vertical_space, DndDestination, DndSource, Id, Widget,
+    },
+    Element,
 };
+
 use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
-use std::sync::{Arc, Mutex};
 use std::{
-    cell::Cell,
+    cell::{Cell, RefCell},
     cmp::Ordering,
     collections::HashMap,
     fmt,
     fs::{self, Metadata},
     num::NonZeroU16,
     path::PathBuf,
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
-use crate::clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste};
-use crate::localize::LANGUAGE_SORTER;
 use crate::{
     app::{self, Action},
+    clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{IconSizes, TabConfig, ICON_SCALE_MAX, ICON_SIZE_GRID},
     dialog::DialogKind,
-    fl, menu,
+    fl,
+    localize::LANGUAGE_SORTER,
+    menu,
     mime_app::{mime_apps, MimeApp},
     mime_icon::{mime_for_path, mime_icon},
     mouse_area,
 };
-use cosmic::widget::{DndDestination, DndSource};
 
 pub const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 pub const HOVER_DURATION: Duration = Duration::from_millis(1600);
@@ -1920,7 +1922,9 @@ impl Tab {
         } = theme::active().cosmic().spacing;
         let size = self.size_opt.get().unwrap_or(Size::new(0.0, 0.0));
 
-        let mut row = widget::row::with_capacity(5).align_items(Alignment::Center).padding([0, space_m]);
+        let mut row = widget::row::with_capacity(5)
+            .align_items(Alignment::Center)
+            .padding([0, space_m]);
         let mut w = 0.0;
 
         let mut prev_button =
@@ -2632,7 +2636,7 @@ impl Tab {
                             .width(Length::Fill)
                             .height(Length::Fixed(row_height as f32))
                             .id(item.button_id.clone())
-                            .padding(space_xxs)
+                            .padding(if icon_size < 24 { 7 } else { space_xxs })
                             .style(button_style(item.selected, true, false)),
                     )
                     .on_press(move |_| Message::Click(Some(i)))
