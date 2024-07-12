@@ -54,7 +54,7 @@ use crate::{
     config::{IconSizes, TabConfig, ICON_SCALE_MAX, ICON_SIZE_GRID},
     dialog::DialogKind,
     fl,
-    localize::LANGUAGE_SORTER,
+    localize::{LANGUAGE_CHRONO, LANGUAGE_SORTER},
     menu,
     mime_app::{mime_apps, MimeApp},
     mime_icon::{mime_for_path, mime_icon},
