@@ -1925,9 +1925,7 @@ impl Tab {
         } = theme::active().cosmic().spacing;
         let size = self.size_opt.get().unwrap_or(Size::new(0.0, 0.0));
 
-        let mut row = widget::row::with_capacity(5)
-            .align_items(Alignment::Center)
-            .padding([space_xxxs, space_s]);
+        let mut row = widget::row::with_capacity(5).align_items(Alignment::Center);
         let mut w = 0.0;
 
         let mut prev_button =
@@ -1969,7 +1967,7 @@ impl Tab {
                             })
                             .on_submit(Message::Location(location.clone())),
                     );
-                    return row.into();
+                    return row.padding([0, space_s]).into();
                 }
                 _ => {
                     //TODO: allow editing other locations
@@ -2139,8 +2137,11 @@ impl Tab {
         for child in children {
             row = row.push(child);
         }
+        let mut column = widget::column::with_capacity(2).padding([0, space_s]);
+        column = column.push(row);
+        column = column.push(horizontal_rule(1));
 
-        let mouse_area = crate::mouse_area::MouseArea::new(row)
+        let mouse_area = crate::mouse_area::MouseArea::new(column)
             .on_right_press(Message::LocationContextMenuPoint);
 
         let mut popover = widget::popover(mouse_area);
@@ -2234,7 +2235,7 @@ impl Tab {
         let mut grid = widget::grid()
             .column_spacing(column_spacing)
             .row_spacing(space_xxs)
-            .padding([0, space_m].into());
+            .padding([space_xxxs, space_xxs].into());
         let mut dnd_items: Vec<(usize, (usize, usize), &Item)> = Vec::new();
         let mut drag_w_i = usize::MAX;
         let mut drag_n_i = usize::MAX;
@@ -2537,7 +2538,7 @@ impl Tab {
                 ])
                 .align_items(Alignment::Center)
                 .height(Length::Fixed((space_m + 4).into()))
-                .padding(0)
+                .padding([0, space_xxs])
                 .spacing(space_xxs)
                 .into(),
             );
