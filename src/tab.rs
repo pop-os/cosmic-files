@@ -47,7 +47,7 @@ use std::{
 };
 
 use crate::clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste};
-use crate::localize::LANGUAGE_SORTER;
+use crate::localize::{LANGUAGE_CHRONO, LANGUAGE_SORTER};
 use crate::{
     app::{self, Action},
     config::{IconSizes, TabConfig, ICON_SCALE_MAX, ICON_SIZE_GRID},
@@ -806,21 +806,24 @@ impl Item {
                 if let Ok(time) = metadata.created() {
                     column = column.push(widget::text(format!(
                         "Created: {}",
-                        chrono::DateTime::<chrono::Local>::from(time).format(TIME_FORMAT)
+                        chrono::DateTime::<chrono::Local>::from(time)
+                            .format_localized(TIME_FORMAT, *LANGUAGE_CHRONO)
                     )));
                 }
 
                 if let Ok(time) = metadata.modified() {
                     column = column.push(widget::text(format!(
                         "Modified: {}",
-                        chrono::DateTime::<chrono::Local>::from(time).format(TIME_FORMAT)
+                        chrono::DateTime::<chrono::Local>::from(time)
+                            .format_localized(TIME_FORMAT, *LANGUAGE_CHRONO)
                     )));
                 }
 
                 if let Ok(time) = metadata.accessed() {
                     column = column.push(widget::text(format!(
                         "Accessed: {}",
-                        chrono::DateTime::<chrono::Local>::from(time).format(TIME_FORMAT)
+                        chrono::DateTime::<chrono::Local>::from(time)
+                            .format_localized(TIME_FORMAT, *LANGUAGE_CHRONO)
                     )));
                 }
             }
@@ -860,7 +863,8 @@ impl Item {
                 if let Ok(time) = metadata.modified() {
                     column = column.push(widget::text(format!(
                         "Last modified: {}",
-                        chrono::DateTime::<chrono::Local>::from(time).format(TIME_FORMAT)
+                        chrono::DateTime::<chrono::Local>::from(time)
+                            .format_localized(TIME_FORMAT, *LANGUAGE_CHRONO)
                     )));
                 }
             }
@@ -2564,7 +2568,7 @@ impl Tab {
                 let modified_text = match &item.metadata {
                     ItemMetadata::Path { metadata, .. } => match metadata.modified() {
                         Ok(time) => chrono::DateTime::<chrono::Local>::from(time)
-                            .format(TIME_FORMAT)
+                            .format_localized(TIME_FORMAT, *LANGUAGE_CHRONO)
                             .to_string(),
                         Err(_) => String::new(),
                     },
