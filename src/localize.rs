@@ -6,7 +6,7 @@ use i18n_embed::{
     fluent::{fluent_language_loader, FluentLanguageLoader},
     DefaultLocalizer, LanguageLoader, Localizer,
 };
-use icu::collator::{Collator, CollatorOptions, Numeric};
+use icu_collator::{Collator, CollatorOptions, Numeric};
 use icu_provider::DataLocale;
 use once_cell::sync::Lazy;
 use rust_embed::RustEmbed;
@@ -38,6 +38,19 @@ pub static LANGUAGE_SORTER: Lazy<Collator> = Lazy::new(|| {
             Collator::try_new(&locale, options).ok()
         })
         .expect("Creating a collator from the system's current language, the fallback language, or American English should succeed")
+});
+
+pub static LANGUAGE_CHRONO: Lazy<chrono::Locale> = Lazy::new(|| {
+    std::env::var("LANG")
+        .ok()
+        .and_then(|locale_full| {
+            // Split LANG because it may be set to a locale such as en_US.UTF8
+            locale_full
+                .split('.')
+                .next()
+                .and_then(|locale| chrono::Locale::from_str(locale).ok())
+        })
+        .unwrap_or(chrono::Locale::en_US)
 });
 
 #[macro_export]

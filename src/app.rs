@@ -66,6 +66,7 @@ pub enum Action {
     AddToSidebar,
     Copy,
     Cut,
+    EditHistory,
     EditLocation,
     HistoryNext,
     HistoryPrevious,
@@ -82,7 +83,6 @@ pub enum Action {
     OpenInNewWindow,
     OpenTerminal,
     OpenWith,
-    Operations,
     Paste,
     Properties,
     Rename,
@@ -113,6 +113,7 @@ impl Action {
             Action::AddToSidebar => Message::AddToSidebar(entity_opt),
             Action::Copy => Message::Copy(entity_opt),
             Action::Cut => Message::Cut(entity_opt),
+            Action::EditHistory => Message::ToggleContextPage(ContextPage::EditHistory),
             Action::EditLocation => Message::EditLocation(entity_opt),
             Action::HistoryNext => Message::TabMessage(entity_opt, tab::Message::GoNext),
             Action::HistoryPrevious => Message::TabMessage(entity_opt, tab::Message::GoPrevious),
@@ -129,7 +130,6 @@ impl Action {
             Action::OpenInNewWindow => Message::OpenInNewWindow(entity_opt),
             Action::OpenTerminal => Message::OpenTerminal(entity_opt),
             Action::OpenWith => Message::ToggleContextPage(ContextPage::OpenWith),
-            Action::Operations => Message::ToggleContextPage(ContextPage::Operations),
             Action::Paste => Message::Paste(entity_opt),
             Action::Properties => Message::ToggleContextPage(ContextPage::Properties(None)),
             Action::Rename => Message::Rename(entity_opt),
@@ -247,7 +247,9 @@ pub enum Message {
     TabMessage(Option<Entity>, tab::Message),
     TabNew,
     TabRescan(Entity, Location, Vec<tab::Item>),
+    Toast(widget::toaster::ToastMessage),
     ToggleContextPage(ContextPage),
+    Undo(u64),
     WindowClose,
     WindowNew,
     DndHoverLocTimeout(Location),
@@ -260,11 +262,17 @@ pub enum Message {
     DndDropNav(Entity, Option<ClipboardPaste>, DndAction),
 }
 
+impl From<widget::toaster::ToastMessage> for Message {
+    fn from(toast_message: widget::toaster::ToastMessage) -> Self {
+        Self::Toast(toast_message)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ContextPage {
     About,
+    EditHistory,
     OpenWith,
-    Operations,
     Properties(Option<ContextItem>),
     Settings,
 }
@@ -273,8 +281,8 @@ impl ContextPage {
     fn title(&self) -> String {
         match self {
             Self::About => String::new(),
+            Self::EditHistory => fl!("edit-history"),
             Self::OpenWith => fl!("open-with"),
-            Self::Operations => fl!("operations"),
             Self::Properties(..) => fl!("properties"),
             Self::Settings => fl!("settings"),
         }
@@ -357,6 +365,7 @@ pub struct App {
     search_active: bool,
     search_id: widget::Id,
     search_input: String,
+    toasts: widget::toaster::Toasts<Message>,
     watcher_opt: Option<(Debouncer<RecommendedWatcher, FileIdMap>, HashSet<PathBuf>)>,
     nav_dnd_hover: Option<(Location, Instant)>,
     tab_dnd_hover: Option<(Entity, Instant)>,
@@ -641,7 +650,7 @@ impl App {
         widget::settings::view_column(children).into()
     }
 
-    fn operations(&self) -> Element<Message> {
+    fn edit_history(&self) -> Element<Message> {
         let mut children = Vec::new();
 
         //TODO: get height from theme?
@@ -651,7 +660,7 @@ impl App {
             let mut section = widget::settings::view_section(fl!("pending"));
             for (_id, (op, progress)) in self.pending_operations.iter().rev() {
                 section = section.add(widget::column::with_children(vec![
-                    widget::text(format!("{:?}", op)).into(),
+                    widget::text(op.pending_text()).into(),
                     widget::progress_bar(0.0..=100.0, *progress)
                         .height(progress_bar_height)
                         .into(),
@@ -664,7 +673,7 @@ impl App {
             let mut section = widget::settings::view_section(fl!("failed"));
             for (_id, (op, error)) in self.failed_operations.iter().rev() {
                 section = section.add(widget::column::with_children(vec![
-                    widget::text(format!("{:?}", op)).into(),
+                    widget::text(op.pending_text()).into(),
                     widget::text(error).into(),
                 ]));
             }
@@ -674,9 +683,13 @@ impl App {
         if !self.complete_operations.is_empty() {
             let mut section = widget::settings::view_section(fl!("complete"));
             for (_id, op) in self.complete_operations.iter().rev() {
-                section = section.add(widget::text(format!("{:?}", op)));
+                section = section.add(widget::text(op.completed_text()));
             }
             children.push(section.into());
+        }
+
+        if children.is_empty() {
+            children.push(widget::text::body(fl!("no-history")).into());
         }
 
         widget::settings::view_column(children).into()
@@ -978,6 +991,7 @@ impl Application for App {
             search_active: false,
             search_id: widget::Id::unique(),
             search_input: String::new(),
+            toasts: widget::toaster::Toasts::default(),
             watcher_opt: None,
             nav_dnd_hover: None,
             tab_dnd_hover: None,
@@ -1528,11 +1542,27 @@ impl Application for App {
                 }
             }
             Message::PendingComplete(id) => {
+                let mut commands = Vec::with_capacity(2);
                 if let Some((op, _)) = self.pending_operations.remove(&id) {
+                    if let Some(description) = op.toast() {
+                        commands.push(
+                            self.toasts.push(
+                                widget::toaster::Toast::new(description)
+                                    /*TODO
+                                    .action(widget::toaster::ToastAction {
+                                        description: fl!("undo"),
+                                        message: Message::Undo(id),
+                                    })
+                                    */
+                                    .duration(widget::toaster::ToastDuration::Long),
+                            ),
+                        );
+                    }
                     self.complete_operations.insert(id, op);
                 }
                 // Manually rescan any trash tabs after any operation is completed
-                return self.rescan_trash();
+                commands.push(self.rescan_trash());
+                return Command::batch(commands);
             }
             Message::PendingError(id, err) => {
                 if let Some((op, _)) = self.pending_operations.remove(&id) {
@@ -1867,6 +1897,9 @@ impl Application for App {
                 }
             }
             //TODO: TABRELOAD
+            Message::Toast(toast_message) => {
+                self.toasts.handle_message(&toast_message);
+            }
             Message::ToggleContextPage(context_page) => {
                 //TODO: ensure context menus are closed
                 if self.context_page == context_page {
@@ -1876,6 +1909,9 @@ impl Application for App {
                     self.core.window.show_context = true;
                 }
                 self.set_context_title(context_page.title());
+            }
+            Message::Undo(id) => {
+                log::error!("TODO: Undo {id}");
             }
             Message::WindowClose => {
                 return window::close(window::Id::MAIN);
@@ -2080,8 +2116,8 @@ impl Application for App {
 
         Some(match self.context_page {
             ContextPage::About => self.about(),
+            ContextPage::EditHistory => self.edit_history(),
             ContextPage::OpenWith => self.open_with(),
-            ContextPage::Operations => self.operations(),
             ContextPage::Properties(entity) => self.properties(entity),
             ContextPage::Settings => self.settings(),
         })
@@ -2320,19 +2356,35 @@ impl Application for App {
     }
 
     fn header_end(&self) -> Vec<Element<Self::Message>> {
-        vec![if self.search_active {
-            widget::text_input::search_input("", &self.search_input)
-                .width(Length::Fixed(240.0))
-                .id(self.search_id.clone())
-                .on_clear(Message::SearchClear)
-                .on_input(Message::SearchInput)
-                .on_submit(Message::SearchSubmit)
-                .into()
+        let mut elements = Vec::with_capacity(2);
+
+        if !self.pending_operations.is_empty() {
+            elements.push(
+                widget::button::text(format!("{}", self.pending_operations.len()))
+                    .on_press(Message::ToggleContextPage(ContextPage::EditHistory))
+                    .into(),
+            );
+        }
+
+        if self.search_active {
+            elements.push(
+                widget::text_input::search_input("", &self.search_input)
+                    .width(Length::Fixed(240.0))
+                    .id(self.search_id.clone())
+                    .on_clear(Message::SearchClear)
+                    .on_input(Message::SearchInput)
+                    .on_submit(Message::SearchSubmit)
+                    .into(),
+            )
         } else {
-            widget::button::icon(widget::icon::from_name("system-search-symbolic"))
-                .on_press(Message::SearchActivate)
-                .into()
-        }]
+            elements.push(
+                widget::button::icon(widget::icon::from_name("system-search-symbolic"))
+                    .on_press(Message::SearchActivate)
+                    .into(),
+            )
+        }
+
+        elements
     }
 
     /// Creates a view after each update.
@@ -2374,7 +2426,7 @@ impl Application for App {
             }
         }
 
-        let content: Element<_> = tab_column.into();
+        let content: Element<_> = widget::toaster::toaster(&self.toasts, tab_column).into();
 
         // Uncomment to debug layout:
         //content.explain(cosmic::iced::Color::WHITE)
@@ -2440,7 +2492,7 @@ impl Application for App {
                             move |events_res: notify_debouncer_full::DebounceEventResult| {
                                 match events_res {
                                     Ok(mut events) => {
-                                        eprintln!("{:?}", events);
+                                        log::debug!("{:?}", events);
 
                                         events.retain(|event| {
                                             match &event.kind {

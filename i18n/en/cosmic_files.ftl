@@ -60,11 +60,45 @@ skip = Skip
 git-description = Git commit {$hash} on {$date}
 
 ## Operations
-operations = Operations
+edit-history = Edit history
+history = History
+no-history = No items in history.
 pending = Pending
 failed = Failed
 complete = Complete
 copy_noun = Copy
+creating = Creating {$name} in {$parent}
+created = Created {$name} in {$parent}
+copying = Copying {$items} {$items ->
+        [one] item
+        *[other] items
+    } from {$from} to {$to}
+copied = Copied {$items} {$items ->
+        [one] item
+        *[other] items
+    } from {$from} to {$to}
+emptying-trash = Emptying {trash}
+emptied-trash = Emptied {trash}
+moving = Moving {$items} {$items ->
+        [one] item
+        *[other] items
+    } from {$from} to {$to}
+moved = Moved {$items} {$items ->
+        [one] item
+        *[other] items
+    } from {$from} to {$to}
+renaming = Renaming {$from} to {$to}
+renamed = Renamed {$from} to {$to}
+restoring = Restoring {$items} {$items ->
+        [one] item
+        *[other] items
+    } from {trash} 
+restored = Restored {$items} {$items ->
+        [one] item
+        *[other] items
+    } from {trash} 
+undo = Undo
+unknown-folder = unknown folder
 
 ## Open with
 open-with = Open with

@@ -1,5 +1,6 @@
 use cosmic::iced::futures::{channel::mpsc::Sender, executor, SinkExt};
 use std::{
+    borrow::Cow,
     fs,
     path::{Path, PathBuf},
     sync::{
@@ -197,7 +198,121 @@ fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
     }
 }
 
+fn file_name<'a>(path: &'a Path) -> Cow<'a, str> {
+    path.file_name()
+        .map_or_else(|| fl!("unknown-folder").into(), |x| x.to_string_lossy())
+}
+
+fn parent_name<'a>(path: &'a Path) -> Cow<'a, str> {
+    let Some(parent) = path.parent() else {
+        return fl!("unknown-folder").into();
+    };
+
+    file_name(parent)
+}
+
+fn paths_parent_name<'a>(paths: &'a Vec<PathBuf>) -> Cow<'a, str> {
+    let Some(first_path) = paths.first() else {
+        return fl!("unknown-folder").into();
+    };
+
+    let Some(parent) = first_path.parent() else {
+        return fl!("unknown-folder").into();
+    };
+
+    for path in paths.iter() {
+        //TODO: is it possible to have different parents, and what should be returned?
+        if path.parent() != Some(parent) {
+            return fl!("unknown-folder").into();
+        }
+    }
+
+    file_name(parent)
+}
+
 impl Operation {
+    pub fn pending_text(&self) -> String {
+        match self {
+            Self::Copy { paths, to } => fl!(
+                "copying",
+                items = paths.len(),
+                from = paths_parent_name(paths),
+                to = file_name(to)
+            ),
+            Self::Delete { paths } => fl!(
+                "moving",
+                items = paths.len(),
+                from = paths_parent_name(paths),
+                to = fl!("trash")
+            ),
+            Self::EmptyTrash => fl!("emptying-trash"),
+            Self::Move { paths, to } => fl!(
+                "moving",
+                items = paths.len(),
+                from = paths_parent_name(paths),
+                to = file_name(to)
+            ),
+            Self::NewFile { path } => fl!(
+                "creating",
+                name = file_name(path),
+                parent = parent_name(path)
+            ),
+            Self::NewFolder { path } => fl!(
+                "creating",
+                name = file_name(path),
+                parent = parent_name(path)
+            ),
+            Self::Rename { from, to } => {
+                fl!("renaming", from = file_name(from), to = file_name(to))
+            }
+            Self::Restore { paths } => fl!("restoring", items = paths.len()),
+        }
+    }
+
+    pub fn completed_text(&self) -> String {
+        match self {
+            Self::Copy { paths, to } => fl!(
+                "copied",
+                items = paths.len(),
+                from = paths_parent_name(paths),
+                to = file_name(to)
+            ),
+            Self::Delete { paths } => fl!(
+                "moved",
+                items = paths.len(),
+                from = paths_parent_name(paths),
+                to = fl!("trash")
+            ),
+            Self::EmptyTrash => fl!("emptied-trash"),
+            Self::Move { paths, to } => fl!(
+                "moved",
+                items = paths.len(),
+                from = paths_parent_name(paths),
+                to = file_name(to)
+            ),
+            Self::NewFile { path } => fl!(
+                "created",
+                name = file_name(path),
+                parent = parent_name(path)
+            ),
+            Self::NewFolder { path } => fl!(
+                "created",
+                name = file_name(path),
+                parent = parent_name(path)
+            ),
+            Self::Rename { from, to } => fl!("renamed", from = file_name(from), to = file_name(to)),
+            Self::Restore { paths } => fl!("restored", items = paths.len()),
+        }
+    }
+
+    pub fn toast(&self) -> Option<String> {
+        match self {
+            Self::Delete { .. } => Some(self.completed_text()),
+            //TODO: more toasts
+            _ => None,
+        }
+    }
+
     /// Perform the operation
     pub async fn perform(
         self,
@@ -242,38 +357,34 @@ impl Operation {
                 let msg_tx = msg_tx.clone();
                 tokio::task::spawn_blocking(move || -> fs_extra::error::Result<()> {
                     log::info!("Copy {:?} to {:?}", paths, to);
-                    let copied_bytes = AtomicU64::default();
-                    let total_bytes = paths
-                        .iter()
-                        .map(fs_extra::dir::get_size)
-                        .sum::<Result<u64, _>>()?;
-                    let handler = || {
-                        executor::block_on(async {
-                            let _ = msg_tx
-                                .lock()
-                                .await
-                                .send(Message::PendingProgress(
-                                    id,
-                                    100.0 * copied_bytes.load(atomic::Ordering::Relaxed) as f32
-                                        / total_bytes as f32,
-                                ))
-                                .await;
-                        })
-                    };
-                    // Files and directory progress are handled separately
-                    let file_handler = |progress: fs_extra::file::TransitProcess| {
-                        copied_bytes.fetch_add(progress.copied_bytes, atomic::Ordering::Relaxed);
-                        handler();
-                    };
-                    let dir_handler = |progress: fs_extra::TransitProcess| {
-                        copied_bytes.fetch_add(progress.copied_bytes, atomic::Ordering::Relaxed);
-                        handler();
-                        handle_progress_state(&msg_tx, &progress)
-                    };
-                    for (from, mut to) in paths.into_iter().zip(to.into_iter()) {
+                    let total_paths = paths.len();
+                    for (path_i, (from, mut to)) in
+                        paths.into_iter().zip(to.into_iter()).enumerate()
+                    {
+                        let handler = |copied_bytes, total_bytes| {
+                            let item_progress = copied_bytes as f32 / total_bytes as f32;
+                            let total_progress =
+                                (item_progress + path_i as f32) / total_paths as f32;
+                            executor::block_on(async {
+                                let _ = msg_tx
+                                    .lock()
+                                    .await
+                                    .send(Message::PendingProgress(id, 100.0 * total_progress))
+                                    .await;
+                            })
+                        };
+
                         if from.is_dir() {
                             let options = fs_extra::dir::CopyOptions::default().copy_inside(true);
-                            fs_extra::copy_items_with_progress(&[from], to, &options, dir_handler)?;
+                            fs_extra::copy_items_with_progress(
+                                &[from],
+                                to,
+                                &options,
+                                |progress: fs_extra::TransitProcess| {
+                                    handler(progress.copied_bytes, progress.total_bytes);
+                                    handle_progress_state(&msg_tx, &progress)
+                                },
+                            )?;
                         } else {
                             let mut options = fs_extra::file::CopyOptions::default();
                             if to.exists() {
@@ -301,7 +412,14 @@ impl Operation {
                                     }
                                 }
                             }
-                            fs_extra::file::copy_with_progress(from, to, &options, file_handler)?;
+                            fs_extra::file::copy_with_progress(
+                                from,
+                                to,
+                                &options,
+                                |progress: fs_extra::file::TransitProcess| {
+                                    handler(progress.copied_bytes, progress.total_bytes);
+                                },
+                            )?;
                         }
                     }
                     Ok(())
@@ -314,10 +432,11 @@ impl Operation {
                 let total = paths.len();
                 let mut count = 0;
                 for path in paths {
-                    tokio::task::spawn_blocking(|| trash::delete(path))
+                    let items_opt = tokio::task::spawn_blocking(|| trash::delete(path))
                         .await
                         .map_err(err_str)?
                         .map_err(err_str)?;
+                    //TODO: items_opt allows for easy restore
                     count += 1;
                     let _ = msg_tx
                         .lock()
