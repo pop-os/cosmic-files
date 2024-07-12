@@ -21,8 +21,8 @@ ignore = "0.4"
 image = "0.24"
 once_cell = "1.19"
 open = "5.0.2"
-icu = { version = "1.5", features = [ "sync" ] }
-icu_provider = "1.5"
+icu_collator = "1.5"
+icu_provider = { version = "1.5", features = ["sync"] }
 libc = "0.2"
 log = "0.4"
 mime_guess = "2"
