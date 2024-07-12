@@ -1928,7 +1928,7 @@ impl Tab {
 
         let mut row = widget::row::with_capacity(5)
             .align_items(Alignment::Center)
-            .padding([0, space_m]);
+            .padding([space_xxxs, space_s]);
         let mut w = 0.0;
 
         let mut prev_button =
@@ -2537,8 +2537,8 @@ impl Tab {
                     heading_item(fl!("size"), Length::Fixed(size_width), HeadingOptions::Size),
                 ])
                 .align_items(Alignment::Center)
-                .height(Length::Fixed(space_m.into()))
-                .padding([0, space_xxs])
+                .height(Length::Fixed((space_m + 4).into()))
+                .padding(0)
                 .spacing(space_xxs)
                 .into(),
             );
