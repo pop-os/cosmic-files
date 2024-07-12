@@ -1921,7 +1921,6 @@ impl Tab {
             space_xxxs,
             space_xxs,
             space_s,
-            space_m,
             ..
         } = theme::active().cosmic().spacing;
         let size = self.size_opt.get().unwrap_or(Size::new(0.0, 0.0));
