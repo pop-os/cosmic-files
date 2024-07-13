@@ -2389,7 +2389,9 @@ impl Application for App {
 
     /// Creates a view after each update.
     fn view(&self) -> Element<Self::Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+        let cosmic_theme::Spacing {
+            space_xxs, space_s, ..
+        } = theme::active().cosmic().spacing;
 
         let mut tab_column = widget::column::with_capacity(1);
 
@@ -2409,7 +2411,8 @@ impl Application for App {
                         .drag_id(self.tab_drag_id),
                 )
                 .style(style::Container::Background)
-                .width(Length::Fill),
+                .width(Length::Fill)
+                .padding([0, space_s]),
             );
         }
 

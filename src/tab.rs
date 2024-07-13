@@ -1925,7 +1925,9 @@ impl Tab {
         } = theme::active().cosmic().spacing;
         let size = self.size_opt.get().unwrap_or(Size::new(0.0, 0.0));
 
-        let mut row = widget::row::with_capacity(5).align_items(Alignment::Center);
+        let mut row = widget::row::with_capacity(5)
+            .align_items(Alignment::Center)
+            .padding([space_xxxs, 0]);
         let mut w = 0.0;
 
         let mut prev_button =
