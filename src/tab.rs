@@ -2479,7 +2479,10 @@ impl Tab {
         bool,
     ) {
         let cosmic_theme::Spacing {
-            space_m, space_xxs, ..
+            space_m,
+            space_s,
+            space_xxs,
+            ..
         } = theme::active().cosmic().spacing;
 
         let TabConfig {
@@ -2787,7 +2790,7 @@ impl Tab {
         (
             drag_col,
             mouse_area::MouseArea::new(
-                widget::column::with_children(children).padding([0, space_m]),
+                widget::column::with_children(children).padding([0, space_s]),
             )
             .with_id(Id::new("list-view"))
             .on_press(|_| Message::Click(None))
