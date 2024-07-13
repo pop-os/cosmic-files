@@ -1967,9 +1967,13 @@ impl Tab {
                             .on_input(|input| {
                                 Message::EditLocation(Some(Location::Path(PathBuf::from(input))))
                             })
-                            .on_submit(Message::Location(location.clone())),
+                            .on_submit(Message::Location(location.clone()))
+                            .line_height(1.0),
                     );
-                    return row.padding([0, space_s]).into();
+                    let mut column = widget::column::with_capacity(2).padding([0, space_s]);
+                    column = column.push(row);
+                    column = column.push(horizontal_rule(1));
+                    return column.into();
                 }
                 _ => {
                     //TODO: allow editing other locations
