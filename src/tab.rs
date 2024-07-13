@@ -2384,7 +2384,7 @@ impl Tab {
             children.push(grid.into());
 
             //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
-            {
+            /*{
                 let mut max_bottom = 0;
                 for (_, item) in items {
                     if let Some(rect) = item.rect_opt.get() {
@@ -2403,7 +2403,7 @@ impl Tab {
                             .into(),
                     )
                 }
-            }
+            }*/
         }
 
         (
@@ -2778,14 +2778,14 @@ impl Tab {
             }
         }
         //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
-        {
+        /*{
             let spacer_height = size.height as i32 - y as i32 - 4 * space_xxs as i32;
             if spacer_height > 0 {
                 children.push(
                     widget::container(vertical_space(Length::Fixed(spacer_height as f32))).into(),
                 );
             }
-        }
+        }*/
         let drag_col = (!drag_items.is_empty()).then(|| {
             Element::from(widget::column::with_children(drag_items))
                 .map(|m| cosmic::app::Message::App(crate::app::Message::TabMessage(None, m)))
