@@ -2241,7 +2241,7 @@ impl Tab {
         let mut grid = widget::grid()
             .column_spacing(column_spacing)
             .row_spacing(space_xxs)
-            .padding([space_xxxs, space_xxs].into());
+            .padding(space_xxs.into());
         let mut dnd_items: Vec<(usize, (usize, usize), &Item)> = Vec::new();
         let mut drag_w_i = usize::MAX;
         let mut drag_n_i = usize::MAX;
@@ -2384,7 +2384,7 @@ impl Tab {
             children.push(grid.into());
 
             //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
-            /*{
+            {
                 let mut max_bottom = 0;
                 for (_, item) in items {
                     if let Some(rect) = item.rect_opt.get() {
@@ -2395,7 +2395,7 @@ impl Tab {
                     }
                 }
                 let spacer_height = height
-                    .checked_sub(max_bottom + 4 * (space_xxs as usize))
+                    .checked_sub(max_bottom + 7 * (space_xxs as usize))
                     .unwrap_or(0);
                 if spacer_height > 0 {
                     children.push(
@@ -2403,7 +2403,7 @@ impl Tab {
                             .into(),
                     )
                 }
-            }*/
+            }
         }
 
         (
@@ -2411,7 +2411,7 @@ impl Tab {
                 let mut dnd_grid = widget::grid()
                     .column_spacing(column_spacing)
                     .row_spacing(space_xxs)
-                    .padding([0, space_m].into());
+                    .padding(space_xxs.into());
 
                 let mut dnd_item_i = 0;
                 for r in drag_n_i..=drag_s_i {
@@ -2778,14 +2778,14 @@ impl Tab {
             }
         }
         //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
-        /*{
-            let spacer_height = size.height as i32 - y as i32 - 4 * space_xxs as i32;
+        {
+            let spacer_height = size.height as i32 - y as i32 - 5 * space_xxs as i32;
             if spacer_height > 0 {
                 children.push(
                     widget::container(vertical_space(Length::Fixed(spacer_height as f32))).into(),
                 );
             }
-        }*/
+        }
         let drag_col = (!drag_items.is_empty()).then(|| {
             Element::from(widget::column::with_children(drag_items))
                 .map(|m| cosmic::app::Message::App(crate::app::Message::TabMessage(None, m)))
