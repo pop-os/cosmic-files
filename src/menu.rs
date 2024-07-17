@@ -1,22 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use cosmic::widget::menu::key_bind::KeyBind;
-use cosmic::widget::menu::{self, ItemHeight, ItemWidth, MenuBar};
 use cosmic::{
     //TODO: export iced::widget::horizontal_rule in cosmic::widget
     iced::{widget::horizontal_rule, Alignment, Background, Border, Length},
     theme,
     widget,
+    widget::menu::{self, key_bind::KeyBind, ItemHeight, ItemWidth, MenuBar},
     Element,
 };
 use std::collections::HashMap;
 
-use crate::tab::LocationMenuAction;
 use crate::{
     app::{Action, Message},
     config::TabConfig,
     fl,
-    tab::{self, HeadingOptions, Location, Tab},
+    tab::{self, HeadingOptions, Location, LocationMenuAction, Tab},
 };
 
 macro_rules! menu_button {
