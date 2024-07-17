@@ -1303,9 +1303,70 @@ impl Tab {
                         if let Some(range) = self.select_range {
                             let min = range.0.min(range.1);
                             let max = range.0.max(range.1);
-                            if let Some(ref mut items) = self.items_opt {
-                                for (i, item) in items.iter_mut().enumerate() {
-                                    item.selected = i >= min && i <= max;
+                            if self.config.sort_name == HeadingOptions::Name
+                                && self.config.sort_direction
+                            {
+                                // A default/unsorted tab's view is consistent with how the
+                                // Items are laid out internally (items_opt), so Items can be
+                                // linearly selected
+                                if let Some(ref mut items) = self.items_opt {
+                                    for item in items.iter_mut().skip(min).take(max - min + 1) {
+                                        item.selected = true;
+                                    }
+                                }
+                            } else {
+                                // A sorted tab's items can't be linearly selected
+                                // Let's say we have:
+                                // index | file
+                                // 0     | file0
+                                // 1     | file1
+                                // 2     | file2
+                                // This is both the default sort and internal ordering
+                                // When sorted it may be displayed as:
+                                // 1     | file1
+                                // 0     | file0
+                                // 2     | file2
+                                // However, the internal ordering is still the same thus
+                                // linearly selecting items doesn't work. Shift selecting
+                                // file0 and file2 would select indices 0 to 2 when it should
+                                // select indices 0 AND 2 from items_opt
+                                let indices: Vec<_> = self
+                                    .column_sort()
+                                    .map(|sorted| sorted.into_iter().map(|(i, _)| i).collect())
+                                    .unwrap_or_else(|| {
+                                        let len = self
+                                            .items_opt
+                                            .as_deref()
+                                            .map(|items| items.len())
+                                            .unwrap_or_default();
+                                        (0..len).collect()
+                                    });
+
+                                // Find the true indices for the min and max element w.r.t.
+                                // a sorted tab.
+                                let min = indices
+                                    .iter()
+                                    .position(|&offset| offset == min)
+                                    .unwrap_or_default();
+                                // We can't skip `min_real` elements here because the index of
+                                // `max` may actually be before `min` in a sorted tab
+                                let max = indices
+                                    .iter()
+                                    .position(|&offset| offset == max)
+                                    .unwrap_or_else(|| indices.len());
+                                let min_real = min.min(max);
+                                let max_real = max.max(min);
+
+                                if let Some(ref mut items) = self.items_opt {
+                                    for index in indices
+                                        .into_iter()
+                                        .skip(min_real)
+                                        .take(max_real - min_real + 1)
+                                    {
+                                        if let Some(item) = items.get_mut(index) {
+                                            item.selected = true;
+                                        }
+                                    }
                                 }
                             }
                         }
