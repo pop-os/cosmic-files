@@ -62,7 +62,7 @@ git-description = «Commit» {$hash} de Git del {$date}
 ## Operations
 edit-history = Historial de ediciones
 history = Historial
-no-history = No hay elementos en el historial.No items in history.
+no-history = No hay elementos en el historial.
 pending = Pendiente
 failed = Fallido
 complete = Completo
