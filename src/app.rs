@@ -1,14 +1,11 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
-use cosmic::iced::clipboard::dnd::DndAction;
-use cosmic::widget::dnd_destination::DragId;
-use cosmic::widget::menu::action::MenuAction;
-use cosmic::widget::menu::key_bind::KeyBind;
 use cosmic::{
     app::{message, Command, Core},
     cosmic_config, cosmic_theme, executor,
     iced::{
+        clipboard::dnd::DndAction,
         event,
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers},
@@ -20,6 +17,8 @@ use cosmic::{
     style, theme,
     widget::{
         self,
+        dnd_destination::DragId,
+        menu::{action::MenuAction, key_bind::KeyBind},
         segmented_button::{self, Entity},
     },
     Application, ApplicationExt, Element,
@@ -42,18 +41,17 @@ use std::{
 };
 use tokio::sync::mpsc;
 
-use crate::localize::LANGUAGE_SORTER;
-use crate::tab::HOVER_DURATION;
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{AppTheme, Config, Favorite, IconSizes, TabConfig, CONFIG_VERSION},
     fl, home_dir,
     key_bind::key_binds,
+    localize::LANGUAGE_SORTER,
     menu, mime_app,
     mounter::{mounters, MounterItem, MounterItems, MounterKey, Mounters},
     operation::{Operation, ReplaceResult},
     spawn_detached::spawn_detached,
-    tab::{self, HeadingOptions, ItemMetadata, Location, Tab},
+    tab::{self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION},
 };
 
 #[derive(Clone, Debug)]
@@ -814,7 +812,7 @@ impl App {
                     widget::settings::item::builder(fl!("icon-size-list"))
                         .description(format!("{}%", list))
                         .control(
-                            widget::slider(75..=500, list, move |list| {
+                            widget::slider(50..=500, list, move |list| {
                                 Message::TabConfig(TabConfig {
                                     icon_sizes: IconSizes {
                                         list: NonZeroU16::new(list).unwrap(),
@@ -2391,7 +2389,9 @@ impl Application for App {
 
     /// Creates a view after each update.
     fn view(&self) -> Element<Self::Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+        let cosmic_theme::Spacing {
+            space_xxs, space_s, ..
+        } = theme::active().cosmic().spacing;
 
         let mut tab_column = widget::column::with_capacity(1);
 
@@ -2411,7 +2411,8 @@ impl Application for App {
                         .drag_id(self.tab_drag_id),
                 )
                 .style(style::Container::Background)
-                .width(Length::Fill),
+                .width(Length::Fill)
+                .padding([0, space_s]),
             );
         }
 

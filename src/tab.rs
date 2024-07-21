@@ -1,9 +1,3 @@
-use cosmic::iced::clipboard::dnd::DndAction;
-use cosmic::iced::Border;
-use cosmic::iced_core::widget::tree;
-use cosmic::widget::menu::action::MenuAction;
-use cosmic::widget::menu::key_bind::KeyBind;
-use cosmic::widget::{vertical_space, Id, Widget};
 use cosmic::{
     cosmic_theme, font,
     iced::{
@@ -12,6 +6,7 @@ use cosmic::{
             text::{self, Paragraph},
         },
         alignment::{Horizontal, Vertical},
+        clipboard::dnd::DndAction,
         futures::SinkExt,
         keyboard::Modifiers,
         subscription::{self, Subscription},
@@ -21,6 +16,7 @@ use cosmic::{
             scrollable::{AbsoluteOffset, Viewport},
         },
         Alignment,
+        Border,
         Color,
         ContentFit,
         Length,
@@ -28,36 +24,42 @@ use cosmic::{
         Rectangle,
         Size,
     },
-    theme, widget, Element,
+    iced_core::widget::tree,
+    theme, widget,
+    widget::{
+        menu::{action::MenuAction, key_bind::KeyBind},
+        vertical_space, DndDestination, DndSource, Id, Widget,
+    },
+    Element,
 };
+
 use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
-use std::sync::{Arc, Mutex};
 use std::{
-    cell::Cell,
+    cell::{Cell, RefCell},
     cmp::Ordering,
     collections::HashMap,
     fmt,
     fs::{self, Metadata},
     num::NonZeroU16,
     path::PathBuf,
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
-use crate::clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste};
-use crate::localize::{LANGUAGE_CHRONO, LANGUAGE_SORTER};
 use crate::{
     app::{self, Action},
+    clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{IconSizes, TabConfig, ICON_SCALE_MAX, ICON_SIZE_GRID},
     dialog::DialogKind,
-    fl, menu,
+    fl,
+    localize::{LANGUAGE_CHRONO, LANGUAGE_SORTER},
+    menu,
     mime_app::{mime_apps, MimeApp},
     mime_icon::{mime_for_path, mime_icon},
     mouse_area,
 };
-use cosmic::widget::{DndDestination, DndSource};
 
 pub const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 pub const HOVER_DURATION: Duration = Duration::from_millis(1600);
@@ -1303,9 +1305,70 @@ impl Tab {
                         if let Some(range) = self.select_range {
                             let min = range.0.min(range.1);
                             let max = range.0.max(range.1);
-                            if let Some(ref mut items) = self.items_opt {
-                                for (i, item) in items.iter_mut().enumerate() {
-                                    item.selected = i >= min && i <= max;
+                            if self.config.sort_name == HeadingOptions::Name
+                                && self.config.sort_direction
+                            {
+                                // A default/unsorted tab's view is consistent with how the
+                                // Items are laid out internally (items_opt), so Items can be
+                                // linearly selected
+                                if let Some(ref mut items) = self.items_opt {
+                                    for item in items.iter_mut().skip(min).take(max - min + 1) {
+                                        item.selected = true;
+                                    }
+                                }
+                            } else {
+                                // A sorted tab's items can't be linearly selected
+                                // Let's say we have:
+                                // index | file
+                                // 0     | file0
+                                // 1     | file1
+                                // 2     | file2
+                                // This is both the default sort and internal ordering
+                                // When sorted it may be displayed as:
+                                // 1     | file1
+                                // 0     | file0
+                                // 2     | file2
+                                // However, the internal ordering is still the same thus
+                                // linearly selecting items doesn't work. Shift selecting
+                                // file0 and file2 would select indices 0 to 2 when it should
+                                // select indices 0 AND 2 from items_opt
+                                let indices: Vec<_> = self
+                                    .column_sort()
+                                    .map(|sorted| sorted.into_iter().map(|(i, _)| i).collect())
+                                    .unwrap_or_else(|| {
+                                        let len = self
+                                            .items_opt
+                                            .as_deref()
+                                            .map(|items| items.len())
+                                            .unwrap_or_default();
+                                        (0..len).collect()
+                                    });
+
+                                // Find the true indices for the min and max element w.r.t.
+                                // a sorted tab.
+                                let min = indices
+                                    .iter()
+                                    .position(|&offset| offset == min)
+                                    .unwrap_or_default();
+                                // We can't skip `min_real` elements here because the index of
+                                // `max` may actually be before `min` in a sorted tab
+                                let max = indices
+                                    .iter()
+                                    .position(|&offset| offset == max)
+                                    .unwrap_or_else(|| indices.len());
+                                let min_real = min.min(max);
+                                let max_real = max.max(min);
+
+                                if let Some(ref mut items) = self.items_opt {
+                                    for index in indices
+                                        .into_iter()
+                                        .skip(min_real)
+                                        .take(max_real - min_real + 1)
+                                    {
+                                        if let Some(item) = items.get_mut(index) {
+                                            item.selected = true;
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1923,7 +1986,9 @@ impl Tab {
         } = theme::active().cosmic().spacing;
         let size = self.size_opt.get().unwrap_or(Size::new(0.0, 0.0));
 
-        let mut row = widget::row::with_capacity(5).align_items(Alignment::Center);
+        let mut row = widget::row::with_capacity(5)
+            .align_items(Alignment::Center)
+            .padding([space_xxxs, 0]);
         let mut w = 0.0;
 
         let mut prev_button =
@@ -1963,9 +2028,13 @@ impl Tab {
                             .on_input(|input| {
                                 Message::EditLocation(Some(Location::Path(PathBuf::from(input))))
                             })
-                            .on_submit(Message::Location(location.clone())),
+                            .on_submit(Message::Location(location.clone()))
+                            .line_height(1.0),
                     );
-                    return row.into();
+                    let mut column = widget::column::with_capacity(2).padding([0, space_s]);
+                    column = column.push(row);
+                    column = column.push(horizontal_rule(1));
+                    return column.into();
                 }
                 _ => {
                     //TODO: allow editing other locations
@@ -2135,8 +2204,11 @@ impl Tab {
         for child in children {
             row = row.push(child);
         }
+        let mut column = widget::column::with_capacity(2).padding([0, space_s]);
+        column = column.push(row);
+        column = column.push(horizontal_rule(1));
 
-        let mouse_area = crate::mouse_area::MouseArea::new(row)
+        let mouse_area = crate::mouse_area::MouseArea::new(column)
             .on_right_press(Message::LocationContextMenuPoint);
 
         let mut popover = widget::popover(mouse_area);
@@ -2230,7 +2302,7 @@ impl Tab {
         let mut grid = widget::grid()
             .column_spacing(column_spacing)
             .row_spacing(space_xxs)
-            .padding([0, space_m].into());
+            .padding(space_xxs.into());
         let mut dnd_items: Vec<(usize, (usize, usize), &Item)> = Vec::new();
         let mut drag_w_i = usize::MAX;
         let mut drag_n_i = usize::MAX;
@@ -2384,7 +2456,7 @@ impl Tab {
                     }
                 }
                 let spacer_height = height
-                    .checked_sub(max_bottom + 4 * (space_xxs as usize))
+                    .checked_sub(max_bottom + 7 * (space_xxs as usize))
                     .unwrap_or(0);
                 if spacer_height > 0 {
                     children.push(
@@ -2400,7 +2472,7 @@ impl Tab {
                 let mut dnd_grid = widget::grid()
                     .column_spacing(column_spacing)
                     .row_spacing(space_xxs)
-                    .padding([0, space_m].into());
+                    .padding(space_xxs.into());
 
                 let mut dnd_item_i = 0;
                 for r in drag_n_i..=drag_s_i {
@@ -2472,7 +2544,10 @@ impl Tab {
         bool,
     ) {
         let cosmic_theme::Spacing {
-            space_m, space_xxs, ..
+            space_m,
+            space_s,
+            space_xxs,
+            ..
         } = theme::active().cosmic().spacing;
 
         let TabConfig {
@@ -2532,8 +2607,8 @@ impl Tab {
                     heading_item(fl!("size"), Length::Fixed(size_width), HeadingOptions::Size),
                 ])
                 .align_items(Alignment::Center)
-                .height(Length::Fixed(row_height as f32))
-                .padding(space_xxs)
+                .height(Length::Fixed((space_m + 4).into()))
+                .padding([0, space_xxs])
                 .spacing(space_xxs)
                 .into(),
             );
@@ -2635,7 +2710,7 @@ impl Tab {
                             .width(Length::Fill)
                             .height(Length::Fixed(row_height as f32))
                             .id(item.button_id.clone())
-                            .padding(space_xxs)
+                            .padding(if icon_size < 24 { 7 } else { space_xxs })
                             .style(button_style(item.selected, true, false)),
                     )
                     .on_press(move |_| Message::Click(Some(i)))
@@ -2765,7 +2840,7 @@ impl Tab {
         }
         //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
         {
-            let spacer_height = size.height as i32 - y as i32 - 4 * space_xxs as i32;
+            let spacer_height = size.height as i32 - y as i32 - 5 * space_xxs as i32;
             if spacer_height > 0 {
                 children.push(
                     widget::container(vertical_space(Length::Fixed(spacer_height as f32))).into(),
@@ -2780,7 +2855,7 @@ impl Tab {
         (
             drag_col,
             mouse_area::MouseArea::new(
-                widget::column::with_children(children).padding([0, space_m]),
+                widget::column::with_children(children).padding([0, space_s]),
             )
             .with_id(Id::new("list-view"))
             .on_press(|_| Message::Click(None))
