@@ -575,19 +575,19 @@ mod tests {
         path::PathBuf,
     };
 
-    use cosmic::iced::futures::channel::mpsc;
+    use cosmic::iced::futures::{channel::mpsc, StreamExt};
     use log::{debug, trace};
     use test_log::test;
     use tokio::sync;
 
-    use super::Operation;
+    use super::{Operation, ReplaceResult};
     use crate::{
         app::{
             test_utils::{
                 empty_fs, filter_dirs, filter_files, read_dir_sorted, simple_fs, NAME_LEN,
                 NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED,
             },
-            Message,
+            DialogPage, Message,
         },
         fl,
     };
@@ -599,25 +599,32 @@ mod tests {
     pub async fn operation_copy(paths: Vec<PathBuf>, to: PathBuf) -> Result<(), String> {
         let id = fastrand::u64(0..u64::MAX);
         let (tx, mut rx) = mpsc::channel(BUF_SIZE);
-        Operation::Copy {
-            paths: paths.clone(),
-            to: to.clone(),
-        }
-        .perform(id, &sync::Mutex::new(tx).into())
-        .await?;
+        let paths_clone = paths.clone();
+        let to_clone = to.clone();
+        let handle_copy = tokio::spawn(async move {
+            Operation::Copy {
+                paths: paths_clone,
+                to: to_clone,
+            }
+            .perform(id, &sync::Mutex::new(tx).into())
+            .await
+        });
 
-        loop {
-            match rx.try_next() {
-                Ok(Some(Message::PendingProgress(id, progress))) => {
+        while let Some(msg) = rx.next().await {
+            match msg {
+                Message::PendingProgress(id, progress) => {
                     trace!("({id}) [ {paths:?} => {to:?} ] {progress}% complete)")
                 }
-                Ok(None) => break,
-                Err(e) => panic!("Receiving message from operation should succeed: {e:?}"),
-                _ => unreachable!("Only `Message::PendingProgress` is sent from operation"),
+                Message::DialogPush(DialogPage::Replace { tx, .. }) => {
+                    debug!("[{id}] Replace request");
+                    tx.send(ReplaceResult::Cancel).await.expect("Sending a response to a replace request should succeed")
+
+                }
+                _ => unreachable!("Only [ `Message::PendingProgress`, `Message::DialogPush(DialogPage::Replace)` ] are sent from operation"),
             }
         }
 
-        Ok(())
+        handle_copy.await.unwrap()
     }
 
     #[test(tokio::test)]
@@ -752,8 +759,8 @@ mod tests {
         );
         operation_copy(vec![first_file.clone()], second_dir.clone())
             .await
-            .expect_err(
-                "Copy operation should have failed because we're copying to different directories",
+            .expect(
+                "Copy operation should have been cancelled because we're copying to different directories without replacement",
             );
         assert!(
             first_dir.join(base_name).exists(),
