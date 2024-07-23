@@ -4,6 +4,7 @@ empty-folder-hidden = Empty folder (has hidden items)
 filesystem = Filesystem
 home = Home
 trash = Trash
+undo = Undo
 
 # List view
 name = Name

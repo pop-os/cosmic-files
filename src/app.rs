@@ -40,6 +40,7 @@ use std::{
     time::{self, Instant},
 };
 use tokio::sync::mpsc;
+use trash::TrashItem;
 
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
@@ -202,6 +203,7 @@ impl MenuAction for NavMenuAction {
 pub enum Message {
     AddToSidebar(Option<Entity>),
     AppTheme(AppTheme),
+    CloseToast(usize),
     Config(Config),
     Copy(Option<Entity>),
     Cut(Option<Entity>),
@@ -247,9 +249,10 @@ pub enum Message {
     TabMessage(Option<Entity>, tab::Message),
     TabNew,
     TabRescan(Entity, Location, Vec<tab::Item>),
-    Toast(widget::toaster::ToastMessage),
     ToggleContextPage(ContextPage),
-    Undo(u64),
+    Undo(usize),
+    UndoTrash(usize, Arc<[PathBuf]>),
+    UndoTrashStart(Vec<TrashItem>),
     WindowClose,
     WindowNew,
     DndHoverLocTimeout(Location),
@@ -260,12 +263,6 @@ pub enum Message {
     DndExitTab,
     DndDropTab(Entity, Option<ClipboardPaste>, DndAction),
     DndDropNav(Entity, Option<ClipboardPaste>, DndAction),
-}
-
-impl From<widget::toaster::ToastMessage> for Message {
-    fn from(toast_message: widget::toaster::ToastMessage) -> Self {
-        Self::Toast(toast_message)
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -991,7 +988,7 @@ impl Application for App {
             search_active: false,
             search_id: widget::Id::unique(),
             search_input: String::new(),
-            toasts: widget::toaster::Toasts::default(),
+            toasts: widget::toaster::Toasts::new(Message::CloseToast),
             watcher_opt: None,
             nav_dnd_hover: None,
             tab_dnd_hover: None,
@@ -1192,6 +1189,9 @@ impl Application for App {
                 let paths = self.selected_paths(entity_opt);
                 let contents = ClipboardCopy::new(ClipboardKind::Cut, &paths);
                 return clipboard::write_data(contents);
+            }
+            Message::CloseToast(id) => {
+                self.toasts.remove(id);
             }
             Message::DialogCancel => {
                 self.dialog_pages.pop_front();
@@ -1542,23 +1542,26 @@ impl Application for App {
                 }
             }
             Message::PendingComplete(id) => {
-                let mut commands = Vec::with_capacity(2);
+                let mut commands = Vec::new();
+
                 if let Some((op, _)) = self.pending_operations.remove(&id) {
                     if let Some(description) = op.toast() {
-                        commands.push(
-                            self.toasts.push(
-                                widget::toaster::Toast::new(description)
-                                    /*TODO
-                                    .action(widget::toaster::ToastAction {
-                                        description: fl!("undo"),
-                                        message: Message::Undo(id),
-                                    })
-                                    */
-                                    .duration(widget::toaster::ToastDuration::Long),
-                            ),
-                        );
+                        if let Operation::Delete { ref paths } = op {
+                            let paths: Arc<[PathBuf]> = Arc::from(paths.as_slice());
+                            commands.push(
+                                self.toasts
+                                    .push(
+                                        widget::toaster::Toast::new(description)
+                                            .action(fl!("undo"), move |tid| {
+                                                Message::UndoTrash(tid, paths.clone())
+                                            }),
+                                    )
+                                    .map(cosmic::app::Message::App),
+                            );
+                        }
+
+                        self.complete_operations.insert(id, op);
                     }
-                    self.complete_operations.insert(id, op);
                 }
                 // Manually rescan any trash tabs after any operation is completed
                 commands.push(self.rescan_trash());
@@ -1896,10 +1899,6 @@ impl Application for App {
                     _ => (),
                 }
             }
-            //TODO: TABRELOAD
-            Message::Toast(toast_message) => {
-                self.toasts.handle_message(&toast_message);
-            }
             Message::ToggleContextPage(context_page) => {
                 //TODO: ensure context menus are closed
                 if self.context_page == context_page {
@@ -1911,7 +1910,40 @@ impl Application for App {
                 self.set_context_title(context_page.title());
             }
             Message::Undo(id) => {
-                log::error!("TODO: Undo {id}");
+                // TODO;
+            }
+            Message::UndoTrash(id, recently_trashed) => {
+                self.toasts.remove(id);
+
+                let mut paths = Vec::with_capacity(recently_trashed.len());
+                let icon_sizes = self.config.tab.icon_sizes;
+
+                return cosmic::command::future(async move {
+                    match tokio::task::spawn_blocking(move || Location::Trash.scan(icon_sizes))
+                        .await
+                    {
+                        Ok(items) => {
+                            for path in &*recently_trashed {
+                                for item in &items {
+                                    if let ItemMetadata::Trash { ref entry, .. } = item.metadata {
+                                        let original_path = entry.original_path();
+                                        if &original_path == path {
+                                            paths.push(entry.clone());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            log::warn!("failed to rescan: {}", err);
+                        }
+                    }
+
+                    Message::UndoTrashStart(paths)
+                });
+            }
+            Message::UndoTrashStart(paths) => {
+                self.operation(Operation::Restore { paths });
             }
             Message::WindowClose => {
                 return window::close(window::Id::MAIN);
@@ -2429,7 +2461,7 @@ impl Application for App {
             }
         }
 
-        let content: Element<_> = widget::toaster::toaster(&self.toasts, tab_column).into();
+        let content: Element<_> = widget::toaster(&self.toasts, tab_column).into();
 
         // Uncomment to debug layout:
         //content.explain(cosmic::iced::Color::WHITE)
