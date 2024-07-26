@@ -2547,6 +2547,7 @@ impl Tab {
             space_m,
             space_s,
             space_xxs,
+            space_xxxs,
             ..
         } = theme::active().cosmic().spacing;
 
@@ -2680,7 +2681,8 @@ impl Tab {
                         widget::column::with_children(vec![
                             widget::text(item.name.clone()).into(),
                             //TODO: translate?
-                            widget::text(format!("{} - {}", modified_text, size_text)).into(),
+                            widget::text::caption(format!("{} - {}", modified_text, size_text))
+                                .into(),
                         ])
                         .into(),
                     ])
@@ -2710,7 +2712,15 @@ impl Tab {
                             .width(Length::Fill)
                             .height(Length::Fixed(row_height as f32))
                             .id(item.button_id.clone())
-                            .padding(if icon_size < 24 { 7 } else { space_xxs })
+                            .padding(if condensed && icon_size < 32 {
+                                space_xxxs
+                            } else {
+                                if icon_size < 24 {
+                                    space_xxs - 1
+                                } else {
+                                    space_xxs
+                                }
+                            })
                             .style(button_style(item.selected, true, false)),
                     )
                     .on_press(move |_| Message::Click(Some(i)))
@@ -2840,7 +2850,7 @@ impl Tab {
         }
         //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
         {
-            let spacer_height = size.height as i32 - y as i32 - 5 * space_xxs as i32;
+            let spacer_height = size.height as i32 - y as i32 - 6 * space_xxs as i32;
             if spacer_height > 0 {
                 children.push(
                     widget::container(vertical_space(Length::Fixed(spacer_height as f32))).into(),
