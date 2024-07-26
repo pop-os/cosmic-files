@@ -1849,7 +1849,7 @@ impl Tab {
                     }
                 };
                 match self.config.view {
-                    View::List => zoom_out(&mut self.config.icon_sizes.list, 100, 500),
+                    View::List => zoom_out(&mut self.config.icon_sizes.list, 50, 500),
                     View::Grid => zoom_out(&mut self.config.icon_sizes.grid, 50, 500),
                 }
             }
