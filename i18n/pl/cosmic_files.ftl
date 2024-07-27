@@ -8,14 +8,14 @@ undo = Cofnij
 
 # List view
 name = Nazwa
-modified = Zmodyfikowany
+modified = Zmodyfikowano
 size = Rozmiar
 
 # Dialogs
 
 ## Empty Trash Dialog
 empty-trash = Opróżnij kosz
-empty-trash-warning = Czy chcesz bezpowrotnie usunąć wszystko z Kosza?
+empty-trash-warning = Czy chcesz bezpowrotnie usunąć zawartość Kosza?
 
 # New File/Folder Dialog
 create-new-file = Utwórz nowy plik
@@ -49,7 +49,7 @@ replace = Zastąp
 replace-title = {$filename} już istnieje w tym miejscu.
 replace-warning = Czy chcesz by został on zastąpiony? To nadpisze jego zawartość.
 replace-warning-operation = Czy chcesz by został on zastąpiony? To nadpisze jego zawartość.
-original-file = Originaly plik
+original-file = Oryginaly plik
 replace-with = Zastąpiony przez
 apply-to-all = Zastosuj do wszystkich
 keep-both = Zachowaj oba
@@ -68,7 +68,7 @@ pending = Oczekujące
 failed = Nieudane
 complete = Ukończone
 copy_noun = Kopiuj
-creating =Tworzy {$name} w {$parent}
+creating = Tworzy {$name} w {$parent}
 created = Stworzono {$name} w {$parent}
 copying = Kopiowanie {$items} {$items ->
         [one] elementu
