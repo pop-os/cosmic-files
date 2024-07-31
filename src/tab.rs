@@ -1830,7 +1830,7 @@ impl Tab {
                     }
                 };
                 match self.config.view {
-                    View::List => zoom_in(&mut self.config.icon_sizes.list, 100, 500),
+                    View::List => zoom_in(&mut self.config.icon_sizes.list, 50, 500),
                     View::Grid => zoom_in(&mut self.config.icon_sizes.grid, 50, 500),
                 }
             }
@@ -1849,7 +1849,7 @@ impl Tab {
                     }
                 };
                 match self.config.view {
-                    View::List => zoom_out(&mut self.config.icon_sizes.list, 100, 500),
+                    View::List => zoom_out(&mut self.config.icon_sizes.list, 50, 500),
                     View::Grid => zoom_out(&mut self.config.icon_sizes.grid, 50, 500),
                 }
             }
@@ -1982,8 +1982,16 @@ impl Tab {
             space_xxxs,
             space_xxs,
             space_s,
+            space_m,
             ..
         } = theme::active().cosmic().spacing;
+
+        let TabConfig {
+            sort_name,
+            sort_direction,
+            ..
+        } = self.config;
+
         let size = self.size_opt.get().unwrap_or(Size::new(0.0, 0.0));
 
         let mut row = widget::row::with_capacity(5)
@@ -2013,6 +2021,48 @@ impl Tab {
         row = row.push(widget::horizontal_space(Length::Fixed(space_s.into())));
         w += space_s as f32;
 
+        //TODO: allow resizing?
+        let name_width = 300.0;
+        let modified_width = 200.0;
+        let size_width = 100.0;
+        let condensed = size.width < (name_width + modified_width + size_width);
+
+        let heading_item = |name, width, msg| {
+            let mut row = widget::row::with_capacity(2)
+                .align_items(Alignment::Center)
+                .spacing(space_xxs)
+                .width(width);
+            row = row.push(widget::text::heading(name));
+            match (sort_name == msg, sort_direction) {
+                (true, true) => {
+                    row = row.push(widget::icon::from_name("pan-down-symbolic").size(16));
+                }
+                (true, false) => {
+                    row = row.push(widget::icon::from_name("pan-up-symbolic").size(16));
+                }
+                _ => {}
+            }
+            //TODO: make it possible to resize with the mouse
+            return crate::mouse_area::MouseArea::new(row)
+                .on_press(move |_point_opt| Message::ToggleSort(msg))
+                .into();
+        };
+
+        let heading_row = widget::row::with_children(vec![
+            heading_item(fl!("name"), Length::Fill, HeadingOptions::Name),
+            //TODO: do not show modified column when in the trash
+            heading_item(
+                fl!("modified"),
+                Length::Fixed(modified_width),
+                HeadingOptions::Modified,
+            ),
+            heading_item(fl!("size"), Length::Fixed(size_width), HeadingOptions::Size),
+        ])
+        .align_items(Alignment::Center)
+        .height(Length::Fixed((space_m + 4).into()))
+        .padding([0, space_xxs])
+        .spacing(space_xxs);
+
         if let Some(location) = &self.edit_location {
             match location {
                 Location::Path(path) => {
@@ -2031,9 +2081,13 @@ impl Tab {
                             .on_submit(Message::Location(location.clone()))
                             .line_height(1.0),
                     );
-                    let mut column = widget::column::with_capacity(2).padding([0, space_s]);
+                    let mut column = widget::column::with_capacity(4).padding([0, space_s]);
                     column = column.push(row);
                     column = column.push(horizontal_rule(1));
+                    if self.config.view == View::List && !condensed {
+                        column = column.push(heading_row);
+                        column = column.push(horizontal_rule(1));
+                    }
                     return column.into();
                 }
                 _ => {
@@ -2204,9 +2258,14 @@ impl Tab {
         for child in children {
             row = row.push(child);
         }
-        let mut column = widget::column::with_capacity(2).padding([0, space_s]);
+        let mut column = widget::column::with_capacity(4).padding([0, space_s]);
         column = column.push(row);
         column = column.push(horizontal_rule(1));
+
+        if self.config.view == View::List && !condensed {
+            column = column.push(heading_row);
+            column = column.push(horizontal_rule(1));
+        }
 
         let mouse_area = crate::mouse_area::MouseArea::new(column)
             .on_right_press(Message::LocationContextMenuPoint);
@@ -2547,14 +2606,13 @@ impl Tab {
             space_m,
             space_s,
             space_xxs,
+            space_xxxs,
             ..
         } = theme::active().cosmic().spacing;
 
         let TabConfig {
             show_hidden,
             icon_sizes,
-            sort_name,
-            sort_direction,
             ..
         } = self.config;
 
@@ -2571,51 +2629,8 @@ impl Tab {
         };
         let row_height = icon_size + 2 * space_xxs;
 
-        let heading_item = |name, width, msg| {
-            let mut row = widget::row::with_capacity(2)
-                .align_items(Alignment::Center)
-                .spacing(space_xxs)
-                .width(width);
-            row = row.push(widget::text::heading(name));
-            match (sort_name == msg, sort_direction) {
-                (true, true) => {
-                    row = row.push(widget::icon::from_name("pan-down-symbolic").size(16));
-                }
-                (true, false) => {
-                    row = row.push(widget::icon::from_name("pan-up-symbolic").size(16));
-                }
-                _ => {}
-            }
-            //TODO: make it possible to resize with the mouse
-            mouse_area::MouseArea::new(row)
-                .on_press(move |_point_opt| Message::ToggleSort(msg))
-                .into()
-        };
-
         let mut children: Vec<Element<_>> = Vec::new();
         let mut y = 0;
-        if !condensed {
-            children.push(
-                widget::row::with_children(vec![
-                    heading_item(fl!("name"), Length::Fill, HeadingOptions::Name),
-                    //TODO: do not show modified column when in the trash
-                    heading_item(
-                        fl!("modified"),
-                        Length::Fixed(modified_width),
-                        HeadingOptions::Modified,
-                    ),
-                    heading_item(fl!("size"), Length::Fixed(size_width), HeadingOptions::Size),
-                ])
-                .align_items(Alignment::Center)
-                .height(Length::Fixed((space_m + 4).into()))
-                .padding([0, space_xxs])
-                .spacing(space_xxs)
-                .into(),
-            );
-            y += row_height;
-            children.push(horizontal_rule(1).into());
-            y += 1;
-        }
 
         let items = self.column_sort();
         let mut drag_items = Vec::new();
@@ -2680,7 +2695,8 @@ impl Tab {
                         widget::column::with_children(vec![
                             widget::text(item.name.clone()).into(),
                             //TODO: translate?
-                            widget::text(format!("{} - {}", modified_text, size_text)).into(),
+                            widget::text::caption(format!("{} - {}", modified_text, size_text))
+                                .into(),
                         ])
                         .into(),
                     ])
@@ -2710,7 +2726,15 @@ impl Tab {
                             .width(Length::Fill)
                             .height(Length::Fixed(row_height as f32))
                             .id(item.button_id.clone())
-                            .padding(if icon_size < 24 { 7 } else { space_xxs })
+                            .padding(if condensed && icon_size < 32 {
+                                space_xxxs
+                            } else {
+                                if icon_size < 24 {
+                                    space_xxs - 1
+                                } else {
+                                    space_xxs
+                                }
+                            })
                             .style(button_style(item.selected, true, false)),
                     )
                     .on_press(move |_| Message::Click(Some(i)))
@@ -2840,7 +2864,8 @@ impl Tab {
         }
         //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
         {
-            let spacer_height = size.height as i32 - y as i32 - 5 * space_xxs as i32;
+            let spacer_height =
+                size.height as i32 - y as i32 - (if condensed { 6 } else { 9 }) * space_xxs as i32;
             if spacer_height > 0 {
                 children.push(
                     widget::container(vertical_space(Length::Fixed(spacer_height as f32))).into(),
@@ -2855,7 +2880,7 @@ impl Tab {
         (
             drag_col,
             mouse_area::MouseArea::new(
-                widget::column::with_children(children).padding([0, space_s]),
+                widget::column::with_children(children).padding([0, space_s + 4]),
             )
             .with_id(Id::new("list-view"))
             .on_press(|_| Message::Click(None))
