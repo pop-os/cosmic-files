@@ -12,7 +12,7 @@ use cosmic::{
         subscription::{self, Subscription},
         //TODO: export in cosmic::widget
         widget::{
-            horizontal_rule,
+            container, horizontal_rule,
             scrollable::{AbsoluteOffset, Viewport},
         },
         Alignment,
@@ -2651,7 +2651,7 @@ impl Tab {
                 )));
 
                 if count > 0 {
-                    children.push(horizontal_rule(1).into());
+                    children.push(container(horizontal_rule(1)).padding([0, space_xxxs]).into());
                     y += 1;
                 }
 
@@ -2880,7 +2880,7 @@ impl Tab {
         (
             drag_col,
             mouse_area::MouseArea::new(
-                widget::column::with_children(children).padding([0, space_s + 4]),
+                widget::column::with_children(children).padding([0, space_s]),
             )
             .with_id(Id::new("list-view"))
             .on_press(|_| Message::Click(None))
