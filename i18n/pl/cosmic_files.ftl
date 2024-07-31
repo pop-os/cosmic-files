@@ -4,17 +4,18 @@ empty-folder-hidden = Pusty katalog (z ukrytymi plikami)
 filesystem = System plików
 home = Katalog Domowy
 trash = Kosz
+undo = Cofnij
 
 # List view
 name = Nazwa
-modified = Zmodyfikowany
+modified = Zmodyfikowano
 size = Rozmiar
 
 # Dialogs
 
 ## Empty Trash Dialog
 empty-trash = Opróżnij kosz
-empty-trash-warning = Czy chcesz bezpowrotnie usunąć wszystko z Kosza?
+empty-trash-warning = Czy chcesz bezpowrotnie usunąć zawartość Kosza?
 
 # New File/Folder Dialog
 create-new-file = Utwórz nowy plik
@@ -46,7 +47,13 @@ rename-folder = Zmień nazwę katalogu
 # Replace Dialog
 replace = Zastąp
 replace-title = {$filename} już istnieje w tym miejscu.
-replace-warning = Czy chcesz by obecny plik został zastąpiony? To nadpisze jego zawartość.
+replace-warning = Czy chcesz by został on zastąpiony? To nadpisze jego zawartość.
+replace-warning-operation = Czy chcesz by został on zastąpiony? To nadpisze jego zawartość.
+original-file = Oryginalny plik
+replace-with = Zastąpiony przez
+apply-to-all = Zastosuj do wszystkich
+keep-both = Zachowaj oba
+skip = Pomiń
 
 # Context Pages
 
@@ -54,11 +61,48 @@ replace-warning = Czy chcesz by obecny plik został zastąpiony? To nadpisze jeg
 git-description = Git commit {$hash} z {$date}
 
 ## Operations
-operations = Operacje
+edit-history = Edytuj historię
+history = Historia
+no-history = Brak pozycji w historii.
 pending = Oczekujące
 failed = Nieudane
 complete = Ukończone
 copy_noun = Kopiuj
+creating = Tworzy {$name} w {$parent}
+created = Stworzono {$name} w {$parent}
+copying = Kopiowanie {$items} {$items ->
+        [one] elementu
+        *[other] elementów
+    } z {$from} do {$to}
+copied = Skopiowano {$items} {$items ->
+        [one] element
+        [few] elementy
+        *[other] elementów
+    } z {$from} do {$to}
+emptying-trash = Opróżnianie {trash}
+emptied-trash = Opróżniono {trash}
+moving = Przenoszenie {$items} {$items ->
+        [one] elementu
+        *[other] elementów
+    } z {$from} do {$to}
+moved = Przeniesiono {$items} {$items ->
+        [one] element
+        [few] elementy
+        *[other] elementów
+    } z {$from} do {$to}
+renaming = Zmieniana nazwa {$from} na {$to}
+renamed = Zmieniono nazwę {$from} na {$to}
+restoring = Przywracanie {$items} {$items ->
+        [one] elementu
+        *[other] elementów
+    } z {trash} 
+restored = Przywrócono {$items} {$items ->
+        [one] element
+        [few] elementy
+        *[other] elementów
+    } z {trash} 
+undo = Cofnij
+unknown-folder = nieznany katalog
 
 ## Open with
 open-with = Otwórz za pomocą
