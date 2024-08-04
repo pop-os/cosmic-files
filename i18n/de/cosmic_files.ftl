@@ -77,6 +77,7 @@ dark = Dunkel
 light = Hell
 
 # Context menu
+add-to-sidebar = Zur Seitenleiste hinzufügen
 new-file = Neue Datei
 new-folder = Neuer Ordner
 open-in-terminal = Im Terminal öffnen
