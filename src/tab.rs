@@ -2651,7 +2651,11 @@ impl Tab {
                 )));
 
                 if count > 0 {
-                    children.push(container(horizontal_rule(1)).padding([0, space_xxxs]).into());
+                    children.push(
+                        container(horizontal_rule(1))
+                            .padding([0, space_xxxs])
+                            .into(),
+                    );
                     y += 1;
                 }
 

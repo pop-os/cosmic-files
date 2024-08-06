@@ -5,6 +5,7 @@ use cosmic::{
     iced::{widget::horizontal_rule, Alignment, Background, Border, Length},
     theme,
     widget,
+    widget::container,
     widget::menu::{self, key_bind::KeyBind, ItemHeight, ItemWidth, MenuBar},
     Element,
 };
@@ -109,17 +110,17 @@ pub fn context_menu<'a>(
                     children
                         .push(menu_item(fl!("open-in-new-window"), Action::OpenInNewWindow).into());
                 }
-                children.push(horizontal_rule(1).into());
+                children.push(container(horizontal_rule(1)).padding([0, 8]).into());
                 children.push(menu_item(fl!("rename"), Action::Rename).into());
                 children.push(menu_item(fl!("cut"), Action::Cut).into());
                 children.push(menu_item(fl!("copy"), Action::Copy).into());
                 //TODO: Print?
-                children.push(horizontal_rule(1).into());
+                children.push(container(horizontal_rule(1)).padding([0, 8]).into());
                 //TODO: change to Show details
                 children.push(menu_item(fl!("properties"), Action::Properties).into());
-                children.push(horizontal_rule(1).into());
+                children.push(container(horizontal_rule(1)).padding([0, 8]).into());
                 children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
-                children.push(horizontal_rule(1).into());
+                children.push(container(horizontal_rule(1)).padding([0, 8]).into());
                 children.push(menu_item(fl!("move-to-trash"), Action::MoveToTrash).into());
             } else {
                 //TODO: need better designs for menu with no selection
@@ -127,10 +128,10 @@ pub fn context_menu<'a>(
                 children.push(menu_item(fl!("new-file"), Action::NewFile).into());
                 children.push(menu_item(fl!("new-folder"), Action::NewFolder).into());
                 children.push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
-                children.push(horizontal_rule(1).into());
+                children.push(container(horizontal_rule(1)).padding([0, 8]).into());
                 children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
                 children.push(menu_item(fl!("paste"), Action::Paste).into());
-                children.push(horizontal_rule(1).into());
+                children.push(container(horizontal_rule(1)).padding([0, 8]).into());
                 // TODO: Nested menu
                 children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
                 children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
@@ -140,13 +141,13 @@ pub fn context_menu<'a>(
         Location::Trash => {
             children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
             if selected > 0 {
-                children.push(horizontal_rule(1).into());
+                children.push(container(horizontal_rule(1)).padding([0, 8]).into());
                 children.push(menu_item(fl!("properties"), Action::Properties).into());
-                children.push(horizontal_rule(1).into());
+                children.push(container(horizontal_rule(1)).padding([0, 8]).into());
                 children
                     .push(menu_item(fl!("restore-from-trash"), Action::RestoreFromTrash).into());
             }
-            children.push(horizontal_rule(1).into());
+            children.push(container(horizontal_rule(1)).padding([0, 8]).into());
             // TODO: Nested menu
             children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
             children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
@@ -272,7 +273,7 @@ pub fn location_context_menu<'a>(ancestor_index: usize) -> Element<'a, tab::Mess
                 LocationMenuAction::OpenInNewWindow(ancestor_index),
             ))
             .into(),
-        horizontal_rule(1).into(),
+        container(horizontal_rule(1)).padding([0, 8]).into(),
         menu_button!(widget::text(fl!("properties")))
             .on_press(tab::Message::LocationMenuAction(
                 LocationMenuAction::Properties(ancestor_index),
