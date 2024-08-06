@@ -90,7 +90,7 @@ moving = Presúvam {$items} {$items ->
 moved = {$items ->
         [one] Presunutá {$items} položka
         [few] Presunuté {$items} položky
-        *[other] položiek
+        *[other] Presunutých {$items} položiek
     } z {$from} do {$to}
 renaming = Premenovávanie z {$from} na {$to}
 renamed = Premenované z {$from} na {$to}
