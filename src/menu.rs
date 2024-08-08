@@ -116,8 +116,7 @@ pub fn context_menu<'a>(
                 children.push(menu_item(fl!("copy"), Action::Copy).into());
                 //TODO: Print?
                 children.push(container(horizontal_rule(1)).padding([0, 8]).into());
-                //TODO: change to Show details
-                children.push(menu_item(fl!("properties"), Action::Properties).into());
+                children.push(menu_item(fl!("show-details"), Action::Properties).into());
                 children.push(container(horizontal_rule(1)).padding([0, 8]).into());
                 children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
                 children.push(container(horizontal_rule(1)).padding([0, 8]).into());
@@ -142,7 +141,7 @@ pub fn context_menu<'a>(
             children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
             if selected > 0 {
                 children.push(container(horizontal_rule(1)).padding([0, 8]).into());
-                children.push(menu_item(fl!("properties"), Action::Properties).into());
+                children.push(menu_item(fl!("show-details"), Action::Properties).into());
                 children.push(container(horizontal_rule(1)).padding([0, 8]).into());
                 children
                     .push(menu_item(fl!("restore-from-trash"), Action::RestoreFromTrash).into());
@@ -192,9 +191,13 @@ pub fn menu_bar<'a>(
                     menu::Item::Button(fl!("new-file"), Action::NewFile),
                     menu::Item::Button(fl!("new-folder"), Action::NewFolder),
                     menu::Item::Button(fl!("open"), Action::Open),
+                    menu::Item::Button(fl!("open-with"), Action::OpenWith),
                     menu::Item::Divider,
                     menu::Item::Button(fl!("rename"), Action::Rename),
-                    //TOOD: add to sidebar, then divider
+                    menu::Item::Divider,
+                    menu::Item::Button(fl!("menu-show-details"), Action::Properties),
+                    menu::Item::Divider,
+                    menu::Item::Button(fl!("add-to-sidebar"), Action::AddToSidebar),
                     menu::Item::Divider,
                     menu::Item::Button(fl!("move-to-trash"), Action::MoveToTrash),
                     menu::Item::Divider,
@@ -274,7 +277,7 @@ pub fn location_context_menu<'a>(ancestor_index: usize) -> Element<'a, tab::Mess
             ))
             .into(),
         container(horizontal_rule(1)).padding([0, 8]).into(),
-        menu_button!(widget::text(fl!("properties")))
+        menu_button!(widget::text(fl!("show-details")))
             .on_press(tab::Message::LocationMenuAction(
                 LocationMenuAction::Properties(ancestor_index),
             ))

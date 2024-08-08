@@ -93,20 +93,20 @@ renamed = Renamed {$from} to {$to}
 restoring = Restoring {$items} {$items ->
         [one] item
         *[other] items
-    } from {trash} 
+    } from {trash}
 restored = Restored {$items} {$items ->
         [one] item
         *[other] items
-    } from {trash} 
+    } from {trash}
 undo = Undo
 unknown-folder = unknown folder
 
 ## Open with
-open-with = Open with
+open-with = Open with...
 default-app = {$name} (default)
 
-## Properties
-properties = Properties
+## Show details
+show-details = Show details
 
 ## Settings
 settings = Settings
@@ -129,8 +129,8 @@ light = Light
 
 # Context menu
 add-to-sidebar = Add to sidebar
-new-file = New file
-new-folder = New folder
+new-file = New file...
+new-folder = New folder...
 open-in-terminal = Open in terminal
 move-to-trash = Move to trash
 restore-from-trash = Restore from trash
@@ -145,7 +145,8 @@ sort-by-size = Sort by size
 file = File
 new-tab = New tab
 new-window = New window
-rename = Rename
+rename = Rename...
+menu-show-details = Show details...
 close-tab = Close tab
 quit = Quit
 

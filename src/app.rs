@@ -280,7 +280,7 @@ impl ContextPage {
             Self::About => String::new(),
             Self::EditHistory => fl!("edit-history"),
             Self::OpenWith => fl!("open-with"),
-            Self::Properties(..) => fl!("properties"),
+            Self::Properties(..) => String::default(),
             Self::Settings => fl!("settings"),
         }
     }
@@ -1051,7 +1051,7 @@ impl Application for App {
                 ),
                 cosmic::widget::menu::Item::Divider,
                 cosmic::widget::menu::Item::Button(
-                    fl!("properties"),
+                    fl!("show-details"),
                     NavMenuAction::Properties(id),
                 ),
                 cosmic::widget::menu::Item::Divider,
