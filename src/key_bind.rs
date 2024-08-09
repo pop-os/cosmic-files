@@ -50,6 +50,7 @@ pub fn key_binds() -> HashMap<KeyBind, Action> {
     bind!([], Key::Named(Named::F2), Rename);
     bind!([Ctrl], Key::Character("f".into()), SearchActivate);
     bind!([Ctrl], Key::Character("a".into()), SelectAll);
+    bind!([Ctrl], Key::Character(",".into()), Settings);
     bind!([Ctrl], Key::Character("w".into()), TabClose);
     bind!([Ctrl], Key::Character("t".into()), TabNew);
     bind!([Ctrl], Key::Named(Named::Tab), TabNext);
