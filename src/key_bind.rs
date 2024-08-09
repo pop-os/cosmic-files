@@ -23,6 +23,7 @@ pub fn key_binds() -> HashMap<KeyBind, Action> {
         }};
     }
 
+    bind!([Ctrl], Key::Character("d".into()), AddToSidebar);
     bind!([Ctrl], Key::Character("c".into()), Copy);
     bind!([Ctrl], Key::Character("x".into()), Cut);
     bind!([Ctrl], Key::Character("l".into()), EditLocation);
