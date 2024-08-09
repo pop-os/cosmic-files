@@ -4,6 +4,7 @@ empty-folder-hidden = 空のフォルダ（隠しファイルあり）
 filesystem = ファイルシステム
 home = ホーム
 trash = ゴミ箱
+undo = 元に戻す
 
 # List view
 name = 名前
@@ -45,6 +46,11 @@ rename-folder = フォルダ名を変更
 replace = 置き換える
 replace-title = {$filename}はすでにこの場所に存在します。
 replace-warning = 保存するファイルで置き換えますか？置き換えると、内容を上書きます。
+original-file = 元のファイル
+replace-with = これで置き換える：
+apply-to-all = 全てに適用
+keep-both = 両方を保管
+skip = スキップ
 
 # List view
 name = 名前
@@ -61,6 +67,20 @@ operations = 操作
 pending = 保留中
 failed = 失敗
 complete = 完了
+creating = {$parent}で{$name}を作成中
+created = {$parent}で{$name}を作成完了
+copying = {$items}つのアイテムを{$from}から{$to}までコピー中
+copied = {$items}つのアイテムを{$from}から{$to}までコピー完了
+emptying-trash = {trash}を空にしています
+emptied-trash = {trash}を空にした
+moving = {$items}つのアイテムを{$from}から{$to}まで移動中
+moved = $items}つのアイテムを{$from}から{$to}まで移動完了
+renaming = {$from}を{$to}に変更中
+renamed = {$from}を{$to}に変更完了
+restoring = {trash}から{$items}つのアイテムをもとに戻している
+restored = {trash}から{$items}つのアイテムをもとに戻した
+undo = 元に戻す
+unknown-folder = 不明なフォルダー
 
 ## Open with
 open-with = 別のアプリケーションで開く
