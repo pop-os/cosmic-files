@@ -3,6 +3,7 @@ empty-folder = Empty folder
 empty-folder-hidden = Empty folder (has hidden items)
 filesystem = Filesystem
 home = Home
+notification-in-progress = File operations are in progress.
 trash = Trash
 undo = Undo
 

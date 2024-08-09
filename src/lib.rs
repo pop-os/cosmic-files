@@ -72,6 +72,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut settings = Settings::default();
     settings = settings.theme(config.app_theme.theme());
     settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
+    settings = settings.exit_on_close(false);
 
     let flags = Flags {
         config_handler,

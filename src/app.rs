@@ -11,7 +11,8 @@ use cosmic::{
         keyboard::{Event as KeyEvent, Key, Modifiers},
         subscription::{self, Subscription},
         widget::scrollable,
-        window, Alignment, Event, Length,
+        window::{self, Event as WindowEvent},
+        Alignment, Event, Length,
     },
     iced_runtime::clipboard,
     style, theme,
@@ -33,10 +34,11 @@ use std::{
     any::TypeId,
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
     env, fmt, fs,
+    future::pending,
     num::NonZeroU16,
     path::PathBuf,
     process,
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::{self, Instant},
 };
 use tokio::sync::mpsc;
@@ -214,6 +216,7 @@ pub enum Message {
     EditLocation(Option<Entity>),
     Key(Modifiers, Key),
     LaunchUrl(String),
+    MaybeExit,
     Modifiers(Modifiers),
     MoveToTrash(Option<Entity>),
     MounterItems(MounterKey, MounterItems),
@@ -221,6 +224,7 @@ pub enum Message {
     NavBarContext(Entity),
     NavMenuAction(NavMenuAction),
     NewItem(Option<Entity>, bool),
+    Notification(Arc<Mutex<notify_rust::NotificationHandle>>),
     NotifyEvents(Vec<DebouncedEvent>),
     NotifyWatcher(WatcherWrapper),
     OpenTerminal(Option<Entity>),
@@ -355,6 +359,7 @@ pub struct App {
     modifiers: Modifiers,
     mounters: Mounters,
     mounter_items: HashMap<MounterKey, MounterItems>,
+    notification_opt: Option<Arc<Mutex<notify_rust::NotificationHandle>>>,
     pending_operation_id: u64,
     pending_operations: BTreeMap<u64, (Operation, f32)>,
     complete_operations: BTreeMap<u64, Operation>,
@@ -364,6 +369,7 @@ pub struct App {
     search_input: String,
     toasts: widget::toaster::Toasts<Message>,
     watcher_opt: Option<(Debouncer<RecommendedWatcher, FileIdMap>, HashSet<PathBuf>)>,
+    window_id_opt: Option<window::Id>,
     nav_dnd_hover: Option<(Location, Instant)>,
     tab_dnd_hover: Option<(Entity, Instant)>,
     nav_drag_id: DragId,
@@ -537,6 +543,30 @@ impl App {
         }
 
         self.nav_model = nav_model.build();
+    }
+
+    fn update_notification(&mut self) -> Command<Message> {
+        // Handle closing notification if there are no operations
+        if self.pending_operations.is_empty() {
+            if let Some(notification_arc) = self.notification_opt.take() {
+                return Command::perform(
+                    async move {
+                        tokio::task::spawn_blocking(move || {
+                            //TODO: this is nasty
+                            let notification_mutex = Arc::try_unwrap(notification_arc).unwrap();
+                            let notification = notification_mutex.into_inner().unwrap();
+                            notification.close();
+                        })
+                        .await
+                        .unwrap();
+                        message::app(Message::MaybeExit)
+                    },
+                    |x| x,
+                );
+            }
+        }
+
+        Command::none()
     }
 
     fn update_title(&mut self) -> Command<Message> {
@@ -981,6 +1011,7 @@ impl Application for App {
             modifiers: Modifiers::empty(),
             mounters: mounters(),
             mounter_items: HashMap::new(),
+            notification_opt: None,
             pending_operation_id: 0,
             pending_operations: BTreeMap::new(),
             complete_operations: BTreeMap::new(),
@@ -990,6 +1021,7 @@ impl Application for App {
             search_input: String::new(),
             toasts: widget::toaster::Toasts::new(Message::CloseToast),
             watcher_opt: None,
+            window_id_opt: Some(window::Id::MAIN),
             nav_dnd_hover: None,
             tab_dnd_hover: None,
             nav_drag_id: DragId::new(),
@@ -1022,6 +1054,10 @@ impl Application for App {
         }
 
         (app, Command::batch(commands))
+    }
+
+    fn main_window_id(&self) -> window::Id {
+        self.window_id_opt.unwrap_or(window::Id::MAIN)
     }
 
     fn nav_context_menu(
@@ -1088,6 +1124,10 @@ impl Application for App {
         }
 
         Command::none()
+    }
+
+    fn on_app_exit(&mut self) -> Option<Message> {
+        Some(Message::WindowClose)
     }
 
     fn on_escape(&mut self) -> Command<Self::Message> {
@@ -1256,6 +1296,12 @@ impl Application for App {
                     }
                 }
             }
+            Message::MaybeExit => {
+                if self.window_id_opt.is_none() && self.pending_operations.is_empty() {
+                    // Exit if window is closed and there are no pending operations
+                    process::exit(0);
+                }
+            }
             Message::LaunchUrl(url) => match open::that_detached(&url) {
                 Ok(()) => {}
                 Err(err) => {
@@ -1346,6 +1392,9 @@ impl Application for App {
                         return widget::text_input::focus(self.dialog_text_input.clone());
                     }
                 }
+            }
+            Message::Notification(notification) => {
+                self.notification_opt = Some(notification);
             }
             Message::NotifyEvents(events) => {
                 log::debug!("{:?}", events);
@@ -1542,7 +1591,7 @@ impl Application for App {
                 }
             }
             Message::PendingComplete(id) => {
-                let mut commands = Vec::new();
+                let mut commands = Vec::with_capacity(3);
 
                 if let Some((op, _)) = self.pending_operations.remove(&id) {
                     if let Some(description) = op.toast() {
@@ -1563,6 +1612,8 @@ impl Application for App {
                         self.complete_operations.insert(id, op);
                     }
                 }
+                // Potentially show a notification
+                commands.push(self.update_notification());
                 // Manually rescan any trash tabs after any operation is completed
                 commands.push(self.rescan_trash());
                 return Command::batch(commands);
@@ -1579,6 +1630,7 @@ impl Application for App {
                 if let Some((_, progress)) = self.pending_operations.get_mut(&id) {
                     *progress = new_progress;
                 }
+                return self.update_notification();
             }
             Message::RescanTrash => {
                 // Update trash icon if empty/full
@@ -1946,7 +1998,12 @@ impl Application for App {
                 self.operation(Operation::Restore { paths });
             }
             Message::WindowClose => {
-                return window::close(window::Id::MAIN);
+                if let Some(window_id) = self.window_id_opt.take() {
+                    return Command::batch([
+                        window::close(window_id),
+                        Command::perform(async move { message::app(Message::MaybeExit) }, |x| x),
+                    ]);
+                }
             }
             Message::WindowNew => match env::current_exe() {
                 Ok(exe) => match process::Command::new(&exe).spawn() {
@@ -2483,6 +2540,7 @@ impl Application for App {
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
                     Some(Message::Modifiers(modifiers))
                 }
+                Event::Window(_id, WindowEvent::CloseRequested) => Some(Message::WindowClose),
                 _ => None,
             }),
             cosmic_config::config_subscription(
@@ -2667,6 +2725,45 @@ impl Application for App {
                     .subscription()
                     .map(move |items| Message::MounterItems(key, items)),
             );
+        }
+
+        if !self.pending_operations.is_empty() {
+            //TODO: inhibit suspend/shutdown?
+
+            if self.window_id_opt.is_none() {
+                struct NotificationSubscription;
+                subscriptions.push(subscription::channel(
+                    TypeId::of::<NotificationSubscription>(),
+                    1,
+                    move |msg_tx| async move {
+                        let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
+                        tokio::task::spawn_blocking(move || match notify_rust::Notification::new()
+                            .summary(&fl!("notification-in-progress"))
+                            .timeout(notify_rust::Timeout::Never)
+                            .show()
+                        {
+                            Ok(notification) => {
+                                let _ = futures::executor::block_on(async {
+                                    msg_tx
+                                        .lock()
+                                        .await
+                                        .send(Message::Notification(Arc::new(Mutex::new(
+                                            notification,
+                                        ))))
+                                        .await
+                                });
+                            }
+                            Err(err) => {
+                                log::warn!("failed to create notification: {}", err);
+                            }
+                        })
+                        .await
+                        .unwrap();
+
+                        pending().await
+                    },
+                ));
+            }
         }
 
         for (id, (pending_operation, _)) in self.pending_operations.iter() {
