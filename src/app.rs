@@ -1111,6 +1111,9 @@ impl Application for App {
     }
 
     fn on_nav_select(&mut self, entity: Entity) -> Command<Self::Message> {
+        self.search_active = false;
+        self.search_input.clear();
+        
         self.nav_model.activate(entity);
         if let Some(location) = self.nav_model.data::<Location>(entity) {
             let message = Message::TabMessage(None, tab::Message::Location(location.clone()));
@@ -1122,7 +1125,6 @@ impl Application for App {
                 return mounter.mount(data.1.clone()).map(|_| message::none());
             }
         }
-
         Command::none()
     }
 
