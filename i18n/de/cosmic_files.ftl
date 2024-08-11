@@ -1,6 +1,7 @@
 cosmic-files = COSMIC Dateien
 empty-folder = Leerer Ordner
 empty-folder-hidden = Leerer Ordner (hat versteckte Dateien)
+no-results = Keine Ergebnisse gefunden
 filesystem = Dateisystem
 home = Home
 trash = Papierkorb
