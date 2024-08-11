@@ -890,6 +890,7 @@ pub enum HeadingOptions {
     Name = 0,
     Modified,
     Size,
+    Bookmark,
 }
 
 impl fmt::Display for HeadingOptions {
@@ -898,6 +899,7 @@ impl fmt::Display for HeadingOptions {
             HeadingOptions::Name => write!(f, "{}", fl!("name")),
             HeadingOptions::Modified => write!(f, "{}", fl!("modified")),
             HeadingOptions::Size => write!(f, "{}", fl!("size")),
+            HeadingOptions::Bookmark => write!(f, "{}", "Bookmark"),
         }
     }
 }
@@ -908,6 +910,7 @@ impl HeadingOptions {
             HeadingOptions::Name.to_string(),
             HeadingOptions::Modified.to_string(),
             HeadingOptions::Size.to_string(),
+            HeadingOptions::Bookmark.to_string(),
         ]
     }
 }
@@ -1943,6 +1946,10 @@ impl Tab {
                     }
                 });
             }
+            HeadingOptions::Bookmark => {
+                //TODO
+                todo!()
+            }
         }
         Some(items)
     }
@@ -2025,7 +2032,8 @@ impl Tab {
         let name_width = 300.0;
         let modified_width = 200.0;
         let size_width = 100.0;
-        let condensed = size.width < (name_width + modified_width + size_width);
+        let bookmark_width = 10.0;
+        let condensed = size.width < (name_width + modified_width + size_width + bookmark_width);
 
         let heading_item = |name, width, msg| {
             let mut row = widget::row::with_capacity(2)
@@ -2057,6 +2065,11 @@ impl Tab {
                 HeadingOptions::Modified,
             ),
             heading_item(fl!("size"), Length::Fixed(size_width), HeadingOptions::Size),
+            heading_item(
+                "".to_string(),
+                Length::Fixed(bookmark_width),
+                HeadingOptions::Bookmark,
+            ),
         ])
         .align_items(Alignment::Center)
         .height(Length::Fixed((space_m + 4).into()))
@@ -2621,7 +2634,8 @@ impl Tab {
         let name_width = 300.0;
         let modified_width = 200.0;
         let size_width = 100.0;
-        let condensed = size.width < (name_width + modified_width + size_width);
+        let bookmark_width = 10.0;
+        let condensed = size.width < (name_width + modified_width + size_width + bookmark_width);
         let icon_size = if condensed {
             icon_sizes.list_condensed()
         } else {
@@ -2718,6 +2732,9 @@ impl Tab {
                             .into(),
                         widget::text(size_text.clone())
                             .width(Length::Fixed(size_width))
+                            .into(),
+                        widget::icon::from_name("user-bookmarks-symbolic")
+                            .size(icon_size / 2)
                             .into(),
                     ])
                     .align_items(Alignment::Center)
