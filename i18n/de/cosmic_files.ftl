@@ -150,6 +150,7 @@ new-file = Neue Datei
 new-folder = Neuer Ordner
 open-in-terminal = Im Terminal öffnen
 move-to-trash = In den Papierkorb verschieben
+permanently-delete = Dauerhaft löschen...
 restore-from-trash = Aus dem Papierkorb wiederherstellen
 remove-from-sidebar = Von der Seitenleiste entfernen
 sort-by-name = Nach Name sortieren
