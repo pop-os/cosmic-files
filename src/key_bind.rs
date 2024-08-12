@@ -68,6 +68,7 @@ pub fn key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
         bind!([Ctrl], Key::Character("c".into()), Copy);
         bind!([Ctrl], Key::Character("x".into()), Cut);
         bind!([], Key::Named(Named::Delete), Delete);
+        bind!([Shift], Key::Named(Named::Delete), PermanentlyDelete);
         bind!([Shift], Key::Named(Named::Enter), OpenInNewWindow);
         bind!([Ctrl], Key::Character("v".into()), Paste);
         bind!([], Key::Named(Named::F2), Rename);
