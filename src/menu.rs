@@ -59,6 +59,7 @@ pub fn context_menu<'a>(
     let TabConfig {
         sort_name,
         sort_direction,
+        show_delete_permanently,
         ..
     } = tab.config;
     let sort_item = |label, variant| {
@@ -121,8 +122,11 @@ pub fn context_menu<'a>(
                 children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
                 children.push(container(horizontal_rule(1)).padding([0, 8]).into());
                 children.push(menu_item(fl!("move-to-trash"), Action::MoveToTrash).into());
-                children
-                    .push(menu_item(fl!("permanently-delete"), Action::PermanentlyDelete).into());
+                if show_delete_permanently {
+                    children.push(
+                        menu_item(fl!("permanently-delete"), Action::PermanentlyDelete).into(),
+                    );
+                }
             } else {
                 //TODO: need better designs for menu with no selection
                 //TODO: have things like properties but they apply to the folder?

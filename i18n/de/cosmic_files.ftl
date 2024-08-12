@@ -128,7 +128,10 @@ properties = Eigenschaften
 ## Einstellungen
 settings = Einstellungen
 settings-tab = Tab
+settings-optional-context-menu-actions = Optionale Aktionen im Kontextmenü
+settings-optional-context-menu-actions-description = Weitere Aktionen im Menü anzeigen. Tastenkürzel können auch für ausgeblendete Aktionen verwendet werden.
 settings-show-hidden = Versteckte Dateien anzeigen
+settings-show-delete-permanently = Dauerhaft löschen
 default-view = Standardansicht
 icon-size-list = Symbolgröße (Liste)
 icon-size-grid = Symbolgröße (Raster)

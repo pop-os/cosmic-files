@@ -130,7 +130,10 @@ show-details = Show details
 ## Settings
 settings = Settings
 settings-tab = Tab
+settings-optional-context-menu-actions = Optional Context Menu Actions
+settings-optional-context-menu-actions-description = Show more actions in the menus. Keyboard shortcuts can be used even if the actions are not shown.
 settings-show-hidden = Show hidden files
+settings-show-delete-permanently = Permanently delete
 default-view = Default view
 icon-size-list = Icon size (list)
 icon-size-grid = Icon size (grid)
