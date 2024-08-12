@@ -40,6 +40,15 @@ open-multiple-folders = Mehrere Ordner öffnen
 save = Speichern
 save-file = Datei speichern
 
+## Dauerhaft Löschen Dialog
+selected-items = {$items} gewählte {$items ->
+        [one] Objekt
+        *[other] Objekte
+    }
+permanently-delete-question = {$target} dauerhaft löschen?
+delete = Löschen
+permanently-delete-warning = Dauerhaft gelöschte Objekte können nicht wiederhergestellt werden
+
 # Umbenennen-Dialog
 rename-file = Datei umbenennen
 rename-folder = Ordner umbenennen
@@ -100,6 +109,14 @@ restored = {$items} {$items ->
     } aus dem {trash} wiederhergestellt
 undo = Rückgängig
 unknown-folder = unbekannter Ordner
+permanently-deleting = Lösche {$items} {$items ->
+        [one] Objekt
+        *[other] Objekte
+    } dauerhaft
+permanently-deleted = {$items} {$items ->
+        [one] Objekt
+        *[other] Objekte
+    } dauerhaft gelöscht
 
 ## Öffnen mit
 open-with = Öffnen mit

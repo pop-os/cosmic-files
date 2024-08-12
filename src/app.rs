@@ -87,6 +87,7 @@ pub enum Action {
     OpenTerminal,
     OpenWith,
     Paste,
+    PermanentlyDelete,
     Properties,
     Rename,
     RestoreFromTrash,
@@ -134,6 +135,7 @@ impl Action {
             Action::OpenTerminal => Message::OpenTerminal(entity_opt),
             Action::OpenWith => Message::ToggleContextPage(ContextPage::OpenWith),
             Action::Paste => Message::Paste(entity_opt),
+            Action::PermanentlyDelete => Message::PermanentlyDelete(entity_opt),
             Action::Properties => Message::ToggleContextPage(ContextPage::Properties(None)),
             Action::Rename => Message::Rename(entity_opt),
             Action::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
@@ -236,6 +238,7 @@ pub enum Message {
     PendingComplete(u64),
     PendingError(u64, String),
     PendingProgress(u64, f32),
+    PermanentlyDelete(Option<Entity>),
     RescanTrash,
     Rename(Option<Entity>),
     ReplaceResult(ReplaceResult),
@@ -298,6 +301,9 @@ pub enum DialogPage {
         parent: PathBuf,
         name: String,
         dir: bool,
+    },
+    PermanentlyDelete {
+        paths: Vec<PathBuf>,
     },
     RenameItem {
         from: PathBuf,
@@ -1285,6 +1291,9 @@ impl Application for App {
                                 Operation::NewFile { path }
                             });
                         }
+                        DialogPage::PermanentlyDelete { paths } => {
+                            self.operation(Operation::PermanentlyDelete { paths });
+                        }
                         DialogPage::RenameItem {
                             from, parent, name, ..
                         } => {
@@ -1663,6 +1672,13 @@ impl Application for App {
                     *progress = new_progress;
                 }
                 return self.update_notification();
+            }
+            Message::PermanentlyDelete(entity_opt) => {
+                let paths = self.selected_paths(entity_opt);
+                if !paths.is_empty() {
+                    self.dialog_pages
+                        .push_back(DialogPage::PermanentlyDelete { paths });
+                }
             }
             Message::RescanTrash => {
                 // Update trash icon if empty/full
@@ -2349,6 +2365,28 @@ impl Application for App {
                         ])
                         .spacing(space_xxs),
                     )
+            }
+            DialogPage::PermanentlyDelete { paths } => {
+                let target = if paths.len() == 1 {
+                    format!(
+                        "»{}«",
+                        paths[0]
+                            .file_name()
+                            .map(std::ffi::OsStr::to_string_lossy)
+                            .unwrap_or_else(|| paths[0].to_string_lossy())
+                    )
+                } else {
+                    fl!("selected-items", items = paths.len())
+                };
+                widget::dialog(fl!("permanently-delete-question", target = target))
+                    .primary_action(
+                        widget::button::destructive(fl!("delete"))
+                            .on_press(Message::DialogComplete),
+                    )
+                    .secondary_action(
+                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                    )
+                    .control(widget::text(fl!("permanently-delete-warning")))
             }
             DialogPage::RenameItem {
                 from,

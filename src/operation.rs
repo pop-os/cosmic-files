@@ -149,6 +149,10 @@ pub enum Operation {
     NewFolder {
         path: PathBuf,
     },
+    /// Permanently delete items, skipping the trash
+    PermanentlyDelete {
+        paths: Vec<PathBuf>,
+    },
     Rename {
         from: PathBuf,
         to: PathBuf,
@@ -262,6 +266,7 @@ impl Operation {
                 name = file_name(path),
                 parent = parent_name(path)
             ),
+            Self::PermanentlyDelete { paths } => fl!("permanently-deleting", items = paths.len()),
             Self::Rename { from, to } => {
                 fl!("renaming", from = file_name(from), to = file_name(to))
             }
@@ -300,6 +305,7 @@ impl Operation {
                 name = file_name(path),
                 parent = parent_name(path)
             ),
+            Self::PermanentlyDelete { paths } => fl!("permanently-deleted", items = paths.len()),
             Self::Rename { from, to } => fl!("renamed", from = file_name(from), to = file_name(to)),
             Self::Restore { paths } => fl!("restored", items = paths.len()),
         }
@@ -518,6 +524,36 @@ impl Operation {
                     .await
                     .send(Message::PendingProgress(id, 100.0))
                     .await;
+            }
+            Self::PermanentlyDelete { paths } => {
+                let total = paths.len();
+                let mut count = 0;
+                for path in paths {
+                    tokio::task::spawn_blocking(|| {
+                        if path.is_symlink() || path.is_file() {
+                            fs::remove_file(path)
+                        } else if path.is_dir() {
+                            fs::remove_dir_all(path)
+                        } else {
+                            Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "File to delete is not symlink, file or directory",
+                            ))
+                        }
+                    })
+                    .await
+                    .map_err(err_str)?
+                    .map_err(err_str)?;
+                    count += 1;
+                    let _ = msg_tx
+                        .lock()
+                        .await
+                        .send(Message::PendingProgress(
+                            id,
+                            100.0 * (count as f32) / (total as f32),
+                        ))
+                        .await;
+                }
             }
             Self::Rename { from, to } => {
                 tokio::task::spawn_blocking(|| fs::rename(from, to))
