@@ -4855,10 +4855,12 @@ impl Tab {
         let mut popover = widget::popover(mouse_area);
 
         if let Some(point) = self.context_menu {
+            let context_menu = menu::context_menu(self, key_binds, &self.modifiers);
             popover = popover
-                .popup(menu::context_menu(self, key_binds))
+                .popup(context_menu)
                 .position(widget::popover::Position::Point(point));
         }
+
         let mut tab_column = widget::column::with_capacity(3);
         if let Some(location_view) = location_view_opt {
             tab_column = tab_column.push(location_view);
