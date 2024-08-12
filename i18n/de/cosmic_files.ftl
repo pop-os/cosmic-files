@@ -79,6 +79,15 @@ save-file = Datei speichern
 open-with-title = Wie möchtest du „{$name}“ öffnen?
 browse-store = {$store} durchsuchen
 
+## Dauerhaft Löschen Dialog
+selected-items = {$items} gewählte Objekte
+permanently-delete-question = {$target} dauerhaft löschen?
+delete = Löschen
+permanently-delete-warning = {$target} dauerhaft löschen, {$nb_items ->
+        [one] es kann
+        *[other] Sie können
+    } nicht wiederhergestellt werden.
+
 # Umbenennen-Dialog
 rename-file = Datei umbenennen
 rename-folder = Ordner umbenennen
@@ -212,6 +221,14 @@ restored = {$items} {$items ->
         *[other] Elemente wurden
     } aus dem {trash} wiederhergestellt
 unknown-folder = unbekannter Ordner
+permanently-deleting = Lösche {$items} {$items ->
+        [one] Objekt
+        *[other] Objekte
+    } dauerhaft
+permanently-deleted = {$items} {$items ->
+        [one] Objekt
+        *[other] Objekte
+    } dauerhaft gelöscht
 
 ## Öffnen mit
 menu-open-with = Öffnen mit
@@ -229,6 +246,7 @@ calculating = Wird berechnet...
 
 ## Einstellungen
 settings = Einstellungen
+settings-show-delete-permanently = Dauerhaft löschen
 
 ### Aussehen
 appearance = Aussehen
@@ -245,6 +263,7 @@ new-file = Neue Datei
 new-folder = Neuer Ordner
 open-in-terminal = Im Terminal öffnen
 move-to-trash = In den Papierkorb verschieben
+delete-permanently = Dauerhaft löschen...
 restore-from-trash = Aus dem Papierkorb wiederherstellen
 remove-from-sidebar = Von der Seitenleiste entfernen
 sort-by-name = Nach Name sortieren
