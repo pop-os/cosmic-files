@@ -75,31 +75,65 @@ pub fn context_menu<'a>(
         .into()
     };
 
-    let (selected, selected_dir) = tab.items_opt().into_iter().fold((0, 0),
-        |selections, items| {
+    struct SelectionCounter {
+        total_count: usize,
+        dirs_count: usize,
+    }
+
+    impl SelectionCounter {
+        fn new() -> Self {
+            Self {
+                total_count: 0,
+                dirs_count: 0,
+            }
+        }
+
+        fn any(&self) -> bool {
+            self.total_count > 0
+        }
+
+        fn exactly_one(&self) -> bool {
+            self.total_count == 1
+        }
+
+        fn exactly_one_dir(&self) -> bool {
+            self.dirs_count == 1
+        }
+
+        fn no_dirs(&self) -> bool {
+            self.dirs_count == 0
+        }
+
+        fn only_directories(&self) -> bool {
+            self.total_count == self.dirs_count
+        }
+    }
+
+    let selected = tab.items_opt().into_iter().fold(SelectionCounter::new(),
+        |mut selections, items| {
             let selected_iter = items.into_iter().filter(|i| i.selected);
-            let selected_count = selected_iter.clone().count();
-            let selected_dirs_count = selected_iter.filter(|i| i.metadata.is_dir()).count();
-            (selections.0 + selected_count, selections.1 + selected_dirs_count)
+            selections.total_count += selected_iter.clone().count();
+            selections.dirs_count += selected_iter.filter(|i| i.metadata.is_dir()).count();
+            selections
         }
     );
 
     let mut children: Vec<Element<_>> = Vec::with_capacity(16);
     match tab.location {
         Location::Path(_) | Location::Search(_, _) => {
-            if selected > 0 {
-                if selected_dir == 1 && selected == 1 || selected_dir == 0 {
+            if selected.any() {
+                if selected.exactly_one_dir() && selected.exactly_one() || selected.no_dirs() {
                     children.push(menu_item(fl!("open"), Action::Open).into());
                 }
-                if selected == 1 {
+                if selected.exactly_one() {
                     children.push(menu_item(fl!("open-with"), Action::OpenWith).into());
-                    if selected_dir == 1 {
+                    if selected.exactly_one_dir() {
                         children
                             .push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
                     }
                 }
                 // All selected items are directories
-                if selected == selected_dir {
+                if selected.only_directories() {
                     children.push(menu_item(fl!("open-in-new-tab"), Action::OpenInNewTab).into());
                     children
                         .push(menu_item(fl!("open-in-new-window"), Action::OpenInNewWindow).into());
@@ -137,7 +171,7 @@ pub fn context_menu<'a>(
         }
         Location::Trash => {
             children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
-            if selected > 0 {
+            if selected.any() {
                 children.extend(vec![
                     container(horizontal_rule(1)).padding([0, 8]).into(),
                     menu_item(fl!("show-details"), Action::Properties).into(),
