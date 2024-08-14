@@ -3,6 +3,7 @@ empty-folder = Pusty katalog
 empty-folder-hidden = Pusty katalog (z ukrytymi plikami)
 filesystem = System plików
 home = Katalog Domowy
+notification-in-progress = Są przeprowadzane operacje na plikach.
 trash = Kosz
 undo = Cofnij
 
@@ -105,11 +106,11 @@ undo = Cofnij
 unknown-folder = nieznany katalog
 
 ## Open with
-open-with = Otwórz za pomocą
+open-with = Otwórz za pomocą...
 default-app = {$name} (domyślnie)
 
-## Properties
-properties = Właściwości
+## Show details
+show-details = Pokaż szczegóły
 
 ## Settings
 settings = Ustawienia
@@ -148,7 +149,8 @@ sort-by-size = Uszereguj według rozmiaru
 file = Plik
 new-tab = Nowa karta
 new-window = Nowe okno
-rename = Zmień nazwę
+rename = Zmień nazwę...
+menu-show-details = Pokaż szczegóły...
 close-tab = Zamknij kartę
 quit = Zamknij
 
