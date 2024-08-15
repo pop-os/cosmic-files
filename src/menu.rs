@@ -121,6 +121,8 @@ pub fn context_menu<'a>(
                 children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
                 children.push(container(horizontal_rule(1)).padding([0, 8]).into());
                 children.push(menu_item(fl!("move-to-trash"), Action::MoveToTrash).into());
+                //TODO this should be add or remove if it already exist not only add
+                children.push(menu_item(fl!("add_bookmark"), Action::AddBookmark).into());
             } else {
                 //TODO: need better designs for menu with no selection
                 //TODO: have things like properties but they apply to the folder?
@@ -152,6 +154,7 @@ pub fn context_menu<'a>(
             children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
             children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
         }
+        Location::Bookmarks => todo!(),
     }
 
     widget::container(widget::column::with_children(children))

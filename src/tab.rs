@@ -1,37 +1,30 @@
-use cosmic::{
-    cosmic_theme, font,
-    iced::{
-        advanced::{
-            graphics,
-            text::{self, Paragraph},
-        },
-        alignment::{Horizontal, Vertical},
-        clipboard::dnd::DndAction,
-        futures::SinkExt,
-        keyboard::Modifiers,
-        subscription::{self, Subscription},
-        //TODO: export in cosmic::widget
-        widget::{
-            container, horizontal_rule,
-            scrollable::{AbsoluteOffset, Viewport},
-        },
-        Alignment,
-        Border,
-        Color,
-        ContentFit,
-        Length,
-        Point,
-        Rectangle,
-        Size,
+use cosmic::{cosmic_config, cosmic_theme, font, iced::{
+    advanced::{
+        graphics,
+        text::{self, Paragraph},
     },
-    iced_core::widget::tree,
-    theme, widget,
+    alignment::{Horizontal, Vertical},
+    clipboard::dnd::DndAction,
+    futures::SinkExt,
+    keyboard::Modifiers,
+    subscription::{self, Subscription},
+    //TODO: export in cosmic::widget
     widget::{
-        menu::{action::MenuAction, key_bind::KeyBind},
-        vertical_space, DndDestination, DndSource, Id, Widget,
+        container, horizontal_rule,
+        scrollable::{AbsoluteOffset, Viewport},
     },
-    Element,
-};
+    Alignment,
+    Border,
+    Color,
+    ContentFit,
+    Length,
+    Point,
+    Rectangle,
+    Size,
+}, iced_core::widget::tree, theme, widget, widget::{
+    menu::{action::MenuAction, key_bind::KeyBind},
+    vertical_space, DndDestination, DndSource, Id, Widget,
+}, Application, Element};
 
 use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
@@ -47,7 +40,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-
+use cosmic::cosmic_config::CosmicConfigEntry;
 use crate::{
     app::{self, Action},
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
@@ -60,6 +53,8 @@ use crate::{
     mime_icon::{mime_for_path, mime_icon},
     mouse_area,
 };
+use crate::app::App;
+use crate::config::{Config, CONFIG_VERSION};
 
 pub const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 pub const HOVER_DURATION: Duration = Duration::from_millis(1600);
@@ -159,8 +154,8 @@ pub fn folder_icon_symbolic(path: &PathBuf, icon_size: u16) -> widget::icon::Han
         "{}-symbolic",
         SPECIAL_DIRS.get(path).map_or("folder", |x| *x)
     ))
-    .size(icon_size)
-    .handle()
+        .size(icon_size)
+        .handle()
 }
 
 pub fn trash_icon_symbolic(icon_size: u16) -> widget::icon::Handle {
@@ -176,8 +171,8 @@ pub fn trash_icon_symbolic(icon_size: u16) -> widget::icon::Handle {
     } else {
         "user-trash-symbolic"
     })
-    .size(icon_size)
-    .handle()
+        .size(icon_size)
+        .handle()
 }
 
 //TODO: translate, add more levels?
@@ -543,11 +538,41 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
     items
 }
 
+pub fn scan_bookmarks(sizes: IconSizes) -> Vec<Item> {
+    let mut items: Vec<Item> = Vec::new();
+    let bookmarks = match cosmic_config::Config::new(App::APP_ID, CONFIG_VERSION) {
+        Ok(config_handler) => {
+            let config = Config::get_entry(&config_handler).unwrap_or_else(|(errs, config)| {
+                log::info!("errors loading config: {:?}", errs);
+                config
+            });
+            Some(config.bookmarks)
+        }
+        Err(err) => {
+            log::error!("failed to create config handler: {}", err);
+            None
+        }
+    };
+    log::info!("bookmarks letti: {:?}", bookmarks);
+
+    if let Some(bookmarks) = bookmarks {
+        //TODO guarda la funzione scan_path e copia l'implementazione
+        for b in bookmarks {
+            if let Some(name) = b.file_name() {
+                let grid_name = Item::grid_name(&name.to_string_lossy());
+            }
+        }
+    }
+
+    items
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Location {
     Path(PathBuf),
     Search(PathBuf, String),
     Trash,
+    Bookmarks,
 }
 
 impl std::fmt::Display for Location {
@@ -556,6 +581,7 @@ impl std::fmt::Display for Location {
             Self::Path(path) => write!(f, "{}", path.display()),
             Self::Search(path, term) => write!(f, "search {} for {}", path.display(), term),
             Self::Trash => write!(f, "trash"),
+            Self::Bookmarks => write!(f, "bookmarks"),
         }
     }
 }
@@ -566,6 +592,7 @@ impl Location {
             Self::Path(path) => scan_path(path, sizes),
             Self::Search(path, term) => scan_search(path, term, sizes),
             Self::Trash => scan_trash(sizes),
+            Self::Bookmarks => scan_bookmarks(sizes),
         }
     }
 }
@@ -764,12 +791,12 @@ impl Item {
                                 widget::text(&app.name).into()
                             },
                         ])
-                        .spacing(space_xs),
+                            .spacing(space_xs),
                     )
-                    //TODO: do not clone so much?
-                    .on_press(app::Message::OpenWith(path.clone(), app.clone()))
-                    .padding(space_xs)
-                    .width(Length::Fill),
+                        //TODO: do not clone so much?
+                        .on_press(app::Message::OpenWith(path.clone(), app.clone()))
+                        .padding(space_xs)
+                        .width(Length::Fill),
                 );
             }
         }
@@ -890,7 +917,6 @@ pub enum HeadingOptions {
     Name = 0,
     Modified,
     Size,
-    Bookmark,
 }
 
 impl fmt::Display for HeadingOptions {
@@ -899,7 +925,6 @@ impl fmt::Display for HeadingOptions {
             HeadingOptions::Name => write!(f, "{}", fl!("name")),
             HeadingOptions::Modified => write!(f, "{}", fl!("modified")),
             HeadingOptions::Size => write!(f, "{}", fl!("size")),
-            HeadingOptions::Bookmark => write!(f, "{}", "Bookmark"),
         }
     }
 }
@@ -910,7 +935,6 @@ impl HeadingOptions {
             HeadingOptions::Name.to_string(),
             HeadingOptions::Modified.to_string(),
             HeadingOptions::Size.to_string(),
-            HeadingOptions::Bookmark.to_string(),
         ]
     }
 }
@@ -981,6 +1005,9 @@ impl Tab {
             }
             Location::Trash => {
                 fl!("trash")
+            }
+            Location::Bookmarks => {
+                fl!("bookmarks")
             }
         }
     }
@@ -1382,9 +1409,9 @@ impl Tab {
                 } else {
                     let dont_unset = mod_ctrl
                         || self.column_sort().is_some_and(|l| {
-                            l.iter()
-                                .any(|(e_i, e)| Some(e_i) == click_i_opt.as_ref() && e.selected)
-                        });
+                        l.iter()
+                            .any(|(e_i, e)| Some(e_i) == click_i_opt.as_ref() && e.selected)
+                    });
                     *self.cached_selected.borrow_mut() = None;
                     if let Some(ref mut items) = self.items_opt {
                         for (i, item) in items.iter_mut().enumerate() {
@@ -1448,8 +1475,8 @@ impl Tab {
                         Location::Search(ref path, _) => Some(path),
                         _ => None,
                     }
-                    .and_then(|path| path.ancestors().nth(ancestor_index))
-                    .map(|path| path.to_path_buf())
+                        .and_then(|path| path.ancestors().nth(ancestor_index))
+                        .map(|path| path.to_path_buf())
                 };
                 match action {
                     LocationMenuAction::OpenInNewTab(ancestor_index) => {
@@ -1651,6 +1678,9 @@ impl Tab {
                     Location::Trash => {
                         cd = Some(location);
                     }
+                    Location::Bookmarks => {
+                        cd = Some(location)
+                    }
                 }
             }
             Message::LocationUp => {
@@ -1791,6 +1821,10 @@ impl Tab {
                     Location::Trash => {
                         log::warn!("Copy to trash is not supported.");
                     }
+                    Location::Bookmarks => {
+                        // enable copy to add to bookmarks?
+                        log::warn!("Copy to bookmarks is not supported");
+                    }
                 };
             }
             Message::Drop(None) => {
@@ -1863,6 +1897,7 @@ impl Tab {
                     Location::Path(path) => path.is_dir(),
                     Location::Search(path, _term) => path.is_dir(),
                     Location::Trash => true,
+                    Location::Bookmarks => true,
                 } {
                     self.change_location(&location, history_i_opt);
                     commands.push(Command::ChangeLocation(self.title(), location));
@@ -1946,10 +1981,6 @@ impl Tab {
                     }
                 });
             }
-            HeadingOptions::Bookmark => {
-                //TODO
-                todo!()
-            }
         }
         Some(items)
     }
@@ -2032,8 +2063,7 @@ impl Tab {
         let name_width = 300.0;
         let modified_width = 200.0;
         let size_width = 100.0;
-        let bookmark_width = 10.0;
-        let condensed = size.width < (name_width + modified_width + size_width + bookmark_width);
+        let condensed = size.width < (name_width + modified_width + size_width);
 
         let heading_item = |name, width, msg| {
             let mut row = widget::row::with_capacity(2)
@@ -2065,16 +2095,11 @@ impl Tab {
                 HeadingOptions::Modified,
             ),
             heading_item(fl!("size"), Length::Fixed(size_width), HeadingOptions::Size),
-            heading_item(
-                "".to_string(),
-                Length::Fixed(bookmark_width),
-                HeadingOptions::Bookmark,
-            ),
         ])
-        .align_items(Alignment::Center)
-        .height(Length::Fixed((space_m + 4).into()))
-        .padding([0, space_xxs])
-        .spacing(space_xxs);
+            .align_items(Alignment::Center)
+            .height(Length::Fixed((space_m + 4).into()))
+            .padding([0, space_xxs])
+            .spacing(space_xxs);
 
         if let Some(location) = &self.edit_location {
             match location {
@@ -2114,8 +2139,8 @@ impl Tab {
                         .padding(space_xxs)
                         .style(theme::Button::Icon),
                 )
-                .on_press(move |_| Message::EditLocation(Some(self.location.clone())))
-                .on_middle_press(move |_| Message::OpenInNewTab(path.clone())),
+                    .on_press(move |_| Message::EditLocation(Some(self.location.clone())))
+                    .on_middle_press(move |_| Message::OpenInNewTab(path.clone())),
             );
             w += 16.0 + 2.0 * space_xxs as f32;
         } else if let Location::Search(_, term) = &self.location {
@@ -2127,13 +2152,14 @@ impl Tab {
                             .into(),
                         widget::text::body(term).wrap(text::Wrap::None).into(),
                     ])
-                    .spacing(space_xxs),
+                        .spacing(space_xxs),
                 )
-                .padding(space_xxs)
-                .style(theme::Button::Icon),
+                    .padding(space_xxs)
+                    .style(theme::Button::Icon),
             );
             w += text_width_body(term) + 16.0 + 3.0 * space_xxs as f32;
         }
+
 
         let mut children: Vec<Element<_>> = Vec::new();
         match &self.location {
@@ -2150,7 +2176,7 @@ impl Tab {
                                     &ancestor.to_path_buf(),
                                     16,
                                 ))
-                                .size(16);
+                                    .size(16);
                                 found_home = true;
                                 (fl!("home"), Some(icon))
                             } else {
@@ -2216,15 +2242,15 @@ impl Tab {
                             .padding(space_xxxs)
                             .style(theme::Button::Link),
                     )
-                    .on_press(move |_| {
-                        Message::Location(match &self.location {
-                            Location::Path(_) => Location::Path(ancestor.to_path_buf()),
-                            Location::Search(_, term) => {
-                                Location::Search(ancestor.to_path_buf(), term.clone())
-                            }
-                            other => other.clone(),
-                        })
-                    });
+                        .on_press(move |_| {
+                            Message::Location(match &self.location {
+                                Location::Path(_) => Location::Path(ancestor.to_path_buf()),
+                                Location::Search(_, term) => {
+                                    Location::Search(ancestor.to_path_buf(), term.clone())
+                                }
+                                other => other.clone(),
+                            })
+                        });
 
                     if self.location_context_menu_index.is_some() {
                         mouse_area = mouse_area.on_right_press(move |_point_opt| {
@@ -2262,6 +2288,21 @@ impl Tab {
                     widget::button(row)
                         .padding(space_xxxs)
                         .on_press(Message::Location(Location::Trash))
+                        .style(theme::Button::Text)
+                        .into(),
+                );
+            }
+            Location::Bookmarks => {
+                let mut row = widget::row::with_capacity(2)
+                    .align_items(Alignment::Center)
+                    .spacing(space_xxxs);
+                row = row.push(widget::icon::from_name("user-bookmarks-symbolic").size(16));
+                row = row.push(widget::text::heading(fl!("bookmarks")));
+
+                children.push(
+                    widget::button(row)
+                        .padding(space_xxxs)
+                        .on_press(Message::Location(Location::Bookmarks))
                         .style(theme::Button::Text)
                         .into(),
                 );
@@ -2310,17 +2351,17 @@ impl Tab {
                 } else {
                     fl!("empty-folder")
                 })
-                .into(),
+                    .into(),
             ])
-            .align_items(Alignment::Center)
-            .spacing(space_xxs),
+                .align_items(Alignment::Center)
+                .spacing(space_xxs),
         )
-        .align_x(Horizontal::Center)
-        .align_y(Vertical::Center)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()])
-        .into()
+            .align_x(Horizontal::Center)
+            .align_y(Vertical::Center)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()])
+            .into()
     }
 
     pub fn grid_view(
@@ -2411,8 +2452,8 @@ impl Tab {
                             .content_fit(ContentFit::Contain)
                             .size(icon_sizes.grid()),
                     )
-                    .padding(space_xxxs)
-                    .style(button_style(item.selected, false, false)),
+                        .padding(space_xxxs)
+                        .style(button_style(item.selected, false, false)),
                     widget::button(widget::text::body(&item.grid_name))
                         .id(item.button_id.clone())
                         .padding([0, space_xxxs])
@@ -2458,31 +2499,31 @@ impl Tab {
                                 Message::Drop(None)
                             }
                         })
-                        .on_enter(move |_, _, _| Message::DndEnter(tab_location_enter.clone()))
-                        .on_leave(move || Message::DndLeave(tab_location_leave.clone())),
+                            .on_enter(move |_, _, _| Message::DndEnter(tab_location_enter.clone()))
+                            .on_leave(move || Message::DndLeave(tab_location_leave.clone())),
                     )
-                    .style(if is_dnd_hovered {
-                        theme::Container::custom(|t| {
-                            let mut a = cosmic::iced_style::container::StyleSheet::appearance(
-                                t,
-                                &theme::Container::default(),
-                            );
-                            let t = t.cosmic();
-                            // todo use theme drop target color
-                            let mut bg = t.accent_color();
-                            bg.alpha = 0.2;
-                            a.background = Some(Color::from(bg).into());
-                            a.border = Border {
-                                color: t.accent_color().into(),
-                                width: 1.0,
-                                radius: t.radius_s().into(),
-                            };
-                            a
+                        .style(if is_dnd_hovered {
+                            theme::Container::custom(|t| {
+                                let mut a = cosmic::iced_style::container::StyleSheet::appearance(
+                                    t,
+                                    &theme::Container::default(),
+                                );
+                                let t = t.cosmic();
+                                // todo use theme drop target color
+                                let mut bg = t.accent_color();
+                                bg.alpha = 0.2;
+                                a.background = Some(Color::from(bg).into());
+                                a.border = Border {
+                                    color: t.accent_color().into(),
+                                    width: 1.0,
+                                    radius: t.radius_s().into(),
+                                };
+                                a
+                            })
+                        } else {
+                            theme::Container::default()
                         })
-                    } else {
-                        theme::Container::default()
-                    })
-                    .into()
+                        .into()
                 } else {
                     column.into()
                 };
@@ -2560,13 +2601,13 @@ impl Tab {
                                         .content_fit(ContentFit::Contain)
                                         .size(icon_sizes.grid()),
                                 )
-                                .on_press(Message::Click(Some(*i)))
-                                .padding(space_xxxs)
-                                .style(button_style(
-                                    item.selected,
-                                    false,
-                                    false,
-                                )),
+                                    .on_press(Message::Click(Some(*i)))
+                                    .padding(space_xxxs)
+                                    .style(button_style(
+                                        item.selected,
+                                        false,
+                                        false,
+                                    )),
                                 widget::button(widget::text(item.grid_name.clone()))
                                     .id(item.button_id.clone())
                                     .on_press(Message::Click(Some(*i)))
@@ -2598,12 +2639,12 @@ impl Tab {
             mouse_area::MouseArea::new(
                 widget::container(widget::column::with_children(children)).width(Length::Fill),
             )
-            .on_press(|_| Message::Click(None))
-            .on_drag(Message::Drag)
-            .on_drag_end(|_| Message::DragEnd(None))
-            .show_drag_rect(true)
-            .on_release(|_| Message::ClickRelease(None))
-            .into(),
+                .on_press(|_| Message::Click(None))
+                .on_drag(Message::Drag)
+                .on_drag_end(|_| Message::DragEnd(None))
+                .show_drag_rect(true)
+                .on_release(|_| Message::ClickRelease(None))
+                .into(),
             true,
         )
     }
@@ -2634,8 +2675,7 @@ impl Tab {
         let name_width = 300.0;
         let modified_width = 200.0;
         let size_width = 100.0;
-        let bookmark_width = 10.0;
-        let condensed = size.width < (name_width + modified_width + size_width + bookmark_width);
+        let condensed = size.width < (name_width + modified_width + size_width);
         let icon_size = if condensed {
             icon_sizes.list_condensed()
         } else {
@@ -2716,10 +2756,10 @@ impl Tab {
                             widget::text::caption(format!("{} - {}", modified_text, size_text))
                                 .into(),
                         ])
-                        .into(),
+                            .into(),
                     ])
-                    .align_items(Alignment::Center)
-                    .spacing(space_xxs)
+                        .align_items(Alignment::Center)
+                        .spacing(space_xxs)
                 } else {
                     widget::row::with_children(vec![
                         widget::icon::icon(item.icon_handle_list.clone())
@@ -2733,12 +2773,9 @@ impl Tab {
                         widget::text(size_text.clone())
                             .width(Length::Fixed(size_width))
                             .into(),
-                        widget::icon::from_name("user-bookmarks-symbolic")
-                            .size(icon_size / 2)
-                            .into(),
                     ])
-                    .align_items(Alignment::Center)
-                    .spacing(space_xxs)
+                        .align_items(Alignment::Center)
+                        .spacing(space_xxs)
                 };
 
                 let button = |row| {
@@ -2758,10 +2795,10 @@ impl Tab {
                             })
                             .style(button_style(item.selected, true, false)),
                     )
-                    .on_press(move |_| Message::Click(Some(i)))
-                    .on_double_click(move |_| Message::DoubleClick(Some(i)))
-                    .on_release(move |_| Message::ClickRelease(Some(i)))
-                    .on_middle_press(move |_| Message::MiddleClick(i));
+                        .on_press(move |_| Message::Click(Some(i)))
+                        .on_double_click(move |_| Message::DoubleClick(Some(i)))
+                        .on_release(move |_| Message::ClickRelease(Some(i)))
+                        .on_middle_press(move |_| Message::MiddleClick(i));
 
                     if self.context_menu.is_some() {
                         mouse_area
@@ -2796,32 +2833,32 @@ impl Tab {
                                 Message::Drop(None)
                             }
                         })
-                        .on_enter(move |_, _, _| Message::DndEnter(tab_location_enter.clone()))
-                        .on_leave(move || Message::DndLeave(tab_location_leave.clone())),
+                            .on_enter(move |_, _, _| Message::DndEnter(tab_location_enter.clone()))
+                            .on_leave(move || Message::DndLeave(tab_location_leave.clone())),
                     )
-                    // todo refactor into the dnd destination wrapper
-                    .style(if is_dnd_hovered {
-                        theme::Container::custom(|t| {
-                            let mut a = cosmic::iced_style::container::StyleSheet::appearance(
-                                t,
-                                &theme::Container::default(),
-                            );
-                            let t = t.cosmic();
-                            // todo use theme drop target color
-                            let mut bg = t.accent_color();
-                            bg.alpha = 0.2;
-                            a.background = Some(Color::from(bg).into());
-                            a.border = Border {
-                                color: t.accent_color().into(),
-                                width: 1.0,
-                                radius: t.radius_s().into(),
-                            };
-                            a
+                        // todo refactor into the dnd destination wrapper
+                        .style(if is_dnd_hovered {
+                            theme::Container::custom(|t| {
+                                let mut a = cosmic::iced_style::container::StyleSheet::appearance(
+                                    t,
+                                    &theme::Container::default(),
+                                );
+                                let t = t.cosmic();
+                                // todo use theme drop target color
+                                let mut bg = t.accent_color();
+                                bg.alpha = 0.2;
+                                a.background = Some(Color::from(bg).into());
+                                a.border = Border {
+                                    color: t.accent_color().into(),
+                                    width: 1.0,
+                                    radius: t.radius_s().into(),
+                                };
+                                a
+                            })
+                        } else {
+                            theme::Container::default()
                         })
-                    } else {
-                        theme::Container::default()
-                    })
-                    .into()
+                        .into()
                 } else {
                     button_row.into()
                 };
@@ -2840,11 +2877,11 @@ impl Tab {
                                 //TODO: translate?
                                 widget::text(format!("{} - {}", modified_text, size_text)).into(),
                             ])
-                            .into(),
+                                .into(),
                         ])
-                        .align_items(Alignment::Center)
-                        .spacing(space_xxs)
-                        .into()
+                            .align_items(Alignment::Center)
+                            .spacing(space_xxs)
+                            .into()
                     } else {
                         widget::row::with_children(vec![
                             widget::icon::icon(item.icon_handle_list.clone())
@@ -2859,9 +2896,9 @@ impl Tab {
                                 .width(Length::Fixed(size_width))
                                 .into(),
                         ])
-                        .align_items(Alignment::Center)
-                        .spacing(space_xxs)
-                        .into()
+                            .align_items(Alignment::Center)
+                            .spacing(space_xxs)
+                            .into()
                     };
                     if item.selected {
                         drag_items.push(
@@ -2903,13 +2940,13 @@ impl Tab {
             mouse_area::MouseArea::new(
                 widget::column::with_children(children).padding([0, space_s]),
             )
-            .with_id(Id::new("list-view"))
-            .on_press(|_| Message::Click(None))
-            .on_drag(Message::Drag)
-            .on_drag_end(|_| Message::DragEnd(None))
-            .show_drag_rect(true)
-            .on_release(|_| Message::ClickRelease(None))
-            .into(),
+                .with_id(Id::new("list-view"))
+                .on_press(|_| Message::Click(None))
+                .on_drag(Message::Drag)
+                .on_drag_end(|_| Message::DragEnd(None))
+                .show_drag_rect(true)
+                .on_release(|_| Message::ClickRelease(None))
+                .into(),
             true,
         )
     }
@@ -3009,8 +3046,8 @@ impl Tab {
                                 .on_press(Message::EmptyTrash)
                                 .into(),
                         ]))
-                        .padding([space_xxs, space_xs])
-                        .layer(cosmic_theme::Layer::Primary),
+                            .padding([space_xxs, space_xs])
+                            .layer(cosmic_theme::Layer::Primary),
                     );
                 }
             }
@@ -3052,8 +3089,8 @@ impl Tab {
                 Message::Drop(None)
             }
         })
-        .on_enter(move |_, _, _| Message::DndEnter(tab_location_2.clone()))
-        .on_leave(move || Message::DndLeave(tab_location_3.clone()));
+            .on_enter(move |_, _, _| Message::DndEnter(tab_location_2.clone()))
+            .on_leave(move || Message::DndLeave(tab_location_3.clone()));
 
         dnd_dest.into()
     }
@@ -3135,8 +3172,8 @@ impl Tab {
                                 log::info!("thumbnailed {:?} in {:?}", path, start.elapsed());
                                 (path, thumbnail)
                             })
-                            .await
-                            .unwrap();
+                                .await
+                                .unwrap();
 
                             match output
                                 .send(Message::Thumbnail(path.clone(), thumbnail))

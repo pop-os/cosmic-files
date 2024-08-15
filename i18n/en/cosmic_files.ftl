@@ -5,6 +5,7 @@ filesystem = Filesystem
 home = Home
 notification-in-progress = File operations are in progress.
 trash = Trash
+bookmarks = Bookmarks
 undo = Undo
 
 # List view
@@ -134,6 +135,8 @@ new-file = New file...
 new-folder = New folder...
 open-in-terminal = Open in terminal
 move-to-trash = Move to trash
+add_bookmark = Add bookmark
+remove_bookmark = Remove bookmark
 restore-from-trash = Restore from trash
 remove-from-sidebar = Remove from sidebar
 sort-by-name = Sort by name

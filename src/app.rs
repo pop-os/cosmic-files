@@ -107,6 +107,7 @@ pub enum Action {
     ZoomDefault,
     ZoomIn,
     ZoomOut,
+    AddBookmark,
 }
 
 impl Action {
@@ -164,6 +165,7 @@ impl Action {
             Action::ZoomDefault => Message::TabMessage(entity_opt, tab::Message::ZoomDefault),
             Action::ZoomIn => Message::TabMessage(entity_opt, tab::Message::ZoomIn),
             Action::ZoomOut => Message::TabMessage(entity_opt, tab::Message::ZoomOut),
+            Action::AddBookmark => Message::AddBookmark(entity_opt),
         }
     }
 }
@@ -267,6 +269,7 @@ pub enum Message {
     DndExitTab,
     DndDropTab(Entity, Option<ClipboardPaste>, DndAction),
     DndDropNav(Entity, Option<ClipboardPaste>, DndAction),
+    AddBookmark(Option<Entity>),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -484,6 +487,13 @@ impl App {
 
     fn update_nav_model(&mut self) {
         let mut nav_model = segmented_button::ModelBuilder::default();
+        
+        nav_model = nav_model.insert(|b| {
+            b.text("Bookmark")
+                .icon(widget::icon::from_name("user-bookmarks-symbolic"))
+                .data(Location::Bookmarks)
+        });
+
         for (favorite_i, favorite) in self.config.favorites.iter().enumerate() {
             if let Some(path) = favorite.path_opt() {
                 let name = if matches!(favorite, Favorite::Home) {
@@ -1116,6 +1126,7 @@ impl Application for App {
         
         self.nav_model.activate(entity);
         if let Some(location) = self.nav_model.data::<Location>(entity) {
+            log::info!("location on nav select: {:?}", location);
             let message = Message::TabMessage(None, tab::Message::Location(location.clone()));
             return self.update(message);
         }
@@ -2152,6 +2163,9 @@ impl Application for App {
                         Some(Location::Trash) => {
                             return self.open_tab(Location::Trash);
                         }
+                        Some(Location::Bookmarks) => {
+                            return self.open_tab(Location::Bookmarks);
+                        }
                         _ => {}
                     }
                 }
@@ -2195,6 +2209,14 @@ impl Application for App {
                     self.dialog_pages.push_front(DialogPage::EmptyTrash);
                 }
             },
+            Message::AddBookmark(entity) => {
+                let selected_paths = self.selected_paths(entity);
+                let mut bookmarks = self.config.bookmarks.clone();
+                for path in selected_paths {
+                    bookmarks.push(path);
+                }
+                config_set!(bookmarks, bookmarks);
+            }
         }
 
         Command::none()
