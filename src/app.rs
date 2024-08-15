@@ -381,7 +381,7 @@ pub struct App {
 
 impl App {
     fn open_tab(&mut self, location: Location) -> Command<Message> {
-        let tab = Tab::new(location.clone(), self.config.tab.clone());
+        let tab = Tab::new(location.clone(), self.config.tab);
         let entity = self
             .tab_model
             .insert()
@@ -390,6 +390,9 @@ impl App {
             .closable()
             .activate()
             .id();
+
+        self.activate_nav_model_location(&location);
+
         Command::batch([
             self.update_title(),
             self.update_watcher(),
@@ -485,6 +488,22 @@ impl App {
         cosmic::app::command::set_theme(self.config.app_theme.theme())
     }
 
+    fn activate_nav_model_location(&mut self, location: &Location) {
+        let nav_bar_id = self.nav_model.iter().find(|&id| {
+            self.nav_model
+                .data::<Location>(id)
+                .map(|l| l == location)
+                .unwrap_or_default()
+        });
+
+        if let Some(id) = nav_bar_id {
+            self.nav_model.activate(id);
+        } else {
+            let active = self.nav_model.active();
+            segmented_button::Selectable::deactivate(&mut self.nav_model, active);
+        }
+    }
+
     fn update_nav_model(&mut self) {
         let mut nav_model = segmented_button::ModelBuilder::default();
         
@@ -553,6 +572,11 @@ impl App {
         }
 
         self.nav_model = nav_model.build();
+
+        let tab_entity = self.tab_model.active();
+        if let Some(tab) = self.tab_model.data::<Tab>(tab_entity) {
+            self.activate_nav_model_location(&tab.location.clone());
+        }
     }
 
     fn update_notification(&mut self) -> Command<Message> {
@@ -1123,7 +1147,7 @@ impl Application for App {
     fn on_nav_select(&mut self, entity: Entity) -> Command<Self::Message> {
         self.search_active = false;
         self.search_input.clear();
-        
+
         self.nav_model.activate(entity);
         if let Some(location) = self.nav_model.data::<Location>(entity) {
             log::info!("location on nav select: {:?}", location);
@@ -1766,6 +1790,11 @@ impl Application for App {
             }
             Message::TabActivate(entity) => {
                 self.tab_model.activate(entity);
+
+                if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+                    self.activate_nav_model_location(&tab.location.clone());
+                }
+
                 return self.update_title();
             }
             Message::TabNext => {
@@ -1806,10 +1835,18 @@ impl Application for App {
 
                 // Activate closest item
                 if let Some(position) = self.tab_model.position(entity) {
-                    if position > 0 {
-                        self.tab_model.activate_position(position - 1);
+                    let new_position = if position > 0 {
+                        position - 1
                     } else {
-                        self.tab_model.activate_position(position + 1);
+                        position + 1
+                    };
+
+                    if self.tab_model.activate_position(new_position) {
+                        if let Some(new_entity) = self.tab_model.entity_at(new_position) {
+                            if let Some(tab) = self.tab_model.data::<Tab>(new_entity) {
+                                self.activate_nav_model_location(&tab.location.clone());
+                            }
+                        }
                     }
                 }
 
@@ -1863,17 +1900,7 @@ impl Application for App {
                             commands.push(self.update(action.message(Some(entity))));
                         }
                         tab::Command::ChangeLocation(tab_title, tab_path) => {
-                            // Activate nav bar item with matching location.
-                            let nav_bar_id = self.nav_model.iter().find(|&id| {
-                                self.nav_model
-                                    .data::<Location>(id)
-                                    .map(|location| &tab_path == location)
-                                    .unwrap_or_default()
-                            });
-
-                            if let Some(id) = nav_bar_id {
-                                self.nav_model.activate(id);
-                            }
+                            self.activate_nav_model_location(&tab_path);
 
                             self.tab_model.text_set(entity, tab_title);
                             commands.push(Command::batch([

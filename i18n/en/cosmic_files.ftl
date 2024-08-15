@@ -1,6 +1,7 @@
 cosmic-files = COSMIC Files
 empty-folder = Empty folder
 empty-folder-hidden = Empty folder (has hidden items)
+no-results = No results found
 filesystem = Filesystem
 home = Home
 notification-in-progress = File operations are in progress.
