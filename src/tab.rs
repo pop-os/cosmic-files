@@ -1758,7 +1758,8 @@ impl Tab {
                 let heading_sort = if self.config.sort_name == heading_option {
                     !self.config.sort_direction
                 } else {
-                    true
+                    // Default modified to descending, and others to ascending.
+                    heading_option != HeadingOptions::Modified
                 };
                 self.config.sort_direction = heading_sort;
                 self.config.sort_name = heading_option;
