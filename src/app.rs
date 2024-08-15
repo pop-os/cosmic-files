@@ -1150,7 +1150,6 @@ impl Application for App {
 
         self.nav_model.activate(entity);
         if let Some(location) = self.nav_model.data::<Location>(entity) {
-            log::info!("location on nav select: {:?}", location);
             let message = Message::TabMessage(None, tab::Message::Location(location.clone()));
             return self.update(message);
         }
@@ -2239,9 +2238,16 @@ impl Application for App {
             Message::AddBookmark(entity) => {
                 let selected_paths = self.selected_paths(entity);
                 let mut bookmarks = self.config.bookmarks.clone();
+
                 for path in selected_paths {
-                    bookmarks.push(path);
+                    if !bookmarks.iter().any(|p| p == &path) {
+                        bookmarks.push(path);
+                    }
+                    else {
+                        bookmarks.retain(|p| p != &path);
+                    }
                 }
+
                 config_set!(bookmarks, bookmarks);
             }
         }

@@ -4,6 +4,7 @@ empty-folder-hidden = Cartella vuota (contiene elementi nascosti)
 filesystem = Filesystem
 home = Home
 trash = Cestino
+bookmarks = Segnalibri
 
 # New File/Folder Dialog
 create-new-file = Crea file
@@ -73,6 +74,7 @@ new-file = Nuovo file
 new-folder = Nuova cartella
 open-with = Apri con
 move-to-trash = Sposta nel cestino
+add_remove_bookmark = Aggiungi/rimuovi segnalibro
 restore-from-trash = Ripristina dal cestino
 
 # Menu
