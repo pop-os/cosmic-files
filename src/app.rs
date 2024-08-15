@@ -443,8 +443,14 @@ impl App {
         if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
             match &tab.location {
                 Location::Path(path) | Location::Search(path, ..) => {
+                    let location = if !self.search_input.is_empty() { 
+                        Location::Search(path.clone(), self.search_input.clone()) 
+                    } 
+                    else {
+                        Location::Path(path.clone())
+                    };
                     tab.change_location(
-                        &Location::Search(path.clone(), self.search_input.clone()),
+                        &location,
                         None,
                     );
                     title_location_opt = Some((tab.title(), tab.location.clone()));
@@ -1771,6 +1777,11 @@ impl Application for App {
             }
             Message::SearchSubmit => {
                 if !self.search_input.is_empty() {
+                    return self.search();
+                } else {
+                    // rescan the tab to get the contents back
+                    // and exit search
+                    self.search_active = false;
                     return self.search();
                 }
             }
