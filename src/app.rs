@@ -71,6 +71,7 @@ pub enum Action {
     Cut,
     EditHistory,
     EditLocation,
+    ExtractHere,
     HistoryNext,
     HistoryPrevious,
     ItemDown,
@@ -119,6 +120,7 @@ impl Action {
             Action::Cut => Message::Cut(entity_opt),
             Action::EditHistory => Message::ToggleContextPage(ContextPage::EditHistory),
             Action::EditLocation => Message::EditLocation(entity_opt),
+            Action::ExtractHere => Message::ExtractHere(entity_opt),
             Action::HistoryNext => Message::TabMessage(entity_opt, tab::Message::GoNext),
             Action::HistoryPrevious => Message::TabMessage(entity_opt, tab::Message::GoPrevious),
             Action::ItemDown => Message::TabMessage(entity_opt, tab::Message::ItemDown),
@@ -216,6 +218,7 @@ pub enum Message {
     DialogPush(DialogPage),
     DialogUpdate(DialogPage),
     EditLocation(Option<Entity>),
+    ExtractHere(Option<Entity>),
     Key(Modifiers, Key),
     LaunchUrl(String),
     MaybeExit,
@@ -1331,6 +1334,18 @@ impl Application for App {
                         Some(entity),
                         tab::Message::EditLocation(Some(location)),
                     ));
+                }
+            }
+            Message::ExtractHere(entity_opt) => {
+                let paths = self.selected_paths(entity_opt);
+                if let Some(current_path) = paths.get(0) {
+                    if let Some(destination) = current_path.parent().zip(current_path.file_stem()) {
+                        let destination_path = destination.0.to_path_buf();
+                        self.operation(Operation::Extract {
+                            paths,
+                            to: destination_path,
+                        });
+                    }
                 }
             }
             Message::Key(modifiers, key) => {
