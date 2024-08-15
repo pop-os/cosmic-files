@@ -2294,6 +2294,8 @@ impl Tab {
                     .into(),
                 widget::text(if has_hidden {
                     fl!("empty-folder-hidden")
+                } else if matches!(self.location, Location::Search(_, _)) {
+                    fl!("no-results")
                 } else {
                     fl!("empty-folder")
                 })

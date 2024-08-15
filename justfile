@@ -62,7 +62,7 @@ dev *args:
 # Run with debug logs
 run *args:
     cargo build --release
-    env RUST_LOG=cosmic_files=info RUST_BACKTRACE=full target/release/cosmic-files {{args}}
+    env RUST_LOG=cosmic_files=info RUST_BACKTRACE=full {{bin-src}} {{args}}
 
 # Run tests
 test *args:
