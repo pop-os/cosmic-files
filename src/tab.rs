@@ -924,6 +924,7 @@ pub struct Tab {
     pub dialog: Option<DialogKind>,
     pub scroll_opt: Option<AbsoluteOffset>,
     pub size_opt: Cell<Option<Size>>,
+    pub item_view_size_opt: Cell<Option<Size>>,
     pub edit_location: Option<Location>,
     pub edit_location_id: widget::Id,
     pub history_i: usize,
@@ -950,6 +951,7 @@ impl Tab {
             dialog: None,
             scroll_opt: None,
             size_opt: Cell::new(None),
+            item_view_size_opt: Cell::new(None),
             edit_location: None,
             edit_location_id: widget::Id::unique(),
             history_i: 0,
@@ -1129,7 +1131,10 @@ impl Tab {
                 Some(offset) => Point::new(0.0, offset.y),
                 None => Point::new(0.0, 0.0),
             };
-            let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
+            let size = self
+                .item_view_size_opt
+                .get()
+                .unwrap_or_else(|| Size::new(0.0, 0.0));
             Rectangle::new(point, size)
         };
 
@@ -2517,9 +2522,16 @@ impl Tab {
                         }
                     }
                 }
-                let spacer_height = height
-                    .checked_sub(max_bottom + 7 * (space_xxs as usize))
-                    .unwrap_or(0);
+
+                let top_deduct = 7 * (space_xxs as usize);
+
+                self.item_view_size_opt
+                    .set(self.size_opt.get().map(|s| Size {
+                        width: s.width,
+                        height: s.height - top_deduct as f32,
+                    }));
+
+                let spacer_height = height.checked_sub(max_bottom + top_deduct).unwrap_or(0);
                 if spacer_height > 0 {
                     children.push(
                         widget::container(vertical_space(Length::Fixed(spacer_height as f32)))
@@ -2871,12 +2883,18 @@ impl Tab {
         }
         //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
         {
-            let spacer_height =
-                size.height as i32 - y as i32 - (if condensed { 6 } else { 9 }) * space_xxs as i32;
-            if spacer_height > 0 {
-                children.push(
-                    widget::container(vertical_space(Length::Fixed(spacer_height as f32))).into(),
-                );
+            let top_deduct = (if condensed { 6 } else { 9 }) * space_xxs;
+
+            self.item_view_size_opt
+                .set(self.size_opt.get().map(|s| Size {
+                    width: s.width,
+                    height: s.height - top_deduct as f32,
+                }));
+
+            let spacer_height = size.height - y as f32 - top_deduct as f32;
+            if spacer_height > 0. {
+                children
+                    .push(widget::container(vertical_space(Length::Fixed(spacer_height))).into());
             }
         }
         let drag_col = (!drag_items.is_empty()).then(|| {
