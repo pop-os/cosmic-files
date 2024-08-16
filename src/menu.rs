@@ -92,7 +92,7 @@ pub fn context_menu<'a>(
 
     let mut children: Vec<Element<_>> = Vec::new();
     match tab.location {
-        Location::Path(_) | Location::Search(_, _) => {
+        Location::Path(_) | Location::Search(_, _) | Location::Recents => {
             if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
                     children.push(menu_item(fl!("open"), Action::Open).into());

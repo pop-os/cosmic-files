@@ -107,6 +107,7 @@ pub enum Action {
     ZoomDefault,
     ZoomIn,
     ZoomOut,
+    Recents
 }
 
 impl Action {
@@ -164,6 +165,7 @@ impl Action {
             Action::ZoomDefault => Message::TabMessage(entity_opt, tab::Message::ZoomDefault),
             Action::ZoomIn => Message::TabMessage(entity_opt, tab::Message::ZoomIn),
             Action::ZoomOut => Message::TabMessage(entity_opt, tab::Message::ZoomOut),
+            Action::Recents => Message::Recents
         }
     }
 }
@@ -267,6 +269,7 @@ pub enum Message {
     DndExitTab,
     DndDropTab(Entity, Option<ClipboardPaste>, DndAction),
     DndDropNav(Entity, Option<ClipboardPaste>, DndAction),
+    Recents
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -509,6 +512,13 @@ impl App {
 
     fn update_nav_model(&mut self) {
         let mut nav_model = segmented_button::ModelBuilder::default();
+
+        nav_model = nav_model.insert(|b| {
+            b.text(fl!("recents"))
+                .icon(widget::icon::from_name("user-bookmarks-symbolic")) //TODO change icon with a watch icon like gnome recents
+                .data(Location::Recents)
+        });
+
         for (favorite_i, favorite) in self.config.favorites.iter().enumerate() {
             if let Some(path) = favorite.path_opt() {
                 let name = if matches!(favorite, Favorite::Home) {
@@ -2233,6 +2243,9 @@ impl Application for App {
                     self.dialog_pages.push_front(DialogPage::EmptyTrash);
                 }
             },
+            Message::Recents => {
+                return self.open_tab(Location::Recents);
+            }
         }
 
         Command::none()

@@ -46,6 +46,7 @@ i18n-embed = { version = "0.14", features = [
 i18n-embed-fl = "0.7"
 rust-embed = "8"
 slotmap = "1.0.7"
+recently-used-xbel = "1.0.0"
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"

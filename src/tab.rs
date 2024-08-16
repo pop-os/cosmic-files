@@ -33,21 +33,6 @@ use cosmic::{
     Element,
 };
 
-use mime_guess::{mime, Mime};
-use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
-use std::{
-    cell::{Cell, RefCell},
-    cmp::Ordering,
-    collections::HashMap,
-    fmt,
-    fs::{self, Metadata},
-    num::NonZeroU16,
-    path::PathBuf,
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
-
 use crate::{
     app::{self, Action},
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
@@ -59,6 +44,24 @@ use crate::{
     mime_app::{mime_apps, MimeApp},
     mime_icon::{mime_for_path, mime_icon},
     mouse_area,
+};
+use chrono::{DateTime, ParseError, Utc};
+use mime_guess::{mime, Mime};
+use once_cell::sync::Lazy;
+use recently_used_xbel::{Error, RecentlyUsed};
+use serde::{Deserialize, Serialize};
+use std::cmp::Reverse;
+use std::iter::from_fn;
+use std::{
+    cell::{Cell, RefCell},
+    cmp::Ordering,
+    collections::HashMap,
+    fmt,
+    fs::{self, Metadata},
+    num::NonZeroU16,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 
 pub const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
@@ -543,11 +546,85 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
     items
 }
 
+fn uri_to_path(uri: String) -> Option<PathBuf> {
+    //TODO support for external drive or cloud?
+    if uri.starts_with("file://") {
+        let path_str = &uri[7..];
+        Some(PathBuf::from(path_str))
+    } else {
+        None
+    }
+}
+
+pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
+    let mut recent_files = recently_used_xbel::parse_file();
+
+    let mut recents = Vec::new();
+
+    match recent_files {
+        Ok(recent_files) => {
+            for bookmark in recent_files.bookmarks {
+                let uri = bookmark.href;
+                let path = match uri_to_path(uri) {
+                    None => continue,
+                    Some(path) => path,
+                };
+                let last_edit = match bookmark.modified.parse::<DateTime<Utc>>() {
+                    Ok(last_edit) => last_edit,
+                    Err(_) => continue,
+                };
+                let last_visit = match bookmark.visited.parse::<DateTime<Utc>>() {
+                    Ok(last_visit) => last_visit,
+                    Err(_) => continue,
+                };
+                let path_buf = PathBuf::from(path);
+                let path_exist = path_buf.exists();
+
+                if path_exist {
+                    let file_name = path_buf.file_name();
+
+                    if let Some(name) = file_name {
+                        let name = name.to_string_lossy().to_string();
+
+                        let metadata = match path_buf.metadata() {
+                            Ok(ok) => ok,
+                            Err(err) => {
+                                log::warn!(
+                                    "failed to read metadata for entry at {:?}: {}",
+                                    path_buf.clone(),
+                                    err
+                                );
+                                continue;
+                            }
+                        };
+                        let item = item_from_entry(path_buf, name, metadata, sizes);
+                        recents.push((item, if last_edit.le(&last_visit) { last_edit } else { last_visit }))
+                    }
+                } else {
+                    log::warn!("recent file path not exist: {:?}", path_buf);
+                }
+            }
+        }
+        Err(err) => {
+            log::warn!("Error reading recent files: {:?}", err);
+        }
+    }
+
+    recents.sort_by(|a, b| b.1.cmp(&a.1));
+
+    let recent_items: Vec<Item> = recents.into_iter().take(50).map(|(item, _)| item).collect();
+
+    log::info!("items: {}", recent_items.len());
+
+    recent_items
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Location {
     Path(PathBuf),
     Search(PathBuf, String),
     Trash,
+    Recents,
 }
 
 impl std::fmt::Display for Location {
@@ -556,6 +633,7 @@ impl std::fmt::Display for Location {
             Self::Path(path) => write!(f, "{}", path.display()),
             Self::Search(path, term) => write!(f, "search {} for {}", path.display(), term),
             Self::Trash => write!(f, "trash"),
+            Self::Recents => write!(f, "recents"),
         }
     }
 }
@@ -566,6 +644,7 @@ impl Location {
             Self::Path(path) => scan_path(path, sizes),
             Self::Search(path, term) => scan_search(path, term, sizes),
             Self::Trash => scan_trash(sizes),
+            Self::Recents => scan_recents(sizes),
         }
     }
 }
@@ -978,6 +1057,9 @@ impl Tab {
             }
             Location::Trash => {
                 fl!("trash")
+            }
+            Location::Recents => {
+                fl!("recents")
             }
         }
     }
@@ -1648,6 +1730,7 @@ impl Tab {
                     Location::Trash => {
                         cd = Some(location);
                     }
+                    Location::Recents => cd = Some(location),
                 }
             }
             Message::LocationUp => {
@@ -1789,6 +1872,9 @@ impl Tab {
                     Location::Trash => {
                         log::warn!("Copy to trash is not supported.");
                     }
+                    Location::Recents => {
+                        log::warn!("Copy to recents is not supported.");
+                    }
                 };
             }
             Message::Drop(None) => {
@@ -1861,6 +1947,7 @@ impl Tab {
                     Location::Path(path) => path.is_dir(),
                     Location::Search(path, _term) => path.is_dir(),
                     Location::Trash => true,
+                    Location::Recents => true,
                 } {
                     self.change_location(&location, history_i_opt);
                     commands.push(Command::ChangeLocation(self.title(), location));
@@ -2250,6 +2337,21 @@ impl Tab {
                     widget::button(row)
                         .padding(space_xxxs)
                         .on_press(Message::Location(Location::Trash))
+                        .style(theme::Button::Text)
+                        .into(),
+                );
+            }
+            Location::Recents => {
+                let mut row = widget::row::with_capacity(2)
+                    .align_items(Alignment::Center)
+                    .spacing(space_xxxs);
+                row = row.push(widget::icon::from_name("user-bookmarks-symbolic").size(16)); //TODO change with recent icon
+                row = row.push(widget::text::heading(fl!("recents")));
+
+                children.push(
+                    widget::button(row)
+                        .padding(space_xxxs)
+                        .on_press(Message::Location(Location::Recents))
                         .style(theme::Button::Text)
                         .into(),
                 );
