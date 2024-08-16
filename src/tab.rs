@@ -2100,9 +2100,9 @@ impl Tab {
                 crate::mouse_area::MouseArea::new(
                     widget::button(widget::icon::from_name("edit-symbolic").size(16))
                         .padding(space_xxs)
-                        .style(theme::Button::Icon),
+                        .style(theme::Button::Icon)
+                        .on_press(Message::EditLocation(Some(self.location.clone()))),
                 )
-                .on_press(move |_| Message::EditLocation(Some(self.location.clone())))
                 .on_middle_press(move |_| Message::OpenInNewTab(path.clone())),
             );
             w += 16.0 + 2.0 * space_xxs as f32;
@@ -2202,24 +2202,22 @@ impl Tab {
                     let mut mouse_area = crate::mouse_area::MouseArea::new(
                         widget::button(row)
                             .padding(space_xxxs)
-                            .style(theme::Button::Link),
-                    )
-                    .on_press(move |_| {
-                        Message::Location(match &self.location {
-                            Location::Path(_) => Location::Path(ancestor.to_path_buf()),
-                            Location::Search(_, term) => {
-                                Location::Search(ancestor.to_path_buf(), term.clone())
-                            }
-                            other => other.clone(),
-                        })
-                    });
+                            .style(theme::Button::Link)
+                            .on_press(Message::Location(match &self.location {
+                                Location::Path(_) => Location::Path(ancestor.to_path_buf()),
+                                Location::Search(_, term) => {
+                                    Location::Search(ancestor.to_path_buf(), term.clone())
+                                }
+                                other => other.clone(),
+                            })),
+                    );
 
                     if self.location_context_menu_index.is_some() {
                         mouse_area = mouse_area.on_right_press(move |_point_opt| {
                             Message::LocationContextMenuIndex(None)
                         })
                     } else {
-                        mouse_area = mouse_area.on_right_press_no_capture(move |point_opt| {
+                        mouse_area = mouse_area.on_right_press_no_capture(move |_point_opt| {
                             Message::LocationContextMenuIndex(Some(index))
                         })
                     }
