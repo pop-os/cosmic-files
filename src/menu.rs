@@ -109,14 +109,15 @@ pub fn context_menu<'a>(
         }
     }
 
-    let selected = tab.items_opt().into_iter().fold(SelectionCounter::new(),
-        |mut selections, items| {
-            let selected_iter = items.into_iter().filter(|i| i.selected);
-            selections.total_count += selected_iter.clone().count();
-            selections.dirs_count += selected_iter.filter(|i| i.metadata.is_dir()).count();
-            selections
-        }
-    );
+    let selected = tab.items_opt().map_or(SelectionCounter::new(), |items| {
+        items.into_iter()
+            .filter(|i| i.selected)
+            .fold(SelectionCounter::new(), |mut counter, selection| {
+                counter.total_count += 1;
+                selection.metadata.is_dir().then(|| counter.dirs_count += 1);
+                counter
+            })
+    });
 
     let mut children: Vec<Element<_>> = Vec::with_capacity(16);
     match tab.location {
