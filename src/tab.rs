@@ -912,6 +912,46 @@ impl HeadingOptions {
     }
 }
 
+/// Helper type to deal with conditions based on items selection count
+pub struct SelectionCounter {
+    total_count: usize,
+    dirs_count: usize,
+}
+
+impl SelectionCounter {
+    fn new() -> Self {
+        Self {
+            total_count: 0,
+            dirs_count: 0,
+        }
+    }
+
+    /// Whether any items are selected
+    pub fn any(&self) -> bool {
+        self.total_count > 0
+    }
+
+    /// Whether exactly one item is selected
+    pub fn exactly_one(&self) -> bool {
+        self.total_count == 1
+    }
+
+    /// Whether exactly one directory is selected
+    pub fn exactly_one_dir(&self) -> bool {
+        self.dirs_count == 1
+    }
+
+    /// Whether selection has no directories
+    pub fn no_dirs(&self) -> bool {
+        self.dirs_count == 0
+    }
+
+    /// Whether selection has only directories
+    pub fn only_directories(&self) -> bool {
+        self.total_count == self.dirs_count
+    }
+}
+
 // TODO when creating items, pass <Arc<SelectedItems>> to each item
 // as a drag data, so that when dnd is initiated, they are all included
 #[derive(Clone)]
@@ -1214,6 +1254,18 @@ impl Tab {
             });
         }
         last
+    }
+
+    pub fn selection_counts(&self) -> SelectionCounter {
+        self.items_opt.as_ref().map_or(SelectionCounter::new(), |items| {
+            items.into_iter()
+                .filter(|i| i.selected)
+                .fold(SelectionCounter::new(), |mut counter, selection| {
+                    counter.total_count += 1;
+                    selection.metadata.is_dir().then(|| counter.dirs_count += 1);
+                    counter
+                })
+            })
     }
 
     pub fn change_location(&mut self, location: &Location, history_i_opt: Option<usize>) {

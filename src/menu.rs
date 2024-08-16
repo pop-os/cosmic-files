@@ -75,49 +75,7 @@ pub fn context_menu<'a>(
         .into()
     };
 
-    struct SelectionCounter {
-        total_count: usize,
-        dirs_count: usize,
-    }
-
-    impl SelectionCounter {
-        fn new() -> Self {
-            Self {
-                total_count: 0,
-                dirs_count: 0,
-            }
-        }
-
-        fn any(&self) -> bool {
-            self.total_count > 0
-        }
-
-        fn exactly_one(&self) -> bool {
-            self.total_count == 1
-        }
-
-        fn exactly_one_dir(&self) -> bool {
-            self.dirs_count == 1
-        }
-
-        fn no_dirs(&self) -> bool {
-            self.dirs_count == 0
-        }
-
-        fn only_directories(&self) -> bool {
-            self.total_count == self.dirs_count
-        }
-    }
-
-    let selected = tab.items_opt().map_or(SelectionCounter::new(), |items| {
-        items.into_iter()
-            .filter(|i| i.selected)
-            .fold(SelectionCounter::new(), |mut counter, selection| {
-                counter.total_count += 1;
-                selection.metadata.is_dir().then(|| counter.dirs_count += 1);
-                counter
-            })
-    });
+    let selected = tab.selection_counts();
 
     let mut children: Vec<Element<_>> = Vec::with_capacity(16);
     match tab.location {
