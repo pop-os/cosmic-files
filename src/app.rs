@@ -515,7 +515,7 @@ impl App {
 
         nav_model = nav_model.insert(|b| {
             b.text(fl!("recents"))
-                .icon(widget::icon::from_name("user-bookmarks-symbolic")) //TODO change icon with a watch icon like gnome recents
+                .icon(widget::icon::from_name("accessories-clock-symbolic"))
                 .data(Location::Recents)
         });
 
