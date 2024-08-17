@@ -754,7 +754,7 @@ impl Application for App {
                         tab::Command::Action(action) => {
                             log::warn!("Action {:?} not supported in dialog", action);
                         }
-                        tab::Command::ChangeLocation(_tab_title, _tab_path) => {
+                        tab::Command::ChangeLocation(_tab_title, _tab_path, _selection_path) => {
                             commands
                                 .push(Command::batch([self.update_watcher(), self.rescan_tab()]));
                         }

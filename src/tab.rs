@@ -573,7 +573,7 @@ impl Location {
 #[derive(Clone, Debug)]
 pub enum Command {
     Action(Action),
-    ChangeLocation(String, Location),
+    ChangeLocation(String, Location, Option<PathBuf>),
     EmptyTrash,
     FocusButton(widget::Id),
     FocusTextInput(widget::Id),
@@ -1022,11 +1022,16 @@ impl Tab {
         *self.cached_selected.borrow_mut() = None;
         if let Some(ref mut items) = self.items_opt {
             for item in items.iter_mut() {
-                if item.name == name {
-                    item.selected = true;
-                } else {
-                    item.selected = false;
-                }
+                item.selected = item.name == name;
+            }
+        }
+    }
+
+    pub fn select_path(&mut self, path: PathBuf) {
+        *self.cached_selected.borrow_mut() = None;
+        if let Some(ref mut items) = self.items_opt {
+            for item in items.iter_mut() {
+                item.selected = item.path_opt.as_ref() == Some(&path);
             }
         }
     }
@@ -1862,8 +1867,13 @@ impl Tab {
                     Location::Search(path, _term) => path.is_dir(),
                     Location::Trash => true,
                 } {
+                    let prev_path = if let Location::Path(path) = &self.location {
+                        Some(path.clone())
+                    } else {
+                        None
+                    };
                     self.change_location(&location, history_i_opt);
-                    commands.push(Command::ChangeLocation(self.title(), location));
+                    commands.push(Command::ChangeLocation(self.title(), location, prev_path));
                 } else {
                     log::warn!("tried to cd to {:?} which is not a directory", location);
                 }
