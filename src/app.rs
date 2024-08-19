@@ -377,18 +377,20 @@ pub struct App {
 }
 
 impl App {
-    fn open_tab(&mut self, location: Location) -> Command<Message> {
+    fn open_tab(&mut self, location: Location, activate: bool) -> Command<Message> {
         let tab = Tab::new(location.clone(), self.config.tab);
         let entity = self
             .tab_model
             .insert()
             .text(tab.title())
             .data(tab)
-            .closable()
-            .activate()
-            .id();
+            .closable();
 
-        self.activate_nav_model_location(&location);
+        let entity = if activate {
+            entity.activate().id()
+        } else {
+            entity.id()
+        };
 
         Command::batch([
             self.update_title(),
@@ -443,16 +445,12 @@ impl App {
         if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
             match &tab.location {
                 Location::Path(path) | Location::Search(path, ..) => {
-                    let location = if !self.search_input.is_empty() { 
-                        Location::Search(path.clone(), self.search_input.clone()) 
-                    } 
-                    else {
+                    let location = if !self.search_input.is_empty() {
+                        Location::Search(path.clone(), self.search_input.clone())
+                    } else {
                         Location::Path(path.clone())
                     };
-                    tab.change_location(
-                        &location,
-                        None,
-                    );
+                    tab.change_location(&location, None);
                     title_location_opt = Some((tab.title(), tab.location.clone()));
                 }
                 _ => {}
@@ -1072,14 +1070,14 @@ impl Application for App {
                     }
                 }
             };
-            commands.push(app.open_tab(location));
+            commands.push(app.open_tab(location, true));
         }
 
         if app.tab_model.iter().next().is_none() {
             if let Ok(current_dir) = env::current_dir() {
-                commands.push(app.open_tab(Location::Path(current_dir)));
+                commands.push(app.open_tab(Location::Path(current_dir), true));
             } else {
-                commands.push(app.open_tab(Location::Path(home_dir())));
+                commands.push(app.open_tab(Location::Path(home_dir()), true));
             }
         }
 
@@ -1565,7 +1563,7 @@ impl Application for App {
                 return Command::batch(self.selected_paths(entity_opt).into_iter().filter_map(
                     |path| {
                         if path.is_dir() {
-                            Some(self.open_tab(Location::Path(path)))
+                            Some(self.open_tab(Location::Path(path), false))
                         } else {
                             None
                         }
@@ -1927,7 +1925,7 @@ impl Application for App {
                             }
                         }
                         tab::Command::OpenInNewTab(path) => {
-                            commands.push(self.open_tab(Location::Path(path.clone())));
+                            commands.push(self.open_tab(Location::Path(path.clone()), false));
                         }
                         tab::Command::OpenInNewWindow(path) => match env::current_exe() {
                             Ok(exe) => match process::Command::new(&exe).arg(path).spawn() {
@@ -1979,7 +1977,7 @@ impl Application for App {
                     Some(tab) => tab.location.clone(),
                     None => Location::Path(home_dir()),
                 };
-                return self.open_tab(location);
+                return self.open_tab(location, true);
             }
             Message::TabRescan(entity, location, items) => {
                 match self.tab_model.data_mut::<Tab>(entity) {
@@ -2185,10 +2183,10 @@ impl Application for App {
                 NavMenuAction::OpenInNewTab(entity) => {
                     match self.nav_model.data::<Location>(entity) {
                         Some(Location::Path(ref path)) => {
-                            return self.open_tab(Location::Path(path.clone()));
+                            return self.open_tab(Location::Path(path.clone()), false);
                         }
                         Some(Location::Trash) => {
-                            return self.open_tab(Location::Trash);
+                            return self.open_tab(Location::Trash, false);
                         }
                         _ => {}
                     }
