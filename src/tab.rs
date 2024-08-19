@@ -333,7 +333,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                     }
                 };
 
-                let metadata = match entry.metadata() {
+                let metadata = match fs::metadata(&path) {
                     Ok(ok) => ok,
                     Err(err) => {
                         log::warn!("failed to read metadata for entry at {:?}: {}", path, err);
@@ -394,7 +394,7 @@ pub fn scan_search(tab_path: &PathBuf, term: &str, sizes: IconSizes) -> Vec<Item
                 if regex.is_match(file_name) {
                     let path = entry.path();
 
-                    let metadata = match entry.metadata() {
+                    let metadata = match fs::metadata(&path) {
                         Ok(ok) => ok,
                         Err(err) => {
                             log::warn!("failed to read metadata for entry at {:?}: {}", path, err);
