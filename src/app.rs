@@ -252,7 +252,7 @@ pub enum Message {
     TabConfig(TabConfig),
     TabMessage(Option<Entity>, tab::Message),
     TabNew,
-    TabRescan(Entity, Location, Vec<tab::Item>),
+    TabRescan(Entity, Location, Vec<tab::Item>, Option<PathBuf>),
     ToggleContextPage(ContextPage),
     Undo(usize),
     UndoTrash(usize, Arc<[PathBuf]>),
@@ -395,7 +395,7 @@ impl App {
         Command::batch([
             self.update_title(),
             self.update_watcher(),
-            self.rescan_tab(entity, location),
+            self.rescan_tab(entity, location, None),
         ])
     }
 
@@ -405,13 +405,20 @@ impl App {
         self.pending_operations.insert(id, (operation, 0.0));
     }
 
-    fn rescan_tab(&mut self, entity: Entity, location: Location) -> Command<Message> {
+    fn rescan_tab(
+        &mut self,
+        entity: Entity,
+        location: Location,
+        selection_path: Option<PathBuf>,
+    ) -> Command<Message> {
         let icon_sizes = self.config.tab.icon_sizes;
         Command::perform(
             async move {
                 let location2 = location.clone();
                 match tokio::task::spawn_blocking(move || location2.scan(icon_sizes)).await {
-                    Ok(items) => message::app(Message::TabRescan(entity, location, items)),
+                    Ok(items) => {
+                        message::app(Message::TabRescan(entity, location, items, selection_path))
+                    }
                     Err(err) => {
                         log::warn!("failed to rescan: {}", err);
                         message::none()
@@ -434,7 +441,7 @@ impl App {
 
         let mut commands = Vec::with_capacity(needs_reload.len());
         for (entity, location) in needs_reload {
-            commands.push(self.rescan_tab(entity, location));
+            commands.push(self.rescan_tab(entity, location, None));
         }
         Command::batch(commands)
     }
@@ -461,7 +468,7 @@ impl App {
             return Command::batch([
                 self.update_title(),
                 self.update_watcher(),
-                self.rescan_tab(entity, location),
+                self.rescan_tab(entity, location, None),
             ]);
         }
         Command::none()
@@ -1392,7 +1399,7 @@ impl Application for App {
                         };
                         if let Some(title) = title_opt {
                             self.tab_model.text_set(entity, title);
-                            commands.push(self.rescan_tab(entity, home_location.clone()));
+                            commands.push(self.rescan_tab(entity, home_location.clone(), None));
                         }
                     }
                     if !commands.is_empty() {
@@ -1490,7 +1497,7 @@ impl Application for App {
 
                 let mut commands = Vec::with_capacity(needs_reload.len());
                 for (entity, location) in needs_reload {
-                    commands.push(self.rescan_tab(entity, location));
+                    commands.push(self.rescan_tab(entity, location, None));
                 }
                 return Command::batch(commands);
             }
@@ -1897,14 +1904,14 @@ impl Application for App {
                         tab::Command::Action(action) => {
                             commands.push(self.update(action.message(Some(entity))));
                         }
-                        tab::Command::ChangeLocation(tab_title, tab_path) => {
+                        tab::Command::ChangeLocation(tab_title, tab_path, selection_path) => {
                             self.activate_nav_model_location(&tab_path);
 
                             self.tab_model.text_set(entity, tab_title);
                             commands.push(Command::batch([
                                 self.update_title(),
                                 self.update_watcher(),
-                                self.rescan_tab(entity, tab_path),
+                                self.rescan_tab(entity, tab_path, selection_path),
                             ]));
                         }
                         tab::Command::EmptyTrash => {
@@ -1979,11 +1986,14 @@ impl Application for App {
                 };
                 return self.open_tab(location, true);
             }
-            Message::TabRescan(entity, location, items) => {
+            Message::TabRescan(entity, location, items, selection_path) => {
                 match self.tab_model.data_mut::<Tab>(entity) {
                     Some(tab) => {
                         if location == tab.location {
                             tab.set_items(items);
+                            if let Some(selection_path) = selection_path {
+                                tab.select_path(selection_path);
+                            }
                         }
                     }
                     _ => (),
@@ -2113,7 +2123,7 @@ impl Application for App {
                         return Command::batch([
                             self.update_title(),
                             self.update_watcher(),
-                            self.rescan_tab(entity, location),
+                            self.rescan_tab(entity, location, None),
                         ]);
                     }
                 }
