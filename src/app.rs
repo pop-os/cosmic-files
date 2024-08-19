@@ -84,6 +84,7 @@ pub enum Action {
     Open,
     OpenInNewTab,
     OpenInNewWindow,
+    OpenItemLocation,
     OpenTerminal,
     OpenWith,
     Paste,
@@ -131,6 +132,7 @@ impl Action {
             Action::Open => Message::TabMessage(entity_opt, tab::Message::Open),
             Action::OpenInNewTab => Message::OpenInNewTab(entity_opt),
             Action::OpenInNewWindow => Message::OpenInNewWindow(entity_opt),
+            Action::OpenItemLocation => Message::OpenItemLocation(entity_opt),
             Action::OpenTerminal => Message::OpenTerminal(entity_opt),
             Action::OpenWith => Message::ToggleContextPage(ContextPage::OpenWith),
             Action::Paste => Message::Paste(entity_opt),
@@ -231,6 +233,7 @@ pub enum Message {
     OpenWith(PathBuf, mime_app::MimeApp),
     OpenInNewTab(Option<Entity>),
     OpenInNewWindow(Option<Entity>),
+    OpenItemLocation(Option<Entity>),
     Paste(Option<Entity>),
     PasteContents(PathBuf, ClipboardPaste),
     PendingComplete(u64),
@@ -377,7 +380,12 @@ pub struct App {
 }
 
 impl App {
-    fn open_tab(&mut self, location: Location, activate: bool) -> Command<Message> {
+    fn open_tab(
+        &mut self,
+        location: Location,
+        activate: bool,
+        selection_path: Option<PathBuf>,
+    ) -> Command<Message> {
         let tab = Tab::new(location.clone(), self.config.tab);
         let entity = self
             .tab_model
@@ -395,7 +403,7 @@ impl App {
         Command::batch([
             self.update_title(),
             self.update_watcher(),
-            self.rescan_tab(entity, location, None),
+            self.rescan_tab(entity, location, selection_path),
         ])
     }
 
@@ -1077,14 +1085,14 @@ impl Application for App {
                     }
                 }
             };
-            commands.push(app.open_tab(location, true));
+            commands.push(app.open_tab(location, true, None));
         }
 
         if app.tab_model.iter().next().is_none() {
             if let Ok(current_dir) = env::current_dir() {
-                commands.push(app.open_tab(Location::Path(current_dir), true));
+                commands.push(app.open_tab(Location::Path(current_dir), true, None));
             } else {
-                commands.push(app.open_tab(Location::Path(home_dir()), true));
+                commands.push(app.open_tab(Location::Path(home_dir()), true, None));
             }
         }
 
@@ -1570,7 +1578,7 @@ impl Application for App {
                 return Command::batch(self.selected_paths(entity_opt).into_iter().filter_map(
                     |path| {
                         if path.is_dir() {
-                            Some(self.open_tab(Location::Path(path), false))
+                            Some(self.open_tab(Location::Path(path), false, None))
                         } else {
                             None
                         }
@@ -1592,6 +1600,21 @@ impl Application for App {
                     log::error!("failed to get current executable path: {}", err);
                 }
             },
+            Message::OpenItemLocation(entity_opt) => {
+                return Command::batch(self.selected_paths(entity_opt).into_iter().filter_map(
+                    |path| {
+                        if let Some(parent) = path.parent() {
+                            Some(self.open_tab(
+                                Location::Path(parent.to_path_buf()),
+                                true,
+                                Some(path),
+                            ))
+                        } else {
+                            None
+                        }
+                    },
+                ))
+            }
             Message::Paste(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
@@ -1932,7 +1955,7 @@ impl Application for App {
                             }
                         }
                         tab::Command::OpenInNewTab(path) => {
-                            commands.push(self.open_tab(Location::Path(path.clone()), false));
+                            commands.push(self.open_tab(Location::Path(path.clone()), false, None));
                         }
                         tab::Command::OpenInNewWindow(path) => match env::current_exe() {
                             Ok(exe) => match process::Command::new(&exe).arg(path).spawn() {
@@ -1984,7 +2007,7 @@ impl Application for App {
                     Some(tab) => tab.location.clone(),
                     None => Location::Path(home_dir()),
                 };
-                return self.open_tab(location, true);
+                return self.open_tab(location, true, None);
             }
             Message::TabRescan(entity, location, items, selection_path) => {
                 match self.tab_model.data_mut::<Tab>(entity) {
@@ -2193,10 +2216,10 @@ impl Application for App {
                 NavMenuAction::OpenInNewTab(entity) => {
                     match self.nav_model.data::<Location>(entity) {
                         Some(Location::Path(ref path)) => {
-                            return self.open_tab(Location::Path(path.clone()), false);
+                            return self.open_tab(Location::Path(path.clone()), false, None);
                         }
                         Some(Location::Trash) => {
-                            return self.open_tab(Location::Trash, false);
+                            return self.open_tab(Location::Trash, false, None);
                         }
                         _ => {}
                     }

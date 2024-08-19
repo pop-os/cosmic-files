@@ -37,6 +37,7 @@ open-file = Open file
 open-folder = Open folder
 open-in-new-tab = Open in new tab
 open-in-new-window = Open in new window
+open-item-location = Open item location
 open-multiple-files = Open multiple files
 open-multiple-folders = Open multiple folders
 save = Save

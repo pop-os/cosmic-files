@@ -104,6 +104,11 @@ pub fn context_menu<'a>(
                             .push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
                     }
                 }
+                if matches!(tab.location, Location::Search(_, _)) {
+                    children.push(
+                        menu_item(fl!("open-item-location"), Action::OpenItemLocation).into(),
+                    );
+                }
                 // All selected items are directories
                 if selected == selected_dir {
                     children.push(menu_item(fl!("open-in-new-tab"), Action::OpenInNewTab).into());
