@@ -1,8 +1,19 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
+#[cfg(feature = "wayland")]
+use cosmic::iced::{
+    event::wayland::{Event as WaylandEvent, OutputEvent},
+    wayland::{
+        actions::layer_surface::{IcedMargin, IcedOutput, SctkLayerSurfaceSettings},
+        layer_surface::{
+            destroy_layer_surface, get_layer_surface, Anchor, KeyboardInteractivity, Layer,
+        },
+    },
+    Limits,
+};
 use cosmic::{
-    app::{message, Command, Core},
+    app::{self, message, Command, Core},
     cosmic_config, cosmic_theme, executor,
     iced::{
         clipboard::dnd::DndAction,
@@ -10,8 +21,7 @@ use cosmic::{
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers},
         subscription::{self, Subscription},
-        widget::scrollable,
-        window::{self, Event as WindowEvent},
+        window::{self, Event as WindowEvent, Id as WindowId},
         Alignment, Event, Length,
     },
     iced_runtime::clipboard,
@@ -43,6 +53,8 @@ use std::{
 };
 use tokio::sync::mpsc;
 use trash::TrashItem;
+#[cfg(feature = "wayland")]
+use wayland_client::{protocol::wl_output::WlOutput, Proxy};
 
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
@@ -50,7 +62,7 @@ use crate::{
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
-    menu, mime_app,
+    menu, mime_app, mime_icon,
     mounter::{mounters, MounterItem, MounterItems, MounterKey, Mounters},
     operation::{Operation, ReplaceResult},
     spawn_detached::spawn_detached,
@@ -58,9 +70,17 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
+pub enum Mode {
+    App,
+    Desktop,
+}
+
+#[derive(Clone, Debug)]
 pub struct Flags {
     pub config_handler: Option<cosmic_config::Config>,
     pub config: Config,
+    pub mode: Mode,
+    pub locations: Vec<Location>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -280,6 +300,10 @@ pub enum Message {
     DndDropTab(Entity, Option<ClipboardPaste>, DndAction),
     DndDropNav(Entity, Option<ClipboardPaste>, DndAction),
     Recents,
+    #[cfg(feature = "wayland")]
+    OutputEvent(OutputEvent, WlOutput),
+    Cosmic(app::cosmic::Message),
+    None,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -393,6 +417,7 @@ pub struct App {
     tab_model: segmented_button::Model<segmented_button::SingleSelect>,
     config_handler: Option<cosmic_config::Config>,
     config: Config,
+    mode: Mode,
     app_themes: Vec<String>,
     default_view: Vec<String>,
     sort_by_names: Vec<String>,
@@ -413,6 +438,10 @@ pub struct App {
     search_active: bool,
     search_id: widget::Id,
     search_input: String,
+    #[cfg(feature = "wayland")]
+    surface_ids: HashMap<WlOutput, WindowId>,
+    #[cfg(feature = "wayland")]
+    surface_names: HashMap<WindowId, String>,
     toasts: widget::toaster::Toasts<Message>,
     watcher_opt: Option<(Debouncer<RecommendedWatcher, FileIdMap>, HashSet<PathBuf>)>,
     window_id_opt: Option<window::Id>,
@@ -429,7 +458,11 @@ impl App {
         activate: bool,
         selection_path: Option<PathBuf>,
     ) -> Command<Message> {
-        let tab = Tab::new(location.clone(), self.config.tab);
+        let mut tab = Tab::new(location.clone(), self.config.tab);
+        tab.mode = match self.mode {
+            Mode::App => tab::Mode::App,
+            Mode::Desktop => tab::Mode::Desktop,
+        };
         let entity = self
             .tab_model
             .insert()
@@ -1043,6 +1076,19 @@ impl Application for App {
 
     /// Creates the application, and optionally emits command on initialize.
     fn init(mut core: Core, flags: Self::Flags) -> (Self, Command<Self::Message>) {
+        match flags.mode {
+            Mode::App => {}
+            Mode::Desktop => {
+                core.window.content_container = false;
+                core.window.show_window_menu = false;
+                core.window.show_headerbar = false;
+                core.window.sharp_corners = false;
+                core.window.show_maximize = false;
+                core.window.show_minimize = false;
+                core.window.use_template = true;
+            }
+        }
+
         let app_themes = vec![fl!("match-desktop"), fl!("dark"), fl!("light")];
 
         let mut app = App {
@@ -1052,6 +1098,7 @@ impl Application for App {
             tab_model: segmented_button::ModelBuilder::default().build(),
             config_handler: flags.config_handler,
             config: flags.config,
+            mode: flags.mode,
             app_themes,
             default_view: vec![fl!("grid-view"), fl!("list-view")],
             sort_by_names: HeadingOptions::names(),
@@ -1072,6 +1119,10 @@ impl Application for App {
             search_active: false,
             search_id: widget::Id::unique(),
             search_input: String::new(),
+            #[cfg(feature = "wayland")]
+            surface_ids: HashMap::new(),
+            #[cfg(feature = "wayland")]
+            surface_names: HashMap::new(),
             toasts: widget::toaster::Toasts::new(Message::CloseToast),
             watcher_opt: None,
             window_id_opt: Some(window::Id::MAIN),
@@ -1083,18 +1134,7 @@ impl Application for App {
 
         let mut commands = vec![app.update_config()];
 
-        for arg in env::args().skip(1) {
-            let location = if &arg == "--trash" {
-                Location::Trash
-            } else {
-                match fs::canonicalize(&arg) {
-                    Ok(absolute) => Location::Path(absolute),
-                    Err(err) => {
-                        log::warn!("failed to canonicalize {:?}: {}", arg, err);
-                        continue;
-                    }
-                }
-            };
+        for location in flags.locations {
             commands.push(app.open_tab(location, true, None));
         }
 
@@ -1199,7 +1239,10 @@ impl Application for App {
     }
 
     fn nav_model(&self) -> Option<&segmented_button::SingleSelectModel> {
-        Some(&self.nav_model)
+        match self.mode {
+            Mode::App => Some(&self.nav_model),
+            Mode::Desktop => None,
+        }
     }
 
     fn on_nav_select(&mut self, entity: Entity) -> Command<Self::Message> {
@@ -2049,27 +2092,76 @@ impl Application for App {
                                 self.rescan_tab(entity, tab_path, selection_path),
                             ]));
                         }
+                        tab::Command::DropFiles(to, from) => {
+                            commands.push(self.update(Message::PasteContents(to, from)));
+                        }
                         tab::Command::EmptyTrash => {
                             self.dialog_pages.push_back(DialogPage::EmptyTrash);
                         }
-                        tab::Command::FocusButton(id) => {
-                            commands.push(widget::button::focus(id));
+                        tab::Command::Iced(iced_command) => {
+                            commands.push(iced_command.map(move |tab_message| {
+                                message::app(Message::TabMessage(Some(entity), tab_message))
+                            }));
                         }
-                        tab::Command::FocusTextInput(id) => {
-                            commands.push(widget::text_input::focus(id));
+                        tab::Command::LocationProperties(index) => {
+                            self.context_page =
+                                ContextPage::Properties(Some(ContextItem::BreadCrumbs(index)));
+                            self.core.window.show_context = true;
+                            self.set_context_title(self.context_page.title());
                         }
-                        tab::Command::OpenFile(item_path) => {
-                            match open::that_detached(&item_path) {
-                                Ok(()) => {
-                                    let _ = recently_used_xbel::update_recently_used(
-                                        &item_path,
-                                        App::APP_ID.to_string(),
-                                        "cosmic-files".to_string(),
-                                        None,
-                                    );
-                                }
-                                Err(err) => {
-                                    log::warn!("failed to open {:?}: {}", item_path, err);
+                        tab::Command::MoveToTrash(paths) => {
+                            self.operation(Operation::Delete { paths });
+                        }
+                        tab::Command::OpenFile(path) => {
+                            let mut found_desktop_exec = false;
+                            if mime_icon::mime_for_path(&path) == "application/x-desktop" {
+                                match freedesktop_entry_parser::parse_entry(&path) {
+                                    Ok(entry) => {
+                                        match entry.section("Desktop Entry").attr("Exec") {
+                                            Some(exec) => {
+                                                match mime_app::exec_to_command(exec, None) {
+                                                    Some(mut command) => {
+                                                        match spawn_detached(&mut command) {
+                                                            Ok(()) => {
+                                                                found_desktop_exec = true;
+                                                            }
+                                                            Err(err) => {
+                                                                log::warn!(
+                                                                    "failed to execute {:?}: {}",
+                                                                    path,
+                                                                    err
+                                                                );
+                                                            }
+                                                        }
+                                                    }
+                                                    None => {
+                                                        log::warn!("failed to parse {:?}: invalid Desktop Entry/Exec", path);
+                                                    }
+                                                }
+                                            }
+                                            None => {
+                                                log::warn!("failed to parse {:?}: missing Desktop Entry/Exec", path);
+                                            }
+                                        }
+                                    }
+                                    Err(err) => {
+                                        log::warn!("failed to parse {:?}: {}", path, err);
+                                    }
+                                };
+                            }
+                            if !found_desktop_exec {
+                                match open::that_detached(&path) {
+                                    Ok(()) => {
+                                        let _ = recently_used_xbel::update_recently_used(
+                                            &path,
+                                            App::APP_ID.to_string(),
+                                            "cosmic-files".to_string(),
+                                            None,
+                                        );
+                                    }
+                                    Err(err) => {
+                                        log::warn!("failed to open {:?}: {}", path, err);
+                                    }
                                 }
                             }
                         }
@@ -2087,35 +2179,6 @@ impl Application for App {
                                 log::error!("failed to get current executable path: {}", err);
                             }
                         },
-                        tab::Command::LocationProperties(index) => {
-                            self.context_page =
-                                ContextPage::Properties(Some(ContextItem::BreadCrumbs(index)));
-                            self.core.window.show_context = true;
-                            self.set_context_title(self.context_page.title());
-                        }
-                        tab::Command::Scroll(id, offset) => {
-                            commands.push(scrollable::scroll_to(id, offset));
-                        }
-                        tab::Command::DropFiles(to, from) => {
-                            commands.push(self.update(Message::PasteContents(to, from)));
-                        }
-                        tab::Command::Timeout(d, tab_msg) => {
-                            commands.push(Command::perform(
-                                async move {
-                                    tokio::time::sleep(d).await;
-                                    tab_msg
-                                },
-                                move |msg| {
-                                    cosmic::app::Message::App(Message::TabMessage(
-                                        Some(entity),
-                                        msg,
-                                    ))
-                                },
-                            ));
-                        }
-                        tab::Command::MoveToTrash(paths) => {
-                            self.operation(Operation::Delete { paths });
-                        }
                     }
                 }
                 return Command::batch(commands);
@@ -2386,6 +2449,80 @@ impl Application for App {
             Message::Recents => {
                 return self.open_tab(Location::Recents, false, None);
             }
+            #[cfg(feature = "wayland")]
+            Message::OutputEvent(output_event, output) => {
+                match output_event {
+                    OutputEvent::Created(output_info_opt) => {
+                        log::info!("output {}: created", output.id());
+
+                        let surface_id = WindowId::unique();
+                        match self.surface_ids.insert(output.clone(), surface_id) {
+                            Some(old_surface_id) => {
+                                //TODO: remove old surface?
+                                log::warn!(
+                                    "output {}: already had surface ID {:?}",
+                                    output.id(),
+                                    old_surface_id
+                                );
+                            }
+                            None => {}
+                        }
+
+                        match output_info_opt {
+                            Some(output_info) => match output_info.name {
+                                Some(output_name) => {
+                                    self.surface_names.insert(surface_id, output_name.clone());
+                                }
+                                None => {
+                                    log::warn!("output {}: no output name", output.id());
+                                }
+                            },
+                            None => {
+                                log::warn!("output {}: no output info", output.id());
+                            }
+                        }
+
+                        return Command::batch([get_layer_surface(SctkLayerSurfaceSettings {
+                            id: surface_id,
+                            layer: Layer::Bottom,
+                            keyboard_interactivity: KeyboardInteractivity::OnDemand,
+                            pointer_interactivity: true,
+                            anchor: Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT,
+                            output: IcedOutput::Output(output),
+                            namespace: "cosmic-files-applet".into(),
+                            size: Some((None, None)),
+                            margin: IcedMargin {
+                                top: 0,
+                                bottom: 0,
+                                left: 0,
+                                right: 0,
+                            },
+                            exclusive_zone: -1,
+                            size_limits: Limits::NONE.min_width(1.0).min_height(1.0),
+                        })]);
+                    }
+                    OutputEvent::Removed => {
+                        log::info!("output {}: removed", output.id());
+                        match self.surface_ids.remove(&output) {
+                            Some(surface_id) => {
+                                self.surface_names.remove(&surface_id);
+                                return destroy_layer_surface(surface_id);
+                            }
+                            None => {
+                                log::warn!("output {}: no surface found", output.id());
+                            }
+                        }
+                    }
+                    OutputEvent::InfoUpdate(_output_info) => {
+                        log::info!("output {}: info update", output.id());
+                    }
+                }
+            }
+            Message::Cosmic(cosmic) => {
+                // Forward cosmic messages
+                return Command::perform(async move { cosmic }, |cosmic| message::cosmic(cosmic));
+            }
+            Message::None => {}
         }
 
         Command::none()
@@ -2796,6 +2933,15 @@ impl Application for App {
         content
     }
 
+    fn view_window(&self, id: WindowId) -> Element<Self::Message> {
+        //TODO: distinct views per window?
+        self.view_main().map(|message| match message {
+            app::Message::App(app) => app,
+            app::Message::Cosmic(cosmic) => Message::Cosmic(cosmic),
+            app::Message::None => Message::None,
+        })
+    }
+
     fn subscription(&self) -> Subscription<Self::Message> {
         struct ThemeSubscription;
         struct WatcherSubscription;
@@ -2811,6 +2957,15 @@ impl Application for App {
                     Some(Message::Modifiers(modifiers))
                 }
                 Event::Window(_id, WindowEvent::CloseRequested) => Some(Message::WindowClose),
+                #[cfg(feature = "wayland")]
+                Event::PlatformSpecific(event::PlatformSpecific::Wayland(wayland_event)) => {
+                    match wayland_event {
+                        WaylandEvent::Output(output_event, output) => {
+                            Some(Message::OutputEvent(output_event, output))
+                        }
+                        _ => None,
+                    }
+                }
                 _ => None,
             }),
             Config::subscription().map(|update| {

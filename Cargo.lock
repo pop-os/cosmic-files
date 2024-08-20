@@ -1286,9 +1286,17 @@ dependencies = [
  "uzers",
  "vergen",
  "walkdir",
+ "wayland-client",
  "xdg",
  "xdg-mime",
  "zip",
+]
+
+[[package]]
+name = "cosmic-files-applet"
+version = "0.1.0"
+dependencies = [
+ "cosmic-files",
 ]
 
 [[package]]

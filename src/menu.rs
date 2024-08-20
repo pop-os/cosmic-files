@@ -97,8 +97,11 @@ pub fn context_menu<'a>(
     selected_types.dedup();
 
     let mut children: Vec<Element<_>> = Vec::new();
-    match tab.location {
-        Location::Path(_) | Location::Search(_, _) | Location::Recents => {
+    match (&tab.mode, &tab.location) {
+        (
+            tab::Mode::App | tab::Mode::Desktop,
+            Location::Path(_) | Location::Search(_, _) | Location::Recents,
+        ) => {
             if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
                     children.push(menu_item(fl!("open"), Action::Open).into());
@@ -155,7 +158,9 @@ pub fn context_menu<'a>(
                 children.push(menu_item(fl!("new-file"), Action::NewFile).into());
                 children.push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
                 children.push(divider::horizontal::light().into());
-                children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
+                if tab.mode.multiple() {
+                    children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
+                }
                 children.push(menu_item(fl!("paste"), Action::Paste).into());
                 children.push(divider::horizontal::light().into());
                 // TODO: Nested menu
@@ -164,20 +169,52 @@ pub fn context_menu<'a>(
                 children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
             }
         }
-        Location::Trash => {
-            children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
+        (
+            tab::Mode::Dialog(dialog_kind),
+            Location::Path(_) | Location::Search(_, _) | Location::Recents,
+        ) => {
             if selected > 0 {
+                if selected_dir == 1 && selected == 1 || selected_dir == 0 {
+                    children.push(menu_item(fl!("open"), Action::Open).into());
+                }
+                if matches!(tab.location, Location::Search(_, _)) {
+                    children.push(
+                        menu_item(fl!("open-item-location"), Action::OpenItemLocation).into(),
+                    );
+                }
+            } else {
+                if dialog_kind.save() {
+                    children.push(menu_item(fl!("new-folder"), Action::NewFolder).into());
+                }
+                if tab.mode.multiple() {
+                    children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
+                }
+                if !children.is_empty() {
+                    children.push(divider::horizontal::light().into());
+                }
+                children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
+                children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
+                children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
+            }
+        }
+        (_, Location::Trash) => {
+            if tab.mode.multiple() {
+                children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
+            }
+            if !children.is_empty() {
                 children.push(divider::horizontal::light().into());
+            }
+            if selected > 0 {
                 children.push(menu_item(fl!("show-details"), Action::Properties).into());
                 children.push(divider::horizontal::light().into());
                 children
                     .push(menu_item(fl!("restore-from-trash"), Action::RestoreFromTrash).into());
+            } else {
+                // TODO: Nested menu
+                children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
+                children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
+                children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
             }
-            children.push(divider::horizontal::light().into());
-            // TODO: Nested menu
-            children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
-            children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
-            children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
         }
     }
 
