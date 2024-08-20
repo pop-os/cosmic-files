@@ -10,6 +10,30 @@ use std::{
     cmp::Ordering, collections::HashMap, env, path::PathBuf, process, sync::Mutex, time::Instant,
 };
 
+pub fn exec_to_command(exec: &str, path_opt: Option<PathBuf>) -> Option<process::Command> {
+    let args_vec: Vec<String> = shlex::split(exec)?;
+    let mut args = args_vec.iter();
+    let mut command = process::Command::new(args.next()?);
+    for arg in args {
+        if arg.starts_with('%') {
+            match arg.as_str() {
+                "%f" | "%F" | "%u" | "%U" => {
+                    if let Some(path) = &path_opt {
+                        command.arg(path);
+                    }
+                }
+                _ => {
+                    log::warn!("unsupported Exec code {:?} in {:?}", arg, exec);
+                    return None;
+                }
+            }
+        } else {
+            command.arg(arg);
+        }
+    }
+    Some(command)
+}
+
 #[derive(Clone, Debug)]
 pub struct MimeApp {
     pub id: String,
@@ -23,27 +47,7 @@ pub struct MimeApp {
 impl MimeApp {
     //TODO: move to libcosmic, support multiple files
     pub fn command(&self, path_opt: Option<PathBuf>) -> Option<process::Command> {
-        let args_vec: Vec<String> = self.exec.as_deref().and_then(shlex::split)?;
-        let mut args = args_vec.iter();
-        let mut command = process::Command::new(args.next()?);
-        for arg in args {
-            if arg.starts_with('%') {
-                match arg.as_str() {
-                    "%f" | "%F" | "%u" | "%U" => {
-                        if let Some(path) = &path_opt {
-                            command.arg(path);
-                        }
-                    }
-                    _ => {
-                        log::warn!("unsupported Exec code {:?} in {:?}", arg, self.id);
-                        return None;
-                    }
-                }
-            } else {
-                command.arg(arg);
-            }
-        }
-        Some(command)
+        exec_to_command(self.exec.as_deref()?, path_opt)
     }
 }
 

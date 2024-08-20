@@ -13,11 +13,14 @@ use cosmic::{
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Modifiers},
         subscription::{self, Subscription},
-        widget::scrollable,
         window, Alignment, Event, Length, Size,
     },
     theme,
-    widget::{self, menu::KeyBind, segmented_button},
+    widget::{
+        self,
+        menu::{Action as MenuAction, KeyBind},
+        segmented_button,
+    },
     Application, ApplicationExt, Element,
 };
 use notify_debouncer_full::{
@@ -36,7 +39,7 @@ use std::{
 };
 
 use crate::{
-    app::Action,
+    app::{Action, Message as AppMessage},
     config::{Config, Favorite, TabConfig},
     fl, home_dir,
     localize::LANGUAGE_SORTER,
@@ -556,7 +559,7 @@ impl Application for App {
             ..Default::default()
         };
         let mut tab = Tab::new(location, tab_config);
-        tab.dialog = Some(flags.kind.clone());
+        tab.mode = tab::Mode::Dialog(flags.kind.clone());
 
         let view_model = segmented_button::SingleSelectModel::builder()
             .insert(|b| {
@@ -957,24 +960,24 @@ impl Application for App {
                 let mut commands = Vec::new();
                 for tab_command in tab_commands {
                     match tab_command {
-                        tab::Command::Action(action) => {
-                            log::warn!("Action {:?} not supported in dialog", action);
-                        }
+                        tab::Command::Action(action) => match action.message() {
+                            AppMessage::TabMessage(_entity_opt, tab_message) => {
+                                commands.push(self.update(Message::TabMessage(tab_message)));
+                            }
+                            unsupported => {
+                                log::warn!("{unsupported:?} not supported in dialog mode");
+                            }
+                        },
                         tab::Command::ChangeLocation(_tab_title, _tab_path, _selection_path) => {
                             commands
                                 .push(Command::batch([self.update_watcher(), self.rescan_tab()]));
                         }
-                        tab::Command::DropFiles(_, _) => {
-                            log::warn!("DropFiles not supported in dialog");
-                        }
-                        tab::Command::EmptyTrash => {
-                            log::warn!("EmptyTrash not supported in dialog");
-                        }
-                        tab::Command::FocusButton(id) => {
-                            commands.push(widget::button::focus(id));
-                        }
-                        tab::Command::FocusTextInput(id) => {
-                            commands.push(widget::text_input::focus(id));
+                        tab::Command::Iced(iced_command) => {
+                            commands.push(
+                                iced_command.map(|tab_message| {
+                                    message::app(Message::TabMessage(tab_message))
+                                }),
+                            );
                         }
                         tab::Command::OpenFile(_item_path) => {
                             if self.flags.kind.save() {
@@ -983,23 +986,8 @@ impl Application for App {
                                 commands.push(self.update(Message::Open));
                             }
                         }
-                        tab::Command::OpenInNewTab(_path) => {
-                            log::warn!("OpenInNewTab not supported in dialog");
-                        }
-                        tab::Command::OpenInNewWindow(_path) => {
-                            log::warn!("OpenInNewWindow not supported in dialog");
-                        }
-                        tab::Command::LocationProperties(_path) => {
-                            log::warn!("LocationProperties not supported in dialog");
-                        }
-                        tab::Command::Scroll(id, offset) => {
-                            commands.push(scrollable::scroll_to(id, offset));
-                        }
-                        tab::Command::Timeout(_, _) => {
-                            log::warn!("Timeout not supported in dialog");
-                        }
-                        tab::Command::MoveToTrash(_) => {
-                            log::warn!("MoveToTrash not supported in dialog");
+                        unsupported => {
+                            log::warn!("{unsupported:?} not supported in dialog mode");
                         }
                     }
                 }

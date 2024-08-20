@@ -40,6 +40,7 @@ tokio = { version = "1", features = ["sync"] }
 trash = { git = "https://github.com/jackpot51/trash-rs.git", branch = "delete-info" }
 url = "2.5"
 walkdir = "2.5.0"
+wayland-client = { version = "0.31.5", optional = true }
 xdg = { version = "2.5.2", optional = true }
 xdg-mime = "0.3"
 # Internationalization
@@ -58,7 +59,7 @@ uzers = "0.12.0"
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
 default-features = false
-features = ["a11y", "multi-window", "tokio"]
+features = ["a11y", "clipboard", "multi-window", "tokio"]
 
 [dependencies.smol_str]
 version = "0.2.1"
@@ -69,7 +70,7 @@ default = ["desktop", "gvfs", "notify", "winit", "wgpu"]
 desktop = ["libcosmic/desktop", "dep:freedesktop_entry_parser", "dep:xdg"]
 gvfs = ["dep:gio", "dep:glib"]
 notify = ["dep:notify-rust"]
-wayland = ["libcosmic/wayland"]
+wayland = ["libcosmic/wayland", "dep:wayland-client"]
 winit = ["libcosmic/winit"]
 wgpu = ["libcosmic/wgpu"]
 
@@ -108,3 +109,6 @@ filetime = { git = "https://github.com/jackpot51/filetime" }
 
 # [patch.'https://github.com/pop-os/smithay-clipboard']
 # smithay-clipboard = { path = "../smithay-clipboard" }
+
+[workspace]
+members = ["cosmic-files-applet"]

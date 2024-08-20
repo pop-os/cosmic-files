@@ -1,0 +1,9 @@
+[package]
+name = "cosmic-files-applet"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies.cosmic-files]
+path = ".."
+default-features = false
+features = ["desktop", "gvfs", "wayland", "wgpu"]

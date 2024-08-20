@@ -13,7 +13,7 @@ use cosmic::{
         //TODO: export in cosmic::widget
         widget::{
             container, horizontal_rule,
-            scrollable::{AbsoluteOffset, Viewport},
+            scrollable::{self, AbsoluteOffset, Viewport},
         },
         Alignment,
         Border,
@@ -111,6 +111,7 @@ fn button_appearance(
     focused: bool,
     accent: bool,
     condensed_radius: bool,
+    desktop: bool,
 ) -> widget::button::Appearance {
     let cosmic = theme.cosmic();
     let mut appearance = widget::button::Appearance::new();
@@ -122,6 +123,10 @@ fn button_appearance(
         } else {
             appearance.background = Some(Color::from(cosmic.bg_component_color()).into());
         }
+    } else if desktop {
+        appearance.background = Some(Color::from(cosmic.bg_color()).into());
+        appearance.icon_color = Some(Color::from(cosmic.on_bg_color()));
+        appearance.text_color = Some(Color::from(cosmic.on_bg_color()));
     }
     if focused && accent {
         appearance.outline_width = 1.0;
@@ -137,20 +142,25 @@ fn button_appearance(
     appearance
 }
 
-fn button_style(selected: bool, accent: bool, condensed_radius: bool) -> theme::Button {
+fn button_style(
+    selected: bool,
+    accent: bool,
+    condensed_radius: bool,
+    desktop: bool,
+) -> theme::Button {
     //TODO: move to libcosmic?
     theme::Button::Custom {
         active: Box::new(move |focused, theme| {
-            button_appearance(theme, selected, focused, accent, condensed_radius)
+            button_appearance(theme, selected, focused, accent, condensed_radius, desktop)
         }),
         disabled: Box::new(move |theme| {
-            button_appearance(theme, selected, false, accent, condensed_radius)
+            button_appearance(theme, selected, false, accent, condensed_radius, desktop)
         }),
         hovered: Box::new(move |focused, theme| {
-            button_appearance(theme, selected, focused, accent, condensed_radius)
+            button_appearance(theme, selected, focused, accent, condensed_radius, desktop)
         }),
         pressed: Box::new(move |focused, theme| {
-            button_appearance(theme, selected, focused, accent, condensed_radius)
+            button_appearance(theme, selected, focused, accent, condensed_radius, desktop)
         }),
     }
 }
@@ -263,13 +273,33 @@ fn hidden_attribute(metadata: &Metadata) -> bool {
     metadata.file_attributes() & FILE_ATTRIBUTE_HIDDEN == FILE_ATTRIBUTE_HIDDEN
 }
 
+pub fn parse_desktop_file(path: &Path) -> (Option<String>, Option<String>) {
+    let entry = match freedesktop_entry_parser::parse_entry(path) {
+        Ok(ok) => ok,
+        Err(err) => {
+            log::warn!("failed to parse {:?}: {}", path, err);
+            return (None, None);
+        }
+    };
+    (
+        entry
+            .section("Desktop Entry")
+            .attr("Name")
+            .map(|x| x.to_string()),
+        entry
+            .section("Desktop Entry")
+            .attr("Icon")
+            .map(|x| x.to_string()),
+    )
+}
+
 pub fn item_from_entry(
     path: PathBuf,
     name: String,
     metadata: fs::Metadata,
     sizes: IconSizes,
 ) -> Item {
-    let grid_name = Item::grid_name(&name);
+    let mut display_name = Item::display_name(&name);
 
     let hidden = name.starts_with(".") || hidden_attribute(&metadata);
 
@@ -284,12 +314,37 @@ pub fn item_from_entry(
             )
         } else {
             let mime = mime_for_path(&path);
-            (
-                mime.clone(),
-                mime_icon(mime.clone(), sizes.grid()),
-                mime_icon(mime.clone(), sizes.list()),
-                mime_icon(mime, sizes.list_condensed()),
-            )
+            //TODO: clean this up, implement for trash
+            let icon_name_opt = if mime == "application/x-desktop" {
+                let (desktop_name_opt, icon_name_opt) = parse_desktop_file(&path);
+                if let Some(desktop_name) = desktop_name_opt {
+                    display_name = Item::display_name(&desktop_name);
+                }
+                icon_name_opt
+            } else {
+                None
+            };
+            if let Some(icon_name) = icon_name_opt {
+                (
+                    mime.clone(),
+                    widget::icon::from_name(&*icon_name)
+                        .size(sizes.grid())
+                        .handle(),
+                    widget::icon::from_name(&*icon_name)
+                        .size(sizes.list())
+                        .handle(),
+                    widget::icon::from_name(&*icon_name)
+                        .size(sizes.list_condensed())
+                        .handle(),
+                )
+            } else {
+                (
+                    mime.clone(),
+                    mime_icon(mime.clone(), sizes.grid()),
+                    mime_icon(mime.clone(), sizes.list()),
+                    mime_icon(mime, sizes.list_condensed()),
+                )
+            }
         };
 
     let open_with = mime_apps(&mime);
@@ -319,7 +374,7 @@ pub fn item_from_entry(
 
     Item {
         name,
-        grid_name,
+        display_name,
         metadata: ItemMetadata::Path { metadata, children },
         hidden,
         path_opt: Some(path),
@@ -401,7 +456,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
     items.sort_by(|a, b| match (a.metadata.is_dir(), b.metadata.is_dir()) {
         (true, false) => Ordering::Less,
         (false, true) => Ordering::Greater,
-        _ => LANGUAGE_SORTER.compare(&a.name, &b.name),
+        _ => LANGUAGE_SORTER.compare(&a.display_name, &b.display_name),
     });
     items
 }
@@ -538,7 +593,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
 
                 let original_path = entry.original_path();
                 let name = entry.name.to_string_lossy().to_string();
-                let grid_name = Item::grid_name(&name);
+                let display_name = Item::display_name(&name);
 
                 let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) =
                     match metadata.size {
@@ -563,7 +618,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
 
                 items.push(Item {
                     name,
-                    grid_name,
+                    display_name,
                     metadata: ItemMetadata::Trash { metadata, entry },
                     hidden: false,
                     path_opt: None,
@@ -588,7 +643,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
     items.sort_by(|a, b| match (a.metadata.is_dir(), b.metadata.is_dir()) {
         (true, false) => Ordering::Less,
         (false, true) => Ordering::Greater,
-        _ => LANGUAGE_SORTER.compare(&a.name, &b.name),
+        _ => LANGUAGE_SORTER.compare(&a.display_name, &b.display_name),
     });
     items
 }
@@ -699,21 +754,18 @@ impl Location {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum Command {
     Action(Action),
     ChangeLocation(String, Location, Option<PathBuf>),
+    DropFiles(PathBuf, ClipboardPaste),
     EmptyTrash,
-    FocusButton(widget::Id),
-    FocusTextInput(widget::Id),
+    Iced(cosmic::Command<Message>),
+    LocationProperties(usize),
+    MoveToTrash(Vec<PathBuf>),
     OpenFile(PathBuf),
     OpenInNewTab(PathBuf),
     OpenInNewWindow(PathBuf),
-    LocationProperties(usize),
-    Scroll(widget::Id, AbsoluteOffset),
-    DropFiles(PathBuf, ClipboardPaste),
-    Timeout(Duration, Message),
-    MoveToTrash(Vec<PathBuf>),
 }
 
 #[derive(Clone, Debug)]
@@ -808,7 +860,7 @@ pub enum ItemThumbnail {
 #[derive(Clone, Debug)]
 pub struct Item {
     pub name: String,
-    pub grid_name: String,
+    pub display_name: String,
     pub metadata: ItemMetadata,
     pub hidden: bool,
     pub path_opt: Option<PathBuf>,
@@ -826,7 +878,7 @@ pub struct Item {
 }
 
 impl Item {
-    fn grid_name(name: &str) -> String {
+    fn display_name(name: &str) -> String {
         // In order to wrap at periods and underscores, add a zero width space after each one
         name.replace(".", ".\u{200B}").replace("_", "_\u{200B}")
     }
@@ -1081,6 +1133,23 @@ impl HeadingOptions {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum Mode {
+    App,
+    Desktop,
+    Dialog(DialogKind),
+}
+
+impl Mode {
+    /// Whether multiple files can be selected in this mode
+    pub fn multiple(&self) -> bool {
+        match self {
+            Mode::App | Mode::Desktop => true,
+            Mode::Dialog(dialog) => dialog.multiple(),
+        }
+    }
+}
+
 // TODO when creating items, pass <Arc<SelectedItems>> to each item
 // as a drag data, so that when dnd is initiated, they are all included
 #[derive(Clone)]
@@ -1090,7 +1159,7 @@ pub struct Tab {
     pub location_context_menu_point: Option<Point>,
     pub location_context_menu_index: Option<usize>,
     pub context_menu: Option<Point>,
-    pub dialog: Option<DialogKind>,
+    pub mode: Mode,
     pub scroll_opt: Option<AbsoluteOffset>,
     pub size_opt: Cell<Option<Size>>,
     pub item_view_size_opt: Cell<Option<Size>>,
@@ -1136,7 +1205,7 @@ impl Tab {
             context_menu: None,
             location_context_menu_point: None,
             location_context_menu_index: None,
-            dialog: None,
+            mode: Mode::App,
             scroll_opt: None,
             size_opt: Cell::new(None),
             item_view_size_opt: Cell::new(None),
@@ -1179,6 +1248,10 @@ impl Tab {
 
     pub fn items_opt(&self) -> Option<&Vec<Item>> {
         self.items_opt.as_ref()
+    }
+
+    pub fn items_opt_mut(&mut self) -> Option<&mut Vec<Item>> {
+        self.items_opt.as_mut()
     }
 
     pub fn set_items(&mut self, items: Vec<Item>) {
@@ -1441,10 +1514,8 @@ impl Tab {
         let mut commands = Vec::new();
         let mut cd = None;
         let mut history_i_opt = None;
-        let mod_ctrl = modifiers.contains(Modifiers::CTRL)
-            && self.dialog.as_ref().map_or(true, |x| x.multiple());
-        let mod_shift = modifiers.contains(Modifiers::SHIFT)
-            && self.dialog.as_ref().map_or(true, |x| x.multiple());
+        let mod_ctrl = modifiers.contains(Modifiers::CTRL) && self.mode.multiple();
+        let mod_shift = modifiers.contains(Modifiers::SHIFT) && self.mode.multiple();
         match message {
             Message::ClickRelease(click_i_opt) => {
                 if click_i_opt == self.clicked.take() {
@@ -1590,7 +1661,7 @@ impl Tab {
                         for (i, item) in items.iter_mut().enumerate() {
                             if Some(i) == click_i_opt {
                                 // Filter out selection if it does not match dialog kind
-                                if let Some(dialog) = &self.dialog {
+                                if let Mode::Dialog(dialog) = &self.mode {
                                     let item_is_dir = item.metadata.is_dir();
                                     if item_is_dir != dialog.is_dir() {
                                         // Allow selecting folder if dialog is for files to make it
@@ -1616,7 +1687,7 @@ impl Tab {
                     }
                     if self.select_focus.take().is_some() {
                         // Unfocus currently focused button
-                        commands.push(Command::FocusButton(widget::Id::unique()));
+                        commands.push(Command::Iced(widget::button::focus(widget::Id::unique())));
                     }
                 }
             }
@@ -1674,14 +1745,16 @@ impl Tab {
                     self.select_rect(rect, mod_ctrl, mod_shift);
                     if self.select_focus.take().is_some() {
                         // Unfocus currently focused button
-                        commands.push(Command::FocusButton(widget::Id::unique()));
+                        commands.push(Command::Iced(widget::button::focus(widget::Id::unique())));
                     }
                 }
                 None => {}
             },
             Message::EditLocation(edit_location) => {
                 if self.edit_location.is_none() && edit_location.is_some() {
-                    commands.push(Command::FocusTextInput(self.edit_location_id.clone()));
+                    commands.push(Command::Iced(widget::text_input::focus(
+                        self.edit_location_id.clone(),
+                    )));
                 }
                 self.edit_location = edit_location;
             }
@@ -1727,10 +1800,13 @@ impl Tab {
                     self.select_position(0, 0, mod_shift);
                 }
                 if let Some(offset) = self.select_focus_scroll() {
-                    commands.push(Command::Scroll(self.scrollable_id.clone(), offset));
+                    commands.push(Command::Iced(scrollable::scroll_to(
+                        self.scrollable_id.clone(),
+                        offset,
+                    )));
                 }
                 if let Some(id) = self.select_focus_id() {
-                    commands.push(Command::FocusButton(id));
+                    commands.push(Command::Iced(widget::button::focus(id)));
                 }
             }
             Message::ItemLeft => {
@@ -1772,10 +1848,13 @@ impl Tab {
                     self.select_position(0, 0, mod_shift);
                 }
                 if let Some(offset) = self.select_focus_scroll() {
-                    commands.push(Command::Scroll(self.scrollable_id.clone(), offset));
+                    commands.push(Command::Iced(scrollable::scroll_to(
+                        self.scrollable_id.clone(),
+                        offset,
+                    )));
                 }
                 if let Some(id) = self.select_focus_id() {
-                    commands.push(Command::FocusButton(id));
+                    commands.push(Command::Iced(widget::button::focus(id)));
                 }
             }
             Message::ItemRight => {
@@ -1799,10 +1878,13 @@ impl Tab {
                     self.select_position(0, 0, mod_shift);
                 }
                 if let Some(offset) = self.select_focus_scroll() {
-                    commands.push(Command::Scroll(self.scrollable_id.clone(), offset));
+                    commands.push(Command::Iced(scrollable::scroll_to(
+                        self.scrollable_id.clone(),
+                        offset,
+                    )));
                 }
                 if let Some(id) = self.select_focus_id() {
-                    commands.push(Command::FocusButton(id));
+                    commands.push(Command::Iced(widget::button::focus(id)));
                 }
             }
             Message::ItemUp => {
@@ -1829,10 +1911,13 @@ impl Tab {
                     self.select_position(0, 0, mod_shift);
                 }
                 if let Some(offset) = self.select_focus_scroll() {
-                    commands.push(Command::Scroll(self.scrollable_id.clone(), offset));
+                    commands.push(Command::Iced(scrollable::scroll_to(
+                        self.scrollable_id.clone(),
+                        offset,
+                    )));
                 }
                 if let Some(id) = self.select_focus_id() {
-                    commands.push(Command::FocusButton(id));
+                    commands.push(Command::Iced(widget::button::focus(id)));
                 }
             }
             Message::Location(location) => {
@@ -1929,7 +2014,7 @@ impl Tab {
                 self.select_all();
                 if self.select_focus.take().is_some() {
                     // Unfocus currently focused button
-                    commands.push(Command::FocusButton(widget::Id::unique()));
+                    commands.push(Command::Iced(widget::button::focus(widget::Id::unique())));
                 }
             }
             Message::Thumbnail(path, thumbnail) => {
@@ -2011,7 +2096,13 @@ impl Tab {
             Message::DndEnter(loc) => {
                 self.dnd_hovered = Some((loc.clone(), Instant::now()));
                 if loc != self.location {
-                    commands.push(Command::Timeout(HOVER_DURATION, Message::DndHover(loc)));
+                    commands.push(Command::Iced(cosmic::Command::perform(
+                        async move {
+                            tokio::time::sleep(HOVER_DURATION).await;
+                            Message::DndHover(loc)
+                        },
+                        |x| x,
+                    )));
                 }
             }
             Message::DndLeave(loc) => {
@@ -2063,7 +2154,14 @@ impl Tab {
             }
         }
         if let Some(location) = cd {
-            if location != self.location {
+            if matches!(self.mode, Mode::Desktop) {
+                match location {
+                    Location::Path(path) => {
+                        commands.push(Command::OpenFile(path));
+                    }
+                    _ => {}
+                }
+            } else if location != self.location {
                 if match &location {
                     Location::Path(path) => path.is_dir(),
                     Location::Search(path, _term) => path.is_dir(),
@@ -2129,12 +2227,15 @@ impl Tab {
                         (true, false) => Ordering::Less,
                         (false, true) => Ordering::Greater,
                         _ => check_reverse(
-                            LANGUAGE_SORTER.compare(&a.1.name, &b.1.name),
+                            LANGUAGE_SORTER.compare(&a.1.display_name, &b.1.display_name),
                             heading_sort,
                         ),
                     }
                 } else {
-                    check_reverse(LANGUAGE_SORTER.compare(&a.1.name, &b.1.name), heading_sort)
+                    check_reverse(
+                        LANGUAGE_SORTER.compare(&a.1.display_name, &b.1.display_name),
+                        heading_sort,
+                    )
                 }
             }),
             HeadingOptions::Modified => {
@@ -2494,21 +2595,25 @@ impl Tab {
     pub fn empty_view(&self, has_hidden: bool) -> Element<Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
 
+        //TODO: left clicking on an empty folder does not clear context menu
         widget::column::with_children(vec![widget::container(
-            widget::column::with_children(vec![
-                widget::icon::from_name("folder-symbolic")
-                    .size(64)
-                    .icon()
+            widget::column::with_children(match self.mode {
+                Mode::App | Mode::Dialog(_) => vec![
+                    widget::icon::from_name("folder-symbolic")
+                        .size(64)
+                        .icon()
+                        .into(),
+                    widget::text(if has_hidden {
+                        fl!("empty-folder-hidden")
+                    } else if matches!(self.location, Location::Search(_, _)) {
+                        fl!("no-results")
+                    } else {
+                        fl!("empty-folder")
+                    })
                     .into(),
-                widget::text(if has_hidden {
-                    fl!("empty-folder-hidden")
-                } else if matches!(self.location, Location::Search(_, _)) {
-                    fl!("no-results")
-                } else {
-                    fl!("empty-folder")
-                })
-                .into(),
-            ])
+                ],
+                Mode::Desktop => Vec::new(),
+            })
             .align_items(Alignment::Center)
             .spacing(space_xxs),
         )
@@ -2568,6 +2673,12 @@ impl Tab {
             (cols, spacing as u16)
         };
 
+        let rows = {
+            let height_m1 = height.checked_sub(item_height).unwrap_or(0);
+            let rows_m1 = height_m1 / (item_height + space_xxs as usize);
+            rows_m1 + 1
+        };
+
         let mut grid = widget::grid()
             .column_spacing(column_spacing)
             .row_spacing(space_xxs)
@@ -2584,7 +2695,9 @@ impl Tab {
             let mut count = 0;
             let mut col = 0;
             let mut row = 0;
+            let mut page_row = 0;
             let mut hidden = 0;
+            let mut grid_elements = Vec::new();
             for &(i, item) in items.iter() {
                 if !show_hidden && item.hidden {
                     item.pos_opt.set(None);
@@ -2609,11 +2722,16 @@ impl Tab {
                             .size(icon_sizes.grid()),
                     )
                     .padding(space_xxxs)
-                    .style(button_style(item.selected, false, false)),
-                    widget::button(widget::text::body(&item.grid_name))
+                    .style(button_style(item.selected, false, false, false)),
+                    widget::button(widget::text::body(&item.display_name))
                         .id(item.button_id.clone())
                         .padding([0, space_xxxs])
-                        .style(button_style(item.selected, true, true)),
+                        .style(button_style(
+                            item.selected,
+                            true,
+                            true,
+                            matches!(self.mode, Mode::Desktop),
+                        )),
                 ];
 
                 let mut column = widget::column::with_capacity(buttons.len())
@@ -2696,15 +2814,39 @@ impl Tab {
                     .on_double_click(move |_| Message::DoubleClick(Some(i)))
                     .on_release(move |_| Message::ClickRelease(Some(i)))
                     .on_middle_press(move |_| Message::MiddleClick(i));
-                grid = grid.push(mouse_area);
+
+                //TODO: error if the row or col is already set?
+                while grid_elements.len() <= row {
+                    grid_elements.push(Vec::new());
+                }
+                grid_elements[row].push(mouse_area);
 
                 count += 1;
-                col += 1;
-                if col >= cols {
-                    col = 0;
+                if matches!(self.mode, Mode::Desktop) {
                     row += 1;
-                    grid = grid.insert_row();
+                    if row >= page_row + rows {
+                        row = 0;
+                        col += 1;
+                    }
+                    if col >= cols {
+                        col = 0;
+                        page_row += rows;
+                        row = page_row;
+                    }
+                } else {
+                    col += 1;
+                    if col >= cols {
+                        col = 0;
+                        row += 1;
+                    }
                 }
+            }
+
+            for row_elements in grid_elements {
+                for element in row_elements {
+                    grid = grid.push(element);
+                }
+                grid = grid.insert_row();
             }
 
             if count == 0 {
@@ -2770,12 +2912,13 @@ impl Tab {
                                     item.selected,
                                     false,
                                     false,
+                                    false,
                                 )),
-                                widget::button(widget::text(item.grid_name.clone()))
+                                widget::button(widget::text(item.display_name.clone()))
                                     .id(item.button_id.clone())
                                     .on_press(Message::Click(Some(*i)))
                                     .padding([0, space_xxxs])
-                                    .style(button_style(item.selected, true, true)),
+                                    .style(button_style(item.selected, true, true, false)),
                             ];
 
                             let mut column = widget::column::with_capacity(buttons.len())
@@ -2914,7 +3057,7 @@ impl Tab {
                             .size(icon_size)
                             .into(),
                         widget::column::with_children(vec![
-                            widget::text(item.name.clone()).into(),
+                            widget::text(item.display_name.clone()).into(),
                             //TODO: translate?
                             widget::text::caption(format!("{} - {}", modified_text, size_text))
                                 .into(),
@@ -2930,7 +3073,9 @@ impl Tab {
                             .content_fit(ContentFit::Contain)
                             .size(icon_size)
                             .into(),
-                        widget::text(item.name.clone()).width(Length::Fill).into(),
+                        widget::text(item.display_name.clone())
+                            .width(Length::Fill)
+                            .into(),
                         widget::text(modified_text.clone())
                             .width(Length::Fixed(modified_width))
                             .into(),
@@ -2949,7 +3094,7 @@ impl Tab {
                             .width(Length::Fill)
                             .id(item.button_id.clone())
                             .padding([0, space_xxs])
-                            .style(button_style(item.selected, true, false)),
+                            .style(button_style(item.selected, true, false, false)),
                     )
                     .on_press(move |_| Message::Click(Some(i)))
                     .on_double_click(move |_| Message::DoubleClick(Some(i)))
@@ -3029,7 +3174,7 @@ impl Tab {
                                 .size(icon_size)
                                 .into(),
                             widget::column::with_children(vec![
-                                widget::text(item.name.clone()).into(),
+                                widget::text(item.display_name.clone()).into(),
                                 //TODO: translate?
                                 widget::text(format!("{} - {}", modified_text, size_text)).into(),
                             ])
@@ -3044,7 +3189,9 @@ impl Tab {
                                 .content_fit(ContentFit::Contain)
                                 .size(icon_size)
                                 .into(),
-                            widget::text(item.name.clone()).width(Length::Fill).into(),
+                            widget::text(item.display_name.clone())
+                                .width(Length::Fill)
+                                .into(),
                             widget::text(modified_text)
                                 .width(Length::Fixed(modified_width))
                                 .into(),
@@ -3121,7 +3268,11 @@ impl Tab {
         // Update cached size
         self.size_opt.set(Some(size));
 
-        let location_view = self.location_view();
+        let location_view_opt = if matches!(self.mode, Mode::Desktop) {
+            None
+        } else {
+            Some(self.location_view())
+        };
         let (drag_list, mut item_view, can_scroll) = match self.config.view {
             View::Grid => self.grid_view(),
             View::List => self.list_view(),
@@ -3180,7 +3331,9 @@ impl Tab {
                 .position(widget::popover::Position::Point(point));
         }
         let mut tab_column = widget::column::with_capacity(3);
-        tab_column = tab_column.push(location_view);
+        if let Some(location_view) = location_view_opt {
+            tab_column = tab_column.push(location_view);
+        }
         if can_scroll {
             tab_column = tab_column.push(
                 widget::scrollable(popover)

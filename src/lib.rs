@@ -5,13 +5,13 @@ use cosmic::{
     app::{Application, Settings},
     iced::Limits,
 };
-use std::{path::PathBuf, process};
+use std::{env, fs, path::PathBuf, process};
 
 use app::{App, Flags};
-mod app;
+pub mod app;
 pub mod clipboard;
 use config::Config;
-mod config;
+pub mod config;
 pub mod dialog;
 mod key_bind;
 mod localize;
@@ -22,7 +22,8 @@ mod mounter;
 mod mouse_area;
 mod operation;
 mod spawn_detached;
-mod tab;
+use tab::Location;
+pub mod tab;
 
 pub fn home_dir() -> PathBuf {
     match dirs::home_dir() {
@@ -32,6 +33,43 @@ pub fn home_dir() -> PathBuf {
             PathBuf::from("/")
         }
     }
+}
+
+/// Runs application in desktop mode
+#[rustfmt::skip]
+pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+
+    localize::localize();
+
+    let (config_handler, config) = Config::load();
+
+    let locations = vec![
+        match dirs::desktop_dir() {
+            Some(path) => Location::Path(path),
+            None => Location::Path(home_dir()),
+        }
+    ];
+
+    let mut settings = Settings::default();
+    settings = settings.theme(config.app_theme.theme());
+    settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
+    settings = settings.exit_on_close(false);
+    settings = settings.transparent(true);
+    #[cfg(feature = "wayland")]
+    {
+        settings = settings.no_main_window(true);
+    }
+
+    let flags = Flags {
+        config_handler,
+        config,
+        mode: app::Mode::Desktop,
+        locations,
+    };
+    cosmic::app::run::<App>(settings, flags)?;
+
+    Ok(())
 }
 
 /// Runs application with these settings
@@ -53,6 +91,22 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (config_handler, config) = Config::load();
 
+    let mut locations = Vec::new();
+    for arg in env::args().skip(1) {
+        let location = if &arg == "--trash" {
+            Location::Trash
+        } else {
+            match fs::canonicalize(&arg) {
+                Ok(absolute) => Location::Path(absolute),
+                Err(err) => {
+                    log::warn!("failed to canonicalize {:?}: {}", arg, err);
+                    continue;
+                }
+            }
+        };
+        locations.push(location);
+    }
+
     let mut settings = Settings::default();
     settings = settings.theme(config.app_theme.theme());
     settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
@@ -61,6 +115,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let flags = Flags {
         config_handler,
         config,
+        mode: app::Mode::App,
+        locations,
     };
     cosmic::app::run::<App>(settings, flags)?;
 
