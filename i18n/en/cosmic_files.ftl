@@ -38,6 +38,7 @@ open-file = Open file
 open-folder = Open folder
 open-in-new-tab = Open in new tab
 open-in-new-window = Open in new window
+open-item-location = Open item location
 open-multiple-files = Open multiple files
 open-multiple-folders = Open multiple folders
 save = Save
@@ -83,6 +84,14 @@ copied = Copied {$items} {$items ->
     } from {$from} to {$to}
 emptying-trash = Emptying {trash}
 emptied-trash = Emptied {trash}
+extracting = Extracting {$items} {$items ->
+        [one] item
+        *[other] items
+    } from {$from} to {$to}
+extracted = Extracted {$items} {$items ->
+        [one] item
+        *[other] items
+    } from {$from} to {$to}
 moving = Moving {$items} {$items ->
         [one] item
         *[other] items
@@ -131,6 +140,7 @@ dark = Dark
 light = Light
 
 # Context menu
+extract-here = Extract
 add-to-sidebar = Add to sidebar
 new-file = New file...
 new-folder = New folder...
