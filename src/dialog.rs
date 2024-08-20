@@ -440,6 +440,13 @@ impl Application for App {
         let accept_label = flags.kind.accept_label();
 
         let mut nav_model = segmented_button::ModelBuilder::default();
+        
+        nav_model = nav_model.insert(move |b| {
+            b.text(fl!("recents"))
+                .icon(widget::icon::from_name("accessories-clock-symbolic").size(16))
+                .data(Location::Recents)
+        });
+
         if let Some(dir) = dirs::home_dir() {
             nav_model = nav_model.insert(move |b| {
                 b.text(fl!("home"))
