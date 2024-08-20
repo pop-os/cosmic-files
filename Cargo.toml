@@ -6,12 +6,6 @@ edition = "2021"
 license = "GPL-3.0-only"
 rust-version = "1.71"
 
-[[example]]
-name = "dialog" # examples/dialog.rs
-
-[[example]]
-name = "gvfs" # examples/gvfs.rs
-
 [build-dependencies]
 vergen = { version = "8", features = ["git", "gitcl"] }
 
