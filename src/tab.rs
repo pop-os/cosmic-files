@@ -43,6 +43,7 @@ use std::{
     fmt,
     fs::{self, Metadata},
     num::NonZeroU16,
+    os::unix::fs::PermissionsExt,
     path::PathBuf,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -198,6 +199,17 @@ fn format_size(size: u64) -> String {
     } else {
         format!("{} B", size)
     }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn format_permissions(metadata: &Metadata) -> String {
+    let octal = format!("{:o}", metadata.permissions().mode());
+    octal[octal.len() - 3..].to_string()
+}
+
+#[cfg(target_os = "windows")]
+fn format_permissions(_metadata: &Metadata) -> String {
+    String::from("Not supported")
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -828,6 +840,11 @@ impl Item {
                             .format_localized(TIME_FORMAT, *LANGUAGE_CHRONO)
                     )));
                 }
+
+                column = column.push(widget::text(format!(
+                    "Permissions: {}",
+                    format_permissions(metadata)
+                )));
             }
             ItemMetadata::Trash { .. } => {
                 //TODO: trash metadata
