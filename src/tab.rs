@@ -43,11 +43,11 @@ use std::{
     fmt,
     fs::{self, Metadata},
     num::NonZeroU16,
-    os::unix::fs::PermissionsExt,
     path::PathBuf,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
+use unix_permissions_ext::UNIXPermissionsExt;
 
 use crate::{
     app::{self, Action},
@@ -203,8 +203,7 @@ fn format_size(size: u64) -> String {
 
 #[cfg(not(target_os = "windows"))]
 fn format_permissions(metadata: &Metadata) -> String {
-    let octal = format!("{:o}", metadata.permissions().mode());
-    octal[octal.len() - 3..].to_string()
+    metadata.permissions().stringify()
 }
 
 #[cfg(target_os = "windows")]
