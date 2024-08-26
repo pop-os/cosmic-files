@@ -220,41 +220,30 @@ fn format_permissions_owner(metadata: &Metadata, owner: PermissionOwner) -> Stri
     };
 }
 fn format_permissions(metadata: &Metadata, owner: PermissionOwner) -> String {
-    let readable = match owner {
+    let mut perms: Vec<String> = Vec::new();
+    if match owner {
         PermissionOwner::Owner => metadata.permissions().readable_by_owner(),
         PermissionOwner::Group => metadata.permissions().readable_by_group(),
         PermissionOwner::Other => metadata.permissions().readable_by_other(),
-    };
-    let writeable = match owner {
+    } {
+        perms.push(fl!("read"));
+    }
+    if match owner {
         PermissionOwner::Owner => metadata.permissions().writable_by_owner(),
         PermissionOwner::Group => metadata.permissions().writable_by_group(),
         PermissionOwner::Other => metadata.permissions().writable_by_other(),
-    };
-    let executable = match owner {
+    } {
+        perms.push(fl!("write"));
+    }
+    if match owner {
         PermissionOwner::Owner => metadata.permissions().executable_by_owner(),
         PermissionOwner::Group => metadata.permissions().executable_by_group(),
         PermissionOwner::Other => metadata.permissions().executable_by_other(),
-    };
-    format!(
-        "{} {} {}",
-        if readable {
-            fl!("read")
-        } else {
-            String::from("")
-        },
-        if writeable {
-            fl!("write")
-        } else {
-            String::from("")
-        },
-        if executable {
-            fl!("execute")
-        } else {
-            String::from("")
-        }
-    )
-    .trim_end()
-    .to_string()
+    } {
+        perms.push(fl!("execute"));
+    }
+
+    perms.join(" ")
 }
 
 #[cfg(not(target_os = "windows"))]
