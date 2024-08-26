@@ -4,6 +4,7 @@ empty-folder-hidden = Pasta vazia (contém itens ocultos)
 filesystem = Sistema de Arquivos
 home = Pasta pessoal
 trash = Lixeira
+undo = Desfazer
 
 # List view
 name = Nome
@@ -46,7 +47,13 @@ rename-folder = Renomear pasta
 ## Replace Dialog
 replace = Substituir
 replace-title = {$filename} já existe neste local.
-replace-warning = Deseja substituir o arquivo com o que você está salvando? Substituir sobrescreverá o conteúdo do arquivo.
+replace-warning = Deseja substituir o arquivo com o que você está salvando? Substituí-lo irá sobrescrever seu conteúdo.
+replace-warning-operation = Deseja substituir o arquivo? Substituí-lo irá sobrescrever seu conteúdo.
+original-file = Arquivo original
+replace-with = Substituir por
+apply-to-all = Aplicar a todos
+keep-both = Manter ambos
+skip = Ignorar
 
 # Context Pages
 
@@ -54,11 +61,45 @@ replace-warning = Deseja substituir o arquivo com o que você está salvando? Su
 git-description = Git commit {$hash} de {$date}
 
 ## Operations
-operations = Operações
+edit-history = Editar histórico
+history = Histórico
+no-history = Nenhum item no histórico.
 pending = Pendente
 failed = Com falha
 complete = Completo
 copy_noun = Copiado
+creating = Criando {$name} em {$parent}
+created = Criado {$name} em {$parent}
+copying = Copiando {$items} {$items ->
+        [one] item
+        *[other] itens
+    } de {$from} a {$to}
+copied = Copiado {$items} {$items ->
+        [one] item
+        *[other] itens
+    } de {$from} a {$to}
+emptying-trash = Esvaziando a lixeira
+emptied-trash = Lixeira vazia
+moving = Movendo {$items} {$items ->
+        [one] item
+        *[other] itens
+    } de {$from} a {$to}
+moved = Movido {$items} {$items ->
+        [one] item
+        *[other] itens
+    } de {$from} a {$to}
+renaming = Renomeando {$from} a {$to}
+renamed = Renomeado {$from} a {$to}
+restoring = Restaurando {$items} {$items ->
+        [one] item
+        *[other] itens
+    } da lixeira
+restored = Restaurado {$items} {$items ->
+        [one] item
+        *[other] itens
+    } da lixeira
+undo = Desfazer
+unknown-folder = pasta desconhecida
 
 ## Open with
 open-with = Abrir com
@@ -81,7 +122,7 @@ descending = Decrescente
 
 ### Appearance
 appearance = Aparência
-theme = Tema 
+theme = Tema
 match-desktop = Acompanhar o ambiente de trabalho
 dark = Escuro
 light = Claro
@@ -91,7 +132,7 @@ add-to-sidebar = Adicionar à barra lateral
 new-file = Novo arquivo
 new-folder = Nova pasta
 open-in-terminal = Abrir no terminal
-move-to-trash = Mover para lixeira 
+move-to-trash = Mover para a lixeira 
 restore-from-trash = Restaurar da lixeira
 remove-from-sidebar = Remover da barra lateral
 sort-by-name = Ordenar por nome
