@@ -43,6 +43,7 @@ use std::{
     fmt,
     fs::{self, Metadata},
     num::NonZeroU16,
+    os::unix::fs::MetadataExt,
     path::PathBuf,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -60,6 +61,8 @@ use crate::{
     mime_icon::{mime_for_path, mime_icon},
     mouse_area,
 };
+use unix_permissions_ext::UNIXPermissionsExt;
+use users::{get_group_by_gid, get_user_by_uid};
 
 pub const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 pub const HOVER_DURATION: Duration = Duration::from_millis(1600);
@@ -198,6 +201,49 @@ fn format_size(size: u64) -> String {
     } else {
         format!("{} B", size)
     }
+}
+enum PermissionOwner {
+    Owner,
+    Group,
+    Other,
+}
+
+fn format_permissions_owner(metadata: &Metadata, owner: PermissionOwner) -> String {
+    return match owner {
+        PermissionOwner::Owner => get_user_by_uid(metadata.uid())
+            .and_then(|user| user.name().to_str().map(ToOwned::to_owned))
+            .unwrap_or_default(),
+        PermissionOwner::Group => get_group_by_gid(metadata.gid())
+            .and_then(|group| group.name().to_str().map(ToOwned::to_owned))
+            .unwrap_or_default(),
+        PermissionOwner::Other => String::from(""),
+    };
+}
+fn format_permissions(metadata: &Metadata, owner: PermissionOwner) -> String {
+    let mut perms: Vec<String> = Vec::new();
+    if match owner {
+        PermissionOwner::Owner => metadata.permissions().readable_by_owner(),
+        PermissionOwner::Group => metadata.permissions().readable_by_group(),
+        PermissionOwner::Other => metadata.permissions().readable_by_other(),
+    } {
+        perms.push(fl!("read"));
+    }
+    if match owner {
+        PermissionOwner::Owner => metadata.permissions().writable_by_owner(),
+        PermissionOwner::Group => metadata.permissions().writable_by_group(),
+        PermissionOwner::Other => metadata.permissions().writable_by_other(),
+    } {
+        perms.push(fl!("write"));
+    }
+    if match owner {
+        PermissionOwner::Owner => metadata.permissions().executable_by_owner(),
+        PermissionOwner::Group => metadata.permissions().executable_by_group(),
+        PermissionOwner::Other => metadata.permissions().executable_by_other(),
+    } {
+        perms.push(fl!("execute"));
+    }
+
+    perms.join(" ")
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -827,6 +873,46 @@ impl Item {
                         chrono::DateTime::<chrono::Local>::from(time)
                             .format_localized(TIME_FORMAT, *LANGUAGE_CHRONO)
                     )));
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    column = column.push(
+                        widget::Row::new()
+                            .push(widget::text(format!("{}:", fl!("owner"))))
+                            .push(widget::text(format_permissions_owner(
+                                metadata,
+                                PermissionOwner::Owner,
+                            )))
+                            .push(widget::text(format!(
+                                "({})",
+                                format_permissions(metadata, PermissionOwner::Owner,)
+                            )))
+                            .spacing(10),
+                    );
+
+                    column = column.push(
+                        widget::Row::new()
+                            .push(widget::text(format!("{}:", fl!("group"))))
+                            .push(widget::text(format_permissions_owner(
+                                metadata,
+                                PermissionOwner::Group,
+                            )))
+                            .push(widget::text(format!(
+                                "({})",
+                                format_permissions(metadata, PermissionOwner::Group,)
+                            )))
+                            .spacing(10),
+                    );
+
+                    column = column.push(
+                        widget::Row::new()
+                            .push(widget::text(format!("{}", fl!("other"))))
+                            .push(widget::text(format!(
+                                "({})",
+                                format_permissions(metadata, PermissionOwner::Other,)
+                            )))
+                            .spacing(10),
+                    );
                 }
             }
             ItemMetadata::Trash { .. } => {
