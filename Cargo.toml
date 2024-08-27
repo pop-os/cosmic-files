@@ -47,7 +47,7 @@ i18n-embed = { version = "0.14", features = [
 i18n-embed-fl = "0.7"
 rust-embed = "8"
 slotmap = "1.0.7"
-recently-used-xbel = "1.0.0"
+recently-used-xbel = "1.1.0"
 zip = "2.1.6"
 unix_permissions_ext = "0.1.2"
 users = "0.11.0"
