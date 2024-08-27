@@ -33,25 +33,11 @@ use cosmic::{
     Element,
 };
 
-use crate::{
-    app::{self, Action},
-    clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
-    config::{IconSizes, TabConfig, ICON_SCALE_MAX, ICON_SIZE_GRID},
-    dialog::DialogKind,
-    fl,
-    localize::{LANGUAGE_CHRONO, LANGUAGE_SORTER},
-    menu,
-    mime_app::{mime_apps, MimeApp},
-    mime_icon::{mime_for_path, mime_icon},
-    mouse_area,
-};
-use chrono::{DateTime, ParseError, Utc};
+use chrono::{DateTime, Utc};
 use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
 use recently_used_xbel::{Error, RecentlyUsed};
 use serde::{Deserialize, Serialize};
-use std::cmp::Reverse;
-use std::iter::from_fn;
 use std::{
     cell::{Cell, RefCell},
     cmp::Ordering,
@@ -657,7 +643,14 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
                             }
                         };
                         let item = item_from_entry(path_buf, name, metadata, sizes);
-                        recents.push((item, if last_edit.le(&last_visit) { last_edit } else { last_visit }))
+                        recents.push((
+                            item,
+                            if last_edit.le(&last_visit) {
+                                last_edit
+                            } else {
+                                last_visit
+                            },
+                        ))
                     }
                 } else {
                     log::warn!("recent file path not exist: {:?}", path_buf);
