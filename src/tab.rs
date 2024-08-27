@@ -664,11 +664,7 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
 
     recents.sort_by(|a, b| b.1.cmp(&a.1));
 
-    let recent_items: Vec<Item> = recents.into_iter().take(50).map(|(item, _)| item).collect();
-
-    log::info!("items: {}", recent_items.len());
-
-    recent_items
+    recents.into_iter().take(50).map(|(item, _)| item).collect()
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
