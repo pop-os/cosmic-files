@@ -50,7 +50,7 @@ slotmap = "1.0.7"
 recently-used-xbel = "1.1.0"
 zip = "2.1.6"
 unix_permissions_ext = "0.1.2"
-users = "0.11.0"
+uzers = "0.12.0"
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
@@ -87,6 +87,10 @@ fastrand = "2"
 tempfile = "3"
 test-log = "0.2"
 tokio = { version = "1", features = ["rt", "macros"] }
+
+[patch.crates-io]
+# https://github.com/alexcrichton/filetime/pull/104
+filetime = { git = "https://github.com/jackpot51/filetime" }
 
 # [patch.'https://github.com/pop-os/cosmic-text']
 # cosmic-text = { path = "../cosmic-text" }
