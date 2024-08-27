@@ -87,6 +87,10 @@ tempfile = "3"
 test-log = "0.2"
 tokio = { version = "1", features = ["rt", "macros"] }
 
+[patch.crates-io]
+# https://github.com/alexcrichton/filetime/pull/104
+filetime = { git = "https://github.com/jackpot51/filetime" }
+
 # [patch.'https://github.com/pop-os/cosmic-text']
 # cosmic-text = { path = "../cosmic-text" }
 
