@@ -62,7 +62,7 @@ use crate::{
     mouse_area,
 };
 use unix_permissions_ext::UNIXPermissionsExt;
-use users::{get_group_by_gid, get_user_by_uid};
+use uzers::{get_group_by_gid, get_user_by_uid};
 
 pub const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 pub const HOVER_DURATION: Duration = Duration::from_millis(1600);
