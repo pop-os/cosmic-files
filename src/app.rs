@@ -211,7 +211,7 @@ impl MenuAction for NavMenuAction {
 pub enum Message {
     AddToSidebar(Option<Entity>),
     AppTheme(AppTheme),
-    CloseToast(usize),
+    CloseToast(widget::ToastId),
     Config(Config),
     Copy(Option<Entity>),
     Cut(Option<Entity>),
@@ -231,6 +231,7 @@ pub enum Message {
     NavBarContext(Entity),
     NavMenuAction(NavMenuAction),
     NewItem(Option<Entity>, bool),
+    #[cfg(feature = "notify")]
     Notification(Arc<Mutex<notify_rust::NotificationHandle>>),
     NotifyEvents(Vec<DebouncedEvent>),
     NotifyWatcher(WatcherWrapper),
@@ -263,7 +264,7 @@ pub enum Message {
     TabRescan(Entity, Location, Vec<tab::Item>, Option<PathBuf>),
     ToggleContextPage(ContextPage),
     Undo(usize),
-    UndoTrash(usize, Arc<[PathBuf]>),
+    UndoTrash(widget::ToastId, Arc<[PathBuf]>),
     UndoTrashStart(Vec<TrashItem>),
     WindowClose,
     WindowNew,
@@ -368,6 +369,7 @@ pub struct App {
     modifiers: Modifiers,
     mounters: Mounters,
     mounter_items: HashMap<MounterKey, MounterItems>,
+    #[cfg(feature = "notify")]
     notification_opt: Option<Arc<Mutex<notify_rust::NotificationHandle>>>,
     pending_operation_id: u64,
     pending_operations: BTreeMap<u64, (Operation, f32)>,
@@ -604,6 +606,7 @@ impl App {
     fn update_notification(&mut self) -> Command<Message> {
         // Handle closing notification if there are no operations
         if self.pending_operations.is_empty() {
+            #[cfg(feature = "notify")]
             if let Some(notification_arc) = self.notification_opt.take() {
                 return Command::perform(
                     async move {
@@ -1067,6 +1070,7 @@ impl Application for App {
             modifiers: Modifiers::empty(),
             mounters: mounters(),
             mounter_items: HashMap::new(),
+            #[cfg(feature = "notify")]
             notification_opt: None,
             pending_operation_id: 0,
             pending_operations: BTreeMap::new(),
@@ -1463,6 +1467,7 @@ impl Application for App {
                     }
                 }
             }
+            #[cfg(feature = "notify")]
             Message::Notification(notification) => {
                 self.notification_opt = Some(notification);
             }
@@ -2830,38 +2835,43 @@ impl Application for App {
             //TODO: inhibit suspend/shutdown?
 
             if self.window_id_opt.is_none() {
-                struct NotificationSubscription;
-                subscriptions.push(subscription::channel(
-                    TypeId::of::<NotificationSubscription>(),
-                    1,
-                    move |msg_tx| async move {
-                        let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
-                        tokio::task::spawn_blocking(move || match notify_rust::Notification::new()
-                            .summary(&fl!("notification-in-progress"))
-                            .timeout(notify_rust::Timeout::Never)
-                            .show()
-                        {
-                            Ok(notification) => {
-                                let _ = futures::executor::block_on(async {
-                                    msg_tx
-                                        .lock()
-                                        .await
-                                        .send(Message::Notification(Arc::new(Mutex::new(
-                                            notification,
-                                        ))))
-                                        .await
-                                });
-                            }
-                            Err(err) => {
-                                log::warn!("failed to create notification: {}", err);
-                            }
-                        })
-                        .await
-                        .unwrap();
+                #[cfg(feature = "notify")]
+                {
+                    struct NotificationSubscription;
+                    subscriptions.push(subscription::channel(
+                        TypeId::of::<NotificationSubscription>(),
+                        1,
+                        move |msg_tx| async move {
+                            let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
+                            tokio::task::spawn_blocking(move || {
+                                match notify_rust::Notification::new()
+                                    .summary(&fl!("notification-in-progress"))
+                                    .timeout(notify_rust::Timeout::Never)
+                                    .show()
+                                {
+                                    Ok(notification) => {
+                                        let _ = futures::executor::block_on(async {
+                                            msg_tx
+                                                .lock()
+                                                .await
+                                                .send(Message::Notification(Arc::new(Mutex::new(
+                                                    notification,
+                                                ))))
+                                                .await
+                                        });
+                                    }
+                                    Err(err) => {
+                                        log::warn!("failed to create notification: {}", err);
+                                    }
+                                }
+                            })
+                            .await
+                            .unwrap();
 
-                        pending().await
-                    },
-                ));
+                            pending().await
+                        },
+                    ));
+                }
             }
         }
 
