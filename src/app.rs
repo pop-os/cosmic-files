@@ -1595,7 +1595,7 @@ impl Application for App {
                         Ok(()) => {
                             let _ = recently_used_xbel::update_recently_used(
                                 &path,
-                                "org.cosmic.cosmic-files".to_string(),
+                                "com.system76.cosmic-files".to_string(),
                                 "cosmic-files".to_string(),
                                 None,
                             );
@@ -1988,7 +1988,7 @@ impl Application for App {
                                 Ok(()) => {
                                     let _ = recently_used_xbel::update_recently_used(
                                         &item_path,
-                                        "org.cosmic.cosmic-files".to_string(),
+                                        "com.system76.cosmic-files".to_string(),
                                         "cosmic-files".to_string(),
                                         None,
                                     );
