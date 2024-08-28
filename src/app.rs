@@ -69,6 +69,8 @@ use crate::{
     tab::{self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION},
 };
 
+static REFRESH_VIEW_DELAY_MS: u64 = 20; 
+
 #[derive(Clone, Debug)]
 pub enum Mode {
     App,
@@ -111,6 +113,7 @@ pub enum Action {
     OpenWith,
     Paste,
     Properties,
+    Refresh,
     Rename,
     RestoreFromTrash,
     SearchActivate,
@@ -163,6 +166,7 @@ impl Action {
             Action::OpenWith => Message::ToggleContextPage(ContextPage::OpenWith),
             Action::Paste => Message::Paste(entity_opt),
             Action::Properties => Message::ToggleContextPage(ContextPage::Properties(None)),
+            Action::Refresh => Message::Refresh(entity_opt),
             Action::Rename => Message::Rename(entity_opt),
             Action::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
             Action::SearchActivate => Message::SearchActivate,
@@ -272,6 +276,9 @@ pub enum Message {
     PendingComplete(u64),
     PendingError(u64, String),
     PendingProgress(u64, f32),
+    Refresh(Option<Entity>),
+    RefreshDelayStart(Entity, Location),
+    RefreshDelayComplete(Entity, Location),
     RescanTrash,
     Rename(Option<Entity>),
     ReplaceResult(ReplaceResult),
@@ -1849,6 +1856,28 @@ impl Application for App {
                 }
                 return self.update_notification();
             }
+            Message::Refresh(entity_opt) => {
+                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                    let location = tab.location.clone();
+                    tab.set_items(vec![]);
+                    tab.refresh_active = true;
+                    return cosmic::command::message(Message::RefreshDelayStart(entity, location));
+                }
+                return Command::none();
+            }
+            Message::RefreshDelayComplete(entity, location) => {
+                if self.search_input.is_empty() {
+                    return self.rescan_tab(entity, location, None);
+                } else {
+                    return self.search();
+                }
+            }
+            Message::RefreshDelayStart(entity, location) => {
+                return Command::perform(tokio::time::sleep(tokio::time::Duration::from_millis(REFRESH_VIEW_DELAY_MS)), move |_| {
+                     cosmic::app::Message::App(Message::RefreshDelayComplete(entity, location))
+                });
+            }
             Message::RescanTrash => {
                 // Update trash icon if empty/full
                 let maybe_entity = self.nav_model.iter().find(|&entity| {
@@ -2206,6 +2235,9 @@ impl Application for App {
                             tab.set_items(items);
                             if let Some(selection_path) = selection_path {
                                 tab.select_path(selection_path);
+                            }
+                            if tab.refresh_active {
+                                tab.refresh_active = false;
                             }
                         }
                     }

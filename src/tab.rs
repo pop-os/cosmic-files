@@ -1171,12 +1171,14 @@ pub struct Tab {
     pub config: TabConfig,
     pub(crate) items_opt: Option<Vec<Item>>,
     pub dnd_hovered: Option<(Location, Instant)>,
+    pub(crate) refresh_active: bool,
     scrollable_id: widget::Id,
     select_focus: Option<usize>,
     select_range: Option<(usize, usize)>,
     cached_selected: RefCell<Option<bool>>,
     clicked: Option<usize>,
     selected_clicked: bool,
+
 }
 
 fn folder_name<P: AsRef<Path>>(path: P) -> (String, bool) {
@@ -1216,6 +1218,7 @@ impl Tab {
             history,
             config,
             items_opt: None,
+            refresh_active: false,
             scrollable_id: widget::Id::unique(),
             select_focus: None,
             select_range: None,
@@ -2608,7 +2611,9 @@ impl Tab {
                         .size(64)
                         .icon()
                         .into(),
-                    widget::text(if has_hidden {
+                    widget::text(if self.refresh_active {
+                        fl!("refresh-loading")
+                    } else if has_hidden {
                         fl!("empty-folder-hidden")
                     } else if matches!(self.location, Location::Search(_, _)) {
                         fl!("no-results")
