@@ -9,6 +9,7 @@ use cosmic::{
     widget::menu::{self, key_bind::KeyBind, ItemHeight, ItemWidth, MenuBar},
     Element,
 };
+use mime_guess::Mime;
 use std::collections::HashMap;
 
 use crate::{
@@ -80,6 +81,7 @@ pub fn context_menu<'a>(
 
     let mut selected_dir = 0;
     let mut selected = 0;
+    let mut selected_types: Vec<Mime> = vec![];
     tab.items_opt().map(|items| {
         for item in items.iter() {
             if item.selected {
@@ -87,9 +89,12 @@ pub fn context_menu<'a>(
                 if item.metadata.is_dir() {
                     selected_dir += 1;
                 }
+                selected_types.push(item.mime.clone());
             }
         }
     });
+    selected_types.sort_unstable();
+    selected_types.dedup();
 
     let mut children: Vec<Element<_>> = Vec::new();
     match tab.location {
@@ -105,6 +110,11 @@ pub fn context_menu<'a>(
                             .push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
                     }
                 }
+                if matches!(tab.location, Location::Search(_, _)) {
+                    children.push(
+                        menu_item(fl!("open-item-location"), Action::OpenItemLocation).into(),
+                    );
+                }
                 // All selected items are directories
                 if selected == selected_dir {
                     children.push(menu_item(fl!("open-in-new-tab"), Action::OpenInNewTab).into());
@@ -115,6 +125,16 @@ pub fn context_menu<'a>(
                 children.push(menu_item(fl!("rename"), Action::Rename).into());
                 children.push(menu_item(fl!("cut"), Action::Cut).into());
                 children.push(menu_item(fl!("copy"), Action::Copy).into());
+
+                let supported_archive_types = ["application/x-tar", "application/zip"]
+                    .iter()
+                    .filter_map(|mime_type| mime_type.parse::<Mime>().ok())
+                    .collect::<Vec<_>>();
+                selected_types.retain(|t| !supported_archive_types.contains(t));
+                if selected_types.is_empty() {
+                    children.push(menu_item(fl!("extract-here"), Action::ExtractHere).into());
+                }
+
                 //TODO: Print?
                 children.push(container(horizontal_rule(1)).padding([0, 8]).into());
                 children.push(menu_item(fl!("show-details"), Action::Properties).into());

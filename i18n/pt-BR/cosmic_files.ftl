@@ -1,9 +1,12 @@
 cosmic-files = Arquivos do COSMIC
 empty-folder = Pasta vazia
 empty-folder-hidden = Pasta vazia (contém itens ocultos)
-filesystem = Sistema de Arquivos
+no-results = Nenhum item encontrado
+filesystem = Sistema de arquivos
 home = Pasta pessoal
+notification-in-progress = Há operações de arquivo em andamento.
 trash = Lixeira
+undo = Desfazer
 
 # List view
 name = Nome
@@ -34,6 +37,7 @@ open-file = Abrir arquivo
 open-folder = Abrir pasta
 open-in-new-tab = Abrir em uma nova aba
 open-in-new-window = Abrir em uma nova janela
+open-item-location = Abrir local do item
 open-multiple-files = Abrir vários arquivos
 open-multiple-folders = Abrir várias pastas
 save = Salvar
@@ -46,7 +50,22 @@ rename-folder = Renomear pasta
 ## Replace Dialog
 replace = Substituir
 replace-title = {$filename} já existe neste local.
-replace-warning = Deseja substituir o arquivo com o que você está salvando? Substituir sobrescreverá o conteúdo do arquivo.
+replace-warning = Deseja substituir o arquivo com o que você está salvando? Substituí-lo irá sobrescrever seu conteúdo.
+replace-warning-operation = Deseja substituir o arquivo? Substituí-lo irá sobrescrever seu conteúdo.
+original-file = Arquivo original
+replace-with = Substituir por
+apply-to-all = Aplicar a todos
+keep-both = Manter ambos
+skip = Ignorar
+
+
+## Metadata Dialog
+owner = Proprietário
+group = Grupo
+other = Outros
+read = Leitura
+write = Escrita
+execute = Execução
 
 # Context Pages
 
@@ -54,18 +73,60 @@ replace-warning = Deseja substituir o arquivo com o que você está salvando? Su
 git-description = Git commit {$hash} de {$date}
 
 ## Operations
-operations = Operações
+edit-history = Editar histórico
+history = Histórico
+no-history = Nenhum item no histórico.
 pending = Pendente
 failed = Com falha
 complete = Completo
 copy_noun = Copiado
+creating = Criando {$name} em {$parent}
+created = Criado {$name} em {$parent}
+copying = Copiando {$items} {$items ->
+        [one] item
+        *[other] itens
+    } de {$from} para {$to}
+copied = Copiado {$items} {$items ->
+        [one] item
+        *[other] itens
+    } de {$from} para {$to}
+emptying-trash = Esvaziando a lixeira
+emptied-trash = Lixeira vazia
+extracting = Extraindo {$items} {$items ->
+        [one] item
+        *[other] itens
+    } de {$from} para {$to}
+extracted = Extraído {$items} {$items ->
+        [one] item
+        *[other] itens
+    } de {$from} para {$to}
+moving = Movendo {$items} {$items ->
+        [one] item
+        *[other] itens
+    } de {$from} para {$to}
+moved = Movido {$items} {$items ->
+        [one] item
+        *[other] itens
+    } de {$from} para {$to}
+renaming = Renomeando {$from} para {$to}
+renamed = Renomeado {$from} para {$to}
+restoring = Restaurando {$items} {$items ->
+        [one] item
+        *[other] itens
+    } da lixeira
+restored = Restaurado {$items} {$items ->
+        [one] item
+        *[other] itens
+    } da lixeira
+undo = Desfazer
+unknown-folder = pasta desconhecida
 
 ## Open with
-open-with = Abrir com
+open-with = Abrir com...
 default-app = {$name} (padrão)
 
-## Properties
-properties = Propriedades
+## Show details
+show-details = Mostrar detalhes
 
 ## Settings
 settings = Configurações
@@ -81,17 +142,18 @@ descending = Decrescente
 
 ### Appearance
 appearance = Aparência
-theme = Tema 
+theme = Tema
 match-desktop = Acompanhar o ambiente de trabalho
 dark = Escuro
 light = Claro
 
 # Context menu
+extract-here = Extrair
 add-to-sidebar = Adicionar à barra lateral
-new-file = Novo arquivo
-new-folder = Nova pasta
+new-file = Novo arquivo...
+new-folder = Nova pasta...
 open-in-terminal = Abrir no terminal
-move-to-trash = Mover para lixeira 
+move-to-trash = Mover para a lixeira
 restore-from-trash = Restaurar da lixeira
 remove-from-sidebar = Remover da barra lateral
 sort-by-name = Ordenar por nome
@@ -104,7 +166,8 @@ sort-by-size = Ordenar por tamanho
 file = Arquivo
 new-tab = Nova aba
 new-window = Nova janela
-rename = Renomear
+rename = Renomear...
+menu-show-details = Mostrar detalhes...
 close-tab = Fechar aba
 quit = Sair
 
@@ -122,7 +185,7 @@ zoom-out = Reduzir
 view = Exibir
 grid-view = Exibição em grade
 list-view = Exibição em lista
-show-hidden-files = Exibir arquivos ocultos
+show-hidden-files = Mostrar arquivos ocultos
 list-directories-first = Listar pastas primeiro
 menu-settings = Configurações...
 menu-about = Sobre o Arquivos do COSMIC...

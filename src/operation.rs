@@ -1,8 +1,11 @@
 use cosmic::iced::futures::{channel::mpsc::Sender, executor, SinkExt};
+use mime_guess::MimeGuess;
 use std::{
     borrow::Cow,
     fs,
+    io::{self, Error},
     path::{Path, PathBuf},
+    process,
     sync::{
         atomic::{self, AtomicU64},
         Arc,
@@ -138,6 +141,11 @@ pub enum Operation {
     },
     /// Empty the trash
     EmptyTrash,
+    /// Uncompress files
+    Extract {
+        paths: Vec<PathBuf>,
+        to: PathBuf,
+    },
     /// Move items
     Move {
         paths: Vec<PathBuf>,
@@ -250,6 +258,12 @@ impl Operation {
                 to = fl!("trash")
             ),
             Self::EmptyTrash => fl!("emptying-trash"),
+            Self::Extract { paths, to } => fl!(
+                "extracting",
+                items = paths.len(),
+                from = paths_parent_name(paths),
+                to = file_name(to)
+            ),
             Self::Move { paths, to } => fl!(
                 "moving",
                 items = paths.len(),
@@ -289,6 +303,12 @@ impl Operation {
                 to = fl!("trash")
             ),
             Self::EmptyTrash => fl!("emptied-trash"),
+            Self::Extract { paths, to } => fl!(
+                "extracted",
+                items = paths.len(),
+                from = paths_parent_name(paths),
+                to = file_name(to)
+            ),
             Self::Move { paths, to } => fl!(
                 "moved",
                 items = paths.len(),
@@ -478,6 +498,50 @@ impl Operation {
                     .await
                     .send(Message::PendingProgress(id, 100.0))
                     .await;
+            }
+            Self::Extract { paths, to } => {
+                for path in paths {
+                    let to = to.to_owned();
+
+                    tokio::task::spawn_blocking(move || -> Result<(), String> {
+                        if let Some(file_stem) = path.file_stem() {
+                            let mut new_dir = to.join(file_stem);
+                            if new_dir.exists() {
+                                let mut extensionless_path = path.to_owned();
+                                extensionless_path.set_extension("");
+                                if let Some(new_dir_parent) = new_dir.parent() {
+                                    new_dir = copy_unique_path(&extensionless_path, new_dir_parent);
+                                }
+                            }
+
+                            if let Some(mime) = mime_guess::from_path(&path).first() {
+                                match mime.essence_str() {
+                                    "application/x-tar" => {
+                                        return fs::File::open(path)
+                                            .map(io::BufReader::new)
+                                            .map(tar::Archive::new)
+                                            .and_then(|mut archive| archive.unpack(new_dir))
+                                            .map_err(err_str)
+                                    }
+                                    "application/zip" => {
+                                        return fs::File::open(path)
+                                            .map(io::BufReader::new)
+                                            .map(zip::ZipArchive::new)
+                                            .map_err(err_str)?
+                                            .and_then(|mut archive| archive.extract(new_dir))
+                                            .map_err(err_str)
+                                    }
+                                    _ => Err(format!("unsupported mime type {:?}", mime))?,
+                                }
+                            }
+                        }
+
+                        Ok(())
+                    })
+                    .await
+                    .map_err(err_str)?
+                    .map_err(err_str)?;
+                }
             }
             Self::Move { paths, to } => {
                 let msg_tx = msg_tx.clone();
