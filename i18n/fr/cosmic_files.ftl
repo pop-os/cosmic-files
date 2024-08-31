@@ -1,6 +1,7 @@
 cosmic-files = Fichiers COSMIC
 empty-folder = Dossier vide
 empty-folder-hidden = Dossier vide (contient des éléments cachés)
+no-results = Aucun résultat trouvé
 filesystem = Système de fichiers
 home = Dossier personnel
 notification-in-progress = Les opérations sur les fichiers sont en cours.
@@ -18,7 +19,7 @@ size = Taille
 empty-trash = Vider la corbeille
 empty-trash-warning = Êtes-vous sûr de vouloir supprimer définitivement tous les éléments de la corbeille ?
 
-# New File/Folder Dialog
+## New File/Folder Dialog
 create-new-file = Créer un nouveau fichier
 create-new-folder = Créer un nouveau dossier
 file-name = Nom du fichier
@@ -29,23 +30,24 @@ name-hidden = Les noms commençant par "." seront cachés.
 name-invalid = Le nom ne peut pas être "{$filename}".
 name-no-slashes = Le nom ne peut pas contenir de slashs.
 
-# Open/Save Dialog
+## Open/Save Dialog
 cancel = Annuler
 open = Ouvrir
 open-file = Ouvrir le fichier
 open-folder = Ouvrir le dossier
 open-in-new-tab = Ouvrir dans un nouvel onglet
 open-in-new-window = Ouvrir dans une nouvelle fenêtre
+open-item-location = Ouvrir l'emplacement de l'élément
 open-multiple-files = Ouvrir plusieurs fichiers
 open-multiple-folders = Ouvrir plusieurs dossiers
 save = Enregistrer
 save-file = Enregistrer fichier
 
-# Rename Dialog
+## Rename Dialog
 rename-file = Renommer le fichier
 rename-folder = Renommer le dossier
 
-# Replace Dialog
+## Replace Dialog
 replace = Remplacer
 replace-title = {$filename} existe déjà à cet endroit.
 replace-warning = Voulez-vous remplacer ce fichier par celui que vous enregistrez ? Cela écrasera son contenu.
@@ -56,6 +58,15 @@ apply-to-all = Appliquer à tous
 keep-both = Conserver les deux
 skip = Ignorer
 
+
+## Metadata Dialog
+owner = Propriétaire
+group = Groupe
+other = Autre
+read = Lecture
+write = Écriture
+execute = Exécution
+
 # Context Pages
 
 ## About
@@ -65,7 +76,6 @@ git-description = Git commit {$hash} le {$date}
 edit-history = Modifier l'historique
 history = Historique
 no-history = Aucun élément dans l'historique.
-operations = Opérations
 pending = En attente
 failed = Échoué
 complete = Terminé
@@ -82,6 +92,14 @@ copied = Copié {$items} {$items ->
     } de {$from} vers {$to}
 emptying-trash = {trash} en cours de nettoyage
 emptied-trash = {trash} vidée
+extracting = Extraction de {$items} {$items ->
+        [one] élément
+        *[other] éléments
+    } de {$from} vers {$to}
+extracted = Extraits {$items} {$items ->
+        [one] élément
+        *[other] éléments
+    } de {$from} vers {$to}
 moving = Déplacement {$items} {$items ->
         [one] élément
         *[other] éléments
@@ -110,13 +128,11 @@ default-app = {$name} (défaut)
 ## Show details
 show-details = Afficher les détails
 
-## Properties
-properties = Propriétés
-
 ## Settings
 settings = Paramètres
 settings-tab = Onglet
 settings-show-hidden = Afficher les fichiers cachés
+default-view = Vue par défaut
 icon-size-list = Taille des icônes (liste)
 icon-size-grid = Taille des icônes (grille)
 sorting-name = Trier par
@@ -132,6 +148,7 @@ dark = Sombre
 light = Clair
 
 # Context menu
+extract-here = Extraire
 add-to-sidebar = Ajouter à la barre latérale
 new-file = Nouveau fichier
 new-folder = Nouveau dossier
