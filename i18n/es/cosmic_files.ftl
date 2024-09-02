@@ -3,6 +3,7 @@ empty-folder = Carpeta vacía
 empty-folder-hidden = Carpeta vacía (tiene elementos escondidos)
 filesystem = Sistema de archivos
 home = Inicio
+recents = Reciente
 trash = Papelera
 
 # List view

@@ -6,6 +6,7 @@ filesystem = Filesystem
 home = Home
 notification-in-progress = Operazioni sui file in corso ...
 trash = Cestino
+recents = Recenti
 undo = Annulla ultima operazione
 
 # List view

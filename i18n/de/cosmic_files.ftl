@@ -4,6 +4,7 @@ empty-folder-hidden = Leerer Ordner (hat versteckte Elemente)
 filesystem = Dateisystem
 home = Benutzerordner
 trash = Papierkorb
+recents = Aktuelle
 undo = Rückgängig
 
 # Listenansicht
