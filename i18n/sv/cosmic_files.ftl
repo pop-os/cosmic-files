@@ -20,6 +20,7 @@ operations = Operationer
 pending = Väntar
 failed = Misslyckades
 complete = Slutförd
+history = Historik
 
 ## Properties
 properties = Egenskaper
@@ -37,6 +38,7 @@ light = Ljust
 # Context menu
 new-file = Ny fil
 new-folder = Ny katalog
+add-to-sidebar = Lägg till i sidofält
 move-to-trash = Flytta till papperskorg
 restore-from-trash = Återställ från papperskorgen
 
@@ -57,7 +59,20 @@ paste = Klistra in
 select-all = Välj alla
 
 ## View
+zoom-in = Zooma in
+default-size = Standardstorlek
+zoom-out = Zooma ut
 view = Visa
 grid-view = Rutnätsvy
 list-view = Listvy
+show-hidden-files = Visa dolda filer
+list-directories-first = Lista kataloger först
 menu-settings = Inställningar...
+menu-about = Om COSMIC Files...
+
+## Open with
+open-with = Öppna med...
+default-app = {$name} (standard)
+
+## Show details
+show-details = Visa detaljer
