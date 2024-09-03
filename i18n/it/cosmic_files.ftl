@@ -58,6 +58,15 @@ apply-to-all = Applica a tutto
 keep-both = Tieni entrambi
 skip = Salta
 
+
+## Metadata Dialog
+owner = Proprietario
+group = Gruppo
+other = Altro
+read = Lettura
+write = Scrittura
+execute = Esecuzione
+
 # Context Pages
 
 ## About
@@ -170,9 +179,9 @@ paste = Incolla
 select-all = Seleziona tutti
 
 ## View
-zoom-in = Zoom in
-default-size = Default size
-zoom-out = Zoom out
+zoom-in = Ingrandisci
+default-size = Reimposta il livello di zoom
+zoom-out = Riduci
 view = Vista
 grid-view = Griglia
 list-view = Lista
