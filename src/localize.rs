@@ -41,7 +41,8 @@ pub static LANGUAGE_SORTER: Lazy<Collator> = Lazy::new(|| {
 });
 
 pub static LANGUAGE_CHRONO: Lazy<chrono::Locale> = Lazy::new(|| {
-    std::env::var("LANG")
+    std::env::var("LC_TIME")
+        .or_else(|_| std::env::var("LANG"))
         .ok()
         .and_then(|locale_full| {
             // Split LANG because it may be set to a locale such as en_US.UTF8

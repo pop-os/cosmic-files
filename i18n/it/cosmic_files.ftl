@@ -70,47 +70,47 @@ no-history = Nessun elemento nella cronologia
 pending = In sospeso
 failed = Non riuscito
 complete = Completato
-copy_noun = Copy
-creating = Creating {$name} in {$parent}
-created = Created {$name} in {$parent}
-copying = Copying {$items} {$items ->
-        [one] item
-        *[other] items
-    } from {$from} to {$to}
-copied = Copied {$items} {$items ->
-        [one] item
-        *[other] items
-    } from {$from} to {$to}
-emptying-trash = Emptying {trash}
-emptied-trash = Emptied {trash}
-extracting = Extracting {$items} {$items ->
-        [one] item
-        *[other] items
-    } from {$from} to {$to}
-extracted = Extracted {$items} {$items ->
-        [one] item
-        *[other] items
-    } from {$from} to {$to}
-moving = Moving {$items} {$items ->
-        [one] item
-        *[other] items
-    } from {$from} to {$to}
-moved = Moved {$items} {$items ->
-        [one] item
-        *[other] items
-    } from {$from} to {$to}
-renaming = Renaming {$from} to {$to}
-renamed = Renamed {$from} to {$to}
-restoring = Restoring {$items} {$items ->
-        [one] item
-        *[other] items
-    } from {trash}
-restored = Restored {$items} {$items ->
-        [one] item
-        *[other] items
-    } from {trash}
-undo = Undo
-unknown-folder = unknown folder
+copy_noun = Copia
+creating = Creazione di {$name} in {$parent}
+created = {$name} creato in {$parent}
+copying = Copiando {$items} {$items ->
+        [one] elemento
+        *[other] elementi
+    } da {$from} a {$to}
+copied = Copiato {$items} {$items ->
+        [one] elemento
+        *[other] elementi
+    } da {$from} a {$to}
+emptying-trash = Svuotamento {trash}
+emptied-trash = {trash} svuotato
+extracting = Estraendo {$items} {$items ->
+        [one] elemento
+        *[other] elementi
+    } da {$from} a {$to}
+extracted = Estratto {$items} {$items ->
+        [one] elemento
+        *[other] elementi
+    } da {$from} a {$to}
+moving = Spostando {$items} {$items ->
+        [one] elemento
+        *[other] elementi
+    } da {$from} a {$to}
+moved = Spostato {$items} {$items ->
+        [one] elemento
+        *[other] elementi
+    } da {$from} a {$to}
+renaming = Rinomina {$from} in {$to}
+renamed = Rinominato {$from} in {$to}
+restoring = Ripristinando {$items} {$items ->
+        [one] elemento
+        *[other] elementi
+    } da {trash}
+restored = Ripristinato {$items} {$items ->
+        [one] elemento
+        *[other] elementi
+    } da {trash}
+undo = Annulla
+unknown-folder = cartella sconosciuta
 
 ## Open with
 open-with = Apri con
