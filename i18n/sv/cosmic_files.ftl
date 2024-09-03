@@ -60,7 +60,7 @@ select-all = Välj alla
 
 ## View
 zoom-in = Zooma in
-default-size = Standard storlek
+default-size = Standardstorlek
 zoom-out = Zooma ut
 view = Visa
 grid-view = Rutnätsvy
