@@ -58,11 +58,27 @@ use std::{
     fmt,
     fs::{self, Metadata},
     num::NonZeroU16,
+    os::unix::fs::MetadataExt,
     path::PathBuf,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 use rayon::prelude::*;
+
+use crate::{
+    app::{self, Action},
+    clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
+    config::{IconSizes, TabConfig, ICON_SCALE_MAX, ICON_SIZE_GRID},
+    dialog::DialogKind,
+    fl,
+    localize::{LANGUAGE_CHRONO, LANGUAGE_SORTER},
+    menu,
+    mime_app::{mime_apps, MimeApp},
+    mime_icon::{mime_for_path, mime_icon},
+    mouse_area,
+};
+use unix_permissions_ext::UNIXPermissionsExt;
+use uzers::{get_group_by_gid, get_user_by_uid};
 
 pub const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 pub const HOVER_DURATION: Duration = Duration::from_millis(1600);
@@ -202,6 +218,49 @@ fn format_size(size: u64) -> String {
         format!("{} B", size)
     }
 }
+enum PermissionOwner {
+    Owner,
+    Group,
+    Other,
+}
+
+fn format_permissions_owner(metadata: &Metadata, owner: PermissionOwner) -> String {
+    return match owner {
+        PermissionOwner::Owner => get_user_by_uid(metadata.uid())
+            .and_then(|user| user.name().to_str().map(ToOwned::to_owned))
+            .unwrap_or_default(),
+        PermissionOwner::Group => get_group_by_gid(metadata.gid())
+            .and_then(|group| group.name().to_str().map(ToOwned::to_owned))
+            .unwrap_or_default(),
+        PermissionOwner::Other => String::from(""),
+    };
+}
+fn format_permissions(metadata: &Metadata, owner: PermissionOwner) -> String {
+    let mut perms: Vec<String> = Vec::new();
+    if match owner {
+        PermissionOwner::Owner => metadata.permissions().readable_by_owner(),
+        PermissionOwner::Group => metadata.permissions().readable_by_group(),
+        PermissionOwner::Other => metadata.permissions().readable_by_other(),
+    } {
+        perms.push(fl!("read"));
+    }
+    if match owner {
+        PermissionOwner::Owner => metadata.permissions().writable_by_owner(),
+        PermissionOwner::Group => metadata.permissions().writable_by_group(),
+        PermissionOwner::Other => metadata.permissions().writable_by_other(),
+    } {
+        perms.push(fl!("write"));
+    }
+    if match owner {
+        PermissionOwner::Owner => metadata.permissions().executable_by_owner(),
+        PermissionOwner::Group => metadata.permissions().executable_by_group(),
+        PermissionOwner::Other => metadata.permissions().executable_by_other(),
+    } {
+        perms.push(fl!("execute"));
+    }
+
+    perms.join(" ")
+}
 
 #[cfg(not(target_os = "windows"))]
 fn hidden_attribute(_metadata: &Metadata) -> bool {
@@ -336,7 +395,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                     }
                 };
 
-                let metadata = match entry.metadata() {
+                let metadata = match fs::metadata(&path) {
                     Ok(ok) => ok,
                     Err(err) => {
                         log::warn!("failed to read metadata for entry at {:?}: {}", path, err);
@@ -397,7 +456,7 @@ pub fn scan_search(tab_path: &PathBuf, term: &str, sizes: IconSizes) -> Vec<Item
                 if regex.is_match(file_name) {
                     let path = entry.path();
 
-                    let metadata = match entry.metadata() {
+                    let metadata = match fs::metadata(&path) {
                         Ok(ok) => ok,
                         Err(err) => {
                             log::warn!("failed to read metadata for entry at {:?}: {}", path, err);
@@ -622,7 +681,7 @@ impl Location {
 #[derive(Clone, Debug)]
 pub enum Command {
     Action(Action),
-    ChangeLocation(String, Location),
+    ChangeLocation(String, Location, Option<PathBuf>),
     EmptyTrash,
     FocusButton(widget::Id),
     FocusTextInput(widget::Id),
@@ -877,6 +936,46 @@ impl Item {
                             .format_localized(TIME_FORMAT, *LANGUAGE_CHRONO)
                     )));
                 }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    column = column.push(
+                        widget::Row::new()
+                            .push(widget::text(format!("{}:", fl!("owner"))))
+                            .push(widget::text(format_permissions_owner(
+                                metadata,
+                                PermissionOwner::Owner,
+                            )))
+                            .push(widget::text(format!(
+                                "({})",
+                                format_permissions(metadata, PermissionOwner::Owner,)
+                            )))
+                            .spacing(10),
+                    );
+
+                    column = column.push(
+                        widget::Row::new()
+                            .push(widget::text(format!("{}:", fl!("group"))))
+                            .push(widget::text(format_permissions_owner(
+                                metadata,
+                                PermissionOwner::Group,
+                            )))
+                            .push(widget::text(format!(
+                                "({})",
+                                format_permissions(metadata, PermissionOwner::Group,)
+                            )))
+                            .spacing(10),
+                    );
+
+                    column = column.push(
+                        widget::Row::new()
+                            .push(widget::text(format!("{}", fl!("other"))))
+                            .push(widget::text(format!(
+                                "({})",
+                                format_permissions(metadata, PermissionOwner::Other,)
+                            )))
+                            .spacing(10),
+                    );
+                }
             }
             ItemMetadata::Trash { .. } => {
                 //TODO: trash metadata
@@ -973,6 +1072,7 @@ pub struct Tab {
     pub dialog: Option<DialogKind>,
     pub scroll_opt: Option<AbsoluteOffset>,
     pub size_opt: Cell<Option<Size>>,
+    pub item_view_size_opt: Cell<Option<Size>>,
     pub edit_location: Option<Location>,
     pub edit_location_id: widget::Id,
     pub history_i: usize,
@@ -999,6 +1099,7 @@ impl Tab {
             dialog: None,
             scroll_opt: None,
             size_opt: Cell::new(None),
+            item_view_size_opt: Cell::new(None),
             edit_location: None,
             edit_location_id: widget::Id::unique(),
             history_i: 0,
@@ -1074,11 +1175,16 @@ impl Tab {
         *self.cached_selected.borrow_mut() = None;
         if let Some(ref mut items) = self.items_opt {
             for item in items.iter_mut() {
-                if item.name == name {
-                    item.selected = true;
-                } else {
-                    item.selected = false;
-                }
+                item.selected = item.name == name;
+            }
+        }
+    }
+
+    pub fn select_path(&mut self, path: PathBuf) {
+        *self.cached_selected.borrow_mut() = None;
+        if let Some(ref mut items) = self.items_opt {
+            for item in items.iter_mut() {
+                item.selected = item.path_opt.as_ref() == Some(&path);
             }
         }
     }
@@ -1181,7 +1287,10 @@ impl Tab {
                 Some(offset) => Point::new(0.0, offset.y),
                 None => Point::new(0.0, 0.0),
             };
-            let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
+            let size = self
+                .item_view_size_opt
+                .get()
+                .unwrap_or_else(|| Size::new(0.0, 0.0));
             Rectangle::new(point, size)
         };
 
@@ -1811,7 +1920,8 @@ impl Tab {
                 let heading_sort = if self.config.sort_name == heading_option {
                     !self.config.sort_direction
                 } else {
-                    true
+                    // Default modified to descending, and others to ascending.
+                    heading_option != HeadingOptions::Modified
                 };
                 self.config.sort_direction = heading_sort;
                 self.config.sort_name = heading_option;
@@ -1919,8 +2029,13 @@ impl Tab {
                     Location::Trash => true,
                     Location::Bookmarks => true,
                 } {
+                    let prev_path = if let Location::Path(path) = &self.location {
+                        Some(path.clone())
+                    } else {
+                        None
+                    };
                     self.change_location(&location, history_i_opt);
-                    commands.push(Command::ChangeLocation(self.title(), location));
+                    commands.push(Command::ChangeLocation(self.title(), location, prev_path));
                 } else {
                     log::warn!("tried to cd to {:?} which is not a directory", location);
                 }
@@ -2157,9 +2272,9 @@ impl Tab {
                 crate::mouse_area::MouseArea::new(
                     widget::button(widget::icon::from_name("edit-symbolic").size(16))
                         .padding(space_xxs)
-                        .style(theme::Button::Icon),
+                        .style(theme::Button::Icon)
+                        .on_press(Message::EditLocation(Some(self.location.clone()))),
                 )
-                .on_press(move |_| Message::EditLocation(Some(self.location.clone())))
                 .on_middle_press(move |_| Message::OpenInNewTab(path.clone())),
             );
             w += 16.0 + 2.0 * space_xxs as f32;
@@ -2259,24 +2374,22 @@ impl Tab {
                     let mut mouse_area = crate::mouse_area::MouseArea::new(
                         widget::button(row)
                             .padding(space_xxxs)
-                            .style(theme::Button::Link),
-                    )
-                    .on_press(move |_| {
-                        Message::Location(match &self.location {
-                            Location::Path(_) => Location::Path(ancestor.to_path_buf()),
-                            Location::Search(_, term) => {
-                                Location::Search(ancestor.to_path_buf(), term.clone())
-                            }
-                            other => other.clone(),
-                        })
-                    });
+                            .style(theme::Button::Link)
+                            .on_press(Message::Location(match &self.location {
+                                Location::Path(_) => Location::Path(ancestor.to_path_buf()),
+                                Location::Search(_, term) => {
+                                    Location::Search(ancestor.to_path_buf(), term.clone())
+                                }
+                                other => other.clone(),
+                            })),
+                    );
 
                     if self.location_context_menu_index.is_some() {
                         mouse_area = mouse_area.on_right_press(move |_point_opt| {
                             Message::LocationContextMenuIndex(None)
                         })
                     } else {
-                        mouse_area = mouse_area.on_right_press_no_capture(move |point_opt| {
+                        mouse_area = mouse_area.on_right_press_no_capture(move |_point_opt| {
                             Message::LocationContextMenuIndex(Some(index))
                         })
                     }
@@ -2589,9 +2702,16 @@ impl Tab {
                         }
                     }
                 }
-                let spacer_height = height
-                    .checked_sub(max_bottom + 7 * (space_xxs as usize))
-                    .unwrap_or(0);
+
+                let top_deduct = 7 * (space_xxs as usize);
+
+                self.item_view_size_opt
+                    .set(self.size_opt.get().map(|s| Size {
+                        width: s.width,
+                        height: s.height - top_deduct as f32,
+                    }));
+
+                let spacer_height = height.checked_sub(max_bottom + top_deduct).unwrap_or(0);
                 if spacer_height > 0 {
                     children.push(
                         widget::container(vertical_space(Length::Fixed(spacer_height as f32)))
@@ -2943,12 +3063,18 @@ impl Tab {
         }
         //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
         {
-            let spacer_height =
-                size.height as i32 - y as i32 - (if condensed { 6 } else { 9 }) * space_xxs as i32;
-            if spacer_height > 0 {
-                children.push(
-                    widget::container(vertical_space(Length::Fixed(spacer_height as f32))).into(),
-                );
+            let top_deduct = (if condensed { 6 } else { 9 }) * space_xxs;
+
+            self.item_view_size_opt
+                .set(self.size_opt.get().map(|s| Size {
+                    width: s.width,
+                    height: s.height - top_deduct as f32,
+                }));
+
+            let spacer_height = size.height - y as f32 - top_deduct as f32;
+            if spacer_height > 0. {
+                children
+                    .push(widget::container(vertical_space(Length::Fixed(spacer_height))).into());
             }
         }
         let drag_col = (!drag_items.is_empty()).then(|| {

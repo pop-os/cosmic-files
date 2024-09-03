@@ -17,27 +17,28 @@ freedesktop_entry_parser = { version = "1.3", optional = true }
 fs_extra = { git = "https://github.com/pop-os/fs_extra.git" }
 gio = { version = "0.19", optional = true }
 glob = "0.3"
-ignore = "0.4"
-image = "0.24"
-notify-rust = "4"
-once_cell = "1.19"
-open = "5.0.2"
 icu_collator = "1.5"
 icu_provider = { version = "1.5", features = ["sync"] }
+ignore = "0.4"
+image = "0.24"
 libc = "0.2"
 log = "0.4"
 mime_guess = "2"
 notify-debouncer-full = "0.3"
+notify-rust = { version = "4", optional = true }
+once_cell = "1.19"
+open = "5.0.2"
 paste = "1.0"
 rayon = "1"
 regex = "1"
 serde = { version = "1", features = ["serde_derive"] }
 shlex = { version = "1.3" }
+tar = "0.4.41"
 tokio = { version = "1", features = ["sync"] }
 trash = { git = "https://github.com/jackpot51/trash-rs.git", branch = "delete-info" }
+url = "2.5"
 xdg = { version = "2.5.2", optional = true }
 xdg-mime = "0.3"
-url = "2.5"
 # Internationalization
 i18n-embed = { version = "0.14", features = [
     "fluent-system",
@@ -46,6 +47,9 @@ i18n-embed = { version = "0.14", features = [
 i18n-embed-fl = "0.7"
 rust-embed = "8"
 slotmap = "1.0.7"
+zip = "2.1.6"
+unix_permissions_ext = "0.1.2"
+uzers = "0.12.0"
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
@@ -57,9 +61,10 @@ version = "0.2.1"
 features = ["serde"]
 
 [features]
-default = ["desktop", "gvfs", "winit", "wgpu"]
+default = ["desktop", "gvfs", "notify", "winit", "wgpu"]
 desktop = ["libcosmic/desktop", "dep:freedesktop_entry_parser", "dep:xdg"]
 gvfs = ["dep:gio"]
+notify = ["dep:notify-rust"]
 wayland = ["libcosmic/wayland"]
 winit = ["libcosmic/winit"]
 wgpu = ["libcosmic/wgpu"]
@@ -81,6 +86,10 @@ fastrand = "2"
 tempfile = "3"
 test-log = "0.2"
 tokio = { version = "1", features = ["rt", "macros"] }
+
+[patch.crates-io]
+# https://github.com/alexcrichton/filetime/pull/104
+filetime = { git = "https://github.com/jackpot51/filetime" }
 
 # [patch.'https://github.com/pop-os/cosmic-text']
 # cosmic-text = { path = "../cosmic-text" }

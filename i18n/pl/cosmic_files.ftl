@@ -1,9 +1,10 @@
 cosmic-files = Pliki COSMIC
 empty-folder = Pusty katalog
 empty-folder-hidden = Pusty katalog (z ukrytymi plikami)
+no-results = Brak wyników
 filesystem = System plików
 home = Katalog Domowy
-notification-in-progress = Są przeprowadzane operacje na plikach.
+notification-in-progress = Operacje na plikach w toku.
 trash = Kosz
 undo = Cofnij
 
@@ -36,6 +37,7 @@ open-file = Otwórz plik
 open-folder = Otwórz katalog
 open-in-new-tab = Otwórz w nowej karcie
 open-in-new-window = Otwórz w nowym oknie
+open-item-location = Otwórz położenie elementu
 open-multiple-files = Otwórz wiele plików
 open-multiple-folders = Otwórz wiele katalogów
 save = Zapisz
@@ -82,6 +84,15 @@ copied = Skopiowano {$items} {$items ->
     } z {$from} do {$to}
 emptying-trash = Opróżnianie {trash}
 emptied-trash = Opróżniono {trash}
+extracting = Wypakowywanie {$items} {$items ->
+        [one] elementu
+        *[other] elementów
+    } z {$from} do {$to}
+extracted = Wypakowano {$items} {$items ->
+        [one] element
+        [few] elementy
+        *[other] elementów
+    } z {$from} do {$to}
 moving = Przenoszenie {$items} {$items ->
         [one] elementu
         *[other] elementów
@@ -132,6 +143,7 @@ dark = Ciemny
 light = Jasny
 
 # Context menu
+extract-here = Wypakuj
 add-to-sidebar = Dodaj do bocznego panelu
 new-file = Nowy plik
 new-folder = Nowy katalog
@@ -167,6 +179,11 @@ default-size = Domyślny rozmiar
 zoom-out = Oddal
 view = Widok
 grid-view = Widok siatki
+list-view = Widok listy
+show-hidden-files = Pokaż ukryte pliki
+list-directories-first = Najpierw wyświetlaj katalogi
+menu-settings = Ustawienia...
+menu-about = O Plikach COSMIC...
 list-view = Widok listy
 show-hidden-files = Pokaż ukryte pliki
 list-directories-first = Najpierw wyświetlaj katalogi
