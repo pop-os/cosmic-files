@@ -2263,7 +2263,7 @@ impl Application for App {
                             return self.open_tab(Location::Trash, false, None);
                         }
                         Some(Location::Bookmarks) => {
-                            return self.open_tab(Location::Bookmarks);
+                            return self.open_tab(Location::Bookmarks, false, None);
                         }
                         _ => {}
                     }
