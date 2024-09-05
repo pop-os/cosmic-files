@@ -1,20 +1,19 @@
 use cosmic::iced::futures::{channel::mpsc::Sender, executor, SinkExt};
-use mime_guess::MimeGuess;
 use std::{
     borrow::Cow,
     fs,
-    io::{self, Error},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
-    process,
     sync::{
         atomic::{self, AtomicU64},
         Arc,
     },
 };
 use tokio::sync::{mpsc, Mutex};
+use walkdir::WalkDir;
 
 use crate::{
-    app::{DialogPage, Message},
+    app::{ArchiveType, DialogPage, Message},
     config::IconSizes,
     fl, tab,
 };
@@ -130,6 +129,12 @@ impl From<ReplaceResult> for fs_extra::dir::TransitProcessResult {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Operation {
+    /// Compress files
+    Compress {
+        paths: Vec<PathBuf>,
+        to: PathBuf,
+        archive_type: ArchiveType,
+    },
     /// Copy items
     Copy {
         paths: Vec<PathBuf>,
@@ -241,6 +246,12 @@ fn paths_parent_name<'a>(paths: &'a Vec<PathBuf>) -> Cow<'a, str> {
 impl Operation {
     pub fn pending_text(&self) -> String {
         match self {
+            Self::Compress { paths, to, .. } => fl!(
+                "compressing",
+                items = paths.len(),
+                from = paths_parent_name(paths),
+                to = file_name(to)
+            ),
             Self::Copy { paths, to } => fl!(
                 "copying",
                 items = paths.len(),
@@ -285,6 +296,12 @@ impl Operation {
 
     pub fn completed_text(&self) -> String {
         match self {
+            Self::Compress { paths, to, .. } => fl!(
+                "compressed",
+                items = paths.len(),
+                from = paths_parent_name(paths),
+                to = file_name(to)
+            ),
             Self::Copy { paths, to } => fl!(
                 "copied",
                 items = paths.len(),
@@ -327,7 +344,9 @@ impl Operation {
 
     pub fn toast(&self) -> Option<String> {
         match self {
+            Self::Compress { .. } => Some(self.completed_text()),
             Self::Delete { .. } => Some(self.completed_text()),
+            Self::Extract { .. } => Some(self.completed_text()),
             //TODO: more toasts
             _ => None,
         }
@@ -348,6 +367,79 @@ impl Operation {
         //TODO: IF ERROR, RETURN AN Operation THAT CAN UNDO THE CURRENT STATE
         //TODO: SAFELY HANDLE CANCEL
         match self {
+            Self::Compress {
+                paths,
+                to,
+                archive_type,
+            } => {
+                let msg_tx = msg_tx.clone();
+                tokio::task::spawn_blocking(move || -> Result<(), String> {
+                    match archive_type {
+                        ArchiveType::Zip => {
+                            let mut archive = fs::File::create(&to)
+                                .map(io::BufWriter::new)
+                                .map(zip::ZipWriter::new)
+                                .map_err(err_str)?;
+
+                            let zip_options = zip::write::SimpleFileOptions::default();
+
+                            let mut paths = paths;
+                            for path in paths.clone().iter() {
+                                if path.is_dir() {
+                                    let new_paths_it = WalkDir::new(path).into_iter();
+                                    for entry in new_paths_it.skip(1) {
+                                        let entry = entry.map_err(err_str)?;
+                                        paths.push(entry.path().to_path_buf());
+                                    }
+                                }
+                            }
+
+                            let total_paths = paths.len();
+                            for (i, path) in paths.iter().enumerate() {
+                                executor::block_on(async {
+                                    let total_progress = (i as f32) / total_paths as f32;
+                                    let _ = msg_tx
+                                        .lock()
+                                        .await
+                                        .send(Message::PendingProgress(id, 100.0 * total_progress))
+                                        .await;
+                                });
+
+                                if let Some(relative_root) = to.parent() {
+                                    if let Some(relative_path) =
+                                        path.strip_prefix(relative_root).map_err(err_str)?.to_str()
+                                    {
+                                        if path.is_file() {
+                                            archive
+                                                .start_file(relative_path, zip_options)
+                                                .map_err(err_str)?;
+
+                                            let mut buffer = Vec::new();
+                                            let mut file = fs::File::open(&path)
+                                                .map(io::BufReader::new)
+                                                .map_err(err_str)?;
+
+                                            file.read_to_end(&mut buffer).map_err(err_str)?;
+                                            archive.write_all(&buffer).map_err(err_str)?;
+                                        } else {
+                                            archive
+                                                .add_directory(relative_path, zip_options)
+                                                .map_err(err_str)?;
+                                        }
+                                    }
+                                }
+                            }
+
+                            archive.finish().map_err(err_str)?;
+                        }
+                    }
+
+                    Ok(())
+                })
+                .await
+                .map_err(err_str)?
+                .map_err(err_str)?;
+            }
             Self::Copy { paths, to } => {
                 // Handle duplicate file names by renaming paths
                 let (paths, to): (Vec<_>, Vec<_>) = tokio::task::spawn_blocking(move || {
@@ -494,10 +586,21 @@ impl Operation {
                     .await;
             }
             Self::Extract { paths, to } => {
-                for path in paths {
-                    let to = to.to_owned();
+                let msg_tx = msg_tx.clone();
+                tokio::task::spawn_blocking(move || -> Result<(), String> {
+                    let total_paths = paths.len();
+                    for (i, path) in paths.iter().enumerate() {
+                        executor::block_on(async {
+                            let total_progress = (i as f32) / total_paths as f32;
+                            let _ = msg_tx
+                                .lock()
+                                .await
+                                .send(Message::PendingProgress(id, 100.0 * total_progress))
+                                .await;
+                        });
 
-                    tokio::task::spawn_blocking(move || -> Result<(), String> {
+                        let to = to.to_owned();
+
                         if let Some(file_stem) = path.file_stem() {
                             let mut new_dir = to.join(file_stem);
                             if new_dir.exists() {
@@ -510,32 +613,28 @@ impl Operation {
 
                             if let Some(mime) = mime_guess::from_path(&path).first() {
                                 match mime.essence_str() {
-                                    "application/x-tar" => {
-                                        return fs::File::open(path)
-                                            .map(io::BufReader::new)
-                                            .map(tar::Archive::new)
-                                            .and_then(|mut archive| archive.unpack(new_dir))
-                                            .map_err(err_str)
-                                    }
-                                    "application/zip" => {
-                                        return fs::File::open(path)
-                                            .map(io::BufReader::new)
-                                            .map(zip::ZipArchive::new)
-                                            .map_err(err_str)?
-                                            .and_then(|mut archive| archive.extract(new_dir))
-                                            .map_err(err_str)
-                                    }
+                                    "application/x-tar" => fs::File::open(path)
+                                        .map(io::BufReader::new)
+                                        .map(tar::Archive::new)
+                                        .and_then(|mut archive| archive.unpack(new_dir))
+                                        .map_err(err_str)?,
+                                    "application/zip" => fs::File::open(path)
+                                        .map(io::BufReader::new)
+                                        .map(zip::ZipArchive::new)
+                                        .map_err(err_str)?
+                                        .and_then(|mut archive| archive.extract(new_dir))
+                                        .map_err(err_str)?,
                                     _ => Err(format!("unsupported mime type {:?}", mime))?,
                                 }
                             }
                         }
+                    }
 
-                        Ok(())
-                    })
-                    .await
-                    .map_err(err_str)?
-                    .map_err(err_str)?;
-                }
+                    Ok(())
+                })
+                .await
+                .map_err(err_str)?
+                .map_err(err_str)?;
             }
             Self::Move { paths, to } => {
                 let msg_tx = msg_tx.clone();

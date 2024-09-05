@@ -15,6 +15,9 @@ size = Size
 
 # Dialogs
 
+## Compress Dialog
+create-archive = Create archive
+
 ## Empty Trash Dialog
 empty-trash = Empty trash
 empty-trash-warning = Are you sure you want to permanently delete all the items in Trash?
@@ -32,6 +35,7 @@ name-no-slashes = Name cannot contain slashes.
 
 ## Open/Save Dialog
 cancel = Cancel
+create = Create
 open = Open
 open-file = Open file
 open-folder = Open folder
@@ -79,6 +83,14 @@ no-history = No items in history.
 pending = Pending
 failed = Failed
 complete = Complete
+compressing = Compressing {$items} {$items ->
+        [one] item
+        *[other] items
+    } from {$from} to {$to}
+compressed = Compressed {$items} {$items ->
+        [one] item
+        *[other] items
+    } from {$from} to {$to}
 copy_noun = Copy
 creating = Creating {$name} in {$parent}
 created = Created {$name} in {$parent}
@@ -148,8 +160,9 @@ dark = Dark
 light = Light
 
 # Context menu
-extract-here = Extract
 add-to-sidebar = Add to sidebar
+compress = Compress
+extract-here = Extract
 new-file = New file...
 new-folder = New folder...
 open-in-terminal = Open in terminal
