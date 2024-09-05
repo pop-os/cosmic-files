@@ -58,6 +58,15 @@ apply-to-all = Applica a tutto
 keep-both = Tieni entrambi
 skip = Salta
 
+
+## Metadata Dialog
+owner = Proprietario
+group = Gruppo
+other = Altri
+read = Lettura
+write = Scrittura
+execute = Esecuzione
+
 # Context Pages
 
 ## About
