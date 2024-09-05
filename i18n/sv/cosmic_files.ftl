@@ -48,6 +48,8 @@ restore-from-trash = Återställ från papperskorgen
 file = Fil
 new-tab = Ny flik
 new-window = Nytt fönster
+rename = Byt namn...
+menu-show-details = Visa detaljer...
 close-tab = Stäng flik
 quit = Avsluta
 
