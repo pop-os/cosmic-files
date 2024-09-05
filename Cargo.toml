@@ -37,6 +37,7 @@ tar = "0.4.41"
 tokio = { version = "1", features = ["sync"] }
 trash = { git = "https://github.com/jackpot51/trash-rs.git", branch = "delete-info" }
 url = "2.5"
+walkdir = "2.5.0"
 xdg = { version = "2.5.2", optional = true }
 xdg-mime = "0.3"
 # Internationalization

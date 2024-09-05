@@ -125,6 +125,7 @@ pub fn context_menu<'a>(
                 children.push(menu_item(fl!("cut"), Action::Cut).into());
                 children.push(menu_item(fl!("copy"), Action::Copy).into());
 
+                children.push(container(horizontal_rule(1)).padding([0, 8]).into());
                 let supported_archive_types = ["application/x-tar", "application/zip"]
                     .iter()
                     .filter_map(|mime_type| mime_type.parse::<Mime>().ok())
@@ -133,6 +134,8 @@ pub fn context_menu<'a>(
                 if selected_types.is_empty() {
                     children.push(menu_item(fl!("extract-here"), Action::ExtractHere).into());
                 }
+                children.push(menu_item(fl!("compress"), Action::Compress).into());
+                children.push(container(horizontal_rule(1)).padding([0, 8]).into());
 
                 //TODO: Print?
                 children.push(container(horizontal_rule(1)).padding([0, 8]).into());

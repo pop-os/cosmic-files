@@ -67,6 +67,7 @@ pub struct Flags {
 pub enum Action {
     About,
     AddToSidebar,
+    Compress,
     Copy,
     Cut,
     EditHistory,
@@ -116,6 +117,7 @@ impl Action {
         match self {
             Action::About => Message::ToggleContextPage(ContextPage::About),
             Action::AddToSidebar => Message::AddToSidebar(entity_opt),
+            Action::Compress => Message::Compress(entity_opt),
             Action::Copy => Message::Copy(entity_opt),
             Action::Cut => Message::Cut(entity_opt),
             Action::EditHistory => Message::ToggleContextPage(ContextPage::EditHistory),
@@ -210,6 +212,7 @@ pub enum Message {
     AddToSidebar(Option<Entity>),
     AppTheme(AppTheme),
     CloseToast(widget::ToastId),
+    Compress(Option<Entity>),
     Config(Config),
     Copy(Option<Entity>),
     Cut(Option<Entity>),
@@ -297,8 +300,27 @@ impl ContextPage {
     }
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum ArchiveType {
+    Zip,
+}
+
+impl ArchiveType {
+    pub fn extension(&self) -> String {
+        match self {
+            ArchiveType::Zip => ".zip".to_string(),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum DialogPage {
+    Compress {
+        paths: Vec<PathBuf>,
+        to: PathBuf,
+        name: String,
+        archive_type: ArchiveType,
+    },
     EmptyTrash,
     FailedOperation(u64),
     NewItem {
@@ -1264,6 +1286,23 @@ impl Application for App {
                 config_set!(app_theme, app_theme);
                 return self.update_config();
             }
+            Message::Compress(entity_opt) => {
+                let paths = self.selected_paths(entity_opt);
+                if let Some(current_path) = paths.first() {
+                    if let Some(destination) = current_path.parent().zip(current_path.file_stem()) {
+                        let to = destination.0.to_path_buf();
+                        let name = destination.1.to_str().unwrap_or_default().to_string();
+                        let archive_type = ArchiveType::Zip;
+                        self.dialog_pages.push_back(DialogPage::Compress {
+                            paths,
+                            to,
+                            name,
+                            archive_type,
+                        });
+                        return widget::text_input::focus(self.dialog_text_input.clone());
+                    }
+                }
+            }
             Message::Config(config) => {
                 if config != self.config {
                     log::info!("update config");
@@ -1291,6 +1330,21 @@ impl Application for App {
             Message::DialogComplete => {
                 if let Some(dialog_page) = self.dialog_pages.pop_front() {
                     match dialog_page {
+                        DialogPage::Compress {
+                            paths,
+                            to,
+                            name,
+                            archive_type,
+                        } => {
+                            let extension = archive_type.extension();
+                            let name = format!("{}{}", name, extension);
+                            let to = to.join(name);
+                            self.operation(Operation::Compress {
+                                paths,
+                                to,
+                                archive_type,
+                            })
+                        }
                         DialogPage::EmptyTrash => {
                             self.operation(Operation::EmptyTrash);
                         }
@@ -2323,6 +2377,74 @@ impl Application for App {
         let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
 
         let dialog = match dialog_page {
+            DialogPage::Compress {
+                paths,
+                to,
+                name,
+                archive_type,
+            } => {
+                let mut dialog = widget::dialog(fl!("create-archive"));
+
+                let complete_maybe = if name.is_empty() {
+                    None
+                } else if name == "." || name == ".." {
+                    dialog = dialog.tertiary_action(widget::text::body(fl!(
+                        "name-invalid",
+                        filename = name.as_str()
+                    )));
+                    None
+                } else if name.contains('/') {
+                    dialog = dialog.tertiary_action(widget::text::body(fl!("name-no-slashes")));
+                    None
+                } else {
+                    let extension = archive_type.extension();
+                    let name = format!("{}{}", name, extension);
+                    let path = to.join(&name);
+                    if path.exists() {
+                        dialog =
+                            dialog.tertiary_action(widget::text::body(fl!("file-already-exists")));
+                        None
+                    } else {
+                        if name.starts_with('.') {
+                            dialog = dialog.tertiary_action(widget::text::body(fl!("name-hidden")));
+                        }
+                        Some(Message::DialogComplete)
+                    }
+                };
+
+                dialog
+                    .primary_action(
+                        widget::button::suggested(fl!("create"))
+                            .on_press_maybe(complete_maybe.clone()),
+                    )
+                    .secondary_action(
+                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                    )
+                    .control(
+                        widget::column::with_children(vec![
+                            widget::text::body(fl!("file-name")).into(),
+                            widget::row::with_children(vec![
+                                widget::text_input("", name.as_str())
+                                    .id(self.dialog_text_input.clone())
+                                    .on_input(move |name| {
+                                        Message::DialogUpdate(DialogPage::Compress {
+                                            paths: paths.clone(),
+                                            to: to.clone(),
+                                            name: name.clone(),
+                                            archive_type: archive_type.clone(),
+                                        })
+                                    })
+                                    .on_submit_maybe(complete_maybe)
+                                    .into(),
+                                widget::text::body(".zip").into(),
+                            ])
+                            .align_items(Alignment::Center)
+                            .spacing(space_xxs)
+                            .into(),
+                        ])
+                        .spacing(space_xxs),
+                    )
+            }
             DialogPage::EmptyTrash => widget::dialog(fl!("empty-trash"))
                 .body(fl!("empty-trash-warning"))
                 .primary_action(

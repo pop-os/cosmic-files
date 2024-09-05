@@ -1271,6 +1271,7 @@ dependencies = [
  "url",
  "uzers",
  "vergen",
+ "walkdir",
  "xdg",
  "xdg-mime",
  "zip",
