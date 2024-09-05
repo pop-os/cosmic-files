@@ -1706,6 +1706,11 @@ impl Application for App {
                 commands.push(self.update_notification());
                 // Manually rescan any trash tabs after any operation is completed
                 commands.push(self.rescan_trash());
+
+                // if search is active, update "search" tab view
+                if !self.search_input.is_empty() {
+                    commands.push(self.search());
+                }
                 return Command::batch(commands);
             }
             Message::PendingError(id, err) => {
@@ -1852,8 +1857,14 @@ impl Application for App {
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
                     self.activate_nav_model_location(&tab.location.clone());
                 }
-
-                return self.update_title();
+                let mut commands = vec![];
+                commands.push(self.update_title());
+                // if the tab was in an active search mode
+                // search again in case files were modified/deleted
+                if !self.search_input.is_empty() {
+                    commands.push(self.search());
+                }
+                return Command::batch(commands);
             }
             Message::TabNext => {
                 let len = self.tab_model.iter().count();

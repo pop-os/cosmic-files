@@ -1,9 +1,12 @@
 cosmic-files = Ficheiros COSMIC
 empty-folder = Pasta vazia
 empty-folder-hidden = Pasta vazia (tem ficheiros ocultos)
+no-results = Nenhum resultado encontrado
 filesystem = Sistema de ficheiros
 home = Pasta Pessoal
+notification-in-progress = Operações de ficheiros estão a processar
 trash = Lixo
+undo = Desfazer
 
 # List view
 name = Nome
@@ -34,6 +37,7 @@ open-file = Abrir ficheiro
 open-folder = Abrir pasta
 open-in-new-tab = Abrir num novo separador
 open-in-new-window = Abrir numa nova janela
+open-item-location = Abrir localização do item
 open-multiple-files = Abrir vários ficheiros
 open-multiple-folders = Abrir várias pastas
 save = Guardar
@@ -54,24 +58,75 @@ apply-to-all = Aplicar a tudo
 keep-both = Manter ambos
 skip = Ignorar
 
+
+## Metadata Dialog
+owner = Proprietário
+group = Grupo
+other = Outro
+read = Leitura
+write = Escrita
+execute = Execução
+
 # Context Pages
 
 ## About
 git-description = Git commit {$hash} em {$date}
 
 ## Operations
-operations = Operações
+edit-history = Editar histórico
+history = Histórico
+no-history = Nenhum item no histórico.
 pending = Pendentes
 failed = Falhadas
-complete = Concluídas
-copy_noun = Copiar
+complete = Completo
+copy_noun = Copiado
+creating = A criar {$name} em {$parent}
+created = {$name} criado em {$parent}
+copying = A copiar {$items} {$items ->
+        [one] item
+        *[other] itens
+    } de {$from} para {$to}
+copied = Copiado {$items} {$items ->
+        [one] item
+        *[other] itens
+    } de {$from} para {$to}
+emptying-trash = A esvaziar {trash}
+emptied-trash = {trash} vazio
+extracting = A extrair {$items} {$items ->
+        [one] item
+        *[other] itens
+    } de {$from} para {$to}
+extracted = Extraído {$items} {$items ->
+        [one] item
+        *[other] itens
+    } de {$from} para {$to}
+moving = A mover {$items} {$items ->
+        [one] item
+        *[other] itens
+    } de {$from} para {$to}
+moved = Movido {$items} {$items ->
+        [one] item
+        *[other] itens
+    } de {$from} para {$to}
+renaming = A renomear {$from} para {$to}
+renamed = {$from} renomeado para {$to}
+restoring = A restaurar {$items} {$items ->
+        [one] item
+        *[other] itens
+    } para {trash}
+restored = Restaurado {$items} {$items ->
+        [one] item
+        *[other] itens
+    } para {trash}
+undo = Desfazer
+unknown-folder = pasta desconhecida
 
 ## Open with
-open-with = Abrir com
+open-with = Abrir com...
 default-app = {$name} (predefinição)
 
-## Properties
-properties = Propriedades
+## Show details
+show-details = Mostrar detalhes
 
 ## Settings
 settings = Definições
@@ -93,10 +148,11 @@ dark = Escuro
 light = Claro
 
 # Context menu
+extract-here = Extrair
 add-to-sidebar = Adicionar à barra lateral
 new-file = Novo ficheiro
 new-folder = Nova pasta
-open-with = Abrir com
+open-in-terminal = Abrir no terminal
 move-to-trash = Mover para o lixo
 restore-from-trash = Restaurar do lixo
 remove-from-sidebar = Remover da barra lateral
@@ -110,9 +166,10 @@ sort-by-size = Ordenar por tamanho
 file = Ficheiro
 new-tab = Novo separador
 new-window = Nova janela
-rename = Renomear
+rename = Renomear...
+menu-show-details = Mostrar detalhes...
 close-tab = Fechar separador
-quit = Sair 
+quit = Sair
 
 ## Edit
 edit = Editar
