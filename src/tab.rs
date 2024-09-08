@@ -25,12 +25,14 @@ use cosmic::{
         Size,
     },
     iced_core::widget::tree,
-    theme, widget,
+    iced_style::rule,
+    theme,
     widget::{
+        self,
         menu::{action::MenuAction, key_bind::KeyBind},
         vertical_space, DndDestination, DndSource, Id, Widget,
     },
-    Element,
+    Element, Theme,
 };
 
 use mime_guess::{mime, Mime};
@@ -2185,10 +2187,17 @@ impl Tab {
                     );
                     let mut column = widget::column::with_capacity(4).padding([0, space_s]);
                     column = column.push(row);
-                    column = column.push(horizontal_rule(1));
+                    column = column.push(horizontal_rule(1).style(theme::Rule::Custom(Box::new(
+                        |theme: &Theme| rule::Appearance {
+                            color: theme.cosmic().accent_color().into(),
+                            width: 1,
+                            radius: 0.0.into(),
+                            fill_mode: rule::FillMode::Full,
+                        },
+                    ))));
                     if self.config.view == View::List && !condensed {
                         column = column.push(heading_row);
-                        column = column.push(horizontal_rule(1));
+                        column = column.push(widget::divider::horizontal::default());
                     }
                     return column.into();
                 }
@@ -2360,11 +2369,18 @@ impl Tab {
         }
         let mut column = widget::column::with_capacity(4).padding([0, space_s]);
         column = column.push(row);
-        column = column.push(horizontal_rule(1));
+        column = column.push(horizontal_rule(1).style(theme::Rule::Custom(Box::new(
+            |theme: &Theme| rule::Appearance {
+                color: theme.cosmic().accent_color().into(),
+                width: 1,
+                radius: 0.0.into(),
+                fill_mode: rule::FillMode::Full,
+            },
+        ))));
 
         if self.config.view == View::List && !condensed {
             column = column.push(heading_row);
-            column = column.push(horizontal_rule(1));
+            column = column.push(widget::divider::horizontal::default());
         }
 
         let mouse_area = crate::mouse_area::MouseArea::new(column)
@@ -2813,6 +2829,7 @@ impl Tab {
                         ])
                         .into(),
                     ])
+                    .height(Length::Fixed(row_height as f32))
                     .align_items(Alignment::Center)
                     .spacing(space_xxs)
                 } else {
@@ -2829,6 +2846,7 @@ impl Tab {
                             .width(Length::Fixed(size_width))
                             .into(),
                     ])
+                    .height(Length::Fixed(row_height as f32))
                     .align_items(Alignment::Center)
                     .spacing(space_xxs)
                 };
@@ -2837,17 +2855,8 @@ impl Tab {
                     let mouse_area = crate::mouse_area::MouseArea::new(
                         widget::button(row)
                             .width(Length::Fill)
-                            .height(Length::Fixed(row_height as f32))
                             .id(item.button_id.clone())
-                            .padding(if condensed && icon_size < 32 {
-                                space_xxxs
-                            } else {
-                                if icon_size < 24 {
-                                    space_xxs - 1
-                                } else {
-                                    space_xxs
-                                }
-                            })
+                            .padding([0, space_xxs])
                             .style(button_style(item.selected, true, false)),
                     )
                     .on_press(move |_| Message::Click(Some(i)))

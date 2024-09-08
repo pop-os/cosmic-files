@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{
-    //TODO: export iced::widget::horizontal_rule in cosmic::widget
-    iced::{widget::horizontal_rule, Alignment, Background, Border, Length},
+    iced::{Alignment, Background, Border, Length},
     theme,
-    widget,
-    widget::container,
-    widget::menu::{self, key_bind::KeyBind, ItemHeight, ItemWidth, MenuBar},
+    widget::{
+        button, column, container, divider, horizontal_space,
+        menu::{self, key_bind::KeyBind, ItemHeight, ItemWidth, MenuBar},
+        text, Row,
+    },
     Element,
 };
 use mime_guess::Mime;
@@ -21,14 +22,14 @@ use crate::{
 
 macro_rules! menu_button {
     ($($x:expr),+ $(,)?) => (
-        widget::button(
-            widget::Row::with_children(
+        button(
+            Row::with_children(
                 vec![$(Element::from($x)),+]
             )
+            .height(Length::Fixed(32.0))
             .align_items(Alignment::Center)
         )
-        .height(Length::Fixed(32.0))
-        .padding([4, 16])
+        .padding([0, 16])
         .width(Length::Fill)
         .style(theme::Button::MenuItem)
     );
@@ -50,9 +51,9 @@ pub fn context_menu<'a>(
     let menu_item = |label, action| {
         let key = find_key(&action);
         menu_button!(
-            widget::text(label),
-            widget::horizontal_space(Length::Fill),
-            widget::text(key)
+            text::body(label),
+            horizontal_space(Length::Fill),
+            text::body(key)
         )
         .on_press(tab::Message::ContextAction(action))
     };
@@ -120,12 +121,12 @@ pub fn context_menu<'a>(
                     children
                         .push(menu_item(fl!("open-in-new-window"), Action::OpenInNewWindow).into());
                 }
-                children.push(container(horizontal_rule(1)).padding([0, 8]).into());
+                children.push(divider::horizontal::light().into());
                 children.push(menu_item(fl!("rename"), Action::Rename).into());
                 children.push(menu_item(fl!("cut"), Action::Cut).into());
                 children.push(menu_item(fl!("copy"), Action::Copy).into());
 
-                children.push(container(horizontal_rule(1)).padding([0, 8]).into());
+                children.push(divider::horizontal::light().into());
                 let supported_archive_types = ["application/x-tar", "application/zip"]
                     .iter()
                     .filter_map(|mime_type| mime_type.parse::<Mime>().ok())
@@ -135,14 +136,13 @@ pub fn context_menu<'a>(
                     children.push(menu_item(fl!("extract-here"), Action::ExtractHere).into());
                 }
                 children.push(menu_item(fl!("compress"), Action::Compress).into());
-                children.push(container(horizontal_rule(1)).padding([0, 8]).into());
+                children.push(divider::horizontal::light().into());
 
                 //TODO: Print?
-                children.push(container(horizontal_rule(1)).padding([0, 8]).into());
                 children.push(menu_item(fl!("show-details"), Action::Properties).into());
-                children.push(container(horizontal_rule(1)).padding([0, 8]).into());
+                children.push(divider::horizontal::light().into());
                 children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
-                children.push(container(horizontal_rule(1)).padding([0, 8]).into());
+                children.push(divider::horizontal::light().into());
                 children.push(menu_item(fl!("move-to-trash"), Action::MoveToTrash).into());
             } else {
                 //TODO: need better designs for menu with no selection
@@ -150,10 +150,10 @@ pub fn context_menu<'a>(
                 children.push(menu_item(fl!("new-file"), Action::NewFile).into());
                 children.push(menu_item(fl!("new-folder"), Action::NewFolder).into());
                 children.push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
-                children.push(container(horizontal_rule(1)).padding([0, 8]).into());
+                children.push(divider::horizontal::light().into());
                 children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
                 children.push(menu_item(fl!("paste"), Action::Paste).into());
-                children.push(container(horizontal_rule(1)).padding([0, 8]).into());
+                children.push(divider::horizontal::light().into());
                 // TODO: Nested menu
                 children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
                 children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
@@ -163,13 +163,13 @@ pub fn context_menu<'a>(
         Location::Trash => {
             children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
             if selected > 0 {
-                children.push(container(horizontal_rule(1)).padding([0, 8]).into());
+                children.push(divider::horizontal::light().into());
                 children.push(menu_item(fl!("show-details"), Action::Properties).into());
-                children.push(container(horizontal_rule(1)).padding([0, 8]).into());
+                children.push(divider::horizontal::light().into());
                 children
                     .push(menu_item(fl!("restore-from-trash"), Action::RestoreFromTrash).into());
             }
-            children.push(container(horizontal_rule(1)).padding([0, 8]).into());
+            children.push(divider::horizontal::light().into());
             // TODO: Nested menu
             children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
             children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
@@ -177,13 +177,13 @@ pub fn context_menu<'a>(
         }
     }
 
-    widget::container(widget::column::with_children(children))
+    container(column::with_children(children))
         .padding(1)
         //TODO: move style to libcosmic
         .style(theme::Container::custom(|theme| {
             let cosmic = theme.cosmic();
             let component = &cosmic.background.component;
-            widget::container::Appearance {
+            container::Appearance {
                 icon_color: Some(component.on.into()),
                 text_color: Some(component.on.into()),
                 background: Some(Background::Color(component.base.into())),
@@ -289,30 +289,30 @@ pub fn menu_bar<'a>(
 
 pub fn location_context_menu<'a>(ancestor_index: usize) -> Element<'a, tab::Message> {
     let children = vec![
-        menu_button!(widget::text(fl!("open-in-new-tab")))
+        menu_button!(text::body(fl!("open-in-new-tab")))
             .on_press(tab::Message::LocationMenuAction(
                 LocationMenuAction::OpenInNewTab(ancestor_index),
             ))
             .into(),
-        menu_button!(widget::text(fl!("open-in-new-window")))
+        menu_button!(text::body(fl!("open-in-new-window")))
             .on_press(tab::Message::LocationMenuAction(
                 LocationMenuAction::OpenInNewWindow(ancestor_index),
             ))
             .into(),
-        container(horizontal_rule(1)).padding([0, 8]).into(),
-        menu_button!(widget::text(fl!("show-details")))
+        divider::horizontal::light().into(),
+        menu_button!(text::body(fl!("show-details")))
             .on_press(tab::Message::LocationMenuAction(
                 LocationMenuAction::Properties(ancestor_index),
             ))
             .into(),
     ];
 
-    widget::container(widget::column::with_children(children))
+    container(column::with_children(children))
         .padding(1)
         .style(theme::Container::custom(|theme| {
             let cosmic = theme.cosmic();
             let component = &cosmic.background.component;
-            widget::container::Appearance {
+            container::Appearance {
                 icon_color: Some(component.on.into()),
                 text_color: Some(component.on.into()),
                 background: Some(Background::Color(component.base.into())),
