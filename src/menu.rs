@@ -26,10 +26,10 @@ macro_rules! menu_button {
             Row::with_children(
                 vec![$(Element::from($x)),+]
             )
-            .height(Length::Fixed(32.0))
+            .height(Length::Fixed(24.0))
             .align_items(Alignment::Center)
         )
-        .padding([0, 16])
+        .padding([theme::active().cosmic().spacing.space_xxxs, 16])
         .width(Length::Fill)
         .style(theme::Button::MenuItem)
     );
@@ -283,7 +283,7 @@ pub fn menu_bar<'a>(
     ])
     .item_height(ItemHeight::Dynamic(40))
     .item_width(ItemWidth::Uniform(240))
-    .spacing(4.0)
+    .spacing(theme::active().cosmic().spacing.space_xxxs.into())
     .into()
 }
 
