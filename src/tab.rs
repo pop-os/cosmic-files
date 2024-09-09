@@ -2232,31 +2232,18 @@ impl Tab {
                 let excess_width = text_width_body(excess_str);
                 for (index, ancestor) in path.ancestors().enumerate() {
                     let mut found_home = false;
-                    let (name, icon_opt) = match ancestor.file_name() {
+                    let name = match ancestor.file_name() {
                         Some(name) => {
                             if ancestor == home_dir {
-                                let icon = widget::icon::icon(folder_icon_symbolic(
-                                    &ancestor.to_path_buf(),
-                                    16,
-                                ))
-                                .size(16);
                                 found_home = true;
-                                (fl!("home"), Some(icon))
+                                fl!("home")
                             } else {
-                                (name.to_string_lossy().to_string(), None)
+                                name.to_string_lossy().to_string()
                             }
                         }
                         None => {
-                            let icon = widget::icon::from_name("drive-harddisk-system-symbolic")
-                                .size(16)
-                                .icon();
-                            (fl!("filesystem"), Some(icon))
+                            fl!("filesystem")
                         }
-                    };
-                    let icon_width = if icon_opt.is_some() {
-                        16.0 + space_xxxs as f32
-                    } else {
-                        0.0
                     };
 
                     let (name_width, name_text) = if children.is_empty() {
@@ -2285,17 +2272,12 @@ impl Tab {
                         .align_items(Alignment::Center)
                         .spacing(space_xxxs);
                     //TODO: figure out why this hardcoded offset is needed after the first item is ellipsed
-                    let overflow_offset = if icon_opt.is_some() { 0.0 } else { 32.0 };
-                    let overflow =
-                        w + icon_width + name_width + overflow_offset > size.width && index > 0;
+                    let overflow_offset = 32.0;
+                    let overflow = w + name_width + overflow_offset > size.width && index > 0;
                     if overflow {
                         row = row.push(widget::text::body(excess_str));
                         w += excess_width;
                     } else {
-                        if let Some(icon) = icon_opt {
-                            row = row.push(icon);
-                            w += icon_width;
-                        }
                         row = row.push(name_text);
                         w += name_width;
                     }
