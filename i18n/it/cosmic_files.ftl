@@ -6,6 +6,7 @@ filesystem = Filesystem
 home = Home
 notification-in-progress = Operazioni sui file in corso ...
 trash = Cestino
+bookmarks = Segnalibri
 undo = Annulla ultima operazione
 
 # List view
@@ -154,6 +155,7 @@ new-file = Nuovo file
 new-folder = Nuova cartella
 open-in-terminal = Apri in terminale
 move-to-trash = Sposta nel cestino
+add_remove_bookmark = Aggiungi/rimuovi segnalibro
 restore-from-trash = Ripristina dal cestino
 remove-from-sidebar = Rimuovi da sidebar
 sort-by-name = Ordina per nome

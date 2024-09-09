@@ -95,6 +95,7 @@ pub struct Config {
     pub app_theme: AppTheme,
     pub favorites: Vec<Favorite>,
     pub tab: TabConfig,
+    pub bookmarks: Vec<PathBuf>,
 }
 
 impl Default for Config {
@@ -110,6 +111,7 @@ impl Default for Config {
                 Favorite::Videos,
             ],
             tab: TabConfig::default(),
+            bookmarks: Vec::new(),
         }
     }
 }
