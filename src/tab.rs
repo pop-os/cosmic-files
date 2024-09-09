@@ -44,7 +44,7 @@ use std::{
     fs::{self, Metadata},
     num::NonZeroU16,
     os::unix::fs::MetadataExt,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -1026,6 +1026,25 @@ pub struct Tab {
     selected_clicked: bool,
 }
 
+fn folder_name<P: AsRef<Path>>(path: P) -> (String, bool) {
+    let path = path.as_ref();
+    let mut found_home = false;
+    let name = match path.file_name() {
+        Some(name) => {
+            if path == crate::home_dir() {
+                found_home = true;
+                fl!("home")
+            } else {
+                name.to_string_lossy().to_string()
+            }
+        }
+        None => {
+            fl!("filesystem")
+        }
+    };
+    (name, found_home)
+}
+
 impl Tab {
     pub fn new(location: Location, config: TabConfig) -> Self {
         let history = vec![location.clone()];
@@ -1058,11 +1077,13 @@ impl Tab {
         //TODO: better title
         match &self.location {
             Location::Path(path) => {
-                format!("{}", path.display())
+                let (name, _) = folder_name(path);
+                name
             }
             Location::Search(path, term) => {
                 //TODO: translate
-                format!("Search for {} in {}", term, path.display())
+                let (name, _) = folder_name(path);
+                format!("Search \"{}\": {}", term, name)
             }
             Location::Trash => {
                 fl!("trash")
@@ -2227,25 +2248,10 @@ impl Tab {
         let mut children: Vec<Element<_>> = Vec::new();
         match &self.location {
             Location::Path(path) | Location::Search(path, ..) => {
-                let home_dir = crate::home_dir();
                 let excess_str = "...";
                 let excess_width = text_width_body(excess_str);
                 for (index, ancestor) in path.ancestors().enumerate() {
-                    let mut found_home = false;
-                    let name = match ancestor.file_name() {
-                        Some(name) => {
-                            if ancestor == home_dir {
-                                found_home = true;
-                                fl!("home")
-                            } else {
-                                name.to_string_lossy().to_string()
-                            }
-                        }
-                        None => {
-                            fl!("filesystem")
-                        }
-                    };
-
+                    let (name, found_home) = folder_name(&ancestor);
                     let (name_width, name_text) = if children.is_empty() {
                         (
                             text_width_heading(&name),
