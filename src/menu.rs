@@ -126,7 +126,7 @@ pub fn context_menu<'a>(
                 children.push(menu_item(fl!("cut"), Action::Cut).into());
                 children.push(menu_item(fl!("copy"), Action::Copy).into());
 
-                children.push(divider::horizontal::light().into()).into());
+                children.push(divider::horizontal::light().into());
                 let supported_archive_types = [
                     "application/x-compressed-tar",
                     "application/x-tar",
@@ -135,7 +135,6 @@ pub fn context_menu<'a>(
                 .iter()
                 .filter_map(|mime_type| mime_type.parse::<Mime>().ok())
                 .collect::<Vec<_>>();
-
                 selected_types.retain(|t| !supported_archive_types.contains(t));
                 if selected_types.is_empty() {
                     children.push(menu_item(fl!("extract-here"), Action::ExtractHere).into());
