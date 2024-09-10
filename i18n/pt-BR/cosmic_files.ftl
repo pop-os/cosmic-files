@@ -15,6 +15,9 @@ size = Tamanho
 
 # Dialogs
 
+## Compress Dialog
+create-archive = Compactar arquivos
+
 ## Empty Trash Dialog
 empty-trash = Esvaziar lixeira
 empty-trash-warning = Tem certeza de que deseja apagar permanentemente todos os itens da lixeira?
@@ -32,6 +35,7 @@ name-no-slashes = O nome não pode conter barras.
 
 ## Open/Save Dialog
 cancel = Cancelar
+create = Criar
 open = Abrir
 open-file = Abrir arquivo
 open-folder = Abrir pasta
@@ -79,6 +83,14 @@ no-history = Nenhum item no histórico.
 pending = Pendente
 failed = Com falha
 complete = Completo
+compressing = Compactando {$items} {$items ->
+        [one] item
+        *[other] itens
+    } de {$from} para {$to}
+compressed = Compactado {$items} {$items ->
+        [one] item
+        *[other] itens
+    } de {$from} para {$to}
 copy_noun = Copiado
 creating = Criando {$name} em {$parent}
 created = Criado {$name} em {$parent}
@@ -148,8 +160,9 @@ dark = Escuro
 light = Claro
 
 # Context menu
-extract-here = Extrair
 add-to-sidebar = Adicionar à barra lateral
+compress = Compactar
+extract-here = Extrair
 new-file = Novo arquivo...
 new-folder = Nova pasta...
 open-in-terminal = Abrir no terminal
