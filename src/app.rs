@@ -110,6 +110,7 @@ pub enum Action {
     ZoomDefault,
     ZoomIn,
     ZoomOut,
+    Recents,
 }
 
 impl Action {
@@ -170,6 +171,7 @@ impl Action {
             Action::ZoomDefault => Message::TabMessage(entity_opt, tab::Message::ZoomDefault),
             Action::ZoomIn => Message::TabMessage(entity_opt, tab::Message::ZoomIn),
             Action::ZoomOut => Message::TabMessage(entity_opt, tab::Message::ZoomOut),
+            Action::Recents => Message::Recents,
         }
     }
 }
@@ -277,6 +279,7 @@ pub enum Message {
     DndExitTab,
     DndDropTab(Entity, Option<ClipboardPaste>, DndAction),
     DndDropNav(Entity, Option<ClipboardPaste>, DndAction),
+    Recents,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -549,6 +552,13 @@ impl App {
 
     fn update_nav_model(&mut self) {
         let mut nav_model = segmented_button::ModelBuilder::default();
+
+        nav_model = nav_model.insert(|b| {
+            b.text(fl!("recents"))
+                .icon(widget::icon::from_name("accessories-clock-symbolic"))
+                .data(Location::Recents)
+        });
+
         for (favorite_i, favorite) in self.config.favorites.iter().enumerate() {
             if let Some(path) = favorite.path_opt() {
                 let name = if matches!(favorite, Favorite::Home) {
@@ -1633,7 +1643,14 @@ impl Application for App {
             Message::OpenWith(path, app) => {
                 if let Some(mut command) = app.command(Some(path.clone())) {
                     match spawn_detached(&mut command) {
-                        Ok(()) => {}
+                        Ok(()) => {
+                            let _ = recently_used_xbel::update_recently_used(
+                                &path,
+                                App::APP_ID.to_string(),
+                                "cosmic-files".to_string(),
+                                None,
+                            );
+                        }
                         Err(err) => {
                             log::warn!("failed to open {:?} with {:?}: {}", path, app.id, err)
                         }
@@ -2030,7 +2047,14 @@ impl Application for App {
                         }
                         tab::Command::OpenFile(item_path) => {
                             match open::that_detached(&item_path) {
-                                Ok(()) => (),
+                                Ok(()) => {
+                                    let _ = recently_used_xbel::update_recently_used(
+                                        &item_path,
+                                        App::APP_ID.to_string(),
+                                        "cosmic-files".to_string(),
+                                        None,
+                                    );
+                                }
                                 Err(err) => {
                                     log::warn!("failed to open {:?}: {}", item_path, err);
                                 }
@@ -2346,6 +2370,9 @@ impl Application for App {
                     self.dialog_pages.push_front(DialogPage::EmptyTrash);
                 }
             },
+            Message::Recents => {
+                return self.open_tab(Location::Recents, false, None);
+            }
         }
 
         Command::none()
