@@ -16,6 +16,9 @@ size = Taille
 
 # Dialogs
 
+## Compress Dialog
+create-archive = Créer une archive
+
 ## Empty Trash Dialog
 empty-trash = Vider la corbeille
 empty-trash-warning = Êtes-vous sûr de vouloir supprimer définitivement tous les éléments de la corbeille ?
@@ -33,6 +36,7 @@ name-no-slashes = Le nom ne peut pas contenir de slashs.
 
 ## Open/Save Dialog
 cancel = Annuler
+create = Créer
 open = Ouvrir
 open-file = Ouvrir le fichier
 open-folder = Ouvrir le dossier
@@ -80,8 +84,16 @@ no-history = Aucun élément dans l'historique.
 pending = En attente
 failed = Échoué
 complete = Terminé
+compressing = Compression {$items} {$items ->
+        [one] élément
+        *[other] éléments
+    } de {$from} vers {$to}
+compressed = Compressé {$items} {$items ->
+        [one] élément
+        *[other] éléments
+    } de {$from} vers {$to}
 copy_noun = Copier
-creating = Création de {$name} dans {$parent}
+creating = Création {$name} dans {$parent}
 created = Créé {$name} dans {$parent}
 copying = Copie {$items} {$items ->
         [one] élément
@@ -93,7 +105,7 @@ copied = Copié {$items} {$items ->
     } de {$from} vers {$to}
 emptying-trash = {trash} en cours de nettoyage
 emptied-trash = {trash} vidée
-extracting = Extraction de {$items} {$items ->
+extracting = Extraction {$items} {$items ->
         [one] élément
         *[other] éléments
     } de {$from} vers {$to}
@@ -109,9 +121,9 @@ moved = Déplacé {$items} {$items ->
         [one] élément
         *[other] éléments
     } de {$from} vers {$to}
-renaming = Renommage de {$from} en {$to}
+renaming = Renommage {$from} en {$to}
 renamed = Renommé {$from} en {$to}
-restoring = Restauration de {$items} {$items ->
+restoring = Restauration {$items} {$items ->
         [one] élément
         *[other] éléments
     } depuis la {trash}
@@ -149,8 +161,9 @@ dark = Sombre
 light = Clair
 
 # Context menu
-extract-here = Extraire
 add-to-sidebar = Ajouter à la barre latérale
+compress = Compresser
+extract-here = Extraire
 new-file = Nouveau fichier
 new-folder = Nouveau dossier
 open-in-terminal = Ouvrir dans le terminal
@@ -167,7 +180,7 @@ sort-by-size = Trier par taille
 file = Fichier
 new-tab = Nouvel onglet
 new-window = Nouvelle fenêtre
-rename = Renommer
+rename = Renommer...
 menu-show-details = Afficher les détails...
 close-tab = Fermer l'onglet
 quit = Quitter
