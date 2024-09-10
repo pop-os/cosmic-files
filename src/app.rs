@@ -303,16 +303,29 @@ impl ContextPage {
     }
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub enum ArchiveType {
+    Tgz,
+    #[default]
     Zip,
 }
 
 impl ArchiveType {
-    pub fn extension(&self) -> String {
+    pub fn all() -> &'static [Self] {
+        &[Self::Tgz, Self::Zip]
+    }
+
+    pub fn extension(&self) -> &str {
         match self {
-            ArchiveType::Zip => ".zip".to_string(),
+            ArchiveType::Tgz => ".tgz",
+            ArchiveType::Zip => ".zip",
         }
+    }
+}
+
+impl AsRef<str> for ArchiveType {
+    fn as_ref(&self) -> &str {
+        self.extension()
     }
 }
 
@@ -1299,7 +1312,7 @@ impl Application for App {
                     if let Some(destination) = current_path.parent().zip(current_path.file_stem()) {
                         let to = destination.0.to_path_buf();
                         let name = destination.1.to_str().unwrap_or_default().to_string();
-                        let archive_type = ArchiveType::Zip;
+                        let archive_type = ArchiveType::default();
                         self.dialog_pages.push_back(DialogPage::Compress {
                             paths,
                             to,
@@ -2436,6 +2449,8 @@ impl Application for App {
                     }
                 };
 
+                let archive_types = ArchiveType::all();
+                let selected = archive_types.iter().position(|&x| x == *archive_type);
                 dialog
                     .primary_action(
                         widget::button::suggested(fl!("create"))
@@ -2455,12 +2470,20 @@ impl Application for App {
                                             paths: paths.clone(),
                                             to: to.clone(),
                                             name: name.clone(),
-                                            archive_type: archive_type.clone(),
+                                            archive_type: *archive_type,
                                         })
                                     })
                                     .on_submit_maybe(complete_maybe)
                                     .into(),
-                                widget::text::body(".zip").into(),
+                                widget::dropdown(archive_types, selected, move |index| {
+                                    Message::DialogUpdate(DialogPage::Compress {
+                                        paths: paths.clone(),
+                                        to: to.clone(),
+                                        name: name.clone(),
+                                        archive_type: archive_types[index],
+                                    })
+                                })
+                                .into(),
                             ])
                             .align_items(Alignment::Center)
                             .spacing(space_xxs)

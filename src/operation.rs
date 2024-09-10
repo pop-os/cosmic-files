@@ -15,7 +15,9 @@ use walkdir::WalkDir;
 use crate::{
     app::{ArchiveType, DialogPage, Message},
     config::IconSizes,
-    fl, tab,
+    fl,
+    mime_icon::mime_for_path,
+    tab,
 };
 
 fn err_str<T: ToString>(err: T) -> String {
@@ -374,25 +376,30 @@ impl Operation {
             } => {
                 let msg_tx = msg_tx.clone();
                 tokio::task::spawn_blocking(move || -> Result<(), String> {
+                    let Some(relative_root) = to.parent() else {
+                        return Err(format!("path {:?} has no parent directory", to));
+                    };
+
+                    let mut paths = paths;
+                    for path in paths.clone().iter() {
+                        if path.is_dir() {
+                            let new_paths_it = WalkDir::new(path).into_iter();
+                            for entry in new_paths_it.skip(1) {
+                                let entry = entry.map_err(err_str)?;
+                                paths.push(entry.path().to_path_buf());
+                            }
+                        }
+                    }
+
                     match archive_type {
-                        ArchiveType::Zip => {
+                        ArchiveType::Tgz => {
                             let mut archive = fs::File::create(&to)
                                 .map(io::BufWriter::new)
-                                .map(zip::ZipWriter::new)
+                                .map(|w| {
+                                    flate2::write::GzEncoder::new(w, flate2::Compression::default())
+                                })
+                                .map(tar::Builder::new)
                                 .map_err(err_str)?;
-
-                            let zip_options = zip::write::SimpleFileOptions::default();
-
-                            let mut paths = paths;
-                            for path in paths.clone().iter() {
-                                if path.is_dir() {
-                                    let new_paths_it = WalkDir::new(path).into_iter();
-                                    for entry in new_paths_it.skip(1) {
-                                        let entry = entry.map_err(err_str)?;
-                                        paths.push(entry.path().to_path_buf());
-                                    }
-                                }
-                            }
 
                             let total_paths = paths.len();
                             for (i, path) in paths.iter().enumerate() {
@@ -405,27 +412,56 @@ impl Operation {
                                         .await;
                                 });
 
-                                if let Some(relative_root) = to.parent() {
-                                    if let Some(relative_path) =
-                                        path.strip_prefix(relative_root).map_err(err_str)?.to_str()
-                                    {
-                                        if path.is_file() {
-                                            archive
-                                                .start_file(relative_path, zip_options)
-                                                .map_err(err_str)?;
+                                if let Some(relative_path) =
+                                    path.strip_prefix(relative_root).map_err(err_str)?.to_str()
+                                {
+                                    archive
+                                        .append_path_with_name(path, relative_path)
+                                        .map_err(err_str)?;
+                                }
+                            }
 
-                                            let mut buffer = Vec::new();
-                                            let mut file = fs::File::open(&path)
-                                                .map(io::BufReader::new)
-                                                .map_err(err_str)?;
+                            archive.finish().map_err(err_str)?;
+                        }
+                        ArchiveType::Zip => {
+                            let mut archive = fs::File::create(&to)
+                                .map(io::BufWriter::new)
+                                .map(zip::ZipWriter::new)
+                                .map_err(err_str)?;
 
-                                            file.read_to_end(&mut buffer).map_err(err_str)?;
-                                            archive.write_all(&buffer).map_err(err_str)?;
-                                        } else {
-                                            archive
-                                                .add_directory(relative_path, zip_options)
-                                                .map_err(err_str)?;
-                                        }
+                            //TODO: set unix_permissions per file?
+                            let zip_options = zip::write::SimpleFileOptions::default();
+
+                            let total_paths = paths.len();
+                            for (i, path) in paths.iter().enumerate() {
+                                executor::block_on(async {
+                                    let total_progress = (i as f32) / total_paths as f32;
+                                    let _ = msg_tx
+                                        .lock()
+                                        .await
+                                        .send(Message::PendingProgress(id, 100.0 * total_progress))
+                                        .await;
+                                });
+
+                                if let Some(relative_path) =
+                                    path.strip_prefix(relative_root).map_err(err_str)?.to_str()
+                                {
+                                    if path.is_file() {
+                                        archive
+                                            .start_file(relative_path, zip_options)
+                                            .map_err(err_str)?;
+
+                                        let mut buffer = Vec::new();
+                                        let mut file = fs::File::open(&path)
+                                            .map(io::BufReader::new)
+                                            .map_err(err_str)?;
+
+                                        file.read_to_end(&mut buffer).map_err(err_str)?;
+                                        archive.write_all(&buffer).map_err(err_str)?;
+                                    } else {
+                                        archive
+                                            .add_directory(relative_path, zip_options)
+                                            .map_err(err_str)?;
                                     }
                                 }
                             }
@@ -611,21 +647,26 @@ impl Operation {
                                 }
                             }
 
-                            if let Some(mime) = mime_guess::from_path(&path).first() {
-                                match mime.essence_str() {
-                                    "application/x-tar" => fs::File::open(path)
-                                        .map(io::BufReader::new)
-                                        .map(tar::Archive::new)
-                                        .and_then(|mut archive| archive.unpack(new_dir))
-                                        .map_err(err_str)?,
-                                    "application/zip" => fs::File::open(path)
-                                        .map(io::BufReader::new)
-                                        .map(zip::ZipArchive::new)
-                                        .map_err(err_str)?
-                                        .and_then(|mut archive| archive.extract(new_dir))
-                                        .map_err(err_str)?,
-                                    _ => Err(format!("unsupported mime type {:?}", mime))?,
-                                }
+                            let mime = mime_for_path(&path);
+                            match mime.essence_str() {
+                                "application/x-compressed-tar" => fs::File::open(path)
+                                    .map(io::BufReader::new)
+                                    .map(flate2::read::GzDecoder::new)
+                                    .map(tar::Archive::new)
+                                    .and_then(|mut archive| archive.unpack(new_dir))
+                                    .map_err(err_str)?,
+                                "application/x-tar" => fs::File::open(path)
+                                    .map(io::BufReader::new)
+                                    .map(tar::Archive::new)
+                                    .and_then(|mut archive| archive.unpack(new_dir))
+                                    .map_err(err_str)?,
+                                "application/zip" => fs::File::open(path)
+                                    .map(io::BufReader::new)
+                                    .map(zip::ZipArchive::new)
+                                    .map_err(err_str)?
+                                    .and_then(|mut archive| archive.extract(new_dir))
+                                    .map_err(err_str)?,
+                                _ => Err(format!("unsupported mime type {:?}", mime))?,
                             }
                         }
                     }

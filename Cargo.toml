@@ -14,8 +14,10 @@ chrono = { version = "0.4", features = ["unstable-locales"] }
 dirs = "5.0.1"
 env_logger = "0.11"
 freedesktop_entry_parser = { version = "1.3", optional = true }
+flate2 = "1.0"
 fs_extra = { git = "https://github.com/pop-os/fs_extra.git" }
-gio = { version = "0.19", optional = true }
+gio = { version = "0.20", optional = true }
+glib = { version = "0.20", optional = true }
 glob = "0.3"
 icu_collator = "1.5"
 icu_provider = { version = "1.5", features = ["sync"] }
@@ -65,7 +67,7 @@ features = ["serde"]
 [features]
 default = ["desktop", "gvfs", "notify", "winit", "wgpu"]
 desktop = ["libcosmic/desktop", "dep:freedesktop_entry_parser", "dep:xdg"]
-gvfs = ["dep:gio"]
+gvfs = ["dep:gio", "dep:glib"]
 notify = ["dep:notify-rust"]
 wayland = ["libcosmic/wayland"]
 winit = ["libcosmic/winit"]
