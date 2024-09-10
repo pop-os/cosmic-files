@@ -16,6 +16,9 @@ size = Dimensioni
 
 # Dialogs
 
+## Compress Dialog
+create-archive = Crea archivio
+
 ## Empty Trash Dialog
 empty-trash = Svuota cestino
 empty-trash-warning = Sei sicuro di voler cancellare definitivamente tutti gli elementi contenuti nel cestino?
