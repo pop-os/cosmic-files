@@ -6,6 +6,7 @@ filesystem = Système de fichiers
 home = Dossier personnel
 notification-in-progress = Les opérations sur les fichiers sont en cours.
 trash = Corbeille
+recents = Récente
 undo = Annuler
 
 # List view

@@ -6,6 +6,7 @@ filesystem = Filesystem
 home = Home
 notification-in-progress = Operazioni sui file in corso ...
 trash = Cestino
+recents = Recenti
 undo = Annulla ultima operazione
 
 # List view
@@ -14,6 +15,9 @@ modified = Modificato
 size = Dimensioni
 
 # Dialogs
+
+## Compress Dialog
+create-archive = Crea archivio
 
 ## Empty Trash Dialog
 empty-trash = Svuota cestino

@@ -98,7 +98,7 @@ pub fn context_menu<'a>(
 
     let mut children: Vec<Element<_>> = Vec::new();
     match tab.location {
-        Location::Path(_) | Location::Search(_, _) => {
+        Location::Path(_) | Location::Search(_, _) | Location::Recents => {
             if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
                     children.push(menu_item(fl!("open"), Action::Open).into());
@@ -126,11 +126,16 @@ pub fn context_menu<'a>(
                 children.push(menu_item(fl!("cut"), Action::Cut).into());
                 children.push(menu_item(fl!("copy"), Action::Copy).into());
 
-                children.push(divider::horizontal::light().into());
-                let supported_archive_types = ["application/x-tar", "application/zip"]
-                    .iter()
-                    .filter_map(|mime_type| mime_type.parse::<Mime>().ok())
-                    .collect::<Vec<_>>();
+                children.push(divider::horizontal::light().into()).into());
+                let supported_archive_types = [
+                    "application/x-compressed-tar",
+                    "application/x-tar",
+                    "application/zip",
+                ]
+                .iter()
+                .filter_map(|mime_type| mime_type.parse::<Mime>().ok())
+                .collect::<Vec<_>>();
+
                 selected_types.retain(|t| !supported_archive_types.contains(t));
                 if selected_types.is_empty() {
                     children.push(menu_item(fl!("extract-here"), Action::ExtractHere).into());

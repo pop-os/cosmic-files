@@ -25,6 +25,7 @@ use notify_debouncer_full::{
     notify::{self, RecommendedWatcher, Watcher},
     DebouncedEvent, Debouncer, FileIdMap,
 };
+use recently_used_xbel::update_recently_used;
 use std::{
     any::TypeId,
     collections::{HashMap, HashSet},
@@ -440,6 +441,13 @@ impl Application for App {
         let accept_label = flags.kind.accept_label();
 
         let mut nav_model = segmented_button::ModelBuilder::default();
+
+        nav_model = nav_model.insert(move |b| {
+            b.text(fl!("recents"))
+                .icon(widget::icon::from_name("accessories-clock-symbolic").size(16))
+                .data(Location::Recents)
+        });
+
         if let Some(dir) = dirs::home_dir() {
             nav_model = nav_model.insert(move |b| {
                 b.text(fl!("home"))
@@ -666,6 +674,12 @@ impl Application for App {
                         if item.selected {
                             if let Some(path) = &item.path_opt {
                                 paths.push(path.clone());
+                                let _ = update_recently_used(
+                                    &path.clone(),
+                                    App::APP_ID.to_string(),
+                                    "cosmic-files".to_string(),
+                                    None,
+                                );
                             }
                         }
                     }

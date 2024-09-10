@@ -15,6 +15,9 @@ size = Rozmiar
 
 # Dialogs
 
+## Compress Dialog
+create-archive = Utwórz archiwum
+
 ## Empty Trash Dialog
 empty-trash = Opróżnij kosz
 empty-trash-warning = Czy chcesz bezpowrotnie usunąć zawartość Kosza?
@@ -33,6 +36,7 @@ name-no-slashes = Nazwa nie może zawierać ukośników.
 # Open/Save Dialog
 cancel = Anuluj
 open = Otwórz
+create = Utwórz
 open-file = Otwórz plik
 open-folder = Otwórz katalog
 open-in-new-tab = Otwórz w nowej karcie
@@ -70,6 +74,16 @@ no-history = Brak pozycji w historii.
 pending = Oczekujące
 failed = Nieudane
 complete = Ukończone
+compressing = Spakuj {$items} {$items ->
+        [one] element
+        [few] elementy
+        *[other] elementów
+    } z {$from} do {$to}
+compressed = Spakowano {$items} {$items ->
+        [one] element
+        [few] elementy
+        *[other] elementów
+    } z {$from} do {$to}
 copy_noun = Kopiuj
 creating = Tworzy {$name} w {$parent}
 created = Stworzono {$name} w {$parent}
@@ -145,6 +159,8 @@ light = Jasny
 # Context menu
 extract-here = Wypakuj
 add-to-sidebar = Dodaj do bocznego panelu
+compress = Spakuj
+extract-here = Wypakuj
 new-file = Nowy plik
 new-folder = Nowy katalog
 open-in-terminal = Otwórz w terminalu

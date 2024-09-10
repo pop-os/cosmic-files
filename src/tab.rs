@@ -35,8 +35,10 @@ use cosmic::{
     Element, Theme,
 };
 
+use chrono::{DateTime, Utc};
 use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
+use recently_used_xbel::{Error, RecentlyUsed};
 use serde::{Deserialize, Serialize};
 use std::{
     cell::{Cell, RefCell},
@@ -46,7 +48,7 @@ use std::{
     fs::{self, Metadata},
     num::NonZeroU16,
     os::unix::fs::MetadataExt,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -591,11 +593,88 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
     items
 }
 
+fn uri_to_path(uri: String) -> Option<PathBuf> {
+    //TODO support for external drive or cloud?
+    if uri.starts_with("file://") {
+        let path_str = &uri[7..];
+        Some(PathBuf::from(path_str))
+    } else {
+        None
+    }
+}
+
+pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
+    let mut recent_files = recently_used_xbel::parse_file();
+
+    let mut recents = Vec::new();
+
+    match recent_files {
+        Ok(recent_files) => {
+            for bookmark in recent_files.bookmarks {
+                let uri = bookmark.href;
+                let path = match uri_to_path(uri) {
+                    None => continue,
+                    Some(path) => path,
+                };
+                let last_edit = match bookmark.modified.parse::<DateTime<Utc>>() {
+                    Ok(last_edit) => last_edit,
+                    Err(_) => continue,
+                };
+                let last_visit = match bookmark.visited.parse::<DateTime<Utc>>() {
+                    Ok(last_visit) => last_visit,
+                    Err(_) => continue,
+                };
+                let path_buf = PathBuf::from(path);
+                let path_exist = path_buf.exists();
+
+                if path_exist {
+                    let file_name = path_buf.file_name();
+
+                    if let Some(name) = file_name {
+                        let name = name.to_string_lossy().to_string();
+
+                        let metadata = match path_buf.metadata() {
+                            Ok(ok) => ok,
+                            Err(err) => {
+                                log::warn!(
+                                    "failed to read metadata for entry at {:?}: {}",
+                                    path_buf.clone(),
+                                    err
+                                );
+                                continue;
+                            }
+                        };
+                        let item = item_from_entry(path_buf, name, metadata, sizes);
+                        recents.push((
+                            item,
+                            if last_edit.le(&last_visit) {
+                                last_edit
+                            } else {
+                                last_visit
+                            },
+                        ))
+                    }
+                } else {
+                    log::warn!("recent file path not exist: {:?}", path_buf);
+                }
+            }
+        }
+        Err(err) => {
+            log::warn!("Error reading recent files: {:?}", err);
+        }
+    }
+
+    recents.sort_by(|a, b| b.1.cmp(&a.1));
+
+    recents.into_iter().take(50).map(|(item, _)| item).collect()
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Location {
     Path(PathBuf),
     Search(PathBuf, String),
     Trash,
+    Recents,
 }
 
 impl std::fmt::Display for Location {
@@ -604,6 +683,7 @@ impl std::fmt::Display for Location {
             Self::Path(path) => write!(f, "{}", path.display()),
             Self::Search(path, term) => write!(f, "search {} for {}", path.display(), term),
             Self::Trash => write!(f, "trash"),
+            Self::Recents => write!(f, "recents"),
         }
     }
 }
@@ -614,6 +694,7 @@ impl Location {
             Self::Path(path) => scan_path(path, sizes),
             Self::Search(path, term) => scan_search(path, term, sizes),
             Self::Trash => scan_trash(sizes),
+            Self::Recents => scan_recents(sizes),
         }
     }
 }
@@ -1028,6 +1109,25 @@ pub struct Tab {
     selected_clicked: bool,
 }
 
+fn folder_name<P: AsRef<Path>>(path: P) -> (String, bool) {
+    let path = path.as_ref();
+    let mut found_home = false;
+    let name = match path.file_name() {
+        Some(name) => {
+            if path == crate::home_dir() {
+                found_home = true;
+                fl!("home")
+            } else {
+                name.to_string_lossy().to_string()
+            }
+        }
+        None => {
+            fl!("filesystem")
+        }
+    };
+    (name, found_home)
+}
+
 impl Tab {
     pub fn new(location: Location, config: TabConfig) -> Self {
         let history = vec![location.clone()];
@@ -1060,14 +1160,19 @@ impl Tab {
         //TODO: better title
         match &self.location {
             Location::Path(path) => {
-                format!("{}", path.display())
+                let (name, _) = folder_name(path);
+                name
             }
             Location::Search(path, term) => {
                 //TODO: translate
-                format!("Search for {} in {}", term, path.display())
+                let (name, _) = folder_name(path);
+                format!("Search \"{}\": {}", term, name)
             }
             Location::Trash => {
                 fl!("trash")
+            }
+            Location::Recents => {
+                fl!("recents")
             }
         }
     }
@@ -1746,6 +1851,7 @@ impl Tab {
                     Location::Trash => {
                         cd = Some(location);
                     }
+                    Location::Recents => cd = Some(location),
                 }
             }
             Message::LocationUp => {
@@ -1887,6 +1993,9 @@ impl Tab {
                     Location::Trash => {
                         log::warn!("Copy to trash is not supported.");
                     }
+                    Location::Recents => {
+                        log::warn!("Copy to recents is not supported.");
+                    }
                 };
             }
             Message::Drop(None) => {
@@ -1959,6 +2068,7 @@ impl Tab {
                     Location::Path(path) => path.is_dir(),
                     Location::Search(path, _term) => path.is_dir(),
                     Location::Trash => true,
+                    Location::Recents => true,
                 } {
                     let prev_path = if let Location::Path(path) = &self.location {
                         Some(path.clone())
@@ -2236,38 +2346,10 @@ impl Tab {
         let mut children: Vec<Element<_>> = Vec::new();
         match &self.location {
             Location::Path(path) | Location::Search(path, ..) => {
-                let home_dir = crate::home_dir();
                 let excess_str = "...";
                 let excess_width = text_width_body(excess_str);
                 for (index, ancestor) in path.ancestors().enumerate() {
-                    let mut found_home = false;
-                    let (name, icon_opt) = match ancestor.file_name() {
-                        Some(name) => {
-                            if ancestor == home_dir {
-                                let icon = widget::icon::icon(folder_icon_symbolic(
-                                    &ancestor.to_path_buf(),
-                                    16,
-                                ))
-                                .size(16);
-                                found_home = true;
-                                (fl!("home"), Some(icon))
-                            } else {
-                                (name.to_string_lossy().to_string(), None)
-                            }
-                        }
-                        None => {
-                            let icon = widget::icon::from_name("drive-harddisk-system-symbolic")
-                                .size(16)
-                                .icon();
-                            (fl!("filesystem"), Some(icon))
-                        }
-                    };
-                    let icon_width = if icon_opt.is_some() {
-                        16.0 + space_xxxs as f32
-                    } else {
-                        0.0
-                    };
-
+                    let (name, found_home) = folder_name(&ancestor);
                     let (name_width, name_text) = if children.is_empty() {
                         (
                             text_width_heading(&name),
@@ -2294,17 +2376,12 @@ impl Tab {
                         .align_items(Alignment::Center)
                         .spacing(space_xxxs);
                     //TODO: figure out why this hardcoded offset is needed after the first item is ellipsed
-                    let overflow_offset = if icon_opt.is_some() { 0.0 } else { 32.0 };
-                    let overflow =
-                        w + icon_width + name_width + overflow_offset > size.width && index > 0;
+                    let overflow_offset = 32.0;
+                    let overflow = w + name_width + overflow_offset > size.width && index > 0;
                     if overflow {
                         row = row.push(widget::text::body(excess_str));
                         w += excess_width;
                     } else {
-                        if let Some(icon) = icon_opt {
-                            row = row.push(icon);
-                            w += icon_width;
-                        }
                         row = row.push(name_text);
                         w += name_width;
                     }
@@ -2358,6 +2435,21 @@ impl Tab {
                     widget::button(row)
                         .padding(space_xxxs)
                         .on_press(Message::Location(Location::Trash))
+                        .style(theme::Button::Text)
+                        .into(),
+                );
+            }
+            Location::Recents => {
+                let mut row = widget::row::with_capacity(2)
+                    .align_items(Alignment::Center)
+                    .spacing(space_xxxs);
+                row = row.push(widget::icon::from_name("accessories-clock-symbolic").size(16));
+                row = row.push(widget::text::heading(fl!("recents")));
+
+                children.push(
+                    widget::button(row)
+                        .padding(space_xxxs)
+                        .on_press(Message::Location(Location::Recents))
                         .style(theme::Button::Text)
                         .into(),
                 );

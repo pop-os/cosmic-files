@@ -3,6 +3,7 @@ empty-folder = Složka je prázdná
 empty-folder-hidden = Složka je prázdná (obsahuje skryté položky)
 filesystem = Souborový systém
 home = Domů
+recents = Nedávné
 trash = Koš
 
 # List view
