@@ -10,7 +10,7 @@ use std::{
     cmp::Ordering, collections::HashMap, env, path::PathBuf, process, sync::Mutex, time::Instant,
 };
 
-pub fn exec_to_command(exec: &str, path_opt: Option<PathBuf>) -> Option<process::Command> {
+pub fn exec_to_command(exec: &str, path_opt: Vec<Option<PathBuf>>) -> Option<process::Command> {
     let args_vec: Vec<String> = shlex::split(exec)?;
     let mut args = args_vec.iter();
     let mut command = process::Command::new(args.next()?);
@@ -18,8 +18,12 @@ pub fn exec_to_command(exec: &str, path_opt: Option<PathBuf>) -> Option<process:
         if arg.starts_with('%') {
             match arg.as_str() {
                 "%f" | "%F" | "%u" | "%U" => {
-                    if let Some(path) = &path_opt {
-                        command.arg(path);
+                    if !path_opt.is_empty() {
+                        path_opt.iter().for_each(|path| {
+                            if let Some(path) = &path {
+                                command.arg(path);
+                            }
+                        })
                     }
                 }
                 _ => {
@@ -46,7 +50,7 @@ pub struct MimeApp {
 
 impl MimeApp {
     //TODO: move to libcosmic, support multiple files
-    pub fn command(&self, path_opt: Option<PathBuf>) -> Option<process::Command> {
+    pub fn command(&self, path_opt: Vec<Option<PathBuf>>) -> Option<process::Command> {
         exec_to_command(self.exec.as_deref()?, path_opt)
     }
 }

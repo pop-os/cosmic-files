@@ -1677,7 +1677,7 @@ impl Application for App {
                         }
                     }
                     for path in paths {
-                        if let Some(mut command) = terminal.command(None) {
+                        if let Some(mut command) = terminal.command(Vec::new()) {
                             command.current_dir(&path);
                             match spawn_detached(&mut command) {
                                 Ok(()) => {}
@@ -1697,7 +1697,7 @@ impl Application for App {
                 }
             }
             Message::OpenWith(path, app) => {
-                if let Some(mut command) = app.command(Some(path.clone())) {
+                if let Some(mut command) = app.command(vec![Some(path.clone())]) {
                     match spawn_detached(&mut command) {
                         Ok(()) => {
                             let _ = recently_used_xbel::update_recently_used(
@@ -2119,7 +2119,7 @@ impl Application for App {
                                     Ok(entry) => {
                                         match entry.section("Desktop Entry").attr("Exec") {
                                             Some(exec) => {
-                                                match mime_app::exec_to_command(exec, None) {
+                                                match mime_app::exec_to_command(exec, Vec::new()) {
                                                     Some(mut command) => {
                                                         match spawn_detached(&mut command) {
                                                             Ok(()) => {
@@ -2161,6 +2161,51 @@ impl Application for App {
                                     }
                                     Err(err) => {
                                         log::warn!("failed to open {:?}: {}", path, err);
+                                    }
+                                }
+                            }
+                        }
+                        tab::Command::OpenMultipleFiles(items) => {
+                            let mut groups: HashMap<
+                                String,
+                                Vec<(mime_app::MimeApp, Option<PathBuf>)>,
+                            > = HashMap::new();
+
+                            for item in items {
+                                item.open_with
+                                    .into_iter()
+                                    .filter(|mime| mime.is_default)
+                                    .for_each(|app| {
+                                        groups
+                                            .entry(app.id.clone())
+                                            .or_default()
+                                            .push((app, item.path_opt.clone()));
+                                    })
+                            }
+
+                            for (_id, values) in groups {
+                                let mut paths = Vec::new();
+                                let mut mime_app: Option<mime_app::MimeApp> = None;
+
+                                for (app, path_opt) in values {
+                                    paths.push(path_opt);
+                                    mime_app = Some(app);
+                                }
+
+                                if let Some(app) = mime_app {
+                                    if let Some(mut command) = app.command(paths) {
+                                        match spawn_detached(&mut command) {
+                                            Ok(()) => {}
+                                            Err(err) => {
+                                                log::warn!(
+                                                    "failed to open with {:?}: {}",
+                                                    app.id,
+                                                    err
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        log::warn!("failed to get command for {:?}", app.id);
                                     }
                                 }
                             }
