@@ -545,9 +545,15 @@ impl Application for App {
             },
         });
 
-        let mut tab = Tab::new(location, TabConfig::default());
+        let tab_config = TabConfig {
+            view: tab::View::List,
+            folders_first: false,
+            sort_name: tab::HeadingOptions::Modified,
+            sort_direction: false,
+            ..Default::default()
+        };
+        let mut tab = Tab::new(location, tab_config);
         tab.dialog = Some(flags.kind.clone());
-        tab.config.view = tab::View::List;
 
         let mut app = App {
             core,
