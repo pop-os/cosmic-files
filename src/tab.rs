@@ -797,6 +797,7 @@ pub enum Message {
     MiddleClick(usize),
     Scroll(Viewport),
     SelectAll,
+    SetSort(HeadingOptions, bool),
     Thumbnail(PathBuf, ItemThumbnail),
     ToggleFoldersFirst,
     ToggleShowHidden,
@@ -2016,6 +2017,10 @@ impl Tab {
                     // Unfocus currently focused button
                     commands.push(Command::Iced(widget::button::focus(widget::Id::unique())));
                 }
+            }
+            Message::SetSort(heading_option, dir) => {
+                self.config.sort_name = heading_option;
+                self.config.sort_direction = dir;
             }
             Message::Thumbnail(path, thumbnail) => {
                 if let Some(ref mut items) = self.items_opt {

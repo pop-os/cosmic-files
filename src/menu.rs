@@ -244,6 +244,16 @@ pub fn menu_bar<'a>(
     tab_opt: Option<&Tab>,
     key_binds: &HashMap<KeyBind, Action>,
 ) -> Element<'a, Message> {
+    let sort_item = |label, sort, dir| {
+        menu::Item::CheckBox(
+            label,
+            tab_opt.map_or(false, |tab| {
+                tab.config.sort_name == sort && tab.config.sort_direction == dir
+            }),
+            Action::SetSort(sort, dir),
+        )
+    };
+
     MenuBar::new(vec![
         menu::Tree::with_children(
             menu::root(fl!("file")),
@@ -318,6 +328,37 @@ pub fn menu_bar<'a>(
                     menu::Item::Button(fl!("menu-settings"), Action::Settings),
                     menu::Item::Divider,
                     menu::Item::Button(fl!("menu-about"), Action::About),
+                ],
+            ),
+        ),
+        menu::Tree::with_children(
+            menu::root(fl!("sort")),
+            menu::items(
+                key_binds,
+                vec![
+                    sort_item(fl!("sort-a-z"), tab::HeadingOptions::Name, true),
+                    sort_item(fl!("sort-z-a"), tab::HeadingOptions::Name, false),
+                    sort_item(
+                        fl!("sort-newest-first"),
+                        tab::HeadingOptions::Modified,
+                        false,
+                    ),
+                    sort_item(
+                        fl!("sort-oldest-first"),
+                        tab::HeadingOptions::Modified,
+                        true,
+                    ),
+                    sort_item(
+                        fl!("sort-smallest-to-largest"),
+                        tab::HeadingOptions::Size,
+                        true,
+                    ),
+                    sort_item(
+                        fl!("sort-largest-to-smallest"),
+                        tab::HeadingOptions::Size,
+                        false,
+                    ),
+                    //TODO: sort by type
                 ],
             ),
         ),

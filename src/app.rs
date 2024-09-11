@@ -115,6 +115,7 @@ pub enum Action {
     RestoreFromTrash,
     SearchActivate,
     SelectAll,
+    SetSort(HeadingOptions, bool),
     Settings,
     TabClose,
     TabNew,
@@ -166,6 +167,9 @@ impl Action {
             Action::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
             Action::SearchActivate => Message::SearchActivate,
             Action::SelectAll => Message::TabMessage(entity_opt, tab::Message::SelectAll),
+            Action::SetSort(sort, dir) => {
+                Message::TabMessage(entity_opt, tab::Message::SetSort(*sort, *dir))
+            }
             Action::Settings => Message::ToggleContextPage(ContextPage::Settings),
             Action::TabClose => Message::TabClose(entity_opt),
             Action::TabNew => Message::TabNew,
