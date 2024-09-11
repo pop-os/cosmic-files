@@ -312,7 +312,6 @@ enum Message {
     SearchSubmit,
     TabMessage(tab::Message),
     TabRescan(Vec<tab::Item>),
-    ViewSelect(segmented_button::Entity),
 }
 
 pub struct MounterData(MounterKey, MounterItem);
@@ -360,7 +359,6 @@ struct App {
     search_input: String,
     tab: Tab,
     key_binds: HashMap<KeyBind, Action>,
-    view_model: segmented_button::SingleSelectModel,
     watcher_opt: Option<(Debouncer<RecommendedWatcher, FileIdMap>, HashSet<PathBuf>)>,
 }
 
@@ -588,18 +586,6 @@ impl Application for App {
         let mut tab = Tab::new(location, tab_config);
         tab.mode = tab::Mode::Dialog(flags.kind.clone());
 
-        let view_model = segmented_button::SingleSelectModel::builder()
-            .insert(|b| {
-                b.icon(widget::icon::from_name("view-grid-symbolic"))
-                    .data(tab::View::Grid)
-            })
-            .insert(|b| {
-                b.icon(widget::icon::from_name("view-list-symbolic"))
-                    .data(tab::View::List)
-                    .activate()
-            })
-            .build();
-
         let mut app = App {
             core,
             flags,
@@ -620,7 +606,6 @@ impl Application for App {
             search_input: String::new(),
             tab,
             key_binds: HashMap::new(),
-            view_model,
             watcher_opt: None,
         };
 
@@ -1169,13 +1154,6 @@ impl Application for App {
                 // Reset focus on location change
                 return widget::text_input::focus(self.filename_id.clone());
             }
-            Message::ViewSelect(entity) => match self.view_model.data::<tab::View>(entity) {
-                Some(view) => {
-                    self.tab.config.view = *view;
-                    self.view_model.activate(entity);
-                }
-                None => {}
-            },
         }
 
         Command::none()
