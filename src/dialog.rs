@@ -439,7 +439,7 @@ impl App {
         // Sort by name lexically
         nav_items.sort_by(|a, b| LANGUAGE_SORTER.compare(&a.1.name(), &b.1.name()));
         // Add items to nav model
-        for (key, item) in nav_items {
+        for (i, (key, item)) in nav_items.into_iter().enumerate() {
             nav_model = nav_model.insert(|mut b| {
                 b = b.text(item.name()).data(MounterData(key, item.clone()));
                 if let Some(path) = item.path() {
@@ -450,6 +450,9 @@ impl App {
                 }
                 if item.is_mounted() {
                     b = b.closable();
+                }
+                if i == 0 {
+                    b = b.divider_above();
                 }
                 b
             });
