@@ -4,7 +4,7 @@ use cosmic::{
     iced::{Alignment, Background, Border, Length},
     theme,
     widget::{
-        button, column, container, divider, horizontal_space,
+        self, button, column, container, divider, horizontal_space,
         menu::{self, key_bind::KeyBind, ItemHeight, ItemWidth, MenuBar},
         text, Row,
     },
@@ -238,6 +238,82 @@ pub fn context_menu<'a>(
         }))
         .width(Length::Fixed(260.0))
         .into()
+}
+
+pub fn dialog_menu<'a>(
+    tab: &Tab,
+    key_binds: &HashMap<KeyBind, Action>,
+) -> Element<'static, Message> {
+    let sort_item = |label, sort, dir| {
+        menu::Item::CheckBox(
+            label,
+            tab.config.sort_name == sort && tab.config.sort_direction == dir,
+            Action::SetSort(sort, dir),
+        )
+    };
+
+    MenuBar::new(vec![
+        menu::Tree::with_children(
+            widget::button::icon(widget::icon::from_name(match tab.config.view {
+                tab::View::Grid => "view-grid-symbolic",
+                tab::View::List => "view-list-symbolic",
+            })),
+            menu::items(
+                key_binds,
+                vec![
+                    menu::Item::CheckBox(
+                        fl!("grid-view"),
+                        matches!(tab.config.view, tab::View::Grid),
+                        Action::TabViewGrid,
+                    ),
+                    menu::Item::CheckBox(
+                        fl!("list-view"),
+                        matches!(tab.config.view, tab::View::List),
+                        Action::TabViewList,
+                    ),
+                ],
+            ),
+        ),
+        menu::Tree::with_children(
+            widget::button::icon(widget::icon::from_name(if tab.config.sort_direction {
+                "view-sort-ascending-symbolic"
+            } else {
+                "view-sort-descending-symbolic"
+            })),
+            menu::items(
+                key_binds,
+                vec![
+                    sort_item(fl!("sort-a-z"), tab::HeadingOptions::Name, true),
+                    sort_item(fl!("sort-z-a"), tab::HeadingOptions::Name, false),
+                    sort_item(
+                        fl!("sort-newest-first"),
+                        tab::HeadingOptions::Modified,
+                        false,
+                    ),
+                    sort_item(
+                        fl!("sort-oldest-first"),
+                        tab::HeadingOptions::Modified,
+                        true,
+                    ),
+                    sort_item(
+                        fl!("sort-smallest-to-largest"),
+                        tab::HeadingOptions::Size,
+                        true,
+                    ),
+                    sort_item(
+                        fl!("sort-largest-to-smallest"),
+                        tab::HeadingOptions::Size,
+                        false,
+                    ),
+                    //TODO: sort by type
+                ],
+            ),
+        ),
+    ])
+    .item_height(ItemHeight::Dynamic(40))
+    .item_width(ItemWidth::Uniform(240))
+    .spacing(theme::active().cosmic().spacing.space_xxxs.into())
+    .into()
 }
 
 pub fn menu_bar<'a>(

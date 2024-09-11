@@ -43,6 +43,7 @@ use crate::{
     config::{Config, Favorite, TabConfig},
     fl, home_dir,
     localize::LANGUAGE_SORTER,
+    menu,
     mounter::{mounters, MounterItem, MounterItems, MounterKey, Mounters},
     tab::{self, ItemMetadata, Location, Tab},
 };
@@ -293,6 +294,7 @@ struct Flags {
 /// Messages that are used specifically by our [`App`].
 #[derive(Clone, Debug)]
 enum Message {
+    None,
     Cancel,
     Choice(usize, usize),
     Config(Config),
@@ -682,9 +684,16 @@ impl Application for App {
         */
 
         elements.push(
-            widget::segmented_control::horizontal(&self.view_model)
-                .on_activate(Message::ViewSelect)
-                .width(Length::Shrink)
+            menu::dialog_menu(&self.tab, &self.key_binds)
+                .map(|message| match message {
+                    AppMessage::TabMessage(_entity_opt, tab_message) => {
+                        Message::TabMessage(tab_message)
+                    }
+                    unsupported => {
+                        log::warn!("{unsupported:?} not supported in dialog mode");
+                        Message::None
+                    }
+                })
                 .into(),
         );
 
@@ -773,6 +782,7 @@ impl Application for App {
     /// Handle application events here.
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
+            Message::None => {}
             Message::Cancel => {
                 if self.replace_dialog {
                     self.replace_dialog = false;
