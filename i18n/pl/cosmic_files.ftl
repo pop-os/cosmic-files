@@ -205,3 +205,12 @@ show-hidden-files = Pokaż ukryte pliki
 list-directories-first = Najpierw wyświetlaj katalogi
 menu-settings = Ustawienia...
 menu-about = O Plikach COSMIC...
+
+## Sort
+sort = Uszereguj
+sort-a-z = A-Z
+sort-z-a = Z-A
+sort-newest-first = Najpierw najnowsze
+sort-oldest-first = Najpierw najstarsze
+sort-smallest-to-largest = Od najmniejszego do największego
+sort-largest-to-smallest = Od największego do najmniejszego
