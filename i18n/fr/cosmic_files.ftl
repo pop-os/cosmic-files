@@ -84,50 +84,50 @@ no-history = Aucun élément dans l'historique.
 pending = En attente
 failed = Échoué
 complete = Terminé
-compressing = Compression {$items} {$items ->
+compressing = Compression de {$items} {$items ->
         [one] élément
         *[other] éléments
-    } de {$from} vers {$to}
-compressed = Compressé {$items} {$items ->
+    } depuis {$from} vers {$to}
+compressed = {$items} compressé(s) {$items ->
         [one] élément
         *[other] éléments
-    } de {$from} vers {$to}
+    } depuis {$from} vers {$to}
 copy_noun = Copier
-creating = Création {$name} dans {$parent}
-created = Créé {$name} dans {$parent}
-copying = Copie {$items} {$items ->
+creating = Création de {$name} dans {$parent}
+created = {$name} créé dans {$parent}
+copying = Copie de {$items} {$items ->
         [one] élément
         *[other] éléments
-    } de {$from} vers {$to}
-copied = Copié {$items} {$items ->
+    } depuis {$from} vers {$to}
+copied = {$items} copié(s) {$items ->
         [one] élément
         *[other] éléments
-    } de {$from} vers {$to}
+    } depuis {$from} vers {$to}
 emptying-trash = {trash} en cours de nettoyage
 emptied-trash = {trash} vidée
-extracting = Extraction {$items} {$items ->
+extracting = Extraction de {$items} {$items ->
         [one] élément
         *[other] éléments
-    } de {$from} vers {$to}
-extracted = Extraits {$items} {$items ->
+    } depuis {$from} vers {$to}
+extracted = {$items} extrait(s) {$items ->
         [one] élément
         *[other] éléments
-    } de {$from} vers {$to}
-moving = Déplacement {$items} {$items ->
+    } depuis {$from} vers {$to}
+moving = Déplacement de {$items} {$items ->
         [one] élément
         *[other] éléments
-    } de {$from} vers {$to}
-moved = Déplacé {$items} {$items ->
+    } depuis {$from} vers {$to}
+moved = {$items} déplacé(s) {$items ->
         [one] élément
         *[other] éléments
-    } de {$from} vers {$to}
-renaming = Renommage {$from} en {$to}
-renamed = Renommé {$from} en {$to}
-restoring = Restauration {$items} {$items ->
+    } depuis {$from} vers {$to}
+renaming = Renommage de {$from} en {$to}
+renamed = {$from} renommé en {$to}
+restoring = Restauration de {$items} {$items ->
         [one] élément
         *[other] éléments
     } depuis la {trash}
-restored = Restauré {$items} {$items ->
+restored = {$items} restauré(s) {$items ->
         [one] élément
         *[other] éléments
     } depuis la {trash}
