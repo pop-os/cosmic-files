@@ -304,6 +304,10 @@ enum Message {
     NotifyWatcher(WatcherWrapper),
     Open,
     Save(bool),
+    SearchActivate,
+    SearchClear,
+    SearchInput(String),
+    SearchSubmit,
     TabMessage(tab::Message),
     TabRescan(Vec<tab::Item>),
     ViewSelect(segmented_button::Entity),
@@ -349,6 +353,9 @@ struct App {
     nav_model: segmented_button::SingleSelectModel,
     result_opt: Option<DialogResult>,
     replace_dialog: bool,
+    search_active: bool,
+    search_id: widget::Id,
+    search_input: String,
     tab: Tab,
     key_binds: HashMap<KeyBind, Action>,
     view_model: segmented_button::SingleSelectModel,
@@ -371,6 +378,21 @@ impl App {
             },
             |x| x,
         )
+    }
+
+    fn search(&mut self) -> Command<Message> {
+        match &self.tab.location {
+            Location::Path(path) | Location::Search(path, ..) => {
+                let location = if !self.search_input.is_empty() {
+                    Location::Search(path.clone(), self.search_input.clone())
+                } else {
+                    Location::Path(path.clone())
+                };
+                self.tab.change_location(&location, None);
+                Command::batch([self.update_watcher(), self.rescan_tab()])
+            }
+            _ => Command::none(),
+        }
     }
 
     fn update_config(&mut self) -> Command<Message> {
@@ -591,6 +613,9 @@ impl Application for App {
             nav_model: segmented_button::ModelBuilder::default().build(),
             result_opt: None,
             replace_dialog: false,
+            search_active: false,
+            search_id: widget::Id::unique(),
+            search_input: String::new(),
             tab,
             key_binds: HashMap::new(),
             view_model,
@@ -632,16 +657,38 @@ impl Application for App {
     }
 
     fn header_end(&self) -> Vec<Element<Message>> {
-        vec![
-            /*TODO: search and new folder buttons
-            widget::button::icon(widget::icon::from_name("system-search-symbolic")).into(),
-            widget::button::icon(widget::icon::from_name("folder-new-symbolic")).into(),
-            */
+        let mut elements = Vec::with_capacity(3);
+
+        if self.search_active {
+            elements.push(
+                widget::text_input::search_input("", &self.search_input)
+                    .width(Length::Fixed(240.0))
+                    .id(self.search_id.clone())
+                    .on_clear(Message::SearchClear)
+                    .on_input(Message::SearchInput)
+                    .on_submit(Message::SearchSubmit)
+                    .into(),
+            )
+        } else {
+            elements.push(
+                widget::button::icon(widget::icon::from_name("system-search-symbolic"))
+                    .on_press(Message::SearchActivate)
+                    .into(),
+            )
+        }
+
+        /*TODO: new folder button
+        elements.push(widget::button::icon(widget::icon::from_name("folder-new-symbolic")).into());
+        */
+
+        elements.push(
             widget::segmented_control::horizontal(&self.view_model)
                 .on_activate(Message::ViewSelect)
                 .width(Length::Shrink)
                 .into(),
-        ]
+        );
+
+        elements
     }
 
     fn nav_bar(&self) -> Option<Element<message::Message<Self::Message>>> {
@@ -682,7 +729,8 @@ impl Application for App {
     }
 
     fn on_nav_select(&mut self, entity: segmented_button::Entity) -> Command<Message> {
-        let location_opt = self.nav_model.data::<Location>(entity).clone();
+        self.search_active = false;
+        self.search_input.clear();
 
         self.nav_model.activate(entity);
         if let Some(location) = self.nav_model.data::<Location>(entity) {
@@ -699,6 +747,26 @@ impl Application for App {
     }
 
     fn on_escape(&mut self) -> Command<Message> {
+        if self.search_active {
+            // Close search if open
+            self.search_active = false;
+            return Command::none();
+        }
+
+        if self.tab.context_menu.is_some() {
+            self.tab.context_menu = None;
+            return Command::none();
+        }
+
+        let had_focused_button = self.tab.select_focus_id().is_some();
+        if self.tab.select_none() {
+            if had_focused_button {
+                // Unfocus if there was a focused button
+                return widget::button::focus(widget::Id::unique());
+            }
+            return Command::none();
+        }
+
         self.update(Message::Cancel)
     }
 
@@ -937,6 +1005,35 @@ impl Application for App {
                             }
                         }
                     }
+                }
+            }
+            Message::SearchActivate => {
+                self.search_active = true;
+                return widget::text_input::focus(self.search_id.clone());
+            }
+            Message::SearchClear => {
+                self.search_active = false;
+                self.search_input.clear();
+            }
+            Message::SearchInput(input) => {
+                if input != self.search_input {
+                    self.search_input = input;
+                    /*TODO: live search? (probably needs subscription for streaming results)
+                    // This performs live search
+                    if !self.search_input.is_empty() {
+                        return self.search();
+                    }
+                    */
+                }
+            }
+            Message::SearchSubmit => {
+                if !self.search_input.is_empty() {
+                    return self.search();
+                } else {
+                    // rescan the tab to get the contents back
+                    // and exit search
+                    self.search_active = false;
+                    return self.search();
                 }
             }
             Message::TabMessage(tab_message) => {
