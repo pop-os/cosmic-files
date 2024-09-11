@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::{num::NonZeroU16, path::PathBuf};
+use std::{any::TypeId, num::NonZeroU16, path::PathBuf};
 
 use cosmic::{
     cosmic_config::{self, cosmic_config_derive::CosmicConfigEntry, CosmicConfigEntry},
-    theme,
+    iced::subscription::Subscription,
+    theme, Application,
 };
 use serde::{Deserialize, Serialize};
 
-use crate::tab::View;
-
-use super::tab::HeadingOptions;
+use crate::{
+    app::App,
+    tab::{HeadingOptions, View},
+};
 
 pub const CONFIG_VERSION: u64 = 1;
 
@@ -95,6 +97,36 @@ pub struct Config {
     pub app_theme: AppTheme,
     pub favorites: Vec<Favorite>,
     pub tab: TabConfig,
+}
+
+impl Config {
+    pub fn load() -> (Option<cosmic_config::Config>, Self) {
+        match cosmic_config::Config::new(App::APP_ID, CONFIG_VERSION) {
+            Ok(config_handler) => {
+                let config = match Config::get_entry(&config_handler) {
+                    Ok(ok) => ok,
+                    Err((errs, config)) => {
+                        log::info!("errors loading config: {:?}", errs);
+                        config
+                    }
+                };
+                (Some(config_handler), config)
+            }
+            Err(err) => {
+                log::error!("failed to create config handler: {}", err);
+                (None, Config::default())
+            }
+        }
+    }
+
+    pub fn subscription() -> Subscription<cosmic_config::Update<Self>> {
+        struct ConfigSubscription;
+        cosmic_config::config_subscription(
+            TypeId::of::<ConfigSubscription>(),
+            App::APP_ID.into(),
+            CONFIG_VERSION,
+        )
+    }
 }
 
 impl Default for Config {

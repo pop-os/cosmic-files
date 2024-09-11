@@ -3,7 +3,6 @@
 
 use cosmic::{
     app::{Application, Settings},
-    cosmic_config::{self, CosmicConfigEntry},
     iced::Limits,
 };
 use std::{path::PathBuf, process};
@@ -11,7 +10,7 @@ use std::{path::PathBuf, process};
 use app::{App, Flags};
 mod app;
 pub mod clipboard;
-use config::{Config, CONFIG_VERSION};
+use config::Config;
 mod config;
 pub mod dialog;
 mod key_bind;
@@ -52,22 +51,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     localize::localize();
 
-    let (config_handler, config) = match cosmic_config::Config::new(App::APP_ID, CONFIG_VERSION) {
-        Ok(config_handler) => {
-            let config = match Config::get_entry(&config_handler) {
-                Ok(ok) => ok,
-                Err((errs, config)) => {
-                    log::info!("errors loading config: {:?}", errs);
-                    config
-                }
-            };
-            (Some(config_handler), config)
-        }
-        Err(err) => {
-            log::error!("failed to create config handler: {}", err);
-            (None, Config::default())
-        }
-    };
+    let (config_handler, config) = Config::load();
 
     let mut settings = Settings::default();
     settings = settings.theme(config.app_theme.theme());

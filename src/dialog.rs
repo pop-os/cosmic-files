@@ -7,7 +7,7 @@ use cosmic::iced::multi_window::Application as IcedApplication;
 use cosmic::iced::Application as IcedApplication;
 use cosmic::{
     app::{self, cosmic::Cosmic, message, Command, Core},
-    cosmic_theme, executor,
+    cosmic_config, cosmic_theme, executor,
     iced::{
         event,
         futures::{self, SinkExt},
@@ -37,8 +37,10 @@ use std::{
 
 use crate::{
     app::Action,
-    config::TabConfig,
+    config::{Config, Favorite, TabConfig},
     fl, home_dir,
+    localize::LANGUAGE_SORTER,
+    mounter::{mounters, MounterItem, MounterItems, MounterKey, Mounters},
     tab::{self, ItemMetadata, Location, Tab},
 };
 
@@ -152,6 +154,8 @@ impl<M: Send + 'static> Dialog<M> {
         //TODO: only do this once somehow?
         crate::localize::localize();
 
+        let (config_handler, config) = Config::load();
+
         let mut settings = window::Settings::default();
         settings.decorations = false;
         settings.exit_on_close_request = false;
@@ -181,6 +185,8 @@ impl<M: Send + 'static> Dialog<M> {
                     }
                 }),
             window_id,
+            config_handler,
+            config,
         };
         let (cosmic, cosmic_command) = <Cosmic<App> as IcedApplication>::new((core, flags));
 
@@ -279,6 +285,8 @@ struct Flags {
     kind: DialogKind,
     path_opt: Option<PathBuf>,
     window_id: window::Id,
+    config_handler: Option<cosmic_config::Config>,
+    config: Config,
 }
 
 /// Messages that are used specifically by our [`App`].
@@ -286,9 +294,11 @@ struct Flags {
 enum Message {
     Cancel,
     Choice(usize, usize),
+    Config(Config),
     Filename(String),
     Filter(usize),
     Modifiers(Modifiers),
+    MounterItems(MounterKey, MounterItems),
     NotifyEvents(Vec<DebouncedEvent>),
     NotifyWatcher(WatcherWrapper),
     Open,
@@ -296,6 +306,8 @@ enum Message {
     TabMessage(tab::Message),
     TabRescan(Vec<tab::Item>),
 }
+
+pub struct MounterData(MounterKey, MounterItem);
 
 struct WatcherWrapper {
     watcher_opt: Option<Debouncer<RecommendedWatcher, FileIdMap>>,
@@ -330,6 +342,8 @@ struct App {
     filter_selected: Option<usize>,
     filename_id: widget::Id,
     modifiers: Modifiers,
+    mounters: Mounters,
+    mounter_items: HashMap<MounterKey, MounterItems>,
     nav_model: segmented_button::SingleSelectModel,
     result_opt: Option<DialogResult>,
     replace_dialog: bool,
@@ -354,6 +368,93 @@ impl App {
             },
             |x| x,
         )
+    }
+
+    fn update_config(&mut self) -> Command<Message> {
+        self.update_nav_model();
+        Command::none()
+    }
+
+    fn activate_nav_model_location(&mut self, location: &Location) {
+        let nav_bar_id = self.nav_model.iter().find(|&id| {
+            self.nav_model
+                .data::<Location>(id)
+                .map(|l| l == location)
+                .unwrap_or_default()
+        });
+
+        if let Some(id) = nav_bar_id {
+            self.nav_model.activate(id);
+        } else {
+            let active = self.nav_model.active();
+            segmented_button::Selectable::deactivate(&mut self.nav_model, active);
+        }
+    }
+
+    fn update_nav_model(&mut self) {
+        let mut nav_model = segmented_button::ModelBuilder::default();
+
+        nav_model = nav_model.insert(|b| {
+            b.text(fl!("recents"))
+                .icon(widget::icon::from_name("accessories-clock-symbolic"))
+                .data(Location::Recents)
+        });
+
+        for (_favorite_i, favorite) in self.flags.config.favorites.iter().enumerate() {
+            if let Some(path) = favorite.path_opt() {
+                let name = if matches!(favorite, Favorite::Home) {
+                    fl!("home")
+                } else if let Some(file_name) = path.file_name().and_then(|x| x.to_str()) {
+                    file_name.to_string()
+                } else {
+                    continue;
+                };
+                nav_model = nav_model.insert(move |b| {
+                    b.text(name.clone())
+                        .icon(
+                            widget::icon::icon(if path.is_dir() {
+                                tab::folder_icon_symbolic(&path, 16)
+                            } else {
+                                widget::icon::from_name("text-x-generic-symbolic")
+                                    .size(16)
+                                    .handle()
+                            })
+                            .size(16),
+                        )
+                        .data(Location::Path(path.clone()))
+                });
+            }
+        }
+
+        // Collect all mounter items
+        let mut nav_items = Vec::new();
+        for (key, items) in self.mounter_items.iter() {
+            for item in items.iter() {
+                nav_items.push((*key, item));
+            }
+        }
+        // Sort by name lexically
+        nav_items.sort_by(|a, b| LANGUAGE_SORTER.compare(&a.1.name(), &b.1.name()));
+        // Add items to nav model
+        for (key, item) in nav_items {
+            nav_model = nav_model.insert(|mut b| {
+                b = b.text(item.name()).data(MounterData(key, item.clone()));
+                if let Some(path) = item.path() {
+                    b = b.data(Location::Path(path.clone()));
+                }
+                if let Some(icon) = item.icon() {
+                    b = b.icon(widget::icon::icon(icon).size(16));
+                }
+                if item.is_mounted() {
+                    b = b.closable();
+                }
+                b
+            });
+        }
+
+        self.nav_model = nav_model.build();
+
+        self.activate_nav_model_location(&self.tab.location.clone());
     }
 
     fn update_title(&mut self) -> Command<Message> {
@@ -440,40 +541,6 @@ impl Application for App {
         let title = flags.kind.title();
         let accept_label = flags.kind.accept_label();
 
-        let mut nav_model = segmented_button::ModelBuilder::default();
-
-        nav_model = nav_model.insert(move |b| {
-            b.text(fl!("recents"))
-                .icon(widget::icon::from_name("accessories-clock-symbolic").size(16))
-                .data(Location::Recents)
-        });
-
-        if let Some(dir) = dirs::home_dir() {
-            nav_model = nav_model.insert(move |b| {
-                b.text(fl!("home"))
-                    .icon(widget::icon::icon(tab::folder_icon_symbolic(&dir, 16)).size(16))
-                    .data(Location::Path(dir.clone()))
-            });
-        }
-        //TODO: Sort by name?
-        for dir_opt in &[
-            dirs::document_dir(),
-            dirs::download_dir(),
-            dirs::audio_dir(),
-            dirs::picture_dir(),
-            dirs::video_dir(),
-        ] {
-            if let Some(dir) = dir_opt {
-                if let Some(file_name) = dir.file_name().and_then(|x| x.to_str()) {
-                    nav_model = nav_model.insert(move |b| {
-                        b.text(file_name.to_string())
-                            .icon(widget::icon::icon(tab::folder_icon_symbolic(&dir, 16)).size(16))
-                            .data(Location::Path(dir.clone()))
-                    });
-                }
-            }
-        }
-
         let location = Location::Path(match &flags.path_opt {
             Some(path) => path.to_path_buf(),
             None => match env::current_dir() {
@@ -496,7 +563,9 @@ impl Application for App {
             filter_selected: None,
             filename_id: widget::Id::unique(),
             modifiers: Modifiers::empty(),
-            nav_model: nav_model.build(),
+            mounters: mounters(),
+            mounter_items: HashMap::new(),
+            nav_model: segmented_button::ModelBuilder::default().build(),
             result_opt: None,
             replace_dialog: false,
             tab,
@@ -504,7 +573,12 @@ impl Application for App {
             watcher_opt: None,
         };
 
-        let commands = Command::batch([app.update_title(), app.update_watcher(), app.rescan_tab()]);
+        let commands = Command::batch([
+            app.update_config(),
+            app.update_title(),
+            app.update_watcher(),
+            app.rescan_tab(),
+        ]);
 
         (app, commands)
     }
@@ -533,6 +607,34 @@ impl Application for App {
         None
     }
 
+    fn nav_bar(&self) -> Option<Element<message::Message<Self::Message>>> {
+        if !self.core().nav_bar_active() {
+            return None;
+        }
+
+        let nav_model = self.nav_model()?;
+
+        let mut nav = cosmic::widget::nav_bar(nav_model, |entity| {
+            cosmic::app::Message::Cosmic(cosmic::app::cosmic::Message::NavBar(entity))
+        })
+        //TODO .on_close(|entity| cosmic::app::Message::App(Message::NavBarClose(entity)))
+        .close_icon(
+            widget::icon::from_name("media-eject-symbolic")
+                .size(16)
+                .icon(),
+        )
+        .into_container();
+
+        if !self.core().is_condensed() {
+            nav = nav.max_width(280);
+        }
+
+        Some(Element::from(
+            // XXX both must be shrink to avoid flex layout from ignoring it
+            nav.width(Length::Shrink).height(Length::Shrink),
+        ))
+    }
+
     fn nav_model(&self) -> Option<&segmented_button::SingleSelectModel> {
         Some(&self.nav_model)
     }
@@ -545,11 +647,17 @@ impl Application for App {
     fn on_nav_select(&mut self, entity: segmented_button::Entity) -> Command<Message> {
         let location_opt = self.nav_model.data::<Location>(entity).clone();
 
-        if let Some(location) = location_opt {
+        self.nav_model.activate(entity);
+        if let Some(location) = self.nav_model.data::<Location>(entity) {
             let message = Message::TabMessage(tab::Message::Location(location.clone()));
             return self.update(message);
         }
 
+        if let Some(data) = self.nav_model.data::<MounterData>(entity).clone() {
+            if let Some(mounter) = self.mounters.get(&data.0) {
+                return mounter.mount(data.1.clone()).map(|_| message::none());
+            }
+        }
         Command::none()
     }
 
@@ -584,6 +692,13 @@ impl Application for App {
                     }
                 }
             }
+            Message::Config(config) => {
+                if config != self.flags.config {
+                    log::info!("update config");
+                    self.flags.config = config;
+                    return self.update_config();
+                }
+            }
             Message::Filename(new_filename) => {
                 // Select based on filename
                 self.tab.select_name(&new_filename);
@@ -602,6 +717,52 @@ impl Application for App {
             }
             Message::Modifiers(modifiers) => {
                 self.modifiers = modifiers;
+            }
+            Message::MounterItems(mounter_key, mounter_items) => {
+                // Check for unmounted folders
+                let mut unmounted = Vec::new();
+                if let Some(old_items) = self.mounter_items.get(&mounter_key) {
+                    for old_item in old_items.iter() {
+                        if let Some(old_path) = old_item.path() {
+                            if old_item.is_mounted() {
+                                let mut still_mounted = false;
+                                for item in mounter_items.iter() {
+                                    if let Some(path) = item.path() {
+                                        if path == old_path {
+                                            if item.is_mounted() {
+                                                still_mounted = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                                if !still_mounted {
+                                    unmounted.push(Location::Path(old_path));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Go back to home in any tabs that were unmounted
+                let mut commands = Vec::new();
+                {
+                    let home_location = Location::Path(home_dir());
+                    if unmounted.contains(&self.tab.location) {
+                        self.tab.change_location(&home_location, None);
+                        commands.push(self.update_watcher());
+                        commands.push(self.rescan_tab());
+                    }
+                }
+
+                // Insert new items
+                self.mounter_items.insert(mounter_key, mounter_items);
+
+                // Update nav bar
+                //TODO: this could change favorites IDs while they are in use
+                self.update_nav_model();
+
+                return Command::batch(commands);
             }
             Message::NotifyEvents(events) => {
                 log::debug!("{:?}", events);
@@ -957,13 +1118,22 @@ impl Application for App {
 
     fn subscription(&self) -> Subscription<Message> {
         struct WatcherSubscription;
-
-        Subscription::batch([
+        let mut subscriptions = vec![
             event::listen_with(|event, _status| match event {
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
                     Some(Message::Modifiers(modifiers))
                 }
                 _ => None,
+            }),
+            Config::subscription().map(|update| {
+                if !update.errors.is_empty() {
+                    log::info!(
+                        "errors loading config {:?}: {:?}",
+                        update.keys,
+                        update.errors
+                    );
+                }
+                Message::Config(update.config)
             }),
             subscription::channel(
                 TypeId::of::<WatcherSubscription>(),
@@ -1041,6 +1211,17 @@ impl Application for App {
                 },
             ),
             self.tab.subscription().map(Message::TabMessage),
-        ])
+        ];
+
+        for (key, mounter) in self.mounters.iter() {
+            let key = *key;
+            subscriptions.push(
+                mounter
+                    .subscription()
+                    .map(move |items| Message::MounterItems(key, items)),
+            );
+        }
+
+        Subscription::batch(subscriptions)
     }
 }

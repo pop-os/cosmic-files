@@ -46,7 +46,7 @@ use trash::TrashItem;
 
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
-    config::{AppTheme, Config, Favorite, IconSizes, TabConfig, CONFIG_VERSION},
+    config::{AppTheme, Config, Favorite, IconSizes, TabConfig},
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
@@ -1041,45 +1041,6 @@ impl Application for App {
         &mut self.core
     }
 
-    fn nav_bar(&self) -> Option<Element<message::Message<Self::Message>>> {
-        if !self.core().nav_bar_active() {
-            return None;
-        }
-
-        let nav_model = self.nav_model()?;
-
-        let mut nav = cosmic::widget::nav_bar(nav_model, |entity| {
-            cosmic::app::Message::Cosmic(cosmic::app::cosmic::Message::NavBar(entity))
-        })
-        .drag_id(self.nav_drag_id)
-        .on_dnd_enter(|entity, _| cosmic::app::Message::App(Message::DndEnterNav(entity)))
-        .on_dnd_leave(|_| cosmic::app::Message::App(Message::DndExitNav))
-        .on_dnd_drop(|entity, data, action| {
-            cosmic::app::Message::App(Message::DndDropNav(entity, data, action))
-        })
-        .on_context(|entity| cosmic::app::Message::App(Message::NavBarContext(entity)))
-        .on_close(|entity| cosmic::app::Message::App(Message::NavBarClose(entity)))
-        .on_middle_press(|entity| {
-            cosmic::app::Message::App(Message::NavMenuAction(NavMenuAction::OpenInNewTab(entity)))
-        })
-        .context_menu(self.nav_context_menu(self.nav_bar_context_id))
-        .close_icon(
-            widget::icon::from_name("media-eject-symbolic")
-                .size(16)
-                .icon(),
-        )
-        .into_container();
-
-        if !self.core().is_condensed() {
-            nav = nav.max_width(280);
-        }
-
-        Some(Element::from(
-            // XXX both must be shrink to avoid flex layout from ignoring it
-            nav.width(Length::Shrink).height(Length::Shrink),
-        ))
-    }
-
     /// Creates the application, and optionally emits command on initialize.
     fn init(mut core: Core, flags: Self::Flags) -> (Self, Command<Self::Message>) {
         let app_themes = vec![fl!("match-desktop"), fl!("dark"), fl!("light")];
@@ -1150,6 +1111,45 @@ impl Application for App {
 
     fn main_window_id(&self) -> window::Id {
         self.window_id_opt.unwrap_or(window::Id::MAIN)
+    }
+
+    fn nav_bar(&self) -> Option<Element<message::Message<Self::Message>>> {
+        if !self.core().nav_bar_active() {
+            return None;
+        }
+
+        let nav_model = self.nav_model()?;
+
+        let mut nav = cosmic::widget::nav_bar(nav_model, |entity| {
+            cosmic::app::Message::Cosmic(cosmic::app::cosmic::Message::NavBar(entity))
+        })
+        .drag_id(self.nav_drag_id)
+        .on_dnd_enter(|entity, _| cosmic::app::Message::App(Message::DndEnterNav(entity)))
+        .on_dnd_leave(|_| cosmic::app::Message::App(Message::DndExitNav))
+        .on_dnd_drop(|entity, data, action| {
+            cosmic::app::Message::App(Message::DndDropNav(entity, data, action))
+        })
+        .on_context(|entity| cosmic::app::Message::App(Message::NavBarContext(entity)))
+        .on_close(|entity| cosmic::app::Message::App(Message::NavBarClose(entity)))
+        .on_middle_press(|entity| {
+            cosmic::app::Message::App(Message::NavMenuAction(NavMenuAction::OpenInNewTab(entity)))
+        })
+        .context_menu(self.nav_context_menu(self.nav_bar_context_id))
+        .close_icon(
+            widget::icon::from_name("media-eject-symbolic")
+                .size(16)
+                .icon(),
+        )
+        .into_container();
+
+        if !self.core().is_condensed() {
+            nav = nav.max_width(280);
+        }
+
+        Some(Element::from(
+            // XXX both must be shrink to avoid flex layout from ignoring it
+            nav.width(Length::Shrink).height(Length::Shrink),
+        ))
     }
 
     fn nav_context_menu(
@@ -2797,7 +2797,6 @@ impl Application for App {
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
-        struct ConfigSubscription;
         struct ThemeSubscription;
         struct WatcherSubscription;
         struct TrashWatcherSubscription;
@@ -2814,12 +2813,7 @@ impl Application for App {
                 Event::Window(_id, WindowEvent::CloseRequested) => Some(Message::WindowClose),
                 _ => None,
             }),
-            cosmic_config::config_subscription(
-                TypeId::of::<ConfigSubscription>(),
-                Self::APP_ID.into(),
-                CONFIG_VERSION,
-            )
-            .map(|update| {
+            Config::subscription().map(|update| {
                 if !update.errors.is_empty() {
                     log::info!(
                         "errors loading config {:?}: {:?}",
