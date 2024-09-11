@@ -151,8 +151,8 @@ pub fn context_menu<'a>(
             } else {
                 //TODO: need better designs for menu with no selection
                 //TODO: have things like properties but they apply to the folder?
-                children.push(menu_item(fl!("new-file"), Action::NewFile).into());
                 children.push(menu_item(fl!("new-folder"), Action::NewFolder).into());
+                children.push(menu_item(fl!("new-file"), Action::NewFile).into());
                 children.push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
                 children.push(container(horizontal_rule(1)).padding([0, 8]).into());
                 children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
@@ -215,8 +215,8 @@ pub fn menu_bar<'a>(
                 vec![
                     menu::Item::Button(fl!("new-tab"), Action::TabNew),
                     menu::Item::Button(fl!("new-window"), Action::WindowNew),
-                    menu::Item::Button(fl!("new-file"), Action::NewFile),
                     menu::Item::Button(fl!("new-folder"), Action::NewFolder),
+                    menu::Item::Button(fl!("new-file"), Action::NewFile),
                     menu::Item::Button(fl!("open"), Action::Open),
                     menu::Item::Button(fl!("open-with"), Action::OpenWith),
                     menu::Item::Divider,
