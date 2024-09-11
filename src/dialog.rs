@@ -160,10 +160,8 @@ impl<M: Send + 'static> Dialog<M> {
         settings.decorations = false;
         settings.exit_on_close_request = false;
         settings.transparent = true;
-
-        //TODO: allow resize!
         settings.size = Size::new(1024.0, 640.0);
-        settings.resizable = false;
+        settings.resizable = true;
 
         #[cfg(target_os = "linux")]
         {
@@ -535,8 +533,6 @@ impl Application for App {
     fn init(mut core: Core, flags: Self::Flags) -> (Self, Command<Message>) {
         core.window.show_maximize = false;
         core.window.show_minimize = false;
-        //TODO: make set_nav_bar_toggle_condensed pub
-        core.nav_bar_toggle_condensed();
 
         let title = flags.kind.title();
         let accept_label = flags.kind.accept_label();
