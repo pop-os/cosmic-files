@@ -88,9 +88,9 @@ compressing = Compression de {$items} {$items ->
         [one] élément
         *[other] éléments
     } depuis {$from} vers {$to}
-compressed = {$items} compressé(s) {$items ->
-        [one] élément
-        *[other] éléments
+compressed = {$items} {$items ->
+        [one] élément compressé
+        *[other] éléments compressés
     } depuis {$from} vers {$to}
 copy_noun = Copier
 creating = Création de {$name} dans {$parent}
@@ -99,9 +99,9 @@ copying = Copie de {$items} {$items ->
         [one] élément
         *[other] éléments
     } depuis {$from} vers {$to}
-copied = {$items} copié(s) {$items ->
-        [one] élément
-        *[other] éléments
+copied = {$items} {$items ->
+        [one] élément copié
+        *[other] éléments copiés
     } depuis {$from} vers {$to}
 emptying-trash = {trash} en cours de nettoyage
 emptied-trash = {trash} vidée
@@ -109,27 +109,27 @@ extracting = Extraction de {$items} {$items ->
         [one] élément
         *[other] éléments
     } depuis {$from} vers {$to}
-extracted = {$items} extrait(s) {$items ->
-        [one] élément
-        *[other] éléments
+extracted = {$items} {$items ->
+        [one] élément extrait
+        *[other] éléments extraits
     } depuis {$from} vers {$to}
 moving = Déplacement de {$items} {$items ->
         [one] élément
         *[other] éléments
     } depuis {$from} vers {$to}
-moved = {$items} déplacé(s) {$items ->
-        [one] élément
-        *[other] éléments
+moved = {$items} {$items ->
+        [one] élément déplacé
+        *[other] éléments déplacés
     } depuis {$from} vers {$to}
 renaming = Renommage de {$from} en {$to}
-renamed = {$from} renommé(s) en {$to}
+renamed = {$from} renommé en {$to}
 restoring = Restauration de {$items} {$items ->
         [one] élément
         *[other] éléments
     } depuis la {trash}
-restored = {$items} restauré(s) {$items ->
-        [one] élément
-        *[other] éléments
+restored = {$items} {$items ->
+        [one] élément restauré
+        *[other] éléments restaurés
     } depuis la {trash}
 undo = Annuler
 unknown-folder = Dossier inconnu
