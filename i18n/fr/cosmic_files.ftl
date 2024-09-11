@@ -122,7 +122,7 @@ moved = {$items} déplacé(s) {$items ->
         *[other] éléments
     } depuis {$from} vers {$to}
 renaming = Renommage de {$from} en {$to}
-renamed = {$from} renommé en {$to}
+renamed = {$from} renommé(s) en {$to}
 restoring = Restauration de {$items} {$items ->
         [one] élément
         *[other] éléments
