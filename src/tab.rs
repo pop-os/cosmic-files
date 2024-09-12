@@ -2549,7 +2549,7 @@ impl Tab {
                 let mut row = widget::row::with_capacity(2)
                     .align_items(Alignment::Center)
                     .spacing(space_xxxs);
-                row = row.push(widget::icon::from_name("accessories-clock-symbolic").size(16));
+                row = row.push(widget::icon::from_name("document-open-recent-symbolic").size(16));
                 row = row.push(widget::text::heading(fl!("recents")));
 
                 children.push(
