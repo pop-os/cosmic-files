@@ -3372,7 +3372,8 @@ impl Tab {
             mouse_area = mouse_area.on_right_press(Message::ContextMenu);
         }
 
-        let mouse_area = ScrollArea::new(mouse_area, true)
+        let should_propogate_events = true;
+        let mouse_area = ScrollArea::new(mouse_area, should_propogate_events)
             .on_scroll(respond_to_scroll_direction);
 
         let mut popover = widget::popover(mouse_area);
