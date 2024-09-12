@@ -1,4 +1,4 @@
-//! A container for capturing mouse wheel events.
+//! A container for reacting to scroll events.
 
 use cosmic::{
     iced_core::{
@@ -14,7 +14,7 @@ use cosmic::{
     Element, Renderer, Theme,
 };
 
-/// Emit messages on mouse wheel events.
+/// Emit messages on scroll events. Optionally continue propogating scroll events.
 #[allow(missing_debug_implementations)]
 pub struct ScrollArea<'a, Message> {
     id: Id,
@@ -24,7 +24,7 @@ pub struct ScrollArea<'a, Message> {
 }
 
 impl<'a, Message> ScrollArea<'a, Message> {
-    /// The message to emit on a forward button release.
+    /// The message to emit on a scroll.
     #[must_use]
     pub fn on_scroll(
         mut self,
@@ -189,8 +189,7 @@ where
     }
 }
 
-/// Processes the given [`Event`] and updates the [`State`] of a [`ScrollArea`]
-/// accordingly.
+/// Processes the given [`Event`] and emit any messages produced by [ScrollArea::on_scroll].
 fn update<Message: Clone>(
     widget: &mut ScrollArea<'_, Message>,
     event: &Event,
@@ -203,15 +202,18 @@ fn update<Message: Clone>(
         return event::Status::Ignored;
     }
 
-    if let Event::Mouse(mouse::Event::WheelScrolled { delta }) = event {
-        if let Some(message) = widget.on_scroll.as_ref() {
-            if let Some(msg) = message(Some(delta.clone())) {
-                shell.publish(msg);
-                if !widget.should_propogate_events {
-                    return event::Status::Captured;
+    match event {
+        Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
+            if let Some(on_scroll) = widget.on_scroll.as_ref() {
+                if let Some(message) = on_scroll(Some(delta.clone())) {
+                    shell.publish(message);
+                    if !widget.should_propogate_events {
+                        return event::Status::Captured;
+                    }
                 }
             }
         }
+        _ => {}
     }
 
     event::Status::Ignored
