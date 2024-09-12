@@ -605,7 +605,7 @@ impl App {
 
         nav_model = nav_model.insert(|b| {
             b.text(fl!("recents"))
-                .icon(widget::icon::from_name("accessories-clock-symbolic"))
+                .icon(widget::icon::from_name("document-open-recent-symbolic"))
                 .data(Location::Recents)
         });
 
