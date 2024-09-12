@@ -1957,7 +1957,7 @@ impl Tab {
                     let selections = items.iter().filter(|item| item.selected).count();
 
                     for item in items.iter() {
-                        let has_default_app = item.open_with.iter().any(|&x| x.is_default);
+                        let has_default_app = item.open_with.iter().any(|x| x.is_default);
 
                         if item.selected {
                             if let Some(path) = &item.path_opt {
