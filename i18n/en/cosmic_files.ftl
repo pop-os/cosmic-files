@@ -202,3 +202,12 @@ show-hidden-files = Show hidden files
 list-directories-first = List directories first
 menu-settings = Settings...
 menu-about = About COSMIC Files...
+
+## Sort
+sort = Sort
+sort-a-z = A-Z
+sort-z-a = Z-A
+sort-newest-first = Newest first
+sort-oldest-first = Oldest first
+sort-smallest-to-largest = Smallest to largest
+sort-largest-to-smallest = Largest to smallest

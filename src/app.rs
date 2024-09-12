@@ -115,6 +115,7 @@ pub enum Action {
     RestoreFromTrash,
     SearchActivate,
     SelectAll,
+    SetSort(HeadingOptions, bool),
     Settings,
     TabClose,
     TabNew,
@@ -166,6 +167,9 @@ impl Action {
             Action::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
             Action::SearchActivate => Message::SearchActivate,
             Action::SelectAll => Message::TabMessage(entity_opt, tab::Message::SelectAll),
+            Action::SetSort(sort, dir) => {
+                Message::TabMessage(entity_opt, tab::Message::SetSort(*sort, *dir))
+            }
             Action::Settings => Message::ToggleContextPage(ContextPage::Settings),
             Action::TabClose => Message::TabClose(entity_opt),
             Action::TabNew => Message::TabNew,
@@ -601,7 +605,7 @@ impl App {
 
         nav_model = nav_model.insert(|b| {
             b.text(fl!("recents"))
-                .icon(widget::icon::from_name("accessories-clock-symbolic"))
+                .icon(widget::icon::from_name("document-open-recent-symbolic"))
                 .data(Location::Recents)
         });
 
@@ -635,6 +639,7 @@ impl App {
             b.text(fl!("trash"))
                 .icon(widget::icon::icon(tab::trash_icon_symbolic(16)))
                 .data(Location::Trash)
+                .divider_above()
         });
 
         // Collect all mounter items
@@ -647,7 +652,7 @@ impl App {
         // Sort by name lexically
         nav_items.sort_by(|a, b| LANGUAGE_SORTER.compare(&a.1.name(), &b.1.name()));
         // Add items to nav model
-        for (key, item) in nav_items {
+        for (i, (key, item)) in nav_items.into_iter().enumerate() {
             nav_model = nav_model.insert(|mut b| {
                 b = b.text(item.name()).data(MounterData(key, item.clone()));
                 if let Some(path) = item.path() {
@@ -658,6 +663,9 @@ impl App {
                 }
                 if item.is_mounted() {
                     b = b.closable();
+                }
+                if i == 0 {
+                    b = b.divider_above();
                 }
                 b
             });
