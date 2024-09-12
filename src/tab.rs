@@ -63,7 +63,7 @@ use crate::{
     menu,
     mime_app::{mime_apps, MimeApp},
     mime_icon::{mime_for_path, mime_icon},
-    mouse_area,
+    mouse_area, scroll_area::ScrollArea,
 };
 use unix_permissions_ext::UNIXPermissionsExt;
 use uzers::{get_group_by_gid, get_user_by_uid};
@@ -3372,6 +3372,9 @@ impl Tab {
             mouse_area = mouse_area.on_right_press(Message::ContextMenu);
         }
 
+        let mouse_area = ScrollArea::new(mouse_area, true)
+            .on_scroll(respond_to_scroll_direction);
+
         let mut popover = widget::popover(mouse_area);
 
         if let Some(point) = self.context_menu {
@@ -3577,6 +3580,24 @@ impl Tab {
     }
 }
 
+fn respond_to_scroll_direction(delta: Option<cosmic::iced_core::mouse::ScrollDelta>) -> Option<Message> {
+    let delta_y = match delta {
+        Some(cosmic::iced_core::mouse::ScrollDelta::Lines { y, .. }) => y,
+        Some(cosmic::iced_core::mouse::ScrollDelta::Pixels { y, .. }) => y,
+        None => 0.0,
+    };
+
+    if delta_y > 0.0 {
+        return Some(Message::ScrollUp);
+    }
+
+    if delta_y < 0.0 {
+        return Some(Message::ScrollDown);
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use std::{fs, io, path::PathBuf};
@@ -3589,8 +3610,9 @@ mod tests {
     use super::{scan_path, Location, Message, Tab};
     use crate::{
         app::test_utils::{
-            assert_eq_tab_path, empty_fs, eq_path_item, filter_dirs, read_dir_sorted, simple_fs,
-            tab_click_new, NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED,
+            assert_eq_tab_path, assert_scroll_affects_item_zoom, empty_fs, eq_path_item,
+            filter_dirs, read_dir_sorted, simple_fs, tab_click_new, NAME_LEN, NUM_DIRS,
+            NUM_FILES, NUM_HIDDEN, NUM_NESTED,
         },
         config::{IconSizes, TabConfig},
     };
@@ -3823,6 +3845,54 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn tab_scroll_up_with_ctrl_modifier_zooms() -> io::Result<()> {
+        let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
+        let path = fs.path();
+
+        let mut tab = Tab::new(Location::Path(path.into()), TabConfig::default());
+        
+        let should_zoom = true;
+        assert_scroll_affects_item_zoom(&mut tab, Message::ScrollUp, Modifiers::CTRL, should_zoom);
+
+        Ok(())
+    }
+
+    #[test]
+    fn tab_scroll_up_without_ctrl_modifier_does_not_zoom() -> io::Result<()> {
+        let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
+        let path = fs.path();
+
+        let mut tab = Tab::new(Location::Path(path.into()), TabConfig::default());
+        let should_not_zoom = false;
+        assert_scroll_affects_item_zoom(&mut tab, Message::ScrollUp, Modifiers::empty(), should_not_zoom);
+
+        Ok(())
+    }
+
+    #[test]
+    fn tab_scroll_down_with_ctrl_modifier_zooms() -> io::Result<()> {
+        let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
+        let path = fs.path();
+        
+        let mut tab = Tab::new(Location::Path(path.into()), TabConfig::default());
+        let should_zoom = true;
+        assert_scroll_affects_item_zoom(&mut tab, Message::ScrollDown, Modifiers::CTRL, should_zoom);
+
+        Ok(())
+    }
+
+    #[test]
+    fn tab_scroll_down_without_ctrl_modifier_does_not_zoom() -> io::Result<()> {
+        let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
+        let path = fs.path();
+        
+        let mut tab = Tab::new(Location::Path(path.into()), TabConfig::default());
+        let should_not_zoom = false;
+        assert_scroll_affects_item_zoom(&mut tab, Message::ScrollDown, Modifiers::empty(), should_not_zoom);
+
+        Ok(())
+    }
     #[test]
     fn tab_empty_history_does_nothing_on_prev_next() -> io::Result<()> {
         let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
