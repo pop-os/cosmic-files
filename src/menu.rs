@@ -197,6 +197,9 @@ pub fn context_menu<'a>(
                 children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
             }
         }
+        (_, Location::Networks) => {
+            //TODO: networks context menu?
+        }
         (_, Location::Trash) => {
             if tab.mode.multiple() {
                 children.push(menu_item(fl!("select-all"), Action::SelectAll).into());

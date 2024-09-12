@@ -44,7 +44,7 @@ use crate::{
     fl, home_dir,
     localize::LANGUAGE_SORTER,
     menu,
-    mounter::{mounters, MounterItem, MounterItems, MounterKey, Mounters},
+    mounter::{mounters, MounterItem, MounterItems, MounterKey, MounterMessage, Mounters},
     tab::{self, ItemMetadata, Location, Tab},
 };
 
@@ -1329,11 +1329,15 @@ impl Application for App {
 
         for (key, mounter) in self.mounters.iter() {
             let key = *key;
-            subscriptions.push(
-                mounter
-                    .subscription()
-                    .map(move |items| Message::MounterItems(key, items)),
-            );
+            subscriptions.push(mounter.subscription().map(move |mounter_message| {
+                match mounter_message {
+                    MounterMessage::Items(items) => Message::MounterItems(key, items),
+                    _ => {
+                        log::warn!("{:?} not supported in dialog mode", mounter_message);
+                        Message::None
+                    }
+                }
+            }));
         }
 
         Subscription::batch(subscriptions)

@@ -4,6 +4,7 @@ empty-folder-hidden = Empty folder (has hidden items)
 no-results = No results found
 filesystem = Filesystem
 home = Home
+networks = Networks
 notification-in-progress = File operations are in progress.
 trash = Trash
 recents = Recents
@@ -63,7 +64,6 @@ apply-to-all = Apply to all
 keep-both = Keep both
 skip = Skip
 
-
 ## Metadata Dialog
 owner = Owner
 group = Group
@@ -76,6 +76,22 @@ execute = Execute
 
 ## About
 git-description = Git commit {$hash} on {$date}
+
+## Add Network Drive
+add-network-drive = Add network drive
+connect = Connect
+connect-anonymously = Connect anonymously
+connecting = Connecting...
+domain = Domain
+enter-server-address = Enter server address
+network-drive-description =
+    Server addresses include a protocol prefix and address.
+    Examples: ssh://192.168.0.1, ftp://[2001:db8::1]
+network-drive-error = Unable to access network drive
+password = Password
+remember-password = Remember password
+try-again = Try again
+username = Username
 
 ## Operations
 edit-history = Edit history

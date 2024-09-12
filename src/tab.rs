@@ -724,12 +724,18 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
     recents.into_iter().take(50).map(|(item, _)| item).collect()
 }
 
+pub fn scan_networks(sizes: IconSizes) -> Vec<Item> {
+    //TODO: network folder items
+    vec![]
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Location {
     Path(PathBuf),
     Search(PathBuf, String),
     Trash,
     Recents,
+    Networks,
 }
 
 impl std::fmt::Display for Location {
@@ -739,6 +745,7 @@ impl std::fmt::Display for Location {
             Self::Search(path, term) => write!(f, "search {} for {}", path.display(), term),
             Self::Trash => write!(f, "trash"),
             Self::Recents => write!(f, "recents"),
+            Self::Networks => write!(f, "networks"),
         }
     }
 }
@@ -750,6 +757,7 @@ impl Location {
             Self::Search(path, term) => scan_search(path, term, sizes),
             Self::Trash => scan_trash(sizes),
             Self::Recents => scan_recents(sizes),
+            Self::Networks => scan_networks(sizes),
         }
     }
 }
@@ -757,6 +765,7 @@ impl Location {
 #[derive(Debug)]
 pub enum Command {
     Action(Action),
+    AddNetworkDrive,
     ChangeLocation(String, Location, Option<PathBuf>),
     DropFiles(PathBuf, ClipboardPaste),
     EmptyTrash,
@@ -770,6 +779,7 @@ pub enum Command {
 
 #[derive(Clone, Debug)]
 pub enum Message {
+    AddNetworkDrive,
     Click(Option<usize>),
     DoubleClick(Option<usize>),
     ClickRelease(Option<usize>),
@@ -1227,7 +1237,6 @@ impl Tab {
     }
 
     pub fn title(&self) -> String {
-        //TODO: better title
         match &self.location {
             Location::Path(path) => {
                 let (name, _) = folder_name(path);
@@ -1243,6 +1252,9 @@ impl Tab {
             }
             Location::Recents => {
                 fl!("recents")
+            }
+            Location::Networks => {
+                fl!("networks")
             }
         }
     }
@@ -1518,6 +1530,9 @@ impl Tab {
         let mod_ctrl = modifiers.contains(Modifiers::CTRL) && self.mode.multiple();
         let mod_shift = modifiers.contains(Modifiers::SHIFT) && self.mode.multiple();
         match message {
+            Message::AddNetworkDrive => {
+                commands.push(Command::AddNetworkDrive);
+            }
             Message::ClickRelease(click_i_opt) => {
                 if click_i_opt == self.clicked.take() {
                     return commands;
@@ -1931,13 +1946,9 @@ impl Tab {
                             commands.push(Command::OpenFile(path.clone()));
                         }
                     }
-                    Location::Search(_path, _term) => {
+                    _ => {
                         cd = Some(location);
                     }
-                    Location::Trash => {
-                        cd = Some(location);
-                    }
-                    Location::Recents => cd = Some(location),
                 }
             }
             Message::LocationUp => {
@@ -2086,6 +2097,9 @@ impl Tab {
                     Location::Recents => {
                         log::warn!("Copy to recents is not supported.");
                     }
+                    Location::Networks => {
+                        log::warn!("Copy to networks is not supported.");
+                    }
                 };
             }
             Message::Drop(None) => {
@@ -2170,8 +2184,7 @@ impl Tab {
                 if match &location {
                     Location::Path(path) => path.is_dir(),
                     Location::Search(path, _term) => path.is_dir(),
-                    Location::Trash => true,
-                    Location::Recents => true,
+                    _ => true,
                 } {
                     let prev_path = if let Location::Path(path) = &self.location {
                         Some(path.clone())
@@ -2531,14 +2544,8 @@ impl Tab {
                 children.reverse();
             }
             Location::Trash => {
-                let mut row = widget::row::with_capacity(2)
-                    .align_items(Alignment::Center)
-                    .spacing(space_xxxs);
-                row = row.push(widget::icon::icon(trash_icon_symbolic(16)).size(16));
-                row = row.push(widget::text::heading(fl!("trash")));
-
                 children.push(
-                    widget::button(row)
+                    widget::button(widget::text::heading(fl!("trash")))
                         .padding(space_xxxs)
                         .on_press(Message::Location(Location::Trash))
                         .style(theme::Button::Text)
@@ -2546,16 +2553,19 @@ impl Tab {
                 );
             }
             Location::Recents => {
-                let mut row = widget::row::with_capacity(2)
-                    .align_items(Alignment::Center)
-                    .spacing(space_xxxs);
-                row = row.push(widget::icon::from_name("document-open-recent-symbolic").size(16));
-                row = row.push(widget::text::heading(fl!("recents")));
-
                 children.push(
-                    widget::button(row)
+                    widget::button(widget::text::heading(fl!("recents")))
                         .padding(space_xxxs)
                         .on_press(Message::Location(Location::Recents))
+                        .style(theme::Button::Text)
+                        .into(),
+                );
+            }
+            Location::Networks => {
+                children.push(
+                    widget::button(widget::text::heading(fl!("networks")))
+                        .padding(space_xxxs)
+                        .on_press(Message::Location(Location::Networks))
                         .style(theme::Button::Text)
                         .into(),
                 );
@@ -3273,6 +3283,12 @@ impl Tab {
         // Update cached size
         self.size_opt.set(Some(size));
 
+        let cosmic_theme::Spacing {
+            space_xxs,
+            space_xs,
+            ..
+        } = theme::active().cosmic().spacing;
+
         let location_view_opt = if matches!(self.mode, Mode::Desktop) {
             None
         } else {
@@ -3350,27 +3366,36 @@ impl Tab {
         } else {
             tab_column = tab_column.push(popover);
         }
-        if let Location::Trash = self.location {
-            if let Some(items) = self.items_opt() {
-                if !items.is_empty() {
-                    let cosmic_theme::Spacing {
-                        space_xxs,
-                        space_xs,
-                        ..
-                    } = theme::active().cosmic().spacing;
-
-                    tab_column = tab_column.push(
-                        widget::layer_container(widget::row::with_children(vec![
-                            widget::horizontal_space(Length::Fill).into(),
-                            widget::button::standard(fl!("empty-trash"))
-                                .on_press(Message::EmptyTrash)
-                                .into(),
-                        ]))
-                        .padding([space_xxs, space_xs])
-                        .layer(cosmic_theme::Layer::Primary),
-                    );
+        match &self.location {
+            Location::Trash => {
+                if let Some(items) = self.items_opt() {
+                    if !items.is_empty() {
+                        tab_column = tab_column.push(
+                            widget::layer_container(widget::row::with_children(vec![
+                                widget::horizontal_space(Length::Fill).into(),
+                                widget::button::standard(fl!("empty-trash"))
+                                    .on_press(Message::EmptyTrash)
+                                    .into(),
+                            ]))
+                            .padding([space_xxs, space_xs])
+                            .layer(cosmic_theme::Layer::Primary),
+                        );
+                    }
                 }
             }
+            Location::Networks => {
+                tab_column = tab_column.push(
+                    widget::layer_container(widget::row::with_children(vec![
+                        widget::horizontal_space(Length::Fill).into(),
+                        widget::button::standard(fl!("add-network-drive"))
+                            .on_press(Message::AddNetworkDrive)
+                            .into(),
+                    ]))
+                    .padding([space_xxs, space_xs])
+                    .layer(cosmic_theme::Layer::Primary),
+                );
+            }
+            _ => {}
         }
         let mut tab_view = widget::container(tab_column)
             .height(Length::Fill)

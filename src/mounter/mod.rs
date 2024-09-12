@@ -1,8 +1,39 @@
 use cosmic::{iced::subscription, widget, Command};
-use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
+use std::{collections::BTreeMap, fmt, path::PathBuf, sync::Arc};
+use tokio::sync::mpsc;
 
 #[cfg(feature = "gvfs")]
 mod gvfs;
+
+#[derive(Clone)]
+pub struct MounterAuth {
+    pub message: String,
+    pub username_opt: Option<String>,
+    pub domain_opt: Option<String>,
+    pub password_opt: Option<String>,
+    pub remember_opt: Option<bool>,
+    pub anonymous_opt: Option<bool>,
+}
+
+// Custom debug for MounterAuth to hide password
+impl fmt::Debug for MounterAuth {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MounterAuth")
+            .field("username_opt", &self.username_opt)
+            .field("domain_opt", &self.domain_opt)
+            .field(
+                "password_opt",
+                if self.password_opt.is_some() {
+                    &"Some(*)"
+                } else {
+                    &"None"
+                },
+            )
+            .field("remember_opt", &self.remember_opt)
+            .field("anonymous_opt", &self.anonymous_opt)
+            .finish()
+    }
+}
 
 #[derive(Clone, Debug)]
 pub enum MounterItem {
@@ -48,11 +79,19 @@ impl MounterItem {
 
 pub type MounterItems = Vec<MounterItem>;
 
+#[derive(Clone, Debug)]
+pub enum MounterMessage {
+    Items(MounterItems),
+    NetworkAuth(String, MounterAuth, mpsc::Sender<MounterAuth>),
+    NetworkResult(String, Result<bool, String>),
+}
+
 pub trait Mounter {
     //TODO: send result
     fn mount(&self, item: MounterItem) -> Command<()>;
+    fn network_drive(&self, uri: String) -> Command<()>;
     fn unmount(&self, item: MounterItem) -> Command<()>;
-    fn subscription(&self) -> subscription::Subscription<MounterItems>;
+    fn subscription(&self) -> subscription::Subscription<MounterMessage>;
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

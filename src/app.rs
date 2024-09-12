@@ -63,7 +63,9 @@ use crate::{
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
     menu, mime_app, mime_icon,
-    mounter::{mounters, MounterItem, MounterItems, MounterKey, Mounters},
+    mounter::{
+        mounters, MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage, Mounters,
+    },
     operation::{Operation, ReplaceResult},
     spawn_detached::spawn_detached,
     tab::{self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION},
@@ -246,6 +248,7 @@ pub enum Message {
     DialogComplete,
     DialogPush(DialogPage),
     DialogUpdate(DialogPage),
+    DialogUpdateComplete(DialogPage),
     EditLocation(Option<Entity>),
     ExtractHere(Option<Entity>),
     Key(Modifiers, Key),
@@ -257,6 +260,10 @@ pub enum Message {
     NavBarClose(Entity),
     NavBarContext(Entity),
     NavMenuAction(NavMenuAction),
+    NetworkAuth(MounterKey, String, MounterAuth, mpsc::Sender<MounterAuth>),
+    NetworkDriveInput(String),
+    NetworkDriveSubmit,
+    NetworkResult(MounterKey, String, Result<bool, String>),
     NewItem(Option<Entity>, bool),
     #[cfg(feature = "notify")]
     Notification(Arc<Mutex<notify_rust::NotificationHandle>>),
@@ -314,6 +321,7 @@ pub enum Message {
 pub enum ContextPage {
     About,
     EditHistory,
+    NetworkDrive,
     OpenWith,
     Properties(Option<ContextItem>),
     Settings,
@@ -324,6 +332,7 @@ impl ContextPage {
         match self {
             Self::About => String::new(),
             Self::EditHistory => fl!("edit-history"),
+            Self::NetworkDrive => fl!("add-network-drive"),
             Self::OpenWith => fl!("open-with"),
             Self::Properties(..) => String::default(),
             Self::Settings => fl!("settings"),
@@ -367,6 +376,17 @@ pub enum DialogPage {
     },
     EmptyTrash,
     FailedOperation(u64),
+    NetworkAuth {
+        mounter_key: MounterKey,
+        uri: String,
+        auth: MounterAuth,
+        auth_tx: mpsc::Sender<MounterAuth>,
+    },
+    NetworkError {
+        mounter_key: MounterKey,
+        uri: String,
+        error: String,
+    },
     NewItem {
         parent: PathBuf,
         name: String,
@@ -433,6 +453,8 @@ pub struct App {
     modifiers: Modifiers,
     mounters: Mounters,
     mounter_items: HashMap<MounterKey, MounterItems>,
+    network_drive_connecting: Option<(MounterKey, String)>,
+    network_drive_input: String,
     #[cfg(feature = "notify")]
     notification_opt: Option<Arc<Mutex<notify_rust::NotificationHandle>>>,
     pending_operation_id: u64,
@@ -635,10 +657,22 @@ impl App {
                 });
             }
         }
+
         nav_model = nav_model.insert(|b| {
             b.text(fl!("trash"))
                 .icon(widget::icon::icon(tab::trash_icon_symbolic(16)))
                 .data(Location::Trash)
+                .divider_above()
+        });
+
+        nav_model = nav_model.insert(|b| {
+            b.text(fl!("networks"))
+                .icon(widget::icon::icon(
+                    widget::icon::from_name("network-workgroup-symbolic")
+                        .size(16)
+                        .handle(),
+                ))
+                .data(Location::Networks)
                 .divider_above()
         });
 
@@ -791,6 +825,31 @@ impl App {
             ])
         .align_items(Alignment::Center)
         .spacing(space_xxs)
+        .into()
+    }
+
+    fn network_drive(&self) -> Element<Message> {
+        let cosmic_theme::Spacing { space_m, .. } = theme::active().cosmic().spacing;
+        let mut text_input =
+            widget::text_input(fl!("enter-server-address"), &self.network_drive_input);
+        let button = if self.network_drive_connecting.is_some() {
+            widget::button::standard(fl!("connecting"))
+        } else {
+            text_input = text_input
+                .on_input(Message::NetworkDriveInput)
+                .on_submit(Message::NetworkDriveSubmit);
+            widget::button::standard(fl!("connect")).on_press(Message::NetworkDriveSubmit)
+        };
+        widget::column::with_children(vec![
+            text_input.into(),
+            widget::text(fl!("network-drive-description")).into(),
+            widget::row::with_children(vec![
+                widget::horizontal_space(Length::Fill).into(),
+                button.into(),
+            ])
+            .into(),
+        ])
+        .spacing(space_m)
         .into()
     }
 
@@ -1118,6 +1177,8 @@ impl Application for App {
             modifiers: Modifiers::empty(),
             mounters: mounters(),
             mounter_items: HashMap::new(),
+            network_drive_connecting: None,
+            network_drive_input: String::new(),
             #[cfg(feature = "notify")]
             notification_opt: None,
             pending_operation_id: 0,
@@ -1422,6 +1483,31 @@ impl Application for App {
                         DialogPage::FailedOperation(id) => {
                             log::warn!("TODO: retry operation {}", id);
                         }
+                        DialogPage::NetworkAuth {
+                            mounter_key,
+                            uri,
+                            auth,
+                            auth_tx,
+                        } => {
+                            return Command::perform(
+                                async move {
+                                    auth_tx.send(auth).await.unwrap();
+                                    message::none()
+                                },
+                                |x| x,
+                            );
+                        }
+                        DialogPage::NetworkError {
+                            mounter_key,
+                            uri,
+                            error,
+                        } => {
+                            //TODO: re-use mounter_key?
+                            return Command::batch([
+                                self.update(Message::NetworkDriveInput(uri)),
+                                self.update(Message::NetworkDriveSubmit),
+                            ]);
+                        }
                         DialogPage::NewItem { parent, name, dir } => {
                             let path = parent.join(name);
                             self.operation(if dir {
@@ -1449,6 +1535,12 @@ impl Application for App {
                 if !self.dialog_pages.is_empty() {
                     self.dialog_pages[0] = dialog_page;
                 }
+            }
+            Message::DialogUpdateComplete(dialog_page) => {
+                return Command::batch([
+                    self.update(Message::DialogUpdate(dialog_page)),
+                    self.update(Message::DialogComplete),
+                ]);
             }
             Message::EditLocation(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
@@ -1568,6 +1660,55 @@ impl Application for App {
                 self.update_nav_model();
 
                 return Command::batch(commands);
+            }
+            Message::NetworkAuth(mounter_key, uri, auth, auth_tx) => {
+                self.dialog_pages.push_back(DialogPage::NetworkAuth {
+                    mounter_key,
+                    uri,
+                    auth,
+                    auth_tx,
+                });
+            }
+            Message::NetworkDriveInput(input) => {
+                self.network_drive_input = input;
+            }
+            Message::NetworkDriveSubmit => {
+                //TODO: know which mounter to use for network drives
+                for (mounter_key, mounter) in self.mounters.iter() {
+                    self.network_drive_connecting =
+                        Some((*mounter_key, self.network_drive_input.clone()));
+                    return mounter
+                        .network_drive(self.network_drive_input.clone())
+                        .map(|_| message::none());
+                }
+                log::warn!(
+                    "no mounter found for connecting to {:?}",
+                    self.network_drive_input
+                );
+            }
+            Message::NetworkResult(mounter_key, uri, res) => {
+                if self.network_drive_connecting == Some((mounter_key, uri.clone())) {
+                    self.network_drive_connecting = None;
+                }
+                match res {
+                    Ok(true) => {
+                        log::info!("connected to {:?}", uri);
+                        if matches!(self.context_page, ContextPage::NetworkDrive) {
+                            self.core.window.show_context = false;
+                        }
+                    }
+                    Ok(false) => {
+                        log::info!("cancelled connection to {:?}", uri);
+                    }
+                    Err(error) => {
+                        log::warn!("failed to connect to {:?}: {}", uri, error);
+                        self.dialog_pages.push_back(DialogPage::NetworkError {
+                            mounter_key,
+                            uri,
+                            error,
+                        });
+                    }
+                }
             }
             Message::NewItem(entity_opt, dir) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
@@ -2090,6 +2231,12 @@ impl Application for App {
                         tab::Command::Action(action) => {
                             commands.push(self.update(action.message(Some(entity))));
                         }
+                        tab::Command::AddNetworkDrive => {
+                            let context_page = ContextPage::NetworkDrive;
+                            self.context_page = context_page;
+                            self.core.window.show_context = true;
+                            self.set_context_title(context_page.title());
+                        }
                         tab::Command::ChangeLocation(tab_title, tab_path, selection_path) => {
                             self.activate_nav_model_location(&tab_path);
 
@@ -2544,6 +2691,7 @@ impl Application for App {
         Some(match self.context_page {
             ContextPage::About => self.about(),
             ContextPage::EditHistory => self.edit_history(),
+            ContextPage::NetworkDrive => self.network_drive(),
             ContextPage::OpenWith => self.open_with(),
             ContextPage::Properties(entity) => self.properties(entity),
             ContextPage::Settings => self.settings(),
@@ -2556,7 +2704,9 @@ impl Application for App {
             None => return None,
         };
 
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+        let cosmic_theme::Spacing {
+            space_xxs, space_s, ..
+        } = theme::active().cosmic().spacing;
 
         let dialog = match dialog_page {
             DialogPage::Compress {
@@ -2658,6 +2808,125 @@ impl Application for App {
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
                     )
             }
+            DialogPage::NetworkAuth {
+                mounter_key,
+                uri,
+                auth,
+                auth_tx,
+            } => {
+                //TODO: use URI!
+                let mut controls = Vec::with_capacity(4);
+                if let Some(username) = &auth.username_opt {
+                    //TODO: what should submit do?
+                    controls.push(
+                        widget::text_input(fl!("username"), username)
+                            .on_input(move |value| {
+                                Message::DialogUpdate(DialogPage::NetworkAuth {
+                                    mounter_key: *mounter_key,
+                                    uri: uri.clone(),
+                                    auth: MounterAuth {
+                                        username_opt: Some(value),
+                                        ..auth.clone()
+                                    },
+                                    auth_tx: auth_tx.clone(),
+                                })
+                            })
+                            .into(),
+                    );
+                }
+                if let Some(domain) = &auth.domain_opt {
+                    //TODO: what should submit do?
+                    controls.push(
+                        widget::text_input(fl!("domain"), domain)
+                            .on_input(move |value| {
+                                Message::DialogUpdate(DialogPage::NetworkAuth {
+                                    mounter_key: *mounter_key,
+                                    uri: uri.clone(),
+                                    auth: MounterAuth {
+                                        domain_opt: Some(value),
+                                        ..auth.clone()
+                                    },
+                                    auth_tx: auth_tx.clone(),
+                                })
+                            })
+                            .into(),
+                    );
+                }
+                if let Some(password) = &auth.password_opt {
+                    //TODO: what should submit do?
+                    //TODO: button for showing password
+                    controls.push(
+                        widget::secure_input(fl!("password"), password, None, true)
+                            .on_input(move |value| {
+                                Message::DialogUpdate(DialogPage::NetworkAuth {
+                                    mounter_key: *mounter_key,
+                                    uri: uri.clone(),
+                                    auth: MounterAuth {
+                                        password_opt: Some(value),
+                                        ..auth.clone()
+                                    },
+                                    auth_tx: auth_tx.clone(),
+                                })
+                            })
+                            .into(),
+                    );
+                }
+                if let Some(remember) = &auth.remember_opt {
+                    //TODO: what should submit do?
+                    //TODO: button for showing password
+                    controls.push(
+                        widget::checkbox(fl!("remember-password"), *remember, move |value| {
+                            Message::DialogUpdate(DialogPage::NetworkAuth {
+                                mounter_key: *mounter_key,
+                                uri: uri.clone(),
+                                auth: MounterAuth {
+                                    remember_opt: Some(value),
+                                    ..auth.clone()
+                                },
+                                auth_tx: auth_tx.clone(),
+                            })
+                        })
+                        .into(),
+                    );
+                }
+
+                let mut parts = auth.message.splitn(2, '\n');
+                let title = parts.next().unwrap_or_default();
+                let body = parts.next().unwrap_or_default();
+                widget::dialog(title)
+                    .body(body)
+                    .control(widget::column::with_children(controls).spacing(space_s))
+                    .primary_action(
+                        widget::button::suggested(fl!("connect")).on_press(Message::DialogComplete),
+                    )
+                    .secondary_action(
+                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                    )
+                    .tertiary_action(widget::button::text(fl!("connect-anonymously")).on_press(
+                        Message::DialogUpdateComplete(DialogPage::NetworkAuth {
+                            mounter_key: *mounter_key,
+                            uri: uri.clone(),
+                            auth: MounterAuth {
+                                anonymous_opt: Some(true),
+                                ..auth.clone()
+                            },
+                            auth_tx: auth_tx.clone(),
+                        }),
+                    ))
+            }
+            DialogPage::NetworkError {
+                mounter_key,
+                uri,
+                error,
+            } => widget::dialog(fl!("network-drive-error"))
+                .body(error)
+                .icon(widget::icon::from_name("dialog-error").size(64))
+                .primary_action(
+                    widget::button::standard(fl!("try-again")).on_press(Message::DialogComplete),
+                )
+                .secondary_action(
+                    widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                ),
             DialogPage::NewItem { parent, name, dir } => {
                 let mut dialog = widget::dialog(if *dir {
                     fl!("create-new-folder")
@@ -3148,11 +3417,17 @@ impl Application for App {
 
         for (key, mounter) in self.mounters.iter() {
             let key = *key;
-            subscriptions.push(
-                mounter
-                    .subscription()
-                    .map(move |items| Message::MounterItems(key, items)),
-            );
+            subscriptions.push(mounter.subscription().map(move |mounter_message| {
+                match mounter_message {
+                    MounterMessage::Items(items) => Message::MounterItems(key, items),
+                    MounterMessage::NetworkAuth(uri, auth, auth_tx) => {
+                        Message::NetworkAuth(key, uri, auth, auth_tx)
+                    }
+                    MounterMessage::NetworkResult(uri, res) => {
+                        Message::NetworkResult(key, uri, res)
+                    }
+                }
+            }));
         }
 
         if !self.pending_operations.is_empty() {
