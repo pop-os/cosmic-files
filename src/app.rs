@@ -3766,6 +3766,24 @@ pub(crate) mod test_utils {
         );
     }
 
+    pub fn assert_scroll_affects_item_zoom(
+        tab: &mut Tab,
+        message: tab::Message,
+        modifiers: Modifiers,
+        should_zoom: bool,
+    ) {
+        let grid_icon_size = tab.config.icon_sizes.grid;
+        let list_icon_size = tab.config.icon_sizes.list;
+
+        debug!("Emitting {:?}", message);
+        tab.update(message, modifiers);
+
+        let grid_size_changed = grid_icon_size != tab.config.icon_sizes.grid;
+        let list_size_changed = list_icon_size != tab.config.icon_sizes.list;
+
+        assert_eq!(grid_size_changed || list_size_changed, should_zoom);
+    }
+
     /// Assert that tab's items are equal to a path's entries.
     pub fn assert_eq_tab_path_contents(tab: &Tab, path: &Path) {
         let Location::Path(ref tab_path) = tab.location else {
