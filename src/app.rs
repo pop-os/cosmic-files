@@ -829,7 +829,9 @@ impl App {
     }
 
     fn network_drive(&self) -> Element<Message> {
-        let cosmic_theme::Spacing { space_m, .. } = theme::active().cosmic().spacing;
+        let cosmic_theme::Spacing {
+            space_xxs, space_m, ..
+        } = theme::active().cosmic().spacing;
         let mut text_input =
             widget::text_input(fl!("enter-server-address"), &self.network_drive_input);
         let button = if self.network_drive_connecting.is_some() {
@@ -840,9 +842,29 @@ impl App {
                 .on_submit(Message::NetworkDriveSubmit);
             widget::button::standard(fl!("connect")).on_press(Message::NetworkDriveSubmit)
         };
+        let mut table = widget::column::with_capacity(8);
+        for (i, line) in fl!("network-drive-schemes").lines().enumerate() {
+            let mut row = widget::row::with_capacity(2);
+            for part in line.split(',') {
+                row = row.push(
+                    widget::container(if i == 0 {
+                        widget::text::heading(part.to_string())
+                    } else {
+                        widget::text::body(part.to_string())
+                    })
+                    .width(Length::Fill)
+                    .padding(space_xxs),
+                );
+            }
+            table = table.push(row);
+            if i == 0 {
+                table = table.push(widget::divider::horizontal::light());
+            }
+        }
         widget::column::with_children(vec![
             text_input.into(),
             widget::text(fl!("network-drive-description")).into(),
+            table.into(),
             widget::row::with_children(vec![
                 widget::horizontal_space(Length::Fill).into(),
                 button.into(),

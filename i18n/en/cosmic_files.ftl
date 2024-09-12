@@ -87,6 +87,15 @@ enter-server-address = Enter server address
 network-drive-description =
     Server addresses include a protocol prefix and address.
     Examples: ssh://192.168.0.1, ftp://[2001:db8::1]
+### Make sure to keep the comma which separates the columns
+network-drive-schemes =
+    Available protocols,Prefix
+    AppleTalk,afp://
+    File Transfer Protocol,ftp:// or ftps://
+    Network File System,nfs://
+    Server Message Block,smb://
+    SSH File Transfer Protocol,sftp:// or ssh://
+    WebDav,dav:// or davs://
 network-drive-error = Unable to access network drive
 password = Password
 remember-password = Remember password
