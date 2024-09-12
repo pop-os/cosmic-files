@@ -17,7 +17,14 @@ pub fn exec_to_command(exec: &str, path_opt: Vec<Option<PathBuf>>) -> Option<pro
     for arg in args {
         if arg.starts_with('%') {
             match arg.as_str() {
-                "%f" | "%F" | "%u" | "%U" => {
+                "%f" | "%u" => {
+                    if !path_opt.is_empty() {
+                        if let Some(Some(path)) = &path_opt.first() {
+                            command.arg(path);
+                        }
+                    }
+                }
+                "%F" | "%U" => {
                     if !path_opt.is_empty() {
                         path_opt.iter().for_each(|path| {
                             if let Some(path) = &path {

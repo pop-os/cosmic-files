@@ -1957,19 +1957,21 @@ impl Tab {
                     let selections = items.iter().filter(|item| item.selected).count();
 
                     for item in items.iter() {
+                        let has_default_app = item.open_with.iter().any(|&x| x.is_default);
+
                         if item.selected {
                             if let Some(path) = &item.path_opt {
                                 if path.is_dir() {
                                     //TODO: allow opening multiple tabs?
                                     cd = Some(Location::Path(path.clone()));
-                                } else if selections == 1 {
+                                } else if selections == 1 || !has_default_app {
                                     commands.push(Command::OpenFile(path.clone()));
                                 }
                             } else {
                                 //TODO: open properties?
                             }
 
-                            if selections > 1 {
+                            if selections > 1 && has_default_app {
                                 many_items.push(item.clone());
                             }
                         }
