@@ -4,6 +4,7 @@ empty-folder-hidden = Cartella vuota (contiene elementi nascosti)
 no-results = Nessun risultato
 filesystem = Filesystem
 home = Home
+networks = Rete
 notification-in-progress = Operazioni sui file in corso ...
 trash = Cestino
 recents = Recenti
@@ -36,6 +37,7 @@ name-no-slashes = Il nome non può contenere slashe.
 
 ## Open/Save Dialog
 cancel = Annulla
+create = Crea
 open = Apri
 open-file = Apri file
 open-folder = Apri cartella
@@ -62,7 +64,6 @@ apply-to-all = Applica a tutto
 keep-both = Tieni entrambi
 skip = Salta
 
-
 ## Metadata Dialog
 owner = Proprietario
 group = Gruppo
@@ -76,6 +77,31 @@ execute = Esecuzione
 ## About
 git-description = Commit git {$hash} del {$date}
 
+## Add Network Drive
+add-network-drive = Aggiungi drive di rete
+connect = Connetti
+connect-anonymously = Connetti in maniera anonima
+connecting = Connessione...
+domain = Dominio
+enter-server-address = Inserisci l'indirizzo del server
+network-drive-description =
+    L'indirizzo del server include il protocollo.
+    Esempio: ssh://192.168.0.1, ftp://[2001:db8::1]
+### Make sure to keep the comma which separates the columns
+network-drive-schemes =
+    Protocolli disponibili,Prefisso
+    AppleTalk,afp://
+    File Transfer Protocol,ftp:// or ftps://
+    Network File System,nfs://
+    Server Message Block,smb://
+    SSH File Transfer Protocol,sftp:// or ssh://
+    WebDav,dav:// or davs://
+network-drive-error = Impossibile accedere al drive di rete
+password = Password
+remember-password = Ricorda password
+try-again = Riprova
+username = Nome utente
+
 ## Operations
 edit-history = Modifica cronologia
 history = Cronologia
@@ -83,6 +109,14 @@ no-history = Nessun elemento nella cronologia
 pending = In sospeso
 failed = Non riuscito
 complete = Completato
+compressing = Comprimendo {$items} {$items ->
+        [one] elemento
+        *[other] elementi
+    } da {$from} a {$to}
+compressed = Compressi {$items} {$items ->
+        [one] elemento
+        *[other] elementi
+    } da {$from} a {$to}
 copy_noun = Copia
 creating = Creazione di {$name} in {$parent}
 created = {$name} creato in {$parent}
@@ -152,8 +186,9 @@ dark = Scuro
 light = Chiaro
 
 # Context menu
-extract-here = Estrai
 add-to-sidebar = Aggiungi a sidebar
+compress = Comprimi
+extract-here = Estrai
 new-file = Nuovo file
 new-folder = Nuova cartella
 open-in-terminal = Apri in terminale
@@ -193,3 +228,12 @@ show-hidden-files = Mostra file nascosti
 list-directories-first = Mostra le cartelle prima dei file
 menu-settings = Impostazioni...
 menu-about = Informazioni su COSMIC Files...
+
+## Sort
+sort = Ordina
+sort-a-z = A-Z
+sort-z-a = Z-A
+sort-newest-first = Più recenti per primi
+sort-oldest-first = Più vecchi per primi
+sort-smallest-to-largest = Dal più piccolo al più grande
+sort-largest-to-smallest = Dal più grande al più piccolo
