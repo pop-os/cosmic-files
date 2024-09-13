@@ -31,7 +31,7 @@ use notify_debouncer_full::{
 use recently_used_xbel::update_recently_used;
 use std::{
     any::TypeId,
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     env, fmt, fs,
     path::PathBuf,
     str::FromStr,
@@ -283,6 +283,12 @@ impl<M: Send + 'static> Dialog<M> {
 }
 
 #[derive(Clone, Debug)]
+enum DialogPage {
+    NewFolder { parent: PathBuf, name: String },
+    Replace { filename: String },
+}
+
+#[derive(Clone, Debug)]
 struct Flags {
     kind: DialogKind,
     path_opt: Option<PathBuf>,
@@ -298,10 +304,14 @@ enum Message {
     Cancel,
     Choice(usize, usize),
     Config(Config),
+    DialogCancel,
+    DialogComplete,
+    DialogUpdate(DialogPage),
     Filename(String),
     Filter(usize),
     Modifiers(Modifiers),
     MounterItems(MounterKey, MounterItems),
+    NewFolder,
     NotifyEvents(Vec<DebouncedEvent>),
     NotifyWatcher(WatcherWrapper),
     Open,
@@ -345,6 +355,8 @@ struct App {
     title: String,
     accept_label: String,
     choices: Vec<DialogChoice>,
+    dialog_pages: VecDeque<DialogPage>,
+    dialog_text_input: widget::Id,
     filters: Vec<DialogFilter>,
     filter_selected: Option<usize>,
     filename_id: widget::Id,
@@ -353,7 +365,6 @@ struct App {
     mounter_items: HashMap<MounterKey, MounterItems>,
     nav_model: segmented_button::SingleSelectModel,
     result_opt: Option<DialogResult>,
-    replace_dialog: bool,
     search_active: bool,
     search_id: widget::Id,
     search_input: String,
@@ -592,6 +603,8 @@ impl Application for App {
             title,
             accept_label,
             choices: Vec::new(),
+            dialog_pages: VecDeque::new(),
+            dialog_text_input: widget::Id::unique(),
             filters: Vec::new(),
             filter_selected: None,
             filename_id: widget::Id::unique(),
@@ -600,7 +613,6 @@ impl Application for App {
             mounter_items: HashMap::new(),
             nav_model: segmented_button::ModelBuilder::default().build(),
             result_opt: None,
-            replace_dialog: false,
             search_active: false,
             search_id: widget::Id::unique(),
             search_input: String::new(),
@@ -624,23 +636,86 @@ impl Application for App {
     }
 
     fn dialog(&self) -> Option<Element<Message>> {
-        if self.replace_dialog {
-            if let DialogKind::SaveFile { filename } = &self.flags.kind {
-                return Some(
-                    widget::dialog(fl!("replace-title", filename = filename.as_str()))
-                        .icon(widget::icon::from_name("dialog-question").size(64))
-                        .body(fl!("replace-warning"))
-                        .primary_action(
-                            widget::button::suggested(fl!("replace")).on_press(Message::Save(true)),
-                        )
-                        .secondary_action(
-                            widget::button::standard(fl!("cancel")).on_press(Message::Cancel),
-                        )
-                        .into(),
-                );
+        let dialog_page = match self.dialog_pages.front() {
+            Some(some) => some,
+            None => return None,
+        };
+
+        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+
+        let dialog = match dialog_page {
+            DialogPage::NewFolder { parent, name } => {
+                let mut dialog = widget::dialog(fl!("create-new-folder"));
+
+                let complete_maybe = if name.is_empty() {
+                    None
+                } else if name == "." || name == ".." {
+                    dialog = dialog.tertiary_action(widget::text::body(fl!(
+                        "name-invalid",
+                        filename = name.as_str()
+                    )));
+                    None
+                } else if name.contains('/') {
+                    dialog = dialog.tertiary_action(widget::text::body(fl!("name-no-slashes")));
+                    None
+                } else {
+                    let path = parent.join(name);
+                    if path.exists() {
+                        if path.is_dir() {
+                            dialog = dialog
+                                .tertiary_action(widget::text::body(fl!("folder-already-exists")));
+                        } else {
+                            dialog = dialog
+                                .tertiary_action(widget::text::body(fl!("file-already-exists")));
+                        }
+                        None
+                    } else {
+                        if name.starts_with('.') {
+                            dialog = dialog.tertiary_action(widget::text::body(fl!("name-hidden")));
+                        }
+                        Some(Message::DialogComplete)
+                    }
+                };
+
+                dialog
+                    .primary_action(
+                        widget::button::suggested(fl!("save"))
+                            .on_press_maybe(complete_maybe.clone()),
+                    )
+                    .secondary_action(
+                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                    )
+                    .control(
+                        widget::column::with_children(vec![
+                            widget::text::body(fl!("folder-name")).into(),
+                            widget::text_input("", name.as_str())
+                                .id(self.dialog_text_input.clone())
+                                .on_input(move |name| {
+                                    Message::DialogUpdate(DialogPage::NewFolder {
+                                        parent: parent.clone(),
+                                        name,
+                                    })
+                                })
+                                .on_submit_maybe(complete_maybe)
+                                .into(),
+                        ])
+                        .spacing(space_xxs),
+                    )
             }
-        }
-        None
+            DialogPage::Replace { filename } => {
+                widget::dialog(fl!("replace-title", filename = filename.as_str()))
+                    .icon(widget::icon::from_name("dialog-question").size(64))
+                    .body(fl!("replace-warning"))
+                    .primary_action(
+                        widget::button::suggested(fl!("replace")).on_press(Message::DialogComplete),
+                    )
+                    .secondary_action(
+                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                    )
+            }
+        };
+
+        Some(dialog.into())
     }
 
     fn header_end(&self) -> Vec<Element<Message>> {
@@ -664,9 +739,13 @@ impl Application for App {
             )
         }
 
-        /*TODO: new folder button
-        elements.push(widget::button::icon(widget::icon::from_name("folder-new-symbolic")).into());
-        */
+        if self.flags.kind.save() {
+            elements.push(
+                widget::button::icon(widget::icon::from_name("folder-new-symbolic"))
+                    .on_press(Message::NewFolder)
+                    .into(),
+            );
+        }
 
         elements.push(
             menu::dialog_menu(&self.tab, &self.key_binds)
@@ -769,12 +848,8 @@ impl Application for App {
         match message {
             Message::None => {}
             Message::Cancel => {
-                if self.replace_dialog {
-                    self.replace_dialog = false;
-                } else {
-                    self.result_opt = Some(DialogResult::Cancel);
-                    return window::close(self.main_window_id());
-                }
+                self.result_opt = Some(DialogResult::Cancel);
+                return window::close(self.main_window_id());
             }
             Message::Choice(choice_i, option_i) => {
                 if let Some(choice) = self.choices.get_mut(choice_i) {
@@ -797,6 +872,38 @@ impl Application for App {
                     log::info!("update config");
                     self.flags.config = config;
                     return self.update_config();
+                }
+            }
+            Message::DialogCancel => {
+                self.dialog_pages.pop_front();
+            }
+            Message::DialogComplete => {
+                if let Some(dialog_page) = self.dialog_pages.pop_front() {
+                    match dialog_page {
+                        DialogPage::NewFolder { parent, name } => {
+                            let path = parent.join(name);
+                            match fs::create_dir(&path) {
+                                Ok(()) => {
+                                    // cd to directory
+                                    let message = Message::TabMessage(tab::Message::Location(
+                                        Location::Path(path.clone()),
+                                    ));
+                                    return self.update(message);
+                                }
+                                Err(err) => {
+                                    log::warn!("failed to create {:?}: {}", path, err);
+                                }
+                            }
+                        }
+                        DialogPage::Replace { filename } => {
+                            return self.update(Message::Save(true));
+                        }
+                    }
+                }
+            }
+            Message::DialogUpdate(dialog_page) => {
+                if !self.dialog_pages.is_empty() {
+                    self.dialog_pages[0] = dialog_page;
                 }
             }
             Message::Filename(new_filename) => {
@@ -863,6 +970,15 @@ impl Application for App {
                 self.update_nav_model();
 
                 return Command::batch(commands);
+            }
+            Message::NewFolder => {
+                if let Location::Path(path) = &self.tab.location {
+                    self.dialog_pages.push_back(DialogPage::NewFolder {
+                        parent: path.clone(),
+                        name: String::new(),
+                    });
+                    return widget::text_input::focus(self.dialog_text_input.clone());
+                }
             }
             Message::NotifyEvents(events) => {
                 log::debug!("{:?}", events);
@@ -993,7 +1109,9 @@ impl Application for App {
                                 ));
                                 return self.update(message);
                             } else if !replace && path.exists() {
-                                self.replace_dialog = true;
+                                self.dialog_pages.push_back(DialogPage::Replace {
+                                    filename: filename.clone(),
+                                });
                             } else {
                                 self.result_opt = Some(DialogResult::Open(vec![path]));
                                 return window::close(self.main_window_id());
