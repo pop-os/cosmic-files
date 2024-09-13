@@ -828,6 +828,8 @@ pub enum Message {
     ZoomDefault,
     ZoomIn,
     ZoomOut,
+    ScrollUp,
+    ScrollDown,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -1545,6 +1547,16 @@ impl Tab {
         match message {
             Message::AddNetworkDrive => {
                 commands.push(Command::AddNetworkDrive);
+            }
+            Message::ScrollUp => {
+                if mod_ctrl {
+                    self.update(Message::ZoomIn, modifiers);
+                }
+            }
+            Message::ScrollDown => {
+                if mod_ctrl {
+                    self.update(Message::ZoomOut, modifiers);
+                }
             }
             Message::ClickRelease(click_i_opt) => {
                 if click_i_opt == self.clicked.take() {
