@@ -2,6 +2,8 @@ use cosmic::{iced::subscription, widget, Command};
 use std::{collections::BTreeMap, fmt, path::PathBuf, sync::Arc};
 use tokio::sync::mpsc;
 
+use crate::{config::IconSizes, tab};
+
 #[cfg(feature = "gvfs")]
 mod gvfs;
 
@@ -86,10 +88,11 @@ pub enum MounterMessage {
     NetworkResult(String, Result<bool, String>),
 }
 
-pub trait Mounter {
+pub trait Mounter: Send + Sync {
     //TODO: send result
     fn mount(&self, item: MounterItem) -> Command<()>;
     fn network_drive(&self, uri: String) -> Command<()>;
+    fn network_scan(&self, uri: &str, sizes: IconSizes) -> Option<Result<Vec<tab::Item>, String>>;
     fn unmount(&self, item: MounterItem) -> Command<()>;
     fn subscription(&self) -> subscription::Subscription<MounterMessage>;
 }

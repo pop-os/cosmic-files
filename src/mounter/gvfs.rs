@@ -3,10 +3,15 @@ use cosmic::{
     widget, Command,
 };
 use gio::{glib, prelude::*};
-use std::{any::TypeId, future::pending, path::PathBuf, sync::Arc};
+use std::{any::TypeId, cell::Cell, future::pending, path::PathBuf, sync::Arc};
 use tokio::sync::{mpsc, Mutex};
 
 use super::{Mounter, MounterAuth, MounterItem, MounterItems, MounterMessage};
+use crate::{
+    config::IconSizes,
+    err_str,
+    tab::{self, ItemMetadata, ItemThumbnail, Location},
+};
 
 fn gio_icon_to_path(icon: &gio::Icon, size: u16) -> Option<PathBuf> {
     if let Some(themed_icon) = icon.downcast_ref::<gio::ThemedIcon>() {
@@ -21,10 +26,97 @@ fn gio_icon_to_path(icon: &gio::Icon, size: u16) -> Option<PathBuf> {
     None
 }
 
+fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
+    let mut items = Vec::new();
+    let file = gio::File::for_uri(&uri);
+    for info_res in file
+        .enumerate_children("*", gio::FileQueryInfoFlags::NONE, gio::Cancellable::NONE)
+        .map_err(err_str)?
+    {
+        let info = info_res.map_err(err_str)?;
+        println!("{:?}", info.display_name());
+        for attribute in info.list_attributes(None) {
+            println!(
+                "  {:?}: {:?}: {:?}",
+                attribute,
+                info.attribute_type(&attribute),
+                info.attribute_as_string(&attribute)
+            );
+        }
+
+        let name = info.name().to_string_lossy().to_string();
+        let display_name = info.display_name().to_string();
+
+        //TODO: what is the best way to resolve shortcuts?
+        let location = Location::Network(
+            if let Some(target_uri) = info.attribute_string(gio::FILE_ATTRIBUTE_STANDARD_TARGET_URI)
+            {
+                target_uri.to_string()
+            } else {
+                file.child(info.name()).uri().to_string()
+            },
+            display_name.clone(),
+        );
+
+        //TODO: support dir or file
+        let metadata = ItemMetadata::SimpleDir { entries: 0 };
+
+        let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) = {
+            let file_icon = |size| {
+                info.icon()
+                    .as_ref()
+                    .and_then(|icon| gio_icon_to_path(icon, size))
+                    .map(|path| widget::icon::from_path(path))
+                    .unwrap_or(
+                        widget::icon::from_name(if metadata.is_dir() {
+                            "folder"
+                        } else {
+                            "text-x-generic"
+                        })
+                        .size(size)
+                        .handle(),
+                    )
+            };
+            (
+                //TODO: get mime from content_type?
+                "inode/directory".parse().unwrap(),
+                file_icon(sizes.grid()),
+                file_icon(sizes.list()),
+                file_icon(sizes.list_condensed()),
+            )
+        };
+
+        items.push(tab::Item {
+            name,
+            display_name,
+            metadata,
+            hidden: false,
+            location_opt: Some(location),
+            mime,
+            icon_handle_grid,
+            icon_handle_list,
+            icon_handle_list_condensed,
+            open_with: Vec::new(),
+            thumbnail_opt: Some(ItemThumbnail::NotImage),
+            button_id: widget::Id::unique(),
+            pos_opt: Cell::new(None),
+            rect_opt: Cell::new(None),
+            selected: false,
+            overlaps_drag_rect: false,
+        });
+    }
+    Ok(items)
+}
+
 enum Cmd {
     Rescan,
     Mount(MounterItem),
     NetworkDrive(String),
+    NetworkScan(
+        String,
+        IconSizes,
+        mpsc::Sender<Result<Vec<tab::Item>, String>>,
+    ),
     Unmount(MounterItem),
 }
 
@@ -267,6 +359,9 @@ impl Gvfs {
                                 }
                             );
                         }
+                        Cmd::NetworkScan(uri, sizes, items_tx) => {
+                            items_tx.send(network_scan(&uri, sizes)).await.unwrap();
+                        }
                         Cmd::Unmount(mounter_item) => {
                             let MounterItem::Gvfs(item) = mounter_item else { continue };
                             let ItemKind::Mount = item.kind else { continue };
@@ -328,6 +423,14 @@ impl Mounter for Gvfs {
             },
             |x| x,
         )
+    }
+
+    fn network_scan(&self, uri: &str, sizes: IconSizes) -> Option<Result<Vec<tab::Item>, String>> {
+        let (items_tx, mut items_rx) = mpsc::channel(1);
+        self.command_tx
+            .send(Cmd::NetworkScan(uri.to_string(), sizes, items_tx))
+            .unwrap();
+        items_rx.blocking_recv()
     }
 
     fn unmount(&self, item: MounterItem) -> Command<()> {
