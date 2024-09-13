@@ -25,6 +25,10 @@ mod spawn_detached;
 use tab::Location;
 pub mod tab;
 
+pub(crate) fn err_str<T: ToString>(err: T) -> String {
+    err.to_string()
+}
+
 pub fn home_dir() -> PathBuf {
     match dirs::home_dir() {
         Some(home) => home,

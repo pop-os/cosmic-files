@@ -197,7 +197,7 @@ pub fn context_menu<'a>(
                 children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
             }
         }
-        (_, Location::Networks) => {
+        (_, Location::Network(_, _)) => {
             //TODO: networks context menu?
         }
         (_, Location::Trash) => {

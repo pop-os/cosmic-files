@@ -63,6 +63,7 @@ use crate::{
     menu,
     mime_app::{mime_apps, MimeApp},
     mime_icon::{mime_for_path, mime_icon},
+    mounter::Mounters,
     mouse_area,
 };
 use unix_permissions_ext::UNIXPermissionsExt;
@@ -561,7 +562,7 @@ pub fn scan_search(tab_path: &PathBuf, term: &str, sizes: IconSizes) -> Vec<Item
     items.par_sort_unstable_by(|a, b| {
         let get_modified = |x: &Item| match &x.metadata {
             ItemMetadata::Path { metadata, .. } => metadata.modified().ok(),
-            ItemMetadata::Trash { .. } => None,
+            _ => None,
         };
 
         // Sort with latest modified first
@@ -750,9 +751,17 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
     recents.into_iter().take(50).map(|(item, _)| item).collect()
 }
 
-pub fn scan_networks(sizes: IconSizes) -> Vec<Item> {
-    //TODO: network folder items
-    vec![]
+pub fn scan_network(uri: &str, mounters: Mounters, sizes: IconSizes) -> Vec<Item> {
+    for (key, mounter) in mounters.iter() {
+        match mounter.network_scan(uri, sizes) {
+            Some(Ok(items)) => return items,
+            Some(Err(err)) => {
+                log::warn!("failed to scan networks: {}", err);
+            }
+            None => {}
+        }
+    }
+    Vec::new()
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -761,7 +770,7 @@ pub enum Location {
     Search(PathBuf, String),
     Trash,
     Recents,
-    Networks,
+    Network(String, String),
 }
 
 impl std::fmt::Display for Location {
@@ -771,7 +780,7 @@ impl std::fmt::Display for Location {
             Self::Search(path, term) => write!(f, "search {} for {}", path.display(), term),
             Self::Trash => write!(f, "trash"),
             Self::Recents => write!(f, "recents"),
-            Self::Networks => write!(f, "networks"),
+            Self::Network(uri, _) => write!(f, "{}", uri),
         }
     }
 }
@@ -785,13 +794,13 @@ impl Location {
         }
     }
 
-    pub fn scan(&self, sizes: IconSizes) -> Vec<Item> {
+    pub fn scan(&self, mounters: Mounters, sizes: IconSizes) -> Vec<Item> {
         match self {
             Self::Path(path) => scan_path(path, sizes),
             Self::Search(path, term) => scan_search(path, term, sizes),
             Self::Trash => scan_trash(sizes),
             Self::Recents => scan_recents(sizes),
-            Self::Networks => scan_networks(sizes),
+            Self::Network(uri, _) => scan_network(uri, mounters, sizes),
         }
     }
 }
@@ -881,6 +890,12 @@ pub enum ItemMetadata {
         metadata: trash::TrashItemMetadata,
         entry: trash::TrashItem,
     },
+    SimpleDir {
+        entries: u64,
+    },
+    SimpleFile {
+        size: u64,
+    },
 }
 
 impl ItemMetadata {
@@ -891,6 +906,8 @@ impl ItemMetadata {
                 trash::TrashItemSize::Entries(_) => true,
                 trash::TrashItemSize::Bytes(_) => false,
             },
+            Self::SimpleDir { .. } => true,
+            Self::SimpleFile { .. } => false,
         }
     }
 }
@@ -1087,8 +1104,8 @@ impl Item {
                     );
                 }
             }
-            ItemMetadata::Trash { .. } => {
-                //TODO: trash metadata
+            _ => {
+                //TODO: other metadata types
             }
         }
 
@@ -1127,8 +1144,8 @@ impl Item {
                     )));
                 }
             }
-            ItemMetadata::Trash { .. } => {
-                //TODO: trash metadata
+            _ => {
+                //TODO: other metadata
             }
         }
 
@@ -1278,9 +1295,7 @@ impl Tab {
             Location::Recents => {
                 fl!("recents")
             }
-            Location::Networks => {
-                fl!("networks")
-            }
+            Location::Network(_uri, display_name) => display_name.clone(),
         }
     }
 
@@ -1592,14 +1607,18 @@ impl Tab {
                     .as_ref()
                     .and_then(|items| click_i_opt.and_then(|click_i| items.get(click_i)))
                 {
-                    if let Some(Location::Path(path)) = &clicked_item.location_opt {
+                    if let Some(location) = &clicked_item.location_opt {
                         if clicked_item.metadata.is_dir() {
-                            cd = Some(Location::Path(path.clone()));
+                            cd = Some(location.clone());
                         } else {
-                            commands.push(Command::OpenFile(path.clone()));
+                            if let Location::Path(path) = location {
+                                commands.push(Command::OpenFile(path.clone()));
+                            } else {
+                                log::warn!("no path for item {:?}", clicked_item);
+                            }
                         }
                     } else {
-                        log::warn!("no path for item {:?}", clicked_item);
+                        log::warn!("no location for item {:?}", clicked_item);
                     }
                 } else {
                     log::warn!("no item for click index {:?}", click_i_opt);
@@ -1990,12 +2009,14 @@ impl Tab {
                 if let Some(ref mut items) = self.items_opt {
                     for item in items.iter() {
                         if item.selected {
-                            if let Some(Location::Path(path)) = &item.location_opt {
-                                if path.is_dir() {
+                            if let Some(location) = &item.location_opt {
+                                if item.metadata.is_dir() {
                                     //TODO: allow opening multiple tabs?
-                                    cd = Some(Location::Path(path.clone()));
+                                    cd = Some(location.clone());
                                 } else {
-                                    commands.push(Command::OpenFile(path.clone()));
+                                    if let Location::Path(path) = location {
+                                        commands.push(Command::OpenFile(path.clone()));
+                                    }
                                 }
                             } else {
                                 //TODO: open properties?
@@ -2112,20 +2133,11 @@ impl Tab {
                         }
                         commands.push(Command::DropFiles(to, from))
                     }
-                    Location::Search(_, _) => {
-                        log::warn!(" Copy/cut to search not supported.");
-                    }
                     Location::Trash if matches!(from.kind, ClipboardKind::Cut) => {
                         commands.push(Command::MoveToTrash(from.paths))
                     }
-                    Location::Trash => {
-                        log::warn!("Copy to trash is not supported.");
-                    }
-                    Location::Recents => {
-                        log::warn!("Copy to recents is not supported.");
-                    }
-                    Location::Networks => {
-                        log::warn!("Copy to networks is not supported.");
+                    _ => {
+                        log::warn!("{:?} to {:?} is not supported.", from.kind, to);
                     }
                 };
             }
@@ -2254,6 +2266,8 @@ impl Tab {
                             trash::TrashItemSize::Entries(entries) => (true, entries as u64),
                             trash::TrashItemSize::Bytes(bytes) => (false, bytes),
                         },
+                        ItemMetadata::SimpleDir { entries } => (true, *entries),
+                        ItemMetadata::SimpleFile { size } => (false, *size),
                     };
                     let (a_is_entry, a_size) = get_size(a.1);
                     let (b_is_entry, b_size) = get_size(b.1);
@@ -2287,7 +2301,7 @@ impl Tab {
                 items.sort_by(|a, b| {
                     let get_modified = |x: &Item| match &x.metadata {
                         ItemMetadata::Path { metadata, .. } => metadata.modified().ok(),
-                        ItemMetadata::Trash { .. } => None,
+                        _ => None,
                     };
 
                     let a_modified = get_modified(a.1);
@@ -2588,11 +2602,14 @@ impl Tab {
                         .into(),
                 );
             }
-            Location::Networks => {
+            Location::Network(uri, display_name) => {
                 children.push(
-                    widget::button(widget::text::heading(fl!("networks")))
+                    widget::button(widget::text::heading(display_name))
                         .padding(space_xxxs)
-                        .on_press(Message::Location(Location::Networks))
+                        .on_press(Message::Location(Location::Network(
+                            uri.clone(),
+                            display_name.clone(),
+                        )))
                         .style(theme::Button::Text)
                         .into(),
                 );
@@ -3067,13 +3084,18 @@ impl Tab {
                         Ok(time) => format_time(time).to_string(),
                         Err(_) => String::new(),
                     },
-                    ItemMetadata::Trash { .. } => String::new(),
+                    _ => String::new(),
                 };
 
                 let size_text = match &item.metadata {
                     ItemMetadata::Path { metadata, children } => {
                         if metadata.is_dir() {
-                            format!("{} items", children)
+                            //TODO: translate
+                            if *children == 1 {
+                                format!("{} item", children)
+                            } else {
+                                format!("{} items", children)
+                            }
                         } else {
                             format_size(metadata.len())
                         }
@@ -3089,6 +3111,15 @@ impl Tab {
                         }
                         trash::TrashItemSize::Bytes(bytes) => format_size(bytes),
                     },
+                    ItemMetadata::SimpleDir { entries } => {
+                        //TODO: translate
+                        if *entries == 1 {
+                            format!("{} item", entries)
+                        } else {
+                            format!("{} items", entries)
+                        }
+                    }
+                    ItemMetadata::SimpleFile { size } => format_size(*size),
                 };
 
                 let row = if condensed {
@@ -3410,7 +3441,7 @@ impl Tab {
                     }
                 }
             }
-            Location::Networks => {
+            Location::Network(uri, display_name) if uri == "network:///" => {
                 tab_column = tab_column.push(
                     widget::layer_container(widget::row::with_children(vec![
                         widget::horizontal_space(Length::Fill).into(),

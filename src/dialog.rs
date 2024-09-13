@@ -376,10 +376,12 @@ struct App {
 impl App {
     fn rescan_tab(&self) -> Command<Message> {
         let location = self.tab.location.clone();
+        let mounters = self.mounters.clone();
         let icon_sizes = self.tab.config.icon_sizes;
         Command::perform(
             async move {
-                match tokio::task::spawn_blocking(move || location.scan(icon_sizes)).await {
+                match tokio::task::spawn_blocking(move || location.scan(mounters, icon_sizes)).await
+                {
                     Ok(items) => message::app(Message::TabRescan(items)),
                     Err(err) => {
                         log::warn!("failed to rescan: {}", err);
@@ -895,7 +897,7 @@ impl Application for App {
                                 }
                             }
                         }
-                        DialogPage::Replace { filename } => {
+                        DialogPage::Replace { .. } => {
                             return self.update(Message::Save(true));
                         }
                     }

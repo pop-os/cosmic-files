@@ -15,14 +15,10 @@ use walkdir::WalkDir;
 use crate::{
     app::{ArchiveType, DialogPage, Message},
     config::IconSizes,
-    fl,
+    err_str, fl,
     mime_icon::mime_for_path,
     tab,
 };
-
-fn err_str<T: ToString>(err: T) -> String {
-    err.to_string()
-}
 
 fn handle_replace(
     msg_tx: &Arc<Mutex<Sender<Message>>>,
