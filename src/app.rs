@@ -591,7 +591,7 @@ impl App {
             if let Some(ref items) = tab.items_opt() {
                 for item in items.iter() {
                     if item.selected {
-                        if let Some(path) = &item.path_opt {
+                        if let Some(Location::Path(path)) = &item.location_opt {
                             paths.push(path.clone());
                         }
                     }
@@ -952,7 +952,7 @@ impl App {
                         let parent = path.parent().unwrap_or(path);
 
                         for item in Location::Path(parent.to_owned()).scan(IconSizes::default()) {
-                            if item.path_opt.as_deref() == Some(path) {
+                            if item.path_opt() == Some(path) {
                                 children.push(item.property_view(IconSizes::default()));
                             }
                         }
@@ -977,7 +977,7 @@ impl App {
                         let parent = path.parent().unwrap_or(path);
 
                         for item in Location::Path(parent.to_owned()).scan(IconSizes::default()) {
-                            if item.path_opt.as_deref() == Some(path) {
+                            if item.path_opt() == Some(path) {
                                 children.push(item.property_view(IconSizes::default()));
                             }
                         }
@@ -1772,9 +1772,7 @@ impl Application for App {
                                                 //TODO: this could be further optimized by looking at what exactly changed
                                                 if let Some(items) = &mut tab.items_opt {
                                                     for item in items.iter_mut() {
-                                                        if item.path_opt.as_ref()
-                                                            == Some(event_path)
-                                                        {
+                                                        if item.path_opt() == Some(event_path) {
                                                             //TODO: reload more, like mime types?
                                                             match fs::metadata(&event_path) {
                                                                 Ok(new_metadata) => match &mut item
@@ -1836,7 +1834,7 @@ impl Application for App {
                             if let Some(items) = tab.items_opt() {
                                 for item in items.iter() {
                                     if item.selected {
-                                        if let Some(path) = &item.path_opt {
+                                        if let Some(Location::Path(path)) = &item.location_opt {
                                             paths.push(path.clone());
                                         }
                                     }
@@ -2036,7 +2034,7 @@ impl Application for App {
                             let mut selected = Vec::new();
                             for item in items.iter() {
                                 if item.selected {
-                                    if let Some(path) = &item.path_opt {
+                                    if let Some(Location::Path(path)) = &item.location_opt {
                                         selected.push(path.clone());
                                     }
                                 }
@@ -3748,7 +3746,7 @@ pub(crate) mod test_utils {
 
         name == item.name
             && is_dir == item.metadata.is_dir()
-            && path == item.path_opt.as_ref().expect("item should have path")
+            && path == item.path_opt().expect("item should have path")
             && is_hidden == item.hidden
     }
 

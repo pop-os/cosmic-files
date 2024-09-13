@@ -377,7 +377,7 @@ pub fn item_from_entry(
         display_name,
         metadata: ItemMetadata::Path { metadata, children },
         hidden,
-        path_opt: Some(path),
+        location_opt: Some(Location::Path(path)),
         mime,
         icon_handle_grid,
         icon_handle_list,
@@ -621,7 +621,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     display_name,
                     metadata: ItemMetadata::Trash { metadata, entry },
                     hidden: false,
-                    path_opt: None,
+                    location_opt: None,
                     mime,
                     icon_handle_grid,
                     icon_handle_list,
@@ -751,6 +751,14 @@ impl std::fmt::Display for Location {
 }
 
 impl Location {
+    pub fn path_opt(&self) -> Option<&PathBuf> {
+        match self {
+            Self::Path(path) => Some(&path),
+            Self::Search(path, _) => Some(&path),
+            _ => None,
+        }
+    }
+
     pub fn scan(&self, sizes: IconSizes) -> Vec<Item> {
         match self {
             Self::Path(path) => scan_path(path, sizes),
@@ -874,7 +882,7 @@ pub struct Item {
     pub display_name: String,
     pub metadata: ItemMetadata,
     pub hidden: bool,
-    pub path_opt: Option<PathBuf>,
+    pub location_opt: Option<Location>,
     pub mime: Mime,
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
@@ -894,6 +902,10 @@ impl Item {
         name.replace(".", ".\u{200B}").replace("_", "_\u{200B}")
     }
 
+    pub fn path_opt(&self) -> Option<&PathBuf> {
+        self.location_opt.as_ref()?.path_opt()
+    }
+
     fn preview(&self, sizes: IconSizes) -> Element<'static, app::Message> {
         // This loads the image only if thumbnailing worked
         let icon = widget::icon::icon(self.icon_handle_grid.clone())
@@ -907,7 +919,7 @@ impl Item {
         {
             ItemThumbnail::NotImage => icon,
             ItemThumbnail::Rgba(_) => {
-                if let Some(path) = &self.path_opt {
+                if let Some(Location::Path(path)) = &self.location_opt {
                     widget::image::viewer(widget::image::Handle::from_path(path))
                         .min_scale(1.0)
                         .into()
@@ -916,7 +928,7 @@ impl Item {
                 }
             }
             ItemThumbnail::Svg => {
-                if let Some(path) = &self.path_opt {
+                if let Some(Location::Path(path)) = &self.location_opt {
                     widget::Svg::from_path(path).into()
                 } else {
                     icon
@@ -944,7 +956,7 @@ impl Item {
 
         column = column.push(widget::text(format!("Type: {}", self.mime)));
 
-        if let Some(path) = &self.path_opt {
+        if let Some(Location::Path(path)) = &self.location_opt {
             for app in self.open_with.iter() {
                 column = column.push(
                     widget::button(
@@ -1309,10 +1321,11 @@ impl Tab {
     }
 
     pub fn select_path(&mut self, path: PathBuf) {
+        let location = Location::Path(path);
         *self.cached_selected.borrow_mut() = None;
         if let Some(ref mut items) = self.items_opt {
             for item in items.iter_mut() {
-                item.selected = item.path_opt.as_ref() == Some(&path);
+                item.selected = item.location_opt.as_ref() == Some(&location);
             }
         }
     }
@@ -1566,7 +1579,7 @@ impl Tab {
                     .as_ref()
                     .and_then(|items| click_i_opt.and_then(|click_i| items.get(click_i)))
                 {
-                    if let Some(path) = &clicked_item.path_opt {
+                    if let Some(Location::Path(path)) = &clicked_item.location_opt {
                         if clicked_item.metadata.is_dir() {
                             cd = Some(Location::Path(path.clone()));
                         } else {
@@ -1964,7 +1977,7 @@ impl Tab {
                 if let Some(ref mut items) = self.items_opt {
                     for item in items.iter() {
                         if item.selected {
-                            if let Some(path) = &item.path_opt {
+                            if let Some(Location::Path(path)) = &item.location_opt {
                                 if path.is_dir() {
                                     //TODO: allow opening multiple tabs?
                                     cd = Some(Location::Path(path.clone()));
@@ -2004,7 +2017,7 @@ impl Tab {
                     if let Some(clicked_item) =
                         self.items_opt.as_ref().and_then(|items| items.get(click_i))
                     {
-                        if let Some(path) = &clicked_item.path_opt {
+                        if let Some(Location::Path(path)) = &clicked_item.location_opt {
                             if clicked_item.metadata.is_dir() {
                                 //cd = Some(Location::Path(path.clone()));
                                 commands.push(Command::OpenInNewTab(path.clone()))
@@ -2035,8 +2048,9 @@ impl Tab {
             }
             Message::Thumbnail(path, thumbnail) => {
                 if let Some(ref mut items) = self.items_opt {
+                    let location = Location::Path(path);
                     for item in items.iter_mut() {
-                        if item.path_opt.as_ref() == Some(&path) {
+                        if item.location_opt.as_ref() == Some(&location) {
                             if let ItemThumbnail::Rgba(rgba) = &thumbnail {
                                 //TODO: pass handles already generated to avoid blocking main thread
                                 let handle = widget::icon::from_raster_pixels(
@@ -2765,9 +2779,10 @@ impl Tab {
                     }
                 }
 
-                let column: Element<Message> = if item.metadata.is_dir() && item.path_opt.is_some()
+                let column: Element<Message> = if item.metadata.is_dir()
+                    && item.location_opt.is_some()
                 {
-                    let tab_location = Location::Path(item.path_opt.clone().unwrap());
+                    let tab_location = item.location_opt.clone().unwrap();
                     let tab_location_enter = tab_location.clone();
                     let tab_location_leave = tab_location.clone();
                     let is_dnd_hovered =
@@ -3126,58 +3141,59 @@ impl Tab {
                 };
 
                 let button_row = button(row.into());
-                let button_row: Element<_> = if item.metadata.is_dir() && item.path_opt.is_some() {
-                    let tab_location = Location::Path(item.path_opt.clone().unwrap());
-                    let tab_location_enter = tab_location.clone();
-                    let tab_location_leave = tab_location.clone();
-                    let is_dnd_hovered =
-                        self.dnd_hovered.as_ref().map(|(l, _)| l) == Some(&tab_location);
-                    cosmic::widget::container(
-                        DndDestination::for_data(button_row, move |data, action| {
-                            if let Some(mut data) = data {
-                                if action == DndAction::Copy {
-                                    Message::Drop(Some((tab_location.clone(), data)))
-                                } else if action == DndAction::Move {
-                                    data.kind = ClipboardKind::Cut;
-                                    Message::Drop(Some((tab_location.clone(), data)))
+                let button_row: Element<_> =
+                    if item.metadata.is_dir() && item.location_opt.is_some() {
+                        let tab_location = item.location_opt.clone().unwrap();
+                        let tab_location_enter = tab_location.clone();
+                        let tab_location_leave = tab_location.clone();
+                        let is_dnd_hovered =
+                            self.dnd_hovered.as_ref().map(|(l, _)| l) == Some(&tab_location);
+                        cosmic::widget::container(
+                            DndDestination::for_data(button_row, move |data, action| {
+                                if let Some(mut data) = data {
+                                    if action == DndAction::Copy {
+                                        Message::Drop(Some((tab_location.clone(), data)))
+                                    } else if action == DndAction::Move {
+                                        data.kind = ClipboardKind::Cut;
+                                        Message::Drop(Some((tab_location.clone(), data)))
+                                    } else {
+                                        log::warn!("unsupported action: {:?}", action);
+                                        Message::Drop(None)
+                                    }
                                 } else {
-                                    log::warn!("unsupported action: {:?}", action);
+                                    log::warn!("No data for drop.");
                                     Message::Drop(None)
                                 }
-                            } else {
-                                log::warn!("No data for drop.");
-                                Message::Drop(None)
-                            }
+                            })
+                            .on_enter(move |_, _, _| Message::DndEnter(tab_location_enter.clone()))
+                            .on_leave(move || Message::DndLeave(tab_location_leave.clone())),
+                        )
+                        // todo refactor into the dnd destination wrapper
+                        .style(if is_dnd_hovered {
+                            theme::Container::custom(|t| {
+                                let mut a = cosmic::iced_style::container::StyleSheet::appearance(
+                                    t,
+                                    &theme::Container::default(),
+                                );
+                                let t = t.cosmic();
+                                // todo use theme drop target color
+                                let mut bg = t.accent_color();
+                                bg.alpha = 0.2;
+                                a.background = Some(Color::from(bg).into());
+                                a.border = Border {
+                                    color: t.accent_color().into(),
+                                    width: 1.0,
+                                    radius: t.radius_s().into(),
+                                };
+                                a
+                            })
+                        } else {
+                            theme::Container::default()
                         })
-                        .on_enter(move |_, _, _| Message::DndEnter(tab_location_enter.clone()))
-                        .on_leave(move || Message::DndLeave(tab_location_leave.clone())),
-                    )
-                    // todo refactor into the dnd destination wrapper
-                    .style(if is_dnd_hovered {
-                        theme::Container::custom(|t| {
-                            let mut a = cosmic::iced_style::container::StyleSheet::appearance(
-                                t,
-                                &theme::Container::default(),
-                            );
-                            let t = t.cosmic();
-                            // todo use theme drop target color
-                            let mut bg = t.accent_color();
-                            bg.alpha = 0.2;
-                            a.background = Some(Color::from(bg).into());
-                            a.border = Border {
-                                color: t.accent_color().into(),
-                                width: 1.0,
-                                radius: t.radius_s().into(),
-                            };
-                            a
-                        })
+                        .into()
                     } else {
-                        theme::Container::default()
-                    })
-                    .into()
-                } else {
-                    button_row.into()
-                };
+                        button_row.into()
+                    };
 
                 if item.selected || !drag_items.is_empty() {
                     let dnd_row = if !item.selected {
@@ -3306,8 +3322,8 @@ impl Tab {
                 items
                     .iter()
                     .filter(|item| item.selected)
-                    .filter_map(|item| item.path_opt.clone())
-                    .collect::<Vec<_>>()
+                    .filter_map(|item| item.path_opt().map(|x| x.clone()))
+                    .collect::<Vec<PathBuf>>()
             })
             .unwrap_or_default();
         let item_view = DndSource::<_, cosmic::app::Message<app::Message>, ClipboardCopy>::with_id(
@@ -3485,7 +3501,7 @@ impl Tab {
                     }
                 }
 
-                if let Some(path) = item.path_opt.clone() {
+                if let Some(Location::Path(path)) = item.location_opt.clone() {
                     subscriptions.push(subscription::channel(
                         path.clone(),
                         1,

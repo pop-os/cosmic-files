@@ -999,7 +999,7 @@ impl Application for App {
                                         //TODO: this could be further optimized by looking at what exactly changed
                                         if let Some(items) = &mut self.tab.items_opt {
                                             for item in items.iter_mut() {
-                                                if item.path_opt.as_ref() == Some(event_path) {
+                                                if item.path_opt() == Some(event_path) {
                                                     //TODO: reload more, like mime types?
                                                     match fs::metadata(&event_path) {
                                                         Ok(new_metadata) => {
@@ -1049,7 +1049,7 @@ impl Application for App {
                 if let Some(items) = self.tab.items_opt() {
                     for item in items.iter() {
                         if item.selected {
-                            if let Some(path) = &item.path_opt {
+                            if let Some(Location::Path(path)) = &item.location_opt {
                                 paths.push(path.clone());
                                 let _ = update_recently_used(
                                     &path.clone(),
