@@ -4,8 +4,10 @@ empty-folder-hidden = Pusty katalog (z ukrytymi plikami)
 no-results = Brak wyników
 filesystem = System plików
 home = Katalog Domowy
+networks = sieci
 notification-in-progress = Operacje na plikach w toku.
 trash = Kosz
+recents = Ubiegłe
 undo = Cofnij
 
 # List view
@@ -62,10 +64,43 @@ apply-to-all = Zastosuj do wszystkich
 keep-both = Zachowaj oba
 skip = Pomiń
 
+## Metadata Dialog
+owner = Właściciel
+group = Grupa
+other = Inni
+read = Odczyt
+write = Zapis
+execute = Wykonywanie
+
 # Context Pages
 
 ## About
 git-description = Git commit {$hash} z {$date}
+
+## Add Network Drive
+add-network-drive = Dodaj dysk sieciowy
+connect = Połącz
+connect-anonymously = Połącz anonimowo
+connecting = Łączenie...
+domain = Domena
+enter-server-address = Wprowadź adres serwera
+network-drive-description =
+    Adres serwera zawiera prefiks protokołu i adres.
+    Przykładowo: ssh://192.168.0.1, ftp://[2001:db8::1]
+### Make sure to keep the comma which separates the columns
+network-drive-schemes =
+    Dostępne protokoły,Prefiks
+    AppleTalk,afp://
+    File Transfer Protocol,ftp:// or ftps://
+    Network File System,nfs://
+    Server Message Block,smb://
+    SSH File Transfer Protocol,sftp:// or ssh://
+    WebDav,dav:// or davs://
+network-drive-error = Brak dostępu do dysku sieciowego
+password = Hasło
+remember-password = Zapamiętaj hasło
+try-again = Spróbuj ponownie
+username = Nazwa użytkownika
 
 ## Operations
 edit-history = Edytuj historię
@@ -200,11 +235,6 @@ show-hidden-files = Pokaż ukryte pliki
 list-directories-first = Najpierw wyświetlaj katalogi
 menu-settings = Ustawienia...
 menu-about = O Plikach COSMIC...
-list-view = Widok listy
-show-hidden-files = Pokaż ukryte pliki
-list-directories-first = Najpierw wyświetlaj katalogi
-menu-settings = Ustawienia...
-menu-about = O Plikach COSMIC...
 
 ## Sort
 sort = Uszereguj
@@ -212,5 +242,5 @@ sort-a-z = A-Z
 sort-z-a = Z-A
 sort-newest-first = Najpierw najnowsze
 sort-oldest-first = Najpierw najstarsze
-sort-smallest-to-largest = Od najmniejszego do największego
-sort-largest-to-smallest = Od największego do najmniejszego
+sort-smallest-to-largest = Najpierw najmniejsze
+sort-largest-to-smallest = Najpierw największe
