@@ -21,7 +21,6 @@ pub mod mime_icon;
 mod mounter;
 mod mouse_area;
 mod operation;
-mod scroll_area;
 mod spawn_detached;
 use tab::Location;
 pub mod tab;

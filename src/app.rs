@@ -3766,17 +3766,16 @@ pub(crate) mod test_utils {
         );
     }
 
-    pub fn assert_scroll_affects_item_zoom(
+    pub fn assert_zoom_affects_item_size(
         tab: &mut Tab,
         message: tab::Message,
-        modifiers: Modifiers,
         should_zoom: bool,
     ) {
         let grid_icon_size = tab.config.icon_sizes.grid;
         let list_icon_size = tab.config.icon_sizes.list;
 
         debug!("Emitting {:?}", message);
-        tab.update(message, modifiers);
+        tab.update(message, Modifiers::empty());
 
         let grid_size_changed = grid_icon_size != tab.config.icon_sizes.grid;
         let list_size_changed = list_icon_size != tab.config.icon_sizes.list;
