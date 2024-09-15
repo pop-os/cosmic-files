@@ -44,7 +44,7 @@ use std::{
     cell::{Cell, RefCell},
     cmp::Ordering,
     collections::HashMap,
-    fmt,
+    fmt::{self, Display},
     fs::{self, Metadata},
     num::NonZeroU16,
     os::unix::fs::MetadataExt,
@@ -72,7 +72,8 @@ pub const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 pub const HOVER_DURATION: Duration = Duration::from_millis(1600);
 
 //TODO: adjust for locales?
-const TIME_FORMAT: &'static str = "%a %-d %b %-Y %r";
+const DATE_TIME_FORMAT: &'static str = "%b %-d, %-Y, %-I:%M %p";
+const TIME_FORMAT: &'static str = "%-I:%M %p";
 static SPECIAL_DIRS: Lazy<HashMap<PathBuf, &'static str>> = Lazy::new(|| {
     let mut special_dirs = HashMap::new();
     if let Some(dir) = dirs::document_dir() {
@@ -258,6 +259,31 @@ fn format_permissions(metadata: &Metadata, owner: PermissionOwner) -> String {
     }
 
     perms.join(" ")
+}
+
+struct FormatTime(std::time::SystemTime);
+
+impl Display for FormatTime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let date_time = chrono::DateTime::<chrono::Local>::from(self.0);
+        let now = chrono::Local::now();
+        if date_time.date() == now.date() {
+            write!(
+                f,
+                "{}, {}",
+                fl!("today"),
+                date_time.format_localized(TIME_FORMAT, *LANGUAGE_CHRONO)
+            )
+        } else {
+            date_time
+                .format_localized(DATE_TIME_FORMAT, *LANGUAGE_CHRONO)
+                .fmt(f)
+        }
+    }
+}
+
+fn format_time(time: std::time::SystemTime) -> FormatTime {
+    FormatTime(time)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -1010,27 +1036,15 @@ impl Item {
                 }
 
                 if let Ok(time) = metadata.created() {
-                    column = column.push(widget::text(format!(
-                        "Created: {}",
-                        chrono::DateTime::<chrono::Local>::from(time)
-                            .format_localized(TIME_FORMAT, *LANGUAGE_CHRONO)
-                    )));
+                    column = column.push(widget::text(format!("Created: {}", format_time(time))));
                 }
 
                 if let Ok(time) = metadata.modified() {
-                    column = column.push(widget::text(format!(
-                        "Modified: {}",
-                        chrono::DateTime::<chrono::Local>::from(time)
-                            .format_localized(TIME_FORMAT, *LANGUAGE_CHRONO)
-                    )));
+                    column = column.push(widget::text(format!("Modified: {}", format_time(time))));
                 }
 
                 if let Ok(time) = metadata.accessed() {
-                    column = column.push(widget::text(format!(
-                        "Accessed: {}",
-                        chrono::DateTime::<chrono::Local>::from(time)
-                            .format_localized(TIME_FORMAT, *LANGUAGE_CHRONO)
-                    )));
+                    column = column.push(widget::text(format!("Accessed: {}", format_time(time))));
                 }
                 #[cfg(not(target_os = "windows"))]
                 {
@@ -1109,8 +1123,7 @@ impl Item {
                 if let Ok(time) = metadata.modified() {
                     column = column.push(widget::text(format!(
                         "Last modified: {}",
-                        chrono::DateTime::<chrono::Local>::from(time)
-                            .format_localized(TIME_FORMAT, *LANGUAGE_CHRONO)
+                        format_time(time)
                     )));
                 }
             }
@@ -3051,9 +3064,7 @@ impl Tab {
 
                 let modified_text = match &item.metadata {
                     ItemMetadata::Path { metadata, .. } => match metadata.modified() {
-                        Ok(time) => chrono::DateTime::<chrono::Local>::from(time)
-                            .format_localized(TIME_FORMAT, *LANGUAGE_CHRONO)
-                            .to_string(),
+                        Ok(time) => format_time(time).to_string(),
                         Err(_) => String::new(),
                     },
                     ItemMetadata::Trash { .. } => String::new(),
