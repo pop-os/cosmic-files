@@ -7,8 +7,9 @@ use cosmic::{
         },
         alignment::{Horizontal, Vertical},
         clipboard::dnd::DndAction,
+        event,
         futures::SinkExt,
-        keyboard::Modifiers,
+        keyboard::{self, Modifiers},
         subscription::{self, Subscription},
         //TODO: export in cosmic::widget
         widget::{
@@ -24,7 +25,7 @@ use cosmic::{
         Rectangle,
         Size,
     },
-    iced_core::widget::tree,
+    iced_core::{mouse::ScrollDelta, widget::tree},
     iced_style::rule,
     theme,
     widget::{
@@ -3394,7 +3395,8 @@ impl Tab {
             .on_press(move |_point_opt| Message::Click(None))
             .on_release(|_| Message::ClickRelease(None))
             .on_back_press(move |_point_opt| Message::GoPrevious)
-            .on_forward_press(move |_point_opt| Message::GoNext);
+            .on_forward_press(move |_point_opt| Message::GoNext)
+            .on_scroll(respond_to_scroll_direction);
 
         if self.context_menu.is_some() {
             mouse_area = mouse_area.on_right_press(move |_point_opt| Message::ContextMenu(None));
@@ -3402,6 +3404,7 @@ impl Tab {
             mouse_area = mouse_area.on_right_press(Message::ContextMenu);
         }
 
+        let should_propogate_events = true;
         let mut popover = widget::popover(mouse_area);
 
         if let Some(point) = self.context_menu {
@@ -3607,20 +3610,42 @@ impl Tab {
     }
 }
 
+pub fn respond_to_scroll_direction(delta: ScrollDelta, modifiers: Modifiers) -> Option<Message> {
+    if !modifiers.control() {
+        return None;
+    }
+
+    let delta_y = match delta {
+        ScrollDelta::Lines { y, .. } => y,
+        ScrollDelta::Pixels { y, .. } => y,
+    };
+
+    if delta_y > 0.0 {
+        return Some(Message::ZoomIn);
+    }
+
+    if delta_y < 0.0 {
+        return Some(Message::ZoomOut);
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use std::{fs, io, path::PathBuf};
 
-    use cosmic::iced_runtime::keyboard::Modifiers;
+    use cosmic::{iced::mouse::ScrollDelta, iced_runtime::keyboard::Modifiers};
     use log::{debug, trace};
     use tempfile::TempDir;
     use test_log::test;
 
-    use super::{scan_path, Location, Message, Tab};
+    use super::{scan_path, respond_to_scroll_direction, Location, Message, Tab};
     use crate::{
         app::test_utils::{
-            assert_eq_tab_path, empty_fs, eq_path_item, filter_dirs, read_dir_sorted, simple_fs,
-            tab_click_new, NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED,
+            assert_eq_tab_path, assert_zoom_affects_item_size, empty_fs, eq_path_item,
+            filter_dirs, read_dir_sorted, simple_fs, tab_click_new, NAME_LEN, NUM_DIRS, NUM_FILES,
+            NUM_HIDDEN, NUM_NESTED,
         },
         config::{IconSizes, TabConfig},
     };
@@ -3854,6 +3879,58 @@ mod tests {
     }
 
     #[test]
+    fn tab_zoom_in_increases_item_view_size() -> io::Result<()> { 
+        let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
+        let path = fs.path();
+
+        let mut tab = Tab::new(Location::Path(path.into()), TabConfig::default());
+
+        let should_affect_size = true;
+        assert_zoom_affects_item_size(&mut tab, Message::ZoomIn, should_affect_size);
+        Ok(())
+    }
+
+    fn tab_zoom_out_decreases_item_view_size() -> io::Result<()> { 
+        let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
+        let path = fs.path();
+
+        let mut tab = Tab::new(Location::Path(path.into()), TabConfig::default());
+
+        let should_affect_size = true;
+        assert_zoom_affects_item_size(&mut tab, Message::ZoomOut, should_affect_size);
+        Ok(())
+    }
+
+    #[test]
+    fn tab_scroll_up_with_ctrl_modifier_zooms() -> io::Result<()> {
+        let message_maybe = respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, Modifiers::CTRL);
+        assert!(!message_maybe.is_none());
+        assert!(matches!(message_maybe.unwrap(), Message::ZoomIn));
+        Ok(())
+    }
+
+    #[test]
+    fn tab_scroll_up_without_ctrl_modifier_does_not_zoom() -> io::Result<()> {
+        let message_maybe = respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, Modifiers::empty());
+        assert!(message_maybe.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn tab_scroll_down_with_ctrl_modifier_zooms() -> io::Result<()> {
+        let message_maybe = respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: -1.0 }, Modifiers::CTRL);
+        assert!(!message_maybe.is_none());
+        assert!(matches!(message_maybe.unwrap(), Message::ZoomOut));
+        Ok(())
+    }
+
+    #[test]
+    fn tab_scroll_down_without_ctrl_modifier_does_not_zoom() -> io::Result<()> {
+        let message_maybe = respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: -1.0 }, Modifiers::empty());
+        assert!(message_maybe.is_none());
+        Ok(())
+    }
+    #[test]
     fn tab_empty_history_does_nothing_on_prev_next() -> io::Result<()> {
         let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
         let path = fs.path();
@@ -4000,7 +4077,7 @@ impl<M> Widget<M, cosmic::Theme, cosmic::Renderer> for ArcElementWrapper<M> {
         _clipboard: &mut dyn cosmic::iced_core::Clipboard,
         _shell: &mut cosmic::iced_core::Shell<'_, M>,
         _viewport: &Rectangle,
-    ) -> cosmic::iced_core::event::Status {
+    ) -> event::Status {
         self.0.lock().unwrap().as_widget_mut().on_event(
             _state, _event, _layout, _cursor, _renderer, _clipboard, _shell, _viewport,
         )
