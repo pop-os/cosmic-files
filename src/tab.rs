@@ -756,7 +756,7 @@ pub fn scan_network(uri: &str, mounters: Mounters, sizes: IconSizes) -> Vec<Item
         match mounter.network_scan(uri, sizes) {
             Some(Ok(items)) => return items,
             Some(Err(err)) => {
-                log::warn!("failed to scan networks: {}", err);
+                log::warn!("failed to scan {:?}: {}", uri, err);
             }
             None => {}
         }

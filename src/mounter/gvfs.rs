@@ -27,8 +27,8 @@ fn gio_icon_to_path(icon: &gio::Icon, size: u16) -> Option<PathBuf> {
 }
 
 fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
+    let file = gio::File::for_uri(uri);
     let mut items = Vec::new();
-    let file = gio::File::for_uri(&uri);
     for info_res in file
         .enumerate_children("*", gio::FileQueryInfoFlags::NONE, gio::Cancellable::NONE)
         .map_err(err_str)?
@@ -106,6 +106,63 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
         });
     }
     Ok(items)
+}
+
+fn mount_op(uri: String, event_tx: mpsc::UnboundedSender<Event>) -> gio::MountOperation {
+    let mount_op = gio::MountOperation::new();
+    mount_op.connect_ask_password(
+        move |mount_op, message, default_user, default_domain, flags| {
+            let auth = MounterAuth {
+                message: message.to_string(),
+                username_opt: if flags.contains(gio::AskPasswordFlags::NEED_USERNAME) {
+                    Some(default_user.to_string())
+                } else {
+                    None
+                },
+                domain_opt: if flags.contains(gio::AskPasswordFlags::NEED_DOMAIN) {
+                    Some(default_domain.to_string())
+                } else {
+                    None
+                },
+                password_opt: if flags.contains(gio::AskPasswordFlags::NEED_PASSWORD) {
+                    Some(String::new())
+                } else {
+                    None
+                },
+                remember_opt: if flags.contains(gio::AskPasswordFlags::SAVING_SUPPORTED) {
+                    Some(false)
+                } else {
+                    None
+                },
+                anonymous_opt: if flags.contains(gio::AskPasswordFlags::ANONYMOUS_SUPPORTED) {
+                    Some(false)
+                } else {
+                    None
+                },
+            };
+            let (auth_tx, mut auth_rx) = mpsc::channel(1);
+            event_tx
+                .send(Event::NetworkAuth(uri.clone(), auth, auth_tx))
+                .unwrap();
+            //TODO: async recv?
+            if let Some(auth) = auth_rx.blocking_recv() {
+                if auth.anonymous_opt == Some(true) {
+                    mount_op.set_anonymous(true);
+                } else {
+                    mount_op.set_username(auth.username_opt.as_deref());
+                    mount_op.set_domain(auth.domain_opt.as_deref());
+                    mount_op.set_password(auth.password_opt.as_deref());
+                    if auth.remember_opt == Some(true) {
+                        mount_op.set_password_save(gio::PasswordSave::Permanently);
+                    }
+                }
+                mount_op.reply(gio::MountOperationResult::Handled);
+            } else {
+                mount_op.reply(gio::MountOperationResult::Aborted);
+            }
+        },
+    );
+    mount_op
 }
 
 enum Cmd {
@@ -286,62 +343,8 @@ impl Gvfs {
                             }
                         }
                         Cmd::NetworkDrive(uri) => {
-                            let mount_op = gio::MountOperation::new();
-
-                            {
-                                let event_tx = event_tx.clone();
-                                let uri = uri.clone();
-                                mount_op.connect_ask_password(move |mount_op, message, default_user, default_domain, flags| {
-                                    let auth = MounterAuth {
-                                        message: message.to_string(),
-                                        username_opt: if flags.contains(gio::AskPasswordFlags::NEED_USERNAME) {
-                                            Some(default_user.to_string())
-                                        } else {
-                                            None
-                                        },
-                                        domain_opt: if flags.contains(gio::AskPasswordFlags::NEED_DOMAIN) {
-                                            Some(default_domain.to_string())
-                                        } else {
-                                            None
-                                        },
-                                        password_opt: if flags.contains(gio::AskPasswordFlags::NEED_PASSWORD) {
-                                            Some(String::new())
-                                        } else {
-                                            None
-                                        },
-                                        remember_opt: if flags.contains(gio::AskPasswordFlags::SAVING_SUPPORTED) {
-                                            Some(false)
-                                        } else {
-                                            None
-                                        },
-                                        anonymous_opt: if flags.contains(gio::AskPasswordFlags::ANONYMOUS_SUPPORTED) {
-                                            Some(false)
-                                        } else {
-                                            None
-                                        }
-                                    };
-                                    let (auth_tx, mut auth_rx) = mpsc::channel(1);
-                                    event_tx.send(Event::NetworkAuth(uri.clone(), auth, auth_tx)).unwrap();
-                                    //TODO: async recv?
-                                    if let Some(auth) = auth_rx.blocking_recv() {
-                                        if auth.anonymous_opt == Some(true) {
-                                            mount_op.set_anonymous(true);
-                                        } else {
-                                            mount_op.set_username(auth.username_opt.as_deref());
-                                            mount_op.set_domain(auth.domain_opt.as_deref());
-                                            mount_op.set_password(auth.password_opt.as_deref());
-                                            if auth.remember_opt == Some(true) {
-                                                mount_op.set_password_save(gio::PasswordSave::Permanently);
-                                            }
-                                        }
-                                        mount_op.reply(gio::MountOperationResult::Handled);
-                                    } else {
-                                        mount_op.reply(gio::MountOperationResult::Aborted);
-                                    }
-                                });
-                            }
-
                             let file = gio::File::for_uri(&uri);
+                            let mount_op = mount_op(uri.clone(), event_tx.clone());
                             let event_tx = event_tx.clone();
                             file.mount_enclosing_volume(
                                 gio::MountMountFlags::empty(),
@@ -360,7 +363,38 @@ impl Gvfs {
                             );
                         }
                         Cmd::NetworkScan(uri, sizes, items_tx) => {
-                            items_tx.send(network_scan(&uri, sizes)).await.unwrap();
+                            let file = gio::File::for_uri(&uri);
+                            let needs_mount = match file.find_enclosing_mount(gio::Cancellable::NONE) {
+                                Ok(_) => false,
+                                Err(err) => match err.kind::<gio::IOErrorEnum>() {
+                                    Some(gio::IOErrorEnum::NotMounted) => true,
+                                    _ => false
+                                }
+                            };
+                            if needs_mount {
+                                let mount_op = mount_op(uri.clone(), event_tx.clone());
+                                let event_tx = event_tx.clone();
+                                file.mount_enclosing_volume(
+                                    gio::MountMountFlags::empty(),
+                                    Some(&mount_op),
+                                    gio::Cancellable::NONE,
+                                    move |res| {
+                                        log::info!("network scan mounted {}: result {:?}", uri, res);
+                                        items_tx.blocking_send(network_scan(&uri, sizes)).unwrap();
+                                        event_tx.send(Event::NetworkResult(uri, match res {
+                                            Ok(()) => {
+                                                Ok(true)
+                                            },
+                                            Err(err) => match err.kind::<gio::IOErrorEnum>() {
+                                                Some(gio::IOErrorEnum::FailedHandled) => Ok(false),
+                                                _ => Err(format!("{}", err))
+                                            }
+                                        })).unwrap();
+                                    }
+                                );
+                            } else {
+                                items_tx.send(network_scan(&uri, sizes)).await.unwrap();
+                            }
                         }
                         Cmd::Unmount(mounter_item) => {
                             let MounterItem::Gvfs(item) = mounter_item else { continue };
