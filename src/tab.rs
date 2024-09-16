@@ -807,6 +807,7 @@ pub enum Command {
     LocationProperties(usize),
     MoveToTrash(Vec<PathBuf>),
     OpenFile(PathBuf),
+    OpenMultipleFiles(Vec<Item>),
     OpenInNewTab(PathBuf),
     OpenInNewWindow(PathBuf),
 }
@@ -1987,20 +1988,34 @@ impl Tab {
                 }
             }
             Message::Open => {
+                let mut many_items = Vec::new();
+
                 if let Some(ref mut items) = self.items_opt {
+                    let selections = items.iter().filter(|item| item.selected).count();
+
                     for item in items.iter() {
+                        let has_default_app = item.open_with.iter().any(|x| x.is_default);
+
                         if item.selected {
                             if let Some(Location::Path(path)) = &item.location_opt {
                                 if path.is_dir() {
                                     //TODO: allow opening multiple tabs?
                                     cd = Some(Location::Path(path.clone()));
-                                } else {
+                                } else if selections == 1 || !has_default_app {
                                     commands.push(Command::OpenFile(path.clone()));
                                 }
                             } else {
                                 //TODO: open properties?
                             }
+
+                            if selections > 1 && has_default_app {
+                                many_items.push(item.clone());
+                            }
                         }
+                    }
+
+                    if !many_items.is_empty() {
+                        commands.push(Command::OpenMultipleFiles(many_items));
                     }
                 }
             }
