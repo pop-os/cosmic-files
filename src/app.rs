@@ -3182,7 +3182,7 @@ impl Application for App {
             space_xxs, space_s, ..
         } = theme::active().cosmic().spacing;
 
-        let mut tab_column = widget::column::with_capacity(1);
+        let mut tab_column = widget::column::with_capacity(3);
 
         if self.tab_model.iter().count() > 1 {
             tab_column = tab_column.push(
@@ -3218,7 +3218,13 @@ impl Application for App {
             }
         }
 
-        let content: Element<_> = widget::toaster(&self.toasts, tab_column).into();
+        // The toaster is added on top of an empty element to ensure that it does not override context menus
+        tab_column = tab_column.push(widget::toaster(
+            &self.toasts,
+            widget::horizontal_space(Length::Fill),
+        ));
+
+        let content: Element<_> = tab_column.into();
 
         // Uncomment to debug layout:
         //content.explain(cosmic::iced::Color::WHITE)
