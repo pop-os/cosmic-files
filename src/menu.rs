@@ -131,9 +131,18 @@ pub fn context_menu<'a>(
 
                 children.push(divider::horizontal::light().into());
                 let supported_archive_types = [
+                    "application/gzip",
                     "application/x-compressed-tar",
                     "application/x-tar",
                     "application/zip",
+                    #[cfg(feature = "bzip2")]
+                    "application/x-bzip",
+                    #[cfg(feature = "bzip2")]
+                    "application/x-bzip-compressed-tar",
+                    #[cfg(feature = "liblzma")]
+                    "application/x-xz",
+                    #[cfg(feature = "liblzma")]
+                    "application/x-xz-compressed-tar",
                 ]
                 .iter()
                 .filter_map(|mime_type| mime_type.parse::<Mime>().ok())

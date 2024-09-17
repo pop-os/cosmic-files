@@ -635,22 +635,26 @@ impl Operation {
 
                         if let Some(file_stem) = path.file_stem() {
                             let mut new_dir = to.join(file_stem);
+                            // Make sure all extension parts are removed (file_stem may still contain them)
+                            while new_dir.extension().is_some() {
+                                new_dir.set_extension("");
+                            }
                             if new_dir.exists() {
-                                let mut extensionless_path = path.to_owned();
-                                extensionless_path.set_extension("");
                                 if let Some(new_dir_parent) = new_dir.parent() {
-                                    new_dir = copy_unique_path(&extensionless_path, new_dir_parent);
+                                    new_dir = copy_unique_path(&new_dir, new_dir_parent);
                                 }
                             }
 
                             let mime = mime_for_path(&path);
                             match mime.essence_str() {
-                                "application/x-compressed-tar" => fs::File::open(path)
-                                    .map(io::BufReader::new)
-                                    .map(flate2::read::GzDecoder::new)
-                                    .map(tar::Archive::new)
-                                    .and_then(|mut archive| archive.unpack(new_dir))
-                                    .map_err(err_str)?,
+                                "application/gzip" | "application/x-compressed-tar" => {
+                                    fs::File::open(path)
+                                        .map(io::BufReader::new)
+                                        .map(flate2::read::GzDecoder::new)
+                                        .map(tar::Archive::new)
+                                        .and_then(|mut archive| archive.unpack(new_dir))
+                                        .map_err(err_str)?
+                                }
                                 "application/x-tar" => fs::File::open(path)
                                     .map(io::BufReader::new)
                                     .map(tar::Archive::new)
@@ -662,6 +666,24 @@ impl Operation {
                                     .map_err(err_str)?
                                     .and_then(|mut archive| archive.extract(new_dir))
                                     .map_err(err_str)?,
+                                #[cfg(feature = "bzip2")]
+                                "application/x-bzip" | "application/x-bzip-compressed-tar" => {
+                                    fs::File::open(path)
+                                        .map(io::BufReader::new)
+                                        .map(bzip2::read::BzDecoder::new)
+                                        .map(tar::Archive::new)
+                                        .and_then(|mut archive| archive.unpack(new_dir))
+                                        .map_err(err_str)?
+                                }
+                                #[cfg(feature = "liblzma")]
+                                "application/x-xz" | "application/x-xz-compressed-tar" => {
+                                    fs::File::open(path)
+                                        .map(io::BufReader::new)
+                                        .map(liblzma::read::XzDecoder::new)
+                                        .map(tar::Archive::new)
+                                        .and_then(|mut archive| archive.unpack(new_dir))
+                                        .map_err(err_str)?
+                                }
                                 _ => Err(format!("unsupported mime type {:?}", mime))?,
                             }
                         }
