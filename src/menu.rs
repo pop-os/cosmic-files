@@ -197,8 +197,22 @@ pub fn context_menu<'a>(
                 children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
             }
         }
-        (_, Location::Networks) => {
-            //TODO: networks context menu?
+        (_, Location::Network(_, _)) => {
+            if selected > 0 {
+                if selected_dir == 1 && selected == 1 || selected_dir == 0 {
+                    children.push(menu_item(fl!("open"), Action::Open).into());
+                }
+            } else {
+                if tab.mode.multiple() {
+                    children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
+                }
+                if !children.is_empty() {
+                    children.push(divider::horizontal::light().into());
+                }
+                children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
+                children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
+                children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
+            }
         }
         (_, Location::Trash) => {
             if tab.mode.multiple() {

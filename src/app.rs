@@ -521,11 +521,14 @@ impl App {
         location: Location,
         selection_path: Option<PathBuf>,
     ) -> Command<Message> {
+        let mounters = self.mounters.clone();
         let icon_sizes = self.config.tab.icon_sizes;
         Command::perform(
             async move {
                 let location2 = location.clone();
-                match tokio::task::spawn_blocking(move || location2.scan(icon_sizes)).await {
+                match tokio::task::spawn_blocking(move || location2.scan(mounters, icon_sizes))
+                    .await
+                {
                     Ok(items) => {
                         message::app(Message::TabRescan(entity, location, items, selection_path))
                     }
@@ -591,7 +594,7 @@ impl App {
             if let Some(ref items) = tab.items_opt() {
                 for item in items.iter() {
                     if item.selected {
-                        if let Some(path) = &item.path_opt {
+                        if let Some(Location::Path(path)) = &item.location_opt {
                             paths.push(path.clone());
                         }
                     }
@@ -672,7 +675,10 @@ impl App {
                         .size(16)
                         .handle(),
                 ))
-                .data(Location::Networks)
+                .data(Location::Network(
+                    "network:///".to_string(),
+                    fl!("networks"),
+                ))
                 .divider_above()
         });
 
@@ -941,49 +947,35 @@ impl App {
     fn properties(&self, entity: Option<ContextItem>) -> Element<Message> {
         match entity {
             None => self.tab_properties(self.tab_model.active()),
-
             Some(ContextItem::TabBar(entity)) => self.tab_properties(entity),
-
             Some(ContextItem::NavBar(item)) => {
-                let mut children = Vec::new();
-
+                let mut children = Vec::with_capacity(1);
                 if let Some(location) = self.nav_model.data::<Location>(item) {
                     if let Location::Path(path) = location {
-                        let parent = path.parent().unwrap_or(path);
-
-                        for item in Location::Path(parent.to_owned()).scan(IconSizes::default()) {
-                            if item.path_opt.as_deref() == Some(path) {
-                                children.push(item.property_view(IconSizes::default()));
-                            }
+                        //TODO: this should be done once, not when generating the view!
+                        if let Ok(item) = tab::item_from_path(path, self.config.tab.icon_sizes) {
+                            children.push(item.property_view(IconSizes::default()));
                         }
-                    };
+                    }
                 }
-
                 widget::settings::view_column(children).into()
             }
 
             Some(ContextItem::BreadCrumbs(index)) => {
-                let mut children = Vec::new();
-
+                let mut children = Vec::with_capacity(1);
                 if let Some(tab) = self.tab_model.active_data::<Tab>() {
-                    let path = match tab.location {
-                        Location::Path(ref path) => Some(path),
-                        Location::Search(ref path, _) => Some(path),
-                        _ => None,
-                    }
-                    .and_then(|path| path.ancestors().nth(index))
-                    .map(|path| path.to_path_buf());
-                    if let Some(ref path) = path {
-                        let parent = path.parent().unwrap_or(path);
-
-                        for item in Location::Path(parent.to_owned()).scan(IconSizes::default()) {
-                            if item.path_opt.as_deref() == Some(path) {
-                                children.push(item.property_view(IconSizes::default()));
-                            }
+                    let path_opt = tab
+                        .location
+                        .path_opt()
+                        .and_then(|path| path.ancestors().nth(index))
+                        .map(|path| path.to_path_buf());
+                    if let Some(ref path) = path_opt {
+                        //TODO: this should be done once, not when generating the view!
+                        if let Ok(item) = tab::item_from_path(path, self.config.tab.icon_sizes) {
+                            children.push(item.property_view(IconSizes::default()));
                         }
                     };
                 }
-
                 widget::settings::view_column(children).into()
             }
         }
@@ -1772,9 +1764,7 @@ impl Application for App {
                                                 //TODO: this could be further optimized by looking at what exactly changed
                                                 if let Some(items) = &mut tab.items_opt {
                                                     for item in items.iter_mut() {
-                                                        if item.path_opt.as_ref()
-                                                            == Some(event_path)
-                                                        {
+                                                        if item.path_opt() == Some(event_path) {
                                                             //TODO: reload more, like mime types?
                                                             match fs::metadata(&event_path) {
                                                                 Ok(new_metadata) => match &mut item
@@ -1836,7 +1826,7 @@ impl Application for App {
                             if let Some(items) = tab.items_opt() {
                                 for item in items.iter() {
                                     if item.selected {
-                                        if let Some(path) = &item.path_opt {
+                                        if let Some(Location::Path(path)) = &item.location_opt {
                                             paths.push(path.clone());
                                         }
                                     }
@@ -2036,7 +2026,7 @@ impl Application for App {
                             let mut selected = Vec::new();
                             for item in items.iter() {
                                 if item.selected {
-                                    if let Some(path) = &item.path_opt {
+                                    if let Some(Location::Path(path)) = &item.location_opt {
                                         selected.push(path.clone());
                                     }
                                 }
@@ -2398,11 +2388,14 @@ impl Application for App {
                 self.toasts.remove(id);
 
                 let mut paths = Vec::with_capacity(recently_trashed.len());
+                let mounters = self.mounters.clone();
                 let icon_sizes = self.config.tab.icon_sizes;
 
                 return cosmic::command::future(async move {
-                    match tokio::task::spawn_blocking(move || Location::Trash.scan(icon_sizes))
-                        .await
+                    match tokio::task::spawn_blocking(move || {
+                        Location::Trash.scan(mounters, icon_sizes)
+                    })
+                    .await
                     {
                         Ok(items) => {
                             for path in &*recently_trashed {
@@ -3551,6 +3544,7 @@ pub(crate) mod test_utils {
 
     use crate::{
         config::{IconSizes, TabConfig},
+        mounter::MounterMap,
         tab::Item,
     };
 
@@ -3713,7 +3707,7 @@ pub(crate) mod test_utils {
 
         // New tab with items
         let location = Location::Path(path.to_owned());
-        let items = location.scan(IconSizes::default());
+        let items = location.scan(Mounters::new(MounterMap::new()), IconSizes::default());
         let mut tab = Tab::new(location, TabConfig::default());
         tab.set_items(items);
 
@@ -3748,7 +3742,7 @@ pub(crate) mod test_utils {
 
         name == item.name
             && is_dir == item.metadata.is_dir()
-            && path == item.path_opt.as_ref().expect("item should have path")
+            && path == item.path_opt().expect("item should have path")
             && is_hidden == item.hidden
     }
 
@@ -3766,6 +3760,19 @@ pub(crate) mod test_utils {
             tab_path.display(),
             path.display()
         );
+    }
+
+    pub fn assert_zoom_affects_item_size(tab: &mut Tab, message: tab::Message, should_zoom: bool) {
+        let grid_icon_size = tab.config.icon_sizes.grid;
+        let list_icon_size = tab.config.icon_sizes.list;
+
+        debug!("Emitting {:?}", message);
+        tab.update(message, Modifiers::empty());
+
+        let grid_size_changed = grid_icon_size != tab.config.icon_sizes.grid;
+        let list_size_changed = list_icon_size != tab.config.icon_sizes.list;
+
+        assert_eq!(grid_size_changed || list_size_changed, should_zoom);
     }
 
     /// Assert that tab's items are equal to a path's entries.

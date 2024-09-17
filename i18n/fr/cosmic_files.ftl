@@ -4,9 +4,9 @@ empty-folder-hidden = Dossier vide (contient des éléments cachés)
 no-results = Aucun résultat trouvé
 filesystem = Système de fichiers
 home = Dossier personnel
-notification-in-progress = Les opérations sur les fichiers sont en cours.
+notification-in-progress = Des opérations sur des fichiers sont en cours.
 trash = Corbeille
-recents = Récente
+recents = Récents
 undo = Annuler
 
 # List view
@@ -76,6 +76,31 @@ execute = Exécution
 
 ## About
 git-description = Git commit {$hash} le {$date}
+
+## Add Network Drive
+add-network-drive = Ajouter un lecteur réseau
+connect = Connecter
+connect-anonymously = Connecter anonymement
+connecting = Connection en cours...
+domain = Domaine
+enter-server-address = Entrez l'adresse du serveur
+network-drive-description =
+    Les adresses de serveur incluent un préfixe de protocole et une adresse.
+    Exemples: ssh://192.168.0.1, ftp://[2001:db8::1]
+### Make sure to keep the comma which separates the columns
+network-drive-schemes =
+    Protocoles disponibles,Préfixe
+    AppleTalk,afp://
+    File Transfer Protocol,ftp:// or ftps://
+    Network File System,nfs://
+    Server Message Block,smb://
+    SSH File Transfer Protocol,sftp:// or ssh://
+    WebDav,dav:// or davs://
+network-drive-error = Impossible d'accéder au lecteur réseau
+password = Mot de passe
+remember-password = Se souvenir du mot de passe
+try-again = Essayer à nouveau
+username = Nom d'utilisateur
 
 ## Operations
 edit-history = Modifier l'historique
@@ -203,3 +228,12 @@ show-hidden-files = Afficher les fichiers cachés
 list-directories-first = Lister les répertoires en premier
 menu-settings = Paramètres...
 menu-about = À propos de Fichiers COSMIC...
+
+## Sort
+sort = Trier
+sort-a-z = A-Z
+sort-z-a = Z-A
+sort-newest-first = Le plus récent en premier
+sort-oldest-first = Le plus ancien en premier
+sort-smallest-to-largest = Du plus petit au plus grand
+sort-largest-to-smallest = Du plus grand au plus petit

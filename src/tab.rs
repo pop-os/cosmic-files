@@ -7,8 +7,9 @@ use cosmic::{
         },
         alignment::{Horizontal, Vertical},
         clipboard::dnd::DndAction,
+        event,
         futures::SinkExt,
-        keyboard::Modifiers,
+        keyboard::{self, Modifiers},
         subscription::{self, Subscription},
         //TODO: export in cosmic::widget
         widget::{
@@ -24,7 +25,7 @@ use cosmic::{
         Rectangle,
         Size,
     },
-    iced_core::widget::tree,
+    iced_core::{mouse::ScrollDelta, widget::tree},
     iced_style::rule,
     theme,
     widget::{
@@ -44,7 +45,7 @@ use std::{
     cell::{Cell, RefCell},
     cmp::Ordering,
     collections::HashMap,
-    fmt,
+    fmt::{self, Display},
     fs::{self, Metadata},
     num::NonZeroU16,
     os::unix::fs::MetadataExt,
@@ -63,6 +64,7 @@ use crate::{
     menu,
     mime_app::{mime_apps, MimeApp},
     mime_icon::{mime_for_path, mime_icon},
+    mounter::Mounters,
     mouse_area,
 };
 use unix_permissions_ext::UNIXPermissionsExt;
@@ -72,7 +74,8 @@ pub const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 pub const HOVER_DURATION: Duration = Duration::from_millis(1600);
 
 //TODO: adjust for locales?
-const TIME_FORMAT: &'static str = "%a %-d %b %-Y %r";
+const DATE_TIME_FORMAT: &'static str = "%b %-d, %-Y, %-I:%M %p";
+const TIME_FORMAT: &'static str = "%-I:%M %p";
 static SPECIAL_DIRS: Lazy<HashMap<PathBuf, &'static str>> = Lazy::new(|| {
     let mut special_dirs = HashMap::new();
     if let Some(dir) = dirs::document_dir() {
@@ -260,6 +263,31 @@ fn format_permissions(metadata: &Metadata, owner: PermissionOwner) -> String {
     perms.join(" ")
 }
 
+struct FormatTime(std::time::SystemTime);
+
+impl Display for FormatTime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let date_time = chrono::DateTime::<chrono::Local>::from(self.0);
+        let now = chrono::Local::now();
+        if date_time.date() == now.date() {
+            write!(
+                f,
+                "{}, {}",
+                fl!("today"),
+                date_time.format_localized(TIME_FORMAT, *LANGUAGE_CHRONO)
+            )
+        } else {
+            date_time
+                .format_localized(DATE_TIME_FORMAT, *LANGUAGE_CHRONO)
+                .fmt(f)
+        }
+    }
+}
+
+fn format_time(time: std::time::SystemTime) -> FormatTime {
+    FormatTime(time)
+}
+
 #[cfg(not(target_os = "windows"))]
 fn hidden_attribute(_metadata: &Metadata) -> bool {
     false
@@ -377,7 +405,7 @@ pub fn item_from_entry(
         display_name,
         metadata: ItemMetadata::Path { metadata, children },
         hidden,
-        path_opt: Some(path),
+        location_opt: Some(Location::Path(path)),
         mime,
         icon_handle_grid,
         icon_handle_list,
@@ -535,7 +563,7 @@ pub fn scan_search(tab_path: &PathBuf, term: &str, sizes: IconSizes) -> Vec<Item
     items.par_sort_unstable_by(|a, b| {
         let get_modified = |x: &Item| match &x.metadata {
             ItemMetadata::Path { metadata, .. } => metadata.modified().ok(),
-            ItemMetadata::Trash { .. } => None,
+            _ => None,
         };
 
         // Sort with latest modified first
@@ -621,7 +649,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     display_name,
                     metadata: ItemMetadata::Trash { metadata, entry },
                     hidden: false,
-                    path_opt: None,
+                    location_opt: None,
                     mime,
                     icon_handle_grid,
                     icon_handle_list,
@@ -724,9 +752,17 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
     recents.into_iter().take(50).map(|(item, _)| item).collect()
 }
 
-pub fn scan_networks(sizes: IconSizes) -> Vec<Item> {
-    //TODO: network folder items
-    vec![]
+pub fn scan_network(uri: &str, mounters: Mounters, sizes: IconSizes) -> Vec<Item> {
+    for (key, mounter) in mounters.iter() {
+        match mounter.network_scan(uri, sizes) {
+            Some(Ok(items)) => return items,
+            Some(Err(err)) => {
+                log::warn!("failed to scan {:?}: {}", uri, err);
+            }
+            None => {}
+        }
+    }
+    Vec::new()
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -735,7 +771,7 @@ pub enum Location {
     Search(PathBuf, String),
     Trash,
     Recents,
-    Networks,
+    Network(String, String),
 }
 
 impl std::fmt::Display for Location {
@@ -745,19 +781,27 @@ impl std::fmt::Display for Location {
             Self::Search(path, term) => write!(f, "search {} for {}", path.display(), term),
             Self::Trash => write!(f, "trash"),
             Self::Recents => write!(f, "recents"),
-            Self::Networks => write!(f, "networks"),
+            Self::Network(uri, _) => write!(f, "{}", uri),
         }
     }
 }
 
 impl Location {
-    pub fn scan(&self, sizes: IconSizes) -> Vec<Item> {
+    pub fn path_opt(&self) -> Option<&PathBuf> {
+        match self {
+            Self::Path(path) => Some(&path),
+            Self::Search(path, _) => Some(&path),
+            _ => None,
+        }
+    }
+
+    pub fn scan(&self, mounters: Mounters, sizes: IconSizes) -> Vec<Item> {
         match self {
             Self::Path(path) => scan_path(path, sizes),
             Self::Search(path, term) => scan_search(path, term, sizes),
             Self::Trash => scan_trash(sizes),
             Self::Recents => scan_recents(sizes),
-            Self::Networks => scan_networks(sizes),
+            Self::Network(uri, _) => scan_network(uri, mounters, sizes),
         }
     }
 }
@@ -847,6 +891,12 @@ pub enum ItemMetadata {
         metadata: trash::TrashItemMetadata,
         entry: trash::TrashItem,
     },
+    SimpleDir {
+        entries: u64,
+    },
+    SimpleFile {
+        size: u64,
+    },
 }
 
 impl ItemMetadata {
@@ -857,6 +907,8 @@ impl ItemMetadata {
                 trash::TrashItemSize::Entries(_) => true,
                 trash::TrashItemSize::Bytes(_) => false,
             },
+            Self::SimpleDir { .. } => true,
+            Self::SimpleFile { .. } => false,
         }
     }
 }
@@ -874,7 +926,7 @@ pub struct Item {
     pub display_name: String,
     pub metadata: ItemMetadata,
     pub hidden: bool,
-    pub path_opt: Option<PathBuf>,
+    pub location_opt: Option<Location>,
     pub mime: Mime,
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
@@ -894,6 +946,10 @@ impl Item {
         name.replace(".", ".\u{200B}").replace("_", "_\u{200B}")
     }
 
+    pub fn path_opt(&self) -> Option<&PathBuf> {
+        self.location_opt.as_ref()?.path_opt()
+    }
+
     fn preview(&self, sizes: IconSizes) -> Element<'static, app::Message> {
         // This loads the image only if thumbnailing worked
         let icon = widget::icon::icon(self.icon_handle_grid.clone())
@@ -907,7 +963,7 @@ impl Item {
         {
             ItemThumbnail::NotImage => icon,
             ItemThumbnail::Rgba(_) => {
-                if let Some(path) = &self.path_opt {
+                if let Some(Location::Path(path)) = &self.location_opt {
                     widget::image::viewer(widget::image::Handle::from_path(path))
                         .min_scale(1.0)
                         .into()
@@ -916,7 +972,7 @@ impl Item {
                 }
             }
             ItemThumbnail::Svg => {
-                if let Some(path) = &self.path_opt {
+                if let Some(Location::Path(path)) = &self.location_opt {
                     widget::Svg::from_path(path).into()
                 } else {
                     icon
@@ -944,7 +1000,7 @@ impl Item {
 
         column = column.push(widget::text(format!("Type: {}", self.mime)));
 
-        if let Some(path) = &self.path_opt {
+        if let Some(Location::Path(path)) = &self.location_opt {
             for app in self.open_with.iter() {
                 column = column.push(
                     widget::button(
@@ -998,27 +1054,15 @@ impl Item {
                 }
 
                 if let Ok(time) = metadata.created() {
-                    column = column.push(widget::text(format!(
-                        "Created: {}",
-                        chrono::DateTime::<chrono::Local>::from(time)
-                            .format_localized(TIME_FORMAT, *LANGUAGE_CHRONO)
-                    )));
+                    column = column.push(widget::text(format!("Created: {}", format_time(time))));
                 }
 
                 if let Ok(time) = metadata.modified() {
-                    column = column.push(widget::text(format!(
-                        "Modified: {}",
-                        chrono::DateTime::<chrono::Local>::from(time)
-                            .format_localized(TIME_FORMAT, *LANGUAGE_CHRONO)
-                    )));
+                    column = column.push(widget::text(format!("Modified: {}", format_time(time))));
                 }
 
                 if let Ok(time) = metadata.accessed() {
-                    column = column.push(widget::text(format!(
-                        "Accessed: {}",
-                        chrono::DateTime::<chrono::Local>::from(time)
-                            .format_localized(TIME_FORMAT, *LANGUAGE_CHRONO)
-                    )));
+                    column = column.push(widget::text(format!("Accessed: {}", format_time(time))));
                 }
                 #[cfg(not(target_os = "windows"))]
                 {
@@ -1061,8 +1105,8 @@ impl Item {
                     );
                 }
             }
-            ItemMetadata::Trash { .. } => {
-                //TODO: trash metadata
+            _ => {
+                //TODO: other metadata types
             }
         }
 
@@ -1097,13 +1141,12 @@ impl Item {
                 if let Ok(time) = metadata.modified() {
                     column = column.push(widget::text(format!(
                         "Last modified: {}",
-                        chrono::DateTime::<chrono::Local>::from(time)
-                            .format_localized(TIME_FORMAT, *LANGUAGE_CHRONO)
+                        format_time(time)
                     )));
                 }
             }
-            ItemMetadata::Trash { .. } => {
-                //TODO: trash metadata
+            _ => {
+                //TODO: other metadata
             }
         }
 
@@ -1253,9 +1296,7 @@ impl Tab {
             Location::Recents => {
                 fl!("recents")
             }
-            Location::Networks => {
-                fl!("networks")
-            }
+            Location::Network(_uri, display_name) => display_name.clone(),
         }
     }
 
@@ -1309,10 +1350,11 @@ impl Tab {
     }
 
     pub fn select_path(&mut self, path: PathBuf) {
+        let location = Location::Path(path);
         *self.cached_selected.borrow_mut() = None;
         if let Some(ref mut items) = self.items_opt {
             for item in items.iter_mut() {
-                item.selected = item.path_opt.as_ref() == Some(&path);
+                item.selected = item.location_opt.as_ref() == Some(&location);
             }
         }
     }
@@ -1566,14 +1608,18 @@ impl Tab {
                     .as_ref()
                     .and_then(|items| click_i_opt.and_then(|click_i| items.get(click_i)))
                 {
-                    if let Some(path) = &clicked_item.path_opt {
+                    if let Some(location) = &clicked_item.location_opt {
                         if clicked_item.metadata.is_dir() {
-                            cd = Some(Location::Path(path.clone()));
+                            cd = Some(location.clone());
                         } else {
-                            commands.push(Command::OpenFile(path.clone()));
+                            if let Location::Path(path) = location {
+                                commands.push(Command::OpenFile(path.clone()));
+                            } else {
+                                log::warn!("no path for item {:?}", clicked_item);
+                            }
                         }
                     } else {
-                        log::warn!("no path for item {:?}", clicked_item);
+                        log::warn!("no location for item {:?}", clicked_item);
                     }
                 } else {
                     log::warn!("no item for click index {:?}", click_i_opt);
@@ -1964,12 +2010,14 @@ impl Tab {
                 if let Some(ref mut items) = self.items_opt {
                     for item in items.iter() {
                         if item.selected {
-                            if let Some(path) = &item.path_opt {
-                                if path.is_dir() {
+                            if let Some(location) = &item.location_opt {
+                                if item.metadata.is_dir() {
                                     //TODO: allow opening multiple tabs?
-                                    cd = Some(Location::Path(path.clone()));
+                                    cd = Some(location.clone());
                                 } else {
-                                    commands.push(Command::OpenFile(path.clone()));
+                                    if let Location::Path(path) = location {
+                                        commands.push(Command::OpenFile(path.clone()));
+                                    }
                                 }
                             } else {
                                 //TODO: open properties?
@@ -2004,7 +2052,7 @@ impl Tab {
                     if let Some(clicked_item) =
                         self.items_opt.as_ref().and_then(|items| items.get(click_i))
                     {
-                        if let Some(path) = &clicked_item.path_opt {
+                        if let Some(Location::Path(path)) = &clicked_item.location_opt {
                             if clicked_item.metadata.is_dir() {
                                 //cd = Some(Location::Path(path.clone()));
                                 commands.push(Command::OpenInNewTab(path.clone()))
@@ -2035,8 +2083,9 @@ impl Tab {
             }
             Message::Thumbnail(path, thumbnail) => {
                 if let Some(ref mut items) = self.items_opt {
+                    let location = Location::Path(path);
                     for item in items.iter_mut() {
-                        if item.path_opt.as_ref() == Some(&path) {
+                        if item.location_opt.as_ref() == Some(&location) {
                             if let ItemThumbnail::Rgba(rgba) = &thumbnail {
                                 //TODO: pass handles already generated to avoid blocking main thread
                                 let handle = widget::icon::from_raster_pixels(
@@ -2085,20 +2134,11 @@ impl Tab {
                         }
                         commands.push(Command::DropFiles(to, from))
                     }
-                    Location::Search(_, _) => {
-                        log::warn!(" Copy/cut to search not supported.");
-                    }
                     Location::Trash if matches!(from.kind, ClipboardKind::Cut) => {
                         commands.push(Command::MoveToTrash(from.paths))
                     }
-                    Location::Trash => {
-                        log::warn!("Copy to trash is not supported.");
-                    }
-                    Location::Recents => {
-                        log::warn!("Copy to recents is not supported.");
-                    }
-                    Location::Networks => {
-                        log::warn!("Copy to networks is not supported.");
+                    _ => {
+                        log::warn!("{:?} to {:?} is not supported.", from.kind, to);
                     }
                 };
             }
@@ -2227,6 +2267,8 @@ impl Tab {
                             trash::TrashItemSize::Entries(entries) => (true, entries as u64),
                             trash::TrashItemSize::Bytes(bytes) => (false, bytes),
                         },
+                        ItemMetadata::SimpleDir { entries } => (true, *entries),
+                        ItemMetadata::SimpleFile { size } => (false, *size),
                     };
                     let (a_is_entry, a_size) = get_size(a.1);
                     let (b_is_entry, b_size) = get_size(b.1);
@@ -2260,7 +2302,7 @@ impl Tab {
                 items.sort_by(|a, b| {
                     let get_modified = |x: &Item| match &x.metadata {
                         ItemMetadata::Path { metadata, .. } => metadata.modified().ok(),
-                        ItemMetadata::Trash { .. } => None,
+                        _ => None,
                     };
 
                     let a_modified = get_modified(a.1);
@@ -2561,11 +2603,14 @@ impl Tab {
                         .into(),
                 );
             }
-            Location::Networks => {
+            Location::Network(uri, display_name) => {
                 children.push(
-                    widget::button(widget::text::heading(fl!("networks")))
+                    widget::button(widget::text::heading(display_name))
                         .padding(space_xxxs)
-                        .on_press(Message::Location(Location::Networks))
+                        .on_press(Message::Location(Location::Network(
+                            uri.clone(),
+                            display_name.clone(),
+                        )))
                         .style(theme::Button::Text)
                         .into(),
                 );
@@ -2765,9 +2810,10 @@ impl Tab {
                     }
                 }
 
-                let column: Element<Message> = if item.metadata.is_dir() && item.path_opt.is_some()
+                let column: Element<Message> = if item.metadata.is_dir()
+                    && item.location_opt.is_some()
                 {
-                    let tab_location = Location::Path(item.path_opt.clone().unwrap());
+                    let tab_location = item.location_opt.clone().unwrap();
                     let tab_location_enter = tab_location.clone();
                     let tab_location_leave = tab_location.clone();
                     let is_dnd_hovered =
@@ -3036,18 +3082,21 @@ impl Tab {
 
                 let modified_text = match &item.metadata {
                     ItemMetadata::Path { metadata, .. } => match metadata.modified() {
-                        Ok(time) => chrono::DateTime::<chrono::Local>::from(time)
-                            .format_localized(TIME_FORMAT, *LANGUAGE_CHRONO)
-                            .to_string(),
+                        Ok(time) => format_time(time).to_string(),
                         Err(_) => String::new(),
                     },
-                    ItemMetadata::Trash { .. } => String::new(),
+                    _ => String::new(),
                 };
 
                 let size_text = match &item.metadata {
                     ItemMetadata::Path { metadata, children } => {
                         if metadata.is_dir() {
-                            format!("{} items", children)
+                            //TODO: translate
+                            if *children == 1 {
+                                format!("{} item", children)
+                            } else {
+                                format!("{} items", children)
+                            }
                         } else {
                             format_size(metadata.len())
                         }
@@ -3063,6 +3112,15 @@ impl Tab {
                         }
                         trash::TrashItemSize::Bytes(bytes) => format_size(bytes),
                     },
+                    ItemMetadata::SimpleDir { entries } => {
+                        //TODO: translate
+                        if *entries == 1 {
+                            format!("{} item", entries)
+                        } else {
+                            format!("{} items", entries)
+                        }
+                    }
+                    ItemMetadata::SimpleFile { size } => format_size(*size),
                 };
 
                 let row = if condensed {
@@ -3126,58 +3184,59 @@ impl Tab {
                 };
 
                 let button_row = button(row.into());
-                let button_row: Element<_> = if item.metadata.is_dir() && item.path_opt.is_some() {
-                    let tab_location = Location::Path(item.path_opt.clone().unwrap());
-                    let tab_location_enter = tab_location.clone();
-                    let tab_location_leave = tab_location.clone();
-                    let is_dnd_hovered =
-                        self.dnd_hovered.as_ref().map(|(l, _)| l) == Some(&tab_location);
-                    cosmic::widget::container(
-                        DndDestination::for_data(button_row, move |data, action| {
-                            if let Some(mut data) = data {
-                                if action == DndAction::Copy {
-                                    Message::Drop(Some((tab_location.clone(), data)))
-                                } else if action == DndAction::Move {
-                                    data.kind = ClipboardKind::Cut;
-                                    Message::Drop(Some((tab_location.clone(), data)))
+                let button_row: Element<_> =
+                    if item.metadata.is_dir() && item.location_opt.is_some() {
+                        let tab_location = item.location_opt.clone().unwrap();
+                        let tab_location_enter = tab_location.clone();
+                        let tab_location_leave = tab_location.clone();
+                        let is_dnd_hovered =
+                            self.dnd_hovered.as_ref().map(|(l, _)| l) == Some(&tab_location);
+                        cosmic::widget::container(
+                            DndDestination::for_data(button_row, move |data, action| {
+                                if let Some(mut data) = data {
+                                    if action == DndAction::Copy {
+                                        Message::Drop(Some((tab_location.clone(), data)))
+                                    } else if action == DndAction::Move {
+                                        data.kind = ClipboardKind::Cut;
+                                        Message::Drop(Some((tab_location.clone(), data)))
+                                    } else {
+                                        log::warn!("unsupported action: {:?}", action);
+                                        Message::Drop(None)
+                                    }
                                 } else {
-                                    log::warn!("unsupported action: {:?}", action);
+                                    log::warn!("No data for drop.");
                                     Message::Drop(None)
                                 }
-                            } else {
-                                log::warn!("No data for drop.");
-                                Message::Drop(None)
-                            }
+                            })
+                            .on_enter(move |_, _, _| Message::DndEnter(tab_location_enter.clone()))
+                            .on_leave(move || Message::DndLeave(tab_location_leave.clone())),
+                        )
+                        // todo refactor into the dnd destination wrapper
+                        .style(if is_dnd_hovered {
+                            theme::Container::custom(|t| {
+                                let mut a = cosmic::iced_style::container::StyleSheet::appearance(
+                                    t,
+                                    &theme::Container::default(),
+                                );
+                                let t = t.cosmic();
+                                // todo use theme drop target color
+                                let mut bg = t.accent_color();
+                                bg.alpha = 0.2;
+                                a.background = Some(Color::from(bg).into());
+                                a.border = Border {
+                                    color: t.accent_color().into(),
+                                    width: 1.0,
+                                    radius: t.radius_s().into(),
+                                };
+                                a
+                            })
+                        } else {
+                            theme::Container::default()
                         })
-                        .on_enter(move |_, _, _| Message::DndEnter(tab_location_enter.clone()))
-                        .on_leave(move || Message::DndLeave(tab_location_leave.clone())),
-                    )
-                    // todo refactor into the dnd destination wrapper
-                    .style(if is_dnd_hovered {
-                        theme::Container::custom(|t| {
-                            let mut a = cosmic::iced_style::container::StyleSheet::appearance(
-                                t,
-                                &theme::Container::default(),
-                            );
-                            let t = t.cosmic();
-                            // todo use theme drop target color
-                            let mut bg = t.accent_color();
-                            bg.alpha = 0.2;
-                            a.background = Some(Color::from(bg).into());
-                            a.border = Border {
-                                color: t.accent_color().into(),
-                                width: 1.0,
-                                radius: t.radius_s().into(),
-                            };
-                            a
-                        })
+                        .into()
                     } else {
-                        theme::Container::default()
-                    })
-                    .into()
-                } else {
-                    button_row.into()
-                };
+                        button_row.into()
+                    };
 
                 if item.selected || !drag_items.is_empty() {
                     let dnd_row = if !item.selected {
@@ -3306,8 +3365,8 @@ impl Tab {
                 items
                     .iter()
                     .filter(|item| item.selected)
-                    .filter_map(|item| item.path_opt.clone())
-                    .collect::<Vec<_>>()
+                    .filter_map(|item| item.path_opt().map(|x| x.clone()))
+                    .collect::<Vec<PathBuf>>()
             })
             .unwrap_or_default();
         let item_view = DndSource::<_, cosmic::app::Message<app::Message>, ClipboardCopy>::with_id(
@@ -3336,7 +3395,8 @@ impl Tab {
             .on_press(move |_point_opt| Message::Click(None))
             .on_release(|_| Message::ClickRelease(None))
             .on_back_press(move |_point_opt| Message::GoPrevious)
-            .on_forward_press(move |_point_opt| Message::GoNext);
+            .on_forward_press(move |_point_opt| Message::GoNext)
+            .on_scroll(respond_to_scroll_direction);
 
         if self.context_menu.is_some() {
             mouse_area = mouse_area.on_right_press(move |_point_opt| Message::ContextMenu(None));
@@ -3344,6 +3404,7 @@ impl Tab {
             mouse_area = mouse_area.on_right_press(Message::ContextMenu);
         }
 
+        let should_propogate_events = true;
         let mut popover = widget::popover(mouse_area);
 
         if let Some(point) = self.context_menu {
@@ -3383,7 +3444,7 @@ impl Tab {
                     }
                 }
             }
-            Location::Networks => {
+            Location::Network(uri, display_name) if uri == "network:///" => {
                 tab_column = tab_column.push(
                     widget::layer_container(widget::row::with_children(vec![
                         widget::horizontal_space(Length::Fill).into(),
@@ -3485,7 +3546,7 @@ impl Tab {
                     }
                 }
 
-                if let Some(path) = item.path_opt.clone() {
+                if let Some(Location::Path(path)) = item.location_opt.clone() {
                     subscriptions.push(subscription::channel(
                         path.clone(),
                         1,
@@ -3549,20 +3610,42 @@ impl Tab {
     }
 }
 
+pub fn respond_to_scroll_direction(delta: ScrollDelta, modifiers: Modifiers) -> Option<Message> {
+    if !modifiers.control() {
+        return None;
+    }
+
+    let delta_y = match delta {
+        ScrollDelta::Lines { y, .. } => y,
+        ScrollDelta::Pixels { y, .. } => y,
+    };
+
+    if delta_y > 0.0 {
+        return Some(Message::ZoomIn);
+    }
+
+    if delta_y < 0.0 {
+        return Some(Message::ZoomOut);
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use std::{fs, io, path::PathBuf};
 
-    use cosmic::iced_runtime::keyboard::Modifiers;
+    use cosmic::{iced::mouse::ScrollDelta, iced_runtime::keyboard::Modifiers};
     use log::{debug, trace};
     use tempfile::TempDir;
     use test_log::test;
 
-    use super::{scan_path, Location, Message, Tab};
+    use super::{respond_to_scroll_direction, scan_path, Location, Message, Tab};
     use crate::{
         app::test_utils::{
-            assert_eq_tab_path, empty_fs, eq_path_item, filter_dirs, read_dir_sorted, simple_fs,
-            tab_click_new, NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED,
+            assert_eq_tab_path, assert_zoom_affects_item_size, empty_fs, eq_path_item, filter_dirs,
+            read_dir_sorted, simple_fs, tab_click_new, NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN,
+            NUM_NESTED,
         },
         config::{IconSizes, TabConfig},
     };
@@ -3796,6 +3879,64 @@ mod tests {
     }
 
     #[test]
+    fn tab_zoom_in_increases_item_view_size() -> io::Result<()> {
+        let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
+        let path = fs.path();
+
+        let mut tab = Tab::new(Location::Path(path.into()), TabConfig::default());
+
+        let should_affect_size = true;
+        assert_zoom_affects_item_size(&mut tab, Message::ZoomIn, should_affect_size);
+        Ok(())
+    }
+
+    fn tab_zoom_out_decreases_item_view_size() -> io::Result<()> {
+        let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
+        let path = fs.path();
+
+        let mut tab = Tab::new(Location::Path(path.into()), TabConfig::default());
+
+        let should_affect_size = true;
+        assert_zoom_affects_item_size(&mut tab, Message::ZoomOut, should_affect_size);
+        Ok(())
+    }
+
+    #[test]
+    fn tab_scroll_up_with_ctrl_modifier_zooms() -> io::Result<()> {
+        let message_maybe =
+            respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, Modifiers::CTRL);
+        assert!(!message_maybe.is_none());
+        assert!(matches!(message_maybe.unwrap(), Message::ZoomIn));
+        Ok(())
+    }
+
+    #[test]
+    fn tab_scroll_up_without_ctrl_modifier_does_not_zoom() -> io::Result<()> {
+        let message_maybe =
+            respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, Modifiers::empty());
+        assert!(message_maybe.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn tab_scroll_down_with_ctrl_modifier_zooms() -> io::Result<()> {
+        let message_maybe =
+            respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: -1.0 }, Modifiers::CTRL);
+        assert!(!message_maybe.is_none());
+        assert!(matches!(message_maybe.unwrap(), Message::ZoomOut));
+        Ok(())
+    }
+
+    #[test]
+    fn tab_scroll_down_without_ctrl_modifier_does_not_zoom() -> io::Result<()> {
+        let message_maybe = respond_to_scroll_direction(
+            ScrollDelta::Pixels { x: 0.0, y: -1.0 },
+            Modifiers::empty(),
+        );
+        assert!(message_maybe.is_none());
+        Ok(())
+    }
+    #[test]
     fn tab_empty_history_does_nothing_on_prev_next() -> io::Result<()> {
         let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
         let path = fs.path();
@@ -3942,7 +4083,7 @@ impl<M> Widget<M, cosmic::Theme, cosmic::Renderer> for ArcElementWrapper<M> {
         _clipboard: &mut dyn cosmic::iced_core::Clipboard,
         _shell: &mut cosmic::iced_core::Shell<'_, M>,
         _viewport: &Rectangle,
-    ) -> cosmic::iced_core::event::Status {
+    ) -> event::Status {
         self.0.lock().unwrap().as_widget_mut().on_event(
             _state, _event, _layout, _cursor, _renderer, _clipboard, _shell, _viewport,
         )

@@ -6,8 +6,14 @@ use cosmic::{
     iced_core::{
         border::Border,
         event::{self, Event},
+        keyboard::{
+            self,
+            key::{self, Key},
+            Event::{KeyPressed, KeyReleased},
+            Modifiers,
+        },
         layout,
-        mouse::{self, click},
+        mouse::{self, click, Event as MouseEvent},
         overlay,
         renderer::{self, Quad, Renderer as _},
         touch,
@@ -39,6 +45,7 @@ pub struct MouseArea<'a, Message> {
     on_back_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_forward_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_forward_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
+    on_scroll: Option<Box<dyn Fn(mouse::ScrollDelta, Modifiers) -> Option<Message> + 'a>>,
     show_drag_rect: bool,
 }
 
@@ -144,6 +151,16 @@ impl<'a, Message> MouseArea<'a, Message> {
         self
     }
 
+    /// The message to emit on a scroll.
+    #[must_use]
+    pub fn on_scroll(
+        mut self,
+        message: impl Fn(mouse::ScrollDelta, Modifiers) -> Option<Message> + 'a,
+    ) -> Self {
+        self.on_scroll = Some(Box::new(message));
+        self
+    }
+
     #[must_use]
     pub fn show_drag_rect(mut self, show_drag_rect: bool) -> Self {
         self.show_drag_rect = show_drag_rect;
@@ -163,7 +180,7 @@ impl<'a, Message> MouseArea<'a, Message> {
 struct State {
     // TODO: Support on_mouse_enter and on_mouse_exit
     drag_initiated: Option<Point>,
-
+    modifiers: Modifiers,
     prev_click: Option<(mouse::Click, Instant)>,
 }
 
@@ -227,6 +244,7 @@ impl<'a, Message> MouseArea<'a, Message> {
             on_back_release: None,
             on_forward_press: None,
             on_forward_release: None,
+            on_scroll: None,
             show_drag_rect: false,
         }
     }
@@ -578,6 +596,21 @@ fn update<Message: Clone>(
         }
     }
 
+    if let Some(message) = widget.on_scroll.as_ref() {
+        if let Event::Mouse(mouse::Event::WheelScrolled { delta }) = event {
+            if let Some(on_scroll) = widget.on_scroll.as_ref() {
+                if let Some(message) = on_scroll(delta.clone(), state.modifiers) {
+                    shell.publish(message);
+                    return event::Status::Captured;
+                }
+            }
+        }
+    }
+
+    if let Event::Keyboard(key_event) = event {
+        handle_key_event(key_event, state)
+    };
+
     if let Some((message, drag_rect)) = widget.on_drag.as_ref().zip(state.drag_rect(cursor)) {
         shell.publish(message(drag_rect.intersection(&layout_bounds).map(
             |mut rect| {
@@ -589,4 +622,54 @@ fn update<Message: Clone>(
     }
 
     event::Status::Ignored
+}
+
+fn handle_key_event(key_event: &keyboard::Event, state: &mut State) {
+    if let KeyPressed {
+        key: Key::Named(key::Named::Control),
+        ..
+    } = key_event
+    {
+        state.modifiers.insert(Modifiers::CTRL);
+    }
+
+    if let KeyReleased {
+        key: Key::Named(key::Named::Control),
+        ..
+    } = key_event
+    {
+        state.modifiers.remove(Modifiers::CTRL);
+    }
+
+    if let KeyPressed {
+        key: Key::Named(key::Named::Shift),
+        ..
+    } = key_event
+    {
+        state.modifiers.insert(Modifiers::SHIFT);
+    }
+
+    if let KeyReleased {
+        key: Key::Named(key::Named::Shift),
+        ..
+    } = key_event
+    {
+        state.modifiers.remove(Modifiers::SHIFT);
+    }
+
+    if let KeyPressed {
+        key: Key::Named(key::Named::Alt),
+        ..
+    } = key_event
+    {
+        state.modifiers.insert(Modifiers::ALT);
+    }
+
+    if let KeyReleased {
+        key: Key::Named(key::Named::Alt),
+        ..
+    } = key_event
+    {
+        state.modifiers.remove(Modifiers::ALT);
+    }
 }
