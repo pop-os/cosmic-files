@@ -1950,10 +1950,34 @@ impl Application for App {
                             });
                         }
                         ClipboardKind::Cut => {
-                            self.operation(Operation::Move {
-                                paths: contents.paths,
-                                to,
-                            });
+                            //TODO: determine ability to move on non-Unix systems
+                            let mut can_move = true;
+                            #[cfg(unix)]
+                            {
+                                use std::os::unix::fs::MetadataExt;
+                                //TODO: better error handling, fall back to not moving?
+                                if let Ok(to_meta) = fs::metadata(&to) {
+                                    for path in contents.paths.iter() {
+                                        if let Ok(meta) = fs::metadata(path) {
+                                            if meta.dev() != to_meta.dev() {
+                                                can_move = false;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if can_move {
+                                self.operation(Operation::Move {
+                                    paths: contents.paths,
+                                    to,
+                                });
+                            } else {
+                                self.operation(Operation::Copy {
+                                    paths: contents.paths,
+                                    to,
+                                });
+                            }
                         }
                     }
                 }
