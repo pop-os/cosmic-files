@@ -1551,6 +1551,7 @@ impl Tab {
         self.location = location.clone();
         self.items_opt = None;
         self.select_focus = None;
+        self.context_menu = None;
         self.edit_location = None;
         if let Some(history_i) = history_i_opt {
             // Navigating in history
