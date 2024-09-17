@@ -3640,12 +3640,12 @@ mod tests {
     use tempfile::TempDir;
     use test_log::test;
 
-    use super::{scan_path, respond_to_scroll_direction, Location, Message, Tab};
+    use super::{respond_to_scroll_direction, scan_path, Location, Message, Tab};
     use crate::{
         app::test_utils::{
-            assert_eq_tab_path, assert_zoom_affects_item_size, empty_fs, eq_path_item,
-            filter_dirs, read_dir_sorted, simple_fs, tab_click_new, NAME_LEN, NUM_DIRS, NUM_FILES,
-            NUM_HIDDEN, NUM_NESTED,
+            assert_eq_tab_path, assert_zoom_affects_item_size, empty_fs, eq_path_item, filter_dirs,
+            read_dir_sorted, simple_fs, tab_click_new, NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN,
+            NUM_NESTED,
         },
         config::{IconSizes, TabConfig},
     };
@@ -3879,7 +3879,7 @@ mod tests {
     }
 
     #[test]
-    fn tab_zoom_in_increases_item_view_size() -> io::Result<()> { 
+    fn tab_zoom_in_increases_item_view_size() -> io::Result<()> {
         let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
         let path = fs.path();
 
@@ -3890,7 +3890,7 @@ mod tests {
         Ok(())
     }
 
-    fn tab_zoom_out_decreases_item_view_size() -> io::Result<()> { 
+    fn tab_zoom_out_decreases_item_view_size() -> io::Result<()> {
         let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
         let path = fs.path();
 
@@ -3903,7 +3903,8 @@ mod tests {
 
     #[test]
     fn tab_scroll_up_with_ctrl_modifier_zooms() -> io::Result<()> {
-        let message_maybe = respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, Modifiers::CTRL);
+        let message_maybe =
+            respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, Modifiers::CTRL);
         assert!(!message_maybe.is_none());
         assert!(matches!(message_maybe.unwrap(), Message::ZoomIn));
         Ok(())
@@ -3911,14 +3912,16 @@ mod tests {
 
     #[test]
     fn tab_scroll_up_without_ctrl_modifier_does_not_zoom() -> io::Result<()> {
-        let message_maybe = respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, Modifiers::empty());
+        let message_maybe =
+            respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, Modifiers::empty());
         assert!(message_maybe.is_none());
         Ok(())
     }
 
     #[test]
     fn tab_scroll_down_with_ctrl_modifier_zooms() -> io::Result<()> {
-        let message_maybe = respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: -1.0 }, Modifiers::CTRL);
+        let message_maybe =
+            respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: -1.0 }, Modifiers::CTRL);
         assert!(!message_maybe.is_none());
         assert!(matches!(message_maybe.unwrap(), Message::ZoomOut));
         Ok(())
@@ -3926,7 +3929,10 @@ mod tests {
 
     #[test]
     fn tab_scroll_down_without_ctrl_modifier_does_not_zoom() -> io::Result<()> {
-        let message_maybe = respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: -1.0 }, Modifiers::empty());
+        let message_maybe = respond_to_scroll_direction(
+            ScrollDelta::Pixels { x: 0.0, y: -1.0 },
+            Modifiers::empty(),
+        );
         assert!(message_maybe.is_none());
         Ok(())
     }

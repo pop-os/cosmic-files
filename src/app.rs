@@ -3762,11 +3762,7 @@ pub(crate) mod test_utils {
         );
     }
 
-    pub fn assert_zoom_affects_item_size(
-        tab: &mut Tab,
-        message: tab::Message,
-        should_zoom: bool,
-    ) {
+    pub fn assert_zoom_affects_item_size(tab: &mut Tab, message: tab::Message, should_zoom: bool) {
         let grid_icon_size = tab.config.icon_sizes.grid;
         let list_icon_size = tab.config.icon_sizes.list;
 
