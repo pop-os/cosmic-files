@@ -2,7 +2,11 @@ empty-folder = Tom katalog
 empty-folder-hidden = Tom katalog (har dolda objekt)
 filesystem = Filsystem
 home = Hem
+networks = Nätverk
 trash = Papperskorg
+recents = Senaste
+undo = Ångra
+today = Idag
 
 # Dialog
 cancel = Avbryt
@@ -27,6 +31,15 @@ properties = Egenskaper
 
 ## Settings
 settings = Inställningar
+settings-tab = Flik
+settings-show-hidden = Visa dolda filer
+default-view = Standardvy
+icon-size-list = Ikonstorlek (lista)
+icon-size-grid = Ikonstorlek (rutnät)
+sorting-name = Sortera efter
+direction = Riktning
+ascending = Stigande
+descending = Fallande
 
 ### Appearance
 appearance = Utseende
@@ -78,3 +91,39 @@ default-app = {$name} (standard)
 
 ## Show details
 show-details = Visa detaljer
+
+
+network-drive-description =
+    Serveradresser inkluderar ett protokollprefix och en adress.
+ Exempel: ssh://192.168.0.1, ftp://[2001:db8::1]
+### Se till att behålla kommatecken som skiljer kolumnerna åt
+network-drive-schemes =
+    Tillgängliga protokoll, Prefix
+    AppleTalk,afp://
+    Filöverföringsprotokoll,ftp:// eller ftps://
+    Nätverksfilsystem,nfs://
+    Servermeddelandeblock,smb://
+   SSH-filöverföringsprotokoll,sftp:// eller ssh://
+    WebDav,dav:// eller davs://
+network-drive-error = Kan inte komma åt nätverksenheten
+password = Lösenord
+remember-password = Kom ihåg lösenord
+
+## Lägg till en Nätverksenhet
+add-network-drive = Lägg till en Nätverksenhet
+connect = Anslut
+connect-anonymously = Anslut anonymt
+connecting = Ansluter...
+domain = Domän
+enter-server-address = Ange server address
+try-again = Försök igen
+username = Användarnamn
+
+## Sort
+sort = Sortera
+sort-a-z = A-Z
+sort-z-a = Z-A
+sort-newest-first = Nyaste först
+sort-oldest-first = Äldst först
+sort-smallest-to-largest = Minsta till största
+sort-largest-to-smallest = Största till minsta
