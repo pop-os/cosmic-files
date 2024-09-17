@@ -487,7 +487,10 @@ impl App {
         let mut tab = Tab::new(location.clone(), self.config.tab);
         tab.mode = match self.mode {
             Mode::App => tab::Mode::App,
-            Mode::Desktop => tab::Mode::Desktop,
+            Mode::Desktop => {
+                tab.config.view = tab::View::Grid;
+                tab::Mode::Desktop
+            }
         };
         let entity = self
             .tab_model
