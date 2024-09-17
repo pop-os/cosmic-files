@@ -3044,7 +3044,8 @@ impl Tab {
         let modified_width = 200.0;
         let size_width = 100.0;
         let condensed = size.width < (name_width + modified_width + size_width);
-        let icon_size = if condensed {
+        let is_search = matches!(self.location, Location::Search(_, _));
+        let icon_size = if condensed || is_search {
             icon_sizes.list_condensed()
         } else {
             icon_sizes.list()
@@ -3137,6 +3138,32 @@ impl Tab {
                                 .into(),
                         ])
                         .into(),
+                    ])
+                    .height(Length::Fixed(row_height as f32))
+                    .align_items(Alignment::Center)
+                    .spacing(space_xxs)
+                } else if is_search {
+                    widget::row::with_children(vec![
+                        widget::icon::icon(item.icon_handle_list_condensed.clone())
+                            .content_fit(ContentFit::Contain)
+                            .size(icon_size)
+                            .into(),
+                        widget::column::with_children(vec![
+                            widget::text(item.display_name.clone()).into(),
+                            widget::text::caption(match item.path_opt() {
+                                Some(path) => path.display().to_string(),
+                                None => String::new(),
+                            })
+                            .into(),
+                        ])
+                        .width(Length::Fill)
+                        .into(),
+                        widget::text(modified_text.clone())
+                            .width(Length::Fixed(modified_width))
+                            .into(),
+                        widget::text(size_text.clone())
+                            .width(Length::Fixed(size_width))
+                            .into(),
                     ])
                     .height(Length::Fixed(row_height as f32))
                     .align_items(Alignment::Center)
@@ -3258,6 +3285,32 @@ impl Tab {
                         .align_items(Alignment::Center)
                         .spacing(space_xxs)
                         .into()
+                    } else if is_search {
+                        widget::row::with_children(vec![
+                            widget::icon::icon(item.icon_handle_list_condensed.clone())
+                                .content_fit(ContentFit::Contain)
+                                .size(icon_size)
+                                .into(),
+                            widget::column::with_children(vec![
+                                widget::text(item.display_name.clone()).into(),
+                                widget::text::caption(match item.path_opt() {
+                                    Some(path) => path.display().to_string(),
+                                    None => String::new(),
+                                })
+                                .into(),
+                            ])
+                            .width(Length::Fill)
+                            .into(),
+                            widget::text(modified_text.clone())
+                                .width(Length::Fixed(modified_width))
+                                .into(),
+                            widget::text(size_text.clone())
+                                .width(Length::Fixed(size_width))
+                                .into(),
+                        ])
+                        .align_items(Alignment::Center)
+                        .spacing(space_xxs)
+                        .into()
                     } else {
                         widget::row::with_children(vec![
                             widget::icon::icon(item.icon_handle_list.clone())
@@ -3300,7 +3353,7 @@ impl Tab {
         }
         //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
         {
-            let top_deduct = (if condensed { 6 } else { 9 }) * space_xxs;
+            let top_deduct = (if condensed || is_search { 6 } else { 9 }) * space_xxs;
 
             self.item_view_size_opt
                 .set(self.size_opt.get().map(|s| Size {
