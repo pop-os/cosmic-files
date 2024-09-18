@@ -671,19 +671,21 @@ impl App {
                 .divider_above()
         });
 
-        nav_model = nav_model.insert(|b| {
-            b.text(fl!("networks"))
-                .icon(widget::icon::icon(
-                    widget::icon::from_name("network-workgroup-symbolic")
-                        .size(16)
-                        .handle(),
-                ))
-                .data(Location::Network(
-                    "network:///".to_string(),
-                    fl!("networks"),
-                ))
-                .divider_above()
-        });
+        if !self.mounters.is_empty() {
+            nav_model = nav_model.insert(|b| {
+                b.text(fl!("networks"))
+                    .icon(widget::icon::icon(
+                        widget::icon::from_name("network-workgroup-symbolic")
+                            .size(16)
+                            .handle(),
+                    ))
+                    .data(Location::Network(
+                        "network:///".to_string(),
+                        fl!("networks"),
+                    ))
+                    .divider_above()
+            });
+        }
 
         // Collect all mounter items
         let mut nav_items = Vec::new();
