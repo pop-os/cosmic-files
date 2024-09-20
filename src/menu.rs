@@ -22,7 +22,7 @@ use crate::{
 
 macro_rules! menu_button {
     ($($x:expr),+ $(,)?) => (
-        button(
+        button::custom(
             Row::with_children(
                 vec![$(Element::from($x)),+]
             )

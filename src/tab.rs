@@ -1003,7 +1003,7 @@ impl Item {
         if let Some(Location::Path(path)) = &self.location_opt {
             for app in self.open_with.iter() {
                 column = column.push(
-                    widget::button(
+                    widget::button::custom(
                         widget::row::with_children(vec![
                             widget::icon(app.icon.clone()).into(),
                             if app.is_default {
@@ -2440,7 +2440,7 @@ impl Tab {
         let mut w = 0.0;
 
         let mut prev_button =
-            widget::button(widget::icon::from_name("go-previous-symbolic").size(16))
+            widget::button::custom(widget::icon::from_name("go-previous-symbolic").size(16))
                 .padding(space_xxs)
                 .style(theme::Button::Icon);
         if self.history_i > 0 && !self.history.is_empty() {
@@ -2449,9 +2449,10 @@ impl Tab {
         row = row.push(prev_button);
         w += 16.0 + 2.0 * space_xxs as f32;
 
-        let mut next_button = widget::button(widget::icon::from_name("go-next-symbolic").size(16))
-            .padding(space_xxs)
-            .style(theme::Button::Icon);
+        let mut next_button =
+            widget::button::custom(widget::icon::from_name("go-next-symbolic").size(16))
+                .padding(space_xxs)
+                .style(theme::Button::Icon);
         if self.history_i + 1 < self.history.len() {
             next_button = next_button.on_press(Message::GoNext);
         }
@@ -2507,10 +2508,12 @@ impl Tab {
             match location {
                 Location::Path(path) => {
                     row = row.push(
-                        widget::button(widget::icon::from_name("window-close-symbolic").size(16))
-                            .on_press(Message::EditLocation(None))
-                            .padding(space_xxs)
-                            .style(theme::Button::Icon),
+                        widget::button::custom(
+                            widget::icon::from_name("window-close-symbolic").size(16),
+                        )
+                        .on_press(Message::EditLocation(None))
+                        .padding(space_xxs)
+                        .style(theme::Button::Icon),
                     );
                     row = row.push(
                         widget::text_input("", path.to_string_lossy())
@@ -2544,7 +2547,7 @@ impl Tab {
         } else if let Location::Path(path) = &self.location {
             row = row.push(
                 crate::mouse_area::MouseArea::new(
-                    widget::button(widget::icon::from_name("edit-symbolic").size(16))
+                    widget::button::custom(widget::icon::from_name("edit-symbolic").size(16))
                         .padding(space_xxs)
                         .style(theme::Button::Icon)
                         .on_press(Message::EditLocation(Some(self.location.clone()))),
@@ -2554,7 +2557,7 @@ impl Tab {
             w += 16.0 + 2.0 * space_xxs as f32;
         } else if let Location::Search(_, term) = &self.location {
             row = row.push(
-                widget::button(
+                widget::button::custom(
                     widget::row::with_children(vec![
                         widget::icon::from_name("system-search-symbolic")
                             .size(16)
@@ -2621,7 +2624,7 @@ impl Tab {
                     };
 
                     let mut mouse_area = crate::mouse_area::MouseArea::new(
-                        widget::button(row)
+                        widget::button::custom(row)
                             .padding(space_xxxs)
                             .style(theme::Button::Link)
                             .on_press(Message::Location(location.clone())),
@@ -2654,7 +2657,7 @@ impl Tab {
             }
             Location::Trash => {
                 children.push(
-                    widget::button(widget::text::heading(fl!("trash")))
+                    widget::button::custom(widget::text::heading(fl!("trash")))
                         .padding(space_xxxs)
                         .on_press(Message::Location(Location::Trash))
                         .style(theme::Button::Text)
@@ -2663,7 +2666,7 @@ impl Tab {
             }
             Location::Recents => {
                 children.push(
-                    widget::button(widget::text::heading(fl!("recents")))
+                    widget::button::custom(widget::text::heading(fl!("recents")))
                         .padding(space_xxxs)
                         .on_press(Message::Location(Location::Recents))
                         .style(theme::Button::Text)
@@ -2672,7 +2675,7 @@ impl Tab {
             }
             Location::Network(uri, display_name) => {
                 children.push(
-                    widget::button(widget::text::heading(display_name))
+                    widget::button::custom(widget::text::heading(display_name))
                         .padding(space_xxxs)
                         .on_press(Message::Location(Location::Network(
                             uri.clone(),
@@ -2843,14 +2846,14 @@ impl Tab {
 
                 //TODO: one focus group per grid item (needs custom widget)
                 let buttons = vec![
-                    widget::button(
+                    widget::button::custom(
                         widget::icon::icon(item.icon_handle_grid.clone())
                             .content_fit(ContentFit::Contain)
                             .size(icon_sizes.grid()),
                     )
                     .padding(space_xxxs)
                     .style(button_style(item.selected, false, false, false)),
-                    widget::button(widget::text::body(&item.display_name))
+                    widget::button::custom(widget::text::body(&item.display_name))
                         .id(item.button_id.clone())
                         .padding([0, space_xxxs])
                         .style(button_style(
@@ -2983,7 +2986,7 @@ impl Tab {
                         };
                         if *row == r && *col == c {
                             let buttons = vec![
-                                widget::button(
+                                widget::button::custom(
                                     widget::icon::icon(item.icon_handle_grid.clone())
                                         .content_fit(ContentFit::Contain)
                                         .size(icon_sizes.grid()),
@@ -2996,7 +2999,7 @@ impl Tab {
                                     false,
                                     false,
                                 )),
-                                widget::button(widget::text(item.display_name.clone()))
+                                widget::button::custom(widget::text(item.display_name.clone()))
                                     .id(item.button_id.clone())
                                     .on_press(Message::Click(Some(*i)))
                                     .padding([0, space_xxxs])
@@ -3211,7 +3214,7 @@ impl Tab {
 
                 let button = |row| {
                     let mouse_area = crate::mouse_area::MouseArea::new(
-                        widget::button(row)
+                        widget::button::custom(row)
                             .width(Length::Fill)
                             .id(item.button_id.clone())
                             .padding([0, space_xxs])
