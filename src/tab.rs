@@ -1230,6 +1230,7 @@ pub struct Tab {
     cached_selected: RefCell<Option<bool>>,
     clicked: Option<usize>,
     selected_clicked: bool,
+    last_right_click: Option<usize>,
 }
 
 fn folder_name<P: AsRef<Path>>(path: P) -> (String, bool) {
@@ -1276,6 +1277,7 @@ impl Tab {
             clicked: None,
             dnd_hovered: None,
             selected_clicked: false,
+            last_right_click: None,
         }
     }
 
@@ -1766,6 +1768,14 @@ impl Tab {
             Message::ContextMenu(point_opt) => {
                 if point_opt.is_none() || !mod_shift {
                     self.context_menu = point_opt;
+                    //TODO: hack for clearing selecting when right clicking empty space
+                    if self.context_menu.is_some() && self.last_right_click.take().is_none() {
+                        if let Some(ref mut items) = self.items_opt {
+                            for item in items.iter_mut() {
+                                item.selected = false;
+                            }
+                        }
+                    }
                 }
             }
             Message::LocationContextMenuPoint(point_opt) => {
@@ -2040,6 +2050,8 @@ impl Tab {
                         }
                     }
                 }
+                //TODO: hack for clearing selecting when right clicking empty space
+                self.last_right_click = click_i_opt;
             }
             Message::MiddleClick(click_i) => {
                 self.update(Message::Click(Some(click_i)), modifiers);
