@@ -2107,7 +2107,8 @@ impl Tab {
                                     rgba.as_raw().clone(),
                                 );
                                 item.icon_handle_grid = handle.clone();
-                                item.icon_handle_list = handle;
+                                item.icon_handle_list = handle.clone();
+                                item.icon_handle_list_condensed = handle;
                             }
                             item.thumbnail_opt = Some(thumbnail);
                             break;
