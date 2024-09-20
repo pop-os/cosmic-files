@@ -55,7 +55,7 @@ use std::{
 };
 
 use crate::{
-    app::{self, Action},
+    app::{self, Action, PreviewItem, PreviewKind},
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{IconSizes, TabConfig, ICON_SCALE_MAX, ICON_SIZE_GRID},
     dialog::DialogKind,
@@ -687,11 +687,9 @@ fn uri_to_path(uri: String) -> Option<PathBuf> {
 }
 
 pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
-    let mut recent_files = recently_used_xbel::parse_file();
-
     let mut recents = Vec::new();
 
-    match recent_files {
+    match recently_used_xbel::parse_file() {
         Ok(recent_files) => {
             for bookmark in recent_files.bookmarks {
                 let uri = bookmark.href;
@@ -814,11 +812,12 @@ pub enum Command {
     DropFiles(PathBuf, ClipboardPaste),
     EmptyTrash,
     Iced(cosmic::Command<Message>),
-    LocationProperties(usize),
     MoveToTrash(Vec<PathBuf>),
     OpenFile(PathBuf),
     OpenInNewTab(PathBuf),
     OpenInNewWindow(PathBuf),
+    Preview(PreviewKind, Duration),
+    PreviewCancel,
 }
 
 #[derive(Clone, Debug)]
@@ -870,7 +869,7 @@ pub enum Message {
 pub enum LocationMenuAction {
     OpenInNewTab(usize),
     OpenInNewWindow(usize),
-    Properties(usize),
+    Preview(usize),
 }
 
 impl MenuAction for LocationMenuAction {
@@ -1574,6 +1573,7 @@ impl Tab {
         let mut history_i_opt = None;
         let mod_ctrl = modifiers.contains(Modifiers::CTRL) && self.mode.multiple();
         let mod_shift = modifiers.contains(Modifiers::SHIFT) && self.mode.multiple();
+        let last_select_focus = self.select_focus;
         match message {
             Message::AddNetworkDrive => {
                 commands.push(Command::AddNetworkDrive);
@@ -1627,6 +1627,9 @@ impl Tab {
                 } else {
                     log::warn!("no item for click index {:?}", click_i_opt);
                 }
+
+                // Cancel any preview timers
+                commands.push(Command::PreviewCancel);
             }
             Message::Click(click_i_opt) => {
                 self.selected_clicked = false;
@@ -1742,17 +1745,13 @@ impl Tab {
                                     item.selected = true;
                                     self.select_range = Some((i, i));
                                 }
-
+                                self.select_focus = click_i_opt;
                                 self.selected_clicked = true;
                             } else if !dont_unset && item.selected {
                                 self.clicked = click_i_opt;
                                 item.selected = false;
                             }
                         }
-                    }
-                    if self.select_focus.take().is_some() {
-                        // Unfocus currently focused button
-                        commands.push(Command::Iced(widget::button::focus(widget::Id::unique())));
                     }
                 }
             }
@@ -1806,8 +1805,22 @@ impl Tab {
                             commands.push(Command::OpenInNewWindow(path));
                         }
                     }
-                    LocationMenuAction::Properties(ancestor_index) => {
-                        commands.push(Command::LocationProperties(ancestor_index));
+                    LocationMenuAction::Preview(ancestor_index) => {
+                        if let Some(path) = path_for_index(ancestor_index) {
+                            //TODO: blocking code, run in command
+                            match item_from_path(&path, IconSizes::default()) {
+                                Ok(item) => {
+                                    // Show preview instantly
+                                    commands.push(Command::Preview(
+                                        PreviewKind::Custom(PreviewItem(item)),
+                                        Duration::new(0, 0),
+                                    ));
+                                }
+                                Err(err) => {
+                                    log::warn!("failed to get item from path {:?}: {}", path, err);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -2160,9 +2173,11 @@ impl Tab {
                 self.dnd_hovered = None;
             }
             Message::DndHover(loc) => {
-                if self.dnd_hovered.as_ref().is_some_and(|(l, i)| {
-                    *l == loc && Instant::now().duration_since(*i) > HOVER_DURATION
-                }) {
+                if self
+                    .dnd_hovered
+                    .as_ref()
+                    .is_some_and(|(l, i)| *l == loc && i.elapsed() > HOVER_DURATION)
+                {
                     cd = Some(loc);
                 }
             }
@@ -2177,6 +2192,9 @@ impl Tab {
                         |x| x,
                     )));
                 }
+
+                // Clear preview timer
+                commands.push(Command::PreviewCancel);
             }
             Message::DndLeave(loc) => {
                 if Some(&loc) == self.dnd_hovered.as_ref().map(|(l, _)| l) {
@@ -2226,6 +2244,26 @@ impl Tab {
                 }
             }
         }
+
+        // Update preview timer
+        //TODO: make this configurable
+        if last_select_focus != self.select_focus {
+            if let Some(index) = self.select_focus {
+                if let Some(ref items) = self.items_opt {
+                    if let Some(item) = items.get(index) {
+                        if let Some(location) = item.location_opt.clone() {
+                            // Show preview after double click timeout
+                            commands.push(Command::Preview(
+                                PreviewKind::Location(location),
+                                DOUBLE_CLICK_DURATION,
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Change directory if requested
         if let Some(location) = cd {
             if matches!(self.mode, Mode::Desktop) {
                 match location {
@@ -2252,6 +2290,7 @@ impl Tab {
                 }
             }
         }
+
         commands
     }
 
@@ -3238,54 +3277,7 @@ impl Tab {
                 let button_row = button(row.into());
                 let button_row: Element<_> =
                     if item.metadata.is_dir() && item.location_opt.is_some() {
-                        let tab_location = item.location_opt.clone().unwrap();
-                        let tab_location_enter = tab_location.clone();
-                        let tab_location_leave = tab_location.clone();
-                        let is_dnd_hovered =
-                            self.dnd_hovered.as_ref().map(|(l, _)| l) == Some(&tab_location);
-                        cosmic::widget::container(
-                            DndDestination::for_data(button_row, move |data, action| {
-                                if let Some(mut data) = data {
-                                    if action == DndAction::Copy {
-                                        Message::Drop(Some((tab_location.clone(), data)))
-                                    } else if action == DndAction::Move {
-                                        data.kind = ClipboardKind::Cut;
-                                        Message::Drop(Some((tab_location.clone(), data)))
-                                    } else {
-                                        log::warn!("unsupported action: {:?}", action);
-                                        Message::Drop(None)
-                                    }
-                                } else {
-                                    log::warn!("No data for drop.");
-                                    Message::Drop(None)
-                                }
-                            })
-                            .on_enter(move |_, _, _| Message::DndEnter(tab_location_enter.clone()))
-                            .on_leave(move || Message::DndLeave(tab_location_leave.clone())),
-                        )
-                        // todo refactor into the dnd destination wrapper
-                        .style(if is_dnd_hovered {
-                            theme::Container::custom(|t| {
-                                let mut a = cosmic::iced_style::container::StyleSheet::appearance(
-                                    t,
-                                    &theme::Container::default(),
-                                );
-                                let t = t.cosmic();
-                                // todo use theme drop target color
-                                let mut bg = t.accent_color();
-                                bg.alpha = 0.2;
-                                a.background = Some(Color::from(bg).into());
-                                a.border = Border {
-                                    color: t.accent_color().into(),
-                                    width: 1.0,
-                                    radius: t.radius_s().into(),
-                                };
-                                a
-                            })
-                        } else {
-                            theme::Container::default()
-                        })
-                        .into()
+                        self.dnd_dest(item.location_opt.as_ref().unwrap(), button_row)
                     } else {
                         button_row.into()
                     };
@@ -3669,10 +3661,7 @@ impl Tab {
                                 }
                             }
 
-                            //TODO: how to properly kill this task?
-                            loop {
-                                tokio::time::sleep(std::time::Duration::new(1, 0)).await;
-                            }
+                            std::future::pending().await
                         },
                     ));
                 }

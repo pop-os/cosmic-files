@@ -46,7 +46,7 @@ pub fn key_binds() -> HashMap<KeyBind, Action> {
     bind!([Ctrl], Key::Named(Named::Enter), OpenInNewTab);
     bind!([Shift], Key::Named(Named::Enter), OpenInNewWindow);
     bind!([Ctrl], Key::Character("v".into()), Paste);
-    bind!([], Key::Named(Named::Space), Properties);
+    bind!([], Key::Named(Named::Space), Preview);
     bind!([], Key::Named(Named::F2), Rename);
     bind!([Ctrl], Key::Character("f".into()), SearchActivate);
     bind!([Ctrl], Key::Character("a".into()), SelectAll);

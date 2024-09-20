@@ -155,7 +155,7 @@ pub fn context_menu<'a>(
                 children.push(divider::horizontal::light().into());
 
                 //TODO: Print?
-                children.push(menu_item(fl!("show-details"), Action::Properties).into());
+                children.push(menu_item(fl!("show-details"), Action::Preview).into());
                 children.push(divider::horizontal::light().into());
                 children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
                 children.push(divider::horizontal::light().into());
@@ -231,7 +231,7 @@ pub fn context_menu<'a>(
                 children.push(divider::horizontal::light().into());
             }
             if selected > 0 {
-                children.push(menu_item(fl!("show-details"), Action::Properties).into());
+                children.push(menu_item(fl!("show-details"), Action::Preview).into());
                 children.push(divider::horizontal::light().into());
                 children
                     .push(menu_item(fl!("restore-from-trash"), Action::RestoreFromTrash).into());
@@ -371,7 +371,7 @@ pub fn menu_bar<'a>(
                     menu::Item::Divider,
                     menu::Item::Button(fl!("rename"), Action::Rename),
                     menu::Item::Divider,
-                    menu::Item::Button(fl!("menu-show-details"), Action::Properties),
+                    menu::Item::Button(fl!("menu-show-details"), Action::Preview),
                     menu::Item::Divider,
                     menu::Item::Button(fl!("add-to-sidebar"), Action::AddToSidebar),
                     menu::Item::Divider,
@@ -486,7 +486,7 @@ pub fn location_context_menu<'a>(ancestor_index: usize) -> Element<'a, tab::Mess
         divider::horizontal::light().into(),
         menu_button!(text::body(fl!("show-details")))
             .on_press(tab::Message::LocationMenuAction(
-                LocationMenuAction::Properties(ancestor_index),
+                LocationMenuAction::Preview(ancestor_index),
             ))
             .into(),
     ];
