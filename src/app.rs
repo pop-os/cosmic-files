@@ -1162,6 +1162,7 @@ impl Application for App {
 
     /// Creates the application, and optionally emits command on initialize.
     fn init(mut core: Core, flags: Self::Flags) -> (Self, Command<Self::Message>) {
+        core.window.context_is_overlay = false;
         match flags.mode {
             Mode::App => {}
             Mode::Desktop => {
@@ -1368,7 +1369,7 @@ impl Application for App {
         // Usually, the Escape key (for example) closes menus and panes one by one instead
         // of closing everything on one press
         if self.core.window.show_context {
-            self.core.window.show_context = false;
+            self.set_show_context(false);
             return Command::none();
         }
         if self.search_active {
@@ -1713,7 +1714,7 @@ impl Application for App {
                     Ok(true) => {
                         log::info!("connected to {:?}", uri);
                         if matches!(self.context_page, ContextPage::NetworkDrive) {
-                            self.core.window.show_context = false;
+                            self.set_show_context(false);
                         }
                     }
                     Ok(false) => {
@@ -1882,7 +1883,7 @@ impl Application for App {
                 }
 
                 // Close Open With context view
-                self.core.window.show_context = false;
+                self.set_show_context(false);
             }
             Message::OpenInNewTab(entity_opt) => {
                 return Command::batch(self.selected_paths(entity_opt).into_iter().filter_map(
@@ -2257,7 +2258,7 @@ impl Application for App {
                 //TODO: move to Command?
                 if let tab::Message::ContextMenu(_point_opt) = tab_message {
                     // Disable side context page
-                    self.core.window.show_context = false;
+                    self.set_show_context(false);
                 }
 
                 let tab_commands = match self.tab_model.data_mut::<Tab>(entity) {
@@ -2274,7 +2275,7 @@ impl Application for App {
                         tab::Command::AddNetworkDrive => {
                             let context_page = ContextPage::NetworkDrive;
                             self.context_page = context_page;
-                            self.core.window.show_context = true;
+                            self.set_show_context(true);
                             self.set_context_title(context_page.title());
                         }
                         tab::Command::ChangeLocation(tab_title, tab_path, selection_path) => {
@@ -2301,7 +2302,7 @@ impl Application for App {
                         tab::Command::LocationProperties(index) => {
                             self.context_page =
                                 ContextPage::Properties(Some(ContextItem::BreadCrumbs(index)));
-                            self.core.window.show_context = true;
+                            self.set_show_context(true);
                             self.set_context_title(self.context_page.title());
                         }
                         tab::Command::MoveToTrash(paths) => {
@@ -2402,10 +2403,10 @@ impl Application for App {
             Message::ToggleContextPage(context_page) => {
                 //TODO: ensure context menus are closed
                 if self.context_page == context_page {
-                    self.core.window.show_context = !self.core.window.show_context;
+                    self.set_show_context(!self.core.window.show_context);
                 } else {
                     self.context_page = context_page;
-                    self.core.window.show_context = true;
+                    self.set_show_context(true);
                 }
                 self.set_context_title(context_page.title());
             }
@@ -2625,7 +2626,7 @@ impl Application for App {
 
                 NavMenuAction::Properties(entity) => {
                     self.context_page = ContextPage::Properties(Some(ContextItem::NavBar(entity)));
-                    self.core.window.show_context = true;
+                    self.set_show_context(true);
                     self.set_context_title(self.context_page.title());
                 }
 
