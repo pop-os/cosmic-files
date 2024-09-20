@@ -36,6 +36,7 @@ pub struct MouseArea<'a, Message> {
     on_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_drag_end: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
+    on_resize: Option<Box<dyn Fn(Size) -> Message + 'a>>,
     on_right_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_right_press_no_capture: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_right_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
@@ -82,6 +83,13 @@ impl<'a, Message> MouseArea<'a, Message> {
     #[must_use]
     pub fn on_release(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
         self.on_release = Some(Box::new(message));
+        self
+    }
+
+    /// The message to emit on resizing.
+    #[must_use]
+    pub fn on_resize(mut self, message: impl Fn(Size) -> Message + 'a) -> Self {
+        self.on_resize = Some(Box::new(message));
         self
     }
 
@@ -182,6 +190,7 @@ struct State {
     drag_initiated: Option<Point>,
     modifiers: Modifiers,
     prev_click: Option<(mouse::Click, Instant)>,
+    size: Option<Size>,
 }
 
 impl State {
@@ -235,6 +244,7 @@ impl<'a, Message> MouseArea<'a, Message> {
             on_double_click: None,
             on_press: None,
             on_release: None,
+            on_resize: None,
             on_right_press: None,
             on_right_press_no_capture: None,
             on_right_release: None,
@@ -448,6 +458,14 @@ fn update<Message: Clone>(
     state: &mut State,
 ) -> event::Status {
     let layout_bounds = layout.bounds();
+
+    if let Some(message) = widget.on_resize.as_ref() {
+        let size = layout_bounds.size();
+        if state.size != Some(size) {
+            state.size = Some(size);
+            shell.publish(message(size));
+        }
+    }
 
     if state.drag_initiated.is_none() && !cursor.is_over(layout_bounds) {
         return event::Status::Ignored;

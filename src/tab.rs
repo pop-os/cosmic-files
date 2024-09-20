@@ -849,6 +849,7 @@ pub enum Message {
     RightClick(Option<usize>),
     MiddleClick(usize),
     Scroll(Viewport),
+    ScrollToFocus,
     SelectAll,
     SetSort(HeadingOptions, bool),
     Thumbnail(PathBuf, ItemThumbnail),
@@ -2095,6 +2096,14 @@ impl Tab {
             }
             Message::Scroll(viewport) => {
                 self.scroll_opt = Some(viewport.absolute_offset());
+            }
+            Message::ScrollToFocus => {
+                if let Some(offset) = self.select_focus_scroll() {
+                    commands.push(Command::Iced(scrollable::scroll_to(
+                        self.scrollable_id.clone(),
+                        offset,
+                    )));
+                }
             }
             Message::SelectAll => {
                 self.select_all();
@@ -3464,6 +3473,8 @@ impl Tab {
         let mut mouse_area = mouse_area::MouseArea::new(item_view)
             .on_press(move |_point_opt| Message::Click(None))
             .on_release(|_| Message::ClickRelease(None))
+            //TODO: better way to keep focused item in view
+            .on_resize(|_| Message::ScrollToFocus)
             .on_back_press(move |_point_opt| Message::GoPrevious)
             .on_forward_press(move |_point_opt| Message::GoNext)
             .on_scroll(respond_to_scroll_direction);
