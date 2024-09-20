@@ -112,7 +112,7 @@ pub enum Action {
     OpenTerminal,
     OpenWith,
     Paste,
-    Properties,
+    Preview,
     Rename,
     RestoreFromTrash,
     SearchActivate,
@@ -164,7 +164,9 @@ impl Action {
             Action::OpenTerminal => Message::OpenTerminal(entity_opt),
             Action::OpenWith => Message::ToggleContextPage(ContextPage::OpenWith),
             Action::Paste => Message::Paste(entity_opt),
-            Action::Properties => Message::ToggleContextPage(ContextPage::Properties(None)),
+            Action::Preview => {
+                Message::ToggleContextPage(ContextPage::Preview(entity_opt, PreviewKind::Selected))
+            }
             Action::Rename => Message::Rename(entity_opt),
             Action::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
             Action::SearchActivate => Message::SearchActivate,
@@ -210,18 +212,29 @@ impl MenuAction for Action {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ContextItem {
-    NavBar(segmented_button::Entity),
-    TabBar(segmented_button::Entity),
-    BreadCrumbs(usize),
+#[derive(Clone, Debug)]
+pub struct PreviewItem(pub tab::Item);
+
+impl PartialEq for PreviewItem {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.location_opt == other.0.location_opt
+    }
+}
+
+impl Eq for PreviewItem {}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PreviewKind {
+    Custom(PreviewItem),
+    Location(Location),
+    Selected,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum NavMenuAction {
     OpenInNewTab(segmented_button::Entity),
     OpenInNewWindow(segmented_button::Entity),
-    Properties(segmented_button::Entity),
+    Preview(segmented_button::Entity),
     RemoveFromSidebar(segmented_button::Entity),
     EmptyTrash,
 }
@@ -279,6 +292,7 @@ pub enum Message {
     PendingComplete(u64),
     PendingError(u64, String),
     PendingProgress(u64, f32),
+    Preview(Entity, PreviewKind, time::Duration),
     RescanTrash,
     Rename(Option<Entity>),
     ReplaceResult(ReplaceResult),
@@ -317,13 +331,13 @@ pub enum Message {
     None,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ContextPage {
     About,
     EditHistory,
     NetworkDrive,
     OpenWith,
-    Properties(Option<ContextItem>),
+    Preview(Option<Entity>, PreviewKind),
     Settings,
 }
 
@@ -334,7 +348,7 @@ impl ContextPage {
             Self::EditHistory => fl!("edit-history"),
             Self::NetworkDrive => fl!("add-network-drive"),
             Self::OpenWith => fl!("open-with"),
-            Self::Properties(..) => String::default(),
+            Self::Preview(..) => String::default(),
             Self::Settings => fl!("settings"),
         }
     }
@@ -461,6 +475,7 @@ pub struct App {
     pending_operations: BTreeMap<u64, (Operation, f32)>,
     complete_operations: BTreeMap<u64, Operation>,
     failed_operations: BTreeMap<u64, (Operation, String)>,
+    preview_opt: Option<(Entity, PreviewKind, time::Instant)>,
     search_active: bool,
     search_id: widget::Id,
     search_input: String,
@@ -487,7 +502,10 @@ impl App {
         let mut tab = Tab::new(location.clone(), self.config.tab);
         tab.mode = match self.mode {
             Mode::App => tab::Mode::App,
-            Mode::Desktop => tab::Mode::Desktop,
+            Mode::Desktop => {
+                tab.config.view = tab::View::Grid;
+                tab::Mode::Desktop
+            }
         };
         let entity = self
             .tab_model
@@ -668,19 +686,21 @@ impl App {
                 .divider_above()
         });
 
-        nav_model = nav_model.insert(|b| {
-            b.text(fl!("networks"))
-                .icon(widget::icon::icon(
-                    widget::icon::from_name("network-workgroup-symbolic")
-                        .size(16)
-                        .handle(),
-                ))
-                .data(Location::Network(
-                    "network:///".to_string(),
-                    fl!("networks"),
-                ))
-                .divider_above()
-        });
+        if !self.mounters.is_empty() {
+            nav_model = nav_model.insert(|b| {
+                b.text(fl!("networks"))
+                    .icon(widget::icon::icon(
+                        widget::icon::from_name("network-workgroup-symbolic")
+                            .size(16)
+                            .handle(),
+                    ))
+                    .data(Location::Network(
+                        "network:///".to_string(),
+                        fl!("networks"),
+                    ))
+                    .divider_above()
+            });
+        }
 
         // Collect all mounter items
         let mut nav_items = Vec::new();
@@ -944,59 +964,42 @@ impl App {
         widget::settings::view_column(children).into()
     }
 
-    fn properties(&self, entity: Option<ContextItem>) -> Element<Message> {
-        match entity {
-            None => self.tab_properties(self.tab_model.active()),
-            Some(ContextItem::TabBar(entity)) => self.tab_properties(entity),
-            Some(ContextItem::NavBar(item)) => {
-                let mut children = Vec::with_capacity(1);
-                if let Some(location) = self.nav_model.data::<Location>(item) {
-                    if let Location::Path(path) = location {
-                        //TODO: this should be done once, not when generating the view!
-                        if let Ok(item) = tab::item_from_path(path, self.config.tab.icon_sizes) {
-                            children.push(item.property_view(IconSizes::default()));
+    fn preview(&self, entity_opt: &Option<Entity>, kind: &PreviewKind) -> Element<Message> {
+        let mut children = Vec::with_capacity(1);
+        let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+        match kind {
+            PreviewKind::Custom(PreviewItem(item)) => {
+                children.push(item.property_view(IconSizes::default()));
+            }
+            PreviewKind::Location(location) => {
+                if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+                    if let Some(items) = tab.items_opt() {
+                        for item in items.iter() {
+                            if item.location_opt.as_ref() == Some(location) {
+                                children.push(item.property_view(tab.config.icon_sizes));
+                                // Only show one property view to avoid issues like hangs when generating
+                                // preview images on thousands of files
+                                break;
+                            }
                         }
                     }
                 }
-                widget::settings::view_column(children).into()
             }
-
-            Some(ContextItem::BreadCrumbs(index)) => {
-                let mut children = Vec::with_capacity(1);
-                if let Some(tab) = self.tab_model.active_data::<Tab>() {
-                    let path_opt = tab
-                        .location
-                        .path_opt()
-                        .and_then(|path| path.ancestors().nth(index))
-                        .map(|path| path.to_path_buf());
-                    if let Some(ref path) = path_opt {
-                        //TODO: this should be done once, not when generating the view!
-                        if let Ok(item) = tab::item_from_path(path, self.config.tab.icon_sizes) {
-                            children.push(item.property_view(IconSizes::default()));
+            PreviewKind::Selected => {
+                if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+                    if let Some(items) = tab.items_opt() {
+                        for item in items.iter() {
+                            if item.selected {
+                                children.push(item.property_view(tab.config.icon_sizes));
+                                // Only show one property view to avoid issues like hangs when generating
+                                // preview images on thousands of files
+                                break;
+                            }
                         }
-                    };
-                }
-                widget::settings::view_column(children).into()
-            }
-        }
-    }
-
-    fn tab_properties(&self, entity: segmented_button::Entity) -> Element<Message> {
-        let mut children = Vec::new();
-
-        if let Some(tab) = self.tab_model.data::<Tab>(entity) {
-            if let Some(items) = tab.items_opt() {
-                for item in items.iter() {
-                    if item.selected {
-                        children.push(item.property_view(tab.config.icon_sizes));
-                        // Only show one property view to avoid issues like hangs when generating
-                        // preview images on thousands of files
-                        break;
                     }
                 }
             }
         }
-
         widget::settings::view_column(children).into()
     }
 
@@ -1157,6 +1160,7 @@ impl Application for App {
 
     /// Creates the application, and optionally emits command on initialize.
     fn init(mut core: Core, flags: Self::Flags) -> (Self, Command<Self::Message>) {
+        core.window.context_is_overlay = false;
         match flags.mode {
             Mode::App => {}
             Mode::Desktop => {
@@ -1199,6 +1203,7 @@ impl Application for App {
             pending_operations: BTreeMap::new(),
             complete_operations: BTreeMap::new(),
             failed_operations: BTreeMap::new(),
+            preview_opt: None,
             search_active: false,
             search_id: widget::Id::unique(),
             search_input: String::new(),
@@ -1301,10 +1306,7 @@ impl Application for App {
                     NavMenuAction::OpenInNewWindow(id),
                 ),
                 cosmic::widget::menu::Item::Divider,
-                cosmic::widget::menu::Item::Button(
-                    fl!("show-details"),
-                    NavMenuAction::Properties(id),
-                ),
+                cosmic::widget::menu::Item::Button(fl!("show-details"), NavMenuAction::Preview(id)),
                 cosmic::widget::menu::Item::Divider,
                 if is_context_trash {
                     cosmic::widget::menu::Item::Button(
@@ -1363,7 +1365,7 @@ impl Application for App {
         // Usually, the Escape key (for example) closes menus and panes one by one instead
         // of closing everything on one press
         if self.core.window.show_context {
-            self.core.window.show_context = false;
+            self.set_show_context(false);
             return Command::none();
         }
         if self.search_active {
@@ -1708,7 +1710,7 @@ impl Application for App {
                     Ok(true) => {
                         log::info!("connected to {:?}", uri);
                         if matches!(self.context_page, ContextPage::NetworkDrive) {
-                            self.core.window.show_context = false;
+                            self.set_show_context(false);
                         }
                     }
                     Ok(false) => {
@@ -1877,7 +1879,7 @@ impl Application for App {
                 }
 
                 // Close Open With context view
-                self.core.window.show_context = false;
+                self.set_show_context(false);
             }
             Message::OpenInNewTab(entity_opt) => {
                 return Command::batch(self.selected_paths(entity_opt).into_iter().filter_map(
@@ -1947,10 +1949,34 @@ impl Application for App {
                             });
                         }
                         ClipboardKind::Cut => {
-                            self.operation(Operation::Move {
-                                paths: contents.paths,
-                                to,
-                            });
+                            //TODO: determine ability to move on non-Unix systems
+                            let mut can_move = true;
+                            #[cfg(unix)]
+                            {
+                                use std::os::unix::fs::MetadataExt;
+                                //TODO: better error handling, fall back to not moving?
+                                if let Ok(to_meta) = fs::metadata(&to) {
+                                    for path in contents.paths.iter() {
+                                        if let Ok(meta) = fs::metadata(path) {
+                                            if meta.dev() != to_meta.dev() {
+                                                can_move = false;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if can_move {
+                                self.operation(Operation::Move {
+                                    paths: contents.paths,
+                                    to,
+                                });
+                            } else {
+                                self.operation(Operation::Copy {
+                                    paths: contents.paths,
+                                    to,
+                                });
+                            }
                         }
                     }
                 }
@@ -1973,9 +1999,8 @@ impl Application for App {
                                     .map(cosmic::app::Message::App),
                             );
                         }
-
-                        self.complete_operations.insert(id, op);
                     }
+                    self.complete_operations.insert(id, op);
                 }
                 // Potentially show a notification
                 commands.push(self.update_notification());
@@ -2001,6 +2026,17 @@ impl Application for App {
                     *progress = new_progress;
                 }
                 return self.update_notification();
+            }
+            Message::Preview(entity, kind, timeout) => {
+                if self
+                    .preview_opt
+                    .as_ref()
+                    .is_some_and(|(e, k, i)| *e == entity && *k == kind && i.elapsed() > timeout)
+                {
+                    self.context_page = ContextPage::Preview(Some(entity), kind);
+                    self.set_show_context(true);
+                    self.set_context_title(self.context_page.title());
+                }
             }
             Message::RescanTrash => {
                 // Update trash icon if empty/full
@@ -2229,7 +2265,7 @@ impl Application for App {
                 //TODO: move to Command?
                 if let tab::Message::ContextMenu(_point_opt) = tab_message {
                     // Disable side context page
-                    self.core.window.show_context = false;
+                    self.set_show_context(false);
                 }
 
                 let tab_commands = match self.tab_model.data_mut::<Tab>(entity) {
@@ -2244,10 +2280,9 @@ impl Application for App {
                             commands.push(self.update(action.message(Some(entity))));
                         }
                         tab::Command::AddNetworkDrive => {
-                            let context_page = ContextPage::NetworkDrive;
-                            self.context_page = context_page;
-                            self.core.window.show_context = true;
-                            self.set_context_title(context_page.title());
+                            self.context_page = ContextPage::NetworkDrive;
+                            self.set_show_context(true);
+                            self.set_context_title(self.context_page.title());
                         }
                         tab::Command::ChangeLocation(tab_title, tab_path, selection_path) => {
                             self.activate_nav_model_location(&tab_path);
@@ -2269,12 +2304,6 @@ impl Application for App {
                             commands.push(iced_command.map(move |tab_message| {
                                 message::app(Message::TabMessage(Some(entity), tab_message))
                             }));
-                        }
-                        tab::Command::LocationProperties(index) => {
-                            self.context_page =
-                                ContextPage::Properties(Some(ContextItem::BreadCrumbs(index)));
-                            self.core.window.show_context = true;
-                            self.set_context_title(self.context_page.title());
                         }
                         tab::Command::MoveToTrash(paths) => {
                             self.operation(Operation::Delete { paths });
@@ -2346,6 +2375,23 @@ impl Application for App {
                                 log::error!("failed to get current executable path: {}", err);
                             }
                         },
+                        tab::Command::Preview(kind, mut timeout) => {
+                            self.preview_opt = Some((entity, kind.clone(), Instant::now()));
+                            if self.core.window.show_context {
+                                // If the context window is already open, immediately show the preview
+                                timeout = time::Duration::new(0, 0)
+                            };
+                            commands.push(Command::perform(
+                                async move {
+                                    tokio::time::sleep(timeout).await;
+                                    message::app(Message::Preview(entity, kind, timeout))
+                                },
+                                |x| x,
+                            ));
+                        }
+                        tab::Command::PreviewCancel => {
+                            self.preview_opt = None;
+                        }
                     }
                 }
                 return Command::batch(commands);
@@ -2374,12 +2420,12 @@ impl Application for App {
             Message::ToggleContextPage(context_page) => {
                 //TODO: ensure context menus are closed
                 if self.context_page == context_page {
-                    self.core.window.show_context = !self.core.window.show_context;
+                    self.set_show_context(!self.core.window.show_context);
                 } else {
-                    self.context_page = context_page;
-                    self.core.window.show_context = true;
+                    self.set_show_context(true);
                 }
-                self.set_context_title(context_page.title());
+                self.context_page = context_page;
+                self.set_context_title(self.context_page.title());
             }
             Message::Undo(id) => {
                 // TODO;
@@ -2595,10 +2641,22 @@ impl Application for App {
                     }
                 }
 
-                NavMenuAction::Properties(entity) => {
-                    self.context_page = ContextPage::Properties(Some(ContextItem::NavBar(entity)));
-                    self.core.window.show_context = true;
-                    self.set_context_title(self.context_page.title());
+                NavMenuAction::Preview(entity) => {
+                    if let Some(Location::Path(path)) = self.nav_model.data::<Location>(entity) {
+                        match tab::item_from_path(path, IconSizes::default()) {
+                            Ok(item) => {
+                                self.context_page = ContextPage::Preview(
+                                    None,
+                                    PreviewKind::Custom(PreviewItem(item)),
+                                );
+                                self.set_show_context(true);
+                                self.set_context_title(self.context_page.title());
+                            }
+                            Err(err) => {
+                                log::warn!("failed to get item from path {:?}: {}", path, err);
+                            }
+                        }
+                    }
                 }
 
                 NavMenuAction::RemoveFromSidebar(entity) => {
@@ -2703,12 +2761,12 @@ impl Application for App {
             return None;
         }
 
-        Some(match self.context_page {
+        Some(match &self.context_page {
             ContextPage::About => self.about(),
             ContextPage::EditHistory => self.edit_history(),
             ContextPage::NetworkDrive => self.network_drive(),
             ContextPage::OpenWith => self.open_with(),
-            ContextPage::Properties(entity) => self.properties(entity),
+            ContextPage::Preview(entity_opt, kind) => self.preview(entity_opt, kind),
             ContextPage::Settings => self.settings(),
         })
     }
@@ -3182,7 +3240,7 @@ impl Application for App {
             space_xxs, space_s, ..
         } = theme::active().cosmic().spacing;
 
-        let mut tab_column = widget::column::with_capacity(1);
+        let mut tab_column = widget::column::with_capacity(3);
 
         if self.tab_model.iter().count() > 1 {
             tab_column = tab_column.push(
@@ -3218,7 +3276,13 @@ impl Application for App {
             }
         }
 
-        let content: Element<_> = widget::toaster(&self.toasts, tab_column).into();
+        // The toaster is added on top of an empty element to ensure that it does not override context menus
+        tab_column = tab_column.push(widget::toaster(
+            &self.toasts,
+            widget::horizontal_space(Length::Fill),
+        ));
+
+        let content: Element<_> = tab_column.into();
 
         // Uncomment to debug layout:
         //content.explain(cosmic::iced::Color::WHITE)

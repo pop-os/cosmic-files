@@ -168,7 +168,7 @@ pub struct TabConfig {
 impl Default for TabConfig {
     fn default() -> Self {
         Self {
-            view: View::Grid,
+            view: View::List,
             folders_first: true,
             show_hidden: false,
             sort_name: HeadingOptions::Name,

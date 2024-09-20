@@ -574,6 +574,7 @@ impl Application for App {
 
     /// Creates the application, and optionally emits command on initialize.
     fn init(mut core: Core, flags: Self::Flags) -> (Self, Command<Message>) {
+        core.window.context_is_overlay = false;
         core.window.show_close = false;
         core.window.show_maximize = false;
         core.window.show_minimize = false;
