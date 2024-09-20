@@ -2002,9 +2002,8 @@ impl Application for App {
                                     .map(cosmic::app::Message::App),
                             );
                         }
-
-                        self.complete_operations.insert(id, op);
                     }
+                    self.complete_operations.insert(id, op);
                 }
                 // Potentially show a notification
                 commands.push(self.update_notification());
