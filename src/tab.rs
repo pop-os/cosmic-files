@@ -2323,6 +2323,58 @@ impl Tab {
         Some(items)
     }
 
+    fn dnd_dest<'a>(
+        &self,
+        location: &Location,
+        element: impl Into<Element<'a, Message>>,
+    ) -> Element<'a, Message> {
+        let location1 = location.clone();
+        let location2 = location.clone();
+        let location3 = location.clone();
+        let is_dnd_hovered = self.dnd_hovered.as_ref().map(|(l, _)| l) == Some(&location);
+        widget::container(
+            DndDestination::for_data::<ClipboardPaste>(element, move |data, action| {
+                if let Some(mut data) = data {
+                    if action == DndAction::Copy {
+                        Message::Drop(Some((location1.clone(), data)))
+                    } else if action == DndAction::Move {
+                        data.kind = ClipboardKind::Cut;
+                        Message::Drop(Some((location1.clone(), data)))
+                    } else {
+                        log::warn!("unsupported action: {:?}", action);
+                        Message::Drop(None)
+                    }
+                } else {
+                    Message::Drop(None)
+                }
+            })
+            .on_enter(move |_, _, _| Message::DndEnter(location2.clone()))
+            .on_leave(move || Message::DndLeave(location3.clone())),
+        )
+        .style(if is_dnd_hovered {
+            theme::Container::custom(|t| {
+                let mut a = cosmic::iced_style::container::StyleSheet::appearance(
+                    t,
+                    &theme::Container::default(),
+                );
+                let t = t.cosmic();
+                // todo use theme drop target color
+                let mut bg = t.accent_color();
+                bg.alpha = 0.2;
+                a.background = Some(Color::from(bg).into());
+                a.border = Border {
+                    color: t.accent_color().into(),
+                    width: 1.0,
+                    radius: t.radius_s().into(),
+                };
+                a
+            })
+        } else {
+            theme::Container::default()
+        })
+        .into()
+    }
+
     pub fn location_view(&self) -> Element<Message> {
         //TODO: responsiveness is done in a hacky way, potentially move this to a custom widget?
         fn text_width<'a>(
@@ -2548,17 +2600,19 @@ impl Tab {
                         w += name_width;
                     }
 
+                    let location = match &self.location {
+                        Location::Path(_) => Location::Path(ancestor.to_path_buf()),
+                        Location::Search(_, term) => {
+                            Location::Search(ancestor.to_path_buf(), term.clone())
+                        }
+                        other => other.clone(),
+                    };
+
                     let mut mouse_area = crate::mouse_area::MouseArea::new(
                         widget::button(row)
                             .padding(space_xxxs)
                             .style(theme::Button::Link)
-                            .on_press(Message::Location(match &self.location {
-                                Location::Path(_) => Location::Path(ancestor.to_path_buf()),
-                                Location::Search(_, term) => {
-                                    Location::Search(ancestor.to_path_buf(), term.clone())
-                                }
-                                other => other.clone(),
-                            })),
+                            .on_press(Message::Location(location.clone())),
                     );
 
                     if self.location_context_menu_index.is_some() {
@@ -2578,7 +2632,7 @@ impl Tab {
                         mouse_area
                     };
 
-                    children.push(mouse_area.into());
+                    children.push(self.dnd_dest(&location, mouse_area));
 
                     if found_home || overflow {
                         break;
@@ -2811,58 +2865,12 @@ impl Tab {
                     }
                 }
 
-                let column: Element<Message> = if item.metadata.is_dir()
-                    && item.location_opt.is_some()
-                {
-                    let tab_location = item.location_opt.clone().unwrap();
-                    let tab_location_enter = tab_location.clone();
-                    let tab_location_leave = tab_location.clone();
-                    let is_dnd_hovered =
-                        self.dnd_hovered.as_ref().map(|(l, _)| l) == Some(&tab_location);
-                    cosmic::widget::container(
-                        DndDestination::for_data::<ClipboardPaste>(column, move |data, action| {
-                            if let Some(mut data) = data {
-                                if action == DndAction::Copy {
-                                    Message::Drop(Some((tab_location.clone(), data)))
-                                } else if action == DndAction::Move {
-                                    data.kind = ClipboardKind::Cut;
-                                    Message::Drop(Some((tab_location.clone(), data)))
-                                } else {
-                                    log::warn!("unsupported action: {:?}", action);
-                                    Message::Drop(None)
-                                }
-                            } else {
-                                Message::Drop(None)
-                            }
-                        })
-                        .on_enter(move |_, _, _| Message::DndEnter(tab_location_enter.clone()))
-                        .on_leave(move || Message::DndLeave(tab_location_leave.clone())),
-                    )
-                    .style(if is_dnd_hovered {
-                        theme::Container::custom(|t| {
-                            let mut a = cosmic::iced_style::container::StyleSheet::appearance(
-                                t,
-                                &theme::Container::default(),
-                            );
-                            let t = t.cosmic();
-                            // todo use theme drop target color
-                            let mut bg = t.accent_color();
-                            bg.alpha = 0.2;
-                            a.background = Some(Color::from(bg).into());
-                            a.border = Border {
-                                color: t.accent_color().into(),
-                                width: 1.0,
-                                radius: t.radius_s().into(),
-                            };
-                            a
-                        })
+                let column: Element<Message> =
+                    if item.metadata.is_dir() && item.location_opt.is_some() {
+                        self.dnd_dest(&item.location_opt.clone().unwrap(), column)
                     } else {
-                        theme::Container::default()
-                    })
-                    .into()
-                } else {
-                    column.into()
-                };
+                        column.into()
+                    };
 
                 if item.selected {
                     dnd_items.push((i, (row, col), item));
