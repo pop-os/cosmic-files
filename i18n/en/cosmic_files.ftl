@@ -14,6 +14,7 @@ today = Today
 # List view
 name = Name
 modified = Modified
+trashed-on = Trashed
 size = Size
 
 # Dialogs
@@ -198,6 +199,7 @@ remove-from-sidebar = Remove from sidebar
 sort-by-name = Sort by name
 sort-by-modified = Sort by modified
 sort-by-size = Sort by size
+sort-by-trashed = Sort by delete time
 
 # Menu
 

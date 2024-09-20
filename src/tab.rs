@@ -51,7 +51,7 @@ use std::{
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime},
 };
 
 use crate::{
@@ -264,6 +264,21 @@ fn format_permissions(metadata: &Metadata, owner: PermissionOwner) -> String {
 }
 
 struct FormatTime(std::time::SystemTime);
+
+impl FormatTime {
+    fn from_secs(secs: i64) -> Option<Self> {
+        // This looks convoluted because we need to ensure the units match up
+        let secs: u64 = secs.try_into().ok()?;
+        let now = SystemTime::now();
+        let filetime_diff = now
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map(|from_epoch| from_epoch.as_secs())
+            .ok()
+            .and_then(|now_secs| now_secs.checked_sub(secs))
+            .map(Duration::from_secs)?;
+        now.checked_add(filetime_diff).map(FormatTime)
+    }
+}
 
 impl Display for FormatTime {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -1165,6 +1180,7 @@ pub enum HeadingOptions {
     Name = 0,
     Modified,
     Size,
+    TrashedOn,
 }
 
 impl fmt::Display for HeadingOptions {
@@ -1173,6 +1189,7 @@ impl fmt::Display for HeadingOptions {
             HeadingOptions::Name => write!(f, "{}", fl!("name")),
             HeadingOptions::Modified => write!(f, "{}", fl!("modified")),
             HeadingOptions::Size => write!(f, "{}", fl!("size")),
+            HeadingOptions::TrashedOn => write!(f, "{}", fl!("trashed-on")),
         }
     }
 }
@@ -1183,6 +1200,7 @@ impl HeadingOptions {
             HeadingOptions::Name.to_string(),
             HeadingOptions::Modified.to_string(),
             HeadingOptions::Size.to_string(),
+            HeadingOptions::TrashedOn.to_string(),
         ]
     }
 }
@@ -2380,6 +2398,26 @@ impl Tab {
                     }
                 });
             }
+            HeadingOptions::TrashedOn => {
+                let time_deleted = |x: &Item| match &x.metadata {
+                    ItemMetadata::Trash { entry, .. } => Some(entry.time_deleted),
+                    _ => None,
+                };
+
+                items.sort_by(|a, b| {
+                    let a_time_deleted = time_deleted(a.1);
+                    let b_time_deleted = time_deleted(b.1);
+                    if self.config.folders_first {
+                        match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
+                            (true, false) => Ordering::Less,
+                            (false, true) => Ordering::Greater,
+                            _ => check_reverse(a_time_deleted.cmp(&b_time_deleted), heading_sort),
+                        }
+                    } else {
+                        check_reverse(b_time_deleted.cmp(&a_time_deleted), heading_sort)
+                    }
+                });
+            }
         }
         Some(items)
     }
@@ -2540,12 +2578,19 @@ impl Tab {
 
         let heading_row = widget::row::with_children(vec![
             heading_item(fl!("name"), Length::Fill, HeadingOptions::Name),
-            //TODO: do not show modified column when in the trash
-            heading_item(
-                fl!("modified"),
-                Length::Fixed(modified_width),
-                HeadingOptions::Modified,
-            ),
+            if self.location == Location::Trash {
+                heading_item(
+                    fl!("trashed-on"),
+                    Length::Fixed(modified_width),
+                    HeadingOptions::TrashedOn,
+                )
+            } else {
+                heading_item(
+                    fl!("modified"),
+                    Length::Fixed(modified_width),
+                    HeadingOptions::Modified,
+                )
+            },
             heading_item(fl!("size"), Length::Fixed(size_width), HeadingOptions::Size),
         ])
         .align_items(Alignment::Center)
@@ -3159,6 +3204,9 @@ impl Tab {
                         Ok(time) => format_time(time).to_string(),
                         Err(_) => String::new(),
                     },
+                    ItemMetadata::Trash { entry, .. } => FormatTime::from_secs(entry.time_deleted)
+                        .map(|t| t.to_string())
+                        .unwrap_or_default(),
                     _ => String::new(),
                 };
 
