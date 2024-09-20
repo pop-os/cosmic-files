@@ -50,6 +50,15 @@ open-multiple-folders = Open multiple folders
 save = Save
 save-file = Save file
 
+## Permanently delete Dialog
+selected-items = {$items} selected {$items ->
+        [one] item
+        *[other] items
+    }
+permanently-delete-question = Permanently delete {$target}?
+delete = Delete
+permanently-delete-warning = Permanently deleted items can not be restored
+
 ## Rename Dialog
 rename-file = Rename file
 rename-folder = Rename folder
@@ -147,6 +156,14 @@ moved = Moved {$items} {$items ->
         [one] item
         *[other] items
     } from {$from} to {$to}
+permanently-deleting = Permanently deleting {$items} {$items ->
+        [one] item
+        *[other] items
+    }
+permanently-deleted = Permanently deleted {$items} {$items ->
+        [one] item
+        *[other] items
+    }
 renaming = Renaming {$from} to {$to}
 renamed = Renamed {$from} to {$to}
 restoring = Restoring {$items} {$items ->
@@ -169,7 +186,10 @@ show-details = Show details
 ## Settings
 settings = Settings
 settings-tab = Tab
+settings-optional-context-menu-actions = Optional Context Menu Actions
+settings-optional-context-menu-actions-description = Show more actions in the menus. Keyboard shortcuts can be used even if the actions are not shown.
 settings-show-hidden = Show hidden files
+settings-show-delete-permanently = Permanently delete
 default-view = Default view
 icon-size-list = Icon size (list)
 icon-size-grid = Icon size (grid)
@@ -193,6 +213,7 @@ new-file = New file...
 new-folder = New folder...
 open-in-terminal = Open in terminal
 move-to-trash = Move to trash
+permanently-delete = Delete permanently...
 restore-from-trash = Restore from trash
 remove-from-sidebar = Remove from sidebar
 sort-by-name = Sort by name

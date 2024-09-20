@@ -163,6 +163,8 @@ pub struct TabConfig {
     pub sort_direction: bool,
     /// Icon zoom
     pub icon_sizes: IconSizes,
+    /// Show delete permanently context menu item
+    pub show_delete_permanently: bool,
 }
 
 impl Default for TabConfig {
@@ -174,6 +176,7 @@ impl Default for TabConfig {
             sort_name: HeadingOptions::Name,
             sort_direction: true,
             icon_sizes: IconSizes::default(),
+            show_delete_permanently: false,
         }
     }
 }

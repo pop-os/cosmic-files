@@ -41,6 +41,15 @@ open-multiple-folders = Mehrere Ordner öffnen
 save = Speichern
 save-file = Datei speichern
 
+## Dauerhaft Löschen Dialog
+selected-items = {$items} gewählte {$items ->
+        [one] Objekt
+        *[other] Objekte
+    }
+permanently-delete-question = {$target} dauerhaft löschen?
+delete = Löschen
+permanently-delete-warning = Dauerhaft gelöschte Objekte können nicht wiederhergestellt werden
+
 # Umbenennen-Dialog
 rename-file = Datei umbenennen
 rename-folder = Ordner umbenennen
@@ -101,6 +110,14 @@ restored = {$items} {$items ->
     } aus dem {trash} wiederhergestellt
 undo = Rückgängig
 unknown-folder = unbekannter Ordner
+permanently-deleting = Lösche {$items} {$items ->
+        [one] Objekt
+        *[other] Objekte
+    } dauerhaft
+permanently-deleted = {$items} {$items ->
+        [one] Objekt
+        *[other] Objekte
+    } dauerhaft gelöscht
 
 ## Öffnen mit
 open-with = Öffnen mit
@@ -112,7 +129,10 @@ properties = Eigenschaften
 ## Einstellungen
 settings = Einstellungen
 settings-tab = Tab
+settings-optional-context-menu-actions = Optionale Aktionen im Kontextmenü
+settings-optional-context-menu-actions-description = Weitere Aktionen im Menü anzeigen. Tastenkürzel können auch für ausgeblendete Aktionen verwendet werden.
 settings-show-hidden = Versteckte Dateien anzeigen
+settings-show-delete-permanently = Dauerhaft löschen
 default-view = Standardansicht
 icon-size-list = Symbolgröße (Liste)
 icon-size-grid = Symbolgröße (Raster)
@@ -134,6 +154,7 @@ new-file = Neue Datei
 new-folder = Neuer Ordner
 open-in-terminal = Im Terminal öffnen
 move-to-trash = In den Papierkorb verschieben
+permanently-delete = Dauerhaft löschen...
 restore-from-trash = Aus dem Papierkorb wiederherstellen
 remove-from-sidebar = Von der Seitenleiste entfernen
 sort-by-name = Nach Name sortieren
