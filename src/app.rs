@@ -342,7 +342,7 @@ pub enum ContextPage {
 }
 
 impl ContextPage {
-    fn title(&self) -> String {
+    pub fn title(&self) -> String {
         match self {
             Self::About => String::new(),
             Self::EditHistory => fl!("edit-history"),

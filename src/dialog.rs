@@ -39,8 +39,8 @@ use std::{
 };
 
 use crate::{
-    app::{Action, Message as AppMessage},
-    config::{Config, Favorite, TabConfig},
+    app::{Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind},
+    config::{Config, Favorite, IconSizes, TabConfig},
     fl, home_dir,
     localize::LANGUAGE_SORTER,
     menu,
@@ -315,6 +315,7 @@ enum Message {
     NotifyEvents(Vec<DebouncedEvent>),
     NotifyWatcher(WatcherWrapper),
     Open,
+    Preview(PreviewKind, time::Duration),
     Save(bool),
     SearchActivate,
     SearchClear,
@@ -322,6 +323,18 @@ enum Message {
     SearchSubmit,
     TabMessage(tab::Message),
     TabRescan(Vec<tab::Item>),
+}
+
+impl From<AppMessage> for Message {
+    fn from(app_message: AppMessage) -> Message {
+        match app_message {
+            AppMessage::TabMessage(_entity_opt, tab_message) => Message::TabMessage(tab_message),
+            unsupported => {
+                log::warn!("{unsupported:?} not supported in dialog mode");
+                Message::None
+            }
+        }
+    }
 }
 
 pub struct MounterData(MounterKey, MounterItem);
@@ -355,6 +368,7 @@ struct App {
     title: String,
     accept_label: String,
     choices: Vec<DialogChoice>,
+    context_page: ContextPage,
     dialog_pages: VecDeque<DialogPage>,
     dialog_text_input: widget::Id,
     filters: Vec<DialogFilter>,
@@ -364,6 +378,7 @@ struct App {
     mounters: Mounters,
     mounter_items: HashMap<MounterKey, MounterItems>,
     nav_model: segmented_button::SingleSelectModel,
+    preview_opt: Option<(PreviewKind, time::Instant)>,
     result_opt: Option<DialogResult>,
     search_active: bool,
     search_id: widget::Id,
@@ -374,6 +389,40 @@ struct App {
 }
 
 impl App {
+    fn preview(&self, kind: &PreviewKind) -> Element<AppMessage> {
+        let mut children = Vec::with_capacity(1);
+        match kind {
+            PreviewKind::Custom(PreviewItem(item)) => {
+                children.push(item.property_view(IconSizes::default()));
+            }
+            PreviewKind::Location(location) => {
+                if let Some(items) = self.tab.items_opt() {
+                    for item in items.iter() {
+                        if item.location_opt.as_ref() == Some(location) {
+                            children.push(item.property_view(self.tab.config.icon_sizes));
+                            // Only show one property view to avoid issues like hangs when generating
+                            // preview images on thousands of files
+                            break;
+                        }
+                    }
+                }
+            }
+            PreviewKind::Selected => {
+                if let Some(items) = self.tab.items_opt() {
+                    for item in items.iter() {
+                        if item.selected {
+                            children.push(item.property_view(self.tab.config.icon_sizes));
+                            // Only show one property view to avoid issues like hangs when generating
+                            // preview images on thousands of files
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        widget::settings::view_column(children).into()
+    }
+
     fn rescan_tab(&self) -> Command<Message> {
         let location = self.tab.location.clone();
         let mounters = self.mounters.clone();
@@ -606,6 +655,7 @@ impl Application for App {
             title,
             accept_label,
             choices: Vec::new(),
+            context_page: ContextPage::Settings,
             dialog_pages: VecDeque::new(),
             dialog_text_input: widget::Id::unique(),
             filters: Vec::new(),
@@ -615,6 +665,7 @@ impl Application for App {
             mounters: mounters(),
             mounter_items: HashMap::new(),
             nav_model: segmented_button::ModelBuilder::default().build(),
+            preview_opt: None,
             result_opt: None,
             search_active: false,
             search_id: widget::Id::unique(),
@@ -636,6 +687,17 @@ impl Application for App {
 
     fn main_window_id(&self) -> window::Id {
         self.flags.window_id
+    }
+
+    fn context_drawer(&self) -> Option<Element<Message>> {
+        if !self.core.window.show_context {
+            return None;
+        }
+
+        match &self.context_page {
+            ContextPage::Preview(_, kind) => Some(self.preview(kind).map(Message::from)),
+            _ => None,
+        }
     }
 
     fn dialog(&self) -> Option<Element<Message>> {
@@ -752,15 +814,7 @@ impl Application for App {
 
         elements.push(
             menu::dialog_menu(&self.tab, &self.key_binds)
-                .map(|message| match message {
-                    AppMessage::TabMessage(_entity_opt, tab_message) => {
-                        Message::TabMessage(tab_message)
-                    }
-                    unsupported => {
-                        log::warn!("{unsupported:?} not supported in dialog mode");
-                        Message::None
-                    }
-                })
+                .map(Message::from)
                 .into(),
         );
 
@@ -1100,6 +1154,17 @@ impl Application for App {
                     }
                 }
             }
+            Message::Preview(kind, timeout) => {
+                if self
+                    .preview_opt
+                    .as_ref()
+                    .is_some_and(|(k, i)| *k == kind && i.elapsed() > timeout)
+                {
+                    self.context_page = ContextPage::Preview(None, kind);
+                    self.set_show_context(true);
+                    self.set_context_title(self.context_page.title());
+                }
+            }
             Message::Save(replace) => {
                 if let DialogKind::SaveFile { filename } = &self.flags.kind {
                     if !filename.is_empty() {
@@ -1176,14 +1241,9 @@ impl Application for App {
                 let mut commands = Vec::new();
                 for tab_command in tab_commands {
                     match tab_command {
-                        tab::Command::Action(action) => match action.message() {
-                            AppMessage::TabMessage(_entity_opt, tab_message) => {
-                                commands.push(self.update(Message::TabMessage(tab_message)));
-                            }
-                            unsupported => {
-                                log::warn!("{unsupported:?} not supported in dialog mode");
-                            }
-                        },
+                        tab::Command::Action(action) => {
+                            commands.push(self.update(Message::from(action.message())));
+                        }
                         tab::Command::ChangeLocation(_tab_title, _tab_path, _selection_path) => {
                             commands
                                 .push(Command::batch([self.update_watcher(), self.rescan_tab()]));
@@ -1201,6 +1261,23 @@ impl Application for App {
                             } else {
                                 commands.push(self.update(Message::Open));
                             }
+                        }
+                        tab::Command::Preview(kind, mut timeout) => {
+                            self.preview_opt = Some((kind.clone(), time::Instant::now()));
+                            if self.core.window.show_context {
+                                // If the context window is already open, immediately show the preview
+                                timeout = time::Duration::new(0, 0)
+                            };
+                            commands.push(Command::perform(
+                                async move {
+                                    tokio::time::sleep(timeout).await;
+                                    message::app(Message::Preview(kind, timeout))
+                                },
+                                |x| x,
+                            ));
+                        }
+                        tab::Command::PreviewCancel => {
+                            self.preview_opt = None;
                         }
                         unsupported => {
                             log::warn!("{unsupported:?} not supported in dialog mode");
