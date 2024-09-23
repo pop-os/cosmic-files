@@ -283,7 +283,8 @@ pub fn dialog_menu<'a>(
             widget::button::icon(widget::icon::from_name(match tab.config.view {
                 tab::View::Grid => "view-grid-symbolic",
                 tab::View::List => "view-list-symbolic",
-            })),
+            }))
+            .padding(8),
             menu::items(
                 key_binds,
                 vec![
@@ -305,7 +306,8 @@ pub fn dialog_menu<'a>(
                 "view-sort-ascending-symbolic"
             } else {
                 "view-sort-descending-symbolic"
-            })),
+            }))
+            .padding(8),
             menu::items(
                 key_binds,
                 vec![
