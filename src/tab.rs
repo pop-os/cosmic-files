@@ -916,7 +916,7 @@ impl ItemMetadata {
 #[derive(Clone, Debug)]
 pub enum ItemThumbnail {
     NotImage,
-    Rgba(image::RgbaImage),
+    Rgba(image::RgbaImage, (u32, u32)),
     Svg,
 }
 
@@ -962,7 +962,7 @@ impl Item {
             .unwrap_or(&ItemThumbnail::NotImage)
         {
             ItemThumbnail::NotImage => icon,
-            ItemThumbnail::Rgba(_) => {
+            ItemThumbnail::Rgba(_, _) => {
                 if let Some(Location::Path(path)) = &self.location_opt {
                     widget::image(widget::image::Handle::from_path(path)).into()
                 } else {
@@ -1129,6 +1129,16 @@ impl Item {
             _ => {
                 //TODO: other metadata types
             }
+        }
+        match self
+            .thumbnail_opt
+            .as_ref()
+            .unwrap_or(&ItemThumbnail::NotImage)
+        {
+            ItemThumbnail::Rgba(_, (width, height)) => {
+                details = details.push(widget::text(format!("{}x{}", width, height)));
+            }
+            _ => {}
         }
         column = column.push(details);
 
@@ -2168,7 +2178,7 @@ impl Tab {
                     let location = Location::Path(path);
                     for item in items.iter_mut() {
                         if item.location_opt.as_ref() == Some(&location) {
-                            if let ItemThumbnail::Rgba(rgba) = &thumbnail {
+                            if let ItemThumbnail::Rgba(rgba, _) = &thumbnail {
                                 //TODO: pass handles already generated to avoid blocking main thread
                                 let handle = widget::icon::from_raster_pixels(
                                     rgba.width(),
@@ -3691,7 +3701,10 @@ impl Tab {
                                                 (ICON_SIZE_GRID * ICON_SCALE_MAX) as u32;
                                             let thumbnail =
                                                 image.thumbnail(thumbnail_size, thumbnail_size);
-                                            ItemThumbnail::Rgba(thumbnail.to_rgba8())
+                                            ItemThumbnail::Rgba(
+                                                thumbnail.to_rgba8(),
+                                                (image.width(), image.height()),
+                                            )
                                         }
                                         Err(err) => {
                                             log::warn!("failed to decode {:?}: {}", path, err);
