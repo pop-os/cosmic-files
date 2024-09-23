@@ -389,6 +389,62 @@ struct App {
 }
 
 impl App {
+    fn button_row(&self) -> Element<Message> {
+        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+
+        let mut row = widget::row::with_capacity(
+            if !self.filters.is_empty() { 1 } else { 0 } + self.choices.len() * 2 + 3,
+        )
+        .align_items(Alignment::Center)
+        .padding(space_xxs)
+        .spacing(space_xxs);
+        if !self.filters.is_empty() {
+            row = row.push(widget::dropdown(
+                &self.filters,
+                self.filter_selected,
+                Message::Filter,
+            ));
+        }
+        for (choice_i, choice) in self.choices.iter().enumerate() {
+            match choice {
+                DialogChoice::CheckBox { label, value, .. } => {
+                    row = row.push(widget::checkbox(label, *value, move |checked| {
+                        Message::Choice(choice_i, if checked { 1 } else { 0 })
+                    }));
+                }
+                DialogChoice::ComboBox {
+                    label,
+                    options,
+                    selected,
+                    ..
+                } => {
+                    row = row.push(widget::text::heading(label));
+                    row = row.push(widget::dropdown(options, *selected, move |option_i| {
+                        Message::Choice(choice_i, option_i)
+                    }));
+                }
+            }
+        }
+        if let DialogKind::SaveFile { filename } = &self.flags.kind {
+            row = row.push(
+                widget::text_input("", filename)
+                    .id(self.filename_id.clone())
+                    .on_input(Message::Filename)
+                    .on_submit(Message::Save(false)),
+            );
+        } else {
+            row = row.push(widget::horizontal_space(Length::Fill));
+        }
+        row = row.push(widget::button::standard(fl!("cancel")).on_press(Message::Cancel));
+        row = row.push(if self.flags.kind.save() {
+            widget::button::suggested(&self.accept_label).on_press(Message::Save(false))
+        } else {
+            widget::button::suggested(&self.accept_label).on_press(Message::Open)
+        });
+
+        row.into()
+    }
+
     fn preview(&self, kind: &PreviewKind) -> Element<AppMessage> {
         let mut children = Vec::with_capacity(1);
         match kind {
@@ -701,6 +757,21 @@ impl Application for App {
     }
 
     fn dialog(&self) -> Option<Element<Message>> {
+        //TODO: should gallery view just be a dialog?
+        if self.tab.gallery {
+            return Some(
+                widget::column::with_children(vec![
+                    self.tab.gallery_view().map(Message::TabMessage),
+                    // Draw button row as part of the overlay
+                    widget::container(self.button_row())
+                        .width(Length::Fill)
+                        .style(theme::Container::WindowBackground)
+                        .into(),
+                ])
+                .into(),
+            );
+        }
+
         let dialog_page = match self.dialog_pages.front() {
             Some(some) => some,
             None => return None,
@@ -877,6 +948,12 @@ impl Application for App {
     }
 
     fn on_escape(&mut self) -> Command<Message> {
+        if self.tab.gallery {
+            // Close gallery if open
+            self.tab.gallery = false;
+            return Command::none();
+        }
+
         if self.search_active {
             // Close search if open
             self.search_active = false;
@@ -1279,6 +1356,9 @@ impl Application for App {
                         tab::Command::PreviewCancel => {
                             self.preview_opt = None;
                         }
+                        tab::Command::WindowDrag => {
+                            commands.push(window::drag(self.main_window_id()));
+                        }
                         unsupported => {
                             log::warn!("{unsupported:?} not supported in dialog mode");
                         }
@@ -1359,9 +1439,8 @@ impl Application for App {
 
     /// Creates a view after each update.
     fn view(&self) -> Element<Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
-
         let mut tab_column = widget::column::with_capacity(2);
+
         tab_column = tab_column.push(
             //TODO: key binds for dialog
             self.tab
@@ -1369,57 +1448,7 @@ impl Application for App {
                 .map(move |message| Message::TabMessage(message)),
         );
 
-        let mut row = widget::row::with_capacity(
-            if !self.filters.is_empty() { 1 } else { 0 } + self.choices.len() * 2 + 3,
-        )
-        .align_items(Alignment::Center)
-        .padding(space_xxs)
-        .spacing(space_xxs);
-        if !self.filters.is_empty() {
-            row = row.push(widget::dropdown(
-                &self.filters,
-                self.filter_selected,
-                Message::Filter,
-            ));
-        }
-        for (choice_i, choice) in self.choices.iter().enumerate() {
-            match choice {
-                DialogChoice::CheckBox { label, value, .. } => {
-                    row = row.push(widget::checkbox(label, *value, move |checked| {
-                        Message::Choice(choice_i, if checked { 1 } else { 0 })
-                    }));
-                }
-                DialogChoice::ComboBox {
-                    label,
-                    options,
-                    selected,
-                    ..
-                } => {
-                    row = row.push(widget::text::heading(label));
-                    row = row.push(widget::dropdown(options, *selected, move |option_i| {
-                        Message::Choice(choice_i, option_i)
-                    }));
-                }
-            }
-        }
-        if let DialogKind::SaveFile { filename } = &self.flags.kind {
-            row = row.push(
-                widget::text_input("", filename)
-                    .id(self.filename_id.clone())
-                    .on_input(Message::Filename)
-                    .on_submit(Message::Save(false)),
-            );
-        } else {
-            row = row.push(widget::horizontal_space(Length::Fill));
-        }
-        row = row.push(widget::button::standard(fl!("cancel")).on_press(Message::Cancel));
-        row = row.push(if self.flags.kind.save() {
-            widget::button::suggested(&self.accept_label).on_press(Message::Save(false))
-        } else {
-            widget::button::suggested(&self.accept_label).on_press(Message::Open)
-        });
-
-        tab_column = tab_column.push(row);
+        tab_column = tab_column.push(self.button_row());
 
         let content: Element<_> = tab_column.into();
 

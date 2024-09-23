@@ -1360,6 +1360,14 @@ impl Application for App {
             return Command::none();
         }
 
+        // Close gallery mode if open
+        if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+            if tab.gallery {
+                tab.gallery = false;
+                return Command::none();
+            }
+        }
+
         // Close menus and context panes in order per message
         // Why: It'd be weird to close everything all at once
         // Usually, the Escape key (for example) closes menus and panes one by one instead
@@ -2392,6 +2400,9 @@ impl Application for App {
                         tab::Command::PreviewCancel => {
                             self.preview_opt = None;
                         }
+                        tab::Command::WindowDrag => {
+                            commands.push(window::drag(self.main_window_id()));
+                        }
                     }
                 }
                 return Command::batch(commands);
@@ -2772,6 +2783,17 @@ impl Application for App {
     }
 
     fn dialog(&self) -> Option<Element<Message>> {
+        //TODO: should gallery view just be a dialog?
+        let entity = self.tab_model.active();
+        if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+            if tab.gallery {
+                return Some(
+                    tab.gallery_view()
+                        .map(move |tab_message| Message::TabMessage(Some(entity), tab_message)),
+                );
+            }
+        }
+
         let dialog_page = match self.dialog_pages.front() {
             Some(some) => some,
             None => return None,

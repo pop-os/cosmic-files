@@ -818,6 +818,7 @@ pub enum Command {
     OpenInNewWindow(PathBuf),
     Preview(PreviewKind, Duration),
     PreviewCancel,
+    WindowDrag,
 }
 
 #[derive(Clone, Debug)]
@@ -837,6 +838,7 @@ pub enum Message {
     EditLocation(Option<Location>),
     OpenInNewTab(PathBuf),
     EmptyTrash,
+    Gallery(bool),
     GoNext,
     GoPrevious,
     ItemDown,
@@ -861,6 +863,7 @@ pub enum Message {
     DndHover(Location),
     DndEnter(Location),
     DndLeave(Location),
+    WindowDrag,
     ZoomDefault,
     ZoomIn,
     ZoomOut,
@@ -1042,20 +1045,21 @@ impl Item {
             widget::button::icon(widget::icon::from_name("go-next-symbolic"))
                 .on_press(app::Message::TabMessage(None, Message::ItemRight)),
         );
-        /*
         match self
             .thumbnail_opt
             .as_ref()
             .unwrap_or(&ItemThumbnail::NotImage)
         {
-            ItemThumbnail::NotImage => {}
-            _ => {
-                row = row.push(widget::button::icon(widget::icon::from_name(
-                    "window-maximize-symbolic",
-                )));
+            ItemThumbnail::Rgba(_, _) => {
+                if let Some(path) = self.path_opt() {
+                    row = row.push(
+                        widget::button::icon(widget::icon::from_name("view-fullscreen-symbolic"))
+                            .on_press(app::Message::TabMessage(None, Message::Gallery(true))),
+                    );
+                }
             }
+            _ => {}
         }
-        */
         column = column.push(row);
 
         column = column.push(widget::row::with_children(vec![
@@ -1268,6 +1272,7 @@ pub struct Tab {
     pub history_i: usize,
     pub history: Vec<Location>,
     pub config: TabConfig,
+    pub gallery: bool,
     pub(crate) items_opt: Option<Vec<Item>>,
     pub dnd_hovered: Option<(Location, Instant)>,
     scrollable_id: widget::Id,
@@ -1315,6 +1320,7 @@ impl Tab {
             history_i: 0,
             history,
             config,
+            gallery: false,
             items_opt: None,
             scrollable_id: widget::Id::unique(),
             select_focus: None,
@@ -1897,6 +1903,9 @@ impl Tab {
             Message::EmptyTrash => {
                 commands.push(Command::EmptyTrash);
             }
+            Message::Gallery(gallery) => {
+                self.gallery = gallery;
+            }
             Message::GoNext => {
                 if let Some(history_i) = self.history_i.checked_add(1) {
                     if let Some(location) = self.history.get(history_i) {
@@ -2267,6 +2276,9 @@ impl Tab {
                     self.dnd_hovered = None;
                 }
             }
+            Message::WindowDrag => {
+                commands.push(Command::WindowDrag);
+            }
             Message::ZoomDefault => match self.config.view {
                 View::List => self.config.icon_sizes.list = 100.try_into().unwrap(),
                 View::Grid => self.config.icon_sizes.grid = 100.try_into().unwrap(),
@@ -2493,6 +2505,98 @@ impl Tab {
         .into()
     }
 
+    pub fn gallery_view(&self) -> Element<Message> {
+        let cosmic_theme::Spacing {
+            space_xxs,
+            space_m,
+            space_l,
+            ..
+        } = theme::active().cosmic().spacing;
+
+        //TODO: display error messages when image not found?
+        let mut name_opt = None;
+        let mut image_opt = None;
+        if let Some(index) = self.select_focus {
+            if let Some(items) = &self.items_opt {
+                if let Some(item) = items.get(index) {
+                    name_opt = Some(widget::text::heading(&item.display_name));
+                    match item
+                        .thumbnail_opt
+                        .as_ref()
+                        .unwrap_or(&ItemThumbnail::NotImage)
+                    {
+                        ItemThumbnail::Rgba(_, _) => {
+                            if let Some(path) = item.path_opt() {
+                                image_opt = Some(
+                                    widget::image::viewer(widget::image::Handle::from_path(path))
+                                        .min_scale(1.0)
+                                        .width(Length::Fill)
+                                        .height(Length::Fill),
+                                );
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        let mut column = widget::column::with_capacity(2);
+        column = column.push(widget::vertical_space(Length::Fixed(space_xxs.into())));
+        {
+            let mut row = widget::row::with_capacity(5).align_items(Alignment::Center);
+            row = row.push(widget::horizontal_space(Length::Fill));
+            if let Some(name) = name_opt {
+                row = row.push(name);
+            }
+            row = row.push(widget::horizontal_space(Length::Fill));
+            row = row.push(
+                widget::button::icon(widget::icon::from_name("window-close-symbolic"))
+                    .on_press(Message::Gallery(false)),
+            );
+            row = row.push(widget::horizontal_space(Length::Fixed(space_xxs.into())));
+            // This mouse area provides window drag while the header bar is hidden
+            let mouse_area = mouse_area::MouseArea::new(row).on_press(|_| Message::WindowDrag);
+            column = column.push(mouse_area);
+        }
+        {
+            let mut row = widget::row::with_capacity(7).align_items(Alignment::Center);
+            row = row.push(widget::horizontal_space(Length::Fixed(space_m.into())));
+            row = row.push(
+                widget::button::icon(widget::icon::from_name("go-previous-symbolic"))
+                    .on_press(Message::ItemLeft),
+            );
+            row = row.push(widget::horizontal_space(Length::Fixed(space_xxs.into())));
+            if let Some(image) = image_opt {
+                row = row.push(image);
+            } else {
+                //TODO: what to do when no image?
+                row = row.push(widget::horizontal_space(Length::Fill));
+            }
+            row = row.push(widget::horizontal_space(Length::Fixed(space_xxs.into())));
+            row = row.push(
+                widget::button::icon(widget::icon::from_name("go-next-symbolic"))
+                    .on_press(Message::ItemRight),
+            );
+            row = row.push(widget::horizontal_space(Length::Fixed(space_m.into())));
+            column = column.push(row);
+        }
+
+        widget::container(column)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(theme::Container::Custom(Box::new(|theme| {
+                let cosmic = theme.cosmic();
+                let mut bg = cosmic.bg_color();
+                bg.alpha = 0.75;
+                widget::container::Appearance {
+                    background: Some(Color::from(bg).into()),
+                    ..Default::default()
+                }
+            })))
+            .into()
+    }
+
     pub fn location_view(&self) -> Element<Message> {
         //TODO: responsiveness is done in a hacky way, potentially move this to a custom widget?
         fn text_width<'a>(
@@ -2590,7 +2694,7 @@ impl Tab {
                 _ => {}
             }
             //TODO: make it possible to resize with the mouse
-            return crate::mouse_area::MouseArea::new(row)
+            return mouse_area::MouseArea::new(row)
                 .on_press(move |_point_opt| Message::ToggleSort(msg))
                 .into();
         };
