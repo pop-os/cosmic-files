@@ -3251,6 +3251,7 @@ impl Application for App {
         } else {
             elements.push(
                 widget::button::icon(widget::icon::from_name("system-search-symbolic"))
+                    .padding(8)
                     .on_press(Message::SearchActivate)
                     .into(),
             )
