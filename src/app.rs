@@ -622,6 +622,14 @@ impl App {
         paths
     }
 
+    fn tab_is_gallery(&self) -> bool {
+        let entity = self.tab_model.active();
+        match self.tab_model.data::<Tab>(entity) {
+            Some(tab) => tab.gallery,
+            None => false,
+        }
+    }
+
     fn update_config(&mut self) -> Command<Message> {
         self.update_nav_model();
         cosmic::app::command::set_theme(self.config.app_theme.theme())
@@ -1242,7 +1250,7 @@ impl Application for App {
     }
 
     fn nav_bar(&self) -> Option<Element<message::Message<Self::Message>>> {
-        if !self.core().nav_bar_active() {
+        if !self.core().nav_bar_active() || self.tab_is_gallery() {
             return None;
         }
 
@@ -1358,6 +1366,14 @@ impl Application for App {
         // Close dialog if open
         if self.dialog_pages.pop_front().is_some() {
             return Command::none();
+        }
+
+        // Close gallery mode if open
+        if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+            if tab.gallery {
+                tab.gallery = false;
+                return Command::none();
+            }
         }
 
         // Close menus and context panes in order per message
@@ -2757,7 +2773,7 @@ impl Application for App {
     }
 
     fn context_drawer(&self) -> Option<Element<Message>> {
-        if !self.core.window.show_context {
+        if !self.core.window.show_context || self.tab_is_gallery() {
             return None;
         }
 

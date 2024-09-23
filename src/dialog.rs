@@ -690,7 +690,7 @@ impl Application for App {
     }
 
     fn context_drawer(&self) -> Option<Element<Message>> {
-        if !self.core.window.show_context {
+        if !self.core.window.show_context || self.tab.gallery {
             return None;
         }
 
@@ -822,7 +822,7 @@ impl Application for App {
     }
 
     fn nav_bar(&self) -> Option<Element<message::Message<Self::Message>>> {
-        if !self.core().nav_bar_active() {
+        if !self.core().nav_bar_active() || self.tab.gallery {
             return None;
         }
 
@@ -877,6 +877,12 @@ impl Application for App {
     }
 
     fn on_escape(&mut self) -> Command<Message> {
+        if self.tab.gallery {
+            // Close gallery if open
+            self.tab.gallery = false;
+            return Command::none();
+        }
+
         if self.search_active {
             // Close search if open
             self.search_active = false;

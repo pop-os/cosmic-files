@@ -837,6 +837,7 @@ pub enum Message {
     EditLocation(Option<Location>),
     OpenInNewTab(PathBuf),
     EmptyTrash,
+    Gallery(bool),
     GoNext,
     GoPrevious,
     ItemDown,
@@ -1042,20 +1043,21 @@ impl Item {
             widget::button::icon(widget::icon::from_name("go-next-symbolic"))
                 .on_press(app::Message::TabMessage(None, Message::ItemRight)),
         );
-        /*
         match self
             .thumbnail_opt
             .as_ref()
             .unwrap_or(&ItemThumbnail::NotImage)
         {
-            ItemThumbnail::NotImage => {}
-            _ => {
-                row = row.push(widget::button::icon(widget::icon::from_name(
-                    "window-maximize-symbolic",
-                )));
+            ItemThumbnail::Rgba(_, _) => {
+                if let Some(path) = self.path_opt() {
+                    row = row.push(
+                        widget::button::icon(widget::icon::from_name("view-fullscreen-symbolic"))
+                            .on_press(app::Message::TabMessage(None, Message::Gallery(true))),
+                    );
+                }
             }
+            _ => {}
         }
-        */
         column = column.push(row);
 
         column = column.push(widget::row::with_children(vec![
@@ -1268,6 +1270,7 @@ pub struct Tab {
     pub history_i: usize,
     pub history: Vec<Location>,
     pub config: TabConfig,
+    pub gallery: bool,
     pub(crate) items_opt: Option<Vec<Item>>,
     pub dnd_hovered: Option<(Location, Instant)>,
     scrollable_id: widget::Id,
@@ -1315,6 +1318,7 @@ impl Tab {
             history_i: 0,
             history,
             config,
+            gallery: false,
             items_opt: None,
             scrollable_id: widget::Id::unique(),
             select_focus: None,
@@ -1896,6 +1900,9 @@ impl Tab {
             }
             Message::EmptyTrash => {
                 commands.push(Command::EmptyTrash);
+            }
+            Message::Gallery(gallery) => {
+                self.gallery = gallery;
             }
             Message::GoNext => {
                 if let Some(history_i) = self.history_i.checked_add(1) {
@@ -2491,6 +2498,65 @@ impl Tab {
             theme::Container::default()
         })
         .into()
+    }
+
+    pub fn gallery_view(&self) -> Element<Message> {
+        let cosmic_theme::Spacing {
+            space_xxs, space_l, ..
+        } = theme::active().cosmic().spacing;
+
+        let mut column = widget::column::with_capacity(2);
+
+        let mut row = widget::row::with_capacity(5)
+            .spacing(space_xxs)
+            .align_items(Alignment::Center);
+
+        //TODO: display error messages when image not found?
+        if let Some(index) = self.select_focus {
+            if let Some(items) = &self.items_opt {
+                if let Some(item) = items.get(index) {
+                    row = row.push(widget::text::heading(&item.display_name));
+                    match item
+                        .thumbnail_opt
+                        .as_ref()
+                        .unwrap_or(&ItemThumbnail::NotImage)
+                    {
+                        ItemThumbnail::Rgba(_, _) => {
+                            if let Some(path) = item.path_opt() {
+                                let image = widget::image::Handle::from_path(path);
+                                column = column.push(
+                                    widget::image::viewer(image)
+                                        .min_scale(1.0)
+                                        .width(Length::Fill)
+                                        .height(Length::Fill),
+                                );
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        row = row.push(widget::horizontal_space(Length::Fill));
+        row = row.push(
+            widget::button::icon(widget::icon::from_name("go-previous-symbolic"))
+                .on_press(Message::ItemLeft),
+        );
+        row = row.push(
+            widget::button::icon(widget::icon::from_name("go-next-symbolic"))
+                .on_press(Message::ItemRight),
+        );
+        row = row.push(
+            widget::button::icon(widget::icon::from_name("view-restore-symbolic"))
+                .on_press(Message::Gallery(false)),
+        );
+        column = column.push(row);
+
+        widget::container(column)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
     }
 
     pub fn location_view(&self) -> Element<Message> {
@@ -3640,6 +3706,11 @@ impl Tab {
     }
 
     pub fn view<'a>(&'a self, key_binds: &'a HashMap<KeyBind, Action>) -> Element<Message> {
+        //TODO: this is a hack for gallery view
+        if self.gallery {
+            return self.gallery_view();
+        }
+
         widget::responsive(|size| self.view_responsive(key_binds, size)).into()
     }
 
