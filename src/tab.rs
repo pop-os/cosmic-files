@@ -819,6 +819,7 @@ pub enum Command {
     Preview(PreviewKind, Duration),
     PreviewCancel,
     WindowDrag,
+    WindowToggleMaximize,
 }
 
 #[derive(Clone, Debug)]
@@ -864,6 +865,7 @@ pub enum Message {
     DndEnter(Location),
     DndLeave(Location),
     WindowDrag,
+    WindowToggleMaximize,
     ZoomDefault,
     ZoomIn,
     ZoomOut,
@@ -2279,6 +2281,9 @@ impl Tab {
             Message::WindowDrag => {
                 commands.push(Command::WindowDrag);
             }
+            Message::WindowToggleMaximize => {
+                commands.push(Command::WindowToggleMaximize);
+            }
             Message::ZoomDefault => match self.config.view {
                 View::List => self.config.icon_sizes.list = 100.try_into().unwrap(),
                 View::Grid => self.config.icon_sizes.grid = 100.try_into().unwrap(),
@@ -2556,7 +2561,9 @@ impl Tab {
             );
             row = row.push(widget::horizontal_space(Length::Fixed(space_xxs.into())));
             // This mouse area provides window drag while the header bar is hidden
-            let mouse_area = mouse_area::MouseArea::new(row).on_press(|_| Message::WindowDrag);
+            let mouse_area = mouse_area::MouseArea::new(row)
+                .on_drag(|_| Message::WindowDrag)
+                .on_double_click(|_| Message::WindowToggleMaximize);
             column = column.push(mouse_area);
         }
         {

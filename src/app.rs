@@ -2403,6 +2403,9 @@ impl Application for App {
                         tab::Command::WindowDrag => {
                             commands.push(window::drag(self.main_window_id()));
                         }
+                        tab::Command::WindowToggleMaximize => {
+                            commands.push(window::toggle_maximize(self.main_window_id()));
+                        }
                     }
                 }
                 return Command::batch(commands);
