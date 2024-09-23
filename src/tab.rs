@@ -2557,6 +2557,7 @@ impl Tab {
             row = row.push(widget::horizontal_space(Length::Fill));
             row = row.push(
                 widget::button::icon(widget::icon::from_name("window-close-symbolic"))
+                    .padding(8)
                     .on_press(Message::Gallery(false)),
             );
             row = row.push(widget::horizontal_space(Length::Fixed(space_xxs.into())));
