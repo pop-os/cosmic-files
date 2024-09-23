@@ -1285,6 +1285,9 @@ impl Application for App {
                         tab::Command::PreviewCancel => {
                             self.preview_opt = None;
                         }
+                        tab::Command::WindowDrag => {
+                            commands.push(window::drag(self.main_window_id()));
+                        }
                         unsupported => {
                             log::warn!("{unsupported:?} not supported in dialog mode");
                         }

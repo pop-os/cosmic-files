@@ -622,14 +622,6 @@ impl App {
         paths
     }
 
-    fn tab_is_gallery(&self) -> bool {
-        let entity = self.tab_model.active();
-        match self.tab_model.data::<Tab>(entity) {
-            Some(tab) => tab.gallery,
-            None => false,
-        }
-    }
-
     fn update_config(&mut self) -> Command<Message> {
         self.update_nav_model();
         cosmic::app::command::set_theme(self.config.app_theme.theme())
@@ -1250,7 +1242,7 @@ impl Application for App {
     }
 
     fn nav_bar(&self) -> Option<Element<message::Message<Self::Message>>> {
-        if !self.core().nav_bar_active() || self.tab_is_gallery() {
+        if !self.core().nav_bar_active() {
             return None;
         }
 
@@ -2408,6 +2400,9 @@ impl Application for App {
                         tab::Command::PreviewCancel => {
                             self.preview_opt = None;
                         }
+                        tab::Command::WindowDrag => {
+                            commands.push(window::drag(self.main_window_id()));
+                        }
                     }
                 }
                 return Command::batch(commands);
@@ -2773,7 +2768,7 @@ impl Application for App {
     }
 
     fn context_drawer(&self) -> Option<Element<Message>> {
-        if !self.core.window.show_context || self.tab_is_gallery() {
+        if !self.core.window.show_context {
             return None;
         }
 
@@ -2788,6 +2783,17 @@ impl Application for App {
     }
 
     fn dialog(&self) -> Option<Element<Message>> {
+        //TODO: should gallery view just be a dialog?
+        let entity = self.tab_model.active();
+        if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+            if tab.gallery {
+                return Some(
+                    tab.gallery_view()
+                        .map(move |tab_message| Message::TabMessage(Some(entity), tab_message)),
+                );
+            }
+        }
+
         let dialog_page = match self.dialog_pages.front() {
             Some(some) => some,
             None => return None,

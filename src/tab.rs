@@ -818,6 +818,7 @@ pub enum Command {
     OpenInNewWindow(PathBuf),
     Preview(PreviewKind, Duration),
     PreviewCancel,
+    WindowDrag,
 }
 
 #[derive(Clone, Debug)]
@@ -862,6 +863,7 @@ pub enum Message {
     DndHover(Location),
     DndEnter(Location),
     DndLeave(Location),
+    WindowDrag,
     ZoomDefault,
     ZoomIn,
     ZoomOut,
@@ -2274,6 +2276,9 @@ impl Tab {
                     self.dnd_hovered = None;
                 }
             }
+            Message::WindowDrag => {
+                commands.push(Command::WindowDrag);
+            }
             Message::ZoomDefault => match self.config.view {
                 View::List => self.config.icon_sizes.list = 100.try_into().unwrap(),
                 View::Grid => self.config.icon_sizes.grid = 100.try_into().unwrap(),
@@ -2502,20 +2507,19 @@ impl Tab {
 
     pub fn gallery_view(&self) -> Element<Message> {
         let cosmic_theme::Spacing {
-            space_xxs, space_l, ..
+            space_xxs,
+            space_m,
+            space_l,
+            ..
         } = theme::active().cosmic().spacing;
 
-        let mut column = widget::column::with_capacity(2);
-
-        let mut row = widget::row::with_capacity(5)
-            .spacing(space_xxs)
-            .align_items(Alignment::Center);
-
         //TODO: display error messages when image not found?
+        let mut name_opt = None;
+        let mut image_opt = None;
         if let Some(index) = self.select_focus {
             if let Some(items) = &self.items_opt {
                 if let Some(item) = items.get(index) {
-                    row = row.push(widget::text::heading(&item.display_name));
+                    name_opt = Some(widget::text::heading(&item.display_name));
                     match item
                         .thumbnail_opt
                         .as_ref()
@@ -2523,9 +2527,8 @@ impl Tab {
                     {
                         ItemThumbnail::Rgba(_, _) => {
                             if let Some(path) = item.path_opt() {
-                                let image = widget::image::Handle::from_path(path);
-                                column = column.push(
-                                    widget::image::viewer(image)
+                                image_opt = Some(
+                                    widget::image::viewer(widget::image::Handle::from_path(path))
                                         .min_scale(1.0)
                                         .width(Length::Fill)
                                         .height(Length::Fill),
@@ -2538,24 +2541,59 @@ impl Tab {
             }
         }
 
-        row = row.push(widget::horizontal_space(Length::Fill));
-        row = row.push(
-            widget::button::icon(widget::icon::from_name("go-previous-symbolic"))
-                .on_press(Message::ItemLeft),
-        );
-        row = row.push(
-            widget::button::icon(widget::icon::from_name("go-next-symbolic"))
-                .on_press(Message::ItemRight),
-        );
-        row = row.push(
-            widget::button::icon(widget::icon::from_name("view-restore-symbolic"))
-                .on_press(Message::Gallery(false)),
-        );
-        column = column.push(row);
+        let mut column = widget::column::with_capacity(2);
+        column = column.push(widget::vertical_space(Length::Fixed(space_xxs.into())));
+        {
+            let mut row = widget::row::with_capacity(5).align_items(Alignment::Center);
+            row = row.push(widget::horizontal_space(Length::Fill));
+            if let Some(name) = name_opt {
+                row = row.push(name);
+            }
+            row = row.push(widget::horizontal_space(Length::Fill));
+            row = row.push(
+                widget::button::icon(widget::icon::from_name("window-close-symbolic"))
+                    .on_press(Message::Gallery(false)),
+            );
+            row = row.push(widget::horizontal_space(Length::Fixed(space_xxs.into())));
+            // This mouse area provides window drag while the header bar is hidden
+            let mouse_area = mouse_area::MouseArea::new(row).on_press(|_| Message::WindowDrag);
+            column = column.push(mouse_area);
+        }
+        {
+            let mut row = widget::row::with_capacity(7).align_items(Alignment::Center);
+            row = row.push(widget::horizontal_space(Length::Fixed(space_m.into())));
+            row = row.push(
+                widget::button::icon(widget::icon::from_name("go-previous-symbolic"))
+                    .on_press(Message::ItemLeft),
+            );
+            row = row.push(widget::horizontal_space(Length::Fixed(space_xxs.into())));
+            if let Some(image) = image_opt {
+                row = row.push(image);
+            } else {
+                //TODO: what to do when no image?
+                row = row.push(widget::horizontal_space(Length::Fill));
+            }
+            row = row.push(widget::horizontal_space(Length::Fixed(space_xxs.into())));
+            row = row.push(
+                widget::button::icon(widget::icon::from_name("go-next-symbolic"))
+                    .on_press(Message::ItemRight),
+            );
+            row = row.push(widget::horizontal_space(Length::Fixed(space_m.into())));
+            column = column.push(row);
+        }
 
         widget::container(column)
             .width(Length::Fill)
             .height(Length::Fill)
+            .style(theme::Container::Custom(Box::new(|theme| {
+                let cosmic = theme.cosmic();
+                let mut bg = cosmic.bg_color();
+                bg.alpha = 0.75;
+                widget::container::Appearance {
+                    background: Some(Color::from(bg).into()),
+                    ..Default::default()
+                }
+            })))
             .into()
     }
 
@@ -2656,7 +2694,7 @@ impl Tab {
                 _ => {}
             }
             //TODO: make it possible to resize with the mouse
-            return crate::mouse_area::MouseArea::new(row)
+            return mouse_area::MouseArea::new(row)
                 .on_press(move |_point_opt| Message::ToggleSort(msg))
                 .into();
         };
@@ -3706,11 +3744,6 @@ impl Tab {
     }
 
     pub fn view<'a>(&'a self, key_binds: &'a HashMap<KeyBind, Action>) -> Element<Message> {
-        //TODO: this is a hack for gallery view
-        if self.gallery {
-            return self.gallery_view();
-        }
-
         widget::responsive(|size| self.view_responsive(key_binds, size)).into()
     }
 
