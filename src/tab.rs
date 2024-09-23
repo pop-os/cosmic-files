@@ -964,9 +964,7 @@ impl Item {
             ItemThumbnail::NotImage => icon,
             ItemThumbnail::Rgba(_) => {
                 if let Some(Location::Path(path)) = &self.location_opt {
-                    widget::image::viewer(widget::image::Handle::from_path(path))
-                        .min_scale(1.0)
-                        .into()
+                    widget::image(widget::image::Handle::from_path(path)).into()
                 } else {
                     icon
                 }
@@ -1069,6 +1067,7 @@ impl Item {
         let mut details = widget::column().spacing(space_xxxs);
         details = details.push(widget::text::heading(self.name.clone()));
         details = details.push(widget::text(format!("Type: {}", self.mime)));
+        let mut settings = Vec::new();
         //TODO: translate!
         //TODO: correct display of folder size?
         match &self.metadata {
@@ -1095,45 +1094,36 @@ impl Item {
                     details =
                         details.push(widget::text(format!("Accessed: {}", format_time(time))));
                 }
+
                 #[cfg(not(target_os = "windows"))]
                 {
-                    details = details.push(
-                        widget::Row::new()
-                            .push(widget::text(format!("{}:", fl!("owner"))))
-                            .push(widget::text(format_permissions_owner(
-                                metadata,
-                                PermissionOwner::Owner,
-                            )))
-                            .push(widget::text(format!(
-                                "({})",
-                                format_permissions(metadata, PermissionOwner::Owner,)
-                            )))
-                            .spacing(10),
+                    settings.push(
+                        widget::settings::item::builder(format_permissions_owner(
+                            metadata,
+                            PermissionOwner::Owner,
+                        ))
+                        .description(fl!("owner"))
+                        .control(widget::text(format_permissions(
+                            metadata,
+                            PermissionOwner::Owner,
+                        ))),
                     );
 
-                    details = details.push(
-                        widget::Row::new()
-                            .push(widget::text(format!("{}:", fl!("group"))))
-                            .push(widget::text(format_permissions_owner(
-                                metadata,
-                                PermissionOwner::Group,
-                            )))
-                            .push(widget::text(format!(
-                                "({})",
-                                format_permissions(metadata, PermissionOwner::Group,)
-                            )))
-                            .spacing(10),
+                    settings.push(
+                        widget::settings::item::builder(format_permissions_owner(
+                            metadata,
+                            PermissionOwner::Group,
+                        ))
+                        .description(fl!("group"))
+                        .control(widget::text(format_permissions(
+                            metadata,
+                            PermissionOwner::Group,
+                        ))),
                     );
 
-                    details = details.push(
-                        widget::Row::new()
-                            .push(widget::text(format!("{}", fl!("other"))))
-                            .push(widget::text(format!(
-                                "({})",
-                                format_permissions(metadata, PermissionOwner::Other,)
-                            )))
-                            .spacing(10),
-                    );
+                    settings.push(widget::settings::item::builder(fl!("other")).control(
+                        widget::text(format_permissions(metadata, PermissionOwner::Other)),
+                    ));
                 }
             }
             _ => {
@@ -1146,6 +1136,14 @@ impl Item {
             column = column.push(widget::button::standard(fl!("open")).on_press(
                 app::Message::TabMessage(None, Message::Open(Some(path.to_path_buf()))),
             ));
+        }
+
+        if !settings.is_empty() {
+            let mut section = widget::settings::section();
+            for setting in settings {
+                section = section.add(setting);
+            }
+            column = column.push(section);
         }
 
         column.into()
