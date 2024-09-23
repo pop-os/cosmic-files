@@ -845,7 +845,7 @@ pub enum Message {
     ItemUp,
     Location(Location),
     LocationUp,
-    Open,
+    Open(Option<PathBuf>),
     RightClick(Option<usize>),
     MiddleClick(usize),
     Scroll(Viewport),
@@ -1025,10 +1025,40 @@ impl Item {
         column.into()
     }
 
-    pub fn property_view(&self, sizes: IconSizes) -> Element<'static, app::Message> {
-        let cosmic_theme::Spacing { space_xxxs, .. } = theme::active().cosmic().spacing;
+    pub fn preview_view(&self, sizes: IconSizes) -> Element<'static, app::Message> {
+        let cosmic_theme::Spacing {
+            space_xxxs,
+            space_xxs,
+            space_m,
+            ..
+        } = theme::active().cosmic().spacing;
 
-        let mut column = widget::column().spacing(space_xxxs);
+        let mut column = widget::column().spacing(space_m);
+
+        let mut row = widget::row::with_capacity(3).spacing(space_xxs);
+        row = row.push(
+            widget::button::icon(widget::icon::from_name("go-previous-symbolic"))
+                .on_press(app::Message::TabMessage(None, Message::ItemLeft)),
+        );
+        row = row.push(
+            widget::button::icon(widget::icon::from_name("go-next-symbolic"))
+                .on_press(app::Message::TabMessage(None, Message::ItemRight)),
+        );
+        /*
+        match self
+            .thumbnail_opt
+            .as_ref()
+            .unwrap_or(&ItemThumbnail::NotImage)
+        {
+            ItemThumbnail::NotImage => {}
+            _ => {
+                row = row.push(widget::button::icon(widget::icon::from_name(
+                    "window-maximize-symbolic",
+                )));
+            }
+        }
+        */
+        column = column.push(row);
 
         column = column.push(widget::row::with_children(vec![
             widget::horizontal_space(Length::Fill).into(),
@@ -1036,37 +1066,38 @@ impl Item {
             widget::horizontal_space(Length::Fill).into(),
         ]));
 
-        column = column.push(widget::text::heading(self.name.clone()));
-
-        column = column.push(widget::text(format!("Type: {}", self.mime)));
-
+        let mut details = widget::column().spacing(space_xxxs);
+        details = details.push(widget::text::heading(self.name.clone()));
+        details = details.push(widget::text(format!("Type: {}", self.mime)));
         //TODO: translate!
         //TODO: correct display of folder size?
         match &self.metadata {
             ItemMetadata::Path { metadata, children } => {
                 if metadata.is_dir() {
-                    column = column.push(widget::text(format!("Items: {}", children)));
+                    details = details.push(widget::text(format!("Items: {}", children)));
                 } else {
-                    column = column.push(widget::text(format!(
+                    details = details.push(widget::text(format!(
                         "Size: {}",
                         format_size(metadata.len())
                     )));
                 }
 
                 if let Ok(time) = metadata.created() {
-                    column = column.push(widget::text(format!("Created: {}", format_time(time))));
+                    details = details.push(widget::text(format!("Created: {}", format_time(time))));
                 }
 
                 if let Ok(time) = metadata.modified() {
-                    column = column.push(widget::text(format!("Modified: {}", format_time(time))));
+                    details =
+                        details.push(widget::text(format!("Modified: {}", format_time(time))));
                 }
 
                 if let Ok(time) = metadata.accessed() {
-                    column = column.push(widget::text(format!("Accessed: {}", format_time(time))));
+                    details =
+                        details.push(widget::text(format!("Accessed: {}", format_time(time))));
                 }
                 #[cfg(not(target_os = "windows"))]
                 {
-                    column = column.push(
+                    details = details.push(
                         widget::Row::new()
                             .push(widget::text(format!("{}:", fl!("owner"))))
                             .push(widget::text(format_permissions_owner(
@@ -1080,7 +1111,7 @@ impl Item {
                             .spacing(10),
                     );
 
-                    column = column.push(
+                    details = details.push(
                         widget::Row::new()
                             .push(widget::text(format!("{}:", fl!("group"))))
                             .push(widget::text(format_permissions_owner(
@@ -1094,7 +1125,7 @@ impl Item {
                             .spacing(10),
                     );
 
-                    column = column.push(
+                    details = details.push(
                         widget::Row::new()
                             .push(widget::text(format!("{}", fl!("other"))))
                             .push(widget::text(format!(
@@ -1108,6 +1139,13 @@ impl Item {
             _ => {
                 //TODO: other metadata types
             }
+        }
+        column = column.push(details);
+
+        if let Some(path) = self.path_opt() {
+            column = column.push(widget::button::standard(fl!("open")).on_press(
+                app::Message::TabMessage(None, Message::Open(Some(path.to_path_buf()))),
+            ));
         }
 
         column.into()
@@ -2031,21 +2069,32 @@ impl Tab {
                     }
                 }
             }
-            Message::Open => {
-                if let Some(ref mut items) = self.items_opt {
-                    for item in items.iter() {
-                        if item.selected {
-                            if let Some(location) = &item.location_opt {
-                                if item.metadata.is_dir() {
-                                    //TODO: allow opening multiple tabs?
-                                    cd = Some(location.clone());
-                                } else {
-                                    if let Location::Path(path) = location {
-                                        commands.push(Command::OpenFile(path.clone()));
+            Message::Open(path_opt) => {
+                match path_opt {
+                    Some(path) => {
+                        if path.is_dir() {
+                            cd = Some(Location::Path(path));
+                        } else {
+                            commands.push(Command::OpenFile(path));
+                        }
+                    }
+                    None => {
+                        if let Some(ref mut items) = self.items_opt {
+                            for item in items.iter() {
+                                if item.selected {
+                                    if let Some(location) = &item.location_opt {
+                                        if item.metadata.is_dir() {
+                                            //TODO: allow opening multiple tabs?
+                                            cd = Some(location.clone());
+                                        } else {
+                                            if let Location::Path(path) = location {
+                                                commands.push(Command::OpenFile(path.clone()));
+                                            }
+                                        }
+                                    } else {
+                                        //TODO: open properties?
                                     }
                                 }
-                            } else {
-                                //TODO: open properties?
                             }
                         }
                     }

@@ -157,7 +157,7 @@ impl Action {
             Action::MoveToTrash => Message::MoveToTrash(entity_opt),
             Action::NewFile => Message::NewItem(entity_opt, false),
             Action::NewFolder => Message::NewItem(entity_opt, true),
-            Action::Open => Message::TabMessage(entity_opt, tab::Message::Open),
+            Action::Open => Message::TabMessage(entity_opt, tab::Message::Open(None)),
             Action::OpenInNewTab => Message::OpenInNewTab(entity_opt),
             Action::OpenInNewWindow => Message::OpenInNewWindow(entity_opt),
             Action::OpenItemLocation => Message::OpenItemLocation(entity_opt),
@@ -969,14 +969,14 @@ impl App {
         let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
         match kind {
             PreviewKind::Custom(PreviewItem(item)) => {
-                children.push(item.property_view(IconSizes::default()));
+                children.push(item.preview_view(IconSizes::default()));
             }
             PreviewKind::Location(location) => {
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
                     if let Some(items) = tab.items_opt() {
                         for item in items.iter() {
                             if item.location_opt.as_ref() == Some(location) {
-                                children.push(item.property_view(tab.config.icon_sizes));
+                                children.push(item.preview_view(tab.config.icon_sizes));
                                 // Only show one property view to avoid issues like hangs when generating
                                 // preview images on thousands of files
                                 break;
@@ -990,7 +990,7 @@ impl App {
                     if let Some(items) = tab.items_opt() {
                         for item in items.iter() {
                             if item.selected {
-                                children.push(item.property_view(tab.config.icon_sizes));
+                                children.push(item.preview_view(tab.config.icon_sizes));
                                 // Only show one property view to avoid issues like hangs when generating
                                 // preview images on thousands of files
                                 break;
