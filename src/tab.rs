@@ -840,6 +840,8 @@ pub enum Message {
     OpenInNewTab(PathBuf),
     EmptyTrash,
     Gallery(bool),
+    GalleryPrevious,
+    GalleryNext,
     GoNext,
     GoPrevious,
     ItemDown,
@@ -1052,7 +1054,8 @@ impl Item {
             .as_ref()
             .unwrap_or(&ItemThumbnail::NotImage)
         {
-            ItemThumbnail::Rgba(_, _) => {
+            ItemThumbnail::NotImage => {}
+            ItemThumbnail::Rgba(_, _) | ItemThumbnail::Svg => {
                 if let Some(path) = self.path_opt() {
                     row = row.push(
                         widget::button::icon(widget::icon::from_name("view-fullscreen-symbolic"))
@@ -1060,7 +1063,6 @@ impl Item {
                     );
                 }
             }
-            _ => {}
         }
         column = column.push(row);
 
@@ -1908,6 +1910,45 @@ impl Tab {
             Message::Gallery(gallery) => {
                 self.gallery = gallery;
             }
+            Message::GalleryPrevious | Message::GalleryNext => {
+                let mut pos_opt = None;
+                if let Some(mut indices) = self.column_sort() {
+                    if matches!(message, Message::GalleryPrevious) {
+                        indices.reverse();
+                    }
+                    let mut found = false;
+                    for (index, item) in indices {
+                        if self.select_focus == None {
+                            found = true;
+                        }
+                        if self.select_focus == Some(index) {
+                            found = true;
+                            continue;
+                        }
+                        if found {
+                            if item.mime.type_() == mime::IMAGE {
+                                pos_opt = item.pos_opt.get();
+                                if pos_opt.is_some() {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                if let Some((row, col)) = pos_opt {
+                    // Should mod_shift be available?
+                    self.select_position(row, col, mod_shift);
+                }
+                if let Some(offset) = self.select_focus_scroll() {
+                    commands.push(Command::Iced(scrollable::scroll_to(
+                        self.scrollable_id.clone(),
+                        offset,
+                    )));
+                }
+                if let Some(id) = self.select_focus_id() {
+                    commands.push(Command::Iced(widget::button::focus(id)));
+                }
+            }
             Message::GoNext => {
                 if let Some(history_i) = self.history_i.checked_add(1) {
                     if let Some(location) = self.history.get(history_i) {
@@ -2520,7 +2561,7 @@ impl Tab {
 
         //TODO: display error messages when image not found?
         let mut name_opt = None;
-        let mut image_opt = None;
+        let mut image_opt: Option<Element<Message>> = None;
         if let Some(index) = self.select_focus {
             if let Some(items) = &self.items_opt {
                 if let Some(item) = items.get(index) {
@@ -2530,17 +2571,28 @@ impl Tab {
                         .as_ref()
                         .unwrap_or(&ItemThumbnail::NotImage)
                     {
+                        ItemThumbnail::NotImage => {}
                         ItemThumbnail::Rgba(_, _) => {
                             if let Some(path) = item.path_opt() {
                                 image_opt = Some(
-                                    widget::image::viewer(widget::image::Handle::from_path(path))
-                                        .min_scale(1.0)
+                                    //TODO: use widget::image::viewer, when its zoom can be reset
+                                    widget::image(widget::image::Handle::from_path(path))
                                         .width(Length::Fill)
-                                        .height(Length::Fill),
+                                        .height(Length::Fill)
+                                        .into(),
                                 );
                             }
                         }
-                        _ => {}
+                        ItemThumbnail::Svg => {
+                            if let Some(path) = item.path_opt() {
+                                image_opt = Some(
+                                    widget::Svg::from_path(path)
+                                        .width(Length::Fill)
+                                        .height(Length::Fill)
+                                        .into(),
+                                );
+                            }
+                        }
                     }
                 }
             }
@@ -2574,7 +2626,7 @@ impl Tab {
                 widget::button::icon(widget::icon::from_name("go-previous-symbolic"))
                     .padding(space_xs)
                     .style(theme::Button::Standard)
-                    .on_press(Message::ItemLeft),
+                    .on_press(Message::GalleryPrevious),
             );
             row = row.push(widget::horizontal_space(Length::Fixed(space_xxs.into())));
             if let Some(image) = image_opt {
@@ -2588,7 +2640,7 @@ impl Tab {
                 widget::button::icon(widget::icon::from_name("go-next-symbolic"))
                     .padding(space_xs)
                     .style(theme::Button::Standard)
-                    .on_press(Message::ItemRight),
+                    .on_press(Message::GalleryNext),
             );
             row = row.push(widget::horizontal_space(Length::Fixed(space_m.into())));
             column = column.push(row);
