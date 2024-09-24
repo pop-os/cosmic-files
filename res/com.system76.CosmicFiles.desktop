@@ -2,6 +2,7 @@
 [Desktop Entry]
 Name=COSMIC Files
 Name[pl]=Pliki COSMIC
+Name[pt-BR]=Arquivos do COSMIC
 Exec=cosmic-files %F
 Terminal=false
 Type=Application
@@ -10,4 +11,5 @@ Icon=com.system76.CosmicFiles
 Categories=COSMIC;Utility;FileManager;
 Keywords=Folder;Manager;
 Keywords[pl]=Katalogi;Pliki;Menedżer;
+Keywords[pt-BR]=Pastas;Gerenciador;
 MimeType=inode/directory;

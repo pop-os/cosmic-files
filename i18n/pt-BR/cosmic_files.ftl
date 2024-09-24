@@ -9,6 +9,7 @@ notification-in-progress = Há operações de arquivo em andamento.
 trash = Lixeira
 recents = Recentes
 undo = Desfazer
+today = Hoje
 
 # List view
 name = Nome
