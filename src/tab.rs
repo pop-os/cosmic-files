@@ -2513,8 +2513,8 @@ impl Tab {
     pub fn gallery_view(&self) -> Element<Message> {
         let cosmic_theme::Spacing {
             space_xxs,
+            space_xs,
             space_m,
-            space_l,
             ..
         } = theme::active().cosmic().spacing;
 
@@ -2547,7 +2547,7 @@ impl Tab {
         }
 
         let mut column = widget::column::with_capacity(2);
-        column = column.push(widget::vertical_space(Length::Fixed(space_xxs.into())));
+        column = column.push(widget::vertical_space(Length::Fixed(space_m.into())));
         {
             let mut row = widget::row::with_capacity(5).align_items(Alignment::Center);
             row = row.push(widget::horizontal_space(Length::Fill));
@@ -2557,9 +2557,10 @@ impl Tab {
             row = row.push(widget::horizontal_space(Length::Fill));
             row = row.push(
                 widget::button::icon(widget::icon::from_name("window-close-symbolic"))
+                    .style(theme::Button::Standard)
                     .on_press(Message::Gallery(false)),
             );
-            row = row.push(widget::horizontal_space(Length::Fixed(space_xxs.into())));
+            row = row.push(widget::horizontal_space(Length::Fixed(space_m.into())));
             // This mouse area provides window drag while the header bar is hidden
             let mouse_area = mouse_area::MouseArea::new(row)
                 .on_drag(|_| Message::WindowDrag)
@@ -2571,6 +2572,8 @@ impl Tab {
             row = row.push(widget::horizontal_space(Length::Fixed(space_m.into())));
             row = row.push(
                 widget::button::icon(widget::icon::from_name("go-previous-symbolic"))
+                    .padding(space_xs)
+                    .style(theme::Button::Standard)
                     .on_press(Message::ItemLeft),
             );
             row = row.push(widget::horizontal_space(Length::Fixed(space_xxs.into())));
@@ -2578,11 +2581,13 @@ impl Tab {
                 row = row.push(image);
             } else {
                 //TODO: what to do when no image?
-                row = row.push(widget::horizontal_space(Length::Fill));
+                row = row.push(widget::Space::new(Length::Fill, Length::Fill));
             }
             row = row.push(widget::horizontal_space(Length::Fixed(space_xxs.into())));
             row = row.push(
                 widget::button::icon(widget::icon::from_name("go-next-symbolic"))
+                    .padding(space_xs)
+                    .style(theme::Button::Standard)
                     .on_press(Message::ItemRight),
             );
             row = row.push(widget::horizontal_space(Length::Fixed(space_m.into())));
