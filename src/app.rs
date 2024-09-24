@@ -157,7 +157,7 @@ impl Action {
             Action::MoveToTrash => Message::MoveToTrash(entity_opt),
             Action::NewFile => Message::NewItem(entity_opt, false),
             Action::NewFolder => Message::NewItem(entity_opt, true),
-            Action::Open => Message::TabMessage(entity_opt, tab::Message::Open),
+            Action::Open => Message::TabMessage(entity_opt, tab::Message::Open(None)),
             Action::OpenInNewTab => Message::OpenInNewTab(entity_opt),
             Action::OpenInNewWindow => Message::OpenInNewWindow(entity_opt),
             Action::OpenItemLocation => Message::OpenItemLocation(entity_opt),
@@ -342,7 +342,7 @@ pub enum ContextPage {
 }
 
 impl ContextPage {
-    fn title(&self) -> String {
+    pub fn title(&self) -> String {
         match self {
             Self::About => String::new(),
             Self::EditHistory => fl!("edit-history"),
@@ -969,14 +969,14 @@ impl App {
         let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
         match kind {
             PreviewKind::Custom(PreviewItem(item)) => {
-                children.push(item.property_view(IconSizes::default()));
+                children.push(item.preview_view(IconSizes::default()));
             }
             PreviewKind::Location(location) => {
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
                     if let Some(items) = tab.items_opt() {
                         for item in items.iter() {
                             if item.location_opt.as_ref() == Some(location) {
-                                children.push(item.property_view(tab.config.icon_sizes));
+                                children.push(item.preview_view(tab.config.icon_sizes));
                                 // Only show one property view to avoid issues like hangs when generating
                                 // preview images on thousands of files
                                 break;
@@ -990,7 +990,7 @@ impl App {
                     if let Some(items) = tab.items_opt() {
                         for item in items.iter() {
                             if item.selected {
-                                children.push(item.property_view(tab.config.icon_sizes));
+                                children.push(item.preview_view(tab.config.icon_sizes));
                                 // Only show one property view to avoid issues like hangs when generating
                                 // preview images on thousands of files
                                 break;
@@ -1358,6 +1358,14 @@ impl Application for App {
         // Close dialog if open
         if self.dialog_pages.pop_front().is_some() {
             return Command::none();
+        }
+
+        // Close gallery mode if open
+        if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+            if tab.gallery {
+                tab.gallery = false;
+                return Command::none();
+            }
         }
 
         // Close menus and context panes in order per message
@@ -2392,6 +2400,12 @@ impl Application for App {
                         tab::Command::PreviewCancel => {
                             self.preview_opt = None;
                         }
+                        tab::Command::WindowDrag => {
+                            commands.push(window::drag(self.main_window_id()));
+                        }
+                        tab::Command::WindowToggleMaximize => {
+                            commands.push(window::toggle_maximize(self.main_window_id()));
+                        }
                     }
                 }
                 return Command::batch(commands);
@@ -2772,6 +2786,17 @@ impl Application for App {
     }
 
     fn dialog(&self) -> Option<Element<Message>> {
+        //TODO: should gallery view just be a dialog?
+        let entity = self.tab_model.active();
+        if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+            if tab.gallery {
+                return Some(
+                    tab.gallery_view()
+                        .map(move |tab_message| Message::TabMessage(Some(entity), tab_message)),
+                );
+            }
+        }
+
         let dialog_page = match self.dialog_pages.front() {
             Some(some) => some,
             None => return None,
@@ -3226,6 +3251,7 @@ impl Application for App {
         } else {
             elements.push(
                 widget::button::icon(widget::icon::from_name("system-search-symbolic"))
+                    .padding(8)
                     .on_press(Message::SearchActivate)
                     .into(),
             )

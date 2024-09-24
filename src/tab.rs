@@ -818,6 +818,8 @@ pub enum Command {
     OpenInNewWindow(PathBuf),
     Preview(PreviewKind, Duration),
     PreviewCancel,
+    WindowDrag,
+    WindowToggleMaximize,
 }
 
 #[derive(Clone, Debug)]
@@ -837,6 +839,9 @@ pub enum Message {
     EditLocation(Option<Location>),
     OpenInNewTab(PathBuf),
     EmptyTrash,
+    Gallery(bool),
+    GalleryPrevious,
+    GalleryNext,
     GoNext,
     GoPrevious,
     ItemDown,
@@ -845,7 +850,7 @@ pub enum Message {
     ItemUp,
     Location(Location),
     LocationUp,
-    Open,
+    Open(Option<PathBuf>),
     RightClick(Option<usize>),
     MiddleClick(usize),
     Scroll(Viewport),
@@ -861,6 +866,8 @@ pub enum Message {
     DndHover(Location),
     DndEnter(Location),
     DndLeave(Location),
+    WindowDrag,
+    WindowToggleMaximize,
     ZoomDefault,
     ZoomIn,
     ZoomOut,
@@ -916,7 +923,7 @@ impl ItemMetadata {
 #[derive(Clone, Debug)]
 pub enum ItemThumbnail {
     NotImage,
-    Rgba(image::RgbaImage),
+    Rgba(image::RgbaImage, (u32, u32)),
     Svg,
 }
 
@@ -962,11 +969,9 @@ impl Item {
             .unwrap_or(&ItemThumbnail::NotImage)
         {
             ItemThumbnail::NotImage => icon,
-            ItemThumbnail::Rgba(_) => {
+            ItemThumbnail::Rgba(_, _) => {
                 if let Some(Location::Path(path)) = &self.location_opt {
-                    widget::image::viewer(widget::image::Handle::from_path(path))
-                        .min_scale(1.0)
-                        .into()
+                    widget::image(widget::image::Handle::from_path(path)).into()
                 } else {
                     icon
                 }
@@ -1025,10 +1030,41 @@ impl Item {
         column.into()
     }
 
-    pub fn property_view(&self, sizes: IconSizes) -> Element<'static, app::Message> {
-        let cosmic_theme::Spacing { space_xxxs, .. } = theme::active().cosmic().spacing;
+    pub fn preview_view(&self, sizes: IconSizes) -> Element<'static, app::Message> {
+        let cosmic_theme::Spacing {
+            space_xxxs,
+            space_xxs,
+            space_m,
+            ..
+        } = theme::active().cosmic().spacing;
 
-        let mut column = widget::column().spacing(space_xxxs);
+        let mut column = widget::column().spacing(space_m);
+
+        let mut row = widget::row::with_capacity(3).spacing(space_xxs);
+        row = row.push(
+            widget::button::icon(widget::icon::from_name("go-previous-symbolic"))
+                .on_press(app::Message::TabMessage(None, Message::ItemLeft)),
+        );
+        row = row.push(
+            widget::button::icon(widget::icon::from_name("go-next-symbolic"))
+                .on_press(app::Message::TabMessage(None, Message::ItemRight)),
+        );
+        match self
+            .thumbnail_opt
+            .as_ref()
+            .unwrap_or(&ItemThumbnail::NotImage)
+        {
+            ItemThumbnail::NotImage => {}
+            ItemThumbnail::Rgba(_, _) | ItemThumbnail::Svg => {
+                if let Some(path) = self.path_opt() {
+                    row = row.push(
+                        widget::button::icon(widget::icon::from_name("view-fullscreen-symbolic"))
+                            .on_press(app::Message::TabMessage(None, Message::Gallery(true))),
+                    );
+                }
+            }
+        }
+        column = column.push(row);
 
         column = column.push(widget::row::with_children(vec![
             widget::horizontal_space(Length::Fill).into(),
@@ -1036,78 +1072,96 @@ impl Item {
             widget::horizontal_space(Length::Fill).into(),
         ]));
 
-        column = column.push(widget::text::heading(self.name.clone()));
-
-        column = column.push(widget::text(format!("Type: {}", self.mime)));
-
+        let mut details = widget::column().spacing(space_xxxs);
+        details = details.push(widget::text::heading(self.name.clone()));
+        details = details.push(widget::text(format!("Type: {}", self.mime)));
+        let mut settings = Vec::new();
         //TODO: translate!
         //TODO: correct display of folder size?
         match &self.metadata {
             ItemMetadata::Path { metadata, children } => {
                 if metadata.is_dir() {
-                    column = column.push(widget::text(format!("Items: {}", children)));
+                    details = details.push(widget::text(format!("Items: {}", children)));
                 } else {
-                    column = column.push(widget::text(format!(
+                    details = details.push(widget::text(format!(
                         "Size: {}",
                         format_size(metadata.len())
                     )));
                 }
 
                 if let Ok(time) = metadata.created() {
-                    column = column.push(widget::text(format!("Created: {}", format_time(time))));
+                    details = details.push(widget::text(format!("Created: {}", format_time(time))));
                 }
 
                 if let Ok(time) = metadata.modified() {
-                    column = column.push(widget::text(format!("Modified: {}", format_time(time))));
+                    details =
+                        details.push(widget::text(format!("Modified: {}", format_time(time))));
                 }
 
                 if let Ok(time) = metadata.accessed() {
-                    column = column.push(widget::text(format!("Accessed: {}", format_time(time))));
+                    details =
+                        details.push(widget::text(format!("Accessed: {}", format_time(time))));
                 }
+
                 #[cfg(not(target_os = "windows"))]
                 {
-                    column = column.push(
-                        widget::Row::new()
-                            .push(widget::text(format!("{}:", fl!("owner"))))
-                            .push(widget::text(format_permissions_owner(
-                                metadata,
-                                PermissionOwner::Owner,
-                            )))
-                            .push(widget::text(format!(
-                                "({})",
-                                format_permissions(metadata, PermissionOwner::Owner,)
-                            )))
-                            .spacing(10),
+                    settings.push(
+                        widget::settings::item::builder(format_permissions_owner(
+                            metadata,
+                            PermissionOwner::Owner,
+                        ))
+                        .description(fl!("owner"))
+                        .control(widget::text(format_permissions(
+                            metadata,
+                            PermissionOwner::Owner,
+                        ))),
                     );
 
-                    column = column.push(
-                        widget::Row::new()
-                            .push(widget::text(format!("{}:", fl!("group"))))
-                            .push(widget::text(format_permissions_owner(
-                                metadata,
-                                PermissionOwner::Group,
-                            )))
-                            .push(widget::text(format!(
-                                "({})",
-                                format_permissions(metadata, PermissionOwner::Group,)
-                            )))
-                            .spacing(10),
+                    settings.push(
+                        widget::settings::item::builder(format_permissions_owner(
+                            metadata,
+                            PermissionOwner::Group,
+                        ))
+                        .description(fl!("group"))
+                        .control(widget::text(format_permissions(
+                            metadata,
+                            PermissionOwner::Group,
+                        ))),
                     );
 
-                    column = column.push(
-                        widget::Row::new()
-                            .push(widget::text(format!("{}", fl!("other"))))
-                            .push(widget::text(format!(
-                                "({})",
-                                format_permissions(metadata, PermissionOwner::Other,)
-                            )))
-                            .spacing(10),
-                    );
+                    settings.push(widget::settings::item::builder(fl!("other")).control(
+                        widget::text(format_permissions(metadata, PermissionOwner::Other)),
+                    ));
                 }
             }
             _ => {
                 //TODO: other metadata types
             }
+        }
+        match self
+            .thumbnail_opt
+            .as_ref()
+            .unwrap_or(&ItemThumbnail::NotImage)
+        {
+            ItemThumbnail::Rgba(_, (width, height)) => {
+                details = details.push(widget::text(format!("{}x{}", width, height)));
+            }
+            _ => {}
+        }
+        column = column.push(details);
+
+        if let Some(path) = self.path_opt() {
+            column = column.push(widget::button::standard(fl!("open")).on_press(
+                app::Message::TabMessage(None, Message::Open(Some(path.to_path_buf()))),
+            ));
+        }
+
+        if !settings.is_empty() {
+            let mut section = widget::settings::section();
+            for setting in settings {
+                section = section.add(setting);
+            }
+            column = column.push(section);
         }
 
         column.into()
@@ -1222,6 +1276,7 @@ pub struct Tab {
     pub history_i: usize,
     pub history: Vec<Location>,
     pub config: TabConfig,
+    pub gallery: bool,
     pub(crate) items_opt: Option<Vec<Item>>,
     pub dnd_hovered: Option<(Location, Instant)>,
     scrollable_id: widget::Id,
@@ -1269,6 +1324,7 @@ impl Tab {
             history_i: 0,
             history,
             config,
+            gallery: false,
             items_opt: None,
             scrollable_id: widget::Id::unique(),
             select_focus: None,
@@ -1851,6 +1907,48 @@ impl Tab {
             Message::EmptyTrash => {
                 commands.push(Command::EmptyTrash);
             }
+            Message::Gallery(gallery) => {
+                self.gallery = gallery;
+            }
+            Message::GalleryPrevious | Message::GalleryNext => {
+                let mut pos_opt = None;
+                if let Some(mut indices) = self.column_sort() {
+                    if matches!(message, Message::GalleryPrevious) {
+                        indices.reverse();
+                    }
+                    let mut found = false;
+                    for (index, item) in indices {
+                        if self.select_focus == None {
+                            found = true;
+                        }
+                        if self.select_focus == Some(index) {
+                            found = true;
+                            continue;
+                        }
+                        if found {
+                            if item.mime.type_() == mime::IMAGE {
+                                pos_opt = item.pos_opt.get();
+                                if pos_opt.is_some() {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                if let Some((row, col)) = pos_opt {
+                    // Should mod_shift be available?
+                    self.select_position(row, col, mod_shift);
+                }
+                if let Some(offset) = self.select_focus_scroll() {
+                    commands.push(Command::Iced(scrollable::scroll_to(
+                        self.scrollable_id.clone(),
+                        offset,
+                    )));
+                }
+                if let Some(id) = self.select_focus_id() {
+                    commands.push(Command::Iced(widget::button::focus(id)));
+                }
+            }
             Message::GoNext => {
                 if let Some(history_i) = self.history_i.checked_add(1) {
                     if let Some(location) = self.history.get(history_i) {
@@ -2031,21 +2129,32 @@ impl Tab {
                     }
                 }
             }
-            Message::Open => {
-                if let Some(ref mut items) = self.items_opt {
-                    for item in items.iter() {
-                        if item.selected {
-                            if let Some(location) = &item.location_opt {
-                                if item.metadata.is_dir() {
-                                    //TODO: allow opening multiple tabs?
-                                    cd = Some(location.clone());
-                                } else {
-                                    if let Location::Path(path) = location {
-                                        commands.push(Command::OpenFile(path.clone()));
+            Message::Open(path_opt) => {
+                match path_opt {
+                    Some(path) => {
+                        if path.is_dir() {
+                            cd = Some(Location::Path(path));
+                        } else {
+                            commands.push(Command::OpenFile(path));
+                        }
+                    }
+                    None => {
+                        if let Some(ref mut items) = self.items_opt {
+                            for item in items.iter() {
+                                if item.selected {
+                                    if let Some(location) = &item.location_opt {
+                                        if item.metadata.is_dir() {
+                                            //TODO: allow opening multiple tabs?
+                                            cd = Some(location.clone());
+                                        } else {
+                                            if let Location::Path(path) = location {
+                                                commands.push(Command::OpenFile(path.clone()));
+                                            }
+                                        }
+                                    } else {
+                                        //TODO: open properties?
                                     }
                                 }
-                            } else {
-                                //TODO: open properties?
                             }
                         }
                     }
@@ -2121,7 +2230,7 @@ impl Tab {
                     let location = Location::Path(path);
                     for item in items.iter_mut() {
                         if item.location_opt.as_ref() == Some(&location) {
-                            if let ItemThumbnail::Rgba(rgba) = &thumbnail {
+                            if let ItemThumbnail::Rgba(rgba, _) = &thumbnail {
                                 //TODO: pass handles already generated to avoid blocking main thread
                                 let handle = widget::icon::from_raster_pixels(
                                     rgba.width(),
@@ -2209,6 +2318,12 @@ impl Tab {
                 if Some(&loc) == self.dnd_hovered.as_ref().map(|(l, _)| l) {
                     self.dnd_hovered = None;
                 }
+            }
+            Message::WindowDrag => {
+                commands.push(Command::WindowDrag);
+            }
+            Message::WindowToggleMaximize => {
+                commands.push(Command::WindowToggleMaximize);
             }
             Message::ZoomDefault => match self.config.view {
                 View::List => self.config.icon_sizes.list = 100.try_into().unwrap(),
@@ -2436,6 +2551,116 @@ impl Tab {
         .into()
     }
 
+    pub fn gallery_view(&self) -> Element<Message> {
+        let cosmic_theme::Spacing {
+            space_xxs,
+            space_xs,
+            space_m,
+            ..
+        } = theme::active().cosmic().spacing;
+
+        //TODO: display error messages when image not found?
+        let mut name_opt = None;
+        let mut image_opt: Option<Element<Message>> = None;
+        if let Some(index) = self.select_focus {
+            if let Some(items) = &self.items_opt {
+                if let Some(item) = items.get(index) {
+                    name_opt = Some(widget::text::heading(&item.display_name));
+                    match item
+                        .thumbnail_opt
+                        .as_ref()
+                        .unwrap_or(&ItemThumbnail::NotImage)
+                    {
+                        ItemThumbnail::NotImage => {}
+                        ItemThumbnail::Rgba(_, _) => {
+                            if let Some(path) = item.path_opt() {
+                                image_opt = Some(
+                                    //TODO: use widget::image::viewer, when its zoom can be reset
+                                    widget::image(widget::image::Handle::from_path(path))
+                                        .width(Length::Fill)
+                                        .height(Length::Fill)
+                                        .into(),
+                                );
+                            }
+                        }
+                        ItemThumbnail::Svg => {
+                            if let Some(path) = item.path_opt() {
+                                image_opt = Some(
+                                    widget::Svg::from_path(path)
+                                        .width(Length::Fill)
+                                        .height(Length::Fill)
+                                        .into(),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut column = widget::column::with_capacity(2);
+        column = column.push(widget::vertical_space(Length::Fixed(space_m.into())));
+        {
+            let mut row = widget::row::with_capacity(5).align_items(Alignment::Center);
+            row = row.push(widget::horizontal_space(Length::Fill));
+            if let Some(name) = name_opt {
+                row = row.push(name);
+            }
+            row = row.push(widget::horizontal_space(Length::Fill));
+            row = row.push(
+                widget::button::icon(widget::icon::from_name("window-close-symbolic"))
+                    .style(theme::Button::Standard)
+                    .on_press(Message::Gallery(false)),
+            );
+            row = row.push(widget::horizontal_space(Length::Fixed(space_m.into())));
+            // This mouse area provides window drag while the header bar is hidden
+            let mouse_area = mouse_area::MouseArea::new(row)
+                .on_drag(|_| Message::WindowDrag)
+                .on_double_click(|_| Message::WindowToggleMaximize);
+            column = column.push(mouse_area);
+        }
+        {
+            let mut row = widget::row::with_capacity(7).align_items(Alignment::Center);
+            row = row.push(widget::horizontal_space(Length::Fixed(space_m.into())));
+            row = row.push(
+                widget::button::icon(widget::icon::from_name("go-previous-symbolic"))
+                    .padding(space_xs)
+                    .style(theme::Button::Standard)
+                    .on_press(Message::GalleryPrevious),
+            );
+            row = row.push(widget::horizontal_space(Length::Fixed(space_xxs.into())));
+            if let Some(image) = image_opt {
+                row = row.push(image);
+            } else {
+                //TODO: what to do when no image?
+                row = row.push(widget::Space::new(Length::Fill, Length::Fill));
+            }
+            row = row.push(widget::horizontal_space(Length::Fixed(space_xxs.into())));
+            row = row.push(
+                widget::button::icon(widget::icon::from_name("go-next-symbolic"))
+                    .padding(space_xs)
+                    .style(theme::Button::Standard)
+                    .on_press(Message::GalleryNext),
+            );
+            row = row.push(widget::horizontal_space(Length::Fixed(space_m.into())));
+            column = column.push(row);
+        }
+
+        widget::container(column)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(theme::Container::Custom(Box::new(|theme| {
+                let cosmic = theme.cosmic();
+                let mut bg = cosmic.bg_color();
+                bg.alpha = 0.75;
+                widget::container::Appearance {
+                    background: Some(Color::from(bg).into()),
+                    ..Default::default()
+                }
+            })))
+            .into()
+    }
+
     pub fn location_view(&self) -> Element<Message> {
         //TODO: responsiveness is done in a hacky way, potentially move this to a custom widget?
         fn text_width<'a>(
@@ -2533,7 +2758,7 @@ impl Tab {
                 _ => {}
             }
             //TODO: make it possible to resize with the mouse
-            return crate::mouse_area::MouseArea::new(row)
+            return mouse_area::MouseArea::new(row)
                 .on_press(move |_point_opt| Message::ToggleSort(msg))
                 .into();
         };
@@ -3644,7 +3869,10 @@ impl Tab {
                                                 (ICON_SIZE_GRID * ICON_SCALE_MAX) as u32;
                                             let thumbnail =
                                                 image.thumbnail(thumbnail_size, thumbnail_size);
-                                            ItemThumbnail::Rgba(thumbnail.to_rgba8())
+                                            ItemThumbnail::Rgba(
+                                                thumbnail.to_rgba8(),
+                                                (image.width(), image.height()),
+                                            )
                                         }
                                         Err(err) => {
                                             log::warn!("failed to decode {:?}: {}", path, err);
