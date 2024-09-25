@@ -4,14 +4,17 @@ empty-folder-hidden = Dossier vide (contient des éléments cachés)
 no-results = Aucun résultat trouvé
 filesystem = Système de fichiers
 home = Dossier personnel
+networks = Réseaux
 notification-in-progress = Des opérations sur des fichiers sont en cours.
 trash = Corbeille
 recents = Récents
 undo = Annuler
+today = Aujourd'hui
 
 # List view
 name = Nom
 modified = Modifié
+trashed-on = Mis à la corbeille
 size = Taille
 
 # Dialogs
@@ -62,7 +65,6 @@ replace-with = Remplacer par
 apply-to-all = Appliquer à tous
 keep-both = Conserver les deux
 skip = Ignorer
-
 
 ## Metadata Dialog
 owner = Propriétaire
@@ -156,7 +158,6 @@ restored = {$items} {$items ->
         [one] élément restauré
         *[other] éléments restaurés
     } depuis la {trash}
-undo = Annuler
 unknown-folder = Dossier inconnu
 
 ## Open with
@@ -198,6 +199,7 @@ remove-from-sidebar = Supprimer de la barre latérale
 sort-by-name = Trier par nom
 sort-by-modified = Trier par modification
 sort-by-size = Trier par taille
+sort-by-trashed = Trier par éléments supprimés
 
 # Menu
 
