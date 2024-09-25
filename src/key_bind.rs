@@ -29,6 +29,7 @@ pub fn key_binds() -> HashMap<KeyBind, Action> {
     bind!([Ctrl], Key::Character("l".into()), EditLocation);
     bind!([Alt], Key::Named(Named::ArrowRight), HistoryNext);
     bind!([Alt], Key::Named(Named::ArrowLeft), HistoryPrevious);
+    bind!([], Key::Named(Named::Backspace), HistoryPrevious);
     // Catch arrow keys
     bind!([], Key::Named(Named::ArrowDown), ItemDown);
     bind!([], Key::Named(Named::ArrowLeft), ItemLeft);
