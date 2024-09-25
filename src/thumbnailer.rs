@@ -31,7 +31,7 @@ impl Thumbnailer {
         for arg in args {
             if arg.starts_with('%') {
                 match arg.as_str() {
-                    "%f" | "%F" | "%u" | "%U" => {
+                    "%i" | "%u" => {
                         command.arg(input);
                     }
                     "%o" => {
