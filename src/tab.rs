@@ -1704,10 +1704,12 @@ impl Tab {
 
     pub fn change_location(&mut self, location: &Location, history_i_opt: Option<usize>) {
         self.location = location.clone();
-        self.items_opt = None;
-        self.select_focus = None;
         self.context_menu = None;
         self.edit_location = None;
+        self.items_opt = None;
+        //TODO: remember scroll by location?
+        self.scroll_opt = None;
+        self.select_focus = None;
         if let Some(history_i) = history_i_opt {
             // Navigating in history
             self.history_i = history_i;
@@ -2491,6 +2493,16 @@ impl Tab {
                     }
                 }
             }
+        }
+
+        // Scroll to top if needed
+        if self.scroll_opt.is_none() {
+            let offset = AbsoluteOffset { x: 0.0, y: 0.0 };
+            self.scroll_opt = Some(offset);
+            commands.push(Command::Iced(scrollable::scroll_to(
+                self.scrollable_id.clone(),
+                offset,
+            )));
         }
 
         // Change directory if requested
@@ -4009,7 +4021,7 @@ impl Tab {
                                 //TODO: configurable thumbnail size?
                                 let thumbnail_size = (ICON_SIZE_GRID * ICON_SCALE_MAX) as u32;
                                 let thumbnail = ItemThumbnail::new(&path, mime, thumbnail_size);
-                                log::info!("thumbnailed {:?} in {:?}", path, start.elapsed());
+                                log::debug!("thumbnailed {:?} in {:?}", path, start.elapsed());
                                 (path, thumbnail)
                             })
                             .await
