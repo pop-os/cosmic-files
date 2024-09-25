@@ -394,14 +394,6 @@ pub fn item_from_entry(
 
     let open_with = mime_apps(&mime);
 
-    let thumbnail_opt = if mime.type_() == mime::IMAGE {
-        None
-    } else if mime.type_() == mime::VIDEO {
-        None
-    } else {
-        Some(ItemThumbnail::NotImage)
-    };
-
     let children = if metadata.is_dir() {
         //TODO: calculate children in the background (and make it cancellable?)
         match fs::read_dir(&path) {
@@ -426,7 +418,7 @@ pub fn item_from_entry(
         icon_handle_list,
         icon_handle_list_condensed,
         open_with,
-        thumbnail_opt,
+        thumbnail_opt: None,
         button_id: widget::Id::unique(),
         pos_opt: Cell::new(None),
         rect_opt: Cell::new(None),
@@ -940,6 +932,106 @@ pub enum ItemThumbnail {
     NotImage,
     Rgba(image::RgbaImage, Option<(u32, u32)>),
     Svg(Cow<'static, [u8]>),
+}
+
+impl ItemThumbnail {
+    pub fn new(path: &Path, mime: mime::Mime, thumbnail_size: u32) -> Self {
+        if mime.type_() == mime::IMAGE && mime.subtype() == mime::SVG {
+            //TODO: have a reasonable limit on SVG size?
+            match fs::read(&path) {
+                Ok(data) => {
+                    //TODO: validate SVG data
+                    ItemThumbnail::Svg(data.into())
+                }
+                Err(err) => {
+                    log::warn!("failed to read {:?}: {}", path, err);
+                    ItemThumbnail::NotImage
+                }
+            }
+        } else if mime.type_() == mime::IMAGE {
+            match image::io::Reader::open(&path).and_then(|img| img.with_guessed_format()) {
+                Ok(reader) => match reader.decode() {
+                    Ok(image) => {
+                        let thumbnail = image.thumbnail(thumbnail_size, thumbnail_size);
+                        ItemThumbnail::Rgba(
+                            thumbnail.to_rgba8(),
+                            Some((image.width(), image.height())),
+                        )
+                    }
+                    Err(err) => {
+                        log::warn!("failed to decode {:?}: {}", path, err);
+                        ItemThumbnail::NotImage
+                    }
+                },
+                Err(err) => {
+                    log::warn!("failed to read {:?}: {}", path, err);
+                    ItemThumbnail::NotImage
+                }
+            }
+        } else {
+            //TODO: also support other external thumbnailers, using /usr/share/thumbnailers?
+            let (thumbnailer, prefix) = if mime.type_() == mime::VIDEO {
+                ("totem-video-thumbnailer", "cosmic-files-")
+            } else if mime == mime::APPLICATION_PDF {
+                //TODO: apparmor config for evince-thumbnailer does not allow /tmp/cosmic-files*
+                ("evince-thumbnailer", "gnome-desktop-")
+            } else {
+                return ItemThumbnail::NotImage;
+            };
+            match tempfile::NamedTempFile::with_prefix(prefix) {
+                Ok(file) => {
+                    match process::Command::new(thumbnailer)
+                        .arg("-l")
+                        .arg("-s")
+                        .arg(format!("{}", thumbnail_size))
+                        .arg(&path)
+                        .arg(file.path())
+                        .status()
+                    {
+                        Ok(status) => {
+                            if status.success() {
+                                match image::io::Reader::open(file.path())
+                                    .and_then(|img| img.with_guessed_format())
+                                {
+                                    Ok(reader) => match reader.decode() {
+                                        Ok(image) => ItemThumbnail::Rgba(image.to_rgba8(), None),
+                                        Err(err) => {
+                                            log::warn!("failed to decode {:?}: {}", path, err);
+                                            ItemThumbnail::NotImage
+                                        }
+                                    },
+                                    Err(err) => {
+                                        log::warn!("failed to read {:?}: {}", path, err);
+                                        ItemThumbnail::NotImage
+                                    }
+                                }
+                            } else {
+                                log::warn!(
+                                    "failed to run {} for {:?}: {}",
+                                    thumbnailer,
+                                    path,
+                                    status
+                                );
+                                ItemThumbnail::NotImage
+                            }
+                        }
+                        Err(err) => {
+                            log::warn!("failed to run {} for {:?}: {}", thumbnailer, path, err);
+                            ItemThumbnail::NotImage
+                        }
+                    }
+                }
+                Err(err) => {
+                    log::warn!(
+                        "failed to create temporary file for thumbnail of {:?}: {}",
+                        path,
+                        err
+                    );
+                    ItemThumbnail::NotImage
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -3925,93 +4017,7 @@ impl Tab {
                                 let start = std::time::Instant::now();
                                 //TODO: configurable thumbnail size?
                                 let thumbnail_size = (ICON_SIZE_GRID * ICON_SCALE_MAX) as u32;
-                                let thumbnail = if mime.type_() == mime::IMAGE && mime.subtype() == mime::SVG {
-                                    //TODO: have a reasonable limit on SVG size?
-                                    match fs::read(&path) {
-                                        Ok(data) => {
-                                            //TODO: validate SVG data
-                                            ItemThumbnail::Svg(data.into())
-                                        },
-                                        Err(err) => {
-                                            log::warn!("failed to read {:?}: {}", path, err);
-                                            ItemThumbnail::NotImage
-                                        }
-                                    }
-                                } else if mime.type_() == mime::IMAGE {
-                                    match image::io::Reader::open(&path)
-                                        .and_then(|img| img.with_guessed_format())
-                                    {
-                                        Ok(reader) => match reader.decode() {
-                                            Ok(image) => {
-                                                let thumbnail =
-                                                    image.thumbnail(thumbnail_size, thumbnail_size);
-                                                ItemThumbnail::Rgba(
-                                                    thumbnail.to_rgba8(),
-                                                    Some((image.width(), image.height())),
-                                                )
-                                            }
-                                            Err(err) => {
-                                                log::warn!("failed to decode {:?}: {}", path, err);
-                                                ItemThumbnail::NotImage
-                                            }
-                                        },
-                                        Err(err) => {
-                                            log::warn!("failed to read {:?}: {}", path, err);
-                                            ItemThumbnail::NotImage
-                                        }
-                                    }
-                                } else if mime.type_() == mime::VIDEO {
-                                    //TODO: also support other optional video thumbnailers, using /usr/share/thumbnailers?
-                                    match tempfile::NamedTempFile::with_prefix("cosmic-files") {
-                                        Ok(file) => {
-                                            match process::Command::new("totem-video-thumbnailer")
-                                                .arg("-l")
-                                                .arg("-s").arg(format!("{}", thumbnail_size))
-                                                .arg(&path)
-                                                .arg(file.path())
-                                                .status()
-                                            {
-                                                Ok(status) => if status.success() {
-                                                    match image::io::Reader::open(file.path())
-                                                        .and_then(|img| img.with_guessed_format())
-                                                    {
-                                                        Ok(reader) => match reader.decode() {
-                                                            Ok(image) => {
-                                                                ItemThumbnail::Rgba(
-                                                                    image.to_rgba8(),
-                                                                    None
-                                                                )
-                                                            }
-                                                            Err(err) => {
-                                                                log::warn!("failed to decode {:?}: {}", path, err);
-                                                                ItemThumbnail::NotImage
-                                                            }
-                                                        },
-                                                        Err(err) => {
-                                                            log::warn!("failed to read {:?}: {}", path, err);
-                                                            ItemThumbnail::NotImage
-                                                        }
-                                                    }
-                                                } else {
-                                                    log::warn!("failed to run totem-video-thumbnailer for {:?}: {}", path, status);
-                                                    ItemThumbnail::NotImage
-                                                },
-                                                Err(err) => {
-                                                    log::warn!("failed to run totem-video-thumbnailer for {:?}: {}", path, err);
-                                                    ItemThumbnail::NotImage
-                                                }
-                                            }
-
-                                        },
-                                        Err(err) => {
-                                            log::warn!("failed to create temporary file for thumbnail of {:?}: {}", path, err);
-                                            ItemThumbnail::NotImage
-                                        }
-                                    }
-                                } else {
-                                    log::warn!("cannot thumbnail {:?}: mime type {:?} not supported", path, mime.type_());
-                                    ItemThumbnail::NotImage
-                                };
+                                let thumbnail = ItemThumbnail::new(&path, mime, thumbnail_size);
                                 log::info!("thumbnailed {:?} in {:?}", path, start.elapsed());
                                 (path, thumbnail)
                             })
