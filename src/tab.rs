@@ -68,6 +68,7 @@ use crate::{
     mime_icon::{mime_for_path, mime_icon},
     mounter::Mounters,
     mouse_area,
+    thumbnailer::thumbnailer,
 };
 use unix_permissions_ext::UNIXPermissionsExt;
 use uzers::{get_group_by_gid, get_user_by_uid};
@@ -937,100 +938,90 @@ pub enum ItemThumbnail {
 impl ItemThumbnail {
     pub fn new(path: &Path, mime: mime::Mime, thumbnail_size: u32) -> Self {
         if mime.type_() == mime::IMAGE && mime.subtype() == mime::SVG {
+            // Try built-in svg thumbnailer
             //TODO: have a reasonable limit on SVG size?
             match fs::read(&path) {
                 Ok(data) => {
                     //TODO: validate SVG data
-                    ItemThumbnail::Svg(data.into())
+                    return ItemThumbnail::Svg(data.into());
                 }
                 Err(err) => {
                     log::warn!("failed to read {:?}: {}", path, err);
-                    ItemThumbnail::NotImage
                 }
             }
         } else if mime.type_() == mime::IMAGE {
+            // Try built-in image thumbnailer
             match image::io::Reader::open(&path).and_then(|img| img.with_guessed_format()) {
                 Ok(reader) => match reader.decode() {
                     Ok(image) => {
                         let thumbnail = image.thumbnail(thumbnail_size, thumbnail_size);
-                        ItemThumbnail::Rgba(
+                        return ItemThumbnail::Rgba(
                             thumbnail.to_rgba8(),
                             Some((image.width(), image.height())),
-                        )
+                        );
                     }
                     Err(err) => {
                         log::warn!("failed to decode {:?}: {}", path, err);
-                        ItemThumbnail::NotImage
                     }
                 },
                 Err(err) => {
                     log::warn!("failed to read {:?}: {}", path, err);
-                    ItemThumbnail::NotImage
                 }
             }
-        } else {
-            //TODO: also support other external thumbnailers, using /usr/share/thumbnailers?
-            let (thumbnailer, prefix) = if mime.type_() == mime::VIDEO {
-                ("totem-video-thumbnailer", "cosmic-files-")
-            } else if mime == mime::APPLICATION_PDF {
+        }
+
+        // Try external thumbnailers
+        for thumbnailer in thumbnailer(&mime) {
+            let prefix = if thumbnailer.exec.starts_with("evince-thumbnailer ") {
                 //TODO: apparmor config for evince-thumbnailer does not allow /tmp/cosmic-files*
-                ("evince-thumbnailer", "gnome-desktop-")
+                "gnome-desktop-"
             } else {
-                return ItemThumbnail::NotImage;
+                "cosmic-files-"
             };
-            match tempfile::NamedTempFile::with_prefix(prefix) {
-                Ok(file) => {
-                    match process::Command::new(thumbnailer)
-                        .arg("-l")
-                        .arg("-s")
-                        .arg(format!("{}", thumbnail_size))
-                        .arg(&path)
-                        .arg(file.path())
-                        .status()
-                    {
-                        Ok(status) => {
-                            if status.success() {
-                                match image::io::Reader::open(file.path())
-                                    .and_then(|img| img.with_guessed_format())
-                                {
-                                    Ok(reader) => match reader.decode() {
-                                        Ok(image) => ItemThumbnail::Rgba(image.to_rgba8(), None),
-                                        Err(err) => {
-                                            log::warn!("failed to decode {:?}: {}", path, err);
-                                            ItemThumbnail::NotImage
-                                        }
-                                    },
-                                    Err(err) => {
-                                        log::warn!("failed to read {:?}: {}", path, err);
-                                        ItemThumbnail::NotImage
-                                    }
-                                }
-                            } else {
-                                log::warn!(
-                                    "failed to run {} for {:?}: {}",
-                                    thumbnailer,
-                                    path,
-                                    status
-                                );
-                                ItemThumbnail::NotImage
-                            }
-                        }
-                        Err(err) => {
-                            log::warn!("failed to run {} for {:?}: {}", thumbnailer, path, err);
-                            ItemThumbnail::NotImage
-                        }
-                    }
-                }
+            let file = match tempfile::NamedTempFile::with_prefix(prefix) {
+                Ok(ok) => ok,
                 Err(err) => {
                     log::warn!(
                         "failed to create temporary file for thumbnail of {:?}: {}",
                         path,
                         err
                     );
-                    ItemThumbnail::NotImage
+                    continue;
+                }
+            };
+
+            let Some(mut command) = thumbnailer.command(&path, file.path(), thumbnail_size) else {
+                continue;
+            };
+            match command.status() {
+                Ok(status) => {
+                    if status.success() {
+                        match image::io::Reader::open(file.path())
+                            .and_then(|img| img.with_guessed_format())
+                        {
+                            Ok(reader) => match reader.decode() {
+                                Ok(image) => {
+                                    return ItemThumbnail::Rgba(image.to_rgba8(), None);
+                                }
+                                Err(err) => {
+                                    log::warn!("failed to decode {:?}: {}", path, err);
+                                }
+                            },
+                            Err(err) => {
+                                log::warn!("failed to read {:?}: {}", path, err);
+                            }
+                        }
+                    } else {
+                        log::warn!("failed to run {:?} for {:?}: {}", thumbnailer, path, status);
+                    }
+                }
+                Err(err) => {
+                    log::warn!("failed to run {:?} for {:?}: {}", thumbnailer, path, err);
                 }
             }
         }
+
+        ItemThumbnail::NotImage
     }
 }
 
