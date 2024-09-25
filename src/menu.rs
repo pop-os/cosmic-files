@@ -238,7 +238,7 @@ pub fn context_menu<'a>(
             } else {
                 // TODO: Nested menu
                 children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
-                children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
+                children.push(sort_item(fl!("sort-by-trashed"), HeadingOptions::TrashedOn));
                 children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
             }
         }
@@ -277,6 +277,7 @@ pub fn dialog_menu<'a>(
             Action::SetSort(sort, dir),
         )
     };
+    let in_trash = tab.location == Location::Trash;
 
     MenuBar::new(vec![
         menu::Tree::with_children(
@@ -315,12 +316,20 @@ pub fn dialog_menu<'a>(
                     sort_item(fl!("sort-z-a"), tab::HeadingOptions::Name, false),
                     sort_item(
                         fl!("sort-newest-first"),
-                        tab::HeadingOptions::Modified,
+                        if in_trash {
+                            tab::HeadingOptions::TrashedOn
+                        } else {
+                            tab::HeadingOptions::Modified
+                        },
                         false,
                     ),
                     sort_item(
                         fl!("sort-oldest-first"),
-                        tab::HeadingOptions::Modified,
+                        if in_trash {
+                            tab::HeadingOptions::TrashedOn
+                        } else {
+                            tab::HeadingOptions::Modified
+                        },
                         true,
                     ),
                     sort_item(
@@ -357,6 +366,7 @@ pub fn menu_bar<'a>(
             Action::SetSort(sort, dir),
         )
     };
+    let in_trash = tab_opt.map_or(false, |tab| tab.location == Location::Trash);
 
     MenuBar::new(vec![
         menu::Tree::with_children(
@@ -444,12 +454,20 @@ pub fn menu_bar<'a>(
                     sort_item(fl!("sort-z-a"), tab::HeadingOptions::Name, false),
                     sort_item(
                         fl!("sort-newest-first"),
-                        tab::HeadingOptions::Modified,
+                        if in_trash {
+                            tab::HeadingOptions::TrashedOn
+                        } else {
+                            tab::HeadingOptions::Modified
+                        },
                         false,
                     ),
                     sort_item(
                         fl!("sort-oldest-first"),
-                        tab::HeadingOptions::Modified,
+                        if in_trash {
+                            tab::HeadingOptions::TrashedOn
+                        } else {
+                            tab::HeadingOptions::Modified
+                        },
                         true,
                     ),
                     sort_item(
