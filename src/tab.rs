@@ -42,6 +42,7 @@ use once_cell::sync::Lazy;
 use recently_used_xbel::{Error, RecentlyUsed};
 use serde::{Deserialize, Serialize};
 use std::{
+    borrow::Cow,
     cell::{Cell, RefCell},
     cmp::Ordering,
     collections::HashMap,
@@ -50,6 +51,7 @@ use std::{
     num::NonZeroU16,
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
+    process,
     sync::{Arc, Mutex},
     time::{Duration, Instant, SystemTime},
 };
@@ -393,11 +395,9 @@ pub fn item_from_entry(
     let open_with = mime_apps(&mime);
 
     let thumbnail_opt = if mime.type_() == mime::IMAGE {
-        if mime.subtype() == mime::SVG {
-            Some(ItemThumbnail::Svg)
-        } else {
-            None
-        }
+        None
+    } else if mime.type_() == mime::VIDEO {
+        None
     } else {
         Some(ItemThumbnail::NotImage)
     };
@@ -938,8 +938,8 @@ impl ItemMetadata {
 #[derive(Clone, Debug)]
 pub enum ItemThumbnail {
     NotImage,
-    Rgba(image::RgbaImage, (u32, u32)),
-    Svg,
+    Rgba(image::RgbaImage, Option<(u32, u32)>),
+    Svg(Cow<'static, [u8]>),
 }
 
 #[derive(Clone, Debug)]
@@ -984,19 +984,21 @@ impl Item {
             .unwrap_or(&ItemThumbnail::NotImage)
         {
             ItemThumbnail::NotImage => icon,
-            ItemThumbnail::Rgba(_, _) => {
+            ItemThumbnail::Rgba(rgba, _) => {
                 if let Some(Location::Path(path)) = &self.location_opt {
-                    widget::image(widget::image::Handle::from_path(path)).into()
-                } else {
-                    icon
+                    if self.mime.type_() == mime::IMAGE {
+                        return widget::image(widget::image::Handle::from_path(path)).into();
+                    }
                 }
+                widget::image(widget::image::Handle::from_pixels(
+                    rgba.width(),
+                    rgba.height(),
+                    rgba.as_raw().clone(),
+                ))
+                .into()
             }
-            ItemThumbnail::Svg => {
-                if let Some(Location::Path(path)) = &self.location_opt {
-                    widget::Svg::from_path(path).into()
-                } else {
-                    icon
-                }
+            ItemThumbnail::Svg(data) => {
+                widget::svg(widget::svg::Handle::from_memory(data.clone())).into()
             }
         }
     }
@@ -1064,19 +1066,13 @@ impl Item {
             widget::button::icon(widget::icon::from_name("go-next-symbolic"))
                 .on_press(app::Message::TabMessage(None, Message::ItemRight)),
         );
-        match self
-            .thumbnail_opt
-            .as_ref()
-            .unwrap_or(&ItemThumbnail::NotImage)
-        {
-            ItemThumbnail::NotImage => {}
-            ItemThumbnail::Rgba(_, _) | ItemThumbnail::Svg => {
-                if let Some(path) = self.path_opt() {
-                    row = row.push(
-                        widget::button::icon(widget::icon::from_name("view-fullscreen-symbolic"))
-                            .on_press(app::Message::TabMessage(None, Message::Gallery(true))),
-                    );
-                }
+
+        if self.mime.type_() == mime::IMAGE {
+            if let Some(path) = self.path_opt() {
+                row = row.push(
+                    widget::button::icon(widget::icon::from_name("view-fullscreen-symbolic"))
+                        .on_press(app::Message::TabMessage(None, Message::Gallery(true))),
+                );
             }
         }
         column = column.push(row);
@@ -1158,7 +1154,7 @@ impl Item {
             .as_ref()
             .unwrap_or(&ItemThumbnail::NotImage)
         {
-            ItemThumbnail::Rgba(_, (width, height)) => {
+            ItemThumbnail::Rgba(_, Some((width, height))) => {
                 details = details.push(widget::text(format!("{}x{}", width, height)));
             }
             _ => {}
@@ -2248,16 +2244,25 @@ impl Tab {
                     let location = Location::Path(path);
                     for item in items.iter_mut() {
                         if item.location_opt.as_ref() == Some(&location) {
-                            if let ItemThumbnail::Rgba(rgba, _) = &thumbnail {
-                                //TODO: pass handles already generated to avoid blocking main thread
-                                let handle = widget::icon::from_raster_pixels(
-                                    rgba.width(),
-                                    rgba.height(),
-                                    rgba.as_raw().clone(),
-                                );
-                                item.icon_handle_grid = handle.clone();
-                                item.icon_handle_list = handle.clone();
-                                item.icon_handle_list_condensed = handle;
+                            //TODO: pass handles already generated to avoid blocking main thread?
+                            match &thumbnail {
+                                ItemThumbnail::NotImage => {}
+                                ItemThumbnail::Rgba(rgba, _) => {
+                                    let handle = widget::icon::from_raster_pixels(
+                                        rgba.width(),
+                                        rgba.height(),
+                                        rgba.as_raw().clone(),
+                                    );
+                                    item.icon_handle_grid = handle.clone();
+                                    item.icon_handle_list = handle.clone();
+                                    item.icon_handle_list_condensed = handle;
+                                }
+                                ItemThumbnail::Svg(data) => {
+                                    let handle = widget::icon::from_svg_bytes(data.clone());
+                                    item.icon_handle_grid = handle.clone();
+                                    item.icon_handle_list = handle.clone();
+                                    item.icon_handle_list_condensed = handle.clone();
+                                }
                             }
                             item.thumbnail_opt = Some(thumbnail);
                             break;
@@ -2610,7 +2615,7 @@ impl Tab {
                         .unwrap_or(&ItemThumbnail::NotImage)
                     {
                         ItemThumbnail::NotImage => {}
-                        ItemThumbnail::Rgba(_, _) => {
+                        ItemThumbnail::Rgba(rgba, _) => {
                             if let Some(path) = item.path_opt() {
                                 image_opt = Some(
                                     //TODO: use widget::image::viewer, when its zoom can be reset
@@ -2619,17 +2624,27 @@ impl Tab {
                                         .height(Length::Fill)
                                         .into(),
                                 );
-                            }
-                        }
-                        ItemThumbnail::Svg => {
-                            if let Some(path) = item.path_opt() {
+                            } else {
                                 image_opt = Some(
-                                    widget::Svg::from_path(path)
-                                        .width(Length::Fill)
-                                        .height(Length::Fill)
-                                        .into(),
+                                    //TODO: use widget::image::viewer, when its zoom can be reset
+                                    widget::image(widget::image::Handle::from_pixels(
+                                        rgba.width(),
+                                        rgba.height(),
+                                        rgba.as_raw().clone(),
+                                    ))
+                                    .width(Length::Fill)
+                                    .height(Length::Fill)
+                                    .into(),
                                 );
                             }
+                        }
+                        ItemThumbnail::Svg(data) => {
+                            image_opt = Some(
+                                widget::svg(widget::svg::Handle::from_memory(data.clone()))
+                                    .width(Length::Fill)
+                                    .height(Length::Fill)
+                                    .into(),
+                            );
                         }
                     }
                 }
@@ -3901,36 +3916,101 @@ impl Tab {
                 }
 
                 if let Some(Location::Path(path)) = item.location_opt.clone() {
+                    let mime = item.mime.clone();
                     subscriptions.push(subscription::channel(
                         path.clone(),
                         1,
                         |mut output| async move {
                             let (path, thumbnail) = tokio::task::spawn_blocking(move || {
                                 let start = std::time::Instant::now();
-                                let thumbnail = match image::io::Reader::open(&path)
-                                    .and_then(|img| img.with_guessed_format())
-                                {
-                                    Ok(reader) => match reader.decode() {
-                                        Ok(image) => {
-                                            //TODO: configurable thumbnail size?
-                                            let thumbnail_size =
-                                                (ICON_SIZE_GRID * ICON_SCALE_MAX) as u32;
-                                            let thumbnail =
-                                                image.thumbnail(thumbnail_size, thumbnail_size);
-                                            ItemThumbnail::Rgba(
-                                                thumbnail.to_rgba8(),
-                                                (image.width(), image.height()),
-                                            )
-                                        }
+                                //TODO: configurable thumbnail size?
+                                let thumbnail_size = (ICON_SIZE_GRID * ICON_SCALE_MAX) as u32;
+                                let thumbnail = if mime.type_() == mime::IMAGE && mime.subtype() == mime::SVG {
+                                    //TODO: have a reasonable limit on SVG size?
+                                    match fs::read(&path) {
+                                        Ok(data) => {
+                                            //TODO: validate SVG data
+                                            ItemThumbnail::Svg(data.into())
+                                        },
                                         Err(err) => {
-                                            log::warn!("failed to decode {:?}: {}", path, err);
+                                            log::warn!("failed to read {:?}: {}", path, err);
                                             ItemThumbnail::NotImage
                                         }
-                                    },
-                                    Err(err) => {
-                                        log::warn!("failed to read {:?}: {}", path, err);
-                                        ItemThumbnail::NotImage
                                     }
+                                } else if mime.type_() == mime::IMAGE {
+                                    match image::io::Reader::open(&path)
+                                        .and_then(|img| img.with_guessed_format())
+                                    {
+                                        Ok(reader) => match reader.decode() {
+                                            Ok(image) => {
+                                                let thumbnail =
+                                                    image.thumbnail(thumbnail_size, thumbnail_size);
+                                                ItemThumbnail::Rgba(
+                                                    thumbnail.to_rgba8(),
+                                                    Some((image.width(), image.height())),
+                                                )
+                                            }
+                                            Err(err) => {
+                                                log::warn!("failed to decode {:?}: {}", path, err);
+                                                ItemThumbnail::NotImage
+                                            }
+                                        },
+                                        Err(err) => {
+                                            log::warn!("failed to read {:?}: {}", path, err);
+                                            ItemThumbnail::NotImage
+                                        }
+                                    }
+                                } else if mime.type_() == mime::VIDEO {
+                                    //TODO: also support other optional video thumbnailers, using /usr/share/thumbnailers?
+                                    match tempfile::NamedTempFile::with_prefix("cosmic-files") {
+                                        Ok(file) => {
+                                            match process::Command::new("totem-video-thumbnailer")
+                                                .arg("-l")
+                                                .arg("-s").arg(format!("{}", thumbnail_size))
+                                                .arg(&path)
+                                                .arg(file.path())
+                                                .status()
+                                            {
+                                                Ok(status) => if status.success() {
+                                                    match image::io::Reader::open(file.path())
+                                                        .and_then(|img| img.with_guessed_format())
+                                                    {
+                                                        Ok(reader) => match reader.decode() {
+                                                            Ok(image) => {
+                                                                ItemThumbnail::Rgba(
+                                                                    image.to_rgba8(),
+                                                                    None
+                                                                )
+                                                            }
+                                                            Err(err) => {
+                                                                log::warn!("failed to decode {:?}: {}", path, err);
+                                                                ItemThumbnail::NotImage
+                                                            }
+                                                        },
+                                                        Err(err) => {
+                                                            log::warn!("failed to read {:?}: {}", path, err);
+                                                            ItemThumbnail::NotImage
+                                                        }
+                                                    }
+                                                } else {
+                                                    log::warn!("failed to run totem-video-thumbnailer for {:?}: {}", path, status);
+                                                    ItemThumbnail::NotImage
+                                                },
+                                                Err(err) => {
+                                                    log::warn!("failed to run totem-video-thumbnailer for {:?}: {}", path, err);
+                                                    ItemThumbnail::NotImage
+                                                }
+                                            }
+
+                                        },
+                                        Err(err) => {
+                                            log::warn!("failed to create temporary file for thumbnail of {:?}: {}", path, err);
+                                            ItemThumbnail::NotImage
+                                        }
+                                    }
+                                } else {
+                                    log::warn!("cannot thumbnail {:?}: mime type {:?} not supported", path, mime.type_());
+                                    ItemThumbnail::NotImage
                                 };
                                 log::info!("thumbnailed {:?} in {:?}", path, start.elapsed());
                                 (path, thumbnail)
