@@ -1463,8 +1463,31 @@ impl Tab {
         self.items_opt.as_mut()
     }
 
-    pub fn set_items(&mut self, items: Vec<Item>) {
+    pub fn set_items(&mut self, mut items: Vec<Item>) {
+        let selected = self.selected_locations();
+        for item in items.iter_mut() {
+            item.selected = false;
+            if let Some(location) = &item.location_opt {
+                if selected.contains(location) {
+                    item.selected = true;
+                }
+            }
+        }
         self.items_opt = Some(items);
+    }
+
+    pub fn selected_locations(&self) -> Vec<Location> {
+        let mut locations = Vec::new();
+        if let Some(ref items) = self.items_opt {
+            for item in items.iter() {
+                if item.selected {
+                    if let Some(location) = &item.location_opt {
+                        locations.push(location.clone());
+                    }
+                }
+            }
+        }
+        locations
     }
 
     pub fn select_all(&mut self) {

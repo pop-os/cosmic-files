@@ -609,13 +609,9 @@ impl App {
         let mut paths = Vec::new();
         let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
         if let Some(tab) = self.tab_model.data::<Tab>(entity) {
-            if let Some(ref items) = tab.items_opt() {
-                for item in items.iter() {
-                    if item.selected {
-                        if let Some(Location::Path(path)) = &item.location_opt {
-                            paths.push(path.clone());
-                        }
-                    }
+            for location in tab.selected_locations() {
+                if let Some(path) = location.path_opt() {
+                    paths.push(path.to_path_buf());
                 }
             }
         }
