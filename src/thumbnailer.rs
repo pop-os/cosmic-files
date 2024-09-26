@@ -70,6 +70,10 @@ impl ThumbnailerCache {
         thumbnailer_cache
     }
 
+    #[cfg(not(feature = "desktop"))]
+    pub fn reload(&mut self) {}
+
+    #[cfg(feature = "desktop")]
     pub fn reload(&mut self) {
         use crate::localize::LANGUAGE_SORTER;
 
