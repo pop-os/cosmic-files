@@ -1,18 +1,26 @@
 cosmic-files = COSMIC Dateien
 empty-folder = Leerer Ordner
 empty-folder-hidden = Leerer Ordner (hat versteckte Elemente)
+no-results = Keine Ergebnisse gefunden
 filesystem = Dateisystem
 home = Benutzerordner
+networks = Netzwerke
+notification-in-progress = Dateioperationen sind im Gange.
 trash = Papierkorb
 recents = Aktuelle
 undo = Rückgängig
+today = Heute
 
 # Listenansicht
 name = Name
 modified = Geändert
+trashed-on = In den Papierkorb verschoben
 size = Größe
 
 # Dialoge
+
+## Komprimieren-Dialog
+create-archive = Archiv erstellen
 
 ## Dialogfeld zum Leeren des Papierkorbs
 empty-trash = Papierkorb leeren?
@@ -31,11 +39,13 @@ name-no-slashes = Namen dürfen keine Schrägstriche enthalten.
 
 # Öffnen/Speichern-Dialog
 cancel = Abbrechen
+create = Erstellen
 open = Öffnen
 open-file = Datei öffnen
 open-folder = Ordner öffnen
 open-in-new-tab = In neuem Tab öffnen
 open-in-new-window = In neuem Fenster öffnen
+open-item-location = Speicherort des Elements öffnen
 open-multiple-files = Mehrere Dateien öffnen
 open-multiple-folders = Mehrere Ordner öffnen
 save = Speichern
@@ -56,10 +66,43 @@ apply-to-all = Auf alle anwenden
 keep-both = Beide behalten
 skip = Überspringen
 
+## Metadaten-Dialog
+owner = Eigentümer
+group = Gruppe
+other = Andere
+read = Lesen
+write = Schreiben
+execute = Ausführen
+
 # Kontextseiten
 
 ## Über
 git-description = Git-Commit {$hash} am {$date}
+
+## Netzlaufwerk hinzufügen
+add-network-drive = Netzlaufwerk hinzufügen
+connect = Verbinden
+connect-anonymously = Anonym verbinden
+connecting = Wird verbunden...
+domain = Domain
+enter-server-address = Serveradresse eingeben
+network-drive-description =
+    Serveradressen enthalten ein Protokollpräfix und eine Adresse.
+    Beispiele: ssh://192.168.0.1, ftp://[2001:db8::1]
+### Achte darauf, dass das Komma, das die Spalten trennt, erhalten bleibt
+network-drive-schemes =
+    Verfügbare Protokolle,Präfix
+    AppleTalk,afp://
+    File Transfer Protocol,ftp:// oder ftps://
+    Network File System,nfs://
+    Server Message Block,smb://
+    SSH File Transfer Protocol,sftp:// oder ssh://
+    WebDav,dav:// oder davs://
+network-drive-error = Zugriff auf Netzlaufwerk nicht möglich
+password = Passwort
+remember-password = Passwort merken
+try-again = Erneut versuchen
+username = Benutzername
 
 ## Operationen
 edit-history = Verlauf bearbeiten
@@ -68,6 +111,14 @@ no-history = Keine Einträge im Verlauf.
 pending = Ausstehend
 failed = Fehlgeschlagen
 complete = Abgeschlossen
+compressing = {$items} {$items ->
+[one] Element wird
+*[other] Elemente werden
+    } von {$from} nach {$to} komprimiert
+compressed = {$items} {$items ->
+[one] Element wurde
+*[other] Elemente wurden
+    } von {$from} nach {$to} komprimiert
 copy_noun = Kopie
 creating = {$name} in {$parent} wird erstellt
 created = {$name} in {$parent} wurde erstellt
@@ -81,6 +132,14 @@ copied = {$items} {$items ->
     } von {$from} nach {$to} kopiert
 emptying-trash = {trash} wird geleert
 emptied-trash = {trash} geleert
+extracting = {$items} {$items ->
+[one] Element wird
+*[other] Elemente werden
+    } von {$from} nach {$to} entpackt
+extracted = {$items} {$items ->
+[one] Element wurde
+*[other] Elemente wurden
+    } von {$from} nach {$to} entpackt
 moving = {$items} {$items ->
         [one] Element wird
         *[other] Elemente werden
@@ -99,7 +158,6 @@ restored = {$items} {$items ->
         [one] Element wurde
         *[other] Elemente wurden
     } aus dem {trash} wiederhergestellt
-undo = Rückgängig
 unknown-folder = unbekannter Ordner
 
 ## Öffnen mit
@@ -130,6 +188,8 @@ light = Hell
 
 # Kontextmenü
 add-to-sidebar = Zur Seitenleiste hinzufügen
+compress = Komprimieren
+extract-here = Entpacken
 new-file = Neue Datei
 new-folder = Neuer Ordner
 open-in-terminal = Im Terminal öffnen
@@ -139,6 +199,7 @@ remove-from-sidebar = Von der Seitenleiste entfernen
 sort-by-name = Nach Name sortieren
 sort-by-modified = Nach Änderung sortieren
 sort-by-size = Nach Größe sortieren
+sort-by-trashed = Nach Löschzeitpunkt sortieren
 
 # Menü
 
@@ -147,6 +208,7 @@ file = Datei
 new-tab = Neuer Tab
 new-window = Neues Fenster
 rename = Umbenennen
+menu-show-details = Details anzeigen...
 close-tab = Tab schließen
 quit = Beenden
 
@@ -168,3 +230,12 @@ show-hidden-files = Versteckte Dateien anzeigen
 list-directories-first = Verzeichnisse zuerst auflisten
 menu-settings = Einstellungen...
 menu-about = Über COSMIC Dateien...
+
+## Sortieren
+sort = Sortieren
+sort-a-z = A-Z
+sort-z-a = Z-A
+sort-newest-first = Neueste zuerst
+sort-oldest-first = Älteste zuerst
+sort-smallest-to-largest = Kleinste bis größte
+sort-largest-to-smallest = Größte bis kleinste
