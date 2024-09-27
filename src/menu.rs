@@ -368,6 +368,31 @@ pub fn menu_bar<'a>(
     };
     let in_trash = tab_opt.map_or(false, |tab| tab.location == Location::Trash);
 
+    let mut selected_dir = 0;
+    let mut selected = 0;
+    tab_opt.and_then(|tab| tab.items_opt()).map(|items| {
+        for item in items.iter() {
+            if item.selected {
+                selected += 1;
+                if item.metadata.is_dir() {
+                    selected_dir += 1;
+                }
+            }
+        }
+    });
+
+    fn menu_button_optional(
+        label: String,
+        action: Action,
+        enabled: bool,
+    ) -> menu::Item<Action, String> {
+        if enabled {
+            menu::Item::Button(label, action)
+        } else {
+            menu::Item::ButtonDisabled(label, action)
+        }
+    }
+
     MenuBar::new(vec![
         menu::Tree::with_children(
             menu::root(fl!("file")),
@@ -378,16 +403,20 @@ pub fn menu_bar<'a>(
                     menu::Item::Button(fl!("new-window"), Action::WindowNew),
                     menu::Item::Button(fl!("new-folder"), Action::NewFolder),
                     menu::Item::Button(fl!("new-file"), Action::NewFile),
-                    menu::Item::Button(fl!("open"), Action::Open),
-                    menu::Item::Button(fl!("open-with"), Action::OpenWith),
+                    menu_button_optional(
+                        fl!("open"),
+                        Action::Open,
+                        (selected > 0 && selected_dir == 0) || (selected_dir == 1 && selected == 1),
+                    ),
+                    menu_button_optional(fl!("open-with"), Action::OpenWith, selected == 1),
                     menu::Item::Divider,
-                    menu::Item::Button(fl!("rename"), Action::Rename),
+                    menu_button_optional(fl!("rename"), Action::Rename, selected > 0),
                     menu::Item::Divider,
-                    menu::Item::Button(fl!("menu-show-details"), Action::Preview),
+                    menu_button_optional(fl!("menu-show-details"), Action::Preview, selected > 0),
                     menu::Item::Divider,
-                    menu::Item::Button(fl!("add-to-sidebar"), Action::AddToSidebar),
+                    menu_button_optional(fl!("add-to-sidebar"), Action::AddToSidebar, selected > 0),
                     menu::Item::Divider,
-                    menu::Item::Button(fl!("move-to-trash"), Action::MoveToTrash),
+                    menu_button_optional(fl!("move-to-trash"), Action::MoveToTrash, selected > 0),
                     menu::Item::Divider,
                     menu::Item::Button(fl!("close-tab"), Action::TabClose),
                     menu::Item::Button(fl!("quit"), Action::WindowClose),
@@ -399,9 +428,9 @@ pub fn menu_bar<'a>(
             menu::items(
                 key_binds,
                 vec![
-                    menu::Item::Button(fl!("cut"), Action::Cut),
-                    menu::Item::Button(fl!("copy"), Action::Copy),
-                    menu::Item::Button(fl!("paste"), Action::Paste),
+                    menu_button_optional(fl!("cut"), Action::Cut, selected > 0),
+                    menu_button_optional(fl!("copy"), Action::Copy, selected > 0),
+                    menu_button_optional(fl!("paste"), Action::Paste, selected > 0),
                     menu::Item::Button(fl!("select-all"), Action::SelectAll),
                     menu::Item::Divider,
                     menu::Item::Button(fl!("history"), Action::EditHistory),
