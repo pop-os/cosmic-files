@@ -170,6 +170,153 @@ pub enum Operation {
     },
 }
 
+async fn copy_or_move(
+    paths: Vec<PathBuf>,
+    to: PathBuf,
+    moving: bool,
+    id: u64,
+    msg_tx: &Arc<Mutex<Sender<Message>>>,
+) -> Result<(), String> {
+    // Handle duplicate file names by renaming paths
+    let (paths, to): (Vec<_>, Vec<_>) = tokio::task::spawn_blocking(move || {
+        paths
+            .into_iter()
+            .zip(std::iter::repeat(to.as_path()))
+            .map(|(from, to)| {
+                if matches!(from.parent(), Some(parent) if parent == to) && !moving {
+                    // `from`'s parent is equal to `to` which means we're copying to the same
+                    // directory (duplicating files)
+                    let to = copy_unique_path(&from, &to);
+                    (from, to)
+                } else if let Some(name) = (from.is_file() || moving)
+                    .then(|| from.file_name())
+                    .flatten()
+                {
+                    let to = to.join(name);
+                    (from, to)
+                } else {
+                    (from, to.to_owned())
+                }
+            })
+            .unzip()
+    })
+    .await
+    .unwrap();
+
+    let msg_tx = msg_tx.clone();
+    tokio::task::spawn_blocking(move || -> fs_extra::error::Result<()> {
+        log::info!(
+            "{} {:?} to {:?}",
+            if moving { "Move" } else { "Copy" },
+            paths,
+            to
+        );
+        let total_paths = paths.len();
+        for (path_i, (from, mut to)) in paths.into_iter().zip(to.into_iter()).enumerate() {
+            let handler = |copied_bytes, total_bytes| {
+                let item_progress = if total_bytes == 0 {
+                    1.0
+                } else {
+                    copied_bytes as f32 / total_bytes as f32
+                };
+                let total_progress = (item_progress + path_i as f32) / total_paths as f32;
+                executor::block_on(async {
+                    let _ = msg_tx
+                        .lock()
+                        .await
+                        .send(Message::PendingProgress(id, 100.0 * total_progress))
+                        .await;
+                })
+            };
+
+            if from == to {
+                log::info!(
+                    "Skipping {} of {:?} to itself",
+                    if moving { "move" } else { "copy" },
+                    from
+                );
+                handler(0, 0);
+                continue;
+            }
+
+            if from.is_dir() {
+                let options = fs_extra::dir::CopyOptions::default().copy_inside(true);
+                if moving {
+                    fs_extra::move_items_with_progress(
+                        &[from],
+                        to,
+                        &options,
+                        |progress: fs_extra::TransitProcess| {
+                            handler(progress.copied_bytes, progress.total_bytes);
+                            handle_progress_state(&msg_tx, &progress)
+                        },
+                    )?;
+                } else {
+                    fs_extra::copy_items_with_progress(
+                        &[from],
+                        to,
+                        &options,
+                        |progress: fs_extra::TransitProcess| {
+                            handler(progress.copied_bytes, progress.total_bytes);
+                            handle_progress_state(&msg_tx, &progress)
+                        },
+                    )?;
+                }
+            } else {
+                let mut options = fs_extra::file::CopyOptions::default();
+                if to.exists() {
+                    match handle_replace(&msg_tx, from.clone(), to.clone(), false) {
+                        ReplaceResult::Replace(_) => {
+                            options.overwrite = true;
+                        }
+                        ReplaceResult::KeepBoth => {
+                            match to.parent() {
+                                Some(to_parent) => {
+                                    to = copy_unique_path(&from, &to_parent);
+                                }
+                                None => {
+                                    log::warn!("failed to get parent of {:?}", to);
+                                    //TODO: error?
+                                }
+                            }
+                        }
+                        ReplaceResult::Skip(_) => {
+                            options.skip_exist = true;
+                        }
+                        ReplaceResult::Cancel => {
+                            //TODO: be silent, but collect actual changes made for undo
+                            continue;
+                        }
+                    }
+                }
+                if moving {
+                    fs_extra::file::move_file_with_progress(
+                        from,
+                        to,
+                        &options,
+                        |progress: fs_extra::file::TransitProcess| {
+                            handler(progress.copied_bytes, progress.total_bytes);
+                        },
+                    )?;
+                } else {
+                    fs_extra::file::copy_with_progress(
+                        from,
+                        to,
+                        &options,
+                        |progress: fs_extra::file::TransitProcess| {
+                            handler(progress.copied_bytes, progress.total_bytes);
+                        },
+                    )?;
+                }
+            }
+        }
+        Ok(())
+    })
+    .await
+    .map_err(err_str)?
+    .map_err(err_str)
+}
+
 fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
     let mut to = to.to_owned();
     // Separate the full file name into its file name plus extension.
@@ -473,104 +620,7 @@ impl Operation {
                 .map_err(err_str)?;
             }
             Self::Copy { paths, to } => {
-                // Handle duplicate file names by renaming paths
-                let (paths, to): (Vec<_>, Vec<_>) = tokio::task::spawn_blocking(move || {
-                    paths
-                        .into_iter()
-                        .zip(std::iter::repeat(to.as_path()))
-                        .map(|(from, to)| {
-                            if matches!(from.parent(), Some(parent) if parent == to) {
-                                // `from`'s parent is equal to `to` which means we're copying to the same
-                                // directory (duplicating files)
-                                let to = copy_unique_path(&from, &to);
-                                (from, to)
-                            } else if let Some(name) =
-                                from.is_file().then(|| from.file_name()).flatten()
-                            {
-                                let to = to.join(name);
-                                (from, to)
-                            } else {
-                                (from, to.to_owned())
-                            }
-                        })
-                        .unzip()
-                })
-                .await
-                .unwrap();
-
-                let msg_tx = msg_tx.clone();
-                tokio::task::spawn_blocking(move || -> fs_extra::error::Result<()> {
-                    log::info!("Copy {:?} to {:?}", paths, to);
-                    let total_paths = paths.len();
-                    for (path_i, (from, mut to)) in
-                        paths.into_iter().zip(to.into_iter()).enumerate()
-                    {
-                        let handler = |copied_bytes, total_bytes| {
-                            let item_progress = copied_bytes as f32 / total_bytes as f32;
-                            let total_progress =
-                                (item_progress + path_i as f32) / total_paths as f32;
-                            executor::block_on(async {
-                                let _ = msg_tx
-                                    .lock()
-                                    .await
-                                    .send(Message::PendingProgress(id, 100.0 * total_progress))
-                                    .await;
-                            })
-                        };
-
-                        if from.is_dir() {
-                            let options = fs_extra::dir::CopyOptions::default().copy_inside(true);
-                            fs_extra::copy_items_with_progress(
-                                &[from],
-                                to,
-                                &options,
-                                |progress: fs_extra::TransitProcess| {
-                                    handler(progress.copied_bytes, progress.total_bytes);
-                                    handle_progress_state(&msg_tx, &progress)
-                                },
-                            )?;
-                        } else {
-                            let mut options = fs_extra::file::CopyOptions::default();
-                            if to.exists() {
-                                match handle_replace(&msg_tx, from.clone(), to.clone(), false) {
-                                    ReplaceResult::Replace(_) => {
-                                        options.overwrite = true;
-                                    }
-                                    ReplaceResult::KeepBoth => {
-                                        match to.parent() {
-                                            Some(to_parent) => {
-                                                to = copy_unique_path(&from, &to_parent);
-                                            }
-                                            None => {
-                                                log::warn!("failed to get parent of {:?}", to);
-                                                //TODO: error?
-                                            }
-                                        }
-                                    }
-                                    ReplaceResult::Skip(_) => {
-                                        options.skip_exist = true;
-                                    }
-                                    ReplaceResult::Cancel => {
-                                        //TODO: be silent, but collect actual changes made for undo
-                                        continue;
-                                    }
-                                }
-                            }
-                            fs_extra::file::copy_with_progress(
-                                from,
-                                to,
-                                &options,
-                                |progress: fs_extra::file::TransitProcess| {
-                                    handler(progress.copied_bytes, progress.total_bytes);
-                                },
-                            )?;
-                        }
-                    }
-                    Ok(())
-                })
-                .await
-                .map_err(err_str)?
-                .map_err(err_str)?;
+                copy_or_move(paths, to, false, id, msg_tx).await?;
             }
             Self::Delete { paths } => {
                 let total = paths.len();
@@ -696,28 +746,7 @@ impl Operation {
                 .map_err(err_str)?;
             }
             Self::Move { paths, to } => {
-                let msg_tx = msg_tx.clone();
-                tokio::task::spawn_blocking(move || {
-                    log::info!("Move {:?} to {:?}", paths, to);
-                    let options = fs_extra::dir::CopyOptions::default();
-                    fs_extra::move_items_with_progress(&paths, &to, &options, |progress| {
-                        executor::block_on(async {
-                            let _ = msg_tx
-                                .lock()
-                                .await
-                                .send(Message::PendingProgress(
-                                    id,
-                                    100.0 * (progress.copied_bytes as f32)
-                                        / (progress.total_bytes as f32),
-                                ))
-                                .await;
-                        });
-                        handle_progress_state(&msg_tx, &progress)
-                    })
-                })
-                .await
-                .map_err(err_str)?
-                .map_err(err_str)?;
+                copy_or_move(paths, to, true, id, msg_tx).await?;
             }
             Self::NewFolder { path } => {
                 tokio::task::spawn_blocking(|| fs::create_dir(path))
