@@ -14,6 +14,7 @@ today = Hoje
 # List view
 name = Nome
 modified = Modificação
+trashed-on = Exclusão
 size = Tamanho
 
 # Dialogs
