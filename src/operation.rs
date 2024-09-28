@@ -330,30 +330,21 @@ async fn copy_or_move(
 
 fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
     let mut to = to.to_owned();
-    // Separate the full file name into its file name plus extension.
-    // `[Path::file_stem]` returns the full name for dotfiles (e.g.
-    // .someconf is the file name)
-    if let (Some(stem), ext) = (
-        // FIXME: Replace `[Path::file_stem]` with `[Path::file_prefix]` when stablized to handle .tar.gz et al. better
-        from.file_stem().and_then(|name| name.to_str()),
-        from.extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or_default(),
-    ) {
-        // '.' needs to be re-added for paths with extensions.
-        let dot = if ext.is_empty() { "" } else { "." };
+    if let Some(file_name) = from.file_name().and_then(|name| name.to_str()) {
         let mut n = 0u32;
-        // Loop until a valid `copy n` variant is found
         loop {
             n = if let Some(n) = n.checked_add(1) {
                 n
             } else {
-                // TODO: Return error? fs_extra will handle it anyway
                 break to;
             };
 
-            // Rebuild file name
-            let new_name = format!("{stem} ({} {n}){dot}{ext}", fl!("copy_noun"));
+            let new_name = if n == 0 {
+                file_name.to_string()
+            } else {
+                format!("{} ({} {})", file_name, fl!("copy_noun"), n)
+            };
+
             to = to.join(new_name);
 
             if !matches!(to.try_exists(), Ok(true)) {
@@ -725,7 +716,7 @@ impl Operation {
                                     .map_err(err_str)?
                                     .and_then(|mut archive| archive.extract(&new_dir))
                                     .map_err(err_str)?,
-                                 #[cfg(feature = "bzip2")]
+                                #[cfg(feature = "bzip2")]
                                 "application/x-bzip" | "application/x-bzip-compressed-tar" => {
                                     fs::File::open(path)
                                         .map(io::BufReader::new)
