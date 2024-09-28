@@ -91,6 +91,17 @@ fn handle_progress_state(
     }
 }
 
+fn get_directory_name(file_name: &str) -> &str {
+    const SUPPORTED_EXTENSIONS: [&str; 4] = [".tar.gz", ".tgz", ".tar", ".zip"];
+
+    for ext in &SUPPORTED_EXTENSIONS {
+        if file_name.ends_with(ext) {
+            return &file_name[..file_name.len() - ext.len()];
+        }
+    }
+    file_name
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ReplaceResult {
     Replace(bool),
@@ -683,12 +694,10 @@ impl Operation {
 
                         let to = to.to_owned();
 
-                        if let Some(file_stem) = path.file_stem() {
-                            let mut new_dir = to.join(file_stem);
-                            // Make sure all extension parts are removed (file_stem may still contain them)
-                            while new_dir.extension().is_some() {
-                                new_dir.set_extension("");
-                            }
+                        if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
+                            let dir_name = get_directory_name(file_name);
+                            let mut new_dir = to.join(dir_name);
+
                             if new_dir.exists() {
                                 if let Some(new_dir_parent) = new_dir.parent() {
                                     new_dir = copy_unique_path(&new_dir, new_dir_parent);
@@ -702,21 +711,21 @@ impl Operation {
                                         .map(io::BufReader::new)
                                         .map(flate2::read::GzDecoder::new)
                                         .map(tar::Archive::new)
-                                        .and_then(|mut archive| archive.unpack(new_dir))
+                                        .and_then(|mut archive| archive.unpack(&new_dir))
                                         .map_err(err_str)?
                                 }
                                 "application/x-tar" => fs::File::open(path)
                                     .map(io::BufReader::new)
                                     .map(tar::Archive::new)
-                                    .and_then(|mut archive| archive.unpack(new_dir))
+                                    .and_then(|mut archive| archive.unpack(&new_dir))
                                     .map_err(err_str)?,
                                 "application/zip" => fs::File::open(path)
                                     .map(io::BufReader::new)
                                     .map(zip::ZipArchive::new)
                                     .map_err(err_str)?
-                                    .and_then(|mut archive| archive.extract(new_dir))
+                                    .and_then(|mut archive| archive.extract(&new_dir))
                                     .map_err(err_str)?,
-                                #[cfg(feature = "bzip2")]
+                                 #[cfg(feature = "bzip2")]
                                 "application/x-bzip" | "application/x-bzip-compressed-tar" => {
                                     fs::File::open(path)
                                         .map(io::BufReader::new)
