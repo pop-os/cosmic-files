@@ -41,7 +41,19 @@ use notify_debouncer_full::{
 };
 use slotmap::Key as SlotMapKey;
 use std::{
-    any::TypeId, collections::{BTreeMap, HashMap, HashSet, VecDeque}, env, ffi::OsStr, fmt, fs, future::pending, io::{BufRead, BufReader}, num::NonZeroU16, os::unix::fs::PermissionsExt, path::PathBuf, process, sync::{Arc, Mutex}, time::{self, Instant}
+    any::TypeId,
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
+    env,
+    ffi::OsStr,
+    fmt, fs,
+    future::pending,
+    io::{BufRead, BufReader},
+    num::NonZeroU16,
+    os::unix::fs::PermissionsExt,
+    path::PathBuf,
+    process,
+    sync::{Arc, Mutex},
+    time::{self, Instant},
 };
 use tokio::sync::mpsc;
 use trash::TrashItem;
@@ -2351,28 +2363,11 @@ impl Application for App {
                                             .permissions();
                                         // Set the executable permission to the file
                                         perms.set_mode(0o755);
-                                        fs::set_permissions(&path, perms).expect("Failed to set permissions");
+                                        fs::set_permissions(&path, perms)
+                                            .expect("Failed to set permissions");
 
                                         log::info!("running app: {:?}", ext);
-                                        let cmd = std::process::Command::new(path).spawn();
-                                        match cmd {
-                                            Ok(mut res) => {
-                                                if let Some(stderr) = res.stderr.take() {
-                                                    let reader = BufReader::new(stderr);
-                                                    for line in reader.lines() {
-                                                        if let Ok(line) = line {
-                                                            log::error!(
-                                                                "running app error: {}",
-                                                                line
-                                                            );
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            Err(error) => {
-                                                log::error!("error: {:?}", error);
-                                            }
-                                        }
+                                        let _ = std::process::Command::new(path).spawn();
                                     }
                                     _ => match open::that_detached(&path) {
                                         Ok(()) => {
