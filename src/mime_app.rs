@@ -31,6 +31,7 @@ pub fn exec_to_command(exec: &str, path_opt: Option<PathBuf>) -> Option<process:
             command.arg(arg);
         }
     }
+    log::info!("command: {:?}", command);
     Some(command)
 }
 

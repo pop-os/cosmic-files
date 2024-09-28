@@ -41,15 +41,7 @@ use notify_debouncer_full::{
 };
 use slotmap::Key as SlotMapKey;
 use std::{
-    any::TypeId,
-    collections::{BTreeMap, HashMap, HashSet, VecDeque},
-    env, fmt, fs,
-    future::pending,
-    num::NonZeroU16,
-    path::PathBuf,
-    process,
-    sync::{Arc, Mutex},
-    time::{self, Instant},
+    any::TypeId, collections::{BTreeMap, HashMap, HashSet, VecDeque}, env, ffi::OsStr, fmt, fs, future::pending, io::{BufRead, BufReader}, num::NonZeroU16, os::unix::fs::PermissionsExt, path::PathBuf, process, sync::{Arc, Mutex}, time::{self, Instant}
 };
 use tokio::sync::mpsc;
 use trash::TrashItem;
@@ -2350,18 +2342,51 @@ impl Application for App {
                                 };
                             }
                             if !found_desktop_exec {
-                                match open::that_detached(&path) {
-                                    Ok(()) => {
-                                        let _ = recently_used_xbel::update_recently_used(
-                                            &path,
-                                            App::APP_ID.to_string(),
-                                            "cosmic-files".to_string(),
-                                            None,
-                                        );
+                                let file_extension = path.extension();
+                                match file_extension {
+                                    Some(ext) if ext == OsStr::new("AppImage") => {
+                                        // Set the executable permission to the file
+                                        let mut perms = fs::metadata(&path)
+                                            .expect("Failed to get metadata")
+                                            .permissions();
+                                        // Set the executable permission to the file
+                                        perms.set_mode(0o755);
+                                        fs::set_permissions(&path, perms).expect("Failed to set permissions");
+
+                                        log::info!("running app: {:?}", ext);
+                                        let cmd = std::process::Command::new(path).spawn();
+                                        match cmd {
+                                            Ok(mut res) => {
+                                                if let Some(stderr) = res.stderr.take() {
+                                                    let reader = BufReader::new(stderr);
+                                                    for line in reader.lines() {
+                                                        if let Ok(line) = line {
+                                                            log::error!(
+                                                                "running app error: {}",
+                                                                line
+                                                            );
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            Err(error) => {
+                                                log::error!("error: {:?}", error);
+                                            }
+                                        }
                                     }
-                                    Err(err) => {
-                                        log::warn!("failed to open {:?}: {}", path, err);
-                                    }
+                                    _ => match open::that_detached(&path) {
+                                        Ok(()) => {
+                                            let _ = recently_used_xbel::update_recently_used(
+                                                &path,
+                                                App::APP_ID.to_string(),
+                                                "cosmic-files".to_string(),
+                                                None,
+                                            );
+                                        }
+                                        Err(err) => {
+                                            log::warn!("failed to open {:?}: {}", path, err);
+                                        }
+                                    },
                                 }
                             }
                         }
