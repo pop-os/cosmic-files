@@ -331,18 +331,35 @@ async fn copy_or_move(
 fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
     let mut to = to.to_owned();
     if let Some(file_name) = from.file_name().and_then(|name| name.to_str()) {
+        let is_dir = from.is_dir();
+        let (stem, ext) = if !is_dir {
+            match from.extension().and_then(|e| e.to_str()) {
+                Some(ext) => {
+                    let stem = from
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or(file_name);
+                    (stem.to_string(), Some(ext.to_string()))
+                }
+                None => (file_name.to_string(), None),
+            }
+        } else {
+            (file_name.to_string(), None)
+        };
+
         let mut n = 0u32;
         loop {
-            n = if let Some(n) = n.checked_add(1) {
-                n
-            } else {
-                break to;
-            };
-
             let new_name = if n == 0 {
                 file_name.to_string()
             } else {
-                format!("{} ({} {})", file_name, fl!("copy_noun"), n)
+                if is_dir {
+                    format!("{} ({} {})", file_name, fl!("copy_noun"), n)
+                } else {
+                    match &ext {
+                        Some(ext) => format!("{} ({} {}).{}", stem, fl!("copy_noun"), n, ext),
+                        None => format!("{} ({} {})", stem, fl!("copy_noun"), n),
+                    }
+                }
             };
 
             to = to.join(new_name);
@@ -352,6 +369,12 @@ fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
             }
             // Continue if a copy with index exists
             to.pop();
+
+            n = if let Some(n) = n.checked_add(1) {
+                n
+            } else {
+                break to;
+            };
         }
     } else {
         to
