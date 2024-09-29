@@ -91,6 +91,17 @@ fn handle_progress_state(
     }
 }
 
+fn get_directory_name(file_name: &str) -> &str {
+    const SUPPORTED_EXTENSIONS: [&str; 4] = [".tar.gz", ".tgz", ".tar", ".zip"];
+
+    for ext in &SUPPORTED_EXTENSIONS {
+        if file_name.ends_with(ext) {
+            return &file_name[..file_name.len() - ext.len()];
+        }
+    }
+    file_name
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ReplaceResult {
     Replace(bool),
@@ -319,30 +330,38 @@ async fn copy_or_move(
 
 fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
     let mut to = to.to_owned();
-    // Separate the full file name into its file name plus extension.
-    // `[Path::file_stem]` returns the full name for dotfiles (e.g.
-    // .someconf is the file name)
-    if let (Some(stem), ext) = (
-        // FIXME: Replace `[Path::file_stem]` with `[Path::file_prefix]` when stablized to handle .tar.gz et al. better
-        from.file_stem().and_then(|name| name.to_str()),
-        from.extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or_default(),
-    ) {
-        // '.' needs to be re-added for paths with extensions.
-        let dot = if ext.is_empty() { "" } else { "." };
+    if let Some(file_name) = from.file_name().and_then(|name| name.to_str()) {
+        let is_dir = from.is_dir();
+        let (stem, ext) = if !is_dir {
+            match from.extension().and_then(|e| e.to_str()) {
+                Some(ext) => {
+                    let stem = from
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or(file_name);
+                    (stem.to_string(), Some(ext.to_string()))
+                }
+                None => (file_name.to_string(), None),
+            }
+        } else {
+            (file_name.to_string(), None)
+        };
+
         let mut n = 0u32;
-        // Loop until a valid `copy n` variant is found
         loop {
-            n = if let Some(n) = n.checked_add(1) {
-                n
+            let new_name = if n == 0 {
+                file_name.to_string()
             } else {
-                // TODO: Return error? fs_extra will handle it anyway
-                break to;
+                if is_dir {
+                    format!("{} ({} {})", file_name, fl!("copy_noun"), n)
+                } else {
+                    match &ext {
+                        Some(ext) => format!("{} ({} {}).{}", stem, fl!("copy_noun"), n, ext),
+                        None => format!("{} ({} {})", stem, fl!("copy_noun"), n),
+                    }
+                }
             };
 
-            // Rebuild file name
-            let new_name = format!("{stem} ({} {n}){dot}{ext}", fl!("copy_noun"));
             to = to.join(new_name);
 
             if !matches!(to.try_exists(), Ok(true)) {
@@ -350,6 +369,12 @@ fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
             }
             // Continue if a copy with index exists
             to.pop();
+
+            n = if let Some(n) = n.checked_add(1) {
+                n
+            } else {
+                break to;
+            };
         }
     } else {
         to
@@ -683,12 +708,10 @@ impl Operation {
 
                         let to = to.to_owned();
 
-                        if let Some(file_stem) = path.file_stem() {
-                            let mut new_dir = to.join(file_stem);
-                            // Make sure all extension parts are removed (file_stem may still contain them)
-                            while new_dir.extension().is_some() {
-                                new_dir.set_extension("");
-                            }
+                        if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
+                            let dir_name = get_directory_name(file_name);
+                            let mut new_dir = to.join(dir_name);
+
                             if new_dir.exists() {
                                 if let Some(new_dir_parent) = new_dir.parent() {
                                     new_dir = copy_unique_path(&new_dir, new_dir_parent);
@@ -702,19 +725,19 @@ impl Operation {
                                         .map(io::BufReader::new)
                                         .map(flate2::read::GzDecoder::new)
                                         .map(tar::Archive::new)
-                                        .and_then(|mut archive| archive.unpack(new_dir))
+                                        .and_then(|mut archive| archive.unpack(&new_dir))
                                         .map_err(err_str)?
                                 }
                                 "application/x-tar" => fs::File::open(path)
                                     .map(io::BufReader::new)
                                     .map(tar::Archive::new)
-                                    .and_then(|mut archive| archive.unpack(new_dir))
+                                    .and_then(|mut archive| archive.unpack(&new_dir))
                                     .map_err(err_str)?,
                                 "application/zip" => fs::File::open(path)
                                     .map(io::BufReader::new)
                                     .map(zip::ZipArchive::new)
                                     .map_err(err_str)?
-                                    .and_then(|mut archive| archive.extract(new_dir))
+                                    .and_then(|mut archive| archive.extract(&new_dir))
                                     .map_err(err_str)?,
                                 #[cfg(feature = "bzip2")]
                                 "application/x-bzip" | "application/x-bzip-compressed-tar" => {
