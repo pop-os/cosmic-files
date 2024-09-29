@@ -329,56 +329,71 @@ async fn copy_or_move(
 }
 
 fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
+    // List of compound extensions to check
+    const COMPOUND_EXTENSIONS: &[&str] = &[
+        ".tar.gz",
+        ".tar.bz2",
+        ".tar.xz",
+        ".tar.zst",
+        ".tar.lz",
+        ".tar.lzma",
+        ".tar.sz",
+        ".tar.lzo",
+        ".tar.br",
+        ".tar.Z",
+        ".tar.pz",
+    ];
+
     let mut to = to.to_owned();
     if let Some(file_name) = from.file_name().and_then(|name| name.to_str()) {
-        let is_dir = from.is_dir();
-        let (stem, ext) = if !is_dir {
-            match from.extension().and_then(|e| e.to_str()) {
-                Some(ext) => {
-                    let stem = from
-                        .file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or(file_name);
-                    (stem.to_string(), Some(ext.to_string()))
-                }
-                None => (file_name.to_string(), None),
-            }
-        } else {
+        let (stem, ext) = if from.is_dir() {
             (file_name.to_string(), None)
+        } else {
+            let file_name = file_name.to_string();
+            COMPOUND_EXTENSIONS
+                .iter()
+                .find(|&&ext| file_name.ends_with(ext))
+                .map(|&ext| {
+                    (
+                        file_name.strip_suffix(ext).unwrap().to_string(),
+                        Some(ext[1..].to_string()),
+                    )
+                })
+                .unwrap_or_else(|| {
+                    from.file_stem()
+                        .and_then(|s| s.to_str())
+                        .map(|stem| {
+                            (
+                                stem.to_string(),
+                                from.extension()
+                                    .and_then(|e| e.to_str())
+                                    .map(|e| e.to_string()),
+                            )
+                        })
+                        .unwrap_or((file_name, None))
+                })
         };
 
-        let mut n = 0u32;
-        loop {
+        for n in 0.. {
             let new_name = if n == 0 {
                 file_name.to_string()
             } else {
-                if is_dir {
-                    format!("{} ({} {})", file_name, fl!("copy_noun"), n)
-                } else {
-                    match &ext {
-                        Some(ext) => format!("{} ({} {}).{}", stem, fl!("copy_noun"), n, ext),
-                        None => format!("{} ({} {})", stem, fl!("copy_noun"), n),
-                    }
+                match ext {
+                    Some(ref ext) => format!("{} ({} {}).{}", stem, fl!("copy_noun"), n, ext),
+                    None => format!("{} ({} {})", stem, fl!("copy_noun"), n),
                 }
             };
 
-            to = to.join(new_name);
+            to = to.join(&new_name);
 
             if !matches!(to.try_exists(), Ok(true)) {
-                break to;
+                break;
             }
             // Continue if a copy with index exists
             to.pop();
-
-            n = if let Some(n) = n.checked_add(1) {
-                n
-            } else {
-                break to;
-            };
         }
-    } else {
-        to
     }
+    to
 }
 
 fn file_name<'a>(path: &'a Path) -> Cow<'a, str> {
