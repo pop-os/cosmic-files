@@ -199,6 +199,7 @@ remove-from-sidebar = Remover da barra lateral
 sort-by-name = Ordenar por nome
 sort-by-modified = Ordenar por data de modificação
 sort-by-size = Ordenar por tamanho
+sort-by-trashed = Ordernar por data de exclusão
 
 # Menu
 
