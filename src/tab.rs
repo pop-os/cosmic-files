@@ -872,6 +872,8 @@ pub enum Message {
     DndLeave(Location),
     WindowDrag,
     WindowToggleMaximize,
+    ZoomIn,
+    ZoomOut,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -2447,6 +2449,12 @@ impl Tab {
             Message::WindowToggleMaximize => {
                 commands.push(Command::WindowToggleMaximize);
             }
+            Message::ZoomIn => {
+                commands.push(Command::Action(Action::ZoomIn));
+            }
+            Message::ZoomOut => {
+                commands.push(Command::Action(Action::ZoomOut));
+            }
         }
 
         // Scroll to top if needed
@@ -4010,7 +4018,6 @@ pub fn respond_to_scroll_direction(delta: ScrollDelta, modifiers: Modifiers) -> 
         ScrollDelta::Pixels { y, .. } => y,
     };
 
-    /*TODO
     if delta_y > 0.0 {
         return Some(Message::ZoomIn);
     }
@@ -4018,7 +4025,6 @@ pub fn respond_to_scroll_direction(delta: ScrollDelta, modifiers: Modifiers) -> 
     if delta_y < 0.0 {
         return Some(Message::ZoomOut);
     }
-    */
 
     None
 }
