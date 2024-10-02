@@ -186,6 +186,8 @@ pub fn context_menu<'a>(
                         menu_item(fl!("open-item-location"), Action::OpenItemLocation).into(),
                     );
                 }
+                children.push(divider::horizontal::light().into());
+                children.push(menu_item(fl!("show-details"), Action::Preview).into());
             } else {
                 if dialog_kind.save() {
                     children.push(menu_item(fl!("new-folder"), Action::NewFolder).into());

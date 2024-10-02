@@ -11,7 +11,7 @@ use cosmic::{
     iced::{
         event,
         futures::{self, SinkExt},
-        keyboard::{Event as KeyEvent, Modifiers},
+        keyboard::{Event as KeyEvent, Key, Modifiers},
         subscription::{self, Subscription},
         window, Alignment, Event, Length, Size,
     },
@@ -42,6 +42,7 @@ use crate::{
     app::{Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind},
     config::{Config, Favorite, IconSizes, TabConfig},
     fl, home_dir,
+    key_bind::key_binds,
     localize::LANGUAGE_SORTER,
     menu,
     mounter::{mounters, MounterItem, MounterItems, MounterKey, MounterMessage, Mounters},
@@ -309,6 +310,7 @@ enum Message {
     DialogUpdate(DialogPage),
     Filename(String),
     Filter(usize),
+    Key(Modifiers, Key),
     Modifiers(Modifiers),
     MounterItems(MounterKey, MounterItems),
     NewFolder,
@@ -322,12 +324,14 @@ enum Message {
     SearchSubmit,
     TabMessage(tab::Message),
     TabRescan(Vec<tab::Item>),
+    ToggleShowDetails,
 }
 
 impl From<AppMessage> for Message {
     fn from(app_message: AppMessage) -> Message {
         match app_message {
             AppMessage::TabMessage(_entity_opt, tab_message) => Message::TabMessage(tab_message),
+            AppMessage::ToggleShowDetails => Message::ToggleShowDetails,
             unsupported => {
                 log::warn!("{unsupported:?} not supported in dialog mode");
                 Message::None
@@ -725,7 +729,7 @@ impl Application for App {
             search_id: widget::Id::unique(),
             search_input: String::new(),
             tab,
-            key_binds: HashMap::new(),
+            key_binds: key_binds(),
             watcher_opt: None,
         };
 
@@ -1055,6 +1059,13 @@ impl Application for App {
                     self.filter_selected = None;
                 }
                 return self.rescan_tab();
+            }
+            Message::Key(modifiers, key) => {
+                for (key_bind, action) in self.key_binds.iter() {
+                    if key_bind.matches(modifiers, &key) {
+                        return self.update(Message::from(action.message()));
+                    }
+                }
             }
             Message::Modifiers(modifiers) => {
                 self.modifiers = modifiers;
@@ -1412,6 +1423,15 @@ impl Application for App {
                 // Reset focus on location change
                 return widget::text_input::focus(self.filename_id.clone());
             }
+            Message::ToggleShowDetails => match self.context_page {
+                ContextPage::Preview(_, _) => {
+                    self.core.window.show_context = !self.core.window.show_context;
+                }
+                _ => {
+                    self.context_page = ContextPage::Preview(None, PreviewKind::Selected);
+                    self.core.window.show_context = true;
+                }
+            },
         }
 
         Command::none()
@@ -1440,7 +1460,11 @@ impl Application for App {
     fn subscription(&self) -> Subscription<Message> {
         struct WatcherSubscription;
         let mut subscriptions = vec![
-            event::listen_with(|event, _status| match event {
+            event::listen_with(|event, status| match event {
+                Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => match status {
+                    event::Status::Ignored => Some(Message::Key(modifiers, key)),
+                    event::Status::Captured => None,
+                },
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
                     Some(Message::Modifiers(modifiers))
                 }
