@@ -698,12 +698,12 @@ impl Application for App {
         let tab_config = TabConfig {
             view: tab::View::List,
             folders_first: false,
-            sort_name: tab::HeadingOptions::Modified,
-            sort_direction: false,
             ..Default::default()
         };
         let mut tab = Tab::new(location, tab_config);
         tab.mode = tab::Mode::Dialog(flags.kind.clone());
+        tab.sort_name = tab::HeadingOptions::Modified;
+        tab.sort_direction = false;
 
         let mut app = App {
             core,

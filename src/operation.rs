@@ -4,10 +4,7 @@ use std::{
     fs,
     io::{self, Read, Write},
     path::{Path, PathBuf},
-    sync::{
-        atomic::{self, AtomicU64},
-        Arc,
-    },
+    sync::Arc,
 };
 use tokio::sync::{mpsc, Mutex};
 use walkdir::WalkDir;

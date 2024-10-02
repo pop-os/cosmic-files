@@ -169,15 +169,6 @@ show-details = विवरण दिखाएँ
 
 ## Settings
 settings = सेटिंग्स
-settings-tab = टैब
-settings-show-hidden = छिपी हुई फाइलें दिखाएँ
-default-view = डिफ़ॉल्ट दृश्य
-icon-size-list = आइकॉन आकार (सूची)
-icon-size-grid = आइकॉन आकार (ग्रिड)
-sorting-name = क्रमबद्ध द्वारा
-direction = दिशा
-ascending = आरोही
-descending = अवरोही
 
 ### Appearance
 appearance = रूप

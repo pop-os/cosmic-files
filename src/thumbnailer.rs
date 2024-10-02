@@ -3,15 +3,7 @@
 
 use mime_guess::Mime;
 use once_cell::sync::Lazy;
-use std::{
-    cmp::Ordering,
-    collections::HashMap,
-    env, fs,
-    path::{Path, PathBuf},
-    process,
-    sync::Mutex,
-    time::Instant,
-};
+use std::{collections::HashMap, fs, path::Path, process, sync::Mutex, time::Instant};
 
 #[derive(Clone, Debug)]
 pub struct Thumbnailer {
@@ -75,8 +67,6 @@ impl ThumbnailerCache {
 
     #[cfg(feature = "desktop")]
     pub fn reload(&mut self) {
-        use crate::localize::LANGUAGE_SORTER;
-
         let start = Instant::now();
 
         self.cache.clear();

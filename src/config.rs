@@ -158,9 +158,6 @@ pub struct TabConfig {
     pub folders_first: bool,
     /// Show hidden files and folders
     pub show_hidden: bool,
-    /// Sorter
-    pub sort_name: HeadingOptions,
-    pub sort_direction: bool,
     /// Icon zoom
     pub icon_sizes: IconSizes,
 }
@@ -171,8 +168,6 @@ impl Default for TabConfig {
             view: View::List,
             folders_first: true,
             show_hidden: false,
-            sort_name: HeadingOptions::Name,
-            sort_direction: true,
             icon_sizes: IconSizes::default(),
         }
     }

@@ -69,15 +69,6 @@ properties = Свойства
 
 ## Settings
 settings = Параметры
-settings-tab = Вкладка
-settings-show-hidden = Показывать скрытые файлы
-default-view = Вид по умолчанию
-icon-size-list = Размер иконок (список)
-icon-size-grid = Размер иконок (сетка)
-sorting-name = Отсортировать
-direction = Направление
-ascending = По возрастанию
-descending = По убыванию
 
 ### Appearance
 appearance = Оформление

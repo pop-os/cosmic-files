@@ -169,15 +169,6 @@ show-details = Show details
 
 ## Settings
 settings = Settings
-settings-tab = Tab
-settings-show-hidden = Show hidden files
-default-view = Default view
-icon-size-list = Icon size (list)
-icon-size-grid = Icon size (grid)
-sorting-name = Sort by
-direction = Direction
-ascending = Ascending
-descending = Descending
 
 ### Appearance
 appearance = Appearance

@@ -60,14 +60,6 @@ properties = 정보
 
 ## Settings
 settings = 설정
-settings-tab = 탭
-settings-show-hidden = 숨겨진 파일 표시
-icon-size-list = 아이콘 크기 (목록)
-icon-size-grid = 아이콘 크기 (그리드)
-sorting-name = 정렬
-direction = 경로
-ascending = 오름차순
-descending = 내림차순
 
 ### Appearance
 appearance = 모양새

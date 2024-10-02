@@ -15,7 +15,6 @@ use std::collections::HashMap;
 
 use crate::{
     app::{Action, Message},
-    config::TabConfig,
     fl,
     tab::{self, HeadingOptions, Location, LocationMenuAction, Tab},
 };
@@ -58,17 +57,12 @@ pub fn context_menu<'a>(
         .on_press(tab::Message::ContextAction(action))
     };
 
-    let TabConfig {
-        sort_name,
-        sort_direction,
-        ..
-    } = tab.config;
     let sort_item = |label, variant| {
         menu_item(
             format!(
                 "{} {}",
                 label,
-                match (sort_name == variant, sort_direction) {
+                match (tab.sort_name == variant, tab.sort_direction) {
                     (true, true) => "\u{2B07}",
                     (true, false) => "\u{2B06}",
                     _ => "",
@@ -273,7 +267,7 @@ pub fn dialog_menu<'a>(
     let sort_item = |label, sort, dir| {
         menu::Item::CheckBox(
             label,
-            tab.config.sort_name == sort && tab.config.sort_direction == dir,
+            tab.sort_name == sort && tab.sort_direction == dir,
             Action::SetSort(sort, dir),
         )
     };
@@ -303,7 +297,7 @@ pub fn dialog_menu<'a>(
             ),
         ),
         menu::Tree::with_children(
-            widget::button::icon(widget::icon::from_name(if tab.config.sort_direction {
+            widget::button::icon(widget::icon::from_name(if tab.sort_direction {
                 "view-sort-ascending-symbolic"
             } else {
                 "view-sort-descending-symbolic"
@@ -361,7 +355,7 @@ pub fn menu_bar<'a>(
         menu::Item::CheckBox(
             label,
             tab_opt.map_or(false, |tab| {
-                tab.config.sort_name == sort && tab.config.sort_direction == dir
+                tab.sort_name == sort && tab.sort_direction == dir
             }),
             Action::SetSort(sort, dir),
         )

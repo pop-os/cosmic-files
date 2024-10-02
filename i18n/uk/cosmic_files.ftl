@@ -114,15 +114,6 @@ properties = Властивості
 
 ## Settings
 settings = Налаштування
-settings-tab = Вкладки
-settings-show-hidden = Показувати приховані файли
-default-view = Типовий режим перегляду
-icon-size-list = Розмір піктограм (для списку)
-icon-size-grid = Розмір піктограм (для ґратки)
-sorting-name = Сортувати за
-direction = Напрям
-ascending = Зростання
-descending = Спадання
 
 ### Appearance
 appearance = Зовнішній вигляд

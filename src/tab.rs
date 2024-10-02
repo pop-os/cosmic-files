@@ -9,7 +9,7 @@ use cosmic::{
         clipboard::dnd::DndAction,
         event,
         futures::SinkExt,
-        keyboard::{self, Modifiers},
+        keyboard::Modifiers,
         subscription::{self, Subscription},
         //TODO: export in cosmic::widget
         widget::{
@@ -39,7 +39,6 @@ use cosmic::{
 use chrono::{DateTime, Utc};
 use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
-use recently_used_xbel::{Error, RecentlyUsed};
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
@@ -48,10 +47,8 @@ use std::{
     collections::HashMap,
     fmt::{self, Display},
     fs::{self, Metadata},
-    num::NonZeroU16,
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
-    process,
     sync::{Arc, Mutex},
     time::{Duration, Instant, SystemTime},
 };
@@ -548,7 +545,7 @@ pub fn scan_search(tab_path: &PathBuf, term: &str, sizes: IconSizes) -> Vec<Item
                         path.to_path_buf(),
                         file_name.to_string(),
                         metadata,
-                        IconSizes::default(),
+                        sizes,
                     ));
                 }
 
@@ -759,7 +756,7 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
 }
 
 pub fn scan_network(uri: &str, mounters: Mounters, sizes: IconSizes) -> Vec<Item> {
-    for (key, mounter) in mounters.iter() {
+    for (_key, mounter) in mounters.iter() {
         match mounter.network_scan(uri, sizes) {
             Some(Ok(items)) => return items,
             Some(Err(err)) => {
@@ -867,7 +864,6 @@ pub enum Message {
     SelectAll,
     SetSort(HeadingOptions, bool),
     Thumbnail(PathBuf, ItemThumbnail),
-    ToggleFoldersFirst,
     ToggleShowHidden,
     View(View),
     ToggleSort(HeadingOptions),
@@ -877,9 +873,6 @@ pub enum Message {
     DndLeave(Location),
     WindowDrag,
     WindowToggleMaximize,
-    ZoomDefault,
-    ZoomIn,
-    ZoomOut,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -1152,7 +1145,7 @@ impl Item {
         );
 
         if self.mime.type_() == mime::IMAGE {
-            if let Some(path) = self.path_opt() {
+            if let Some(_path) = self.path_opt() {
                 row = row.push(
                     widget::button::icon(widget::icon::from_name("view-fullscreen-symbolic"))
                         .on_press(app::Message::TabMessage(None, Message::Gallery(true))),
@@ -1374,6 +1367,8 @@ pub struct Tab {
     pub history_i: usize,
     pub history: Vec<Location>,
     pub config: TabConfig,
+    pub sort_name: HeadingOptions,
+    pub sort_direction: bool,
     pub gallery: bool,
     pub(crate) items_opt: Option<Vec<Item>>,
     pub dnd_hovered: Option<(Location, Instant)>,
@@ -1422,6 +1417,8 @@ impl Tab {
             history_i: 0,
             history,
             config,
+            sort_name: HeadingOptions::Name,
+            sort_direction: true,
             gallery: false,
             items_opt: None,
             scrollable_id: widget::Id::unique(),
@@ -1827,9 +1824,7 @@ impl Tab {
                         if let Some(range) = self.select_range {
                             let min = range.0.min(range.1);
                             let max = range.0.max(range.1);
-                            if self.config.sort_name == HeadingOptions::Name
-                                && self.config.sort_direction
-                            {
+                            if self.sort_name == HeadingOptions::Name && self.sort_direction {
                                 // A default/unsorted tab's view is consistent with how the
                                 // Items are laid out internally (items_opt), so Items can be
                                 // linearly selected
@@ -1936,7 +1931,10 @@ impl Tab {
                 }
             }
             Message::Config(config) => {
+                // View is preserved for existing tabs
+                let view = self.config.view;
                 self.config = config;
+                self.config.view = view;
             }
             Message::ContextAction(action) => {
                 // Close context menu
@@ -2348,8 +2346,8 @@ impl Tab {
                 }
             }
             Message::SetSort(heading_option, dir) => {
-                self.config.sort_name = heading_option;
-                self.config.sort_direction = dir;
+                self.sort_name = heading_option;
+                self.sort_direction = dir;
             }
             Message::Thumbnail(path, thumbnail) => {
                 if let Some(ref mut items) = self.items_opt {
@@ -2382,21 +2380,20 @@ impl Tab {
                     }
                 }
             }
-            Message::ToggleFoldersFirst => self.config.folders_first = !self.config.folders_first,
             Message::ToggleShowHidden => self.config.show_hidden = !self.config.show_hidden,
 
             Message::View(view) => {
                 self.config.view = view;
             }
             Message::ToggleSort(heading_option) => {
-                let heading_sort = if self.config.sort_name == heading_option {
-                    !self.config.sort_direction
+                let heading_sort = if self.sort_name == heading_option {
+                    !self.sort_direction
                 } else {
                     // Default modified to descending, and others to ascending.
                     heading_option != HeadingOptions::Modified
                 };
-                self.config.sort_direction = heading_sort;
-                self.config.sort_name = heading_option;
+                self.sort_direction = heading_sort;
+                self.sort_name = heading_option;
             }
             Message::Drop(Some((to, mut from))) => {
                 self.dnd_hovered = None;
@@ -2459,48 +2456,6 @@ impl Tab {
             }
             Message::WindowToggleMaximize => {
                 commands.push(Command::WindowToggleMaximize);
-            }
-            Message::ZoomDefault => match self.config.view {
-                View::List => self.config.icon_sizes.list = 100.try_into().unwrap(),
-                View::Grid => self.config.icon_sizes.grid = 100.try_into().unwrap(),
-            },
-            Message::ZoomIn => {
-                let zoom_in = |size: &mut NonZeroU16, min: u16, max: u16| {
-                    let mut step = min;
-                    while step <= max {
-                        if size.get() < step {
-                            *size = step.try_into().unwrap();
-                            break;
-                        }
-                        step += 25;
-                    }
-                    if size.get() > step {
-                        *size = step.try_into().unwrap();
-                    }
-                };
-                match self.config.view {
-                    View::List => zoom_in(&mut self.config.icon_sizes.list, 50, 500),
-                    View::Grid => zoom_in(&mut self.config.icon_sizes.grid, 50, 500),
-                }
-            }
-            Message::ZoomOut => {
-                let zoom_out = |size: &mut NonZeroU16, min: u16, max: u16| {
-                    let mut step = max;
-                    while step >= min {
-                        if size.get() > step {
-                            *size = step.try_into().unwrap();
-                            break;
-                        }
-                        step -= 25;
-                    }
-                    if size.get() < step {
-                        *size = step.try_into().unwrap();
-                    }
-                };
-                match self.config.view {
-                    View::List => zoom_out(&mut self.config.icon_sizes.list, 50, 500),
-                    View::Grid => zoom_out(&mut self.config.icon_sizes.grid, 50, 500),
-                }
             }
         }
 
@@ -2572,8 +2527,8 @@ impl Tab {
             }
         };
         let mut items: Vec<_> = self.items_opt.as_ref()?.iter().enumerate().collect();
-        let heading_sort = self.config.sort_direction;
-        match self.config.sort_name {
+        let heading_sort = self.sort_direction;
+        match self.sort_name {
             HeadingOptions::Size => {
                 items.sort_by(|a, b| {
                     // entries take precedence over size
@@ -2875,12 +2830,6 @@ impl Tab {
             ..
         } = theme::active().cosmic().spacing;
 
-        let TabConfig {
-            sort_name,
-            sort_direction,
-            ..
-        } = self.config;
-
         let size = self.size_opt.get().unwrap_or(Size::new(0.0, 0.0));
 
         let mut row = widget::row::with_capacity(5)
@@ -2923,7 +2872,7 @@ impl Tab {
                 .spacing(space_xxs)
                 .width(width);
             row = row.push(widget::text::heading(name));
-            match (sort_name == msg, sort_direction) {
+            match (self.sort_name == msg, self.sort_direction) {
                 (true, true) => {
                     row = row.push(widget::icon::from_name("pan-down-symbolic").size(16));
                 }
@@ -3895,7 +3844,6 @@ impl Tab {
             mouse_area = mouse_area.on_right_press(Message::ContextMenu);
         }
 
-        let should_propogate_events = true;
         let mut popover = widget::popover(mouse_area);
 
         if let Some(point) = self.context_menu {
@@ -3935,7 +3883,7 @@ impl Tab {
                     }
                 }
             }
-            Location::Network(uri, display_name) if uri == "network:///" => {
+            Location::Network(uri, _display_name) if uri == "network:///" => {
                 tab_column = tab_column.push(
                     widget::layer_container(widget::row::with_children(vec![
                         widget::horizontal_space(Length::Fill).into(),
@@ -4090,6 +4038,7 @@ pub fn respond_to_scroll_direction(delta: ScrollDelta, modifiers: Modifiers) -> 
         ScrollDelta::Pixels { y, .. } => y,
     };
 
+    /*TODO
     if delta_y > 0.0 {
         return Some(Message::ZoomIn);
     }
@@ -4097,6 +4046,7 @@ pub fn respond_to_scroll_direction(delta: ScrollDelta, modifiers: Modifiers) -> 
     if delta_y < 0.0 {
         return Some(Message::ZoomOut);
     }
+    */
 
     None
 }
