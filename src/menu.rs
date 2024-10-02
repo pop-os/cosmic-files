@@ -465,7 +465,7 @@ pub fn menu_bar<'a>(
                         tab_opt.map_or(false, |tab| tab.config.folders_first),
                         Action::ToggleFoldersFirst,
                     ),
-                    menu_button_optional(fl!("show-details"), Action::Preview, selected > 0),
+                    menu::Item::Button(fl!("show-details"), Action::Preview),
                     menu::Item::Divider,
                     menu_button_optional(fl!("gallery-preview"), Action::Gallery, selected > 0),
                     menu::Item::Divider,
