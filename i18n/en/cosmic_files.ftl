@@ -208,7 +208,6 @@ file = File
 new-tab = New tab
 new-window = New window
 rename = Rename...
-menu-show-details = Show details...
 close-tab = Close tab
 quit = Quit
 
@@ -228,6 +227,7 @@ grid-view = Grid view
 list-view = List view
 show-hidden-files = Show hidden files
 list-directories-first = List directories first
+gallery-preview = Gallery preview
 menu-settings = Settings...
 menu-about = About COSMIC Files...
 

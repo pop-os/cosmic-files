@@ -850,6 +850,7 @@ pub enum Message {
     Gallery(bool),
     GalleryPrevious,
     GalleryNext,
+    GalleryToggle,
     GoNext,
     GoPrevious,
     ItemDown,
@@ -2070,6 +2071,9 @@ impl Tab {
                 if let Some(id) = self.select_focus_id() {
                     commands.push(Command::Iced(widget::button::focus(id)));
                 }
+            }
+            Message::GalleryToggle => {
+                self.gallery = !self.gallery;
             }
             Message::GoNext => {
                 if let Some(history_i) = self.history_i.checked_add(1) {
