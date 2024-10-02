@@ -15,6 +15,7 @@ use std::collections::HashMap;
 
 use crate::{
     app::{Action, Message},
+    config::Config,
     fl,
     tab::{self, HeadingOptions, Location, LocationMenuAction, Tab},
 };
@@ -349,6 +350,7 @@ pub fn dialog_menu<'a>(
 
 pub fn menu_bar<'a>(
     tab_opt: Option<&Tab>,
+    config: &Config,
     key_binds: &HashMap<KeyBind, Action>,
 ) -> Element<'a, Message> {
     let sort_item = |label, sort, dir| {
@@ -459,7 +461,7 @@ pub fn menu_bar<'a>(
                         tab_opt.map_or(false, |tab| tab.config.folders_first),
                         Action::ToggleFoldersFirst,
                     ),
-                    menu::Item::Button(fl!("show-details"), Action::Preview),
+                    menu::Item::CheckBox(fl!("show-details"), config.show_details, Action::Preview),
                     menu::Item::Divider,
                     menu_button_optional(fl!("gallery-preview"), Action::Gallery, selected > 0),
                     menu::Item::Divider,

@@ -166,9 +166,7 @@ impl Action {
             Action::OpenTerminal => Message::OpenTerminal(entity_opt),
             Action::OpenWith => Message::ToggleContextPage(ContextPage::OpenWith),
             Action::Paste => Message::Paste(entity_opt),
-            Action::Preview => {
-                Message::ToggleContextPage(ContextPage::Preview(entity_opt, PreviewKind::Selected))
-            }
+            Action::Preview => Message::ToggleShowDetails,
             Action::Rename => Message::Rename(entity_opt),
             Action::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
             Action::SearchActivate => Message::SearchActivate,
@@ -288,7 +286,6 @@ pub enum Message {
     PendingComplete(u64),
     PendingError(u64, String),
     PendingProgress(u64, f32),
-    Preview(Entity, PreviewKind, time::Duration),
     RescanTrash,
     Rename(Option<Entity>),
     ReplaceResult(ReplaceResult),
@@ -308,6 +305,7 @@ pub enum Message {
     TabRescan(Entity, Location, Vec<tab::Item>, Option<PathBuf>),
     TabView(Option<Entity>, tab::View),
     ToggleContextPage(ContextPage),
+    ToggleShowDetails,
     ToggleFoldersFirst,
     Undo(usize),
     UndoTrash(widget::ToastId, Arc<[PathBuf]>),
@@ -473,7 +471,6 @@ pub struct App {
     pending_operations: BTreeMap<u64, (Operation, f32)>,
     complete_operations: BTreeMap<u64, Operation>,
     failed_operations: BTreeMap<u64, (Operation, String)>,
-    preview_opt: Option<(Entity, PreviewKind, time::Instant)>,
     search_active: bool,
     search_id: widget::Id,
     search_input: String,
@@ -1063,7 +1060,9 @@ impl Application for App {
     fn init(mut core: Core, flags: Self::Flags) -> (Self, Command<Self::Message>) {
         core.window.context_is_overlay = false;
         match flags.mode {
-            Mode::App => {}
+            Mode::App => {
+                core.window.show_context = flags.config.show_details;
+            }
             Mode::Desktop => {
                 core.window.content_container = false;
                 core.window.show_window_menu = false;
@@ -1086,7 +1085,7 @@ impl Application for App {
             config: flags.config,
             mode: flags.mode,
             app_themes,
-            context_page: ContextPage::Settings,
+            context_page: ContextPage::Preview(None, PreviewKind::Selected),
             dialog_pages: VecDeque::new(),
             dialog_text_input: widget::Id::unique(),
             key_binds: key_binds(),
@@ -1101,7 +1100,6 @@ impl Application for App {
             pending_operations: BTreeMap::new(),
             complete_operations: BTreeMap::new(),
             failed_operations: BTreeMap::new(),
-            preview_opt: None,
             search_active: false,
             search_id: widget::Id::unique(),
             search_input: String::new(),
@@ -1250,6 +1248,19 @@ impl Application for App {
         Some(Message::WindowClose)
     }
 
+    fn on_context_drawer(&mut self) -> Command<Self::Message> {
+        match self.context_page {
+            ContextPage::Preview(_, _) => {
+                // Persist state of preview page
+                if self.core.window.show_context != self.config.show_details {
+                    return self.update(Message::ToggleShowDetails);
+                }
+            }
+            _ => {}
+        }
+        Command::none()
+    }
+
     fn on_escape(&mut self) -> Command<Self::Message> {
         let entity = self.tab_model.active();
 
@@ -1360,8 +1371,10 @@ impl Application for App {
             Message::Config(config) => {
                 if config != self.config {
                     log::info!("update config");
-                    //TODO: update syntax theme by clearing tabs, only if needed
+                    // Show details is preserved for existing instances
+                    let show_details = self.config.show_details;
                     self.config = config;
+                    self.config.show_details = show_details;
                     return self.update_config();
                 }
             }
@@ -1933,17 +1946,6 @@ impl Application for App {
                 }
                 return self.update_notification();
             }
-            Message::Preview(entity, kind, timeout) => {
-                if self
-                    .preview_opt
-                    .as_ref()
-                    .is_some_and(|(e, k, i)| *e == entity && *k == kind && i.elapsed() > timeout)
-                {
-                    self.context_page = ContextPage::Preview(Some(entity), kind);
-                    self.set_show_context(true);
-                    self.set_context_title(self.context_page.title());
-                }
-            }
             Message::RescanTrash => {
                 // Update trash icon if empty/full
                 let maybe_entity = self.nav_model.iter().find(|&entity| {
@@ -2152,6 +2154,16 @@ impl Application for App {
                     return self.update_config();
                 }
             }
+            Message::ToggleShowDetails => {
+                let show_details = !self.config.show_details;
+                //TODO: move to update_config?
+                if show_details {
+                    self.context_page = ContextPage::Preview(None, PreviewKind::Selected);
+                    self.core.window.show_context = true;
+                }
+                config_set!(show_details, show_details);
+                return self.update_config();
+            }
             Message::ToggleFoldersFirst => {
                 let mut config = self.config.tab;
                 config.folders_first = !config.folders_first;
@@ -2273,22 +2285,10 @@ impl Application for App {
                                 log::error!("failed to get current executable path: {}", err);
                             }
                         },
-                        tab::Command::Preview(kind, mut timeout) => {
-                            self.preview_opt = Some((entity, kind.clone(), Instant::now()));
-                            if self.core.window.show_context {
-                                // If the context window is already open, immediately show the preview
-                                timeout = time::Duration::new(0, 0)
-                            };
-                            commands.push(Command::perform(
-                                async move {
-                                    tokio::time::sleep(timeout).await;
-                                    message::app(Message::Preview(entity, kind, timeout))
-                                },
-                                |x| x,
-                            ));
-                        }
-                        tab::Command::PreviewCancel => {
-                            self.preview_opt = None;
+                        tab::Command::Preview(kind) => {
+                            self.context_page = ContextPage::Preview(Some(entity), kind);
+                            self.set_show_context(true);
+                            self.set_context_title(self.context_page.title());
                         }
                         tab::Command::WindowDrag => {
                             commands.push(window::drag(self.main_window_id()));
@@ -3182,7 +3182,12 @@ impl Application for App {
     }
 
     fn header_start(&self) -> Vec<Element<Self::Message>> {
-        vec![menu::menu_bar(self.tab_model.active_data::<Tab>(), &self.key_binds).into()]
+        vec![menu::menu_bar(
+            self.tab_model.active_data::<Tab>(),
+            &self.config,
+            &self.key_binds,
+        )
+        .into()]
     }
 
     fn header_end(&self) -> Vec<Element<Self::Message>> {

@@ -9,10 +9,7 @@ use cosmic::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    app::App,
-    tab::{HeadingOptions, View},
-};
+use crate::{app::App, tab::View};
 
 pub const CONFIG_VERSION: u64 = 1;
 
@@ -96,6 +93,7 @@ impl Favorite {
 pub struct Config {
     pub app_theme: AppTheme,
     pub favorites: Vec<Favorite>,
+    pub show_details: bool,
     pub tab: TabConfig,
 }
 
@@ -141,6 +139,7 @@ impl Default for Config {
                 Favorite::Pictures,
                 Favorite::Videos,
             ],
+            show_details: false,
             tab: TabConfig::default(),
         }
     }

@@ -821,8 +821,7 @@ pub enum Command {
     OpenFile(PathBuf),
     OpenInNewTab(PathBuf),
     OpenInNewWindow(PathBuf),
-    Preview(PreviewKind, Duration),
-    PreviewCancel,
+    Preview(PreviewKind),
     WindowDrag,
     WindowToggleMaximize,
 }
@@ -1750,7 +1749,6 @@ impl Tab {
         let mut history_i_opt = None;
         let mod_ctrl = modifiers.contains(Modifiers::CTRL) && self.mode.multiple();
         let mod_shift = modifiers.contains(Modifiers::SHIFT) && self.mode.multiple();
-        let last_select_focus = self.select_focus;
         match message {
             Message::AddNetworkDrive => {
                 commands.push(Command::AddNetworkDrive);
@@ -1804,9 +1802,6 @@ impl Tab {
                 } else {
                     log::warn!("no item for click index {:?}", click_i_opt);
                 }
-
-                // Cancel any preview timers
-                commands.push(Command::PreviewCancel);
             }
             Message::Click(click_i_opt) => {
                 self.selected_clicked = false;
@@ -1988,11 +1983,9 @@ impl Tab {
                             //TODO: blocking code, run in command
                             match item_from_path(&path, IconSizes::default()) {
                                 Ok(item) => {
-                                    // Show preview instantly
-                                    commands.push(Command::Preview(
-                                        PreviewKind::Custom(PreviewItem(item)),
-                                        Duration::new(0, 0),
-                                    ));
+                                    commands.push(Command::Preview(PreviewKind::Custom(
+                                        PreviewItem(item),
+                                    )));
                                 }
                                 Err(err) => {
                                     log::warn!("failed to get item from path {:?}: {}", path, err);
@@ -2442,9 +2435,6 @@ impl Tab {
                         |x| x,
                     )));
                 }
-
-                // Clear preview timer
-                commands.push(Command::PreviewCancel);
             }
             Message::DndLeave(loc) => {
                 if Some(&loc) == self.dnd_hovered.as_ref().map(|(l, _)| l) {
@@ -2456,24 +2446,6 @@ impl Tab {
             }
             Message::WindowToggleMaximize => {
                 commands.push(Command::WindowToggleMaximize);
-            }
-        }
-
-        // Update preview timer
-        //TODO: make this configurable
-        if last_select_focus != self.select_focus {
-            if let Some(index) = self.select_focus {
-                if let Some(ref items) = self.items_opt {
-                    if let Some(item) = items.get(index) {
-                        if let Some(location) = item.location_opt.clone() {
-                            // Show preview after double click timeout
-                            commands.push(Command::Preview(
-                                PreviewKind::Location(location),
-                                DOUBLE_CLICK_DURATION,
-                            ));
-                        }
-                    }
-                }
             }
         }
 
