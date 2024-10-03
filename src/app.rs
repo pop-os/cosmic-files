@@ -43,13 +43,10 @@ use slotmap::Key as SlotMapKey;
 use std::{
     any::TypeId,
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
-    env,
-    ffi::OsStr,
-    fmt, fs,
+    env, fmt, fs,
     future::pending,
-    io::{BufRead, BufReader},
+    io,
     num::NonZeroU16,
-    os::unix::fs::PermissionsExt,
     path::PathBuf,
     process,
     sync::{Arc, Mutex},
@@ -415,16 +412,15 @@ pub enum DialogPage {
         name: String,
         dir: bool,
     },
-    AddExecutablePermission {
-        file_path: PathBuf,
-        run: bool,
-    },
     Replace {
         from: tab::Item,
         to: tab::Item,
         multiple: bool,
         apply_to_all: bool,
         tx: mpsc::Sender<ReplaceResult>,
+    },
+    SetExecutableAndLaunch {
+        path: PathBuf,
     },
 }
 
@@ -1465,24 +1461,11 @@ impl Application for App {
                             let to = parent.join(name);
                             self.operation(Operation::Rename { from, to });
                         }
-                        DialogPage::AddExecutablePermission { file_path, run } => {
-                            let mut perms = fs::metadata(&file_path)
-                                .expect("Failed to get metadata")
-                                .permissions();
-
-                            let current_mode = perms.mode();
-                            let new_mode = current_mode | 0o100;
-                            perms.set_mode(new_mode);
-                            fs::set_permissions(&file_path, perms)
-                                .expect("Failed to set permissions");
-
-                            if run {
-                                log::info!("running app: {:?}", file_path);
-                                let _ = std::process::Command::new(file_path).spawn();
-                            }
-                        }
                         DialogPage::Replace { .. } => {
                             log::warn!("replace dialog should be completed with replace result");
+                        }
+                        DialogPage::SetExecutableAndLaunch { path } => {
+                            self.operation(Operation::SetExecutableAndLaunch { path });
                         }
                     }
                 }
@@ -2242,7 +2225,8 @@ impl Application for App {
                         }
                         tab::Command::OpenFile(path) => {
                             let mut found_desktop_exec = false;
-                            if mime_icon::mime_for_path(&path) == "application/x-desktop" {
+                            let mime = mime_icon::mime_for_path(&path);
+                            if mime == "application/x-desktop" {
                                 match freedesktop_entry_parser::parse_entry(&path) {
                                     Ok(entry) => {
                                         match entry.section("Desktop Entry").attr("Exec") {
@@ -2275,36 +2259,42 @@ impl Application for App {
                                     Err(err) => {
                                         log::warn!("failed to parse {:?}: {}", path, err);
                                     }
-                                };
-                            }
-                            if !found_desktop_exec {
-                                let file_extension = path.extension();
-                                match file_extension {
-                                    Some(ext) if ext == OsStr::new("AppImage") => {
-                                        let mut perms = fs::metadata(&path)
-                                            .expect("Failed to get metadata")
-                                            .permissions();
-
-                                        self.dialog_pages.push_back(
-                                            DialogPage::AddExecutablePermission {
-                                                file_path: path.clone(),
-                                                run: true,
-                                            },
-                                        );
-                                    }
-                                    _ => match open::that_detached(&path) {
-                                        Ok(()) => {
-                                            let _ = recently_used_xbel::update_recently_used(
-                                                &path,
-                                                App::APP_ID.to_string(),
-                                                "cosmic-files".to_string(),
-                                                None,
+                                }
+                            } else if mime == "application/x-executable"
+                                || mime == "application/vnd.appimage"
+                            {
+                                let mut command = std::process::Command::new(&path);
+                                match spawn_detached(&mut command) {
+                                    Ok(()) => {}
+                                    Err(err) => match err.kind() {
+                                        io::ErrorKind::PermissionDenied => {
+                                            // If permission is denied, try marking as executable, then running
+                                            self.dialog_pages.push_back(
+                                                DialogPage::SetExecutableAndLaunch {
+                                                    path: path.clone(),
+                                                },
                                             );
                                         }
-                                        Err(err) => {
-                                            log::warn!("failed to open {:?}: {}", path, err);
+                                        _ => {
+                                            log::warn!("failed to execute {:?}: {}", path, err);
                                         }
                                     },
+                                }
+                                found_desktop_exec = true;
+                            }
+                            if !found_desktop_exec {
+                                match open::that_detached(&path) {
+                                    Ok(()) => {
+                                        let _ = recently_used_xbel::update_recently_used(
+                                            &path,
+                                            App::APP_ID.to_string(),
+                                            "cosmic-files".to_string(),
+                                            None,
+                                        );
+                                    }
+                                    Err(err) => {
+                                        log::warn!("failed to open {:?}: {}", path, err);
+                                    }
                                 }
                             }
                         }
@@ -3088,24 +3078,6 @@ impl Application for App {
                         .spacing(space_xxs),
                     )
             }
-            DialogPage::AddExecutablePermission { file_path, run } => {
-                let mut dialog = widget::dialog(fl!("add-permission-title"))
-                    .primary_action(
-                        widget::button::text(fl!("add-permission"))
-                            .style(theme::Button::Suggested)
-                            .on_press(Message::DialogComplete),
-                    )
-                    .secondary_action(
-                        widget::button::text(fl!("cancel"))
-                            .style(theme::Button::Destructive)
-                            .on_press(Message::DialogCancel),
-                    )
-                    .control(widget::column().push(widget::text::text(fl!(
-                        "add-permission-control",
-                        path = file_path.as_os_str().to_str()
-                    ))));
-                dialog
-            }
             DialogPage::RenameItem {
                 from,
                 parent,
@@ -3230,6 +3202,27 @@ impl Application for App {
                                 .on_press(Message::ReplaceResult(ReplaceResult::KeepBoth)),
                         )
                 }
+            }
+            DialogPage::SetExecutableAndLaunch { path } => {
+                let name = match path.file_name() {
+                    Some(file_name) => file_name.to_str(),
+                    None => path.as_os_str().to_str(),
+                };
+                widget::dialog(fl!("set-executable-and-launch"))
+                    .primary_action(
+                        widget::button::text(fl!("set-and-launch"))
+                            .style(theme::Button::Suggested)
+                            .on_press(Message::DialogComplete),
+                    )
+                    .secondary_action(
+                        widget::button::text(fl!("cancel"))
+                            .style(theme::Button::Standard)
+                            .on_press(Message::DialogCancel),
+                    )
+                    .control(widget::text::text(fl!(
+                        "set-executable-and-launch-description",
+                        name = name
+                    )))
             }
         };
 

@@ -66,10 +66,10 @@ apply-to-all = Apply to all
 keep-both = Keep both
 skip = Skip
 
-## Execution permission Dialog
-add-permission-title = Add execution permission
-add-permission-control = Add execution permission to {$path}
-add-permission = Add permission
+## Set as Executable and Launch Dialog
+set-executable-and-launch = Set as executable and launch
+set-executable-and-launch-description = Do you want to set "{$name}" as executable and launch it?
+set-and-launch = Set and launch
 
 ## Metadata Dialog
 owner = Owner
@@ -145,6 +145,8 @@ extracted = Extracted {$items} {$items ->
         [one] item
         *[other] items
     } from {$from} to {$to}
+setting-executable-and-launching = Setting "{$name}" as executable and launching
+set-executable-and-launched = Set "{$name}" as executable and launched
 moving = Moving {$items} {$items ->
         [one] item
         *[other] items

@@ -14,6 +14,7 @@ use crate::{
     config::IconSizes,
     err_str, fl,
     mime_icon::mime_for_path,
+    spawn_detached::spawn_detached,
     tab,
 };
 
@@ -175,6 +176,10 @@ pub enum Operation {
     /// Restore a path from the trash
     Restore {
         paths: Vec<trash::TrashItem>,
+    },
+    /// Set executable and launch
+    SetExecutableAndLaunch {
+        path: PathBuf,
     },
 }
 
@@ -473,6 +478,9 @@ impl Operation {
                 fl!("renaming", from = file_name(from), to = file_name(to))
             }
             Self::Restore { paths } => fl!("restoring", items = paths.len()),
+            Self::SetExecutableAndLaunch { path } => {
+                fl!("setting-executable-and-launching", name = file_name(path))
+            }
         }
     }
 
@@ -521,6 +529,9 @@ impl Operation {
             ),
             Self::Rename { from, to } => fl!("renamed", from = file_name(from), to = file_name(to)),
             Self::Restore { paths } => fl!("restored", items = paths.len()),
+            Self::SetExecutableAndLaunch { path } => {
+                fl!("set-executable-and-launched", name = file_name(path))
+            }
         }
     }
 
@@ -840,6 +851,33 @@ impl Operation {
                         ))
                         .await;
                 }
+            }
+            Self::SetExecutableAndLaunch { path } => {
+                tokio::task::spawn_blocking(move || -> io::Result<()> {
+                    //TODO: what to do on non-Unix systems?
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        let mut perms = fs::metadata(&path)?.permissions();
+                        let current_mode = perms.mode();
+                        let new_mode = current_mode | 0o111;
+                        perms.set_mode(new_mode);
+                        fs::set_permissions(&path, perms)?;
+                    }
+
+                    let mut command = std::process::Command::new(path);
+                    spawn_detached(&mut command)?;
+
+                    Ok(())
+                })
+                .await
+                .map_err(err_str)?
+                .map_err(err_str)?;
+                let _ = msg_tx
+                    .lock()
+                    .await
+                    .send(Message::PendingProgress(id, 100.0))
+                    .await;
             }
         }
 
