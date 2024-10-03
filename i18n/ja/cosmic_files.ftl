@@ -136,15 +136,6 @@ properties = プロパティ
 
 ## Settings
 settings = 設定
-settings-tab = タブ
-settings-show-hidden = 隠しファイルを表示
-default-view = デフォルトの表示
-icon-size-list = アイコンサイズ（リスト）
-icon-size-grid = アイコンサイズ（グリッド）
-sorting-name = 並べ替え
-direction = 順
-ascending = 昇順
-descending = 降順
 
 ### Appearance
 appearance = 外観

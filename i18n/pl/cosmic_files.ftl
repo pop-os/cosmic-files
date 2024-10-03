@@ -174,15 +174,6 @@ show-details = Pokaż szczegóły
 
 ## Settings
 settings = Ustawienia
-settings-tab = Karta
-settings-show-hidden = Pokaż ukryte pliki
-default-view = Domyślny widok
-icon-size-list = Rozmiar ikon (lista)
-icon-size-grid = Rozmiar ikon (siatka)
-sorting-name = Uszereguj według
-direction = Kierunek
-ascending = Rosnąco
-descending = Malejąco
 
 ### Appearance
 appearance = Wygląd

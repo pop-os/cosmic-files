@@ -111,15 +111,6 @@ show-details = 显示详情
 
 ## Settings
 settings = 设置
-settings-tab = 标签页
-settings-show-hidden = 显示隐藏文件
-default-view = 默认视图
-icon-size-list = 图标大小（列表）
-icon-size-grid = 图标大小（网格）
-sorting-name = 排序方式
-direction = 方向
-ascending = 升序
-descending = 降序
 
 ### Appearance
 appearance = 外观

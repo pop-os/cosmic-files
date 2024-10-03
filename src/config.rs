@@ -9,10 +9,7 @@ use cosmic::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    app::App,
-    tab::{HeadingOptions, View},
-};
+use crate::{app::App, tab::View};
 
 pub const CONFIG_VERSION: u64 = 1;
 
@@ -96,6 +93,7 @@ impl Favorite {
 pub struct Config {
     pub app_theme: AppTheme,
     pub favorites: Vec<Favorite>,
+    pub show_details: bool,
     pub tab: TabConfig,
 }
 
@@ -141,6 +139,7 @@ impl Default for Config {
                 Favorite::Pictures,
                 Favorite::Videos,
             ],
+            show_details: false,
             tab: TabConfig::default(),
         }
     }
@@ -158,9 +157,6 @@ pub struct TabConfig {
     pub folders_first: bool,
     /// Show hidden files and folders
     pub show_hidden: bool,
-    /// Sorter
-    pub sort_name: HeadingOptions,
-    pub sort_direction: bool,
     /// Icon zoom
     pub icon_sizes: IconSizes,
 }
@@ -171,8 +167,6 @@ impl Default for TabConfig {
             view: View::List,
             folders_first: true,
             show_hidden: false,
-            sort_name: HeadingOptions::Name,
-            sort_direction: true,
             icon_sizes: IconSizes::default(),
         }
     }

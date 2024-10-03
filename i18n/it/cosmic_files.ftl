@@ -14,6 +14,7 @@ today = Oggi
 # List view
 name = Nome
 modified = Modificato
+trashed-on = Spostato nel cestino
 size = Dimensioni
 
 # Dialogs
@@ -169,15 +170,6 @@ show-details = Mostra dettagli
 
 ## Settings
 settings = Impostazioni
-settings-tab = Schede
-settings-show-hidden = Mostra file nascosti
-default-view = Vista predefinita
-icon-size-list = Dimensioni icone (lista)
-icon-size-grid = Dimensioni icone (griglia)
-sorting-name = Ordina per
-direction = Direzione
-ascending = Ascendente
-descending = Discendente
 
 ### Appearance
 appearance = Aspetto
@@ -199,6 +191,7 @@ remove-from-sidebar = Rimuovi da sidebar
 sort-by-name = Ordina per nome
 sort-by-modified = Ordina per ultima modifica
 sort-by-size = Ordina per dimensione
+sort-by-trashed = Ordina per cancellazione
 
 # Menu
 
@@ -220,7 +213,7 @@ select-all = Seleziona tutti
 
 ## View
 zoom-in = Zoom in
-default-size = Default size
+default-size = Default
 zoom-out = Zoom out
 view = Vista
 grid-view = Griglia

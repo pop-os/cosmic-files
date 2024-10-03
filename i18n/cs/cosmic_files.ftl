@@ -70,15 +70,6 @@ properties = Vlastnosti
 
 ## Settings
 settings = Nastavení
-settings-tab = Karta
-settings-show-hidden = Zobrazit skryté soubory
-default-view = Výchozí zobrazení
-icon-size-list = Velikost ikon (seznam)
-icon-size-grid = Velikost ikon (mřížka)
-sorting-name = Třídit podle
-direction = Směr
-ascending = Vzestupně
-descending = Sestupně
 
 ### Appearance
 appearance = Vzhled

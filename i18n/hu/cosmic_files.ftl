@@ -110,15 +110,6 @@ properties = Tulajdonságok
 
 ## Settings
 settings = Beállítások
-settings-tab = Lap
-settings-show-hidden = Rejtett fájlok mutatása
-default-view = Alapértelmezett nézet
-icon-size-list = Ikon méret (lista)
-icon-size-grid = Ikon méret (rács)
-sorting-name = Rendezés
-direction = Irány
-ascending = Növekvő
-descending = Csökkenő
 
 ### Appearance
 appearance = Kinézet

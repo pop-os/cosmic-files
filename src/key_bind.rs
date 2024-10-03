@@ -27,6 +27,7 @@ pub fn key_binds() -> HashMap<KeyBind, Action> {
     bind!([Ctrl], Key::Character("c".into()), Copy);
     bind!([Ctrl], Key::Character("x".into()), Cut);
     bind!([Ctrl], Key::Character("l".into()), EditLocation);
+    bind!([], Key::Named(Named::Space), Gallery);
     bind!([Alt], Key::Named(Named::ArrowRight), HistoryNext);
     bind!([Alt], Key::Named(Named::ArrowLeft), HistoryPrevious);
     bind!([], Key::Named(Named::Backspace), HistoryPrevious);
@@ -47,7 +48,7 @@ pub fn key_binds() -> HashMap<KeyBind, Action> {
     bind!([Ctrl], Key::Named(Named::Enter), OpenInNewTab);
     bind!([Shift], Key::Named(Named::Enter), OpenInNewWindow);
     bind!([Ctrl], Key::Character("v".into()), Paste);
-    bind!([], Key::Named(Named::Space), Preview);
+    bind!([Ctrl], Key::Named(Named::Space), Preview);
     bind!([], Key::Named(Named::F2), Rename);
     bind!([Ctrl], Key::Character("f".into()), SearchActivate);
     bind!([Ctrl], Key::Character("a".into()), SelectAll);

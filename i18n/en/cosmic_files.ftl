@@ -169,15 +169,6 @@ show-details = Show details
 
 ## Settings
 settings = Settings
-settings-tab = Tab
-settings-show-hidden = Show hidden files
-default-view = Default view
-icon-size-list = Icon size (list)
-icon-size-grid = Icon size (grid)
-sorting-name = Sort by
-direction = Direction
-ascending = Ascending
-descending = Descending
 
 ### Appearance
 appearance = Appearance
@@ -208,7 +199,6 @@ file = File
 new-tab = New tab
 new-window = New window
 rename = Rename...
-menu-show-details = Show details...
 close-tab = Close tab
 quit = Quit
 
@@ -228,6 +218,7 @@ grid-view = Grid view
 list-view = List view
 show-hidden-files = Show hidden files
 list-directories-first = List directories first
+gallery-preview = Gallery preview
 menu-settings = Settings...
 menu-about = About COSMIC Files...
 
