@@ -66,6 +66,11 @@ apply-to-all = Apply to all
 keep-both = Keep both
 skip = Skip
 
+## Execution permission Dialog
+add-permission-title = Add execution permission
+add-permission-control = Add execution permission to {$path}
+add-permission = Add permission
+
 ## Metadata Dialog
 owner = Owner
 group = Group

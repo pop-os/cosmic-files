@@ -43,9 +43,13 @@ use slotmap::Key as SlotMapKey;
 use std::{
     any::TypeId,
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
-    env, fmt, fs,
+    env,
+    ffi::OsStr,
+    fmt, fs,
     future::pending,
+    io::{BufRead, BufReader},
     num::NonZeroU16,
+    os::unix::fs::PermissionsExt,
     path::PathBuf,
     process,
     sync::{Arc, Mutex},
@@ -246,6 +250,7 @@ impl MenuAction for NavMenuAction {
 pub enum Message {
     AddToSidebar(Option<Entity>),
     AppTheme(AppTheme),
+    AddExecutablePermission(PathBuf),
     CloseToast(widget::ToastId),
     Compress(Option<Entity>),
     Config(Config),
@@ -410,6 +415,10 @@ pub enum DialogPage {
         parent: PathBuf,
         name: String,
         dir: bool,
+    },
+    AddExecutablePermission {
+        file_path: PathBuf,
+        run: bool,
     },
     Replace {
         from: tab::Item,
@@ -1457,11 +1466,30 @@ impl Application for App {
                             let to = parent.join(name);
                             self.operation(Operation::Rename { from, to });
                         }
+                        DialogPage::AddExecutablePermission { file_path, run } => {
+                            let mut perms = fs::metadata(&file_path)
+                                .expect("Failed to get metadata")
+                                .permissions();
+
+                            let current_mode = perms.mode();
+                            let new_mode = current_mode | 0o100;
+                            perms.set_mode(new_mode);
+                            fs::set_permissions(&file_path, perms)
+                                .expect("Failed to set permissions");
+
+                            if run {
+                                log::info!("running app: {:?}", file_path);
+                                let _ = std::process::Command::new(file_path).spawn();
+                            }
+                        }
                         DialogPage::Replace { .. } => {
                             log::warn!("replace dialog should be completed with replace result");
                         }
                     }
                 }
+            }
+            Message::AddExecutablePermission(file_path) => {
+                return Command::batch([self.update(Message::AddExecutablePermission(file_path))]);
             }
             Message::DialogPush(dialog_page) => {
                 self.dialog_pages.push_back(dialog_page);
@@ -2254,18 +2282,33 @@ impl Application for App {
                                 };
                             }
                             if !found_desktop_exec {
-                                match open::that_detached(&path) {
-                                    Ok(()) => {
-                                        let _ = recently_used_xbel::update_recently_used(
-                                            &path,
-                                            App::APP_ID.to_string(),
-                                            "cosmic-files".to_string(),
-                                            None,
+                                let file_extension = path.extension();
+                                match file_extension {
+                                    Some(ext) if ext == OsStr::new("AppImage") => {
+                                        let mut perms = fs::metadata(&path)
+                                            .expect("Failed to get metadata")
+                                            .permissions();
+
+                                        self.dialog_pages.push_back(
+                                            DialogPage::AddExecutablePermission {
+                                                file_path: path.clone(),
+                                                run: true,
+                                            },
                                         );
                                     }
-                                    Err(err) => {
-                                        log::warn!("failed to open {:?}: {}", path, err);
-                                    }
+                                    _ => match open::that_detached(&path) {
+                                        Ok(()) => {
+                                            let _ = recently_used_xbel::update_recently_used(
+                                                &path,
+                                                App::APP_ID.to_string(),
+                                                "cosmic-files".to_string(),
+                                                None,
+                                            );
+                                        }
+                                        Err(err) => {
+                                            log::warn!("failed to open {:?}: {}", path, err);
+                                        }
+                                    },
                                 }
                             }
                         }
@@ -3048,6 +3091,24 @@ impl Application for App {
                         ])
                         .spacing(space_xxs),
                     )
+            }
+            DialogPage::AddExecutablePermission { file_path, run } => {
+                let mut dialog = widget::dialog(fl!("add-permission-title"))
+                    .primary_action(
+                        widget::button::text(fl!("add-permission"))
+                            .style(theme::Button::Suggested)
+                            .on_press(Message::DialogComplete),
+                    )
+                    .secondary_action(
+                        widget::button::text("cancell")
+                            .style(theme::Button::Destructive)
+                            .on_press(Message::DialogCancel),
+                    )
+                    .control(widget::column().push(widget::text::text(fl!(
+                        "add-permission-control",
+                        path = file_path.as_os_str().to_str()
+                    ))));
+                dialog
             }
             DialogPage::RenameItem {
                 from,
