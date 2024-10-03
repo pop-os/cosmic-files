@@ -168,6 +168,22 @@ pub fn context_menu<'a>(
                     children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
                 }
                 children.push(menu_item(fl!("paste"), Action::Paste).into());
+
+                //TODO: only show if cosmic-settings is found?
+                if matches!(tab.mode, tab::Mode::Desktop) {
+                    children.push(divider::horizontal::light().into());
+                    children.push(
+                        menu_item(fl!("change-wallpaper"), Action::CosmicSettingsWallpaper).into(),
+                    );
+                    children.push(
+                        menu_item(fl!("desktop-appearance"), Action::CosmicSettingsAppearance)
+                            .into(),
+                    );
+                    children.push(
+                        menu_item(fl!("display-settings"), Action::CosmicSettingsDisplays).into(),
+                    );
+                }
+
                 children.push(divider::horizontal::light().into());
                 // TODO: Nested menu
                 children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));

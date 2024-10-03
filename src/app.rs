@@ -93,6 +93,9 @@ pub enum Action {
     Compress,
     Copy,
     Cut,
+    CosmicSettingsAppearance,
+    CosmicSettingsDisplays,
+    CosmicSettingsWallpaper,
     EditHistory,
     EditLocation,
     ExtractHere,
@@ -146,6 +149,9 @@ impl Action {
             Action::Compress => Message::Compress(entity_opt),
             Action::Copy => Message::Copy(entity_opt),
             Action::Cut => Message::Cut(entity_opt),
+            Action::CosmicSettingsAppearance => Message::CosmicSettings("appearance"),
+            Action::CosmicSettingsDisplays => Message::CosmicSettings("displays"),
+            Action::CosmicSettingsWallpaper => Message::CosmicSettings("wallpaper"),
             Action::EditHistory => Message::ToggleContextPage(ContextPage::EditHistory),
             Action::EditLocation => {
                 Message::TabMessage(entity_opt, tab::Message::EditLocationToggle)
@@ -253,6 +259,7 @@ pub enum Message {
     Compress(Option<Entity>),
     Config(Config),
     Copy(Option<Entity>),
+    CosmicSettings(&'static str),
     Cut(Option<Entity>),
     DialogCancel,
     DialogComplete,
@@ -1389,6 +1396,17 @@ impl Application for App {
             }
             Message::CloseToast(id) => {
                 self.toasts.remove(id);
+            }
+            Message::CosmicSettings(arg) => {
+                //TODO: use special settings URL scheme instead?
+                let mut command = process::Command::new("cosmic-settings");
+                command.arg(arg);
+                match spawn_detached(&mut command) {
+                    Ok(()) => {}
+                    Err(err) => {
+                        log::warn!("failed to run cosmic-settings {}: {}", arg, err)
+                    }
+                }
             }
             Message::DialogCancel => {
                 self.dialog_pages.pop_front();

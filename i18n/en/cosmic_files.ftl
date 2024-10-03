@@ -203,6 +203,11 @@ sort-by-modified = Sort by modified
 sort-by-size = Sort by size
 sort-by-trashed = Sort by delete time
 
+## Desktop
+change-wallpaper = Change wallpaper...
+desktop-appearance = Desktop appearance...
+display-settings = Display settings...
+
 # Menu
 
 ## File
