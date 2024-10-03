@@ -2030,7 +2030,14 @@ impl Tab {
                 }
             }
             Message::GalleryToggle => {
-                self.gallery = !self.gallery;
+                if let Some(indices) = self.column_sort() {
+                    for (_, item) in indices.iter() {
+                        if item.selected && item.mime.type_() == mime::IMAGE {
+                            self.gallery = !self.gallery;
+                            break;
+                        }
+                    }
+                }
             }
             Message::GoNext => {
                 if let Some(history_i) = self.history_i.checked_add(1) {
