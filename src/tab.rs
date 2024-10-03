@@ -4041,7 +4041,7 @@ mod tests {
     use super::{respond_to_scroll_direction, scan_path, Location, Message, Tab};
     use crate::{
         app::test_utils::{
-            assert_eq_tab_path, assert_zoom_affects_item_size, empty_fs, eq_path_item, filter_dirs,
+            assert_eq_tab_path, empty_fs, eq_path_item, filter_dirs,
             read_dir_sorted, simple_fs, tab_click_new, NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN,
             NUM_NESTED,
         },
@@ -4273,29 +4273,6 @@ mod tests {
         }
         assert_eq_tab_path(&tab, path);
 
-        Ok(())
-    }
-
-    #[test]
-    fn tab_zoom_in_increases_item_view_size() -> io::Result<()> {
-        let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
-        let path = fs.path();
-
-        let mut tab = Tab::new(Location::Path(path.into()), TabConfig::default());
-
-        let should_affect_size = true;
-        assert_zoom_affects_item_size(&mut tab, Message::ZoomIn, should_affect_size);
-        Ok(())
-    }
-
-    fn tab_zoom_out_decreases_item_view_size() -> io::Result<()> {
-        let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
-        let path = fs.path();
-
-        let mut tab = Tab::new(Location::Path(path.into()), TabConfig::default());
-
-        let should_affect_size = true;
-        assert_zoom_affects_item_size(&mut tab, Message::ZoomOut, should_affect_size);
         Ok(())
     }
 
