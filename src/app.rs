@@ -1352,7 +1352,10 @@ impl Application for App {
             Message::AddToSidebar(entity_opt) => {
                 let mut favorites = self.config.favorites.clone();
                 for path in self.selected_paths(entity_opt) {
-                    favorites.push(Favorite::from_path(path));
+                    let favorite = Favorite::from_path(path);
+                    if !favorites.iter().any(|f| f == &favorite) {
+                        favorites.push(favorite);
+                    }
                 }
                 config_set!(favorites, favorites);
                 return self.update_config();
