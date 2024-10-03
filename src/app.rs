@@ -2157,10 +2157,8 @@ impl Application for App {
             Message::ToggleShowDetails => {
                 let show_details = !self.config.show_details;
                 //TODO: move to update_config?
-                if show_details {
-                    self.context_page = ContextPage::Preview(None, PreviewKind::Selected);
-                    self.core.window.show_context = true;
-                }
+                self.context_page = ContextPage::Preview(None, PreviewKind::Selected);
+                self.core.window.show_context = show_details;
                 config_set!(show_details, show_details);
                 return self.update_config();
             }
