@@ -3136,7 +3136,7 @@ impl Application for App {
                             .on_press(Message::DialogComplete),
                     )
                     .secondary_action(
-                        widget::button::text("cancell")
+                        widget::button::text(fl!("cancel"))
                             .style(theme::Button::Destructive)
                             .on_press(Message::DialogCancel),
                     )
