@@ -60,7 +60,9 @@ impl From<&desktop::DesktopEntryData> for MimeApp {
             name: app.name.clone(),
             exec: app.exec.clone(),
             icon: match &app.icon {
-                desktop::IconSource::Name(name) => widget::icon::from_name(name.as_str()).handle(),
+                desktop::IconSource::Name(name) => {
+                    widget::icon::from_name(name.as_str()).size(32).handle()
+                }
                 desktop::IconSource::Path(path) => widget::icon::from_path(path.clone()),
             },
             is_default: false,

@@ -167,7 +167,7 @@ impl Action {
             Action::OpenInNewWindow => Message::OpenInNewWindow(entity_opt),
             Action::OpenItemLocation => Message::OpenItemLocation(entity_opt),
             Action::OpenTerminal => Message::OpenTerminal(entity_opt),
-            Action::OpenWith => Message::ToggleContextPage(ContextPage::OpenWith),
+            Action::OpenWith => Message::OpenWithDialog(entity_opt),
             Action::Paste => Message::Paste(entity_opt),
             Action::Preview => Message::ToggleShowDetails,
             Action::Rename => Message::Rename(entity_opt),
@@ -279,10 +279,11 @@ pub enum Message {
     NotifyEvents(Vec<DebouncedEvent>),
     NotifyWatcher(WatcherWrapper),
     OpenTerminal(Option<Entity>),
-    OpenWith(PathBuf, mime_app::MimeApp),
     OpenInNewTab(Option<Entity>),
     OpenInNewWindow(Option<Entity>),
     OpenItemLocation(Option<Entity>),
+    OpenWithDialog(Option<Entity>),
+    OpenWithSelection(usize),
     Paste(Option<Entity>),
     PasteContents(PathBuf, ClipboardPaste),
     PendingComplete(u64),
@@ -337,7 +338,6 @@ pub enum ContextPage {
     About,
     EditHistory,
     NetworkDrive,
-    OpenWith,
     Preview(Option<Entity>, PreviewKind),
     Settings,
 }
@@ -348,7 +348,6 @@ impl ContextPage {
             Self::About => String::new(),
             Self::EditHistory => fl!("edit-history"),
             Self::NetworkDrive => fl!("add-network-drive"),
-            Self::OpenWith => fl!("open-with"),
             Self::Preview(..) => String::default(),
             Self::Settings => fl!("settings"),
         }
@@ -406,6 +405,11 @@ pub enum DialogPage {
         parent: PathBuf,
         name: String,
         dir: bool,
+    },
+    OpenWith {
+        path: PathBuf,
+        apps: Vec<mime_app::MimeApp>,
+        selected: usize,
     },
     RenameItem {
         from: PathBuf,
@@ -908,24 +912,6 @@ impl App {
         ])
         .spacing(space_m)
         .into()
-    }
-
-    fn open_with(&self) -> Element<Message> {
-        let mut children = Vec::new();
-        let entity = self.tab_model.active();
-        if let Some(tab) = self.tab_model.data::<Tab>(entity) {
-            if let Some(items) = tab.items_opt() {
-                for item in items.iter() {
-                    if item.selected {
-                        children.push(item.open_with_view(tab.config.icon_sizes));
-                        // Only show one property view to avoid issues like hangs when generating
-                        // preview images on thousands of files
-                        break;
-                    }
-                }
-            }
-        }
-        widget::settings::view_column(children).into()
     }
 
     fn edit_history(&self) -> Element<Message> {
@@ -1461,6 +1447,40 @@ impl Application for App {
                                 Operation::NewFile { path }
                             });
                         }
+                        DialogPage::OpenWith {
+                            path,
+                            apps,
+                            selected,
+                        } => {
+                            if let Some(app) = apps.get(selected) {
+                                if let Some(mut command) = app.command(Some(path.clone())) {
+                                    match spawn_detached(&mut command) {
+                                        Ok(()) => {
+                                            let _ = recently_used_xbel::update_recently_used(
+                                                &path,
+                                                App::APP_ID.to_string(),
+                                                "cosmic-files".to_string(),
+                                                None,
+                                            );
+                                        }
+                                        Err(err) => {
+                                            log::warn!(
+                                                "failed to open {:?} with {:?}: {}",
+                                                path,
+                                                app.id,
+                                                err
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    log::warn!(
+                                        "failed to open {:?} with {:?}: failed to get command",
+                                        path,
+                                        app.id
+                                    );
+                                }
+                            }
+                        }
                         DialogPage::RenameItem {
                             from, parent, name, ..
                         } => {
@@ -1776,28 +1796,6 @@ impl Application for App {
                     }
                 }
             }
-            Message::OpenWith(path, app) => {
-                if let Some(mut command) = app.command(Some(path.clone())) {
-                    match spawn_detached(&mut command) {
-                        Ok(()) => {
-                            let _ = recently_used_xbel::update_recently_used(
-                                &path,
-                                App::APP_ID.to_string(),
-                                "cosmic-files".to_string(),
-                                None,
-                            );
-                        }
-                        Err(err) => {
-                            log::warn!("failed to open {:?} with {:?}: {}", path, app.id, err)
-                        }
-                    }
-                } else {
-                    log::warn!("failed to get command for {:?}", app.id);
-                }
-
-                // Close Open With context view
-                self.set_show_context(false);
-            }
             Message::OpenInNewTab(entity_opt) => {
                 return Command::batch(self.selected_paths(entity_opt).into_iter().filter_map(
                     |path| {
@@ -1838,6 +1836,31 @@ impl Application for App {
                         }
                     },
                 ))
+            }
+            Message::OpenWithDialog(entity_opt) => {
+                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+                    if let Some(items) = tab.items_opt() {
+                        for item in items {
+                            if !item.selected {
+                                continue;
+                            }
+                            let Some(path) = item.path_opt() else {
+                                continue;
+                            };
+                            return self.update(Message::DialogPush(DialogPage::OpenWith {
+                                path: path.to_path_buf(),
+                                apps: item.open_with.clone(),
+                                selected: 0,
+                            }));
+                        }
+                    }
+                }
+            }
+            Message::OpenWithSelection(index) => {
+                if let Some(DialogPage::OpenWith { selected, .. }) = self.dialog_pages.front_mut() {
+                    *selected = index;
+                }
             }
             Message::Paste(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
@@ -2755,7 +2778,6 @@ impl Application for App {
             ContextPage::About => self.about(),
             ContextPage::EditHistory => self.edit_history(),
             ContextPage::NetworkDrive => self.network_drive(),
-            ContextPage::OpenWith => self.open_with(),
             ContextPage::Preview(entity_opt, kind) => self.preview(entity_opt, kind),
             ContextPage::Settings => self.settings(),
         })
@@ -2779,7 +2801,10 @@ impl Application for App {
         };
 
         let cosmic_theme::Spacing {
-            space_xxs, space_s, ..
+            space_xxs,
+            space_s,
+            space_m,
+            ..
         } = theme::active().cosmic().spacing;
 
         let dialog = match dialog_page {
@@ -3068,6 +3093,58 @@ impl Application for App {
                         ])
                         .spacing(space_xxs),
                     )
+            }
+            DialogPage::OpenWith {
+                path,
+                apps,
+                selected,
+            } => {
+                let name = match path.file_name() {
+                    Some(file_name) => file_name.to_str(),
+                    None => path.as_os_str().to_str(),
+                };
+
+                let mut column = widget::list_column();
+                for (i, app) in apps.iter().enumerate() {
+                    column = column.add(
+                        widget::button::custom(
+                            widget::row::with_children(vec![
+                                widget::icon(app.icon.clone()).size(32).into(),
+                                if app.is_default {
+                                    widget::text(fl!("default-app", name = app.name.as_str()))
+                                        .into()
+                                } else {
+                                    widget::text(app.name.to_string()).into()
+                                },
+                                widget::horizontal_space(Length::Fill).into(),
+                                if *selected == i {
+                                    widget::icon::from_name("checkbox-checked-symbolic")
+                                        .size(16)
+                                        .into()
+                                } else {
+                                    widget::horizontal_space(Length::Fixed(16.0)).into()
+                                },
+                            ])
+                            .spacing(space_s)
+                            .height(Length::Fixed(32.0))
+                            .align_items(Alignment::Center),
+                        )
+                        .width(Length::Fill)
+                        .style(theme::Button::MenuItem)
+                        .on_press(Message::OpenWithSelection(i)),
+                    );
+                }
+
+                //TODO: Browse COSMIC Store link, does that imply auto updating the app list?
+
+                widget::dialog(fl!("open-with-title", name = name))
+                    .primary_action(
+                        widget::button::suggested(fl!("open")).on_press(Message::DialogComplete),
+                    )
+                    .secondary_action(
+                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                    )
+                    .control(column)
             }
             DialogPage::RenameItem {
                 from,

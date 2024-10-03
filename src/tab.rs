@@ -1082,50 +1082,6 @@ impl Item {
         }
     }
 
-    pub fn open_with_view(&self, sizes: IconSizes) -> Element<app::Message> {
-        let cosmic_theme::Spacing {
-            space_xs,
-            space_xxxs,
-            ..
-        } = theme::active().cosmic().spacing;
-
-        let mut column = widget::column().spacing(space_xxxs);
-
-        column = column.push(widget::row::with_children(vec![
-            widget::horizontal_space(Length::Fill).into(),
-            self.preview(sizes),
-            widget::horizontal_space(Length::Fill).into(),
-        ]));
-
-        column = column.push(widget::text::heading(&self.name));
-
-        column = column.push(widget::text(format!("Type: {}", self.mime)));
-
-        if let Some(Location::Path(path)) = &self.location_opt {
-            for app in self.open_with.iter() {
-                column = column.push(
-                    widget::button::custom(
-                        widget::row::with_children(vec![
-                            widget::icon(app.icon.clone()).into(),
-                            if app.is_default {
-                                widget::text(fl!("default-app", name = app.name.as_str())).into()
-                            } else {
-                                widget::text(&app.name).into()
-                            },
-                        ])
-                        .spacing(space_xs),
-                    )
-                    //TODO: do not clone so much?
-                    .on_press(app::Message::OpenWith(path.clone(), app.clone()))
-                    .padding(space_xs)
-                    .width(Length::Fill),
-                );
-            }
-        }
-
-        column.into()
-    }
-
     pub fn preview_view(&self, sizes: IconSizes) -> Element<'static, app::Message> {
         let cosmic_theme::Spacing {
             space_xxxs,

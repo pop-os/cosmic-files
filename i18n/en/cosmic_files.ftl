@@ -51,6 +51,9 @@ open-multiple-folders = Open multiple folders
 save = Save
 save-file = Save file
 
+## Open With Dialog
+open-with-title = How do you want to open "{$name}"?
+
 ## Rename Dialog
 rename-file = Rename file
 rename-folder = Rename folder
