@@ -282,6 +282,7 @@ pub enum Message {
     OpenInNewTab(Option<Entity>),
     OpenInNewWindow(Option<Entity>),
     OpenItemLocation(Option<Entity>),
+    OpenWithBrowse,
     OpenWithDialog(Option<Entity>),
     OpenWithSelection(usize),
     Paste(Option<Entity>),
@@ -408,8 +409,10 @@ pub enum DialogPage {
     },
     OpenWith {
         path: PathBuf,
+        mime: mime_guess::Mime,
         apps: Vec<mime_app::MimeApp>,
         selected: usize,
+        store_opt: Option<mime_app::MimeApp>,
     },
     RenameItem {
         from: PathBuf,
@@ -1451,9 +1454,10 @@ impl Application for App {
                             path,
                             apps,
                             selected,
+                            ..
                         } => {
                             if let Some(app) = apps.get(selected) {
-                                if let Some(mut command) = app.command(Some(path.clone())) {
+                                if let Some(mut command) = app.command(Some(path.clone().into())) {
                                     match spawn_detached(&mut command) {
                                         Ok(()) => {
                                             let _ = recently_used_xbel::update_recently_used(
@@ -1837,6 +1841,38 @@ impl Application for App {
                     },
                 ))
             }
+            Message::OpenWithBrowse => match self.dialog_pages.pop_front() {
+                Some(DialogPage::OpenWith {
+                    mime, store_opt, ..
+                }) => {
+                    if let Some(app) = store_opt {
+                        let url = format!("mime:///{mime}");
+                        if let Some(mut command) = app.command(Some(url.clone().into())) {
+                            match spawn_detached(&mut command) {
+                                Ok(()) => {}
+                                Err(err) => {
+                                    log::warn!(
+                                        "failed to open {:?} with {:?}: {}",
+                                        url,
+                                        app.id,
+                                        err
+                                    )
+                                }
+                            }
+                        } else {
+                            log::warn!(
+                                "failed to open {:?} with {:?}: failed to get command",
+                                url,
+                                app.id
+                            );
+                        }
+                    }
+                }
+                Some(dialog_page) => {
+                    self.dialog_pages.push_front(dialog_page);
+                }
+                None => {}
+            },
             Message::OpenWithDialog(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
@@ -1850,8 +1886,13 @@ impl Application for App {
                             };
                             return self.update(Message::DialogPush(DialogPage::OpenWith {
                                 path: path.to_path_buf(),
+                                mime: item.mime.clone(),
                                 apps: item.open_with.clone(),
                                 selected: 0,
+                                store_opt: "x-scheme-handler/mime"
+                                    .parse::<mime_guess::Mime>()
+                                    .ok()
+                                    .and_then(|mime| mime_app::mime_apps(&mime).first().cloned()),
                             }));
                         }
                     }
@@ -2801,10 +2842,7 @@ impl Application for App {
         };
 
         let cosmic_theme::Spacing {
-            space_xxs,
-            space_s,
-            space_m,
-            ..
+            space_xxs, space_s, ..
         } = theme::active().cosmic().spacing;
 
         let dialog = match dialog_page {
@@ -3098,6 +3136,8 @@ impl Application for App {
                 path,
                 apps,
                 selected,
+                store_opt,
+                ..
             } => {
                 let name = match path.file_name() {
                     Some(file_name) => file_name.to_str(),
@@ -3135,16 +3175,23 @@ impl Application for App {
                     );
                 }
 
-                //TODO: Browse COSMIC Store link, does that imply auto updating the app list?
-
-                widget::dialog(fl!("open-with-title", name = name))
+                let mut dialog = widget::dialog(fl!("open-with-title", name = name))
                     .primary_action(
                         widget::button::suggested(fl!("open")).on_press(Message::DialogComplete),
                     )
                     .secondary_action(
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
                     )
-                    .control(column)
+                    .control(column);
+
+                if let Some(app) = store_opt {
+                    dialog = dialog.control(
+                        widget::button::link(fl!("browse-store", store = app.name.as_str()))
+                            .on_press(Message::OpenWithBrowse),
+                    );
+                }
+
+                dialog
             }
             DialogPage::RenameItem {
                 from,

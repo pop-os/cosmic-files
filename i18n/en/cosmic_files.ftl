@@ -53,6 +53,7 @@ save-file = Save file
 
 ## Open With Dialog
 open-with-title = How do you want to open "{$name}"?
+browse-store = Browse {$store}
 
 ## Rename Dialog
 rename-file = Rename file
