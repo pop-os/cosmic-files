@@ -256,7 +256,6 @@ impl MenuAction for NavMenuAction {
 pub enum Message {
     AddToSidebar(Option<Entity>),
     AppTheme(AppTheme),
-    AddExecutablePermission(PathBuf),
     CloseToast(widget::ToastId),
     Compress(Option<Entity>),
     Config(Config),
@@ -1572,9 +1571,6 @@ impl Application for App {
                         }
                     }
                 }
-            }
-            Message::AddExecutablePermission(file_path) => {
-                return Command::batch([self.update(Message::AddExecutablePermission(file_path))]);
             }
             Message::DialogPush(dialog_page) => {
                 self.dialog_pages.push_back(dialog_page);
