@@ -114,7 +114,7 @@ pub fn context_menu<'a>(
                     );
                 }
                 // All selected items are directories
-                if selected == selected_dir {
+                if selected == selected_dir && matches!(tab.mode, tab::Mode::App) {
                     children.push(menu_item(fl!("open-in-new-tab"), Action::OpenInNewTab).into());
                     children
                         .push(menu_item(fl!("open-in-new-window"), Action::OpenInNewWindow).into());
@@ -151,8 +151,10 @@ pub fn context_menu<'a>(
 
                 //TODO: Print?
                 children.push(menu_item(fl!("show-details"), Action::Preview).into());
-                children.push(divider::horizontal::light().into());
-                children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
+                if matches!(tab.mode, tab::Mode::App) {
+                    children.push(divider::horizontal::light().into());
+                    children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
+                }
                 children.push(divider::horizontal::light().into());
                 children.push(menu_item(fl!("move-to-trash"), Action::MoveToTrash).into());
             } else {

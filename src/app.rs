@@ -147,7 +147,9 @@ impl Action {
             Action::Copy => Message::Copy(entity_opt),
             Action::Cut => Message::Cut(entity_opt),
             Action::EditHistory => Message::ToggleContextPage(ContextPage::EditHistory),
-            Action::EditLocation => Message::TabMessage(entity_opt, tab::Message::EditLocationToggle),
+            Action::EditLocation => {
+                Message::TabMessage(entity_opt, tab::Message::EditLocationToggle)
+            }
             Action::ExtractHere => Message::ExtractHere(entity_opt),
             Action::Gallery => Message::TabMessage(entity_opt, tab::Message::GalleryToggle),
             Action::HistoryNext => Message::TabMessage(entity_opt, tab::Message::GoNext),
