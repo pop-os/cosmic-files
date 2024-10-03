@@ -330,6 +330,7 @@ enum Message {
 impl From<AppMessage> for Message {
     fn from(app_message: AppMessage) -> Message {
         match app_message {
+            AppMessage::SearchActivate => Message::SearchActivate,
             AppMessage::TabMessage(_entity_opt, tab_message) => Message::TabMessage(tab_message),
             AppMessage::ToggleShowDetails => Message::ToggleShowDetails,
             unsupported => {
@@ -708,6 +709,8 @@ impl Application for App {
         tab.sort_name = tab::HeadingOptions::Modified;
         tab.sort_direction = false;
 
+        let key_binds = key_binds(&tab.mode);
+
         let mut app = App {
             core,
             flags,
@@ -729,7 +732,7 @@ impl Application for App {
             search_id: widget::Id::unique(),
             search_input: String::new(),
             tab,
-            key_binds: key_binds(),
+            key_binds,
             watcher_opt: None,
         };
 

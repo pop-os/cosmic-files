@@ -147,7 +147,7 @@ impl Action {
             Action::Copy => Message::Copy(entity_opt),
             Action::Cut => Message::Cut(entity_opt),
             Action::EditHistory => Message::ToggleContextPage(ContextPage::EditHistory),
-            Action::EditLocation => Message::EditLocation(entity_opt),
+            Action::EditLocation => Message::TabMessage(entity_opt, tab::Message::EditLocationToggle),
             Action::ExtractHere => Message::ExtractHere(entity_opt),
             Action::Gallery => Message::TabMessage(entity_opt, tab::Message::GalleryToggle),
             Action::HistoryNext => Message::TabMessage(entity_opt, tab::Message::GoNext),
@@ -257,7 +257,6 @@ pub enum Message {
     DialogPush(DialogPage),
     DialogUpdate(DialogPage),
     DialogUpdateComplete(DialogPage),
-    EditLocation(Option<Entity>),
     ExtractHere(Option<Entity>),
     Key(Modifiers, Key),
     LaunchUrl(String),
@@ -1080,6 +1079,11 @@ impl Application for App {
 
         let app_themes = vec![fl!("match-desktop"), fl!("dark"), fl!("light")];
 
+        let key_binds = key_binds(&match flags.mode {
+            Mode::App => tab::Mode::App,
+            Mode::Desktop => tab::Mode::Desktop,
+        });
+
         let mut app = App {
             core,
             nav_bar_context_id: segmented_button::Entity::null(),
@@ -1092,7 +1096,7 @@ impl Application for App {
             context_page: ContextPage::Preview(None, PreviewKind::Selected),
             dialog_pages: VecDeque::new(),
             dialog_text_input: widget::Id::unique(),
-            key_binds: key_binds(),
+            key_binds,
             modifiers: Modifiers::empty(),
             mounters: mounters(),
             mounter_items: HashMap::new(),
@@ -1483,21 +1487,6 @@ impl Application for App {
                     self.update(Message::DialogUpdate(dialog_page)),
                     self.update(Message::DialogComplete),
                 ]);
-            }
-            Message::EditLocation(entity_opt) => {
-                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
-                if let Some(location) = self.tab_model.data::<Tab>(entity).and_then(|tab| {
-                    if tab.edit_location.is_none() {
-                        Some(tab.location.clone())
-                    } else {
-                        None
-                    }
-                }) {
-                    return self.update(Message::TabMessage(
-                        Some(entity),
-                        tab::Message::EditLocation(Some(location)),
-                    ));
-                }
             }
             Message::ExtractHere(entity_opt) => {
                 let paths = self.selected_paths(entity_opt);

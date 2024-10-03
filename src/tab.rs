@@ -841,6 +841,7 @@ pub enum Message {
     LocationMenuAction(LocationMenuAction),
     Drag(Option<Rectangle>),
     EditLocation(Option<Location>),
+    EditLocationToggle,
     OpenInNewTab(PathBuf),
     EmptyTrash,
     Gallery(bool),
@@ -2016,6 +2017,13 @@ impl Tab {
                     )));
                 }
                 self.edit_location = edit_location;
+            }
+            Message::EditLocationToggle => {
+                if self.edit_location.is_none() {
+                    self.edit_location = Some(self.location.clone());
+                } else {
+                    self.edit_location = None;
+                }
             }
             Message::OpenInNewTab(path) => {
                 commands.push(Command::OpenInNewTab(path));
@@ -4041,9 +4049,8 @@ mod tests {
     use super::{respond_to_scroll_direction, scan_path, Location, Message, Tab};
     use crate::{
         app::test_utils::{
-            assert_eq_tab_path, empty_fs, eq_path_item, filter_dirs,
-            read_dir_sorted, simple_fs, tab_click_new, NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN,
-            NUM_NESTED,
+            assert_eq_tab_path, empty_fs, eq_path_item, filter_dirs, read_dir_sorted, simple_fs,
+            tab_click_new, NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED,
         },
         config::{IconSizes, TabConfig},
     };
