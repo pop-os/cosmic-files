@@ -7,7 +7,7 @@ home = Benutzerordner
 networks = Netzwerke
 notification-in-progress = Dateioperationen sind im Gange.
 trash = Papierkorb
-recents = Aktuelle
+recents = Zuletzt benutzt
 undo = Rückgängig
 today = Heute
 
