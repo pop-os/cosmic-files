@@ -4,15 +4,17 @@ empty-folder-hidden = Pusty katalog (z ukrytymi plikami)
 no-results = Brak wyników
 filesystem = System plików
 home = Katalog Domowy
-networks = sieci
+networks = Sieci
 notification-in-progress = Operacje na plikach w toku.
 trash = Kosz
 recents = Ubiegłe
 undo = Cofnij
+today = Dzisiaj
 
 # List view
 name = Nazwa
 modified = Zmodyfikowano
+trashed-on = Wyrzucono do kosza
 size = Rozmiar
 
 # Dialogs
@@ -49,6 +51,10 @@ open-multiple-folders = Otwórz wiele katalogów
 save = Zapisz
 save-file = Zapisz plik
 
+## Open With Dialog
+open-with-title = Czym chcesz otworzyć "{$name}"?
+browse-store = Przeglądaj {$store}
+
 # Rename Dialog
 rename-file = Zmień nazwę pliku
 rename-folder = Zmień nazwę katalogu
@@ -63,6 +69,11 @@ replace-with = Zastąpiony przez
 apply-to-all = Zastosuj do wszystkich
 keep-both = Zachowaj oba
 skip = Pomiń
+
+## Set as Executable and Launch Dialog
+set-executable-and-launch = Ustaw jako wykonywalny i uruchom
+set-executable-and-launch-description = Czu chcesz ustawić "{$name}" jako wykonywalny i uruchomić?
+set-and-launch = Ustaw i uruchom
 
 ## Metadata Dialog
 owner = Właściciel
@@ -156,13 +167,12 @@ renamed = Zmieniono nazwę {$from} na {$to}
 restoring = Przywracanie {$items} {$items ->
         [one] elementu
         *[other] elementów
-    } z {trash} 
+    } z {trash}
 restored = Przywrócono {$items} {$items ->
         [one] element
         [few] elementy
         *[other] elementów
-    } z {trash} 
-undo = Cofnij
+    } z {trash}
 unknown-folder = nieznany katalog
 
 ## Open with
@@ -196,6 +206,12 @@ remove-from-sidebar = Usuń z bocznego panelu
 sort-by-name = Uszereguj według nazwy
 sort-by-modified = Uszereguj według czasu modyfikacji
 sort-by-size = Uszereguj według rozmiaru
+sort-by-trashed = Uszereguj według czasu usunięcia
+
+## Desktop
+change-wallpaper = Zmień tapetę...
+desktop-appearance = Wygląd pulpitu...
+display-settings = Ustawienia wyświetlacza...
 
 # Menu
 
@@ -224,6 +240,7 @@ grid-view = Widok siatki
 list-view = Widok listy
 show-hidden-files = Pokaż ukryte pliki
 list-directories-first = Najpierw wyświetlaj katalogi
+gallery-preview = Podgąd galerii
 menu-settings = Ustawienia...
 menu-about = O Plikach COSMIC...
 
