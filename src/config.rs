@@ -90,8 +90,10 @@ impl Favorite {
 }
 
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default)]
 pub struct Config {
     pub app_theme: AppTheme,
+    pub desktop: DesktopConfig,
     pub favorites: Vec<Favorite>,
     pub show_details: bool,
     pub tab: TabConfig,
@@ -131,6 +133,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             app_theme: AppTheme::System,
+            desktop: DesktopConfig::default(),
             favorites: vec![
                 Favorite::Home,
                 Favorite::Documents,
@@ -145,12 +148,31 @@ impl Default for Config {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
+#[serde(default)]
+pub struct DesktopConfig {
+    pub show_content: bool,
+    pub show_mounted_drives: bool,
+    pub show_trash: bool,
+}
+
+impl Default for DesktopConfig {
+    fn default() -> Self {
+        Self {
+            show_content: true,
+            show_mounted_drives: false,
+            show_trash: false,
+        }
+    }
+}
+
 /// Global and local [`crate::tab::Tab`] config.
 ///
 /// [`TabConfig`] contains options that are passed to each instance of [`crate::tab::Tab`].
 /// These options are set globally through the main config, but each tab may change options
 /// locally. Local changes aren't saved to the main config.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
+#[serde(default)]
 pub struct TabConfig {
     pub view: View,
     /// Show folders before files
@@ -179,6 +201,7 @@ macro_rules! percent {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
+#[serde(default)]
 pub struct IconSizes {
     pub list: NonZeroU16,
     pub grid: NonZeroU16,

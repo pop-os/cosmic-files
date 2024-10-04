@@ -26,6 +26,37 @@ fn gio_icon_to_path(icon: &gio::Icon, size: u16) -> Option<PathBuf> {
     None
 }
 
+fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
+    let mut items = MounterItems::new();
+    for (i, mount) in monitor.mounts().into_iter().enumerate() {
+        items.push(MounterItem::Gvfs(Item {
+            kind: ItemKind::Mount,
+            index: i,
+            name: MountExt::name(&mount).to_string(),
+            is_mounted: true,
+            icon_opt: gio_icon_to_path(&MountExt::icon(&mount), sizes.grid()),
+            icon_symbolic_opt: gio_icon_to_path(&MountExt::symbolic_icon(&mount), 16),
+            path_opt: MountExt::root(&mount).path(),
+        }));
+    }
+    for (i, volume) in monitor.volumes().into_iter().enumerate() {
+        if volume.get_mount().is_some() {
+            // Volumes with mounts are already listed by mount
+            continue;
+        }
+        items.push(MounterItem::Gvfs(Item {
+            kind: ItemKind::Volume,
+            index: i,
+            name: VolumeExt::name(&volume).to_string(),
+            is_mounted: false,
+            icon_opt: gio_icon_to_path(&VolumeExt::icon(&volume), sizes.grid()),
+            icon_symbolic_opt: gio_icon_to_path(&VolumeExt::symbolic_icon(&volume), 16),
+            path_opt: None,
+        }));
+    }
+    items
+}
+
 fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
     let file = gio::File::for_uri(uri);
     let mut items = Vec::new();
@@ -166,6 +197,7 @@ fn mount_op(uri: String, event_tx: mpsc::UnboundedSender<Event>) -> gio::MountOp
 }
 
 enum Cmd {
+    Items(IconSizes, mpsc::Sender<MounterItems>),
     Rescan,
     Mount(MounterItem),
     NetworkDrive(String),
@@ -198,6 +230,7 @@ pub struct Item {
     name: String,
     is_mounted: bool,
     icon_opt: Option<PathBuf>,
+    icon_symbolic_opt: Option<PathBuf>,
     path_opt: Option<PathBuf>,
 }
 
@@ -210,10 +243,13 @@ impl Item {
         self.is_mounted
     }
 
-    pub fn icon(&self) -> Option<widget::icon::Handle> {
-        self.icon_opt
-            .as_ref()
-            .map(|icon| widget::icon::from_path(icon.clone()))
+    pub fn icon(&self, symbolic: bool) -> Option<widget::icon::Handle> {
+        if symbolic {
+            self.icon_symbolic_opt.as_ref()
+        } else {
+            self.icon_opt.as_ref()
+        }
+        .map(|icon| widget::icon::from_path(icon.clone()))
     }
 
     pub fn path(&self) -> Option<PathBuf> {
@@ -281,39 +317,11 @@ impl Gvfs {
 
                 while let Some(command) = command_rx.recv().await {
                     match command {
+                        Cmd::Items(sizes, items_tx) => {
+                            items_tx.send(items(&monitor, sizes)).await.unwrap();
+                        }
                         Cmd::Rescan => {
-                            let mut items = MounterItems::new();
-                            for (i, mount) in monitor.mounts().into_iter().enumerate() {
-                                items.push(MounterItem::Gvfs(Item {
-                                    kind: ItemKind::Mount,
-                                    index: i,
-                                    name: MountExt::name(&mount).to_string(),
-                                    is_mounted: true,
-                                    icon_opt: gio_icon_to_path(
-                                        &MountExt::symbolic_icon(&mount),
-                                        16,
-                                    ),
-                                    path_opt: MountExt::root(&mount).path(),
-                                }));
-                            }
-                            for (i, volume) in monitor.volumes().into_iter().enumerate() {
-                                if volume.get_mount().is_some() {
-                                    // Volumes with mounts are already listed by mount
-                                    continue;
-                                }
-                                items.push(MounterItem::Gvfs(Item {
-                                    kind: ItemKind::Volume,
-                                    index: i,
-                                    name: VolumeExt::name(&volume).to_string(),
-                                    is_mounted: false,
-                                    icon_opt: gio_icon_to_path(
-                                        &VolumeExt::symbolic_icon(&volume),
-                                        16,
-                                    ),
-                                    path_opt: None,
-                                }));
-                            }
-                            event_tx.send(Event::Items(items)).unwrap();
+                            event_tx.send(Event::Items(items(&monitor, IconSizes::default()))).unwrap();
                         }
                         Cmd::Mount(mounter_item) => {
                             let MounterItem::Gvfs(item) = mounter_item else { continue };
@@ -437,6 +445,12 @@ impl Gvfs {
 }
 
 impl Mounter for Gvfs {
+    fn items(&self, sizes: IconSizes) -> Option<MounterItems> {
+        let (items_tx, mut items_rx) = mpsc::channel(1);
+        self.command_tx.send(Cmd::Items(sizes, items_tx)).unwrap();
+        items_rx.blocking_recv()
+    }
+
     fn mount(&self, item: MounterItem) -> Command<()> {
         let command_tx = self.command_tx.clone();
         Command::perform(

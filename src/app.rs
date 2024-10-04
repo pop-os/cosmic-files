@@ -58,7 +58,7 @@ use wayland_client::{protocol::wl_output::WlOutput, Proxy};
 
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
-    config::{AppTheme, Config, Favorite, IconSizes, TabConfig},
+    config::{AppTheme, Config, DesktopConfig, Favorite, IconSizes, TabConfig},
     desktop_dir, fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
@@ -95,6 +95,7 @@ pub enum Action {
     CosmicSettingsAppearance,
     CosmicSettingsDisplays,
     CosmicSettingsWallpaper,
+    DesktopViewOptions,
     EditHistory,
     EditLocation,
     ExtractHere,
@@ -151,6 +152,7 @@ impl Action {
             Action::CosmicSettingsAppearance => Message::CosmicSettings("appearance"),
             Action::CosmicSettingsDisplays => Message::CosmicSettings("displays"),
             Action::CosmicSettingsWallpaper => Message::CosmicSettings("wallpaper"),
+            Action::DesktopViewOptions => Message::DesktopViewOptions,
             Action::EditHistory => Message::ToggleContextPage(ContextPage::EditHistory),
             Action::EditLocation => {
                 Message::TabMessage(entity_opt, tab::Message::EditLocationToggle)
@@ -260,6 +262,8 @@ pub enum Message {
     Copy(Option<Entity>),
     CosmicSettings(&'static str),
     Cut(Option<Entity>),
+    DesktopConfig(DesktopConfig),
+    DesktopViewOptions,
     DialogCancel,
     DialogComplete,
     DialogPush(DialogPage),
@@ -446,6 +450,7 @@ pub struct MounterData(MounterKey, MounterItem);
 #[derive(Clone, Debug)]
 pub enum WindowKind {
     Desktop(Entity),
+    DesktopViewOptions,
     Preview(Option<Entity>, PreviewKind),
 }
 
@@ -583,13 +588,16 @@ impl App {
         selection_path: Option<PathBuf>,
     ) -> Command<Message> {
         log::info!("rescan_tab {entity:?} {location:?} {selection_path:?}");
+        let desktop_config = self.config.desktop;
         let mounters = self.mounters.clone();
         let icon_sizes = self.config.tab.icon_sizes;
         Command::perform(
             async move {
                 let location2 = location.clone();
-                match tokio::task::spawn_blocking(move || location2.scan(mounters, icon_sizes))
-                    .await
+                match tokio::task::spawn_blocking(move || {
+                    location2.scan(desktop_config, mounters, icon_sizes)
+                })
+                .await
                 {
                     Ok(items) => {
                         message::app(Message::TabRescan(entity, location, items, selection_path))
@@ -625,17 +633,14 @@ impl App {
         let entity = self.tab_model.active();
         let mut title_location_opt = None;
         if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-            match &tab.location {
-                Location::Path(path) | Location::Search(path, ..) => {
-                    let location = if !self.search_input.is_empty() {
-                        Location::Search(path.clone(), self.search_input.clone())
-                    } else {
-                        Location::Path(path.clone())
-                    };
-                    tab.change_location(&location, None);
-                    title_location_opt = Some((tab.title(), tab.location.clone()));
-                }
-                _ => {}
+            if let Some(path) = tab.location.path_opt() {
+                let location = if !self.search_input.is_empty() {
+                    Location::Search(path.to_path_buf(), self.search_input.clone())
+                } else {
+                    Location::Path(path.to_path_buf())
+                };
+                tab.change_location(&location, None);
+                title_location_opt = Some((tab.title(), tab.location.clone()));
             }
         }
         if let Some((title, location)) = title_location_opt {
@@ -677,6 +682,22 @@ impl App {
             ))
         }))
         .collect();
+        Command::batch(commands)
+    }
+
+    fn update_desktop(&mut self) -> Command<Message> {
+        let mut needs_reload = Vec::new();
+        for entity in self.tab_model.iter() {
+            if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+                if let Location::Desktop(..) = &tab.location {
+                    needs_reload.push((entity, tab.location.clone()));
+                };
+            }
+        }
+        let mut commands = Vec::with_capacity(needs_reload.len());
+        for (entity, location) in needs_reload {
+            commands.push(self.rescan_tab(entity, location, None));
+        }
         Command::batch(commands)
     }
 
@@ -771,7 +792,7 @@ impl App {
                 if let Some(path) = item.path() {
                     b = b.data(Location::Path(path.clone()));
                 }
-                if let Some(icon) = item.icon() {
+                if let Some(icon) = item.icon(true) {
                     b = b.icon(widget::icon::icon(icon).size(16));
                 }
                 if item.is_mounted() {
@@ -830,8 +851,8 @@ impl App {
             let mut new_paths = HashSet::new();
             for entity in self.tab_model.iter() {
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
-                    if let Location::Path(path) = &tab.location {
-                        new_paths.insert(path.clone());
+                    if let Some(path) = tab.location.path_opt() {
+                        new_paths.insert(path.to_path_buf());
                     }
                 }
             }
@@ -952,6 +973,72 @@ impl App {
         ])
         .spacing(space_m)
         .into()
+    }
+
+    fn desktop_view_options(&self) -> Element<Message> {
+        let config = self.config.desktop;
+
+        let mut children = Vec::new();
+
+        let mut section = widget::settings::section().title(fl!("show-on-desktop"));
+        section = section.add(
+            widget::settings::item::builder(fl!("desktop-folder-content")).toggler(
+                config.show_content,
+                move |show_content| {
+                    Message::DesktopConfig(DesktopConfig {
+                        show_content,
+                        ..config
+                    })
+                },
+            ),
+        );
+        section = section.add(
+            widget::settings::item::builder(fl!("mounted-drives")).toggler(
+                config.show_mounted_drives,
+                move |show_mounted_drives| {
+                    Message::DesktopConfig(DesktopConfig {
+                        show_mounted_drives,
+                        ..config
+                    })
+                },
+            ),
+        );
+        section = section.add(
+            widget::settings::item::builder(fl!("trash-folder-icon")).toggler(
+                config.show_trash,
+                move |show_trash| {
+                    Message::DesktopConfig(DesktopConfig {
+                        show_trash,
+                        ..config
+                    })
+                },
+            ),
+        );
+        children.push(section.into());
+
+        /*TODO: Desktop icon size and spacing
+        let mut section = widget::settings::section().title(fl!("icon-size-and-spacing"));
+        let grid: u16 = config.icon_sizes.grid.into();
+        section = section.add(
+            widget::settings::item::builder(fl!("icon-size"))
+                .description(format!("{}%", grid))
+                .control(
+                    widget::slider(50..=500, grid, move |grid| {
+                        Message::DesktopConfig(DesktopConfig {
+                            icon_sizes: IconSizes {
+                                grid: NonZeroU16::new(grid).unwrap(),
+                                ..config.icon_sizes
+                            },
+                            ..config
+                        })
+                    })
+                    .step(25u16),
+                ),
+        );
+        children.push(section.into());
+        */
+
+        widget::settings::view_column(children).into()
     }
 
     fn edit_history(&self) -> Element<Message> {
@@ -1459,6 +1546,31 @@ impl Application for App {
                     }
                 }
             }
+            Message::DesktopConfig(config) => {
+                if config != self.config.desktop {
+                    config_set!(desktop, config);
+                    return self.update_desktop();
+                }
+            }
+            Message::DesktopViewOptions => {
+                let mut settings = window::Settings::default();
+                settings.decorations = true;
+                settings.min_size = Some(Size::new(360.0, 180.0));
+                settings.resizable = true;
+                settings.size = Size::new(480.0, 444.0);
+                settings.transparent = true;
+
+                #[cfg(target_os = "linux")]
+                {
+                    // Use the dialog ID to make it float
+                    settings.platform_specific.application_id =
+                        "com.system76.CosmicFilesDialog".to_string();
+                }
+
+                let (id, command) = window::spawn(settings);
+                self.windows.insert(id, WindowKind::DesktopViewOptions);
+                return command;
+            }
             Message::DialogCancel => {
                 self.dialog_pages.pop_front();
             }
@@ -1685,6 +1797,9 @@ impl Application for App {
                 //TODO: this could change favorites IDs while they are in use
                 self.update_nav_model();
 
+                // Update desktop tabs
+                commands.push(self.update_desktop());
+
                 return Command::batch(commands);
             }
             Message::NetworkAuth(mounter_key, uri, auth, auth_tx) => {
@@ -1739,9 +1854,9 @@ impl Application for App {
             Message::NewItem(entity_opt, dir) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-                    if let Location::Path(path) = &tab.location {
+                    if let Some(path) = &tab.location.path_opt() {
                         self.dialog_pages.push_back(DialogPage::NewItem {
-                            parent: path.clone(),
+                            parent: path.to_path_buf(),
                             name: String::new(),
                             dir,
                         });
@@ -1760,7 +1875,7 @@ impl Application for App {
                 let entities: Vec<_> = self.tab_model.iter().collect();
                 for entity in entities {
                     if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-                        if let Location::Path(path) = &tab.location {
+                        if let Some(path) = &tab.location.path_opt() {
                             let mut contains_change = false;
                             for event in events.iter() {
                                 for event_path in event.paths.iter() {
@@ -1834,18 +1949,18 @@ impl Application for App {
                     let mut paths = Vec::new();
                     let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                     if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-                        if let Location::Path(path) = &tab.location {
+                        if let Some(path) = &tab.location.path_opt() {
                             if let Some(items) = tab.items_opt() {
                                 for item in items.iter() {
                                     if item.selected {
-                                        if let Some(Location::Path(path)) = &item.location_opt {
-                                            paths.push(path.clone());
+                                        if let Some(path) = item.path_opt() {
+                                            paths.push(path.to_path_buf());
                                         }
                                     }
                                 }
                             }
                             if paths.is_empty() {
-                                paths.push(path.clone());
+                                paths.push(path.to_path_buf());
                             }
                         }
                     }
@@ -1975,7 +2090,7 @@ impl Application for App {
             Message::Paste(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-                    if let Location::Path(path) = &tab.location {
+                    if let Some(path) = tab.location.path_opt() {
                         let to = path.clone();
                         return clipboard::read_data::<ClipboardPaste, _>(move |contents_opt| {
                             match contents_opt {
@@ -2124,7 +2239,7 @@ impl Application for App {
                 let maybe_entity = self.nav_model.iter().find(|&entity| {
                     self.nav_model
                         .data::<Location>(entity)
-                        .map(|loc| *loc == Location::Trash)
+                        .map(|loc| matches!(loc, Location::Trash))
                         .unwrap_or_default()
                 });
                 if let Some(entity) = maybe_entity {
@@ -2132,19 +2247,19 @@ impl Application for App {
                         .icon_set(entity, widget::icon::icon(tab::trash_icon_symbolic(16)));
                 }
 
-                return self.rescan_trash();
+                return Command::batch([self.rescan_trash(), self.update_desktop()]);
             }
 
             Message::Rename(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-                    if let Location::Path(parent) = &tab.location {
+                    if let Some(parent) = tab.location.path_opt() {
                         if let Some(items) = tab.items_opt() {
                             let mut selected = Vec::new();
                             for item in items.iter() {
                                 if item.selected {
-                                    if let Some(Location::Path(path)) = &item.location_opt {
-                                        selected.push(path.clone());
+                                    if let Some(path) = item.path_opt() {
+                                        selected.push(path.to_path_buf());
                                     }
                                 }
                             }
@@ -2470,6 +2585,17 @@ impl Application for App {
                                 log::error!("failed to get current executable path: {}", err);
                             }
                         },
+                        tab::Command::OpenTrash => {
+                            //TODO: use handler for x-scheme-handler/trash and open trash:///
+                            let mut command = process::Command::new("cosmic-files");
+                            command.arg("--trash");
+                            match spawn_detached(&mut command) {
+                                Ok(()) => {}
+                                Err(err) => {
+                                    log::warn!("failed to run cosmic-files --trash: {}", err)
+                                }
+                            }
+                        }
                         tab::Command::Preview(kind) => {
                             self.context_page = ContextPage::Preview(Some(entity), kind);
                             self.set_show_context(true);
@@ -2532,12 +2658,13 @@ impl Application for App {
                 self.toasts.remove(id);
 
                 let mut paths = Vec::with_capacity(recently_trashed.len());
+                let desktop_config = self.config.desktop;
                 let mounters = self.mounters.clone();
                 let icon_sizes = self.config.tab.icon_sizes;
 
                 return cosmic::command::future(async move {
                     match tokio::task::spawn_blocking(move || {
-                        Location::Trash.scan(mounters, icon_sizes)
+                        Location::Trash.scan(desktop_config, mounters, icon_sizes)
                     })
                     .await
                     {
@@ -2802,7 +2929,11 @@ impl Application for App {
                 }
 
                 NavMenuAction::Preview(entity) => {
-                    if let Some(Location::Path(path)) = self.nav_model.data::<Location>(entity) {
+                    if let Some(path) = self
+                        .nav_model
+                        .data::<Location>(entity)
+                        .and_then(|location| location.path_opt())
+                    {
                         match tab::item_from_path(path, IconSizes::default()) {
                             Ok(item) => {
                                 self.context_page = ContextPage::Preview(
@@ -2856,22 +2987,28 @@ impl Application for App {
                             None => {}
                         }
 
-                        match output_info_opt {
+                        let display = match output_info_opt {
                             Some(output_info) => match output_info.name {
                                 Some(output_name) => {
                                     self.surface_names.insert(surface_id, output_name.clone());
+                                    output_name
                                 }
                                 None => {
                                     log::warn!("output {}: no output name", output.id());
+                                    String::new()
                                 }
                             },
                             None => {
                                 log::warn!("output {}: no output info", output.id());
+                                String::new()
                             }
-                        }
+                        };
 
-                        let (entity, command) =
-                            self.open_tab_entity(Location::Path(desktop_dir()), false, None);
+                        let (entity, command) = self.open_tab_entity(
+                            Location::Desktop(desktop_dir(), display),
+                            false,
+                            None,
+                        );
                         self.windows.insert(surface_id, WindowKind::Desktop(entity));
                         return Command::batch([
                             command,
@@ -3557,19 +3694,20 @@ impl Application for App {
     fn view_window(&self, id: WindowId) -> Element<Self::Message> {
         let content = match self.windows.get(&id) {
             Some(WindowKind::Desktop(entity)) => {
-                let mut tab_column = widget::column::with_capacity(2);
+                let mut tab_column = widget::column::with_capacity(3);
 
-                match self.tab_model.data::<Tab>(*entity) {
-                    Some(tab) => {
-                        let tab_view = tab
-                            .view(&self.key_binds)
-                            .map(move |message| Message::TabMessage(Some(*entity), message));
-                        tab_column = tab_column.push(tab_view);
-                    }
-                    None => {
-                        //TODO
-                    }
+                let tab_view = match self.tab_model.data::<Tab>(*entity) {
+                    Some(tab) => tab
+                        .view(&self.key_binds)
+                        .map(move |message| Message::TabMessage(Some(*entity), message)),
+                    None => widget::vertical_space(Length::Fill).into(),
+                };
+
+                let mut popover = widget::popover(tab_view);
+                if let Some(dialog) = self.dialog() {
+                    popover = popover.popup(dialog);
                 }
+                tab_column = tab_column.push(popover);
 
                 // The toaster is added on top of an empty element to ensure that it does not override context menus
                 tab_column = tab_column.push(widget::toaster(
@@ -3579,6 +3717,7 @@ impl Application for App {
 
                 return tab_column.into();
             }
+            Some(WindowKind::DesktopViewOptions) => self.desktop_view_options(),
             Some(WindowKind::Preview(entity_opt, kind)) => self.preview(entity_opt, kind, false),
             None => {
                 //TODO: distinct views per monitor in desktop mode
@@ -3597,7 +3736,10 @@ impl Application for App {
         widget::container(
             widget::scrollable(widget::row::with_children(vec![
                 content,
-                widget::horizontal_space(Length::Fixed((scrollbar_width + scrollbar_margin).into())).into(),
+                widget::horizontal_space(Length::Fixed(
+                    (scrollbar_width + scrollbar_margin).into(),
+                ))
+                .into(),
             ]))
             .direction(scrollable::Direction::Vertical(
                 scrollable::Properties::new()
@@ -3607,7 +3749,12 @@ impl Application for App {
         )
         .width(Length::Fill)
         .height(Length::Fill)
-        .padding([0, space_l - (scrollbar_width + scrollbar_margin), space_l, space_l])
+        .padding([
+            0,
+            space_l - (scrollbar_width + scrollbar_margin),
+            space_l,
+            space_l,
+        ])
         .style(theme::Container::WindowBackground)
         .into()
     }
@@ -4085,7 +4232,11 @@ pub(crate) mod test_utils {
 
         // New tab with items
         let location = Location::Path(path.to_owned());
-        let items = location.scan(Mounters::new(MounterMap::new()), IconSizes::default());
+        let items = location.scan(
+            DesktopConfig::default(),
+            Mounters::new(MounterMap::new()),
+            IconSizes::default(),
+        );
         let mut tab = Tab::new(location, TabConfig::default());
         tab.set_items(items);
 
@@ -4127,7 +4278,7 @@ pub(crate) mod test_utils {
     /// Asserts `tab`'s location changed to `path`
     pub fn assert_eq_tab_path(tab: &Tab, path: &Path) {
         // Paths should be the same
-        let Location::Path(ref tab_path) = tab.location else {
+        let Some(tab_path) = tab.location.path_opt() else {
             panic!("Expected tab's location to be a path");
         };
 
@@ -4142,7 +4293,7 @@ pub(crate) mod test_utils {
 
     /// Assert that tab's items are equal to a path's entries.
     pub fn assert_eq_tab_path_contents(tab: &Tab, path: &Path) {
-        let Location::Path(ref tab_path) = tab.location else {
+        let Some(tab_path) = tab.location.path_opt() else {
             panic!("Expected tab's location to be a path");
         };
 

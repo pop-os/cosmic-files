@@ -11,6 +11,15 @@ recents = Recents
 undo = Undo
 today = Today
 
+# Desktop view options
+desktop-view-options = Desktop view options...
+show-on-desktop = Show on Desktop
+desktop-folder-content = Desktop folder content
+mounted-drives = Mounted drives
+trash-folder-icon = Trash folder icon
+icon-size-and-spacing = Icon size and spacing
+icon-size = Icon size
+
 # List view
 name = Name
 modified = Modified

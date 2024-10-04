@@ -57,7 +57,7 @@ use std::{
 use crate::{
     app::{self, Action, PreviewItem, PreviewKind},
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
-    config::{IconSizes, TabConfig, ICON_SCALE_MAX, ICON_SIZE_GRID},
+    config::{DesktopConfig, IconSizes, TabConfig, ICON_SCALE_MAX, ICON_SIZE_GRID},
     dialog::DialogKind,
     fl,
     localize::{LANGUAGE_CHRONO, LANGUAGE_SORTER},
@@ -184,15 +184,31 @@ pub fn folder_icon_symbolic(path: &PathBuf, icon_size: u16) -> widget::icon::Han
     .handle()
 }
 
+#[cfg(target_os = "macos")]
+pub fn trash_entries() -> usize {
+    0
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn trash_entries() -> usize {
+    match trash::os_limited::list() {
+        Ok(entries) => entries.len(),
+        Err(_err) => 0,
+    }
+}
+
+pub fn trash_icon(icon_size: u16) -> widget::icon::Handle {
+    widget::icon::from_name(if trash_entries() > 0 {
+        "user-trash-full"
+    } else {
+        "user-trash"
+    })
+    .size(icon_size)
+    .handle()
+}
+
 pub fn trash_icon_symbolic(icon_size: u16) -> widget::icon::Handle {
-    #[cfg(target_os = "macos")]
-    let full = false; // TODO: add support for macos
-    #[cfg(not(target_os = "macos"))]
-    let full = match trash::os_limited::list() {
-        Ok(entries) => !entries.is_empty(),
-        Err(_err) => false,
-    };
-    widget::icon::from_name(if full {
+    widget::icon::from_name(if trash_entries() > 0 {
         "user-trash-full-symbolic"
     } else {
         "user-trash-symbolic"
@@ -783,23 +799,111 @@ pub fn scan_network(uri: &str, mounters: Mounters, sizes: IconSizes) -> Vec<Item
     Vec::new()
 }
 
+//TODO: organize desktop items based on display
+pub fn scan_desktop(
+    tab_path: &PathBuf,
+    display: &str,
+    desktop_config: DesktopConfig,
+    mounters: Mounters,
+    sizes: IconSizes,
+) -> Vec<Item> {
+    let mut items = Vec::new();
+
+    if desktop_config.show_content {
+        items.extend(scan_path(tab_path, sizes));
+    }
+
+    if desktop_config.show_mounted_drives {
+        for (_mounter_key, mounter) in mounters.iter() {
+            for mounter_item in mounter.items(sizes).unwrap_or_default() {
+                let Some(path) = mounter_item.path() else {
+                    continue;
+                };
+
+                // Get most item data from path
+                let mut item = match item_from_path(&path, sizes) {
+                    Ok(item) => item,
+                    Err(err) => {
+                        log::warn!("failed to get item from mounter item {:?}: {}", path, err);
+                        continue;
+                    }
+                };
+
+                //Override some data with mounter information
+                item.name = mounter_item.name();
+                item.display_name = Item::display_name(&item.name);
+
+                //TODO: use icon size for mounter item icon
+                if let Some(icon) = mounter_item.icon(false) {
+                    item.icon_handle_grid = icon.clone();
+                    item.icon_handle_list = icon.clone();
+                    item.icon_handle_list_condensed = icon;
+                }
+
+                items.push(item);
+            }
+        }
+    }
+
+    if desktop_config.show_trash {
+        let name = fl!("trash");
+        let display_name = Item::display_name(&name);
+
+        let metadata = ItemMetadata::SimpleDir {
+            entries: trash_entries() as u64,
+        };
+
+        let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) = {
+            (
+                "inode/directory".parse().unwrap(),
+                trash_icon(sizes.grid()),
+                trash_icon(sizes.list()),
+                trash_icon(sizes.list_condensed()),
+            )
+        };
+
+        items.push(Item {
+            name,
+            display_name,
+            metadata,
+            hidden: false,
+            location_opt: Some(Location::Trash),
+            mime,
+            icon_handle_grid,
+            icon_handle_list,
+            icon_handle_list_condensed,
+            open_with: Vec::new(),
+            thumbnail_opt: Some(ItemThumbnail::NotImage),
+            button_id: widget::Id::unique(),
+            pos_opt: Cell::new(None),
+            rect_opt: Cell::new(None),
+            selected: false,
+            overlaps_drag_rect: false,
+        })
+    }
+
+    items
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Location {
+    Desktop(PathBuf, String),
+    Network(String, String),
     Path(PathBuf),
+    Recents,
     Search(PathBuf, String),
     Trash,
-    Recents,
-    Network(String, String),
 }
 
 impl std::fmt::Display for Location {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Desktop(path, display) => write!(f, "{} on display {display}", path.display()),
+            Self::Network(uri, _) => write!(f, "{}", uri),
             Self::Path(path) => write!(f, "{}", path.display()),
+            Self::Recents => write!(f, "recents"),
             Self::Search(path, term) => write!(f, "search {} for {}", path.display(), term),
             Self::Trash => write!(f, "trash"),
-            Self::Recents => write!(f, "recents"),
-            Self::Network(uri, _) => write!(f, "{}", uri),
         }
     }
 }
@@ -807,14 +911,23 @@ impl std::fmt::Display for Location {
 impl Location {
     pub fn path_opt(&self) -> Option<&PathBuf> {
         match self {
+            Self::Desktop(path, _display) => Some(&path),
             Self::Path(path) => Some(&path),
             Self::Search(path, _) => Some(&path),
             _ => None,
         }
     }
 
-    pub fn scan(&self, mounters: Mounters, sizes: IconSizes) -> Vec<Item> {
+    pub fn scan(
+        &self,
+        desktop_config: DesktopConfig,
+        mounters: Mounters,
+        sizes: IconSizes,
+    ) -> Vec<Item> {
         match self {
+            Self::Desktop(path, display) => {
+                scan_desktop(path, display, desktop_config, mounters, sizes)
+            }
             Self::Path(path) => scan_path(path, sizes),
             Self::Search(path, term) => scan_search(path, term, sizes),
             Self::Trash => scan_trash(sizes),
@@ -836,6 +949,7 @@ pub enum Command {
     OpenFile(PathBuf),
     OpenInNewTab(PathBuf),
     OpenInNewWindow(PathBuf),
+    OpenTrash,
     Preview(PreviewKind),
     WindowDrag,
     WindowToggleMaximize,
@@ -1079,7 +1193,7 @@ impl Item {
         {
             ItemThumbnail::NotImage => icon,
             ItemThumbnail::Rgba(rgba, _) => {
-                if let Some(Location::Path(path)) = &self.location_opt {
+                if let Some(path) = self.path_opt() {
                     if self.mime.type_() == mime::IMAGE {
                         return widget::image(widget::image::Handle::from_path(path)).into();
                     }
@@ -1430,6 +1544,10 @@ impl Tab {
 
     pub fn title(&self) -> String {
         match &self.location {
+            Location::Desktop(path, _display) => {
+                let (name, _) = folder_name(path);
+                name
+            }
             Location::Path(path) => {
                 let (name, _) = folder_name(path);
                 name
@@ -1787,8 +1905,8 @@ impl Tab {
                         if clicked_item.metadata.is_dir() {
                             cd = Some(location.clone());
                         } else {
-                            if let Location::Path(path) = location {
-                                commands.push(Command::OpenFile(path.clone()));
+                            if let Some(path) = location.path_opt() {
+                                commands.push(Command::OpenFile(path.to_path_buf()));
                             } else {
                                 log::warn!("no path for item {:?}", clicked_item);
                             }
@@ -2275,8 +2393,9 @@ impl Tab {
                                             //TODO: allow opening multiple tabs?
                                             cd = Some(location.clone());
                                         } else {
-                                            if let Location::Path(path) = location {
-                                                commands.push(Command::OpenFile(path.clone()));
+                                            if let Some(path) = location.path_opt() {
+                                                commands
+                                                    .push(Command::OpenFile(path.to_path_buf()));
                                             }
                                         }
                                     } else {
@@ -2316,7 +2435,7 @@ impl Tab {
                     if let Some(clicked_item) =
                         self.items_opt.as_ref().and_then(|items| items.get(click_i))
                     {
-                        if let Some(Location::Path(path)) = &clicked_item.location_opt {
+                        if let Some(path) = clicked_item.path_opt() {
                             if clicked_item.metadata.is_dir() {
                                 //cd = Some(Location::Path(path.clone()));
                                 commands.push(Command::OpenInNewTab(path.clone()))
@@ -2483,6 +2602,9 @@ impl Tab {
                     Location::Path(path) => {
                         commands.push(Command::OpenFile(path));
                     }
+                    Location::Trash => {
+                        commands.push(Command::OpenTrash);
+                    }
                     _ => {}
                 }
             } else if location != self.location {
@@ -2491,8 +2613,8 @@ impl Tab {
                     Location::Search(path, _term) => path.is_dir(),
                     _ => true,
                 } {
-                    let prev_path = if let Location::Path(path) = &self.location {
-                        Some(path.clone())
+                    let prev_path = if let Some(path) = self.location.path_opt() {
+                        Some(path.to_path_buf())
                     } else {
                         None
                     };
@@ -2968,7 +3090,7 @@ impl Tab {
 
         let mut children: Vec<Element<_>> = Vec::new();
         match &self.location {
-            Location::Path(path) | Location::Search(path, ..) => {
+            Location::Desktop(path, _) | Location::Path(path) | Location::Search(path, _) => {
                 let excess_str = "...";
                 let excess_width = text_width_body(excess_str);
                 for (index, ancestor) in path.ancestors().enumerate() {
@@ -3974,7 +4096,7 @@ impl Tab {
                     }
                 }
 
-                if let Some(Location::Path(path)) = item.location_opt.clone() {
+                if let Some(path) = item.path_opt().map(|path| path.to_path_buf()) {
                     let mime = item.mime.clone();
                     subscriptions.push(subscription::channel(
                         path.clone(),

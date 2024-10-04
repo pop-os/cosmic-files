@@ -485,11 +485,15 @@ impl App {
 
     fn rescan_tab(&self) -> Command<Message> {
         let location = self.tab.location.clone();
+        let desktop_config = self.flags.config.desktop;
         let mounters = self.mounters.clone();
         let icon_sizes = self.tab.config.icon_sizes;
         Command::perform(
             async move {
-                match tokio::task::spawn_blocking(move || location.scan(mounters, icon_sizes)).await
+                match tokio::task::spawn_blocking(move || {
+                    location.scan(desktop_config, mounters, icon_sizes)
+                })
+                .await
                 {
                     Ok(items) => message::app(Message::TabRescan(items)),
                     Err(err) => {
@@ -589,7 +593,7 @@ impl App {
                 if let Some(path) = item.path() {
                     b = b.data(Location::Path(path.clone()));
                 }
-                if let Some(icon) = item.icon() {
+                if let Some(icon) = item.icon(true) {
                     b = b.icon(widget::icon::icon(icon).size(16));
                 }
                 if item.is_mounted() {
@@ -615,8 +619,8 @@ impl App {
     fn update_watcher(&mut self) -> Command<Message> {
         if let Some((mut watcher, old_paths)) = self.watcher_opt.take() {
             let mut new_paths = HashSet::new();
-            if let Location::Path(path) = &self.tab.location {
-                new_paths.insert(path.clone());
+            if let Some(path) = &self.tab.location.path_opt() {
+                new_paths.insert(path.to_path_buf());
             }
 
             // Unwatch paths no longer used
@@ -1121,9 +1125,9 @@ impl Application for App {
                 return Command::batch(commands);
             }
             Message::NewFolder => {
-                if let Location::Path(path) = &self.tab.location {
+                if let Some(path) = self.tab.location.path_opt() {
                     self.dialog_pages.push_back(DialogPage::NewFolder {
-                        parent: path.clone(),
+                        parent: path.to_path_buf(),
                         name: String::new(),
                     });
                     return widget::text_input::focus(self.dialog_text_input.clone());
@@ -1132,7 +1136,7 @@ impl Application for App {
             Message::NotifyEvents(events) => {
                 log::debug!("{:?}", events);
 
-                if let Location::Path(path) = &self.tab.location {
+                if let Some(path) = self.tab.location.path_opt() {
                     let mut contains_change = false;
                     for event in events.iter() {
                         for event_path in event.paths.iter() {
@@ -1198,7 +1202,7 @@ impl Application for App {
                 if let Some(items) = self.tab.items_opt() {
                     for item in items.iter() {
                         if item.selected {
-                            if let Some(Location::Path(path)) = &item.location_opt {
+                            if let Some(path) = item.path_opt() {
                                 paths.push(path.clone());
                                 let _ = update_recently_used(
                                     &path.clone(),
@@ -1258,7 +1262,7 @@ impl Application for App {
             Message::Save(replace) => {
                 if let DialogKind::SaveFile { filename } = &self.flags.kind {
                     if !filename.is_empty() {
-                        if let Location::Path(tab_path) = &self.tab.location {
+                        if let Some(tab_path) = self.tab.location.path_opt() {
                             let path = tab_path.join(&filename);
                             if path.is_dir() {
                                 // cd to directory
