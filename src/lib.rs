@@ -49,7 +49,11 @@ pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
     let locations = vec![
         match dirs::desktop_dir() {
             Some(path) => Location::Path(path),
-            None => Location::Path(home_dir()),
+            None => {
+                let path = home_dir().join("Desktop");
+                log::warn!("failed to find XDG_DESKTOP_DIR, falling back to {path:?}");
+                Location::Path(path)
+            }
         }
     ];
 
