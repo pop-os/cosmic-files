@@ -51,6 +51,10 @@ open-multiple-folders = Abrir várias pastas
 save = Salvar
 save-file = Salvar arquivo
 
+## Open With Dialog
+open-with-title = Como deseja abrir "{$name}"?
+browse-store = Procurar em {$store}
+
 ## Rename Dialog
 rename-file = Renomear arquivo
 rename-folder = Renomear pasta
@@ -65,6 +69,11 @@ replace-with = Substituir por
 apply-to-all = Aplicar a todos
 keep-both = Manter ambos
 skip = Ignorar
+
+## Set as Executable and Launch Dialog
+set-executable-and-launch = Marcar como executável e iniciar
+set-executable-and-launch-description = Deseja marcar "{$name}" como executável e iniciá-lo?
+set-and-launch = Marcar e iniciar
 
 ## Metadata Dialog
 owner = Proprietário
@@ -140,6 +149,8 @@ extracted = Extraído {$items} {$items ->
         [one] item
         *[other] itens
     } de {$from} para {$to}
+setting-executable-and-launching = Definindo "{$name}" como executável e iniciando
+set-executable-and-launched = Definido "{$name}" como executável e iniciado
 moving = Movendo {$items} {$items ->
         [one] item
         *[other] itens
@@ -192,6 +203,11 @@ sort-by-modified = Ordenar por data de modificação
 sort-by-size = Ordenar por tamanho
 sort-by-trashed = Ordernar por data de exclusão
 
+## Desktop
+change-wallpaper = Alterar papel de parede...
+desktop-appearance = Aparência do desktop...
+display-settings = Configurações da tela...
+
 # Menu
 
 ## File
@@ -199,7 +215,6 @@ file = Arquivo
 new-tab = Nova aba
 new-window = Nova janela
 rename = Renomear...
-menu-show-details = Mostrar detalhes...
 close-tab = Fechar aba
 quit = Sair
 
@@ -219,6 +234,7 @@ grid-view = Exibição em grade
 list-view = Exibição em lista
 show-hidden-files = Mostrar arquivos ocultos
 list-directories-first = Listar pastas primeiro
+gallery-preview = Galeria
 menu-settings = Configurações...
 menu-about = Sobre o Arquivos do COSMIC...
 
