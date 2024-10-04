@@ -2072,6 +2072,7 @@ impl Application for App {
                         for path in selected_paths {
                             let mut settings = window::Settings::default();
                             settings.decorations = true;
+                            settings.min_size = Some(Size::new(360.0, 180.0));
                             settings.resizable = true;
                             settings.size = Size::new(480.0, 600.0);
                             settings.transparent = true;

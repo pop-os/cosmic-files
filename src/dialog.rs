@@ -164,6 +164,7 @@ impl<M: Send + 'static> Dialog<M> {
         let mut settings = window::Settings::default();
         settings.decorations = false;
         settings.exit_on_close_request = false;
+        settings.min_size = Some(Size::new(360.0, 180.0));
         settings.resizable = true;
         settings.size = Size::new(1024.0, 640.0);
         settings.transparent = true;
