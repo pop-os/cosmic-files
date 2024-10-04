@@ -15,7 +15,7 @@ use std::collections::HashMap;
 
 use crate::{
     app::{Action, Message},
-    config::TabConfig,
+    config::Config,
     fl,
     tab::{self, HeadingOptions, Location, LocationMenuAction, Tab},
 };
@@ -58,17 +58,12 @@ pub fn context_menu<'a>(
         .on_press(tab::Message::ContextAction(action))
     };
 
-    let TabConfig {
-        sort_name,
-        sort_direction,
-        ..
-    } = tab.config;
     let sort_item = |label, variant| {
         menu_item(
             format!(
                 "{} {}",
                 label,
-                match (sort_name == variant, sort_direction) {
+                match (tab.sort_name == variant, tab.sort_direction) {
                     (true, true) => "\u{2B07}",
                     (true, false) => "\u{2B06}",
                     _ => "",
@@ -119,7 +114,7 @@ pub fn context_menu<'a>(
                     );
                 }
                 // All selected items are directories
-                if selected == selected_dir {
+                if selected == selected_dir && matches!(tab.mode, tab::Mode::App) {
                     children.push(menu_item(fl!("open-in-new-tab"), Action::OpenInNewTab).into());
                     children
                         .push(menu_item(fl!("open-in-new-window"), Action::OpenInNewWindow).into());
@@ -156,8 +151,10 @@ pub fn context_menu<'a>(
 
                 //TODO: Print?
                 children.push(menu_item(fl!("show-details"), Action::Preview).into());
-                children.push(divider::horizontal::light().into());
-                children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
+                if matches!(tab.mode, tab::Mode::App) {
+                    children.push(divider::horizontal::light().into());
+                    children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
+                }
                 children.push(divider::horizontal::light().into());
                 children.push(menu_item(fl!("move-to-trash"), Action::MoveToTrash).into());
             } else {
@@ -171,6 +168,22 @@ pub fn context_menu<'a>(
                     children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
                 }
                 children.push(menu_item(fl!("paste"), Action::Paste).into());
+
+                //TODO: only show if cosmic-settings is found?
+                if matches!(tab.mode, tab::Mode::Desktop) {
+                    children.push(divider::horizontal::light().into());
+                    children.push(
+                        menu_item(fl!("change-wallpaper"), Action::CosmicSettingsWallpaper).into(),
+                    );
+                    children.push(
+                        menu_item(fl!("desktop-appearance"), Action::CosmicSettingsAppearance)
+                            .into(),
+                    );
+                    children.push(
+                        menu_item(fl!("display-settings"), Action::CosmicSettingsDisplays).into(),
+                    );
+                }
+
                 children.push(divider::horizontal::light().into());
                 // TODO: Nested menu
                 children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
@@ -191,6 +204,8 @@ pub fn context_menu<'a>(
                         menu_item(fl!("open-item-location"), Action::OpenItemLocation).into(),
                     );
                 }
+                children.push(divider::horizontal::light().into());
+                children.push(menu_item(fl!("show-details"), Action::Preview).into());
             } else {
                 if dialog_kind.save() {
                     children.push(menu_item(fl!("new-folder"), Action::NewFolder).into());
@@ -273,7 +288,7 @@ pub fn dialog_menu<'a>(
     let sort_item = |label, sort, dir| {
         menu::Item::CheckBox(
             label,
-            tab.config.sort_name == sort && tab.config.sort_direction == dir,
+            tab.sort_name == sort && tab.sort_direction == dir,
             Action::SetSort(sort, dir),
         )
     };
@@ -303,7 +318,7 @@ pub fn dialog_menu<'a>(
             ),
         ),
         menu::Tree::with_children(
-            widget::button::icon(widget::icon::from_name(if tab.config.sort_direction {
+            widget::button::icon(widget::icon::from_name(if tab.sort_direction {
                 "view-sort-ascending-symbolic"
             } else {
                 "view-sort-descending-symbolic"
@@ -355,13 +370,14 @@ pub fn dialog_menu<'a>(
 
 pub fn menu_bar<'a>(
     tab_opt: Option<&Tab>,
+    config: &Config,
     key_binds: &HashMap<KeyBind, Action>,
 ) -> Element<'a, Message> {
     let sort_item = |label, sort, dir| {
         menu::Item::CheckBox(
             label,
             tab_opt.map_or(false, |tab| {
-                tab.config.sort_name == sort && tab.config.sort_direction == dir
+                tab.sort_name == sort && tab.sort_direction == dir
             }),
             Action::SetSort(sort, dir),
         )
@@ -411,8 +427,6 @@ pub fn menu_bar<'a>(
                     menu_button_optional(fl!("open-with"), Action::OpenWith, selected == 1),
                     menu::Item::Divider,
                     menu_button_optional(fl!("rename"), Action::Rename, selected > 0),
-                    menu::Item::Divider,
-                    menu_button_optional(fl!("menu-show-details"), Action::Preview, selected > 0),
                     menu::Item::Divider,
                     menu_button_optional(fl!("add-to-sidebar"), Action::AddToSidebar, selected > 0),
                     menu::Item::Divider,
@@ -467,6 +481,9 @@ pub fn menu_bar<'a>(
                         tab_opt.map_or(false, |tab| tab.config.folders_first),
                         Action::ToggleFoldersFirst,
                     ),
+                    menu::Item::CheckBox(fl!("show-details"), config.show_details, Action::Preview),
+                    menu::Item::Divider,
+                    menu_button_optional(fl!("gallery-preview"), Action::Gallery, selected > 0),
                     menu::Item::Divider,
                     menu::Item::Button(fl!("menu-settings"), Action::Settings),
                     menu::Item::Divider,

@@ -167,15 +167,6 @@ show-details = 顯示詳細資料
 
 ## Settings
 settings = 設定
-settings-tab = 分頁
-settings-show-hidden = 顯示隱藏檔案
-default-view = 預設檢視
-icon-size-list = 圖示大小（列表）
-icon-size-grid = 圖示大小（網格）
-sorting-name = 排序依據
-direction = 排序方向
-ascending = 升序
-descending = 降序
 
 ### Appearance
 appearance = 外觀

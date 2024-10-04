@@ -9,7 +9,7 @@ use cosmic::{
         clipboard::dnd::DndAction,
         event,
         futures::SinkExt,
-        keyboard::{self, Modifiers},
+        keyboard::Modifiers,
         subscription::{self, Subscription},
         //TODO: export in cosmic::widget
         widget::{
@@ -39,7 +39,6 @@ use cosmic::{
 use chrono::{DateTime, Utc};
 use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
-use recently_used_xbel::{Error, RecentlyUsed};
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
@@ -48,10 +47,8 @@ use std::{
     collections::HashMap,
     fmt::{self, Display},
     fs::{self, Metadata},
-    num::NonZeroU16,
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
-    process,
     sync::{Arc, Mutex},
     time::{Duration, Instant, SystemTime},
 };
@@ -548,7 +545,7 @@ pub fn scan_search(tab_path: &PathBuf, term: &str, sizes: IconSizes) -> Vec<Item
                         path.to_path_buf(),
                         file_name.to_string(),
                         metadata,
-                        IconSizes::default(),
+                        sizes,
                     ));
                 }
 
@@ -759,7 +756,7 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
 }
 
 pub fn scan_network(uri: &str, mounters: Mounters, sizes: IconSizes) -> Vec<Item> {
-    for (key, mounter) in mounters.iter() {
+    for (_key, mounter) in mounters.iter() {
         match mounter.network_scan(uri, sizes) {
             Some(Ok(items)) => return items,
             Some(Err(err)) => {
@@ -824,8 +821,7 @@ pub enum Command {
     OpenFile(PathBuf),
     OpenInNewTab(PathBuf),
     OpenInNewWindow(PathBuf),
-    Preview(PreviewKind, Duration),
-    PreviewCancel,
+    Preview(PreviewKind),
     WindowDrag,
     WindowToggleMaximize,
 }
@@ -845,11 +841,13 @@ pub enum Message {
     LocationMenuAction(LocationMenuAction),
     Drag(Option<Rectangle>),
     EditLocation(Option<Location>),
+    EditLocationToggle,
     OpenInNewTab(PathBuf),
     EmptyTrash,
     Gallery(bool),
     GalleryPrevious,
     GalleryNext,
+    GalleryToggle,
     GoNext,
     GoPrevious,
     ItemDown,
@@ -866,7 +864,6 @@ pub enum Message {
     SelectAll,
     SetSort(HeadingOptions, bool),
     Thumbnail(PathBuf, ItemThumbnail),
-    ToggleFoldersFirst,
     ToggleShowHidden,
     View(View),
     ToggleSort(HeadingOptions),
@@ -876,7 +873,6 @@ pub enum Message {
     DndLeave(Location),
     WindowDrag,
     WindowToggleMaximize,
-    ZoomDefault,
     ZoomIn,
     ZoomOut,
 }
@@ -1086,50 +1082,6 @@ impl Item {
         }
     }
 
-    pub fn open_with_view(&self, sizes: IconSizes) -> Element<app::Message> {
-        let cosmic_theme::Spacing {
-            space_xs,
-            space_xxxs,
-            ..
-        } = theme::active().cosmic().spacing;
-
-        let mut column = widget::column().spacing(space_xxxs);
-
-        column = column.push(widget::row::with_children(vec![
-            widget::horizontal_space(Length::Fill).into(),
-            self.preview(sizes),
-            widget::horizontal_space(Length::Fill).into(),
-        ]));
-
-        column = column.push(widget::text::heading(&self.name));
-
-        column = column.push(widget::text(format!("Type: {}", self.mime)));
-
-        if let Some(Location::Path(path)) = &self.location_opt {
-            for app in self.open_with.iter() {
-                column = column.push(
-                    widget::button::custom(
-                        widget::row::with_children(vec![
-                            widget::icon(app.icon.clone()).into(),
-                            if app.is_default {
-                                widget::text(fl!("default-app", name = app.name.as_str())).into()
-                            } else {
-                                widget::text(&app.name).into()
-                            },
-                        ])
-                        .spacing(space_xs),
-                    )
-                    //TODO: do not clone so much?
-                    .on_press(app::Message::OpenWith(path.clone(), app.clone()))
-                    .padding(space_xs)
-                    .width(Length::Fill),
-                );
-            }
-        }
-
-        column.into()
-    }
-
     pub fn preview_view(&self, sizes: IconSizes) -> Element<'static, app::Message> {
         let cosmic_theme::Spacing {
             space_xxxs,
@@ -1151,7 +1103,7 @@ impl Item {
         );
 
         if self.mime.type_() == mime::IMAGE {
-            if let Some(path) = self.path_opt() {
+            if let Some(_path) = self.path_opt() {
                 row = row.push(
                     widget::button::icon(widget::icon::from_name("view-fullscreen-symbolic"))
                         .on_press(app::Message::TabMessage(None, Message::Gallery(true))),
@@ -1373,6 +1325,8 @@ pub struct Tab {
     pub history_i: usize,
     pub history: Vec<Location>,
     pub config: TabConfig,
+    pub sort_name: HeadingOptions,
+    pub sort_direction: bool,
     pub gallery: bool,
     pub(crate) items_opt: Option<Vec<Item>>,
     pub dnd_hovered: Option<(Location, Instant)>,
@@ -1421,6 +1375,8 @@ impl Tab {
             history_i: 0,
             history,
             config,
+            sort_name: HeadingOptions::Name,
+            sort_direction: true,
             gallery: false,
             items_opt: None,
             scrollable_id: widget::Id::unique(),
@@ -1752,7 +1708,6 @@ impl Tab {
         let mut history_i_opt = None;
         let mod_ctrl = modifiers.contains(Modifiers::CTRL) && self.mode.multiple();
         let mod_shift = modifiers.contains(Modifiers::SHIFT) && self.mode.multiple();
-        let last_select_focus = self.select_focus;
         match message {
             Message::AddNetworkDrive => {
                 commands.push(Command::AddNetworkDrive);
@@ -1806,9 +1761,6 @@ impl Tab {
                 } else {
                     log::warn!("no item for click index {:?}", click_i_opt);
                 }
-
-                // Cancel any preview timers
-                commands.push(Command::PreviewCancel);
             }
             Message::Click(click_i_opt) => {
                 self.selected_clicked = false;
@@ -1826,9 +1778,7 @@ impl Tab {
                         if let Some(range) = self.select_range {
                             let min = range.0.min(range.1);
                             let max = range.0.max(range.1);
-                            if self.config.sort_name == HeadingOptions::Name
-                                && self.config.sort_direction
-                            {
+                            if self.sort_name == HeadingOptions::Name && self.sort_direction {
                                 // A default/unsorted tab's view is consistent with how the
                                 // Items are laid out internally (items_opt), so Items can be
                                 // linearly selected
@@ -1935,7 +1885,10 @@ impl Tab {
                 }
             }
             Message::Config(config) => {
+                // View is preserved for existing tabs
+                let view = self.config.view;
                 self.config = config;
+                self.config.view = view;
             }
             Message::ContextAction(action) => {
                 // Close context menu
@@ -1989,11 +1942,9 @@ impl Tab {
                             //TODO: blocking code, run in command
                             match item_from_path(&path, IconSizes::default()) {
                                 Ok(item) => {
-                                    // Show preview instantly
-                                    commands.push(Command::Preview(
-                                        PreviewKind::Custom(PreviewItem(item)),
-                                        Duration::new(0, 0),
-                                    ));
+                                    commands.push(Command::Preview(PreviewKind::Custom(
+                                        PreviewItem(item),
+                                    )));
                                 }
                                 Err(err) => {
                                     log::warn!("failed to get item from path {:?}: {}", path, err);
@@ -2022,6 +1973,13 @@ impl Tab {
                     )));
                 }
                 self.edit_location = edit_location;
+            }
+            Message::EditLocationToggle => {
+                if self.edit_location.is_none() {
+                    self.edit_location = Some(self.location.clone());
+                } else {
+                    self.edit_location = None;
+                }
             }
             Message::OpenInNewTab(path) => {
                 commands.push(Command::OpenInNewTab(path));
@@ -2069,6 +2027,16 @@ impl Tab {
                 }
                 if let Some(id) = self.select_focus_id() {
                     commands.push(Command::Iced(widget::button::focus(id)));
+                }
+            }
+            Message::GalleryToggle => {
+                if let Some(indices) = self.column_sort() {
+                    for (_, item) in indices.iter() {
+                        if item.selected && item.mime.type_() == mime::IMAGE {
+                            self.gallery = !self.gallery;
+                            break;
+                        }
+                    }
                 }
             }
             Message::GoNext => {
@@ -2344,8 +2312,8 @@ impl Tab {
                 }
             }
             Message::SetSort(heading_option, dir) => {
-                self.config.sort_name = heading_option;
-                self.config.sort_direction = dir;
+                self.sort_name = heading_option;
+                self.sort_direction = dir;
             }
             Message::Thumbnail(path, thumbnail) => {
                 if let Some(ref mut items) = self.items_opt {
@@ -2378,21 +2346,20 @@ impl Tab {
                     }
                 }
             }
-            Message::ToggleFoldersFirst => self.config.folders_first = !self.config.folders_first,
             Message::ToggleShowHidden => self.config.show_hidden = !self.config.show_hidden,
 
             Message::View(view) => {
                 self.config.view = view;
             }
             Message::ToggleSort(heading_option) => {
-                let heading_sort = if self.config.sort_name == heading_option {
-                    !self.config.sort_direction
+                let heading_sort = if self.sort_name == heading_option {
+                    !self.sort_direction
                 } else {
                     // Default modified to descending, and others to ascending.
                     heading_option != HeadingOptions::Modified
                 };
-                self.config.sort_direction = heading_sort;
-                self.config.sort_name = heading_option;
+                self.sort_direction = heading_sort;
+                self.sort_name = heading_option;
             }
             Message::Drop(Some((to, mut from))) => {
                 self.dnd_hovered = None;
@@ -2441,9 +2408,6 @@ impl Tab {
                         |x| x,
                     )));
                 }
-
-                // Clear preview timer
-                commands.push(Command::PreviewCancel);
             }
             Message::DndLeave(loc) => {
                 if Some(&loc) == self.dnd_hovered.as_ref().map(|(l, _)| l) {
@@ -2456,65 +2420,11 @@ impl Tab {
             Message::WindowToggleMaximize => {
                 commands.push(Command::WindowToggleMaximize);
             }
-            Message::ZoomDefault => match self.config.view {
-                View::List => self.config.icon_sizes.list = 100.try_into().unwrap(),
-                View::Grid => self.config.icon_sizes.grid = 100.try_into().unwrap(),
-            },
             Message::ZoomIn => {
-                let zoom_in = |size: &mut NonZeroU16, min: u16, max: u16| {
-                    let mut step = min;
-                    while step <= max {
-                        if size.get() < step {
-                            *size = step.try_into().unwrap();
-                            break;
-                        }
-                        step += 25;
-                    }
-                    if size.get() > step {
-                        *size = step.try_into().unwrap();
-                    }
-                };
-                match self.config.view {
-                    View::List => zoom_in(&mut self.config.icon_sizes.list, 50, 500),
-                    View::Grid => zoom_in(&mut self.config.icon_sizes.grid, 50, 500),
-                }
+                commands.push(Command::Action(Action::ZoomIn));
             }
             Message::ZoomOut => {
-                let zoom_out = |size: &mut NonZeroU16, min: u16, max: u16| {
-                    let mut step = max;
-                    while step >= min {
-                        if size.get() > step {
-                            *size = step.try_into().unwrap();
-                            break;
-                        }
-                        step -= 25;
-                    }
-                    if size.get() < step {
-                        *size = step.try_into().unwrap();
-                    }
-                };
-                match self.config.view {
-                    View::List => zoom_out(&mut self.config.icon_sizes.list, 50, 500),
-                    View::Grid => zoom_out(&mut self.config.icon_sizes.grid, 50, 500),
-                }
-            }
-        }
-
-        // Update preview timer
-        //TODO: make this configurable
-        if last_select_focus != self.select_focus {
-            if let Some(index) = self.select_focus {
-                if let Some(ref items) = self.items_opt {
-                    if let Some(item) = items.get(index) {
-                        if let Some(location) = item.location_opt.clone() {
-                            // Show preview after double click timeout
-                            commands.push(Command::Preview(
-                                PreviewKind::Location(location),
-                                DOUBLE_CLICK_DURATION,
-                            ));
-                        }
-                    }
-                }
+                commands.push(Command::Action(Action::ZoomOut));
             }
         }
 
@@ -2568,8 +2478,8 @@ impl Tab {
             }
         };
         let mut items: Vec<_> = self.items_opt.as_ref()?.iter().enumerate().collect();
-        let heading_sort = self.config.sort_direction;
-        match self.config.sort_name {
+        let heading_sort = self.sort_direction;
+        match self.sort_name {
             HeadingOptions::Size => {
                 items.sort_by(|a, b| {
                     // entries take precedence over size
@@ -2871,12 +2781,6 @@ impl Tab {
             ..
         } = theme::active().cosmic().spacing;
 
-        let TabConfig {
-            sort_name,
-            sort_direction,
-            ..
-        } = self.config;
-
         let size = self.size_opt.get().unwrap_or(Size::new(0.0, 0.0));
 
         let mut row = widget::row::with_capacity(5)
@@ -2919,7 +2823,7 @@ impl Tab {
                 .spacing(space_xxs)
                 .width(width);
             row = row.push(widget::text::heading(name));
-            match (sort_name == msg, sort_direction) {
+            match (self.sort_name == msg, self.sort_direction) {
                 (true, true) => {
                     row = row.push(widget::icon::from_name("pan-down-symbolic").size(16));
                 }
@@ -3891,7 +3795,6 @@ impl Tab {
             mouse_area = mouse_area.on_right_press(Message::ContextMenu);
         }
 
-        let should_propogate_events = true;
         let mut popover = widget::popover(mouse_area);
 
         if let Some(point) = self.context_menu {
@@ -3931,7 +3834,7 @@ impl Tab {
                     }
                 }
             }
-            Location::Network(uri, display_name) if uri == "network:///" => {
+            Location::Network(uri, _display_name) if uri == "network:///" => {
                 tab_column = tab_column.push(
                     widget::layer_container(widget::row::with_children(vec![
                         widget::horizontal_space(Length::Fill).into(),
@@ -4109,9 +4012,8 @@ mod tests {
     use super::{respond_to_scroll_direction, scan_path, Location, Message, Tab};
     use crate::{
         app::test_utils::{
-            assert_eq_tab_path, assert_zoom_affects_item_size, empty_fs, eq_path_item, filter_dirs,
-            read_dir_sorted, simple_fs, tab_click_new, NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN,
-            NUM_NESTED,
+            assert_eq_tab_path, empty_fs, eq_path_item, filter_dirs, read_dir_sorted, simple_fs,
+            tab_click_new, NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED,
         },
         config::{IconSizes, TabConfig},
     };
@@ -4341,29 +4243,6 @@ mod tests {
         }
         assert_eq_tab_path(&tab, path);
 
-        Ok(())
-    }
-
-    #[test]
-    fn tab_zoom_in_increases_item_view_size() -> io::Result<()> {
-        let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
-        let path = fs.path();
-
-        let mut tab = Tab::new(Location::Path(path.into()), TabConfig::default());
-
-        let should_affect_size = true;
-        assert_zoom_affects_item_size(&mut tab, Message::ZoomIn, should_affect_size);
-        Ok(())
-    }
-
-    fn tab_zoom_out_decreases_item_view_size() -> io::Result<()> {
-        let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
-        let path = fs.path();
-
-        let mut tab = Tab::new(Location::Path(path.into()), TabConfig::default());
-
-        let should_affect_size = true;
-        assert_zoom_affects_item_size(&mut tab, Message::ZoomOut, should_affect_size);
         Ok(())
     }
 

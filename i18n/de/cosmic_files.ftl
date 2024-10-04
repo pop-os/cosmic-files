@@ -7,7 +7,7 @@ home = Benutzerordner
 networks = Netzwerke
 notification-in-progress = Dateioperationen sind im Gange.
 trash = Papierkorb
-recents = Aktuelle
+recents = Zuletzt benutzt
 undo = Rückgängig
 today = Heute
 
@@ -169,15 +169,6 @@ properties = Eigenschaften
 
 ## Einstellungen
 settings = Einstellungen
-settings-tab = Tab
-settings-show-hidden = Versteckte Dateien anzeigen
-default-view = Standardansicht
-icon-size-list = Symbolgröße (Liste)
-icon-size-grid = Symbolgröße (Raster)
-sorting-name = Sortieren nach
-direction = Richtung
-ascending = Aufsteigend
-descending = Absteigend
 
 ### Aussehen
 appearance = Aussehen

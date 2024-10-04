@@ -60,14 +60,6 @@ properties = Ominaisuudet
 
 ## Settings
 settings = Asetukset
-settings-tab = Välilehti
-settings-show-hidden = Näytä piilotiedostot
-icon-size-list = Kuvakkeen koko (luettelo)
-icon-size-grid = Kuvakkeen koko (ruudukko)
-sorting-name = Järjestä
-direction = Suunta
-ascending = Nouseva
-descending = Laskeva
 
 ### Appearance
 appearance = Ulkoasu

@@ -169,15 +169,6 @@ show-details = ವಿವರಗಳನ್ನು ತೋರಿಸಿ
 
 ## Settings
 settings = ಸೆಟ್ಟಿಂಗ್‌ಗಳು
-settings-tab = ಟ್ಯಾಬ್
-settings-show-hidden = ಮರೆಮಾಡಲಾದ ಫೈಲ್‌ಗಳನ್ನು ತೋರಿಸಿ
-default-view = ಸ್ಥೂಲ ದೃಶ್ಯ
-icon-size-list = ಐಕಾನ್ ಗಾತ್ರ (ಪಟ್ಟಿ)
-icon-size-grid = ಐಕಾನ್ ಗಾತ್ರ (ಗ್ರೀಡ್)
-sorting-name = ಇದರಿಂದ ಶ್ರೇಣೀಬದ್ಧಗೊಳಿಸಿ
-direction = ದಿಕ್ಕು
-ascending = ಆರೋಹಣ
-descending = ಅವರೋಹಣ
 
 ### Appearance
 appearance = ನೋಟ

@@ -13,7 +13,7 @@ use cosmic::{
             Modifiers,
         },
         layout,
-        mouse::{self, click, Event as MouseEvent},
+        mouse::{self, click},
         overlay,
         renderer::{self, Quad, Renderer as _},
         touch,
@@ -614,13 +614,11 @@ fn update<Message: Clone>(
         }
     }
 
-    if let Some(message) = widget.on_scroll.as_ref() {
+    if let Some(on_scroll) = widget.on_scroll.as_ref() {
         if let Event::Mouse(mouse::Event::WheelScrolled { delta }) = event {
-            if let Some(on_scroll) = widget.on_scroll.as_ref() {
-                if let Some(message) = on_scroll(delta.clone(), state.modifiers) {
-                    shell.publish(message);
-                    return event::Status::Captured;
-                }
+            if let Some(message) = on_scroll(delta.clone(), state.modifiers) {
+                shell.publish(message);
+                return event::Status::Captured;
             }
         }
     }

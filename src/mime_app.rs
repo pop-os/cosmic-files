@@ -7,10 +7,11 @@ use cosmic::widget;
 pub use mime_guess::Mime;
 use once_cell::sync::Lazy;
 use std::{
-    cmp::Ordering, collections::HashMap, env, path::PathBuf, process, sync::Mutex, time::Instant,
+    cmp::Ordering, collections::HashMap, env, ffi::OsString, path::PathBuf, process, sync::Mutex,
+    time::Instant,
 };
 
-pub fn exec_to_command(exec: &str, path_opt: Option<PathBuf>) -> Option<process::Command> {
+pub fn exec_to_command(exec: &str, path_opt: Option<OsString>) -> Option<process::Command> {
     let args_vec: Vec<String> = shlex::split(exec)?;
     let mut args = args_vec.iter();
     let mut command = process::Command::new(args.next()?);
@@ -46,7 +47,7 @@ pub struct MimeApp {
 
 impl MimeApp {
     //TODO: move to libcosmic, support multiple files
-    pub fn command(&self, path_opt: Option<PathBuf>) -> Option<process::Command> {
+    pub fn command(&self, path_opt: Option<OsString>) -> Option<process::Command> {
         exec_to_command(self.exec.as_deref()?, path_opt)
     }
 }
@@ -60,7 +61,9 @@ impl From<&desktop::DesktopEntryData> for MimeApp {
             name: app.name.clone(),
             exec: app.exec.clone(),
             icon: match &app.icon {
-                desktop::IconSource::Name(name) => widget::icon::from_name(name.as_str()).handle(),
+                desktop::IconSource::Name(name) => {
+                    widget::icon::from_name(name.as_str()).size(32).handle()
+                }
                 desktop::IconSource::Path(path) => widget::icon::from_path(path.clone()),
             },
             is_default: false,

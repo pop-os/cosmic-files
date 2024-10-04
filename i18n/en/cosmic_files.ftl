@@ -51,6 +51,10 @@ open-multiple-folders = Open multiple folders
 save = Save
 save-file = Save file
 
+## Open With Dialog
+open-with-title = How do you want to open "{$name}"?
+browse-store = Browse {$store}
+
 ## Rename Dialog
 rename-file = Rename file
 rename-folder = Rename folder
@@ -65,6 +69,11 @@ replace-with = Replace with
 apply-to-all = Apply to all
 keep-both = Keep both
 skip = Skip
+
+## Set as Executable and Launch Dialog
+set-executable-and-launch = Set as executable and launch
+set-executable-and-launch-description = Do you want to set "{$name}" as executable and launch it?
+set-and-launch = Set and launch
 
 ## Metadata Dialog
 owner = Owner
@@ -140,6 +149,8 @@ extracted = Extracted {$items} {$items ->
         [one] item
         *[other] items
     } from {$from} to {$to}
+setting-executable-and-launching = Setting "{$name}" as executable and launching
+set-executable-and-launched = Set "{$name}" as executable and launched
 moving = Moving {$items} {$items ->
         [one] item
         *[other] items
@@ -169,15 +180,6 @@ show-details = Show details
 
 ## Settings
 settings = Settings
-settings-tab = Tab
-settings-show-hidden = Show hidden files
-default-view = Default view
-icon-size-list = Icon size (list)
-icon-size-grid = Icon size (grid)
-sorting-name = Sort by
-direction = Direction
-ascending = Ascending
-descending = Descending
 
 ### Appearance
 appearance = Appearance
@@ -201,6 +203,11 @@ sort-by-modified = Sort by modified
 sort-by-size = Sort by size
 sort-by-trashed = Sort by delete time
 
+## Desktop
+change-wallpaper = Change wallpaper...
+desktop-appearance = Desktop appearance...
+display-settings = Display settings...
+
 # Menu
 
 ## File
@@ -208,7 +215,6 @@ file = File
 new-tab = New tab
 new-window = New window
 rename = Rename...
-menu-show-details = Show details...
 close-tab = Close tab
 quit = Quit
 
@@ -228,6 +234,7 @@ grid-view = Grid view
 list-view = List view
 show-hidden-files = Show hidden files
 list-directories-first = List directories first
+gallery-preview = Gallery preview
 menu-settings = Settings...
 menu-about = About COSMIC Files...
 

@@ -70,15 +70,6 @@ properties = الخصائص
 
 ## Settings
 settings = الإعدادات
-settings-tab = لسان
-settings-show-hidden = أظهر الملفّات والمجلدات المخفية
-default-view = العرض المبدئي
-icon-size-list = حجم الأيقونات (لائحة)
-icon-size-grid = حجم الأيقونات (شبكة)
-sorting-name = رتّب حسب
-direction = الاتّجاه
-ascending = تصاعديًا
-descending = تنازليًا
 
 ### Appearance
 appearance = المظهر

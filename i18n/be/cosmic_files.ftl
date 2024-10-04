@@ -170,15 +170,6 @@ show-details = Паказаць дэталі
 
 ## Settings
 settings = Налады
-settings-tab = Укладка
-settings-show-hidden = Паказаць схаваныя файлы
-default-view = Выгляд па змаўчанні
-icon-size-list = Памер значка (спіс)
-icon-size-grid = Памер значка (сетка)
-sorting-name = Сартаваць
-direction = Напрамак
-ascending = Па ўзрастанні
-descending = Па ўбыванні
 
 ### Appearance
 appearance = Выгляд

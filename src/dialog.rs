@@ -11,7 +11,7 @@ use cosmic::{
     iced::{
         event,
         futures::{self, SinkExt},
-        keyboard::{Event as KeyEvent, Modifiers},
+        keyboard::{Event as KeyEvent, Key, Modifiers},
         subscription::{self, Subscription},
         window, Alignment, Event, Length, Size,
     },
@@ -42,6 +42,7 @@ use crate::{
     app::{Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind},
     config::{Config, Favorite, IconSizes, TabConfig},
     fl, home_dir,
+    key_bind::key_binds,
     localize::LANGUAGE_SORTER,
     menu,
     mounter::{mounters, MounterItem, MounterItems, MounterKey, MounterMessage, Mounters},
@@ -309,13 +310,13 @@ enum Message {
     DialogUpdate(DialogPage),
     Filename(String),
     Filter(usize),
+    Key(Modifiers, Key),
     Modifiers(Modifiers),
     MounterItems(MounterKey, MounterItems),
     NewFolder,
     NotifyEvents(Vec<DebouncedEvent>),
     NotifyWatcher(WatcherWrapper),
     Open,
-    Preview(PreviewKind, time::Duration),
     Save(bool),
     SearchActivate,
     SearchClear,
@@ -323,12 +324,15 @@ enum Message {
     SearchSubmit,
     TabMessage(tab::Message),
     TabRescan(Vec<tab::Item>),
+    ToggleShowDetails,
 }
 
 impl From<AppMessage> for Message {
     fn from(app_message: AppMessage) -> Message {
         match app_message {
+            AppMessage::SearchActivate => Message::SearchActivate,
             AppMessage::TabMessage(_entity_opt, tab_message) => Message::TabMessage(tab_message),
+            AppMessage::ToggleShowDetails => Message::ToggleShowDetails,
             unsupported => {
                 log::warn!("{unsupported:?} not supported in dialog mode");
                 Message::None
@@ -378,7 +382,6 @@ struct App {
     mounters: Mounters,
     mounter_items: HashMap<MounterKey, MounterItems>,
     nav_model: segmented_button::SingleSelectModel,
-    preview_opt: Option<(PreviewKind, time::Instant)>,
     result_opt: Option<DialogResult>,
     search_active: bool,
     search_id: widget::Id,
@@ -683,6 +686,7 @@ impl Application for App {
         core.window.show_close = false;
         core.window.show_maximize = false;
         core.window.show_minimize = false;
+        core.window.show_context = true;
 
         let title = flags.kind.title();
         let accept_label = flags.kind.accept_label();
@@ -698,12 +702,14 @@ impl Application for App {
         let tab_config = TabConfig {
             view: tab::View::List,
             folders_first: false,
-            sort_name: tab::HeadingOptions::Modified,
-            sort_direction: false,
             ..Default::default()
         };
         let mut tab = Tab::new(location, tab_config);
         tab.mode = tab::Mode::Dialog(flags.kind.clone());
+        tab.sort_name = tab::HeadingOptions::Modified;
+        tab.sort_direction = false;
+
+        let key_binds = key_binds(&tab.mode);
 
         let mut app = App {
             core,
@@ -711,7 +717,7 @@ impl Application for App {
             title,
             accept_label,
             choices: Vec::new(),
-            context_page: ContextPage::Settings,
+            context_page: ContextPage::Preview(None, PreviewKind::Selected),
             dialog_pages: VecDeque::new(),
             dialog_text_input: widget::Id::unique(),
             filters: Vec::new(),
@@ -721,13 +727,12 @@ impl Application for App {
             mounters: mounters(),
             mounter_items: HashMap::new(),
             nav_model: segmented_button::ModelBuilder::default().build(),
-            preview_opt: None,
             result_opt: None,
             search_active: false,
             search_id: widget::Id::unique(),
             search_input: String::new(),
             tab,
-            key_binds: HashMap::new(),
+            key_binds,
             watcher_opt: None,
         };
 
@@ -1058,6 +1063,13 @@ impl Application for App {
                 }
                 return self.rescan_tab();
             }
+            Message::Key(modifiers, key) => {
+                for (key_bind, action) in self.key_binds.iter() {
+                    if key_bind.matches(modifiers, &key) {
+                        return self.update(Message::from(action.message()));
+                    }
+                }
+            }
             Message::Modifiers(modifiers) => {
                 self.modifiers = modifiers;
             }
@@ -1233,17 +1245,6 @@ impl Application for App {
                     }
                 }
             }
-            Message::Preview(kind, timeout) => {
-                if self
-                    .preview_opt
-                    .as_ref()
-                    .is_some_and(|(k, i)| *k == kind && i.elapsed() > timeout)
-                {
-                    self.context_page = ContextPage::Preview(None, kind);
-                    self.set_show_context(true);
-                    self.set_context_title(self.context_page.title());
-                }
-            }
             Message::Save(replace) => {
                 if let DialogKind::SaveFile { filename } = &self.flags.kind {
                     if !filename.is_empty() {
@@ -1341,22 +1342,10 @@ impl Application for App {
                                 commands.push(self.update(Message::Open));
                             }
                         }
-                        tab::Command::Preview(kind, mut timeout) => {
-                            self.preview_opt = Some((kind.clone(), time::Instant::now()));
-                            if self.core.window.show_context {
-                                // If the context window is already open, immediately show the preview
-                                timeout = time::Duration::new(0, 0)
-                            };
-                            commands.push(Command::perform(
-                                async move {
-                                    tokio::time::sleep(timeout).await;
-                                    message::app(Message::Preview(kind, timeout))
-                                },
-                                |x| x,
-                            ));
-                        }
-                        tab::Command::PreviewCancel => {
-                            self.preview_opt = None;
+                        tab::Command::Preview(kind) => {
+                            self.context_page = ContextPage::Preview(None, kind);
+                            self.set_show_context(true);
+                            self.set_context_title(self.context_page.title());
                         }
                         tab::Command::WindowDrag => {
                             commands.push(window::drag(self.main_window_id()));
@@ -1437,6 +1426,15 @@ impl Application for App {
                 // Reset focus on location change
                 return widget::text_input::focus(self.filename_id.clone());
             }
+            Message::ToggleShowDetails => match self.context_page {
+                ContextPage::Preview(_, _) => {
+                    self.core.window.show_context = !self.core.window.show_context;
+                }
+                _ => {
+                    self.context_page = ContextPage::Preview(None, PreviewKind::Selected);
+                    self.core.window.show_context = true;
+                }
+            },
         }
 
         Command::none()
@@ -1465,7 +1463,11 @@ impl Application for App {
     fn subscription(&self) -> Subscription<Message> {
         struct WatcherSubscription;
         let mut subscriptions = vec![
-            event::listen_with(|event, _status| match event {
+            event::listen_with(|event, status| match event {
+                Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => match status {
+                    event::Status::Ignored => Some(Message::Key(modifiers, key)),
+                    event::Status::Captured => None,
+                },
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
                     Some(Message::Modifiers(modifiers))
                 }

@@ -116,15 +116,6 @@ properties = Podrobnosti
 
 ## Settings
 settings = Nastavenia
-settings-tab = Karta
-settings-show-hidden = Zobraziť skryté súbory
-default-view = Predvolené zobrazenie
-icon-size-list = Veľkosť ikon (zoznam)
-icon-size-grid = Veľkosť ikon (mriežka)
-sorting-name = Zoradiť podľa
-direction = Smer
-ascending = Vzostupný
-descending = Zostupný
 
 ### Appearance
 appearance = Vzhľad

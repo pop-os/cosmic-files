@@ -130,15 +130,6 @@ show-details = Mostrar detalhes
 
 ## Settings
 settings = Definições
-settings-tab = Separador
-settings-show-hidden = Mostrar ficheiros ocultos
-default-view = Vista predefinida
-icon-size-list = Tamanho dos ícones (lista)
-icon-size-grid = Tamanho dos ícones (grelha)
-sorting-name = Ordenar por
-direction = Direção
-ascending = Ascendente
-descending = Descendente
 
 ### Appearance
 appearance = Aparência

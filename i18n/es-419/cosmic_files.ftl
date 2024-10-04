@@ -109,15 +109,6 @@ properties = Propiedades
 
 ## Settings
 settings = Configuración
-settings-tab = Pestaña
-settings-show-hidden = Mostrar archivos ocultos
-default-view = Vista predeterminada
-icon-size-list = Tamaño de icono (lista)
-icon-size-grid = Tamaño de icono (cuadrícula)
-sorting-name = Ordenar por
-direction = Dirección
-ascending = Ascendente
-descending = Descendente
 
 ### Appearance
 appearance = Apariencia

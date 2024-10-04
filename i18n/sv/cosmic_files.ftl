@@ -31,15 +31,6 @@ properties = Egenskaper
 
 ## Settings
 settings = Inställningar
-settings-tab = Flik
-settings-show-hidden = Visa dolda filer
-default-view = Standardvy
-icon-size-list = Ikonstorlek (lista)
-icon-size-grid = Ikonstorlek (rutnät)
-sorting-name = Sortera efter
-direction = Riktning
-ascending = Stigande
-descending = Fallande
 
 ### Appearance
 appearance = Utseende
