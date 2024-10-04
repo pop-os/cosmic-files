@@ -3208,6 +3208,20 @@ impl Tab {
         let mut children = Vec::new();
 
         if let Some(items) = self.column_sort() {
+            let cloned_items = items.clone();
+            let hidden_file = items
+                .iter()
+                .find(|(size, item)| item.name == ".hidden")
+                .map(|(size, item)| item);
+
+            let hidden_files = match hidden_file {
+                Some(hidden_file) => match hidden_file.path_opt() {
+                    Some(path) => parse_hidden_file(path),
+                    None => Vec::new(),
+                },
+                None => Vec::new(),
+            };
+
             let mut count = 0;
             let mut col = 0;
             let mut row = 0;
@@ -3215,6 +3229,18 @@ impl Tab {
             let mut hidden = 0;
             let mut grid_elements = Vec::new();
             for &(i, item) in items.iter() {
+                let is_from_hidden = item.path_opt().and_then(|path| {
+                    hidden_files
+                        .iter()
+                        .find(|hidden_item| hidden_item.eq(&path))
+                });
+
+                if !show_hidden && is_from_hidden.is_some() {
+                    item.pos_opt.set(None);
+                    item.rect_opt.set(None);
+                    hidden += 1;
+                    continue;
+                }
                 if !show_hidden && item.hidden {
                     item.pos_opt.set(None);
                     item.rect_opt.set(None);
