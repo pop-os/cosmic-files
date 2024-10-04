@@ -1097,7 +1097,7 @@ impl Item {
         }
     }
 
-    pub fn preview_view(&self, sizes: IconSizes) -> Element<'static, app::Message> {
+    pub fn preview_view(&self, sizes: IconSizes, nav_row: bool) -> Element<'static, app::Message> {
         let cosmic_theme::Spacing {
             space_xxxs,
             space_xxs,
@@ -1107,25 +1107,27 @@ impl Item {
 
         let mut column = widget::column().spacing(space_m);
 
-        let mut row = widget::row::with_capacity(3).spacing(space_xxs);
-        row = row.push(
-            widget::button::icon(widget::icon::from_name("go-previous-symbolic"))
-                .on_press(app::Message::TabMessage(None, Message::ItemLeft)),
-        );
-        row = row.push(
-            widget::button::icon(widget::icon::from_name("go-next-symbolic"))
-                .on_press(app::Message::TabMessage(None, Message::ItemRight)),
-        );
+        if nav_row {
+            let mut row = widget::row::with_capacity(3).spacing(space_xxs);
+            row = row.push(
+                widget::button::icon(widget::icon::from_name("go-previous-symbolic"))
+                    .on_press(app::Message::TabMessage(None, Message::ItemLeft)),
+            );
+            row = row.push(
+                widget::button::icon(widget::icon::from_name("go-next-symbolic"))
+                    .on_press(app::Message::TabMessage(None, Message::ItemRight)),
+            );
 
-        if self.mime.type_() == mime::IMAGE {
-            if let Some(_path) = self.path_opt() {
-                row = row.push(
-                    widget::button::icon(widget::icon::from_name("view-fullscreen-symbolic"))
-                        .on_press(app::Message::TabMessage(None, Message::Gallery(true))),
-                );
+            if self.mime.type_() == mime::IMAGE {
+                if let Some(_path) = self.path_opt() {
+                    row = row.push(
+                        widget::button::icon(widget::icon::from_name("view-fullscreen-symbolic"))
+                            .on_press(app::Message::TabMessage(None, Message::Gallery(true))),
+                    );
+                }
             }
+            column = column.push(row);
         }
-        column = column.push(row);
 
         column = column.push(widget::row::with_children(vec![
             widget::horizontal_space(Length::Fill).into(),

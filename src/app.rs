@@ -21,8 +21,9 @@ use cosmic::{
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers},
         subscription::{self, Subscription},
+        widget::scrollable,
         window::{self, Event as WindowEvent, Id as WindowId},
-        Alignment, Event, Length,
+        Alignment, Event, Length, Size,
     },
     iced_runtime::clipboard,
     style, theme,
@@ -175,7 +176,7 @@ impl Action {
             Action::OpenTerminal => Message::OpenTerminal(entity_opt),
             Action::OpenWith => Message::OpenWithDialog(entity_opt),
             Action::Paste => Message::Paste(entity_opt),
-            Action::Preview => Message::ToggleShowDetails,
+            Action::Preview => Message::Preview,
             Action::Rename => Message::Rename(entity_opt),
             Action::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
             Action::SearchActivate => Message::SearchActivate,
@@ -297,6 +298,7 @@ pub enum Message {
     PendingComplete(u64),
     PendingError(u64, String),
     PendingProgress(u64, f32),
+    Preview,
     RescanTrash,
     Rename(Option<Entity>),
     ReplaceResult(ReplaceResult),
@@ -316,12 +318,12 @@ pub enum Message {
     TabRescan(Entity, Location, Vec<tab::Item>, Option<PathBuf>),
     TabView(Option<Entity>, tab::View),
     ToggleContextPage(ContextPage),
-    ToggleShowDetails,
     ToggleFoldersFirst,
     Undo(usize),
     UndoTrash(widget::ToastId, Arc<[PathBuf]>),
     UndoTrashStart(Vec<TrashItem>),
     WindowClose,
+    WindowCloseRequested(window::Id),
     WindowNew,
     ZoomDefault(Option<Entity>),
     ZoomIn(Option<Entity>),
@@ -443,6 +445,12 @@ pub struct FavoriteIndex(usize);
 
 pub struct MounterData(MounterKey, MounterItem);
 
+#[derive(Clone, Debug)]
+pub enum WindowKind {
+    Main,
+    Preview(Option<Entity>, PreviewKind),
+}
+
 pub struct WatcherWrapper {
     watcher_opt: Option<Debouncer<RecommendedWatcher, FileIdMap>>,
 }
@@ -500,6 +508,7 @@ pub struct App {
     toasts: widget::toaster::Toasts<Message>,
     watcher_opt: Option<(Debouncer<RecommendedWatcher, FileIdMap>, HashSet<PathBuf>)>,
     window_id_opt: Option<window::Id>,
+    windows: HashMap<window::Id, WindowKind>,
     nav_dnd_hover: Option<(Location, Instant)>,
     tab_dnd_hover: Option<(Entity, Instant)>,
     nav_drag_id: DragId,
@@ -969,19 +978,25 @@ impl App {
         widget::settings::view_column(children).into()
     }
 
-    fn preview(&self, entity_opt: &Option<Entity>, kind: &PreviewKind) -> Element<Message> {
+    fn preview(
+        &self,
+        entity_opt: &Option<Entity>,
+        kind: &PreviewKind,
+        context_drawer: bool,
+    ) -> Element<Message> {
         let mut children = Vec::with_capacity(1);
         let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
         match kind {
             PreviewKind::Custom(PreviewItem(item)) => {
-                children.push(item.preview_view(IconSizes::default()));
+                children.push(item.preview_view(IconSizes::default(), context_drawer));
             }
             PreviewKind::Location(location) => {
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
                     if let Some(items) = tab.items_opt() {
                         for item in items.iter() {
                             if item.location_opt.as_ref() == Some(location) {
-                                children.push(item.preview_view(tab.config.icon_sizes));
+                                children
+                                    .push(item.preview_view(tab.config.icon_sizes, context_drawer));
                                 // Only show one property view to avoid issues like hangs when generating
                                 // preview images on thousands of files
                                 break;
@@ -995,7 +1010,8 @@ impl App {
                     if let Some(items) = tab.items_opt() {
                         for item in items.iter() {
                             if item.selected {
-                                children.push(item.preview_view(tab.config.icon_sizes));
+                                children
+                                    .push(item.preview_view(tab.config.icon_sizes, context_drawer));
                                 // Only show one property view to avoid issues like hangs when generating
                                 // preview images on thousands of files
                                 break;
@@ -1005,7 +1021,13 @@ impl App {
                 }
             }
         }
-        widget::settings::view_column(children).into()
+
+        // View column has extra padding not wanted when not showing in context drawer
+        if context_drawer {
+            widget::settings::view_column(children).into()
+        } else {
+            widget::column::with_children(children).into()
+        }
     }
 
     fn settings(&self) -> Element<Message> {
@@ -1116,6 +1138,7 @@ impl Application for App {
             toasts: widget::toaster::Toasts::new(Message::CloseToast),
             watcher_opt: None,
             window_id_opt: Some(window::Id::MAIN),
+            windows: HashMap::new(),
             nav_dnd_hover: None,
             tab_dnd_hover: None,
             nav_drag_id: DragId::new(),
@@ -1254,12 +1277,16 @@ impl Application for App {
         Some(Message::WindowClose)
     }
 
+    fn on_close_requested(&self, id: window::Id) -> Option<Self::Message> {
+        Some(Message::WindowCloseRequested(id))
+    }
+
     fn on_context_drawer(&mut self) -> Command<Self::Message> {
         match self.context_page {
             ContextPage::Preview(_, _) => {
                 // Persist state of preview page
                 if self.core.window.show_context != self.config.show_details {
-                    return self.update(Message::ToggleShowDetails);
+                    return self.update(Message::Preview);
                 }
             }
             _ => {}
@@ -2029,6 +2056,47 @@ impl Application for App {
                 }
                 return self.update_notification();
             }
+            Message::Preview => {
+                match self.mode {
+                    Mode::App => {
+                        let show_details = !self.config.show_details;
+                        //TODO: move to update_config?
+                        self.context_page = ContextPage::Preview(None, PreviewKind::Selected);
+                        self.core.window.show_context = show_details;
+                        config_set!(show_details, show_details);
+                        return self.update_config();
+                    }
+                    Mode::Desktop => {
+                        let selected_paths = self.selected_paths(None);
+                        let mut commands = Vec::with_capacity(selected_paths.len());
+                        for path in selected_paths {
+                            let mut settings = window::Settings::default();
+                            settings.decorations = true;
+                            settings.resizable = true;
+                            settings.size = Size::new(480.0, 600.0);
+                            settings.transparent = true;
+
+                            #[cfg(target_os = "linux")]
+                            {
+                                // Use the dialog ID to make it float
+                                settings.platform_specific.application_id =
+                                    "com.system76.CosmicFilesDialog".to_string();
+                            }
+
+                            let (id, command) = window::spawn(settings);
+                            self.windows.insert(
+                                id,
+                                WindowKind::Preview(
+                                    None,
+                                    PreviewKind::Location(Location::Path(path)),
+                                ),
+                            );
+                            commands.push(command);
+                        }
+                        return Command::batch(commands);
+                    }
+                }
+            }
             Message::RescanTrash => {
                 // Update trash icon if empty/full
                 let maybe_entity = self.nav_model.iter().find(|&entity| {
@@ -2236,14 +2304,6 @@ impl Application for App {
                     config_set!(tab, config);
                     return self.update_config();
                 }
-            }
-            Message::ToggleShowDetails => {
-                let show_details = !self.config.show_details;
-                //TODO: move to update_config?
-                self.context_page = ContextPage::Preview(None, PreviewKind::Selected);
-                self.core.window.show_context = show_details;
-                config_set!(show_details, show_details);
-                return self.update_config();
             }
             Message::ToggleFoldersFirst => {
                 let mut config = self.config.tab;
@@ -2489,6 +2549,9 @@ impl Application for App {
                         Command::perform(async move { message::app(Message::MaybeExit) }, |x| x),
                     ]);
                 }
+            }
+            Message::WindowCloseRequested(id) => {
+                self.windows.remove(&id);
             }
             Message::WindowNew => match env::current_exe() {
                 Ok(exe) => match process::Command::new(&exe).spawn() {
@@ -2840,7 +2903,7 @@ impl Application for App {
             ContextPage::About => self.about(),
             ContextPage::EditHistory => self.edit_history(),
             ContextPage::NetworkDrive => self.network_drive(),
-            ContextPage::Preview(entity_opt, kind) => self.preview(entity_opt, kind),
+            ContextPage::Preview(entity_opt, kind) => self.preview(entity_opt, kind, true),
             ContextPage::Settings => self.settings(),
         })
     }
@@ -3462,13 +3525,37 @@ impl Application for App {
         content
     }
 
-    fn view_window(&self, _id: WindowId) -> Element<Self::Message> {
-        //TODO: distinct views per window?
-        self.view_main().map(|message| match message {
-            app::Message::App(app) => app,
-            app::Message::Cosmic(cosmic) => Message::Cosmic(cosmic),
-            app::Message::None => Message::None,
-        })
+    fn view_window(&self, id: WindowId) -> Element<Self::Message> {
+        let content = match self.windows.get(&id) {
+            Some(WindowKind::Main) | None => {
+                //TODO: distinct views per monitor in desktop mode
+                return self.view_main().map(|message| match message {
+                    app::Message::App(app) => app,
+                    app::Message::Cosmic(cosmic) => Message::Cosmic(cosmic),
+                    app::Message::None => Message::None,
+                });
+            }
+            Some(WindowKind::Preview(entity_opt, kind)) => self.preview(entity_opt, kind, false),
+        };
+        //TODO: these are hacks to have a sane scroll bar
+        let cosmic_theme::Spacing { space_l, .. } = theme::active().cosmic().spacing;
+        let scrollbar_width = 8;
+        widget::container(
+            widget::scrollable(widget::row::with_children(vec![
+                content,
+                widget::horizontal_space(Length::Fixed(scrollbar_width.into())).into(),
+            ]))
+            .direction(scrollable::Direction::Vertical(
+                scrollable::Properties::new()
+                    .width(scrollbar_width)
+                    .scroller_width(scrollbar_width),
+            )),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .padding([0, space_l - scrollbar_width, space_l, space_l])
+        .style(theme::Container::WindowBackground)
+        .into()
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {

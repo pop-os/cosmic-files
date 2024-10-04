@@ -164,9 +164,9 @@ impl<M: Send + 'static> Dialog<M> {
         let mut settings = window::Settings::default();
         settings.decorations = false;
         settings.exit_on_close_request = false;
-        settings.transparent = true;
-        settings.size = Size::new(1024.0, 640.0);
         settings.resizable = true;
+        settings.size = Size::new(1024.0, 640.0);
+        settings.transparent = true;
 
         #[cfg(target_os = "linux")]
         {
@@ -317,6 +317,7 @@ enum Message {
     NotifyEvents(Vec<DebouncedEvent>),
     NotifyWatcher(WatcherWrapper),
     Open,
+    Preview,
     Save(bool),
     SearchActivate,
     SearchClear,
@@ -324,15 +325,14 @@ enum Message {
     SearchSubmit,
     TabMessage(tab::Message),
     TabRescan(Vec<tab::Item>),
-    ToggleShowDetails,
 }
 
 impl From<AppMessage> for Message {
     fn from(app_message: AppMessage) -> Message {
         match app_message {
+            AppMessage::Preview => Message::Preview,
             AppMessage::SearchActivate => Message::SearchActivate,
             AppMessage::TabMessage(_entity_opt, tab_message) => Message::TabMessage(tab_message),
-            AppMessage::ToggleShowDetails => Message::ToggleShowDetails,
             unsupported => {
                 log::warn!("{unsupported:?} not supported in dialog mode");
                 Message::None
@@ -452,13 +452,13 @@ impl App {
         let mut children = Vec::with_capacity(1);
         match kind {
             PreviewKind::Custom(PreviewItem(item)) => {
-                children.push(item.preview_view(IconSizes::default()));
+                children.push(item.preview_view(IconSizes::default(), true));
             }
             PreviewKind::Location(location) => {
                 if let Some(items) = self.tab.items_opt() {
                     for item in items.iter() {
                         if item.location_opt.as_ref() == Some(location) {
-                            children.push(item.preview_view(self.tab.config.icon_sizes));
+                            children.push(item.preview_view(self.tab.config.icon_sizes, true));
                             // Only show one property view to avoid issues like hangs when generating
                             // preview images on thousands of files
                             break;
@@ -470,7 +470,7 @@ impl App {
                 if let Some(items) = self.tab.items_opt() {
                     for item in items.iter() {
                         if item.selected {
-                            children.push(item.preview_view(self.tab.config.icon_sizes));
+                            children.push(item.preview_view(self.tab.config.icon_sizes, true));
                             // Only show one property view to avoid issues like hangs when generating
                             // preview images on thousands of files
                             break;
@@ -1245,6 +1245,15 @@ impl Application for App {
                     }
                 }
             }
+            Message::Preview => match self.context_page {
+                ContextPage::Preview(_, _) => {
+                    self.core.window.show_context = !self.core.window.show_context;
+                }
+                _ => {
+                    self.context_page = ContextPage::Preview(None, PreviewKind::Selected);
+                    self.core.window.show_context = true;
+                }
+            },
             Message::Save(replace) => {
                 if let DialogKind::SaveFile { filename } = &self.flags.kind {
                     if !filename.is_empty() {
@@ -1426,15 +1435,6 @@ impl Application for App {
                 // Reset focus on location change
                 return widget::text_input::focus(self.filename_id.clone());
             }
-            Message::ToggleShowDetails => match self.context_page {
-                ContextPage::Preview(_, _) => {
-                    self.core.window.show_context = !self.core.window.show_context;
-                }
-                _ => {
-                    self.context_page = ContextPage::Preview(None, PreviewKind::Selected);
-                    self.core.window.show_context = true;
-                }
-            },
         }
 
         Command::none()
