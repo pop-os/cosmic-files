@@ -149,8 +149,8 @@ extracted = Extraído {$items} {$items ->
         [one] item
         *[other] itens
     } de {$from} para {$to}
-setting-executable-and-launching = Definindo "{$name}" como executável e iniciando
-set-executable-and-launched = Definido "{$name}" como executável e iniciado
+setting-executable-and-launching = Marcando "{$name}" como executável e iniciando
+set-executable-and-launched = Marcado "{$name}" como executável e iniciado
 moving = Movendo {$items} {$items ->
         [one] item
         *[other] itens
