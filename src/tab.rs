@@ -46,7 +46,8 @@ use std::{
     cmp::Ordering,
     collections::HashMap,
     fmt::{self, Display},
-    fs::{self, Metadata},
+    fs::{self, File, Metadata},
+    io::{BufRead, BufReader},
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -446,6 +447,7 @@ pub fn item_from_path<P: Into<PathBuf>>(path: P, sizes: IconSizes) -> Result<Ite
 
 pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
     let mut items = Vec::new();
+    let mut hidden_files = Vec::new();
     match fs::read_dir(tab_path) {
         Ok(entries) => {
             for entry_res in entries {
@@ -471,6 +473,10 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                     }
                 };
 
+                if name == ".hidden" {
+                    hidden_files = parse_hidden_file(&path);
+                }
+
                 let metadata = match fs::metadata(&path) {
                     Ok(ok) => ok,
                     Err(err) => {
@@ -490,6 +496,15 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
         (true, false) => Ordering::Less,
         (false, true) => Ordering::Greater,
         _ => LANGUAGE_SORTER.compare(&a.display_name, &b.display_name),
+    });
+    items.iter_mut().for_each(|mut item| {
+        if hidden_files
+            .iter()
+            .find(|hidden| &&item.name == hidden)
+            .is_some()
+        {
+            item.hidden = true;
+        }
     });
     items
 }
@@ -1356,6 +1371,27 @@ fn folder_name<P: AsRef<Path>>(path: P) -> (String, bool) {
         }
     };
     (name, found_home)
+}
+
+// parse .hidden file and return files path
+fn parse_hidden_file(path: &PathBuf) -> Vec<String> {
+    let file = match File::open(path) {
+        Ok(f) => f,
+        Err(_) => return Vec::new(),
+    };
+
+    let reader = BufReader::new(file);
+    let mut paths: Vec<String> = Vec::new();
+
+    for line in reader.lines() {
+        if let Ok(line) = line {
+            if !line.is_empty() {
+                paths.push(line.trim().to_string());
+            }
+        }
+    }
+
+    paths
 }
 
 impl Tab {
@@ -3440,7 +3476,7 @@ impl Tab {
             let mut count = 0;
             let mut hidden = 0;
             for (i, item) in items {
-                if !show_hidden && item.hidden {
+                if item.hidden && !show_hidden {
                     item.pos_opt.set(None);
                     item.rect_opt.set(None);
                     hidden += 1;
