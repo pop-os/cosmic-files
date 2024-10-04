@@ -447,6 +447,7 @@ pub fn item_from_path<P: Into<PathBuf>>(path: P, sizes: IconSizes) -> Result<Ite
 
 pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
     let mut items = Vec::new();
+    let mut hidden_file = Vec::new();
     match fs::read_dir(tab_path) {
         Ok(entries) => {
             for entry_res in entries {
@@ -472,6 +473,10 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                     }
                 };
 
+                if name == ".hidden" {
+                    hidden_file = parse_hidden_file(&path);
+                }
+
                 let metadata = match fs::metadata(&path) {
                     Ok(ok) => ok,
                     Err(err) => {
@@ -491,6 +496,17 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
         (true, false) => Ordering::Less,
         (false, true) => Ordering::Greater,
         _ => LANGUAGE_SORTER.compare(&a.display_name, &b.display_name),
+    });
+    items.iter_mut().for_each(|mut item| {
+        if item.path_opt().is_some() {
+            if hidden_file
+                .iter()
+                .find(|hidden| hidden.eq(&item.path_opt().unwrap()))
+                .is_some()
+            {
+                item.hidden = true;
+            }
+        }
     });
     items
 }
@@ -3208,20 +3224,6 @@ impl Tab {
         let mut children = Vec::new();
 
         if let Some(items) = self.column_sort() {
-            let cloned_items = items.clone();
-            let hidden_file = items
-                .iter()
-                .find(|(size, item)| item.name == ".hidden")
-                .map(|(size, item)| item);
-
-            let hidden_files = match hidden_file {
-                Some(hidden_file) => match hidden_file.path_opt() {
-                    Some(path) => parse_hidden_file(path),
-                    None => Vec::new(),
-                },
-                None => Vec::new(),
-            };
-
             let mut count = 0;
             let mut col = 0;
             let mut row = 0;
@@ -3229,18 +3231,6 @@ impl Tab {
             let mut hidden = 0;
             let mut grid_elements = Vec::new();
             for &(i, item) in items.iter() {
-                let is_from_hidden = item.path_opt().and_then(|path| {
-                    hidden_files
-                        .iter()
-                        .find(|hidden_item| hidden_item.eq(&path))
-                });
-
-                if !show_hidden && is_from_hidden.is_some() {
-                    item.pos_opt.set(None);
-                    item.rect_opt.set(None);
-                    hidden += 1;
-                    continue;
-                }
                 if !show_hidden && item.hidden {
                     item.pos_opt.set(None);
                     item.rect_opt.set(None);
@@ -3491,40 +3481,11 @@ impl Tab {
         let mut y = 0;
 
         let items = self.column_sort();
-        let cloned_items = items.clone();
-        let hidden_files = if let Some(items) = cloned_items {
-            let hidden_file = items
-                .iter()
-                .find(|(size, item)| item.name == ".hidden")
-                .map(|(size, item)| item);
-            match hidden_file {
-                Some(hidden_file) => match hidden_file.path_opt() {
-                    Some(path) => parse_hidden_file(path),
-                    None => Vec::new(),
-                },
-                None => Vec::new(),
-            }
-        } else {
-            Vec::new()
-        };
         let mut drag_items = Vec::new();
         if let Some(items) = items {
             let mut count = 0;
             let mut hidden = 0;
             for (i, item) in items {
-                let is_from_hidden = item.path_opt().and_then(|path| {
-                    hidden_files
-                        .iter()
-                        .find(|hidden_item| hidden_item.eq(&path))
-                });
-
-                if !show_hidden && is_from_hidden.is_some() {
-                    item.pos_opt.set(None);
-                    item.rect_opt.set(None);
-                    hidden += 1;
-                    continue;
-                }
-
                 if item.hidden && !show_hidden {
                     item.pos_opt.set(None);
                     item.rect_opt.set(None);
