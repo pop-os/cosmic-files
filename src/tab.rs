@@ -46,7 +46,8 @@ use std::{
     cmp::Ordering,
     collections::HashMap,
     fmt::{self, Display},
-    fs::{self, Metadata},
+    fs::{self, File, Metadata},
+    io::{BufRead, BufReader},
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -1356,6 +1357,35 @@ fn folder_name<P: AsRef<Path>>(path: P) -> (String, bool) {
         }
     };
     (name, found_home)
+}
+
+// parse .hidden file and return files path
+fn parse_hidden_file(path: &PathBuf) -> Vec<PathBuf> {
+    let parent_dir = match path.parent() {
+        Some(dir) => dir,
+        None => return Vec::new(),
+    };
+
+    let file = match File::open(path) {
+        Ok(f) => f,
+        Err(_) => return Vec::new(),
+    };
+
+    let reader = BufReader::new(file);
+    let mut paths: Vec<PathBuf> = Vec::new();
+
+    for line in reader.lines() {
+        if let Ok(line) = line {
+            if !line.is_empty() {
+                let file_path = parent_dir.join(&line.trim());
+                if file_path.exists() {
+                    paths.push(file_path);
+                }
+            }
+        }
+    }
+
+    paths
 }
 
 impl Tab {
@@ -3435,12 +3465,41 @@ impl Tab {
         let mut y = 0;
 
         let items = self.column_sort();
+        let cloned_items = items.clone();
+        let hidden_files = if let Some(items) = cloned_items {
+            let hidden_file = items
+                .iter()
+                .find(|(size, item)| item.name == ".hidden")
+                .map(|(size, item)| item);
+            match hidden_file {
+                Some(hidden_file) => match hidden_file.path_opt() {
+                    Some(path) => parse_hidden_file(path),
+                    None => Vec::new(),
+                },
+                None => Vec::new(),
+            }
+        } else {
+            Vec::new()
+        };
         let mut drag_items = Vec::new();
         if let Some(items) = items {
             let mut count = 0;
             let mut hidden = 0;
             for (i, item) in items {
-                if !show_hidden && item.hidden {
+                let is_from_hidden = item.path_opt().and_then(|path| {
+                    hidden_files
+                        .iter()
+                        .find(|hidden_item| hidden_item.eq(&path))
+                });
+
+                if !show_hidden && is_from_hidden.is_some() {
+                    item.pos_opt.set(None);
+                    item.rect_opt.set(None);
+                    hidden += 1;
+                    continue;
+                }
+
+                if item.hidden && !show_hidden {
                     item.pos_opt.set(None);
                     item.rect_opt.set(None);
                     hidden += 1;
