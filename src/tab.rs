@@ -497,7 +497,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
         (false, true) => Ordering::Greater,
         _ => LANGUAGE_SORTER.compare(&a.display_name, &b.display_name),
     });
-    items.iter_mut().for_each(|mut item| {
+    items.iter_mut().for_each(|item| {
         if hidden_files
             .iter()
             .find(|hidden| &&item.name == hidden)

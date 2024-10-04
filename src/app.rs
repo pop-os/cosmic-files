@@ -44,9 +44,7 @@ use slotmap::Key as SlotMapKey;
 use std::{
     any::TypeId,
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
-    env, fmt, fs,
-    future::pending,
-    io,
+    env, fmt, fs, io,
     num::NonZeroU16,
     path::PathBuf,
     process,
@@ -61,7 +59,7 @@ use wayland_client::{protocol::wl_output::WlOutput, Proxy};
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{AppTheme, Config, Favorite, IconSizes, TabConfig},
-    fl, home_dir,
+    desktop_dir, fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
     menu, mime_app, mime_icon,
@@ -176,7 +174,7 @@ impl Action {
             Action::OpenTerminal => Message::OpenTerminal(entity_opt),
             Action::OpenWith => Message::OpenWithDialog(entity_opt),
             Action::Paste => Message::Paste(entity_opt),
-            Action::Preview => Message::Preview,
+            Action::Preview => Message::Preview(entity_opt),
             Action::Rename => Message::Rename(entity_opt),
             Action::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
             Action::SearchActivate => Message::SearchActivate,
@@ -298,7 +296,7 @@ pub enum Message {
     PendingComplete(u64),
     PendingError(u64, String),
     PendingProgress(u64, f32),
-    Preview,
+    Preview(Option<Entity>),
     RescanTrash,
     Rename(Option<Entity>),
     ReplaceResult(ReplaceResult),
@@ -447,7 +445,7 @@ pub struct MounterData(MounterKey, MounterItem);
 
 #[derive(Clone, Debug)]
 pub enum WindowKind {
-    Main,
+    Desktop(Entity),
     Preview(Option<Entity>, PreviewKind),
 }
 
@@ -516,12 +514,12 @@ pub struct App {
 }
 
 impl App {
-    fn open_tab(
+    fn open_tab_entity(
         &mut self,
         location: Location,
         activate: bool,
         selection_path: Option<PathBuf>,
-    ) -> Command<Message> {
+    ) -> (Entity, Command<Message>) {
         let mut tab = Tab::new(location.clone(), self.config.tab);
         tab.mode = match self.mode {
             Mode::App => tab::Mode::App,
@@ -543,11 +541,23 @@ impl App {
             entity.id()
         };
 
-        Command::batch([
-            self.update_title(),
-            self.update_watcher(),
-            self.rescan_tab(entity, location, selection_path),
-        ])
+        (
+            entity,
+            Command::batch([
+                self.update_title(),
+                self.update_watcher(),
+                self.rescan_tab(entity, location, selection_path),
+            ]),
+        )
+    }
+
+    fn open_tab(
+        &mut self,
+        location: Location,
+        activate: bool,
+        selection_path: Option<PathBuf>,
+    ) -> Command<Message> {
+        self.open_tab_entity(location, activate, selection_path).1
     }
 
     fn operation(&mut self, operation: Operation) {
@@ -556,12 +566,23 @@ impl App {
         self.pending_operations.insert(id, (operation, 0.0));
     }
 
+    fn remove_window(&mut self, id: &window::Id) {
+        match self.windows.remove(id) {
+            Some(WindowKind::Desktop(entity)) => {
+                // Remove the tab from the tab model
+                self.tab_model.remove(entity);
+            }
+            _ => {}
+        }
+    }
+
     fn rescan_tab(
         &mut self,
         entity: Entity,
         location: Location,
         selection_path: Option<PathBuf>,
     ) -> Command<Message> {
+        log::info!("rescan_tab {entity:?} {location:?} {selection_path:?}");
         let mounters = self.mounters.clone();
         let icon_sizes = self.config.tab.icon_sizes;
         Command::perform(
@@ -1286,7 +1307,7 @@ impl Application for App {
             ContextPage::Preview(_, _) => {
                 // Persist state of preview page
                 if self.core.window.show_context != self.config.show_details {
-                    return self.update(Message::Preview);
+                    return self.update(Message::Preview(None));
                 }
             }
             _ => {}
@@ -2056,7 +2077,7 @@ impl Application for App {
                 }
                 return self.update_notification();
             }
-            Message::Preview => {
+            Message::Preview(entity_opt) => {
                 match self.mode {
                     Mode::App => {
                         let show_details = !self.config.show_details;
@@ -2067,7 +2088,7 @@ impl Application for App {
                         return self.update_config();
                     }
                     Mode::Desktop => {
-                        let selected_paths = self.selected_paths(None);
+                        let selected_paths = self.selected_paths(entity_opt);
                         let mut commands = Vec::with_capacity(selected_paths.len());
                         for path in selected_paths {
                             let mut settings = window::Settings::default();
@@ -2088,7 +2109,7 @@ impl Application for App {
                             self.windows.insert(
                                 id,
                                 WindowKind::Preview(
-                                    None,
+                                    entity_opt,
                                     PreviewKind::Location(Location::Path(path)),
                                 ),
                             );
@@ -2552,7 +2573,7 @@ impl Application for App {
                 }
             }
             Message::WindowCloseRequested(id) => {
-                self.windows.remove(&id);
+                self.remove_window(&id);
             }
             Message::WindowNew => match env::current_exe() {
                 Ok(exe) => match process::Command::new(&exe).spawn() {
@@ -2849,29 +2870,36 @@ impl Application for App {
                             }
                         }
 
-                        return Command::batch([get_layer_surface(SctkLayerSurfaceSettings {
-                            id: surface_id,
-                            layer: Layer::Bottom,
-                            keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                            pointer_interactivity: true,
-                            anchor: Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT,
-                            output: IcedOutput::Output(output),
-                            namespace: "cosmic-files-applet".into(),
-                            size: Some((None, None)),
-                            margin: IcedMargin {
-                                top: 0,
-                                bottom: 0,
-                                left: 0,
-                                right: 0,
-                            },
-                            exclusive_zone: -1,
-                            size_limits: Limits::NONE.min_width(1.0).min_height(1.0),
-                        })]);
+                        let (entity, command) =
+                            self.open_tab_entity(Location::Path(desktop_dir()), false, None);
+                        self.windows.insert(surface_id, WindowKind::Desktop(entity));
+                        return Command::batch([
+                            command,
+                            get_layer_surface(SctkLayerSurfaceSettings {
+                                id: surface_id,
+                                layer: Layer::Bottom,
+                                keyboard_interactivity: KeyboardInteractivity::OnDemand,
+                                pointer_interactivity: true,
+                                anchor: Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT,
+                                output: IcedOutput::Output(output),
+                                namespace: "cosmic-files-applet".into(),
+                                size: Some((None, None)),
+                                margin: IcedMargin {
+                                    top: 0,
+                                    bottom: 0,
+                                    left: 0,
+                                    right: 0,
+                                },
+                                exclusive_zone: -1,
+                                size_limits: Limits::NONE.min_width(1.0).min_height(1.0),
+                            }),
+                        ]);
                     }
                     OutputEvent::Removed => {
                         log::info!("output {}: removed", output.id());
                         match self.surface_ids.remove(&output) {
                             Some(surface_id) => {
+                                self.remove_window(&surface_id);
                                 self.surface_names.remove(&surface_id);
                                 return destroy_layer_surface(surface_id);
                             }
@@ -3528,7 +3556,31 @@ impl Application for App {
 
     fn view_window(&self, id: WindowId) -> Element<Self::Message> {
         let content = match self.windows.get(&id) {
-            Some(WindowKind::Main) | None => {
+            Some(WindowKind::Desktop(entity)) => {
+                let mut tab_column = widget::column::with_capacity(2);
+
+                match self.tab_model.data::<Tab>(*entity) {
+                    Some(tab) => {
+                        let tab_view = tab
+                            .view(&self.key_binds)
+                            .map(move |message| Message::TabMessage(Some(*entity), message));
+                        tab_column = tab_column.push(tab_view);
+                    }
+                    None => {
+                        //TODO
+                    }
+                }
+
+                // The toaster is added on top of an empty element to ensure that it does not override context menus
+                tab_column = tab_column.push(widget::toaster(
+                    &self.toasts,
+                    widget::horizontal_space(Length::Fill),
+                ));
+
+                return tab_column.into();
+            }
+            Some(WindowKind::Preview(entity_opt, kind)) => self.preview(entity_opt, kind, false),
+            None => {
                 //TODO: distinct views per monitor in desktop mode
                 return self.view_main().map(|message| match message {
                     app::Message::App(app) => app,
@@ -3536,15 +3588,16 @@ impl Application for App {
                     app::Message::None => Message::None,
                 });
             }
-            Some(WindowKind::Preview(entity_opt, kind)) => self.preview(entity_opt, kind, false),
         };
+
         //TODO: these are hacks to have a sane scroll bar
         let cosmic_theme::Spacing { space_l, .. } = theme::active().cosmic().spacing;
         let scrollbar_width = 8;
+        let scrollbar_margin = 8;
         widget::container(
             widget::scrollable(widget::row::with_children(vec![
                 content,
-                widget::horizontal_space(Length::Fixed(scrollbar_width.into())).into(),
+                widget::horizontal_space(Length::Fixed((scrollbar_width + scrollbar_margin).into())).into(),
             ]))
             .direction(scrollable::Direction::Vertical(
                 scrollable::Properties::new()
@@ -3554,7 +3607,7 @@ impl Application for App {
         )
         .width(Length::Fill)
         .height(Length::Fill)
-        .padding([0, space_l - scrollbar_width, space_l, space_l])
+        .padding([0, space_l - (scrollbar_width + scrollbar_margin), space_l, space_l])
         .style(theme::Container::WindowBackground)
         .into()
     }
@@ -3807,7 +3860,7 @@ impl Application for App {
                             .await
                             .unwrap();
 
-                            pending().await
+                            std::future::pending().await
                         },
                     ));
                 }

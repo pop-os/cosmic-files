@@ -331,7 +331,7 @@ enum Message {
 impl From<AppMessage> for Message {
     fn from(app_message: AppMessage) -> Message {
         match app_message {
-            AppMessage::Preview => Message::Preview,
+            AppMessage::Preview(_entity_opt) => Message::Preview,
             AppMessage::SearchActivate => Message::SearchActivate,
             AppMessage::TabMessage(_entity_opt, tab_message) => Message::TabMessage(tab_message),
             unsupported => {

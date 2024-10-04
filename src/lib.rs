@@ -27,12 +27,24 @@ pub(crate) fn err_str<T: ToString>(err: T) -> String {
     err.to_string()
 }
 
+pub fn desktop_dir() -> PathBuf {
+    match dirs::desktop_dir() {
+        Some(path) => path,
+        None => {
+            let path = home_dir().join("Desktop");
+            log::warn!("failed to locate desktop directory, falling back to {path:?}");
+            path
+        }
+    }
+}
+
 pub fn home_dir() -> PathBuf {
     match dirs::home_dir() {
         Some(home) => home,
         None => {
-            log::warn!("failed to locate home directory");
-            PathBuf::from("/")
+            let path = PathBuf::from("/");
+            log::warn!("failed to locate home directory, falling back to {path:?}");
+            path
         }
     }
 }
@@ -45,17 +57,6 @@ pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
     localize::localize();
 
     let (config_handler, config) = Config::load();
-
-    let locations = vec![
-        match dirs::desktop_dir() {
-            Some(path) => Location::Path(path),
-            None => {
-                let path = home_dir().join("Desktop");
-                log::warn!("failed to find XDG_DESKTOP_DIR, falling back to {path:?}");
-                Location::Path(path)
-            }
-        }
-    ];
 
     let mut settings = Settings::default();
     settings = settings.theme(config.app_theme.theme());
@@ -71,7 +72,7 @@ pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
         config_handler,
         config,
         mode: app::Mode::Desktop,
-        locations,
+        locations: vec![tab::Location::Path(desktop_dir())],
     };
     cosmic::app::run::<App>(settings, flags)?;
 
