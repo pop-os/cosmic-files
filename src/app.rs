@@ -3206,8 +3206,8 @@ impl Application for App {
                     .control(column);
 
                 if let Some(app) = store_opt {
-                    dialog = dialog.control(
-                        widget::button::link(fl!("browse-store", store = app.name.as_str()))
+                    dialog = dialog.tertiary_action(
+                        widget::button::text(fl!("browse-store", store = app.name.as_str()))
                             .on_press(Message::OpenWithBrowse),
                     );
                 }
