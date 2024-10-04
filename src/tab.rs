@@ -447,7 +447,7 @@ pub fn item_from_path<P: Into<PathBuf>>(path: P, sizes: IconSizes) -> Result<Ite
 
 pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
     let mut items = Vec::new();
-    let mut hidden_file = Vec::new();
+    let mut hidden_files = Vec::new();
     match fs::read_dir(tab_path) {
         Ok(entries) => {
             for entry_res in entries {
@@ -474,7 +474,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                 };
 
                 if name == ".hidden" {
-                    hidden_file = parse_hidden_file(&path);
+                    hidden_files = parse_hidden_file(&path);
                 }
 
                 let metadata = match fs::metadata(&path) {
@@ -498,14 +498,12 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
         _ => LANGUAGE_SORTER.compare(&a.display_name, &b.display_name),
     });
     items.iter_mut().for_each(|mut item| {
-        if item.path_opt().is_some() {
-            if hidden_file
-                .iter()
-                .find(|hidden| hidden.eq(&item.path_opt().unwrap()))
-                .is_some()
-            {
-                item.hidden = true;
-            }
+        if hidden_files
+            .iter()
+            .find(|hidden| &&item.name == hidden)
+            .is_some()
+        {
+            item.hidden = true;
         }
     });
     items
@@ -1376,27 +1374,19 @@ fn folder_name<P: AsRef<Path>>(path: P) -> (String, bool) {
 }
 
 // parse .hidden file and return files path
-fn parse_hidden_file(path: &PathBuf) -> Vec<PathBuf> {
-    let parent_dir = match path.parent() {
-        Some(dir) => dir,
-        None => return Vec::new(),
-    };
-
+fn parse_hidden_file(path: &PathBuf) -> Vec<String> {
     let file = match File::open(path) {
         Ok(f) => f,
         Err(_) => return Vec::new(),
     };
 
     let reader = BufReader::new(file);
-    let mut paths: Vec<PathBuf> = Vec::new();
+    let mut paths: Vec<String> = Vec::new();
 
     for line in reader.lines() {
         if let Ok(line) = line {
             if !line.is_empty() {
-                let file_path = parent_dir.join(&line.trim());
-                if file_path.exists() {
-                    paths.push(file_path);
-                }
+                paths.push(line.trim().to_string());
             }
         }
     }
