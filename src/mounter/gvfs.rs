@@ -418,12 +418,10 @@ impl Gvfs {
                                     continue;
                                 }
 
-                                //TODO: do eject instead of unmount?
                                 log::info!("unmount {}", name);
-                                MountExt::unmount_with_operation(
+                                MountExt::eject_with_operation(
                                     &mount,
                                     gio::MountUnmountFlags::NONE,
-                                    //TODO: gio::MountOperation needed for network shares with auth
                                     gio::MountOperation::NONE,
                                     gio::Cancellable::NONE,
                                     move |result| {
