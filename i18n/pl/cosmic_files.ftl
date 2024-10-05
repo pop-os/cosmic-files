@@ -11,6 +11,15 @@ recents = Ubiegłe
 undo = Cofnij
 today = Dzisiaj
 
+# Desktop view options
+desktop-view-options = Opcje widoku pulpitu...
+show-on-desktop = Pokaż na Pulpicie
+desktop-folder-content = Zawartość katalogu Pulpit
+mounted-drives = Podpięte dyski
+trash-folder-icon = Ikona kosza
+icon-size-and-spacing = Rozmiar i rozstaw ikon
+icon-size = Rozmiar ikon
+
 # List view
 name = Nazwa
 modified = Zmodyfikowano
