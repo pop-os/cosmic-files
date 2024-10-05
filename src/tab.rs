@@ -2927,10 +2927,10 @@ impl Tab {
         }
         fn text_width_body<'a>(content: &'a str) -> f32 {
             //TODO: should libcosmic set the font when using widget::text::body?
-            text_width(content, font::Font::DEFAULT, 14.0, 20.0)
+            text_width(content, font::default(), 14.0, 20.0)
         }
         fn text_width_heading<'a>(content: &'a str) -> f32 {
-            text_width(content, font::FONT_SEMIBOLD, 14.0, 20.0)
+            text_width(content, font::semibold(), 14.0, 20.0)
         }
 
         let cosmic_theme::Spacing {
