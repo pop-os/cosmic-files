@@ -58,7 +58,7 @@ use wayland_client::{protocol::wl_output::WlOutput, Proxy};
 
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
-    config::{AppTheme, Config, DesktopConfig, Favorite, IconSizes, TabConfig},
+    config::{AppTheme, Config, DesktopConfig, Favorite, IconSizes, SessionConfig, TabConfig},
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
@@ -69,7 +69,7 @@ use crate::{
     tab::{self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION},
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Mode {
     App,
     Desktop,
@@ -303,9 +303,11 @@ pub enum Message {
     Rename(Option<Entity>),
     ReplaceResult(ReplaceResult),
     RestoreFromTrash(Option<Entity>),
+    SaveSession,
     SearchActivate,
     SearchClear,
     SearchInput(String),
+    SessionConfig(SessionConfig),
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     TabActivate(Entity),
     TabNext,
@@ -1179,27 +1181,43 @@ impl App {
 
     fn settings(&self) -> Element<Message> {
         // TODO: Should dialog be updated here too?
-        widget::settings::view_column(vec![widget::settings::section()
-            .title(fl!("appearance"))
-            .add({
-                let app_theme_selected = match self.config.app_theme {
-                    AppTheme::Dark => 1,
-                    AppTheme::Light => 2,
-                    AppTheme::System => 0,
-                };
-                widget::settings::item::builder(fl!("theme")).control(widget::dropdown(
-                    &self.app_themes,
-                    Some(app_theme_selected),
-                    move |index| {
-                        Message::AppTheme(match index {
-                            1 => AppTheme::Dark,
-                            2 => AppTheme::Light,
-                            _ => AppTheme::System,
-                        })
-                    },
-                ))
-            })
-            .into()])
+        widget::settings::view_column(vec![
+            widget::settings::section()
+                .title(fl!("appearance"))
+                .add({
+                    let app_theme_selected = match self.config.app_theme {
+                        AppTheme::Dark => 1,
+                        AppTheme::Light => 2,
+                        AppTheme::System => 0,
+                    };
+                    widget::settings::item::builder(fl!("theme")).control(widget::dropdown(
+                        &self.app_themes,
+                        Some(app_theme_selected),
+                        move |index| {
+                            Message::AppTheme(match index {
+                                1 => AppTheme::Dark,
+                                2 => AppTheme::Light,
+                                _ => AppTheme::System,
+                            })
+                        },
+                    ))
+                })
+                .into(),
+            widget::settings::section()
+                .title(fl!("session"))
+                .add(
+                    widget::settings::item::builder(fl!("restore-session")).toggler(
+                        self.config.session.restore,
+                        move |restore| {
+                            Message::SessionConfig(SessionConfig {
+                                restore,
+                                ..Default::default()
+                            })
+                        },
+                    ),
+                )
+                .into(),
+        ])
         .into()
     }
 }
@@ -2355,6 +2373,35 @@ impl Application for App {
                     self.operation(Operation::Restore { paths });
                 }
             }
+            Message::SaveSession => {
+                if self.config.session.restore && self.mode == Mode::App {
+                    let session = SessionConfig {
+                        tabs: Some(
+                            self.tab_model
+                                .iter()
+                                .filter_map(|entity| {
+                                    match self
+                                        .tab_model
+                                        .data::<Tab>(entity)
+                                        .map(|tab| &tab.location)
+                                    {
+                                        // Location's serialization implementation skips variants
+                                        // such as mounts
+                                        // However, we'd still clone all Locations here only for
+                                        // some to be skipped, so it's best to avoid the clone
+                                        loc @ Location::Path(_)
+                                        | Location::Recents
+                                        | Location::Trash => Some(loc.clone()),
+                                        _ => None,
+                                    }
+                                })
+                                .collect(),
+                        ),
+                        ..self.config.session
+                    };
+                    config_set!(session, session);
+                }
+            }
             Message::SearchActivate => {
                 return if self.search_get().is_none() {
                     self.search_set(Some(String::new()))
@@ -2367,6 +2414,9 @@ impl Application for App {
             }
             Message::SearchInput(input) => {
                 return self.search_set(Some(input));
+            }
+            Message::SessionConfig(session) => {
+                config_set!(session, session);
             }
             Message::SystemThemeModeChange(_theme_mode) => {
                 return self.update_config();
@@ -2435,9 +2485,12 @@ impl Application for App {
                 // Remove item
                 self.tab_model.remove(entity);
 
-                // If that was the last tab, close window
+                // If that was the last tab, close window and serialize empty session if necessary
                 if self.tab_model.iter().next().is_none() {
-                    return window::close(window::Id::MAIN);
+                    return Command::batch([
+                        self.update(Message::SaveSession),
+                        window::close(window::Id::MAIN),
+                    ]);
                 }
 
                 return Command::batch([self.update_title(), self.update_watcher()]);
@@ -2698,6 +2751,7 @@ impl Application for App {
                 if let Some(window_id) = self.window_id_opt.take() {
                     return Command::batch([
                         window::close(window_id),
+                        self.update(Message::SaveSession),
                         Command::perform(async move { message::app(Message::MaybeExit) }, |x| x),
                     ]);
                 }
