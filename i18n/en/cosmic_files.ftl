@@ -197,6 +197,10 @@ match-desktop = Match desktop
 dark = Dark
 light = Light
 
+### Session
+session = Session
+restore-session = Restore previous session on start
+
 # Context menu
 add-to-sidebar = Add to sidebar
 compress = Compress

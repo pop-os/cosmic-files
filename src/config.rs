@@ -9,7 +9,10 @@ use cosmic::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{app::App, tab::View};
+use crate::{
+    app::App,
+    tab::{Location, View},
+};
 
 pub const CONFIG_VERSION: u64 = 1;
 
@@ -97,6 +100,7 @@ pub struct Config {
     pub favorites: Vec<Favorite>,
     pub show_details: bool,
     pub tab: TabConfig,
+    pub session: SessionConfig,
 }
 
 impl Config {
@@ -144,6 +148,7 @@ impl Default for Config {
             ],
             show_details: false,
             tab: TabConfig::default(),
+            session: SessionConfig::default(),
         }
     }
 }
@@ -228,4 +233,10 @@ impl IconSizes {
     pub fn grid(&self) -> u16 {
         percent!(self.grid, ICON_SIZE_GRID) as _
     }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, CosmicConfigEntry, Deserialize, Serialize)]
+pub struct SessionConfig {
+    pub restore: bool,
+    pub tabs: Option<Vec<Location>>,
 }
