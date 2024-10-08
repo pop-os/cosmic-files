@@ -11,6 +11,15 @@ recents = Recenti
 undo = Annulla ultima operazione
 today = Oggi
 
+# Desktop view options
+desktop-view-options = Opzioni di visualizzazione del desktop...
+show-on-desktop = Mostra sul desktop
+desktop-folder-content = Contenuto della cartella Desktop
+mounted-drives = Unità montate
+trash-folder-icon = Icona del cestino
+icon-size-and-spacing = Dimensione e spaziatura delle icone
+icon-size = Dimensione delle icone
+
 # List view
 name = Nome
 modified = Modificato
@@ -51,6 +60,10 @@ open-multiple-folders = Apri cartelle multiple
 save = Salva
 save-file = Salva file
 
+## Open With Dialog
+open-with-title = Come vuoi aprire "{$name}"?
+browse-store = Sfoglia {$store}
+
 ## Rename Dialog
 rename-file = Rinomina file
 rename-folder = Rinomina cartella
@@ -65,6 +78,11 @@ replace-with = Sostituisci con
 apply-to-all = Applica a tutto
 keep-both = Tieni entrambi
 skip = Salta
+
+## Set as Executable and Launch Dialog
+set-executable-and-launch = Imposta come eseguibile e avvia
+set-executable-and-launch-description = Vuoi impostare "{$name}" come eseguibile e avviarlo?
+set-and-launch = Imposta e avvia
 
 ## Metadata Dialog
 owner = Proprietario
@@ -193,6 +211,11 @@ sort-by-modified = Ordina per ultima modifica
 sort-by-size = Ordina per dimensione
 sort-by-trashed = Ordina per cancellazione
 
+## Desktop
+change-wallpaper = Cambia sfondo...
+desktop-appearance = Aspetto del desktop...
+display-settings = Impostazioni del display...
+
 # Menu
 
 ## File
@@ -200,7 +223,6 @@ file = File
 new-tab = Nuova scheda
 new-window = Nuova finestra
 rename = Rinomina
-menu-show-details = Mostra dettagli...
 close-tab = Chiudi scheda
 quit = Esci
 
@@ -220,6 +242,7 @@ grid-view = Griglia
 list-view = Lista
 show-hidden-files = Mostra file nascosti
 list-directories-first = Mostra le cartelle prima dei file
+gallery-preview = Anteprima galleria
 menu-settings = Impostazioni...
 menu-about = Informazioni su COSMIC Files...
 
