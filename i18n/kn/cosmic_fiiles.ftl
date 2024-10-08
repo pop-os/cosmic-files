@@ -11,6 +11,15 @@ recents = ಇತ್ತೀಚಿನ
 undo = ಹಿಂತಿರುಗಿಸು
 today = ಇಂದು
 
+# Desktop view options
+desktop-view-options = ಡೆಸ್ಕ್‌ಟಾಪ್ ವೀಕ್ಷಣೆಯ ಆಯ್ಕೆಗಳು...
+show-on-desktop = ಡೆಸ್ಕ್‌ಟಾಪ್‌ನಲ್ಲಿ ತೋರಿಸಿ
+desktop-folder-content = ಡೆಸ್ಕ್‌ಟಾಪ್ ಫೋಲ್ಡರ್ ವಿಷಯ
+mounted-drives = ಮೌಂಟ್ ಮಾಡಿರುವ ಡ್ರೈವ್‌ಗಳು
+trash-folder-icon = ಕಸದ ಫೋಲ್ಡರ್ ಐಕಾನ್
+icon-size-and-spacing = ಐಕಾನ್ ಗಾತ್ರ ಮತ್ತು ಅಂತರ
+icon-size = ಐಕಾನ್ ಗಾತ್ರ
+
 # List view
 name = ಹೆಸರು
 modified = ಮಾರ್ಪಡಿಸಿದ ದಿನಾಂಕ 
@@ -51,6 +60,10 @@ open-multiple-folders = ಬಹು ಫೋಲ್ಡರ್‌ಗಳನ್ನು ತ
 save = ಉಳಿಸಿ
 save-file = ಫೈಲ್ ಉಳಿಸಿ
 
+## Open With Dialog
+open-with-title = "{$name}" ಅನ್ನು ಹೇಗೆ ತೆರೆಯಲು ನೀವು ಬಯಸುತ್ತೀರಿ?
+browse-store = {$store} ಅಲ್ಲಿ ಹುಡುಕಿ
+
 ## Rename Dialog
 rename-file = ಫೈಲ್ ಹೆಸರು ಬದಲಿಸಿ
 rename-folder = ಫೋಲ್ಡರ್ ಹೆಸರು ಬದಲಿಸಿ
@@ -65,6 +78,11 @@ replace-with = ಇದರೊಂದಿಗೆ ಬದಲಾಯಿಸಿ
 apply-to-all = ಎಲ್ಲರಿಗೂ ಅನ್ವಯಿಸಿ
 keep-both = ಎರಡನ್ನೂ ಇಟ್ಟುಕೊಳ್ಳಿ
 skip = ಬಿಟ್ಟುಬಿಡಿ
+
+## Set as Executable and Launch Dialog
+set-executable-and-launch = ಕಾರ್ಯನಿರ್ವಹಿಸುವಂತೆ ಸೆಟ್ ಮಾಡಿ ಮತ್ತು ಪ್ರಾರಂಭಿಸಿ
+set-executable-and-launch-description = ನೀವು "{$name}" ಅನ್ನು ಕಾರ್ಯನಿರ್ವಹಿಸುವಂತೆ ಸೆಟ್ ಮಾಡಿ ಮತ್ತು ಪ್ರಾರಂಭಿಸಬೇಕೆಂದು ಬಯಸುವಿರಾ?
+set-and-launch = ಸೆಟ್ ಮಾಡಿ ಮತ್ತು ಪ್ರಾರಂಭಿಸಿ
 
 ## Metadata Dialog
 owner = ಮಾಲೀಕ
@@ -140,6 +158,8 @@ extracted = {$items} {$items ->
         [one] ಐಟಂ
         *[other] ಐಟಂಗಳು
     } ನಿಂದ {$from} ಗೆ {$to} ಹೊರತೆಗೆಯಲಾಯಿತು
+setting-executable-and-launching = "{$name}" ಅನ್ನು ಕಾರ್ಯನಿರ್ವಹಿಸುವಂತೆ ಸೆಟ್ ಮಾಡಲಾಗುತ್ತಿದೆ ಮತ್ತು ಪ್ರಾರಂಭಿಸಲಾಗುತ್ತಿದೆ
+set-executable-and-launched = "{$name}" ಅನ್ನು ಕಾರ್ಯನಿರ್ವಹಿಸುವಂತೆ ಸೆಟ್ ಮಾಡಲಾಗಿದೆ ಮತ್ತು ಪ್ರಾರಂಭಿಸಲಾಗಿದೆ
 moving = {$items} {$items ->
         [one] ಐಟಂ
         *[other] ಐಟಂಗಳು
@@ -191,6 +211,11 @@ sort-by-name = ಹೆಸರಿನಿಂದ ವಿಂಗಡಿಸಿ
 sort-by-modified = ತಿದ್ದುಪಡಿ ಮಾಡಿದ ದಿನಾಂಕದಿಂದ ವಿಂಗಡಿಸಿ
 sort-by-size = ಗಾತ್ರದಿಂದ ವಿಂಗಡಿಸಿ
 sort-by-trashed = ಅಳಿಸಿದ ದಿನಾಂಕದಿಂದ ವಿಂಗಡಿಸಿ
+
+## Desktop
+change-wallpaper = ವಾಲ್‌ಪೇಪರ್ ಬದಲಾಯಿಸಿ...
+desktop-appearance = ಡೆಸ್ಕ್‌ಟಾಪ್ ಕಾಣಿಕೆ...
+display-settings = ಡಿಸ್ಪ್ಲೇ ಸೆಟ್ಟಿಂಗ್‌ಗಳು...
 
 # Menu
 
