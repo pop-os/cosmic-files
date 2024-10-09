@@ -1,4 +1,5 @@
 use cosmic::{iced::subscription, widget, Command};
+use once_cell::sync::Lazy;
 use std::{collections::BTreeMap, fmt, path::PathBuf, sync::Arc};
 use tokio::sync::mpsc;
 
@@ -114,3 +115,5 @@ pub fn mounters() -> Mounters {
 
     Mounters::new(mounters)
 }
+
+pub static MOUNTERS: Lazy<Mounters> = Lazy::new(|| mounters());

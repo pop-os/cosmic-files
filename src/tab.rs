@@ -8,6 +8,7 @@ use cosmic::{
         alignment::{Horizontal, Vertical},
         clipboard::dnd::DndAction,
         event,
+        futures,
         futures::SinkExt,
         keyboard::Modifiers,
         subscription::{self, Subscription},
@@ -64,7 +65,7 @@ use crate::{
     menu,
     mime_app::{mime_apps, MimeApp},
     mime_icon::{mime_for_path, mime_icon},
-    mounter::Mounters,
+    mounter::MOUNTERS,
     mouse_area,
     thumbnailer::thumbnailer,
 };
@@ -73,6 +74,8 @@ use uzers::{get_group_by_gid, get_user_by_uid};
 
 pub const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 pub const HOVER_DURATION: Duration = Duration::from_millis(1600);
+//TODO: best limit for search items
+const MAX_SEARCH_RESULTS: usize = 1000;
 
 //TODO: adjust for locales?
 const DATE_TIME_FORMAT: &'static str = "%b %-d, %-Y, %-I:%M %p";
@@ -525,10 +528,15 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
     items
 }
 
-pub fn scan_search(tab_path: &PathBuf, term: &str, sizes: IconSizes) -> Vec<Item> {
-    use rayon::prelude::ParallelSliceMut;
-
-    let start = Instant::now();
+pub fn scan_search<F: Fn(Item) -> bool + Sync>(
+    tab_path: &PathBuf,
+    term: &str,
+    sizes: IconSizes,
+    callback: F,
+) {
+    if term.is_empty() {
+        return;
+    }
 
     let pattern = regex::escape(&term);
     let regex = match regex::RegexBuilder::new(&pattern)
@@ -538,11 +546,10 @@ pub fn scan_search(tab_path: &PathBuf, term: &str, sizes: IconSizes) -> Vec<Item
         Ok(ok) => ok,
         Err(err) => {
             log::warn!("failed to parse regex {:?}: {}", pattern, err);
-            return Vec::new();
+            return;
         }
     };
 
-    let items_arc = Arc::new(Mutex::new(Vec::new()));
     //TODO: do we want to ignore files?
     ignore::WalkBuilder::new(tab_path)
         //TODO: only use this on supported targets
@@ -571,50 +578,19 @@ pub fn scan_search(tab_path: &PathBuf, term: &str, sizes: IconSizes) -> Vec<Item
                         }
                     };
 
-                    let mut items = items_arc.lock().unwrap();
-                    items.push(item_from_entry(
+                    if !callback(item_from_entry(
                         path.to_path_buf(),
                         file_name.to_string(),
                         metadata,
                         sizes,
-                    ));
+                    )) {
+                        return ignore::WalkState::Quit;
+                    }
                 }
 
                 ignore::WalkState::Continue
             })
         });
-
-    let mut items = Arc::into_inner(items_arc).unwrap().into_inner().unwrap();
-    let duration = start.elapsed();
-    log::info!(
-        "searched for {:?} inside {:?} in {:?}, found {} items",
-        term,
-        tab_path,
-        duration,
-        items.len(),
-    );
-
-    let start = Instant::now();
-
-    items.par_sort_unstable_by(|a, b| {
-        let get_modified = |x: &Item| match &x.metadata {
-            ItemMetadata::Path { metadata, .. } => metadata.modified().ok(),
-            _ => None,
-        };
-
-        // Sort with latest modified first
-        let a_modified = get_modified(a);
-        let b_modified = get_modified(b);
-        b_modified.cmp(&a_modified)
-    });
-
-    let duration = start.elapsed();
-    log::info!("sorted {} items in {:?}", items.len(), duration);
-
-    //TODO: ideal number of search results, pages?
-    items.truncate(100);
-
-    items
 }
 
 // This config statement is from trash::os_limited, inverted
@@ -786,8 +762,8 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
     recents.into_iter().take(50).map(|(item, _)| item).collect()
 }
 
-pub fn scan_network(uri: &str, mounters: Mounters, sizes: IconSizes) -> Vec<Item> {
-    for (_key, mounter) in mounters.iter() {
+pub fn scan_network(uri: &str, sizes: IconSizes) -> Vec<Item> {
+    for (_key, mounter) in MOUNTERS.iter() {
         match mounter.network_scan(uri, sizes) {
             Some(Ok(items)) => return items,
             Some(Err(err)) => {
@@ -802,9 +778,8 @@ pub fn scan_network(uri: &str, mounters: Mounters, sizes: IconSizes) -> Vec<Item
 //TODO: organize desktop items based on display
 pub fn scan_desktop(
     tab_path: &PathBuf,
-    display: &str,
+    _display: &str,
     desktop_config: DesktopConfig,
-    mounters: Mounters,
     sizes: IconSizes,
 ) -> Vec<Item> {
     let mut items = Vec::new();
@@ -814,7 +789,7 @@ pub fn scan_desktop(
     }
 
     if desktop_config.show_mounted_drives {
-        for (_mounter_key, mounter) in mounters.iter() {
+        for (_mounter_key, mounter) in MOUNTERS.iter() {
             for mounter_item in mounter.items(sizes).unwrap_or_default() {
                 let Some(path) = mounter_item.path() else {
                     continue;
@@ -885,24 +860,26 @@ pub fn scan_desktop(
     items
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Location {
-    Desktop(PathBuf, String),
+    Desktop(PathBuf, String, DesktopConfig),
     Network(String, String),
     Path(PathBuf),
     Recents,
-    Search(PathBuf, String),
+    Search(PathBuf, String, Instant),
     Trash,
 }
 
 impl std::fmt::Display for Location {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Desktop(path, display) => write!(f, "{} on display {display}", path.display()),
-            Self::Network(uri, _) => write!(f, "{}", uri),
+            Self::Desktop(path, display, ..) => {
+                write!(f, "{} on display {display}", path.display())
+            }
+            Self::Network(uri, ..) => write!(f, "{}", uri),
             Self::Path(path) => write!(f, "{}", path.display()),
             Self::Recents => write!(f, "recents"),
-            Self::Search(path, term) => write!(f, "search {} for {}", path.display(), term),
+            Self::Search(path, term, ..) => write!(f, "search {} for {}", path.display(), term),
             Self::Trash => write!(f, "trash"),
         }
     }
@@ -911,28 +888,37 @@ impl std::fmt::Display for Location {
 impl Location {
     pub fn path_opt(&self) -> Option<&PathBuf> {
         match self {
-            Self::Desktop(path, _display) => Some(&path),
+            Self::Desktop(path, ..) => Some(&path),
             Self::Path(path) => Some(&path),
-            Self::Search(path, _) => Some(&path),
+            Self::Search(path, ..) => Some(&path),
             _ => None,
         }
     }
 
-    pub fn scan(
-        &self,
-        desktop_config: DesktopConfig,
-        mounters: Mounters,
-        sizes: IconSizes,
-    ) -> Vec<Item> {
+    pub fn with_path(&self, path: PathBuf) -> Self {
         match self {
-            Self::Desktop(path, display) => {
-                scan_desktop(path, display, desktop_config, mounters, sizes)
+            Self::Desktop(_, display, desktop_config) => {
+                Self::Desktop(path, display.clone(), *desktop_config)
+            }
+            Self::Path(..) => Self::Path(path),
+            Self::Search(_, term, ..) => Self::Search(path, term.clone(), Instant::now()),
+            other => other.clone(),
+        }
+    }
+
+    pub fn scan(&self, sizes: IconSizes) -> Vec<Item> {
+        match self {
+            Self::Desktop(path, display, desktop_config) => {
+                scan_desktop(path, display, *desktop_config, sizes)
             }
             Self::Path(path) => scan_path(path, sizes),
-            Self::Search(path, term) => scan_search(path, term, sizes),
+            Self::Search(..) => {
+                // Search is done incrementally
+                Vec::new()
+            }
             Self::Trash => scan_trash(sizes),
             Self::Recents => scan_recents(sizes),
-            Self::Network(uri, _) => scan_network(uri, mounters, sizes),
+            Self::Network(uri, _) => scan_network(uri, sizes),
         }
     }
 }
@@ -990,6 +976,7 @@ pub enum Message {
     MiddleClick(usize),
     Scroll(Viewport),
     ScrollToFocus,
+    SearchItem(Location, Item),
     SelectAll,
     SetSort(HeadingOptions, bool),
     Thumbnail(PathBuf, ItemThumbnail),
@@ -1544,7 +1531,7 @@ impl Tab {
 
     pub fn title(&self) -> String {
         match &self.location {
-            Location::Desktop(path, _display) => {
+            Location::Desktop(path, _, _) => {
                 let (name, _) = folder_name(path);
                 name
             }
@@ -1552,7 +1539,7 @@ impl Tab {
                 let (name, _) = folder_name(path);
                 name
             }
-            Location::Search(path, term) => {
+            Location::Search(path, term, ..) => {
                 //TODO: translate
                 let (name, _) = folder_name(path);
                 format!("Search \"{}\": {}", term, name)
@@ -1934,7 +1921,8 @@ impl Tab {
                         if let Some(range) = self.select_range {
                             let min = range.0.min(range.1);
                             let max = range.0.max(range.1);
-                            if self.sort_name == HeadingOptions::Name && self.sort_direction {
+                            let (sort_name, sort_direction) = self.sort_options();
+                            if sort_name == HeadingOptions::Name && sort_direction {
                                 // A default/unsorted tab's view is consistent with how the
                                 // Items are laid out internally (items_opt), so Items can be
                                 // linearly selected
@@ -2074,13 +2062,10 @@ impl Tab {
             Message::LocationMenuAction(action) => {
                 self.location_context_menu_index = None;
                 let path_for_index = |ancestor_index| {
-                    match self.location {
-                        Location::Path(ref path) => Some(path),
-                        Location::Search(ref path, _) => Some(path),
-                        _ => None,
-                    }
-                    .and_then(|path| path.ancestors().nth(ancestor_index))
-                    .map(|path| path.to_path_buf())
+                    self.location
+                        .path_opt()
+                        .and_then(|path| path.ancestors().nth(ancestor_index))
+                        .map(|path| path.to_path_buf())
                 };
                 match action {
                     LocationMenuAction::OpenInNewTab(ancestor_index) => {
@@ -2461,6 +2446,27 @@ impl Tab {
                     )));
                 }
             }
+            Message::SearchItem(location, item) => {
+                if location == self.location {
+                    if let Some(items) = &mut self.items_opt {
+                        items.push(item);
+                    } else {
+                        log::warn!("tried to load items in {:?} without items array", location);
+                    }
+                } else {
+                    log::warn!(
+                        "search item found in {:?} instead of {:?}",
+                        location,
+                        self.location
+                    );
+                }
+
+                //TODO: optimize
+                self.column_sort();
+                if let Some(items) = &mut self.items_opt {
+                    items.truncate(MAX_SEARCH_RESULTS);
+                }
+            }
             Message::SelectAll => {
                 self.select_all();
                 if self.select_focus.take().is_some() {
@@ -2469,8 +2475,10 @@ impl Tab {
                 }
             }
             Message::SetSort(heading_option, dir) => {
-                self.sort_name = heading_option;
-                self.sort_direction = dir;
+                if !matches!(self.location, Location::Search(..)) {
+                    self.sort_name = heading_option;
+                    self.sort_direction = dir;
+                }
             }
             Message::Thumbnail(path, thumbnail) => {
                 if let Some(ref mut items) = self.items_opt {
@@ -2509,14 +2517,16 @@ impl Tab {
                 self.config.view = view;
             }
             Message::ToggleSort(heading_option) => {
-                let heading_sort = if self.sort_name == heading_option {
-                    !self.sort_direction
-                } else {
-                    // Default modified to descending, and others to ascending.
-                    heading_option != HeadingOptions::Modified
-                };
-                self.sort_direction = heading_sort;
-                self.sort_name = heading_option;
+                if !matches!(self.location, Location::Search(..)) {
+                    let heading_sort = if self.sort_name == heading_option {
+                        !self.sort_direction
+                    } else {
+                        // Default modified to descending, and others to ascending.
+                        heading_option != HeadingOptions::Modified
+                    };
+                    self.sort_direction = heading_sort;
+                    self.sort_name = heading_option;
+                }
             }
             Message::Drop(Some((to, mut from))) => {
                 self.dnd_hovered = None;
@@ -2608,11 +2618,7 @@ impl Tab {
                     _ => {}
                 }
             } else if location != self.location {
-                if match &location {
-                    Location::Path(path) => path.is_dir(),
-                    Location::Search(path, _term) => path.is_dir(),
-                    _ => true,
-                } {
+                if location.path_opt().map_or(true, |path| path.is_dir()) {
                     let prev_path = if let Some(path) = self.location.path_opt() {
                         Some(path.to_path_buf())
                     } else {
@@ -2629,6 +2635,13 @@ impl Tab {
         commands
     }
 
+    pub(crate) fn sort_options(&self) -> (HeadingOptions, bool) {
+        match self.location {
+            Location::Search(..) => (HeadingOptions::Modified, false),
+            _ => (self.sort_name, self.sort_direction),
+        }
+    }
+
     fn column_sort(&self) -> Option<Vec<(usize, &Item)>> {
         let check_reverse = |ord: Ordering, sort: bool| {
             if sort {
@@ -2638,8 +2651,8 @@ impl Tab {
             }
         };
         let mut items: Vec<_> = self.items_opt.as_ref()?.iter().enumerate().collect();
-        let heading_sort = self.sort_direction;
-        match self.sort_name {
+        let (sort_name, sort_direction) = self.sort_options();
+        match sort_name {
             HeadingOptions::Size => {
                 items.sort_by(|a, b| {
                     // entries take precedence over size
@@ -2665,7 +2678,7 @@ impl Tab {
                     match (a_is_entry, b_is_entry) {
                         (true, false) => Ordering::Less,
                         (false, true) => Ordering::Greater,
-                        _ => check_reverse(a_size.cmp(&b_size), heading_sort),
+                        _ => check_reverse(a_size.cmp(&b_size), sort_direction),
                     }
                 })
             }
@@ -2676,13 +2689,13 @@ impl Tab {
                         (false, true) => Ordering::Greater,
                         _ => check_reverse(
                             LANGUAGE_SORTER.compare(&a.1.display_name, &b.1.display_name),
-                            heading_sort,
+                            sort_direction,
                         ),
                     }
                 } else {
                     check_reverse(
                         LANGUAGE_SORTER.compare(&a.1.display_name, &b.1.display_name),
-                        heading_sort,
+                        sort_direction,
                     )
                 }
             }),
@@ -2699,10 +2712,10 @@ impl Tab {
                         match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
                             (true, false) => Ordering::Less,
                             (false, true) => Ordering::Greater,
-                            _ => check_reverse(a_modified.cmp(&b_modified), heading_sort),
+                            _ => check_reverse(a_modified.cmp(&b_modified), sort_direction),
                         }
                     } else {
-                        check_reverse(a_modified.cmp(&b_modified), heading_sort)
+                        check_reverse(a_modified.cmp(&b_modified), sort_direction)
                     }
                 });
             }
@@ -2719,10 +2732,10 @@ impl Tab {
                         match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
                             (true, false) => Ordering::Less,
                             (false, true) => Ordering::Greater,
-                            _ => check_reverse(a_time_deleted.cmp(&b_time_deleted), heading_sort),
+                            _ => check_reverse(a_time_deleted.cmp(&b_time_deleted), sort_direction),
                         }
                     } else {
-                        check_reverse(b_time_deleted.cmp(&a_time_deleted), heading_sort)
+                        check_reverse(b_time_deleted.cmp(&a_time_deleted), sort_direction)
                     }
                 });
             }
@@ -2977,13 +2990,14 @@ impl Tab {
         let size_width = 100.0;
         let condensed = size.width < (name_width + modified_width + size_width);
 
+        let (sort_name, sort_direction) = self.sort_options();
         let heading_item = |name, width, msg| {
             let mut row = widget::row::with_capacity(2)
                 .align_items(Alignment::Center)
                 .spacing(space_xxs)
                 .width(width);
             row = row.push(widget::text::heading(name));
-            match (self.sort_name == msg, self.sort_direction) {
+            match (sort_name == msg, sort_direction) {
                 (true, true) => {
                     row = row.push(widget::icon::from_name("pan-down-symbolic").size(16));
                 }
@@ -3021,46 +3035,42 @@ impl Tab {
         .spacing(space_xxs);
 
         if let Some(location) = &self.edit_location {
-            match location {
-                Location::Path(path) => {
-                    row = row.push(
-                        widget::button::custom(
-                            widget::icon::from_name("window-close-symbolic").size(16),
-                        )
-                        .on_press(Message::EditLocation(None))
-                        .padding(space_xxs)
-                        .style(theme::Button::Icon),
-                    );
-                    row = row.push(
-                        widget::text_input("", path.to_string_lossy())
-                            .id(self.edit_location_id.clone())
-                            .on_input(|input| {
-                                Message::EditLocation(Some(Location::Path(PathBuf::from(input))))
-                            })
-                            .on_submit(Message::Location(location.clone()))
-                            .line_height(1.0),
-                    );
-                    let mut column = widget::column::with_capacity(4).padding([0, space_s]);
-                    column = column.push(row);
-                    column = column.push(horizontal_rule(1).style(theme::Rule::Custom(Box::new(
-                        |theme: &Theme| rule::Appearance {
-                            color: theme.cosmic().accent_color().into(),
-                            width: 1,
-                            radius: 0.0.into(),
-                            fill_mode: rule::FillMode::Full,
-                        },
-                    ))));
-                    if self.config.view == View::List && !condensed {
-                        column = column.push(heading_row);
-                        column = column.push(widget::divider::horizontal::default());
-                    }
-                    return column.into();
+            //TODO: allow editing other locations
+            if let Some(path) = location.path_opt() {
+                row = row.push(
+                    widget::button::custom(
+                        widget::icon::from_name("window-close-symbolic").size(16),
+                    )
+                    .on_press(Message::EditLocation(None))
+                    .padding(space_xxs)
+                    .style(theme::Button::Icon),
+                );
+                row = row.push(
+                    widget::text_input("", path.to_string_lossy())
+                        .id(self.edit_location_id.clone())
+                        .on_input(|input| {
+                            Message::EditLocation(Some(location.with_path(PathBuf::from(input))))
+                        })
+                        .on_submit(Message::Location(location.clone()))
+                        .line_height(1.0),
+                );
+                let mut column = widget::column::with_capacity(4).padding([0, space_s]);
+                column = column.push(row);
+                column = column.push(horizontal_rule(1).style(theme::Rule::Custom(Box::new(
+                    |theme: &Theme| rule::Appearance {
+                        color: theme.cosmic().accent_color().into(),
+                        width: 1,
+                        radius: 0.0.into(),
+                        fill_mode: rule::FillMode::Full,
+                    },
+                ))));
+                if self.config.view == View::List && !condensed {
+                    column = column.push(heading_row);
+                    column = column.push(widget::divider::horizontal::default());
                 }
-                _ => {
-                    //TODO: allow editing other locations
-                }
+                return column.into();
             }
-        } else if let Location::Path(path) = &self.location {
+        } else if let Some(path) = self.location.path_opt() {
             row = row.push(
                 crate::mouse_area::MouseArea::new(
                     widget::button::custom(widget::icon::from_name("edit-symbolic").size(16))
@@ -3071,26 +3081,11 @@ impl Tab {
                 .on_middle_press(move |_| Message::OpenInNewTab(path.clone())),
             );
             w += 16.0 + 2.0 * space_xxs as f32;
-        } else if let Location::Search(_, term) = &self.location {
-            row = row.push(
-                widget::button::custom(
-                    widget::row::with_children(vec![
-                        widget::icon::from_name("system-search-symbolic")
-                            .size(16)
-                            .into(),
-                        widget::text::body(term).wrap(text::Wrap::None).into(),
-                    ])
-                    .spacing(space_xxs),
-                )
-                .padding(space_xxs)
-                .style(theme::Button::Icon),
-            );
-            w += text_width_body(term) + 16.0 + 3.0 * space_xxs as f32;
         }
 
         let mut children: Vec<Element<_>> = Vec::new();
         match &self.location {
-            Location::Desktop(path, _) | Location::Path(path) | Location::Search(path, _) => {
+            Location::Desktop(path, ..) | Location::Path(path) | Location::Search(path, ..) => {
                 let excess_str = "...";
                 let excess_width = text_width_body(excess_str);
                 for (index, ancestor) in path.ancestors().enumerate() {
@@ -3131,14 +3126,7 @@ impl Tab {
                         w += name_width;
                     }
 
-                    let location = match &self.location {
-                        Location::Path(_) => Location::Path(ancestor.to_path_buf()),
-                        Location::Search(_, term) => {
-                            Location::Search(ancestor.to_path_buf(), term.clone())
-                        }
-                        other => other.clone(),
-                    };
-
+                    let location = self.location.with_path(ancestor.to_path_buf());
                     let mut mouse_area = crate::mouse_area::MouseArea::new(
                         widget::button::custom(row)
                             .padding(space_xxxs)
@@ -3251,7 +3239,7 @@ impl Tab {
                         .into(),
                     widget::text(if has_hidden {
                         fl!("empty-folder-hidden")
-                    } else if matches!(self.location, Location::Search(_, _)) {
+                    } else if matches!(self.location, Location::Search(..)) {
                         fl!("no-results")
                     } else {
                         fl!("empty-folder")
@@ -3583,7 +3571,7 @@ impl Tab {
         let modified_width = 200.0;
         let size_width = 100.0;
         let condensed = size.width < (name_width + modified_width + size_width);
-        let is_search = matches!(self.location, Location::Search(_, _));
+        let is_search = matches!(self.location, Location::Search(..));
         let icon_size = if condensed || is_search {
             icon_sizes.list_condensed()
         } else {
@@ -4056,86 +4044,123 @@ impl Tab {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        if let Some(items) = &self.items_opt {
-            //TODO: how many thumbnail loads should be in flight at once?
-            let jobs = 8;
-            let mut subscriptions = Vec::with_capacity(jobs);
+        let Some(items) = &self.items_opt else {
+            return Subscription::none();
+        };
 
-            //TODO: move to function
-            let visible_rect = {
-                let point = match self.scroll_opt {
-                    Some(offset) => Point::new(0.0, offset.y),
-                    None => Point::new(0.0, 0.0),
-                };
-                let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
-                Rectangle::new(point, size)
+        // Load search items incrementally
+        if let Location::Search(path, term, start) = &self.location {
+            let location = self.location.clone();
+            let path = path.clone();
+            let term = term.clone();
+            let start = start.clone();
+            return subscription::channel(location.clone(), 100, move |output| async move {
+                let output = tokio::sync::Mutex::new(output);
+
+                tokio::task::spawn_blocking(move || {
+                    //TODO: use correct icon sizes, or fetch icons lazily?
+                    //TODO: getting mime types for search results is expensive, and not necessary if the results
+                    // are not used. Perhaps they can be gathered when the item is scrolled to, like thumbnails
+                    scan_search(&path, &term, IconSizes::default(), move |item| -> bool {
+                        futures::executor::block_on(async {
+                            output
+                                .lock()
+                                .await
+                                .send(Message::SearchItem(location.clone(), item))
+                                .await
+                        })
+                        .is_ok()
+                    });
+                    log::info!(
+                        "searched for {:?} in {:?} in {:?}",
+                        term,
+                        path,
+                        start.elapsed(),
+                    );
+                })
+                .await
+                .unwrap();
+
+                std::future::pending().await
+            });
+        }
+
+        //TODO: how many thumbnail loads should be in flight at once?
+        let jobs = 8;
+        let mut subscriptions = Vec::with_capacity(jobs);
+
+        //TODO: move to function
+        let visible_rect = {
+            let point = match self.scroll_opt {
+                Some(offset) => Point::new(0.0, offset.y),
+                None => Point::new(0.0, 0.0),
             };
+            let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
+            Rectangle::new(point, size)
+        };
 
-            //TODO: HACK to ensure positions are up to date since subscription runs before view
-            match self.config.view {
-                View::Grid => _ = self.grid_view(),
-                View::List => _ = self.list_view(),
-            };
+        //TODO: HACK to ensure positions are up to date since subscription runs before view
+        match self.config.view {
+            View::Grid => _ = self.grid_view(),
+            View::List => _ = self.list_view(),
+        };
 
-            for item in items.iter() {
-                if item.thumbnail_opt.is_some() {
-                    // Skip items that already have a thumbnail
-                    continue;
-                }
+        for item in items.iter() {
+            if item.thumbnail_opt.is_some() {
+                // Skip items that already have a thumbnail
+                continue;
+            }
 
-                match item.rect_opt.get() {
-                    Some(rect) => {
-                        if !rect.intersects(&visible_rect) {
-                            // Skip items that are not visible
-                            continue;
-                        }
-                    }
-                    None => {
-                        // Skip items with no determined rect (this should include hidden items)
+            match item.rect_opt.get() {
+                Some(rect) => {
+                    if !rect.intersects(&visible_rect) {
+                        // Skip items that are not visible
                         continue;
                     }
                 }
-
-                if let Some(path) = item.path_opt().map(|path| path.to_path_buf()) {
-                    let mime = item.mime.clone();
-                    subscriptions.push(subscription::channel(
-                        path.clone(),
-                        1,
-                        |mut output| async move {
-                            let (path, thumbnail) = tokio::task::spawn_blocking(move || {
-                                let start = std::time::Instant::now();
-                                //TODO: configurable thumbnail size?
-                                let thumbnail_size = (ICON_SIZE_GRID * ICON_SCALE_MAX) as u32;
-                                let thumbnail = ItemThumbnail::new(&path, mime, thumbnail_size);
-                                log::debug!("thumbnailed {:?} in {:?}", path, start.elapsed());
-                                (path, thumbnail)
-                            })
-                            .await
-                            .unwrap();
-
-                            match output
-                                .send(Message::Thumbnail(path.clone(), thumbnail))
-                                .await
-                            {
-                                Ok(()) => {}
-                                Err(err) => {
-                                    log::warn!("failed to send thumbnail for {:?}: {}", path, err);
-                                }
-                            }
-
-                            std::future::pending().await
-                        },
-                    ));
-                }
-
-                if subscriptions.len() >= jobs {
-                    break;
+                None => {
+                    // Skip items with no determined rect (this should include hidden items)
+                    continue;
                 }
             }
-            Subscription::batch(subscriptions)
-        } else {
-            Subscription::none()
+
+            if let Some(path) = item.path_opt().map(|path| path.to_path_buf()) {
+                let mime = item.mime.clone();
+                subscriptions.push(subscription::channel(
+                    path.clone(),
+                    1,
+                    |mut output| async move {
+                        let (path, thumbnail) = tokio::task::spawn_blocking(move || {
+                            let start = std::time::Instant::now();
+                            //TODO: configurable thumbnail size?
+                            let thumbnail_size = (ICON_SIZE_GRID * ICON_SCALE_MAX) as u32;
+                            let thumbnail = ItemThumbnail::new(&path, mime, thumbnail_size);
+                            log::debug!("thumbnailed {:?} in {:?}", path, start.elapsed());
+                            (path, thumbnail)
+                        })
+                        .await
+                        .unwrap();
+
+                        match output
+                            .send(Message::Thumbnail(path.clone(), thumbnail))
+                            .await
+                        {
+                            Ok(()) => {}
+                            Err(err) => {
+                                log::warn!("failed to send thumbnail for {:?}: {}", path, err);
+                            }
+                        }
+
+                        std::future::pending().await
+                    },
+                ));
+            }
+
+            if subscriptions.len() >= jobs {
+                break;
+            }
         }
+        Subscription::batch(subscriptions)
     }
 }
 

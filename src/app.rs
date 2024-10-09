@@ -59,13 +59,11 @@ use wayland_client::{protocol::wl_output::WlOutput, Proxy};
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{AppTheme, Config, DesktopConfig, Favorite, IconSizes, TabConfig},
-    desktop_dir, fl, home_dir,
+    fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
     menu, mime_app, mime_icon,
-    mounter::{
-        mounters, MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage, Mounters,
-    },
+    mounter::{MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage, MOUNTERS},
     operation::{Operation, ReplaceResult},
     spawn_detached::spawn_detached,
     tab::{self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION},
@@ -308,7 +306,6 @@ pub enum Message {
     SearchActivate,
     SearchClear,
     SearchInput(String),
-    SearchSubmit,
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     TabActivate(Entity),
     TabNext,
@@ -491,7 +488,6 @@ pub struct App {
     dialog_text_input: widget::Id,
     key_binds: HashMap<KeyBind, Action>,
     modifiers: Modifiers,
-    mounters: Mounters,
     mounter_items: HashMap<MounterKey, MounterItems>,
     network_drive_connecting: Option<(MounterKey, String)>,
     network_drive_input: String,
@@ -501,9 +497,7 @@ pub struct App {
     pending_operations: BTreeMap<u64, (Operation, f32)>,
     complete_operations: BTreeMap<u64, Operation>,
     failed_operations: BTreeMap<u64, (Operation, String)>,
-    search_active: bool,
     search_id: widget::Id,
-    search_input: String,
     #[cfg(feature = "wayland")]
     surface_ids: HashMap<WlOutput, WindowId>,
     #[cfg(feature = "wayland")]
@@ -588,17 +582,11 @@ impl App {
         selection_path: Option<PathBuf>,
     ) -> Command<Message> {
         log::info!("rescan_tab {entity:?} {location:?} {selection_path:?}");
-        let desktop_config = self.config.desktop;
-        let mounters = self.mounters.clone();
         let icon_sizes = self.config.tab.icon_sizes;
         Command::perform(
             async move {
                 let location2 = location.clone();
-                match tokio::task::spawn_blocking(move || {
-                    location2.scan(desktop_config, mounters, icon_sizes)
-                })
-                .await
-                {
+                match tokio::task::spawn_blocking(move || location2.scan(icon_sizes)).await {
                     Ok(items) => {
                         message::app(Message::TabRescan(entity, location, items, selection_path))
                     }
@@ -630,25 +618,55 @@ impl App {
     }
 
     fn search(&mut self) -> Command<Message> {
+        if let Some(term) = self.search_get() {
+            self.search_set(Some(term.to_string()))
+        } else {
+            Command::none()
+        }
+    }
+
+    fn search_get(&self) -> Option<&str> {
+        let entity = self.tab_model.active();
+        let tab = self.tab_model.data::<Tab>(entity)?;
+        match &tab.location {
+            Location::Search(_, term, ..) => Some(term),
+            _ => None,
+        }
+    }
+
+    fn search_set(&mut self, term_opt: Option<String>) -> Command<Message> {
         let entity = self.tab_model.active();
         let mut title_location_opt = None;
         if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-            if let Some(path) = tab.location.path_opt() {
-                let location = if !self.search_input.is_empty() {
-                    Location::Search(path.to_path_buf(), self.search_input.clone())
-                } else {
-                    Location::Path(path.to_path_buf())
-                };
+            let location_opt = match term_opt {
+                Some(term) => match &tab.location {
+                    Location::Path(path) | Location::Search(path, ..) => Some((
+                        Location::Search(path.to_path_buf(), term, Instant::now()),
+                        true,
+                    )),
+                    _ => None,
+                },
+                None => match &tab.location {
+                    Location::Search(path, ..) => Some((Location::Path(path.to_path_buf()), false)),
+                    _ => None,
+                },
+            };
+            if let Some((location, focus_search)) = location_opt {
                 tab.change_location(&location, None);
-                title_location_opt = Some((tab.title(), tab.location.clone()));
+                title_location_opt = Some((tab.title(), tab.location.clone(), focus_search));
             }
         }
-        if let Some((title, location)) = title_location_opt {
+        if let Some((title, location, focus_search)) = title_location_opt {
             self.tab_model.text_set(entity, title);
             return Command::batch([
                 self.update_title(),
                 self.update_watcher(),
                 self.rescan_tab(entity, location, None),
+                if focus_search {
+                    widget::text_input::focus(self.search_id.clone())
+                } else {
+                    Command::none()
+                },
             ]);
         }
         Command::none()
@@ -760,7 +778,7 @@ impl App {
                 .divider_above()
         });
 
-        if !self.mounters.is_empty() {
+        if !MOUNTERS.is_empty() {
             nav_model = nav_model.insert(|b| {
                 b.text(fl!("networks"))
                     .icon(widget::icon::icon(
@@ -1226,7 +1244,6 @@ impl Application for App {
             dialog_text_input: widget::Id::unique(),
             key_binds,
             modifiers: Modifiers::empty(),
-            mounters: mounters(),
             mounter_items: HashMap::new(),
             network_drive_connecting: None,
             network_drive_input: String::new(),
@@ -1236,9 +1253,7 @@ impl Application for App {
             pending_operations: BTreeMap::new(),
             complete_operations: BTreeMap::new(),
             failed_operations: BTreeMap::new(),
-            search_active: false,
             search_id: widget::Id::unique(),
-            search_input: String::new(),
             #[cfg(feature = "wayland")]
             surface_ids: HashMap::new(),
             #[cfg(feature = "wayland")]
@@ -1364,9 +1379,6 @@ impl Application for App {
     }
 
     fn on_nav_select(&mut self, entity: Entity) -> Command<Self::Message> {
-        self.search_active = false;
-        self.search_input.clear();
-
         self.nav_model.activate(entity);
         if let Some(location) = self.nav_model.data::<Location>(entity) {
             let message = Message::TabMessage(None, tab::Message::Location(location.clone()));
@@ -1374,7 +1386,7 @@ impl Application for App {
         }
 
         if let Some(data) = self.nav_model.data::<MounterData>(entity).clone() {
-            if let Some(mounter) = self.mounters.get(&data.0) {
+            if let Some(mounter) = MOUNTERS.get(&data.0) {
                 return mounter.mount(data.1.clone()).map(|_| message::none());
             }
         }
@@ -1391,7 +1403,7 @@ impl Application for App {
 
     fn on_context_drawer(&mut self) -> Command<Self::Message> {
         match self.context_page {
-            ContextPage::Preview(_, _) => {
+            ContextPage::Preview(..) => {
                 // Persist state of preview page
                 if self.core.window.show_context != self.config.show_details {
                     return self.update(Message::Preview(None));
@@ -1426,10 +1438,9 @@ impl Application for App {
             self.set_show_context(false);
             return Command::none();
         }
-        if self.search_active {
+        if self.search_get().is_some() {
             // Close search if open
-            self.search_active = false;
-            return Command::none();
+            return self.search_set(None);
         }
         if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
             if tab.context_menu.is_some() {
@@ -1815,7 +1826,7 @@ impl Application for App {
             }
             Message::NetworkDriveSubmit => {
                 //TODO: know which mounter to use for network drives
-                for (mounter_key, mounter) in self.mounters.iter() {
+                for (mounter_key, mounter) in MOUNTERS.iter() {
                     self.network_drive_connecting =
                         Some((*mounter_key, self.network_drive_input.clone()));
                     return mounter
@@ -2171,11 +2182,8 @@ impl Application for App {
                 commands.push(self.update_notification());
                 // Manually rescan any trash tabs after any operation is completed
                 commands.push(self.rescan_trash());
-
                 // if search is active, update "search" tab view
-                if !self.search_input.is_empty() {
-                    commands.push(self.search());
-                }
+                commands.push(self.search());
                 return Command::batch(commands);
             }
             Message::PendingError(id, err) => {
@@ -2327,33 +2335,17 @@ impl Application for App {
                 }
             }
             Message::SearchActivate => {
-                self.search_active = true;
-                return widget::text_input::focus(self.search_id.clone());
+                return if self.search_get().is_none() {
+                    self.search_set(Some(String::new()))
+                } else {
+                    widget::text_input::focus(self.search_id.clone())
+                };
             }
             Message::SearchClear => {
-                self.search_active = false;
-                self.search_input.clear();
+                return self.search_set(None);
             }
             Message::SearchInput(input) => {
-                if input != self.search_input {
-                    self.search_input = input;
-                    /*TODO: live search? (probably needs subscription for streaming results)
-                    // This performs live search
-                    if !self.search_input.is_empty() {
-                        return self.search();
-                    }
-                    */
-                }
-            }
-            Message::SearchSubmit => {
-                if !self.search_input.is_empty() {
-                    return self.search();
-                } else {
-                    // rescan the tab to get the contents back
-                    // and exit search
-                    self.search_active = false;
-                    return self.search();
-                }
+                return self.search_set(Some(input));
             }
             Message::SystemThemeModeChange(_theme_mode) => {
                 return self.update_config();
@@ -2364,14 +2356,7 @@ impl Application for App {
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
                     self.activate_nav_model_location(&tab.location.clone());
                 }
-                let mut commands = vec![];
-                commands.push(self.update_title());
-                // if the tab was in an active search mode
-                // search again in case files were modified/deleted
-                if !self.search_input.is_empty() {
-                    commands.push(self.search());
-                }
-                return Command::batch(commands);
+                return self.update_title();
             }
             Message::TabNext => {
                 let len = self.tab_model.iter().count();
@@ -2658,15 +2643,11 @@ impl Application for App {
                 self.toasts.remove(id);
 
                 let mut paths = Vec::with_capacity(recently_trashed.len());
-                let desktop_config = self.config.desktop;
-                let mounters = self.mounters.clone();
                 let icon_sizes = self.config.tab.icon_sizes;
 
                 return cosmic::command::future(async move {
-                    match tokio::task::spawn_blocking(move || {
-                        Location::Trash.scan(desktop_config, mounters, icon_sizes)
-                    })
-                    .await
+                    match tokio::task::spawn_blocking(move || Location::Trash.scan(icon_sizes))
+                        .await
                     {
                         Ok(items) => {
                             for path in &*recently_trashed {
@@ -2885,7 +2866,7 @@ impl Application for App {
 
             Message::NavBarClose(entity) => {
                 if let Some(data) = self.nav_model.data::<MounterData>(entity) {
-                    if let Some(mounter) = self.mounters.get(&data.0) {
+                    if let Some(mounter) = MOUNTERS.get(&data.0) {
                         return mounter.unmount(data.1.clone()).map(|_| message::none());
                     }
                 }
@@ -3005,7 +2986,7 @@ impl Application for App {
                         };
 
                         let (entity, command) = self.open_tab_entity(
-                            Location::Desktop(desktop_dir(), display),
+                            Location::Desktop(crate::desktop_dir(), display),
                             false,
                             None,
                         );
@@ -3614,14 +3595,13 @@ impl Application for App {
             );
         }
 
-        if self.search_active {
+        if let Some(term) = self.search_get() {
             elements.push(
-                widget::text_input::search_input("", &self.search_input)
+                widget::text_input::search_input("", term)
                     .width(Length::Fixed(240.0))
                     .id(self.search_id.clone())
                     .on_clear(Message::SearchClear)
                     .on_input(Message::SearchInput)
-                    .on_submit(Message::SearchSubmit)
                     .into(),
             )
         } else {
@@ -3955,7 +3935,7 @@ impl Application for App {
             ),
         ];
 
-        for (key, mounter) in self.mounters.iter() {
+        for (key, mounter) in MOUNTERS.iter() {
             let key = *key;
             subscriptions.push(mounter.subscription().map(move |mounter_message| {
                 match mounter_message {

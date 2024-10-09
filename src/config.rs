@@ -148,7 +148,7 @@ impl Default for Config {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
 #[serde(default)]
 pub struct DesktopConfig {
     pub show_content: bool,

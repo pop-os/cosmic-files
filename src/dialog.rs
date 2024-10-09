@@ -35,7 +35,7 @@ use std::{
     env, fmt, fs,
     path::PathBuf,
     str::FromStr,
-    time,
+    time::{self, Instant},
 };
 
 use crate::{
@@ -45,7 +45,7 @@ use crate::{
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
     menu,
-    mounter::{mounters, MounterItem, MounterItems, MounterKey, MounterMessage, Mounters},
+    mounter::{MounterItem, MounterItems, MounterKey, MounterMessage, MOUNTERS},
     tab::{self, ItemMetadata, Location, Tab},
 };
 
@@ -323,7 +323,6 @@ enum Message {
     SearchActivate,
     SearchClear,
     SearchInput(String),
-    SearchSubmit,
     TabMessage(tab::Message),
     TabRescan(Vec<tab::Item>),
 }
@@ -380,21 +379,30 @@ struct App {
     filter_selected: Option<usize>,
     filename_id: widget::Id,
     modifiers: Modifiers,
-    mounters: Mounters,
     mounter_items: HashMap<MounterKey, MounterItems>,
     nav_model: segmented_button::SingleSelectModel,
     result_opt: Option<DialogResult>,
-    search_active: bool,
     search_id: widget::Id,
-    search_input: String,
     tab: Tab,
     key_binds: HashMap<KeyBind, Action>,
     watcher_opt: Option<(Debouncer<RecommendedWatcher, FileIdMap>, HashSet<PathBuf>)>,
 }
 
 impl App {
-    fn button_row(&self) -> Element<Message> {
+    fn button_view(&self) -> Element<Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+
+        let mut col = widget::column::with_capacity(2)
+            .spacing(space_xxs)
+            .padding(space_xxs);
+        if let DialogKind::SaveFile { filename } = &self.flags.kind {
+            col = col.push(
+                widget::text_input("", filename)
+                    .id(self.filename_id.clone())
+                    .on_input(Message::Filename)
+                    .on_submit(Message::Save(false)),
+            );
+        }
 
         let mut row = widget::row::with_capacity(
             if !self.filters.is_empty() { 1 } else { 0 } + self.choices.len() * 2 + 3,
@@ -429,16 +437,7 @@ impl App {
                 }
             }
         }
-        if let DialogKind::SaveFile { filename } = &self.flags.kind {
-            row = row.push(
-                widget::text_input("", filename)
-                    .id(self.filename_id.clone())
-                    .on_input(Message::Filename)
-                    .on_submit(Message::Save(false)),
-            );
-        } else {
-            row = row.push(widget::horizontal_space(Length::Fill));
-        }
+        row = row.push(widget::horizontal_space(Length::Fill));
         row = row.push(widget::button::standard(fl!("cancel")).on_press(Message::Cancel));
         row = row.push(if self.flags.kind.save() {
             widget::button::suggested(&self.accept_label).on_press(Message::Save(false))
@@ -446,7 +445,9 @@ impl App {
             widget::button::suggested(&self.accept_label).on_press(Message::Open)
         });
 
-        row.into()
+        col = col.push(row);
+
+        col.into()
     }
 
     fn preview(&self, kind: &PreviewKind) -> Element<AppMessage> {
@@ -485,16 +486,10 @@ impl App {
 
     fn rescan_tab(&self) -> Command<Message> {
         let location = self.tab.location.clone();
-        let desktop_config = self.flags.config.desktop;
-        let mounters = self.mounters.clone();
         let icon_sizes = self.tab.config.icon_sizes;
         Command::perform(
             async move {
-                match tokio::task::spawn_blocking(move || {
-                    location.scan(desktop_config, mounters, icon_sizes)
-                })
-                .await
-                {
+                match tokio::task::spawn_blocking(move || location.scan(icon_sizes)).await {
                     Ok(items) => message::app(Message::TabRescan(items)),
                     Err(err) => {
                         log::warn!("failed to rescan: {}", err);
@@ -506,19 +501,41 @@ impl App {
         )
     }
 
-    fn search(&mut self) -> Command<Message> {
+    fn search_get(&self) -> Option<&str> {
         match &self.tab.location {
-            Location::Path(path) | Location::Search(path, ..) => {
-                let location = if !self.search_input.is_empty() {
-                    Location::Search(path.clone(), self.search_input.clone())
-                } else {
-                    Location::Path(path.clone())
-                };
-                self.tab.change_location(&location, None);
-                Command::batch([self.update_watcher(), self.rescan_tab()])
-            }
-            _ => Command::none(),
+            Location::Search(_, term, ..) => Some(term),
+            _ => None,
         }
+    }
+
+    fn search_set(&mut self, term_opt: Option<String>) -> Command<Message> {
+        let location_opt = match term_opt {
+            Some(term) => match &self.tab.location {
+                Location::Path(path) | Location::Search(path, ..) => Some((
+                    Location::Search(path.to_path_buf(), term, Instant::now()),
+                    true,
+                )),
+                _ => None,
+            },
+            None => match &self.tab.location {
+                Location::Search(path, ..) => Some((Location::Path(path.to_path_buf()), false)),
+                _ => None,
+            },
+        };
+        if let Some((location, focus_search)) = location_opt {
+            self.tab.change_location(&location, None);
+            return Command::batch([
+                self.update_title(),
+                self.update_watcher(),
+                self.rescan_tab(),
+                if focus_search {
+                    widget::text_input::focus(self.search_id.clone())
+                } else {
+                    Command::none()
+                },
+            ]);
+        }
+        Command::none()
     }
 
     fn update_config(&mut self) -> Command<Message> {
@@ -729,13 +746,10 @@ impl Application for App {
             filter_selected: None,
             filename_id: widget::Id::unique(),
             modifiers: Modifiers::empty(),
-            mounters: mounters(),
             mounter_items: HashMap::new(),
             nav_model: segmented_button::ModelBuilder::default().build(),
             result_opt: None,
-            search_active: false,
             search_id: widget::Id::unique(),
-            search_input: String::new(),
             tab,
             key_binds,
             watcher_opt: None,
@@ -773,7 +787,7 @@ impl Application for App {
                 widget::column::with_children(vec![
                     self.tab.gallery_view().map(Message::TabMessage),
                     // Draw button row as part of the overlay
-                    widget::container(self.button_row())
+                    widget::container(self.button_view())
                         .width(Length::Fill)
                         .style(theme::Container::WindowBackground)
                         .into(),
@@ -867,14 +881,13 @@ impl Application for App {
     fn header_end(&self) -> Vec<Element<Message>> {
         let mut elements = Vec::with_capacity(3);
 
-        if self.search_active {
+        if let Some(term) = self.search_get() {
             elements.push(
-                widget::text_input::search_input("", &self.search_input)
+                widget::text_input::search_input("", term)
                     .width(Length::Fixed(240.0))
                     .id(self.search_id.clone())
                     .on_clear(Message::SearchClear)
                     .on_input(Message::SearchInput)
-                    .on_submit(Message::SearchSubmit)
                     .into(),
             )
         } else {
@@ -942,9 +955,6 @@ impl Application for App {
     }
 
     fn on_nav_select(&mut self, entity: segmented_button::Entity) -> Command<Message> {
-        self.search_active = false;
-        self.search_input.clear();
-
         self.nav_model.activate(entity);
         if let Some(location) = self.nav_model.data::<Location>(entity) {
             let message = Message::TabMessage(tab::Message::Location(location.clone()));
@@ -952,7 +962,7 @@ impl Application for App {
         }
 
         if let Some(data) = self.nav_model.data::<MounterData>(entity).clone() {
-            if let Some(mounter) = self.mounters.get(&data.0) {
+            if let Some(mounter) = MOUNTERS.get(&data.0) {
                 return mounter.mount(data.1.clone()).map(|_| message::none());
             }
         }
@@ -966,10 +976,9 @@ impl Application for App {
             return Command::none();
         }
 
-        if self.search_active {
+        if self.search_get().is_some() {
             // Close search if open
-            self.search_active = false;
-            return Command::none();
+            return self.search_set(None);
         }
 
         if self.tab.context_menu.is_some() {
@@ -1251,7 +1260,7 @@ impl Application for App {
                 }
             }
             Message::Preview => match self.context_page {
-                ContextPage::Preview(_, _) => {
+                ContextPage::Preview(..) => {
                     self.core.window.show_context = !self.core.window.show_context;
                 }
                 _ => {
@@ -1283,33 +1292,17 @@ impl Application for App {
                 }
             }
             Message::SearchActivate => {
-                self.search_active = true;
-                return widget::text_input::focus(self.search_id.clone());
+                return if self.search_get().is_none() {
+                    self.search_set(Some(String::new()))
+                } else {
+                    widget::text_input::focus(self.search_id.clone())
+                };
             }
             Message::SearchClear => {
-                self.search_active = false;
-                self.search_input.clear();
+                return self.search_set(None);
             }
             Message::SearchInput(input) => {
-                if input != self.search_input {
-                    self.search_input = input;
-                    /*TODO: live search? (probably needs subscription for streaming results)
-                    // This performs live search
-                    if !self.search_input.is_empty() {
-                        return self.search();
-                    }
-                    */
-                }
-            }
-            Message::SearchSubmit => {
-                if !self.search_input.is_empty() {
-                    return self.search();
-                } else {
-                    // rescan the tab to get the contents back
-                    // and exit search
-                    self.search_active = false;
-                    return self.search();
-                }
+                return self.search_set(Some(input));
             }
             Message::TabMessage(tab_message) => {
                 let click_i_opt = match tab_message {
@@ -1438,7 +1431,11 @@ impl Application for App {
                 self.tab.set_items(items);
 
                 // Reset focus on location change
-                return widget::text_input::focus(self.filename_id.clone());
+                if self.search_get().is_some() {
+                    return widget::text_input::focus(self.search_id.clone());
+                } else {
+                    return widget::text_input::focus(self.filename_id.clone());
+                }
             }
         }
 
@@ -1456,7 +1453,7 @@ impl Application for App {
                 .map(move |message| Message::TabMessage(message)),
         );
 
-        tab_column = tab_column.push(self.button_row());
+        tab_column = tab_column.push(self.button_view());
 
         let content: Element<_> = tab_column.into();
 
@@ -1566,7 +1563,7 @@ impl Application for App {
             self.tab.subscription().map(Message::TabMessage),
         ];
 
-        for (key, mounter) in self.mounters.iter() {
+        for (key, mounter) in MOUNTERS.iter() {
             let key = *key;
             subscriptions.push(mounter.subscription().map(move |mounter_message| {
                 match mounter_message {

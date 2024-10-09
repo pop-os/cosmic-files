@@ -58,12 +58,13 @@ pub fn context_menu<'a>(
         .on_press(tab::Message::ContextAction(action))
     };
 
+    let (sort_name, sort_direction) = tab.sort_options();
     let sort_item = |label, variant| {
         menu_item(
             format!(
                 "{} {}",
                 label,
-                match (tab.sort_name == variant, tab.sort_direction) {
+                match (sort_name == variant, sort_direction) {
                     (true, true) => "\u{2B07}",
                     (true, false) => "\u{2B06}",
                     _ => "",
@@ -95,10 +96,7 @@ pub fn context_menu<'a>(
     match (&tab.mode, &tab.location) {
         (
             tab::Mode::App | tab::Mode::Desktop,
-            Location::Desktop(_, _)
-            | Location::Path(_)
-            | Location::Search(_, _)
-            | Location::Recents,
+            Location::Desktop(..) | Location::Path(..) | Location::Search(..) | Location::Recents,
         ) => {
             if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
@@ -111,7 +109,7 @@ pub fn context_menu<'a>(
                             .push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
                     }
                 }
-                if matches!(tab.location, Location::Search(_, _)) {
+                if matches!(tab.location, Location::Search(..)) {
                     children.push(
                         menu_item(fl!("open-item-location"), Action::OpenItemLocation).into(),
                     );
@@ -200,16 +198,13 @@ pub fn context_menu<'a>(
         }
         (
             tab::Mode::Dialog(dialog_kind),
-            Location::Desktop(_, _)
-            | Location::Path(_)
-            | Location::Search(_, _)
-            | Location::Recents,
+            Location::Desktop(..) | Location::Path(..) | Location::Search(..) | Location::Recents,
         ) => {
             if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
                     children.push(menu_item(fl!("open"), Action::Open).into());
                 }
-                if matches!(tab.location, Location::Search(_, _)) {
+                if matches!(tab.location, Location::Search(..)) {
                     children.push(
                         menu_item(fl!("open-item-location"), Action::OpenItemLocation).into(),
                     );
@@ -231,7 +226,7 @@ pub fn context_menu<'a>(
                 children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
             }
         }
-        (_, Location::Network(_, _)) => {
+        (_, Location::Network(..)) => {
             if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
                     children.push(menu_item(fl!("open"), Action::Open).into());
@@ -295,10 +290,11 @@ pub fn dialog_menu<'a>(
     tab: &Tab,
     key_binds: &HashMap<KeyBind, Action>,
 ) -> Element<'static, Message> {
+    let (sort_name, sort_direction) = tab.sort_options();
     let sort_item = |label, sort, dir| {
         menu::Item::CheckBox(
             label,
-            tab.sort_name == sort && tab.sort_direction == dir,
+            sort_name == sort && sort_direction == dir,
             Action::SetSort(sort, dir),
         )
     };
@@ -328,7 +324,7 @@ pub fn dialog_menu<'a>(
             ),
         ),
         menu::Tree::with_children(
-            widget::button::icon(widget::icon::from_name(if tab.sort_direction {
+            widget::button::icon(widget::icon::from_name(if sort_direction {
                 "view-sort-ascending-symbolic"
             } else {
                 "view-sort-descending-symbolic"
@@ -383,11 +379,12 @@ pub fn menu_bar<'a>(
     config: &Config,
     key_binds: &HashMap<KeyBind, Action>,
 ) -> Element<'a, Message> {
+    let sort_options = tab_opt.map(|tab| tab.sort_options());
     let sort_item = |label, sort, dir| {
         menu::Item::CheckBox(
             label,
-            tab_opt.map_or(false, |tab| {
-                tab.sort_name == sort && tab.sort_direction == dir
+            sort_options.map_or(false, |(sort_name, sort_direction)| {
+                sort_name == sort && sort_direction == dir
             }),
             Action::SetSort(sort, dir),
         )
