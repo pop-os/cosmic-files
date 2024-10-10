@@ -450,7 +450,7 @@ impl App {
         col.into()
     }
 
-    fn preview(&self, kind: &PreviewKind) -> Element<AppMessage> {
+    fn preview<'a>(&'a self, kind: &'a PreviewKind) -> Element<'a, AppMessage> {
         let mut children = Vec::with_capacity(1);
         match kind {
             PreviewKind::Custom(PreviewItem(item)) => {

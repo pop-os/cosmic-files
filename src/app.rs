@@ -1109,12 +1109,12 @@ impl App {
         widget::settings::view_column(children).into()
     }
 
-    fn preview(
-        &self,
+    fn preview<'a>(
+        &'a self,
         entity_opt: &Option<Entity>,
-        kind: &PreviewKind,
+        kind: &'a PreviewKind,
         context_drawer: bool,
-    ) -> Element<Message> {
+    ) -> Element<'a, Message> {
         let mut children = Vec::with_capacity(1);
         let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
         match kind {

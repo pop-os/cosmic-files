@@ -77,6 +77,8 @@ pub const HOVER_DURATION: Duration = Duration::from_millis(1600);
 //TODO: best limit for search items
 const MAX_SEARCH_LATENCY: Duration = Duration::from_millis(20);
 const MAX_SEARCH_RESULTS: usize = 200;
+//TODO: configurable thumbnail size?
+const THUMBNAIL_SIZE: u32 = (ICON_SIZE_GRID as u32) * (ICON_SCALE_MAX as u32);
 
 //TODO: adjust for locales?
 const DATE_TIME_FORMAT: &'static str = "%b %-d, %-Y, %-I:%M %p";
@@ -1049,18 +1051,49 @@ impl ItemMetadata {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum ItemThumbnail {
     NotImage,
     Image(widget::image::Handle, Option<(u32, u32)>),
     Svg(widget::svg::Handle),
+    Text(widget::text_editor::Content),
+}
+
+impl Clone for ItemThumbnail {
+    fn clone(&self) -> Self {
+        match self {
+            Self::NotImage => Self::NotImage,
+            Self::Image(handle, size_opt) => Self::Image(handle.clone(), *size_opt),
+            Self::Svg(handle) => Self::Svg(handle.clone()),
+            // Content cannot be cloned
+            Self::Text(content) => Self::NotImage,
+        }
+    }
 }
 
 impl ItemThumbnail {
-    pub fn new(path: &Path, mime: mime::Mime, thumbnail_size: u32) -> Self {
-        if mime.type_() == mime::IMAGE && mime.subtype() == mime::SVG {
+    pub fn new(path: &Path, metadata: fs::Metadata, mime: mime::Mime, thumbnail_size: u32) -> Self {
+        let size = metadata.len();
+        let check_size = |thumbnailer: &str, max_size| {
+            if size <= max_size {
+                true
+            } else {
+                log::warn!(
+                    "skipping internal {} thumbnailer for {:?}: file size {} is larger than {}",
+                    thumbnailer,
+                    path,
+                    format_size(size),
+                    format_size(max_size)
+                );
+                false
+            }
+        };
+        //TODO: adjust limits for internal thumbnailers as desired
+        if mime.type_() == mime::IMAGE
+            && mime.subtype() == mime::SVG
+            && check_size("svg", 8 * 1000 * 1000)
+        {
             // Try built-in svg thumbnailer
-            //TODO: have a reasonable limit on SVG size?
             match fs::read(&path) {
                 Ok(data) => {
                     //TODO: validate SVG data
@@ -1070,7 +1103,7 @@ impl ItemThumbnail {
                     log::warn!("failed to read {:?}: {}", path, err);
                 }
             }
-        } else if mime.type_() == mime::IMAGE {
+        } else if mime.type_() == mime::IMAGE && check_size("image", 64 * 1000 * 1000) {
             // Try built-in image thumbnailer
             match image::io::Reader::open(&path).and_then(|img| img.with_guessed_format()) {
                 Ok(reader) => match reader.decode() {
@@ -1090,6 +1123,15 @@ impl ItemThumbnail {
                         log::warn!("failed to decode {:?}: {}", path, err);
                     }
                 },
+                Err(err) => {
+                    log::warn!("failed to read {:?}: {}", path, err);
+                }
+            }
+        } else if mime.type_() == mime::TEXT && check_size("text", 8 * 1000 * 1000) {
+            match fs::read_to_string(&path) {
+                Ok(data) => {
+                    return ItemThumbnail::Text(widget::text_editor::Content::with_text(&data));
+                }
                 Err(err) => {
                     log::warn!("failed to read {:?}: {}", path, err);
                 }
@@ -1188,11 +1230,11 @@ impl Item {
         self.location_opt.as_ref()?.path_opt()
     }
 
-    pub fn is_image(&self) -> bool {
-        self.mime.type_() == mime::IMAGE
+    pub fn can_gallery(&self) -> bool {
+        self.mime.type_() == mime::IMAGE || self.mime.type_() == mime::TEXT
     }
 
-    fn preview(&self, sizes: IconSizes) -> Element<'static, app::Message> {
+    fn preview<'a>(&'a self, sizes: IconSizes) -> Element<'a, app::Message> {
         // This loads the image only if thumbnailing worked
         let icon = widget::icon::icon(self.icon_handle_grid.clone())
             .content_fit(ContentFit::Contain)
@@ -1206,17 +1248,25 @@ impl Item {
             ItemThumbnail::NotImage => icon,
             ItemThumbnail::Image(handle, _) => {
                 if let Some(path) = self.path_opt() {
-                    if self.is_image() {
+                    if self.mime.type_() == mime::IMAGE {
                         return widget::image(widget::image::Handle::from_path(path)).into();
                     }
                 }
                 widget::image(handle.clone()).into()
             }
             ItemThumbnail::Svg(handle) => widget::svg(handle.clone()).into(),
+            ItemThumbnail::Text(content) => widget::container(widget::text_editor(content))
+                .width(Length::Fixed(THUMBNAIL_SIZE as f32))
+                .height(Length::Fixed(THUMBNAIL_SIZE as f32))
+                .into(),
         }
     }
 
-    pub fn preview_view(&self, sizes: IconSizes, nav_row: bool) -> Element<'static, app::Message> {
+    pub fn preview_view<'a>(
+        &'a self,
+        sizes: IconSizes,
+        nav_row: bool,
+    ) -> Element<'a, app::Message> {
         let cosmic_theme::Spacing {
             space_xxxs,
             space_xxs,
@@ -1237,7 +1287,7 @@ impl Item {
                     .on_press(app::Message::TabMessage(None, Message::ItemRight)),
             );
 
-            if self.is_image() {
+            if self.can_gallery() {
                 if let Some(_path) = self.path_opt() {
                     row = row.push(
                         widget::button::icon(widget::icon::from_name("view-fullscreen-symbolic"))
@@ -1349,11 +1399,11 @@ impl Item {
         column.into()
     }
 
-    pub fn replace_view(
-        &self,
+    pub fn replace_view<'a>(
+        &'a self,
         heading: String,
         sizes: IconSizes,
-    ) -> Element<'static, app::Message> {
+    ) -> Element<'a, app::Message> {
         let cosmic_theme::Spacing { space_xxxs, .. } = theme::active().cosmic().spacing;
 
         let mut row = widget::row().spacing(space_xxxs);
@@ -2188,7 +2238,7 @@ impl Tab {
                             continue;
                         }
                         if found {
-                            if item.is_image() {
+                            if item.can_gallery() {
                                 pos_opt = item.pos_opt.get();
                                 if pos_opt.is_some() {
                                     break;
@@ -2214,7 +2264,7 @@ impl Tab {
             Message::GalleryToggle => {
                 if let Some(indices) = self.column_sort() {
                     for (_, item) in indices.iter() {
-                        if item.selected && item.is_image() {
+                        if item.selected && item.can_gallery() {
                             self.gallery = !self.gallery;
                             break;
                         }
@@ -2572,6 +2622,8 @@ impl Tab {
                                     symbolic: false,
                                     data: widget::icon::Data::Svg(handle.clone()),
                                 }),
+                                //TODO: text thumbnails?
+                                ItemThumbnail::Text(_text) => None,
                             };
                             if let Some(handle) = handle_opt {
                                 item.icon_handle_grid = handle.clone();
@@ -2886,7 +2938,7 @@ impl Tab {
 
         //TODO: display error messages when image not found?
         let mut name_opt = None;
-        let mut image_opt: Option<Element<Message>> = None;
+        let mut element_opt: Option<Element<Message>> = None;
         if let Some(index) = self.select_focus {
             if let Some(items) = &self.items_opt {
                 if let Some(item) = items.get(index) {
@@ -2899,7 +2951,7 @@ impl Tab {
                         ItemThumbnail::NotImage => {}
                         ItemThumbnail::Image(handle, _) => {
                             if let Some(path) = item.path_opt() {
-                                image_opt = Some(
+                                element_opt = Some(
                                     //TODO: use widget::image::viewer, when its zoom can be reset
                                     widget::image(widget::image::Handle::from_path(path))
                                         .width(Length::Fill)
@@ -2907,7 +2959,7 @@ impl Tab {
                                         .into(),
                                 );
                             } else {
-                                image_opt = Some(
+                                element_opt = Some(
                                     //TODO: use widget::image::viewer, when its zoom can be reset
                                     widget::image(handle.clone())
                                         .width(Length::Fill)
@@ -2917,12 +2969,15 @@ impl Tab {
                             }
                         }
                         ItemThumbnail::Svg(handle) => {
-                            image_opt = Some(
+                            element_opt = Some(
                                 widget::svg(handle.clone())
                                     .width(Length::Fill)
                                     .height(Length::Fill)
                                     .into(),
                             );
+                        }
+                        ItemThumbnail::Text(text) => {
+                            element_opt = Some(widget::text_editor(text).into())
                         }
                     }
                 }
@@ -2960,8 +3015,8 @@ impl Tab {
                     .on_press(Message::GalleryPrevious),
             );
             row = row.push(widget::horizontal_space(Length::Fixed(space_xxs.into())));
-            if let Some(image) = image_opt {
-                row = row.push(image);
+            if let Some(element) = element_opt {
+                row = row.push(element);
             } else {
                 //TODO: what to do when no image?
                 row = row.push(widget::Space::new(Length::Fill, Length::Fill));
@@ -4167,6 +4222,9 @@ impl Tab {
             let Some(path) = item.path_opt().map(|path| path.to_path_buf()) else {
                 continue;
             };
+            let ItemMetadata::Path { metadata, .. } = item.metadata.clone() else {
+                continue;
+            };
             let mime = item.mime.clone();
             subscriptions.push(subscription::channel(
                 path.clone(),
@@ -4176,9 +4234,8 @@ impl Tab {
                         let path = path.clone();
                         tokio::task::spawn_blocking(move || {
                             let start = Instant::now();
-                            //TODO: configurable thumbnail size?
-                            let thumbnail_size = (ICON_SIZE_GRID * ICON_SCALE_MAX) as u32;
-                            let thumbnail = ItemThumbnail::new(&path, mime, thumbnail_size);
+                            let thumbnail =
+                                ItemThumbnail::new(&path, metadata, mime, THUMBNAIL_SIZE);
                             log::debug!("thumbnailed {:?} in {:?}", path, start.elapsed());
                             Message::Thumbnail(path.clone(), thumbnail)
                         })
