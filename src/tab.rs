@@ -51,7 +51,7 @@ use std::{
     io::{BufRead, BufReader},
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
-    sync::{atomic, Arc, Mutex},
+    sync::{atomic, Arc, Mutex, RwLock},
     time::{Duration, Instant, SystemTime},
 };
 use tokio::sync::mpsc;
@@ -285,7 +285,7 @@ fn format_permissions(metadata: &Metadata, owner: PermissionOwner) -> String {
     perms.join(" ")
 }
 
-struct FormatTime(std::time::SystemTime);
+struct FormatTime(SystemTime);
 
 impl FormatTime {
     fn from_secs(secs: i64) -> Option<Self> {
@@ -321,7 +321,7 @@ impl Display for FormatTime {
     }
 }
 
-fn format_time(time: std::time::SystemTime) -> FormatTime {
+fn format_time(time: SystemTime) -> FormatTime {
     FormatTime(time)
 }
 
@@ -530,7 +530,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
     items
 }
 
-pub fn scan_search<F: Fn(PathBuf, String, Metadata) -> bool + Sync>(
+pub fn scan_search<F: Fn(&Path, &str, Metadata) -> bool + Sync>(
     tab_path: &PathBuf,
     term: &str,
     callback: F,
@@ -571,7 +571,7 @@ pub fn scan_search<F: Fn(PathBuf, String, Metadata) -> bool + Sync>(
                 if regex.is_match(file_name) {
                     let path = entry.path();
 
-                    let metadata = match fs::metadata(&path) {
+                    let metadata = match entry.metadata() {
                         Ok(ok) => ok,
                         Err(err) => {
                             log::warn!("failed to read metadata for entry at {:?}: {}", path, err);
@@ -579,7 +579,8 @@ pub fn scan_search<F: Fn(PathBuf, String, Metadata) -> bool + Sync>(
                         }
                     };
 
-                    if !callback(path.to_path_buf(), file_name.to_string(), metadata) {
+                    //TODO: use entry.into_path?
+                    if !callback(path, file_name, metadata) {
                         return ignore::WalkState::Quit;
                     }
                 }
@@ -1036,6 +1037,13 @@ impl ItemMetadata {
             Self::SimpleFile { .. } => false,
         }
     }
+
+    pub fn modified(&self) -> Option<SystemTime> {
+        match self {
+            Self::Path { metadata, .. } => metadata.modified().ok(),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1430,6 +1438,7 @@ impl Mode {
 struct SearchContext {
     results_rx: mpsc::Receiver<(PathBuf, String, Metadata)>,
     ready: Arc<atomic::AtomicBool>,
+    last_modified_opt: Arc<RwLock<Option<SystemTime>>>,
 }
 
 pub struct SearchContextWrapper(Option<SearchContext>);
@@ -1945,6 +1954,7 @@ impl Tab {
                             let min = range.0.min(range.1);
                             let max = range.0.max(range.1);
                             let (sort_name, sort_direction, _) = self.sort_options();
+                            //TODO: this assumes the default sort order!
                             if sort_name == HeadingOptions::Name && sort_direction {
                                 // A default/unsorted tab's view is consistent with how the
                                 // Items are laid out internally (items_opt), so Items can be
@@ -2490,13 +2500,9 @@ impl Tab {
                                 context.results_rx.blocking_recv()
                             {
                                 //TODO: combine this with column_sort logic, they must match!
-                                let get_modified = |x: &Item| match &x.metadata {
-                                    ItemMetadata::Path { metadata, .. } => metadata.modified().ok(),
-                                    _ => None,
-                                };
                                 let item_modified = metadata.modified().ok();
                                 let index = match items.binary_search_by(|other| {
-                                    item_modified.cmp(&get_modified(&other))
+                                    item_modified.cmp(&other.metadata.modified())
                                 }) {
                                     Ok(index) => index,
                                     Err(index) => index,
@@ -2516,6 +2522,11 @@ impl Tab {
                         }
                         if items.len() >= MAX_SEARCH_RESULTS {
                             items.truncate(MAX_SEARCH_RESULTS);
+                            if let Some(last_modified) =
+                                items.last().and_then(|item| item.metadata.modified())
+                            {
+                                *context.last_modified_opt.write().unwrap() = Some(last_modified);
+                            }
                         }
                     } else {
                         log::warn!("search ready but items array is empty");
@@ -2763,13 +2774,8 @@ impl Tab {
             }),
             HeadingOptions::Modified => {
                 items.sort_by(|a, b| {
-                    let get_modified = |x: &Item| match &x.metadata {
-                        ItemMetadata::Path { metadata, .. } => metadata.modified().ok(),
-                        _ => None,
-                    };
-
-                    let a_modified = get_modified(a.1);
-                    let b_modified = get_modified(b.1);
+                    let a_modified = a.1.metadata.modified();
+                    let b_modified = b.1.metadata.modified();
                     if folders_first {
                         match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
                             (true, false) => Ordering::Less,
@@ -4160,7 +4166,7 @@ impl Tab {
                     let message = {
                         let path = path.clone();
                         tokio::task::spawn_blocking(move || {
-                            let start = std::time::Instant::now();
+                            let start = Instant::now();
                             //TODO: configurable thumbnail size?
                             let thumbnail_size = (ICON_SIZE_GRID * ICON_SCALE_MAX) as u32;
                             let thumbnail = ItemThumbnail::new(&path, mime, thumbnail_size);
@@ -4201,12 +4207,14 @@ impl Tab {
                     let (results_tx, results_rx) = mpsc::channel(65536);
 
                     let ready = Arc::new(atomic::AtomicBool::new(false));
+                    let last_modified_opt = Arc::new(RwLock::new(None));
                     output
                         .send(Message::SearchContext(
                             location.clone(),
                             SearchContextWrapper(Some(SearchContext {
                                 results_rx,
                                 ready: ready.clone(),
+                                last_modified_opt: last_modified_opt.clone(),
                             })),
                         ))
                         .await
@@ -4217,7 +4225,22 @@ impl Tab {
                         let output = output.clone();
                         tokio::task::spawn_blocking(move || {
                             scan_search(&path, &term, move |path, name, metadata| -> bool {
-                                match results_tx.blocking_send((path, name, metadata)) {
+                                // Don't send if the result is too old
+                                if let Some(last_modified) = *last_modified_opt.read().unwrap() {
+                                    if let Ok(modified) = metadata.modified() {
+                                        if metadata.modified().ok() < Some(last_modified) {
+                                            return true;
+                                        }
+                                    } else {
+                                        return true;
+                                    }
+                                }
+
+                                match results_tx.blocking_send((
+                                    path.to_path_buf(),
+                                    name.to_string(),
+                                    metadata,
+                                )) {
                                     Ok(()) => {
                                         if !ready.swap(true, atomic::Ordering::SeqCst) {
                                             // Wake up update method
