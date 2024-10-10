@@ -42,7 +42,6 @@ use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::{
-    borrow::Cow,
     cell::{Cell, RefCell},
     cmp::Ordering,
     collections::HashMap,
@@ -1053,8 +1052,8 @@ impl ItemMetadata {
 #[derive(Clone, Debug)]
 pub enum ItemThumbnail {
     NotImage,
-    Rgba(image::RgbaImage, Option<(u32, u32)>),
-    Svg(Cow<'static, [u8]>),
+    Image(widget::image::Handle, Option<(u32, u32)>),
+    Svg(widget::svg::Handle),
 }
 
 impl ItemThumbnail {
@@ -1065,7 +1064,7 @@ impl ItemThumbnail {
             match fs::read(&path) {
                 Ok(data) => {
                     //TODO: validate SVG data
-                    return ItemThumbnail::Svg(data.into());
+                    return ItemThumbnail::Svg(widget::svg::Handle::from_memory(data));
                 }
                 Err(err) => {
                     log::warn!("failed to read {:?}: {}", path, err);
@@ -1076,9 +1075,14 @@ impl ItemThumbnail {
             match image::io::Reader::open(&path).and_then(|img| img.with_guessed_format()) {
                 Ok(reader) => match reader.decode() {
                     Ok(image) => {
-                        let thumbnail = image.thumbnail(thumbnail_size, thumbnail_size);
-                        return ItemThumbnail::Rgba(
-                            thumbnail.to_rgba8(),
+                        let thumbnail =
+                            image.thumbnail(thumbnail_size, thumbnail_size).into_rgba8();
+                        return ItemThumbnail::Image(
+                            widget::image::Handle::from_pixels(
+                                thumbnail.width(),
+                                thumbnail.height(),
+                                thumbnail.into_raw(),
+                            ),
                             Some((image.width(), image.height())),
                         );
                     }
@@ -1121,9 +1125,16 @@ impl ItemThumbnail {
                         match image::io::Reader::open(file.path())
                             .and_then(|img| img.with_guessed_format())
                         {
-                            Ok(reader) => match reader.decode() {
+                            Ok(reader) => match reader.decode().map(|image| image.into_rgba8()) {
                                 Ok(image) => {
-                                    return ItemThumbnail::Rgba(image.to_rgba8(), None);
+                                    return ItemThumbnail::Image(
+                                        widget::image::Handle::from_pixels(
+                                            image.width(),
+                                            image.height(),
+                                            image.into_raw(),
+                                        ),
+                                        None,
+                                    );
                                 }
                                 Err(err) => {
                                     log::warn!("failed to decode {:?}: {}", path, err);
@@ -1193,22 +1204,15 @@ impl Item {
             .unwrap_or(&ItemThumbnail::NotImage)
         {
             ItemThumbnail::NotImage => icon,
-            ItemThumbnail::Rgba(rgba, _) => {
+            ItemThumbnail::Image(handle, _) => {
                 if let Some(path) = self.path_opt() {
                     if self.is_image() {
                         return widget::image(widget::image::Handle::from_path(path)).into();
                     }
                 }
-                widget::image(widget::image::Handle::from_pixels(
-                    rgba.width(),
-                    rgba.height(),
-                    rgba.as_raw().clone(),
-                ))
-                .into()
+                widget::image(handle.clone()).into()
             }
-            ItemThumbnail::Svg(data) => {
-                widget::svg(widget::svg::Handle::from_memory(data.clone())).into()
-            }
+            ItemThumbnail::Svg(handle) => widget::svg(handle.clone()).into(),
         }
     }
 
@@ -1321,7 +1325,7 @@ impl Item {
             .as_ref()
             .unwrap_or(&ItemThumbnail::NotImage)
         {
-            ItemThumbnail::Rgba(_, Some((width, height))) => {
+            ItemThumbnail::Image(_, Some((width, height))) => {
                 details = details.push(widget::text(format!("{}x{}", width, height)));
             }
             _ => {}
@@ -2558,25 +2562,21 @@ impl Tab {
                     let location = Location::Path(path);
                     for item in items.iter_mut() {
                         if item.location_opt.as_ref() == Some(&location) {
-                            //TODO: pass handles already generated to avoid blocking main thread?
-                            match &thumbnail {
-                                ItemThumbnail::NotImage => {}
-                                ItemThumbnail::Rgba(rgba, _) => {
-                                    let handle = widget::icon::from_raster_pixels(
-                                        rgba.width(),
-                                        rgba.height(),
-                                        rgba.as_raw().clone(),
-                                    );
-                                    item.icon_handle_grid = handle.clone();
-                                    item.icon_handle_list = handle.clone();
-                                    item.icon_handle_list_condensed = handle;
-                                }
-                                ItemThumbnail::Svg(data) => {
-                                    let handle = widget::icon::from_svg_bytes(data.clone());
-                                    item.icon_handle_grid = handle.clone();
-                                    item.icon_handle_list = handle.clone();
-                                    item.icon_handle_list_condensed = handle.clone();
-                                }
+                            let handle_opt = match &thumbnail {
+                                ItemThumbnail::NotImage => None,
+                                ItemThumbnail::Image(handle, _) => Some(widget::icon::Handle {
+                                    symbolic: false,
+                                    data: widget::icon::Data::Image(handle.clone()),
+                                }),
+                                ItemThumbnail::Svg(handle) => Some(widget::icon::Handle {
+                                    symbolic: false,
+                                    data: widget::icon::Data::Svg(handle.clone()),
+                                }),
+                            };
+                            if let Some(handle) = handle_opt {
+                                item.icon_handle_grid = handle.clone();
+                                item.icon_handle_list = handle.clone();
+                                item.icon_handle_list_condensed = handle;
                             }
                             item.thumbnail_opt = Some(thumbnail);
                             break;
@@ -2897,7 +2897,7 @@ impl Tab {
                         .unwrap_or(&ItemThumbnail::NotImage)
                     {
                         ItemThumbnail::NotImage => {}
-                        ItemThumbnail::Rgba(rgba, _) => {
+                        ItemThumbnail::Image(handle, _) => {
                             if let Some(path) = item.path_opt() {
                                 image_opt = Some(
                                     //TODO: use widget::image::viewer, when its zoom can be reset
@@ -2909,20 +2909,16 @@ impl Tab {
                             } else {
                                 image_opt = Some(
                                     //TODO: use widget::image::viewer, when its zoom can be reset
-                                    widget::image(widget::image::Handle::from_pixels(
-                                        rgba.width(),
-                                        rgba.height(),
-                                        rgba.as_raw().clone(),
-                                    ))
-                                    .width(Length::Fill)
-                                    .height(Length::Fill)
-                                    .into(),
+                                    widget::image(handle.clone())
+                                        .width(Length::Fill)
+                                        .height(Length::Fill)
+                                        .into(),
                                 );
                             }
                         }
-                        ItemThumbnail::Svg(data) => {
+                        ItemThumbnail::Svg(handle) => {
                             image_opt = Some(
-                                widget::svg(widget::svg::Handle::from_memory(data.clone()))
+                                widget::svg(handle.clone())
                                     .width(Length::Fill)
                                     .height(Length::Fill)
                                     .into(),
