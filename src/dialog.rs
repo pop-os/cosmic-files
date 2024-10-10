@@ -896,21 +896,32 @@ impl Application for App {
         let mut elements = Vec::with_capacity(3);
 
         if let Some(term) = self.search_get() {
-            elements.push(
-                widget::text_input::search_input("", term)
-                    .width(Length::Fixed(240.0))
-                    .id(self.search_id.clone())
-                    .on_clear(Message::SearchClear)
-                    .on_input(Message::SearchInput)
-                    .into(),
-            )
+            if self.core.is_condensed() {
+                elements.push(
+                    //TODO: selected state is not appearing different
+                    widget::button::icon(widget::icon::from_name("system-search-symbolic"))
+                        .on_press(Message::SearchClear)
+                        .padding(8)
+                        .selected(true)
+                        .into(),
+                );
+            } else {
+                elements.push(
+                    widget::text_input::search_input("", term)
+                        .width(Length::Fixed(240.0))
+                        .id(self.search_id.clone())
+                        .on_clear(Message::SearchClear)
+                        .on_input(Message::SearchInput)
+                        .into(),
+                );
+            }
         } else {
             elements.push(
                 widget::button::icon(widget::icon::from_name("system-search-symbolic"))
                     .on_press(Message::SearchActivate)
                     .padding(8)
                     .into(),
-            )
+            );
         }
 
         if self.flags.kind.save() {
@@ -1458,9 +1469,32 @@ impl Application for App {
 
     /// Creates a view after each update.
     fn view(&self) -> Element<Message> {
-        self.tab
-            .view(&self.key_binds)
-            .map(move |message| Message::TabMessage(message))
+        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+
+        let mut col = widget::column::with_capacity(2);
+
+        if self.core.is_condensed() {
+            if let Some(term) = self.search_get() {
+                col = col.push(
+                    widget::container(
+                        widget::text_input::search_input("", term)
+                            .width(Length::Fill)
+                            .id(self.search_id.clone())
+                            .on_clear(Message::SearchClear)
+                            .on_input(Message::SearchInput),
+                    )
+                    .padding(space_xxs),
+                )
+            }
+        }
+
+        col = col.push(
+            self.tab
+                .view(&self.key_binds)
+                .map(move |message| Message::TabMessage(message)),
+        );
+
+        col.into()
     }
 
     fn subscription(&self) -> Subscription<Message> {

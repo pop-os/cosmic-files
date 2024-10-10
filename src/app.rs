@@ -3601,21 +3601,32 @@ impl Application for App {
         }
 
         if let Some(term) = self.search_get() {
-            elements.push(
-                widget::text_input::search_input("", term)
-                    .width(Length::Fixed(240.0))
-                    .id(self.search_id.clone())
-                    .on_clear(Message::SearchClear)
-                    .on_input(Message::SearchInput)
-                    .into(),
-            )
+            if self.core.is_condensed() {
+                elements.push(
+                    //TODO: selected state is not appearing different
+                    widget::button::icon(widget::icon::from_name("system-search-symbolic"))
+                        .on_press(Message::SearchClear)
+                        .padding(8)
+                        .selected(true)
+                        .into(),
+                );
+            } else {
+                elements.push(
+                    widget::text_input::search_input("", term)
+                        .width(Length::Fixed(240.0))
+                        .id(self.search_id.clone())
+                        .on_clear(Message::SearchClear)
+                        .on_input(Message::SearchInput)
+                        .into(),
+                );
+            }
         } else {
             elements.push(
                 widget::button::icon(widget::icon::from_name("system-search-symbolic"))
-                    .padding(8)
                     .on_press(Message::SearchActivate)
+                    .padding(8)
                     .into(),
-            )
+            );
         }
 
         elements
@@ -3627,7 +3638,22 @@ impl Application for App {
             space_xxs, space_s, ..
         } = theme::active().cosmic().spacing;
 
-        let mut tab_column = widget::column::with_capacity(3);
+        let mut tab_column = widget::column::with_capacity(4);
+
+        if self.core.is_condensed() {
+            if let Some(term) = self.search_get() {
+                tab_column = tab_column.push(
+                    widget::container(
+                        widget::text_input::search_input("", term)
+                            .width(Length::Fill)
+                            .id(self.search_id.clone())
+                            .on_clear(Message::SearchClear)
+                            .on_input(Message::SearchInput),
+                    )
+                    .padding(space_xxs),
+                )
+            }
+        }
 
         if self.tab_model.iter().count() > 1 {
             tab_column = tab_column.push(
