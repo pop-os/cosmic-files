@@ -51,9 +51,10 @@ use std::{
     io::{BufRead, BufReader},
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{atomic, Arc, Mutex},
     time::{Duration, Instant, SystemTime},
 };
+use tokio::sync::mpsc;
 
 use crate::{
     app::{self, Action, PreviewItem, PreviewKind},
@@ -75,6 +76,7 @@ use uzers::{get_group_by_gid, get_user_by_uid};
 pub const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 pub const HOVER_DURATION: Duration = Duration::from_millis(1600);
 //TODO: best limit for search items
+const MAX_SEARCH_LATENCY: Duration = Duration::from_millis(100);
 const MAX_SEARCH_RESULTS: usize = 1000;
 
 //TODO: adjust for locales?
@@ -528,10 +530,9 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
     items
 }
 
-pub fn scan_search<F: Fn(Item) -> bool + Sync>(
+pub fn scan_search<F: Fn(PathBuf, String, Metadata) -> bool + Sync>(
     tab_path: &PathBuf,
     term: &str,
-    sizes: IconSizes,
     callback: F,
 ) {
     if term.is_empty() {
@@ -578,12 +579,7 @@ pub fn scan_search<F: Fn(Item) -> bool + Sync>(
                         }
                     };
 
-                    if !callback(item_from_entry(
-                        path.to_path_buf(),
-                        file_name.to_string(),
-                        metadata,
-                        sizes,
-                    )) {
+                    if !callback(path.to_path_buf(), file_name.to_string(), metadata) {
                         return ignore::WalkState::Quit;
                     }
                 }
@@ -737,6 +733,7 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
                                 continue;
                             }
                         };
+
                         let item = item_from_entry(path_buf, name, metadata, sizes);
                         recents.push((
                             item,
@@ -976,7 +973,8 @@ pub enum Message {
     MiddleClick(usize),
     Scroll(Viewport),
     ScrollToFocus,
-    SearchItem(Location, Item),
+    SearchContext(Location, SearchContextWrapper),
+    SearchReady(bool),
     SelectAll,
     SetSort(HeadingOptions, bool),
     Thumbnail(PathBuf, ItemThumbnail),
@@ -1167,6 +1165,10 @@ impl Item {
         self.location_opt.as_ref()?.path_opt()
     }
 
+    pub fn is_image(&self) -> bool {
+        self.mime.type_() == mime::IMAGE
+    }
+
     fn preview(&self, sizes: IconSizes) -> Element<'static, app::Message> {
         // This loads the image only if thumbnailing worked
         let icon = widget::icon::icon(self.icon_handle_grid.clone())
@@ -1181,7 +1183,7 @@ impl Item {
             ItemThumbnail::NotImage => icon,
             ItemThumbnail::Rgba(rgba, _) => {
                 if let Some(path) = self.path_opt() {
-                    if self.mime.type_() == mime::IMAGE {
+                    if self.is_image() {
                         return widget::image(widget::image::Handle::from_path(path)).into();
                     }
                 }
@@ -1219,7 +1221,7 @@ impl Item {
                     .on_press(app::Message::TabMessage(None, Message::ItemRight)),
             );
 
-            if self.mime.type_() == mime::IMAGE {
+            if self.is_image() {
                 if let Some(_path) = self.path_opt() {
                     row = row.push(
                         widget::button::icon(widget::icon::from_name("view-fullscreen-symbolic"))
@@ -1425,9 +1427,27 @@ impl Mode {
     }
 }
 
+struct SearchContext {
+    results_rx: mpsc::Receiver<(PathBuf, String, Metadata)>,
+    ready: Arc<atomic::AtomicBool>,
+}
+
+pub struct SearchContextWrapper(Option<SearchContext>);
+
+impl Clone for SearchContextWrapper {
+    fn clone(&self) -> Self {
+        Self(None)
+    }
+}
+
+impl fmt::Debug for SearchContextWrapper {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SearchContextWrapper").finish()
+    }
+}
+
 // TODO when creating items, pass <Arc<SelectedItems>> to each item
 // as a drag data, so that when dnd is initiated, they are all included
-#[derive(Clone)]
 pub struct Tab {
     //TODO: make more items private
     pub location: Location,
@@ -1455,6 +1475,7 @@ pub struct Tab {
     clicked: Option<usize>,
     selected_clicked: bool,
     last_right_click: Option<usize>,
+    search_context: Option<SearchContext>,
 }
 
 fn folder_name<P: AsRef<Path>>(path: P) -> (String, bool) {
@@ -1526,6 +1547,7 @@ impl Tab {
             dnd_hovered: None,
             selected_clicked: false,
             last_right_click: None,
+            search_context: None,
         }
     }
 
@@ -1832,6 +1854,7 @@ impl Tab {
         //TODO: remember scroll by location?
         self.scroll_opt = None;
         self.select_focus = None;
+        self.search_context = None;
         if let Some(history_i) = history_i_opt {
             // Navigating in history
             self.history_i = history_i;
@@ -1921,7 +1944,7 @@ impl Tab {
                         if let Some(range) = self.select_range {
                             let min = range.0.min(range.1);
                             let max = range.0.max(range.1);
-                            let (sort_name, sort_direction) = self.sort_options();
+                            let (sort_name, sort_direction, _) = self.sort_options();
                             if sort_name == HeadingOptions::Name && sort_direction {
                                 // A default/unsorted tab's view is consistent with how the
                                 // Items are laid out internally (items_opt), so Items can be
@@ -2147,7 +2170,7 @@ impl Tab {
                             continue;
                         }
                         if found {
-                            if item.mime.type_() == mime::IMAGE {
+                            if item.is_image() {
                                 pos_opt = item.pos_opt.get();
                                 if pos_opt.is_some() {
                                     break;
@@ -2173,7 +2196,7 @@ impl Tab {
             Message::GalleryToggle => {
                 if let Some(indices) = self.column_sort() {
                     for (_, item) in indices.iter() {
-                        if item.selected && item.mime.type_() == mime::IMAGE {
+                        if item.selected && item.is_image() {
                             self.gallery = !self.gallery;
                             break;
                         }
@@ -2435,6 +2458,7 @@ impl Tab {
                     }
                 }
             }
+
             Message::Scroll(viewport) => {
                 self.scroll_opt = Some(viewport.absolute_offset());
             }
@@ -2446,25 +2470,61 @@ impl Tab {
                     )));
                 }
             }
-            Message::SearchItem(location, item) => {
+            Message::SearchContext(location, context) => {
                 if location == self.location {
-                    if let Some(items) = &mut self.items_opt {
-                        items.push(item);
-                    } else {
-                        log::warn!("tried to load items in {:?} without items array", location);
-                    }
+                    self.search_context = context.0;
                 } else {
                     log::warn!(
-                        "search item found in {:?} instead of {:?}",
+                        "search context provided for {:?} instead of {:?}",
                         location,
                         self.location
                     );
                 }
-
-                //TODO: optimize
-                self.column_sort();
-                if let Some(items) = &mut self.items_opt {
-                    items.truncate(MAX_SEARCH_RESULTS);
+            }
+            Message::SearchReady(finished) => {
+                if let Some(context) = &mut self.search_context {
+                    let mut count = 0;
+                    if let Some(items) = &mut self.items_opt {
+                        if finished || context.ready.swap(false, atomic::Ordering::SeqCst) {
+                            let duration = Instant::now();
+                            while let Some((path, name, metadata)) =
+                                context.results_rx.blocking_recv()
+                            {
+                                //TODO: combine this with column_sort logic, they must match!
+                                let get_modified = |x: &Item| match &x.metadata {
+                                    ItemMetadata::Path { metadata, .. } => metadata.modified().ok(),
+                                    _ => None,
+                                };
+                                let item_modified = metadata.modified().ok();
+                                let index = match items.binary_search_by(|other| {
+                                    item_modified.cmp(&get_modified(&other))
+                                }) {
+                                    Ok(index) => index,
+                                    Err(index) => index,
+                                };
+                                if index < MAX_SEARCH_RESULTS {
+                                    //TODO: use correct IconSizes
+                                    items.insert(
+                                        index,
+                                        item_from_entry(path, name, metadata, IconSizes::default()),
+                                    );
+                                }
+                                count += 1;
+                                // Ensure that updates make it to the GUI in a timely manner
+                                if !finished && duration.elapsed() >= MAX_SEARCH_LATENCY {
+                                    break;
+                                }
+                            }
+                        }
+                        if items.len() >= MAX_SEARCH_RESULTS {
+                            items.truncate(MAX_SEARCH_RESULTS);
+                        }
+                    } else {
+                        log::warn!("search ready but items array is empty");
+                    }
+                }
+                if finished {
+                    self.search_context = None;
                 }
             }
             Message::SelectAll => {
@@ -2635,10 +2695,14 @@ impl Tab {
         commands
     }
 
-    pub(crate) fn sort_options(&self) -> (HeadingOptions, bool) {
+    pub(crate) fn sort_options(&self) -> (HeadingOptions, bool, bool) {
         match self.location {
-            Location::Search(..) => (HeadingOptions::Modified, false),
-            _ => (self.sort_name, self.sort_direction),
+            Location::Search(..) => (HeadingOptions::Modified, false, false),
+            _ => (
+                self.sort_name,
+                self.sort_direction,
+                self.config.folders_first,
+            ),
         }
     }
 
@@ -2651,7 +2715,7 @@ impl Tab {
             }
         };
         let mut items: Vec<_> = self.items_opt.as_ref()?.iter().enumerate().collect();
-        let (sort_name, sort_direction) = self.sort_options();
+        let (sort_name, sort_direction, folders_first) = self.sort_options();
         match sort_name {
             HeadingOptions::Size => {
                 items.sort_by(|a, b| {
@@ -2683,7 +2747,7 @@ impl Tab {
                 })
             }
             HeadingOptions::Name => items.sort_by(|a, b| {
-                if self.config.folders_first {
+                if folders_first {
                     match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
                         (true, false) => Ordering::Less,
                         (false, true) => Ordering::Greater,
@@ -2708,7 +2772,7 @@ impl Tab {
 
                     let a_modified = get_modified(a.1);
                     let b_modified = get_modified(b.1);
-                    if self.config.folders_first {
+                    if folders_first {
                         match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
                             (true, false) => Ordering::Less,
                             (false, true) => Ordering::Greater,
@@ -2728,7 +2792,7 @@ impl Tab {
                 items.sort_by(|a, b| {
                     let a_time_deleted = time_deleted(a.1);
                     let b_time_deleted = time_deleted(b.1);
-                    if self.config.folders_first {
+                    if folders_first {
                         match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
                             (true, false) => Ordering::Less,
                             (false, true) => Ordering::Greater,
@@ -2990,7 +3054,7 @@ impl Tab {
         let size_width = 100.0;
         let condensed = size.width < (name_width + modified_width + size_width);
 
-        let (sort_name, sort_direction) = self.sort_options();
+        let (sort_name, sort_direction, _) = self.sort_options();
         let heading_item = |name, width, msg| {
             let mut row = widget::row::with_capacity(2)
                 .align_items(Alignment::Center)
@@ -4048,46 +4112,9 @@ impl Tab {
             return Subscription::none();
         };
 
-        // Load search items incrementally
-        if let Location::Search(path, term, start) = &self.location {
-            let location = self.location.clone();
-            let path = path.clone();
-            let term = term.clone();
-            let start = start.clone();
-            return subscription::channel(location.clone(), 100, move |output| async move {
-                let output = tokio::sync::Mutex::new(output);
-
-                tokio::task::spawn_blocking(move || {
-                    //TODO: use correct icon sizes, or fetch icons lazily?
-                    //TODO: getting mime types for search results is expensive, and not necessary if the results
-                    // are not used. Perhaps they can be gathered when the item is scrolled to, like thumbnails
-                    scan_search(&path, &term, IconSizes::default(), move |item| -> bool {
-                        futures::executor::block_on(async {
-                            output
-                                .lock()
-                                .await
-                                .send(Message::SearchItem(location.clone(), item))
-                                .await
-                        })
-                        .is_ok()
-                    });
-                    log::info!(
-                        "searched for {:?} in {:?} in {:?}",
-                        term,
-                        path,
-                        start.elapsed(),
-                    );
-                })
-                .await
-                .unwrap();
-
-                std::future::pending().await
-            });
-        }
-
         //TODO: how many thumbnail loads should be in flight at once?
         let jobs = 8;
-        let mut subscriptions = Vec::with_capacity(jobs);
+        let mut subscriptions = Vec::with_capacity(jobs + 1);
 
         //TODO: move to function
         let visible_rect = {
@@ -4107,7 +4134,7 @@ impl Tab {
 
         for item in items.iter() {
             if item.thumbnail_opt.is_some() {
-                // Skip items that already have a thumbnail
+                // Skip items that already have a mime type and thumbnail
                 continue;
             }
 
@@ -4124,42 +4151,112 @@ impl Tab {
                 }
             }
 
-            if let Some(path) = item.path_opt().map(|path| path.to_path_buf()) {
-                let mime = item.mime.clone();
-                subscriptions.push(subscription::channel(
-                    path.clone(),
-                    1,
-                    |mut output| async move {
-                        let (path, thumbnail) = tokio::task::spawn_blocking(move || {
+            let Some(path) = item.path_opt().map(|path| path.to_path_buf()) else {
+                continue;
+            };
+            let mime = item.mime.clone();
+            subscriptions.push(subscription::channel(
+                path.clone(),
+                1,
+                |mut output| async move {
+                    let message = {
+                        let path = path.clone();
+                        tokio::task::spawn_blocking(move || {
                             let start = std::time::Instant::now();
                             //TODO: configurable thumbnail size?
                             let thumbnail_size = (ICON_SIZE_GRID * ICON_SCALE_MAX) as u32;
                             let thumbnail = ItemThumbnail::new(&path, mime, thumbnail_size);
                             log::debug!("thumbnailed {:?} in {:?}", path, start.elapsed());
-                            (path, thumbnail)
+                            Message::Thumbnail(path.clone(), thumbnail)
                         })
                         .await
-                        .unwrap();
+                        .unwrap()
+                    };
 
-                        match output
-                            .send(Message::Thumbnail(path.clone(), thumbnail))
-                            .await
-                        {
-                            Ok(()) => {}
-                            Err(err) => {
-                                log::warn!("failed to send thumbnail for {:?}: {}", path, err);
-                            }
+                    match output.send(message).await {
+                        Ok(()) => {}
+                        Err(err) => {
+                            log::warn!("failed to send thumbnail for {:?}: {}", path, err);
                         }
+                    }
 
-                        std::future::pending().await
-                    },
-                ));
-            }
+                    std::future::pending().await
+                },
+            ));
 
             if subscriptions.len() >= jobs {
                 break;
             }
         }
+
+        // Load search items incrementally
+        if let Location::Search(path, term, start) = &self.location {
+            let location = self.location.clone();
+            let path = path.clone();
+            let term = term.clone();
+            let start = start.clone();
+            subscriptions.push(subscription::channel(
+                location.clone(),
+                2,
+                move |mut output| async move {
+                    //TODO: optimal size?
+                    let (results_tx, results_rx) = mpsc::channel(65536);
+
+                    let ready = Arc::new(atomic::AtomicBool::new(false));
+                    output
+                        .send(Message::SearchContext(
+                            location.clone(),
+                            SearchContextWrapper(Some(SearchContext {
+                                results_rx,
+                                ready: ready.clone(),
+                            })),
+                        ))
+                        .await
+                        .unwrap();
+
+                    let output = Arc::new(tokio::sync::Mutex::new(output));
+                    {
+                        let output = output.clone();
+                        tokio::task::spawn_blocking(move || {
+                            scan_search(&path, &term, move |path, name, metadata| -> bool {
+                                match results_tx.blocking_send((path, name, metadata)) {
+                                    Ok(()) => {
+                                        if !ready.swap(true, atomic::Ordering::SeqCst) {
+                                            // Wake up update method
+                                            futures::executor::block_on(async {
+                                                output
+                                                    .lock()
+                                                    .await
+                                                    .send(Message::SearchReady(false))
+                                                    .await
+                                            })
+                                            .is_ok()
+                                        } else {
+                                            true
+                                        }
+                                    }
+                                    Err(_) => false,
+                                }
+                            });
+                            log::info!(
+                                "searched for {:?} in {:?} in {:?}",
+                                term,
+                                path,
+                                start.elapsed(),
+                            );
+                        })
+                        .await
+                        .unwrap();
+                    }
+
+                    // Send final ready
+                    let _ = output.lock().await.send(Message::SearchReady(true)).await;
+
+                    std::future::pending().await
+                },
+            ));
+        }
+
         Subscription::batch(subscriptions)
     }
 }

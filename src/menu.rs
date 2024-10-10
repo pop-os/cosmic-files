@@ -58,7 +58,7 @@ pub fn context_menu<'a>(
         .on_press(tab::Message::ContextAction(action))
     };
 
-    let (sort_name, sort_direction) = tab.sort_options();
+    let (sort_name, sort_direction, _) = tab.sort_options();
     let sort_item = |label, variant| {
         menu_item(
             format!(
@@ -290,7 +290,7 @@ pub fn dialog_menu<'a>(
     tab: &Tab,
     key_binds: &HashMap<KeyBind, Action>,
 ) -> Element<'static, Message> {
-    let (sort_name, sort_direction) = tab.sort_options();
+    let (sort_name, sort_direction, _) = tab.sort_options();
     let sort_item = |label, sort, dir| {
         menu::Item::CheckBox(
             label,
@@ -383,7 +383,7 @@ pub fn menu_bar<'a>(
     let sort_item = |label, sort, dir| {
         menu::Item::CheckBox(
             label,
-            sort_options.map_or(false, |(sort_name, sort_direction)| {
+            sort_options.map_or(false, |(sort_name, sort_direction, _)| {
                 sort_name == sort && sort_direction == dir
             }),
             Action::SetSort(sort, dir),
