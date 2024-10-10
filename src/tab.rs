@@ -306,7 +306,7 @@ impl Display for FormatTime {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let date_time = chrono::DateTime::<chrono::Local>::from(self.0);
         let now = chrono::Local::now();
-        if date_time.date() == now.date() {
+        if date_time.date_naive() == now.date_naive() {
             write!(
                 f,
                 "{}, {}",
