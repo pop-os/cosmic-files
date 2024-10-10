@@ -390,11 +390,13 @@ struct App {
 
 impl App {
     fn button_view(&self) -> Element<Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+        let cosmic_theme::Spacing {
+            space_xxs,
+            space_xs,
+            ..
+        } = theme::active().cosmic().spacing;
 
-        let mut col = widget::column::with_capacity(2)
-            .spacing(space_xxs)
-            .padding(space_xxs);
+        let mut col = widget::column::with_capacity(2).spacing(space_xxs);
         if let DialogKind::SaveFile { filename } = &self.flags.kind {
             col = col.push(
                 widget::text_input("", filename)
@@ -408,7 +410,6 @@ impl App {
             if !self.filters.is_empty() { 1 } else { 0 } + self.choices.len() * 2 + 3,
         )
         .align_items(Alignment::Center)
-        .padding(space_xxs)
         .spacing(space_xxs);
         if !self.filters.is_empty() {
             row = row.push(widget::dropdown(
@@ -447,7 +448,10 @@ impl App {
 
         col = col.push(row);
 
-        col.into()
+        widget::layer_container(col)
+            .layer(cosmic_theme::Layer::Primary)
+            .padding([space_xxs, space_xs])
+            .into()
     }
 
     fn preview<'a>(&'a self, kind: &'a PreviewKind) -> Element<'a, AppMessage> {
@@ -786,6 +790,8 @@ impl Application for App {
     }
 
     fn dialog(&self) -> Option<Element<Message>> {
+        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+
         //TODO: should gallery view just be a dialog?
         if self.tab.gallery {
             return Some(
@@ -794,6 +800,7 @@ impl Application for App {
                     // Draw button row as part of the overlay
                     widget::container(self.button_view())
                         .width(Length::Fill)
+                        .padding(space_xxs)
                         .style(theme::Container::WindowBackground)
                         .into(),
                 ])
@@ -805,8 +812,6 @@ impl Application for App {
             Some(some) => some,
             None => return None,
         };
-
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
 
         let dialog = match dialog_page {
             DialogPage::NewFolder { parent, name } => {
@@ -881,6 +886,10 @@ impl Application for App {
         };
 
         Some(dialog.into())
+    }
+
+    fn footer(&self) -> Option<Element<Message>> {
+        Some(self.button_view())
     }
 
     fn header_end(&self) -> Vec<Element<Message>> {
@@ -1449,22 +1458,9 @@ impl Application for App {
 
     /// Creates a view after each update.
     fn view(&self) -> Element<Message> {
-        let mut tab_column = widget::column::with_capacity(2);
-
-        tab_column = tab_column.push(
-            //TODO: key binds for dialog
-            self.tab
-                .view(&self.key_binds)
-                .map(move |message| Message::TabMessage(message)),
-        );
-
-        tab_column = tab_column.push(self.button_view());
-
-        let content: Element<_> = tab_column.into();
-
-        // Uncomment to debug layout:
-        //content.explain(cosmic::iced::Color::WHITE)
-        content
+        self.tab
+            .view(&self.key_binds)
+            .map(move |message| Message::TabMessage(message))
     }
 
     fn subscription(&self) -> Subscription<Message> {
