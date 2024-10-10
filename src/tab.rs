@@ -2483,7 +2483,6 @@ impl Tab {
             }
             Message::SearchReady(finished) => {
                 if let Some(context) = &mut self.search_context {
-                    let mut count = 0;
                     if let Some(items) = &mut self.items_opt {
                         if finished || context.ready.swap(false, atomic::Ordering::SeqCst) {
                             let duration = Instant::now();
@@ -2509,7 +2508,6 @@ impl Tab {
                                         item_from_entry(path, name, metadata, IconSizes::default()),
                                     );
                                 }
-                                count += 1;
                                 // Ensure that updates make it to the GUI in a timely manner
                                 if !finished && duration.elapsed() >= MAX_SEARCH_LATENCY {
                                     break;
