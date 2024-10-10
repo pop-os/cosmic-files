@@ -512,7 +512,12 @@ impl App {
         let location_opt = match term_opt {
             Some(term) => match &self.tab.location {
                 Location::Path(path) | Location::Search(path, ..) => Some((
-                    Location::Search(path.to_path_buf(), term, Instant::now()),
+                    Location::Search(
+                        path.to_path_buf(),
+                        term,
+                        self.tab.config.show_hidden,
+                        Instant::now(),
+                    ),
                     true,
                 )),
                 _ => None,

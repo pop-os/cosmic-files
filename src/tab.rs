@@ -533,6 +533,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
 pub fn scan_search<F: Fn(&Path, &str, Metadata) -> bool + Sync>(
     tab_path: &PathBuf,
     term: &str,
+    show_hidden: bool,
     callback: F,
 ) {
     if term.is_empty() {
@@ -551,8 +552,9 @@ pub fn scan_search<F: Fn(&Path, &str, Metadata) -> bool + Sync>(
         }
     };
 
-    //TODO: do we want to ignore files?
     ignore::WalkBuilder::new(tab_path)
+        .standard_filters(false)
+        .hidden(!show_hidden)
         //TODO: only use this on supported targets
         .same_file_system(true)
         .build_parallel()
@@ -864,7 +866,7 @@ pub enum Location {
     Network(String, String),
     Path(PathBuf),
     Recents,
-    Search(PathBuf, String, Instant),
+    Search(PathBuf, String, bool, Instant),
     Trash,
 }
 
@@ -899,7 +901,9 @@ impl Location {
                 Self::Desktop(path, display.clone(), *desktop_config)
             }
             Self::Path(..) => Self::Path(path),
-            Self::Search(_, term, ..) => Self::Search(path, term.clone(), Instant::now()),
+            Self::Search(_, term, show_hidden, _) => {
+                Self::Search(path, term.clone(), *show_hidden, Instant::now())
+            }
             other => other.clone(),
         }
     }
@@ -2580,8 +2584,17 @@ impl Tab {
                     }
                 }
             }
-            Message::ToggleShowHidden => self.config.show_hidden = !self.config.show_hidden,
-
+            Message::ToggleShowHidden => {
+                self.config.show_hidden = !self.config.show_hidden;
+                if let Location::Search(path, term, ..) = &self.location {
+                    cd = Some(Location::Search(
+                        path.clone(),
+                        term.clone(),
+                        self.config.show_hidden,
+                        Instant::now(),
+                    ));
+                }
+            }
             Message::View(view) => {
                 self.config.view = view;
             }
@@ -4194,10 +4207,11 @@ impl Tab {
         }
 
         // Load search items incrementally
-        if let Location::Search(path, term, start) = &self.location {
+        if let Location::Search(path, term, show_hidden, start) = &self.location {
             let location = self.location.clone();
             let path = path.clone();
             let term = term.clone();
+            let show_hidden = *show_hidden;
             let start = start.clone();
             subscriptions.push(subscription::channel(
                 location.clone(),
@@ -4224,41 +4238,47 @@ impl Tab {
                     {
                         let output = output.clone();
                         tokio::task::spawn_blocking(move || {
-                            scan_search(&path, &term, move |path, name, metadata| -> bool {
-                                // Don't send if the result is too old
-                                if let Some(last_modified) = *last_modified_opt.read().unwrap() {
-                                    if let Ok(modified) = metadata.modified() {
-                                        if metadata.modified().ok() < Some(last_modified) {
+                            scan_search(
+                                &path,
+                                &term,
+                                show_hidden,
+                                move |path, name, metadata| -> bool {
+                                    // Don't send if the result is too old
+                                    if let Some(last_modified) = *last_modified_opt.read().unwrap()
+                                    {
+                                        if let Ok(modified) = metadata.modified() {
+                                            if modified < last_modified {
+                                                return true;
+                                            }
+                                        } else {
                                             return true;
                                         }
-                                    } else {
-                                        return true;
                                     }
-                                }
 
-                                match results_tx.blocking_send((
-                                    path.to_path_buf(),
-                                    name.to_string(),
-                                    metadata,
-                                )) {
-                                    Ok(()) => {
-                                        if !ready.swap(true, atomic::Ordering::SeqCst) {
-                                            // Wake up update method
-                                            futures::executor::block_on(async {
-                                                output
-                                                    .lock()
-                                                    .await
-                                                    .send(Message::SearchReady(false))
-                                                    .await
-                                            })
-                                            .is_ok()
-                                        } else {
-                                            true
+                                    match results_tx.blocking_send((
+                                        path.to_path_buf(),
+                                        name.to_string(),
+                                        metadata,
+                                    )) {
+                                        Ok(()) => {
+                                            if !ready.swap(true, atomic::Ordering::SeqCst) {
+                                                // Wake up update method
+                                                futures::executor::block_on(async {
+                                                    output
+                                                        .lock()
+                                                        .await
+                                                        .send(Message::SearchReady(false))
+                                                        .await
+                                                })
+                                                .is_ok()
+                                            } else {
+                                                true
+                                            }
                                         }
+                                        Err(_) => false,
                                     }
-                                    Err(_) => false,
-                                }
-                            });
+                                },
+                            );
                             log::info!(
                                 "searched for {:?} in {:?} in {:?}",
                                 term,
