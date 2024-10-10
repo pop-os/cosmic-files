@@ -35,6 +35,18 @@ macro_rules! menu_button {
     );
 }
 
+fn menu_button_optional(
+    label: String,
+    action: Action,
+    enabled: bool,
+) -> menu::Item<Action, String> {
+    if enabled {
+        menu::Item::Button(label, action)
+    } else {
+        menu::Item::ButtonDisabled(label, action)
+    }
+}
+
 pub fn context_menu<'a>(
     tab: &Tab,
     key_binds: &HashMap<KeyBind, Action>,
@@ -291,6 +303,7 @@ pub fn context_menu<'a>(
 pub fn dialog_menu<'a>(
     tab: &Tab,
     key_binds: &HashMap<KeyBind, Action>,
+    show_details: bool,
 ) -> Element<'static, Message> {
     let (sort_name, sort_direction, _) = tab.sort_options();
     let sort_item = |label, sort, dir| {
@@ -302,12 +315,25 @@ pub fn dialog_menu<'a>(
     };
     let in_trash = tab.location == Location::Trash;
 
+    let mut selected_gallery = 0;
+    tab.items_opt().map(|items| {
+        for item in items.iter() {
+            if item.selected {
+                if item.can_gallery() {
+                    selected_gallery += 1;
+                }
+            }
+        }
+    });
+
     MenuBar::new(vec![
         menu::Tree::with_children(
             widget::button::icon(widget::icon::from_name(match tab.config.view {
                 tab::View::Grid => "view-grid-symbolic",
                 tab::View::List => "view-list-symbolic",
             }))
+            // This prevents the button from being shown as insensitive
+            .on_press(Message::None)
             .padding(8),
             menu::items(
                 key_binds,
@@ -331,6 +357,8 @@ pub fn dialog_menu<'a>(
             } else {
                 "view-sort-descending-symbolic"
             }))
+            // This prevents the button from being shown as insensitive
+            .on_press(Message::None)
             .padding(8),
             menu::items(
                 key_binds,
@@ -369,6 +397,38 @@ pub fn dialog_menu<'a>(
                 ],
             ),
         ),
+        menu::Tree::with_children(
+            widget::button::icon(widget::icon::from_name("view-more-symbolic"))
+                // This prevents the button from being shown as insensitive
+                .on_press(Message::None)
+                .padding(8),
+            menu::items(
+                key_binds,
+                vec![
+                    menu::Item::Button(fl!("zoom-in"), Action::ZoomIn),
+                    menu::Item::Button(fl!("default-size"), Action::ZoomDefault),
+                    menu::Item::Button(fl!("zoom-out"), Action::ZoomOut),
+                    menu::Item::Divider,
+                    menu::Item::CheckBox(
+                        fl!("show-hidden-files"),
+                        tab.config.show_hidden,
+                        Action::ToggleShowHidden,
+                    ),
+                    menu::Item::CheckBox(
+                        fl!("list-directories-first"),
+                        tab.config.folders_first,
+                        Action::ToggleFoldersFirst,
+                    ),
+                    menu::Item::CheckBox(fl!("show-details"), show_details, Action::Preview),
+                    menu::Item::Divider,
+                    menu_button_optional(
+                        fl!("gallery-preview"),
+                        Action::Gallery,
+                        selected_gallery > 0,
+                    ),
+                ],
+            ),
+        ),
     ])
     .item_height(ItemHeight::Dynamic(40))
     .item_width(ItemWidth::Uniform(240))
@@ -395,6 +455,7 @@ pub fn menu_bar<'a>(
 
     let mut selected_dir = 0;
     let mut selected = 0;
+    let mut selected_gallery = 0;
     tab_opt.and_then(|tab| tab.items_opt()).map(|items| {
         for item in items.iter() {
             if item.selected {
@@ -402,21 +463,12 @@ pub fn menu_bar<'a>(
                 if item.metadata.is_dir() {
                     selected_dir += 1;
                 }
+                if item.can_gallery() {
+                    selected_gallery += 1;
+                }
             }
         }
     });
-
-    fn menu_button_optional(
-        label: String,
-        action: Action,
-        enabled: bool,
-    ) -> menu::Item<Action, String> {
-        if enabled {
-            menu::Item::Button(label, action)
-        } else {
-            menu::Item::ButtonDisabled(label, action)
-        }
-    }
 
     MenuBar::new(vec![
         menu::Tree::with_children(
@@ -492,7 +544,11 @@ pub fn menu_bar<'a>(
                     ),
                     menu::Item::CheckBox(fl!("show-details"), config.show_details, Action::Preview),
                     menu::Item::Divider,
-                    menu_button_optional(fl!("gallery-preview"), Action::Gallery, selected > 0),
+                    menu_button_optional(
+                        fl!("gallery-preview"),
+                        Action::Gallery,
+                        selected_gallery > 0,
+                    ),
                     menu::Item::Divider,
                     menu::Item::Button(fl!("menu-settings"), Action::Settings),
                     menu::Item::Divider,

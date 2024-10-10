@@ -33,6 +33,7 @@ use std::{
     any::TypeId,
     collections::{HashMap, HashSet, VecDeque},
     env, fmt, fs,
+    num::NonZeroU16,
     path::PathBuf,
     str::FromStr,
     time::{self, Instant},
@@ -325,14 +326,25 @@ enum Message {
     SearchInput(String),
     TabMessage(tab::Message),
     TabRescan(Vec<tab::Item>),
+    TabView(tab::View),
+    ToggleFoldersFirst,
+    ZoomDefault,
+    ZoomIn,
+    ZoomOut,
 }
 
 impl From<AppMessage> for Message {
     fn from(app_message: AppMessage) -> Message {
         match app_message {
+            AppMessage::None => Message::None,
             AppMessage::Preview(_entity_opt) => Message::Preview,
             AppMessage::SearchActivate => Message::SearchActivate,
             AppMessage::TabMessage(_entity_opt, tab_message) => Message::TabMessage(tab_message),
+            AppMessage::TabView(_entity_opt, view) => Message::TabView(view),
+            AppMessage::ToggleFoldersFirst => Message::ToggleFoldersFirst,
+            AppMessage::ZoomDefault(_entity_opt) => Message::ZoomDefault,
+            AppMessage::ZoomIn(_entity_opt) => Message::ZoomIn,
+            AppMessage::ZoomOut(_entity_opt) => Message::ZoomOut,
             unsupported => {
                 log::warn!("{unsupported:?} not supported in dialog mode");
                 Message::None
@@ -933,8 +945,12 @@ impl Application for App {
             );
         }
 
+        let show_details = match self.context_page {
+            ContextPage::Preview(..) => self.core.window.show_context,
+            _ => false,
+        };
         elements.push(
-            menu::dialog_menu(&self.tab, &self.key_binds)
+            menu::dialog_menu(&self.tab, &self.key_binds, show_details)
                 .map(Message::from)
                 .into(),
         );
@@ -1460,6 +1476,54 @@ impl Application for App {
                     return widget::text_input::focus(self.search_id.clone());
                 } else {
                     return widget::text_input::focus(self.filename_id.clone());
+                }
+            }
+            Message::TabView(view) => {
+                self.tab.config.view = view;
+            }
+            Message::ToggleFoldersFirst => {
+                self.tab.config.folders_first = !self.tab.config.folders_first;
+            }
+            Message::ZoomDefault => match self.tab.config.view {
+                tab::View::List => self.tab.config.icon_sizes.list = 100.try_into().unwrap(),
+                tab::View::Grid => self.tab.config.icon_sizes.grid = 100.try_into().unwrap(),
+            },
+            Message::ZoomIn => {
+                let zoom_in = |size: &mut NonZeroU16, min: u16, max: u16| {
+                    let mut step = min;
+                    while step <= max {
+                        if size.get() < step {
+                            *size = step.try_into().unwrap();
+                            break;
+                        }
+                        step += 25;
+                    }
+                    if size.get() > step {
+                        *size = step.try_into().unwrap();
+                    }
+                };
+                match self.tab.config.view {
+                    tab::View::List => zoom_in(&mut self.tab.config.icon_sizes.list, 50, 500),
+                    tab::View::Grid => zoom_in(&mut self.tab.config.icon_sizes.grid, 50, 500),
+                }
+            }
+            Message::ZoomOut => {
+                let zoom_out = |size: &mut NonZeroU16, min: u16, max: u16| {
+                    let mut step = max;
+                    while step >= min {
+                        if size.get() > step {
+                            *size = step.try_into().unwrap();
+                            break;
+                        }
+                        step -= 25;
+                    }
+                    if size.get() < step {
+                        *size = step.try_into().unwrap();
+                    }
+                };
+                match self.tab.config.view {
+                    tab::View::List => zoom_out(&mut self.tab.config.icon_sizes.list, 50, 500),
+                    tab::View::Grid => zoom_out(&mut self.tab.config.icon_sizes.grid, 50, 500),
                 }
             }
         }
