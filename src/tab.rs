@@ -1065,8 +1065,10 @@ impl Clone for ItemThumbnail {
             Self::NotImage => Self::NotImage,
             Self::Image(handle, size_opt) => Self::Image(handle.clone(), *size_opt),
             Self::Svg(handle) => Self::Svg(handle.clone()),
-            // Content cannot be cloned
-            Self::Text(content) => Self::NotImage,
+            // Content cannot be cloned simply
+            Self::Text(content) => {
+                Self::Text(widget::text_editor::Content::with_text(&content.text()))
+            }
         }
     }
 }
