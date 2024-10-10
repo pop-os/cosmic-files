@@ -76,8 +76,8 @@ use uzers::{get_group_by_gid, get_user_by_uid};
 pub const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 pub const HOVER_DURATION: Duration = Duration::from_millis(1600);
 //TODO: best limit for search items
-const MAX_SEARCH_LATENCY: Duration = Duration::from_millis(100);
-const MAX_SEARCH_RESULTS: usize = 1000;
+const MAX_SEARCH_LATENCY: Duration = Duration::from_millis(20);
+const MAX_SEARCH_RESULTS: usize = 200;
 
 //TODO: adjust for locales?
 const DATE_TIME_FORMAT: &'static str = "%b %-d, %-Y, %-I:%M %p";
