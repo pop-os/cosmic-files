@@ -153,7 +153,7 @@ impl Action {
             Action::DesktopViewOptions => Message::DesktopViewOptions,
             Action::EditHistory => Message::ToggleContextPage(ContextPage::EditHistory),
             Action::EditLocation => {
-                Message::TabMessage(entity_opt, tab::Message::EditLocationToggle)
+                Message::TabMessage(entity_opt, tab::Message::EditLocationEnable)
             }
             Action::ExtractHere => Message::ExtractHere(entity_opt),
             Action::Gallery => Message::TabMessage(entity_opt, tab::Message::GalleryToggle),
@@ -1466,6 +1466,11 @@ impl Application for App {
         if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
             if tab.context_menu.is_some() {
                 tab.context_menu = None;
+                return Command::none();
+            }
+
+            if tab.edit_location.is_some() {
+                tab.edit_location = None;
                 return Command::none();
             }
 
