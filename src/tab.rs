@@ -3509,23 +3509,29 @@ impl Tab {
                 )));
 
                 //TODO: one focus group per grid item (needs custom widget)
-                let buttons = vec![
+                let buttons: Vec<Element<Message>> = vec![
                     widget::button::custom(
                         widget::icon::icon(item.icon_handle_grid.clone())
                             .content_fit(ContentFit::Contain)
                             .size(icon_sizes.grid()),
                     )
                     .padding(space_xxxs)
-                    .style(button_style(item.selected, false, false, false)),
-                    widget::button::custom(widget::text::body(&item.display_name))
-                        .id(item.button_id.clone())
-                        .padding([0, space_xxxs])
-                        .style(button_style(
-                            item.selected,
-                            true,
-                            true,
-                            matches!(self.mode, Mode::Desktop),
-                        )),
+                    .style(button_style(item.selected, false, false, false))
+                    .into(),
+                    widget::tooltip(
+                        widget::button::custom(widget::text::body(&item.display_name))
+                            .id(item.button_id.clone())
+                            .padding([0, space_xxxs])
+                            .style(button_style(
+                                item.selected,
+                                true,
+                                true,
+                                matches!(self.mode, Mode::Desktop),
+                            )),
+                        &item.name,
+                        widget::tooltip::Position::Bottom,
+                    )
+                    .into(),
                 ];
 
                 let mut column = widget::column::with_capacity(buttons.len())
