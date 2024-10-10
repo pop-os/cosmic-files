@@ -190,10 +190,12 @@ pub fn context_menu<'a>(
                 children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
                 children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
                 children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
-                children.push(divider::horizontal::light().into());
-                children.push(
-                    menu_item(fl!("desktop-view-options"), Action::DesktopViewOptions).into(),
-                );
+                if matches!(tab.location, Location::Desktop(..)) {
+                    children.push(divider::horizontal::light().into());
+                    children.push(
+                        menu_item(fl!("desktop-view-options"), Action::DesktopViewOptions).into(),
+                    );
+                }
             }
         }
         (
