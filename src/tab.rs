@@ -2288,143 +2288,169 @@ impl Tab {
                 }
             }
             Message::ItemDown => {
-                if let Some((row, col)) = self.select_focus_pos_opt().or(self.select_last_pos_opt())
-                {
-                    if self.select_focus.is_none() {
-                        // Select last item in current selection to focus it.
-                        self.select_position(row, col, mod_shift);
-                    }
-
-                    //TODO: Shift modifier should select items in between
-                    // Try to select item in next row
-                    if !self.select_position(row + 1, col, mod_shift) {
-                        // Ensure current item is still selected if there are no other items
-                        self.select_position(row, col, mod_shift);
+                if self.gallery {
+                    for command in self.update(Message::GalleryNext, modifiers) {
+                        commands.push(command);
                     }
                 } else {
-                    // Select first item
-                    //TODO: select first in scroll
-                    self.select_position(0, 0, mod_shift);
-                }
-                if let Some(offset) = self.select_focus_scroll() {
-                    commands.push(Command::Iced(scrollable::scroll_to(
-                        self.scrollable_id.clone(),
-                        offset,
-                    )));
-                }
-                if let Some(id) = self.select_focus_id() {
-                    commands.push(Command::Iced(widget::button::focus(id)));
+                    if let Some((row, col)) =
+                        self.select_focus_pos_opt().or(self.select_last_pos_opt())
+                    {
+                        if self.select_focus.is_none() {
+                            // Select last item in current selection to focus it.
+                            self.select_position(row, col, mod_shift);
+                        }
+
+                        //TODO: Shift modifier should select items in between
+                        // Try to select item in next row
+                        if !self.select_position(row + 1, col, mod_shift) {
+                            // Ensure current item is still selected if there are no other items
+                            self.select_position(row, col, mod_shift);
+                        }
+                    } else {
+                        // Select first item
+                        //TODO: select first in scroll
+                        self.select_position(0, 0, mod_shift);
+                    }
+                    if let Some(offset) = self.select_focus_scroll() {
+                        commands.push(Command::Iced(scrollable::scroll_to(
+                            self.scrollable_id.clone(),
+                            offset,
+                        )));
+                    }
+                    if let Some(id) = self.select_focus_id() {
+                        commands.push(Command::Iced(widget::button::focus(id)));
+                    }
                 }
             }
             Message::ItemLeft => {
-                if let Some((row, col)) =
-                    self.select_focus_pos_opt().or(self.select_first_pos_opt())
-                {
-                    if self.select_focus.is_none() {
-                        // Select first item in current selection to focus it.
-                        self.select_position(row, col, mod_shift);
-                    }
-
-                    // Try to select previous item in current row
-                    if !col
-                        .checked_sub(1)
-                        .map_or(false, |col| self.select_position(row, col, mod_shift))
-                    {
-                        // Try to select last item in previous row
-                        if !row.checked_sub(1).map_or(false, |row| {
-                            let mut col = 0;
-                            if let Some(ref items) = self.items_opt {
-                                for item in items.iter() {
-                                    match item.pos_opt.get() {
-                                        Some((item_row, item_col)) if item_row == row => {
-                                            col = col.max(item_col);
-                                        }
-                                        _ => continue,
-                                    }
-                                }
-                            }
-                            self.select_position(row, col, mod_shift)
-                        }) {
-                            // Ensure current item is still selected if there are no other items
-                            self.select_position(row, col, mod_shift);
-                        }
+                if self.gallery {
+                    for command in self.update(Message::GalleryPrevious, modifiers) {
+                        commands.push(command);
                     }
                 } else {
-                    // Select first item
-                    //TODO: select first in scroll
-                    self.select_position(0, 0, mod_shift);
-                }
-                if let Some(offset) = self.select_focus_scroll() {
-                    commands.push(Command::Iced(scrollable::scroll_to(
-                        self.scrollable_id.clone(),
-                        offset,
-                    )));
-                }
-                if let Some(id) = self.select_focus_id() {
-                    commands.push(Command::Iced(widget::button::focus(id)));
+                    if let Some((row, col)) =
+                        self.select_focus_pos_opt().or(self.select_first_pos_opt())
+                    {
+                        if self.select_focus.is_none() {
+                            // Select first item in current selection to focus it.
+                            self.select_position(row, col, mod_shift);
+                        }
+
+                        // Try to select previous item in current row
+                        if !col
+                            .checked_sub(1)
+                            .map_or(false, |col| self.select_position(row, col, mod_shift))
+                        {
+                            // Try to select last item in previous row
+                            if !row.checked_sub(1).map_or(false, |row| {
+                                let mut col = 0;
+                                if let Some(ref items) = self.items_opt {
+                                    for item in items.iter() {
+                                        match item.pos_opt.get() {
+                                            Some((item_row, item_col)) if item_row == row => {
+                                                col = col.max(item_col);
+                                            }
+                                            _ => continue,
+                                        }
+                                    }
+                                }
+                                self.select_position(row, col, mod_shift)
+                            }) {
+                                // Ensure current item is still selected if there are no other items
+                                self.select_position(row, col, mod_shift);
+                            }
+                        }
+                    } else {
+                        // Select first item
+                        //TODO: select first in scroll
+                        self.select_position(0, 0, mod_shift);
+                    }
+                    if let Some(offset) = self.select_focus_scroll() {
+                        commands.push(Command::Iced(scrollable::scroll_to(
+                            self.scrollable_id.clone(),
+                            offset,
+                        )));
+                    }
+                    if let Some(id) = self.select_focus_id() {
+                        commands.push(Command::Iced(widget::button::focus(id)));
+                    }
                 }
             }
             Message::ItemRight => {
-                if let Some((row, col)) = self.select_focus_pos_opt().or(self.select_last_pos_opt())
-                {
-                    if self.select_focus.is_none() {
-                        // Select last item in current selection to focus it.
-                        self.select_position(row, col, mod_shift);
-                    }
-                    // Try to select next item in current row
-                    if !self.select_position(row, col + 1, mod_shift) {
-                        // Try to select first item in next row
-                        if !self.select_position(row + 1, 0, mod_shift) {
-                            // Ensure current item is still selected if there are no other items
-                            self.select_position(row, col, mod_shift);
-                        }
+                if self.gallery {
+                    for command in self.update(Message::GalleryNext, modifiers) {
+                        commands.push(command);
                     }
                 } else {
-                    // Select first item
-                    //TODO: select first in scroll
-                    self.select_position(0, 0, mod_shift);
-                }
-                if let Some(offset) = self.select_focus_scroll() {
-                    commands.push(Command::Iced(scrollable::scroll_to(
-                        self.scrollable_id.clone(),
-                        offset,
-                    )));
-                }
-                if let Some(id) = self.select_focus_id() {
-                    commands.push(Command::Iced(widget::button::focus(id)));
+                    if let Some((row, col)) =
+                        self.select_focus_pos_opt().or(self.select_last_pos_opt())
+                    {
+                        if self.select_focus.is_none() {
+                            // Select last item in current selection to focus it.
+                            self.select_position(row, col, mod_shift);
+                        }
+                        // Try to select next item in current row
+                        if !self.select_position(row, col + 1, mod_shift) {
+                            // Try to select first item in next row
+                            if !self.select_position(row + 1, 0, mod_shift) {
+                                // Ensure current item is still selected if there are no other items
+                                self.select_position(row, col, mod_shift);
+                            }
+                        }
+                    } else {
+                        // Select first item
+                        //TODO: select first in scroll
+                        self.select_position(0, 0, mod_shift);
+                    }
+                    if let Some(offset) = self.select_focus_scroll() {
+                        commands.push(Command::Iced(scrollable::scroll_to(
+                            self.scrollable_id.clone(),
+                            offset,
+                        )));
+                    }
+                    if let Some(id) = self.select_focus_id() {
+                        commands.push(Command::Iced(widget::button::focus(id)));
+                    }
                 }
             }
             Message::ItemUp => {
-                if let Some((row, col)) =
-                    self.select_focus_pos_opt().or(self.select_first_pos_opt())
-                {
-                    if self.select_focus.is_none() {
-                        // Select first item in current selection to focus it.
-                        self.select_position(row, col, mod_shift);
-                    }
-
-                    //TODO: Shift modifier should select items in between
-                    // Try to select item in last row
-                    if !row
-                        .checked_sub(1)
-                        .map_or(false, |row| self.select_position(row, col, mod_shift))
-                    {
-                        // Ensure current item is still selected if there are no other items
-                        self.select_position(row, col, mod_shift);
+                if self.gallery {
+                    for command in self.update(Message::GalleryPrevious, modifiers) {
+                        commands.push(command);
                     }
                 } else {
-                    // Select first item
-                    //TODO: select first in scroll
-                    self.select_position(0, 0, mod_shift);
-                }
-                if let Some(offset) = self.select_focus_scroll() {
-                    commands.push(Command::Iced(scrollable::scroll_to(
-                        self.scrollable_id.clone(),
-                        offset,
-                    )));
-                }
-                if let Some(id) = self.select_focus_id() {
-                    commands.push(Command::Iced(widget::button::focus(id)));
+                    if let Some((row, col)) =
+                        self.select_focus_pos_opt().or(self.select_first_pos_opt())
+                    {
+                        if self.select_focus.is_none() {
+                            // Select first item in current selection to focus it.
+                            self.select_position(row, col, mod_shift);
+                        }
+
+                        //TODO: Shift modifier should select items in between
+                        // Try to select item in last row
+                        if !row
+                            .checked_sub(1)
+                            .map_or(false, |row| self.select_position(row, col, mod_shift))
+                        {
+                            // Ensure current item is still selected if there are no other items
+                            self.select_position(row, col, mod_shift);
+                        }
+                    } else {
+                        // Select first item
+                        //TODO: select first in scroll
+                        self.select_position(0, 0, mod_shift);
+                    }
+                    if let Some(offset) = self.select_focus_scroll() {
+                        commands.push(Command::Iced(scrollable::scroll_to(
+                            self.scrollable_id.clone(),
+                            offset,
+                        )));
+                    }
+                    if let Some(id) = self.select_focus_id() {
+                        commands.push(Command::Iced(widget::button::focus(id)));
+                    }
                 }
             }
             Message::Location(location) => {
