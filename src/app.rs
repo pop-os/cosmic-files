@@ -2991,7 +2991,7 @@ impl Application for App {
                         };
 
                         let (entity, command) = self.open_tab_entity(
-                            Location::Desktop(crate::desktop_dir(), display),
+                            Location::Desktop(crate::desktop_dir(), display, self.config.desktop),
                             false,
                             None,
                         );
@@ -4217,11 +4217,7 @@ pub(crate) mod test_utils {
 
         // New tab with items
         let location = Location::Path(path.to_owned());
-        let items = location.scan(
-            DesktopConfig::default(),
-            Mounters::new(MounterMap::new()),
-            IconSizes::default(),
-        );
+        let items = location.scan(IconSizes::default());
         let mut tab = Tab::new(location, TabConfig::default());
         tab.set_items(items);
 
