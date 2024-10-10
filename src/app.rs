@@ -314,7 +314,13 @@ pub enum Message {
     TabConfig(TabConfig),
     TabMessage(Option<Entity>, tab::Message),
     TabNew,
-    TabRescan(Entity, Location, Vec<tab::Item>, Option<PathBuf>),
+    TabRescan(
+        Entity,
+        Location,
+        Option<tab::Item>,
+        Vec<tab::Item>,
+        Option<PathBuf>,
+    ),
     TabView(Option<Entity>, tab::View),
     ToggleContextPage(ContextPage),
     ToggleFoldersFirst,
@@ -587,9 +593,13 @@ impl App {
             async move {
                 let location2 = location.clone();
                 match tokio::task::spawn_blocking(move || location2.scan(icon_sizes)).await {
-                    Ok(items) => {
-                        message::app(Message::TabRescan(entity, location, items, selection_path))
-                    }
+                    Ok((parent_item_opt, items)) => message::app(Message::TabRescan(
+                        entity,
+                        location,
+                        parent_item_opt,
+                        items,
+                        selection_path,
+                    )),
                     Err(err) => {
                         log::warn!("failed to rescan: {}", err);
                         message::none()
@@ -1146,6 +1156,12 @@ impl App {
                                 // Only show one property view to avoid issues like hangs when generating
                                 // preview images on thousands of files
                                 break;
+                            }
+                        }
+                        if children.is_empty() {
+                            if let Some(item) = &tab.parent_item_opt {
+                                children
+                                    .push(item.preview_view(tab.config.icon_sizes, context_drawer));
                             }
                         }
                     }
@@ -2609,10 +2625,11 @@ impl Application for App {
                 };
                 return self.open_tab(location, true, None);
             }
-            Message::TabRescan(entity, location, items, selection_path) => {
+            Message::TabRescan(entity, location, parent_item_opt, items, selection_path) => {
                 match self.tab_model.data_mut::<Tab>(entity) {
                     Some(tab) => {
                         if location == tab.location {
+                            tab.parent_item_opt = parent_item_opt;
                             tab.set_items(items);
                             if let Some(selection_path) = selection_path {
                                 tab.select_path(selection_path);
@@ -2654,7 +2671,7 @@ impl Application for App {
                     match tokio::task::spawn_blocking(move || Location::Trash.scan(icon_sizes))
                         .await
                     {
-                        Ok(items) => {
+                        Ok((_parent_item_opt, items)) => {
                             for path in &*recently_trashed {
                                 for item in &items {
                                     if let ItemMetadata::Trash { ref entry, .. } = item.metadata {
@@ -4243,8 +4260,9 @@ pub(crate) mod test_utils {
 
         // New tab with items
         let location = Location::Path(path.to_owned());
-        let items = location.scan(IconSizes::default());
+        let (parent_item_opt, items) = location.scan(IconSizes::default());
         let mut tab = Tab::new(location, TabConfig::default());
+        tab.parent_item_opt = parent_item_opt;
         tab.set_items(items);
 
         // Ensure correct number of directories as a sanity check

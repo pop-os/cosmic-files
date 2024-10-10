@@ -325,7 +325,7 @@ enum Message {
     SearchClear,
     SearchInput(String),
     TabMessage(tab::Message),
-    TabRescan(Vec<tab::Item>),
+    TabRescan(Location, Option<tab::Item>, Vec<tab::Item>),
     TabView(tab::View),
     ToggleFoldersFirst,
     ZoomDefault,
@@ -494,6 +494,11 @@ impl App {
                             break;
                         }
                     }
+                    if children.is_empty() {
+                        if let Some(item) = &self.tab.parent_item_opt {
+                            children.push(item.preview_view(self.tab.config.icon_sizes, true));
+                        }
+                    }
                 }
             }
         }
@@ -505,8 +510,11 @@ impl App {
         let icon_sizes = self.tab.config.icon_sizes;
         Command::perform(
             async move {
-                match tokio::task::spawn_blocking(move || location.scan(icon_sizes)).await {
-                    Ok(items) => message::app(Message::TabRescan(items)),
+                let location2 = location.clone();
+                match tokio::task::spawn_blocking(move || location2.scan(icon_sizes)).await {
+                    Ok((parent_item_opt, items)) => {
+                        message::app(Message::TabRescan(location, parent_item_opt, items))
+                    }
                     Err(err) => {
                         log::warn!("failed to rescan: {}", err);
                         message::none()
@@ -1408,74 +1416,85 @@ impl Application for App {
                 }
                 return Command::batch(commands);
             }
-            Message::TabRescan(mut items) => {
-                // Filter
-                if let Some(filter_i) = self.filter_selected {
-                    if let Some(filter) = self.filters.get(filter_i) {
-                        // Parse filters
-                        let mut parsed_globs = Vec::new();
-                        let mut parsed_mimes = Vec::new();
-                        for pattern in filter.patterns.iter() {
-                            match pattern {
-                                DialogFilterPattern::Glob(value) => {
-                                    match glob::Pattern::new(value) {
-                                        Ok(glob) => parsed_globs.push(glob),
-                                        Err(err) => {
-                                            log::warn!("failed to parse glob {:?}: {}", value, err);
+            Message::TabRescan(location, parent_item_opt, mut items) => {
+                if location == self.tab.location {
+                    // Filter
+                    if let Some(filter_i) = self.filter_selected {
+                        if let Some(filter) = self.filters.get(filter_i) {
+                            // Parse filters
+                            let mut parsed_globs = Vec::new();
+                            let mut parsed_mimes = Vec::new();
+                            for pattern in filter.patterns.iter() {
+                                match pattern {
+                                    DialogFilterPattern::Glob(value) => {
+                                        match glob::Pattern::new(value) {
+                                            Ok(glob) => parsed_globs.push(glob),
+                                            Err(err) => {
+                                                log::warn!(
+                                                    "failed to parse glob {:?}: {}",
+                                                    value,
+                                                    err
+                                                );
+                                            }
                                         }
                                     }
-                                }
-                                DialogFilterPattern::Mime(value) => {
-                                    match mime_guess::Mime::from_str(value) {
-                                        Ok(mime) => parsed_mimes.push(mime),
-                                        Err(err) => {
-                                            log::warn!("failed to parse mime {:?}: {}", value, err);
+                                    DialogFilterPattern::Mime(value) => {
+                                        match mime_guess::Mime::from_str(value) {
+                                            Ok(mime) => parsed_mimes.push(mime),
+                                            Err(err) => {
+                                                log::warn!(
+                                                    "failed to parse mime {:?}: {}",
+                                                    value,
+                                                    err
+                                                );
+                                            }
                                         }
                                     }
                                 }
                             }
+
+                            items.retain(|item| {
+                                if item.metadata.is_dir() {
+                                    // Directories are always shown
+                                    return true;
+                                }
+
+                                // Check for mime type match (first because it is faster)
+                                for mime in parsed_mimes.iter() {
+                                    if mime == &item.mime {
+                                        return true;
+                                    }
+                                }
+
+                                // Check for glob match (last because it is slower)
+                                for glob in parsed_globs.iter() {
+                                    if glob.matches(&item.name) {
+                                        return true;
+                                    }
+                                }
+
+                                // No filters matched
+                                false
+                            });
                         }
-
-                        items.retain(|item| {
-                            if item.metadata.is_dir() {
-                                // Directories are always shown
-                                return true;
-                            }
-
-                            // Check for mime type match (first because it is faster)
-                            for mime in parsed_mimes.iter() {
-                                if mime == &item.mime {
-                                    return true;
-                                }
-                            }
-
-                            // Check for glob match (last because it is slower)
-                            for glob in parsed_globs.iter() {
-                                if glob.matches(&item.name) {
-                                    return true;
-                                }
-                            }
-
-                            // No filters matched
-                            false
-                        });
                     }
-                }
 
-                // Select based on filename
-                if let DialogKind::SaveFile { filename } = &self.flags.kind {
-                    for item in items.iter_mut() {
-                        item.selected = &item.name == filename;
+                    // Select based on filename
+                    if let DialogKind::SaveFile { filename } = &self.flags.kind {
+                        for item in items.iter_mut() {
+                            item.selected = &item.name == filename;
+                        }
                     }
-                }
 
-                self.tab.set_items(items);
+                    self.tab.parent_item_opt = parent_item_opt;
+                    self.tab.set_items(items);
 
-                // Reset focus on location change
-                if self.search_get().is_some() {
-                    return widget::text_input::focus(self.search_id.clone());
-                } else {
-                    return widget::text_input::focus(self.filename_id.clone());
+                    // Reset focus on location change
+                    if self.search_get().is_some() {
+                        return widget::text_input::focus(self.search_id.clone());
+                    } else {
+                        return widget::text_input::focus(self.filename_id.clone());
+                    }
                 }
             }
             Message::TabView(view) => {
