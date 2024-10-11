@@ -303,6 +303,7 @@ async fn copy_or_move(
                     }
                 }
                 if moving {
+                    //TODO: optimize to fs::rename when possible
                     fs_extra::file::move_file_with_progress(
                         from,
                         to,

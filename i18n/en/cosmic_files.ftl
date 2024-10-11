@@ -70,7 +70,7 @@ rename-folder = Rename folder
 
 ## Replace Dialog
 replace = Replace
-replace-title = {$filename} already exists in this location.
+replace-title = "{$filename}" already exists in this location.
 replace-warning = Do you want to replace it with the one you are saving? Replacing it will overwrite its content.
 replace-warning-operation = Do you want to replace it? Replacing it will overwrite its content.
 original-file = Original file
@@ -132,44 +132,44 @@ complete = Complete
 compressing = Compressing {$items} {$items ->
         [one] item
         *[other] items
-    } from {$from} to {$to}
+    } from "{$from}" to "{$to}"
 compressed = Compressed {$items} {$items ->
         [one] item
         *[other] items
-    } from {$from} to {$to}
+    } from "{$from}" to "{$to}"
 copy_noun = Copy
-creating = Creating {$name} in {$parent}
-created = Created {$name} in {$parent}
+creating = Creating "{$name}" in "{$parent}"
+created = Created "{$name}" in "{$parent}"
 copying = Copying {$items} {$items ->
         [one] item
         *[other] items
-    } from {$from} to {$to}
+    } from "{$from}" to "{$to}"
 copied = Copied {$items} {$items ->
         [one] item
         *[other] items
-    } from {$from} to {$to}
+    } from "{$from}" to "{$to}"
 emptying-trash = Emptying {trash}
 emptied-trash = Emptied {trash}
 extracting = Extracting {$items} {$items ->
         [one] item
         *[other] items
-    } from {$from} to {$to}
+    } from "{$from}" to "{$to}"
 extracted = Extracted {$items} {$items ->
         [one] item
         *[other] items
-    } from {$from} to {$to}
+    } from "{$from}" to "{$to}"
 setting-executable-and-launching = Setting "{$name}" as executable and launching
 set-executable-and-launched = Set "{$name}" as executable and launched
 moving = Moving {$items} {$items ->
         [one] item
         *[other] items
-    } from {$from} to {$to}
+    } from "{$from}" to "{$to}"
 moved = Moved {$items} {$items ->
         [one] item
         *[other] items
-    } from {$from} to {$to}
-renaming = Renaming {$from} to {$to}
-renamed = Renamed {$from} to {$to}
+    } from "{$from}" to "{$to}"
+renaming = Renaming "{$from}" to "{$to}"
+renamed = Renamed "{$from}" to "{$to}"
 restoring = Restoring {$items} {$items ->
         [one] item
         *[other] items
