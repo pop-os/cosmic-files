@@ -3290,7 +3290,7 @@ impl Tab {
                         .align_items(Alignment::Center)
                         .spacing(space_xxxs);
                     //TODO: figure out why this hardcoded offset is needed after the first item is ellipsed
-                    let overflow_offset = 32.0;
+                    let overflow_offset = 64.0;
                     let overflow = w + name_width + overflow_offset > size.width && index > 0;
                     if overflow {
                         row = row.push(widget::text::body(excess_str));
