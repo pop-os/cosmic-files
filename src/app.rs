@@ -274,6 +274,7 @@ pub enum Message {
     Modifiers(Modifiers),
     MoveToTrash(Option<Entity>),
     MounterItems(MounterKey, MounterItems),
+    MountResult(MounterKey, MounterItem, Result<bool, String>),
     NavBarClose(Entity),
     NavBarContext(Entity),
     NavMenuAction(NavMenuAction),
@@ -405,6 +406,11 @@ pub enum DialogPage {
     },
     EmptyTrash,
     FailedOperation(u64),
+    MountError {
+        mounter_key: MounterKey,
+        item: MounterItem,
+        error: String,
+    },
     NetworkAuth {
         mounter_key: MounterKey,
         uri: String,
@@ -1630,6 +1636,15 @@ impl Application for App {
                         DialogPage::FailedOperation(id) => {
                             log::warn!("TODO: retry operation {}", id);
                         }
+                        DialogPage::MountError {
+                            mounter_key,
+                            item,
+                            error: _,
+                        } => {
+                            if let Some(mounter) = MOUNTERS.get(&mounter_key) {
+                                return mounter.mount(item).map(|_| message::none());
+                            }
+                        }
                         DialogPage::NetworkAuth {
                             mounter_key: _,
                             uri: _,
@@ -1834,6 +1849,22 @@ impl Application for App {
 
                 return Command::batch(commands);
             }
+            Message::MountResult(mounter_key, item, res) => match res {
+                Ok(true) => {
+                    log::info!("connected to {:?}", item);
+                }
+                Ok(false) => {
+                    log::info!("cancelled connection to {:?}", item);
+                }
+                Err(error) => {
+                    log::warn!("failed to connect to {:?}: {}", item, error);
+                    self.dialog_pages.push_back(DialogPage::MountError {
+                        mounter_key,
+                        item,
+                        error,
+                    });
+                }
+            },
             Message::NetworkAuth(mounter_key, uri, auth, auth_tx) => {
                 self.dialog_pages.push_back(DialogPage::NetworkAuth {
                     mounter_key,
@@ -3198,6 +3229,19 @@ impl Application for App {
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
                     )
             }
+            DialogPage::MountError {
+                mounter_key: _,
+                item: _,
+                error,
+            } => widget::dialog(fl!("mount-error"))
+                .body(error)
+                .icon(widget::icon::from_name("dialog-error").size(64))
+                .primary_action(
+                    widget::button::standard(fl!("try-again")).on_press(Message::DialogComplete),
+                )
+                .secondary_action(
+                    widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                ),
             DialogPage::NetworkAuth {
                 mounter_key,
                 uri,
@@ -3988,6 +4032,7 @@ impl Application for App {
             subscriptions.push(mounter.subscription().map(move |mounter_message| {
                 match mounter_message {
                     MounterMessage::Items(items) => Message::MounterItems(key, items),
+                    MounterMessage::MountResult(item, res) => Message::MountResult(key, item, res),
                     MounterMessage::NetworkAuth(uri, auth, auth_tx) => {
                         Message::NetworkAuth(key, uri, auth, auth_tx)
                     }

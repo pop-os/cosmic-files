@@ -85,6 +85,7 @@ pub type MounterItems = Vec<MounterItem>;
 #[derive(Clone, Debug)]
 pub enum MounterMessage {
     Items(MounterItems),
+    MountResult(MounterItem, Result<bool, String>),
     NetworkAuth(String, MounterAuth, mpsc::Sender<MounterAuth>),
     NetworkResult(String, Result<bool, String>),
 }

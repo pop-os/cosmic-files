@@ -35,6 +35,9 @@ create-archive = Create archive
 empty-trash = Empty trash
 empty-trash-warning = Are you sure you want to permanently delete all the items in Trash?
 
+## Mount Error Dialog
+mount-error = Unable to access drive
+
 ## New File/Folder Dialog
 create-new-file = Create new file
 create-new-folder = Create new folder

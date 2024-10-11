@@ -212,6 +212,7 @@ enum Cmd {
 enum Event {
     Changed,
     Items(MounterItems),
+    MountResult(MounterItem, Result<bool, String>),
     NetworkAuth(String, MounterAuth, mpsc::Sender<MounterAuth>),
     NetworkResult(String, Result<bool, String>),
 }
@@ -324,7 +325,7 @@ impl Gvfs {
                             event_tx.send(Event::Items(items(&monitor, IconSizes::default()))).unwrap();
                         }
                         Cmd::Mount(mounter_item) => {
-                            let MounterItem::Gvfs(item) = mounter_item else { continue };
+                            let MounterItem::Gvfs(ref item) = mounter_item else { continue };
                             let ItemKind::Volume = item.kind else { continue };
                             for (i, volume) in monitor.volumes().into_iter().enumerate() {
                                 if i != item.index {
@@ -338,14 +339,24 @@ impl Gvfs {
                                 }
 
                                 log::info!("mount {}", name);
+                                //TODO: do not use name as a URI for mount_op
+                                let mount_op = mount_op(name.to_string(), event_tx.clone());
+                                let event_tx = event_tx.clone();
+                                let mounter_item = mounter_item.clone();
                                 VolumeExt::mount(
                                     &volume,
                                     gio::MountMountFlags::NONE,
-                                    //TODO: gio::MountOperation needed for network shares with auth
-                                    gio::MountOperation::NONE,
+                                    Some(&mount_op),
                                     gio::Cancellable::NONE,
-                                    move |result| {
-                                        log::info!("mount {}: result {:?}", name, result);
+                                    move |res| {
+                                        log::info!("mount {}: result {:?}", name, res);
+                                        event_tx.send(Event::MountResult(mounter_item, match res {
+                                            Ok(()) => Ok(true),
+                                            Err(err) => match err.kind::<gio::IOErrorEnum>() {
+                                                Some(gio::IOErrorEnum::FailedHandled) => Ok(false),
+                                                _ => Err(format!("{}", err))
+                                            }
+                                        })).unwrap();
                                     },
                                 );
                             }
@@ -355,7 +366,7 @@ impl Gvfs {
                             let mount_op = mount_op(uri.clone(), event_tx.clone());
                             let event_tx = event_tx.clone();
                             file.mount_enclosing_volume(
-                                gio::MountMountFlags::empty(),
+                                gio::MountMountFlags::NONE,
                                 Some(&mount_op),
                                 gio::Cancellable::NONE,
                                 move |res| {
@@ -499,6 +510,10 @@ impl Mounter for Gvfs {
                 match event {
                     Event::Changed => command_tx.send(Cmd::Rescan).unwrap(),
                     Event::Items(items) => output.send(MounterMessage::Items(items)).await.unwrap(),
+                    Event::MountResult(item, res) => output
+                        .send(MounterMessage::MountResult(item, res))
+                        .await
+                        .unwrap(),
                     Event::NetworkAuth(uri, auth, auth_tx) => output
                         .send(MounterMessage::NetworkAuth(uri, auth, auth_tx))
                         .await
