@@ -972,7 +972,7 @@ pub enum Message {
     LocationMenuAction(LocationMenuAction),
     Drag(Option<Rectangle>),
     EditLocation(Option<Location>),
-    EditLocationToggle,
+    EditLocationEnable,
     OpenInNewTab(PathBuf),
     EmptyTrash,
     Gallery(bool),
@@ -2016,6 +2016,7 @@ impl Tab {
             Message::Click(click_i_opt) => {
                 self.selected_clicked = false;
                 self.context_menu = None;
+                self.edit_location = None;
                 self.location_context_menu_index = None;
                 if click_i_opt.is_none() {
                     self.clicked = click_i_opt;
@@ -2150,6 +2151,7 @@ impl Tab {
                 commands.push(Command::Action(action));
             }
             Message::ContextMenu(point_opt) => {
+                self.edit_location = None;
                 if point_opt.is_none() || !mod_shift {
                     self.context_menu = point_opt;
                     //TODO: hack for clearing selecting when right clicking empty space
@@ -2234,12 +2236,11 @@ impl Tab {
                 }
                 self.edit_location = edit_location;
             }
-            Message::EditLocationToggle => {
-                if self.edit_location.is_none() {
-                    self.edit_location = Some(self.location.clone());
-                } else {
-                    self.edit_location = None;
-                }
+            Message::EditLocationEnable => {
+                commands.push(Command::Iced(widget::text_input::focus(
+                    self.edit_location_id.clone(),
+                )));
+                self.edit_location = Some(self.location.clone());
             }
             Message::OpenInNewTab(path) => {
                 commands.push(Command::OpenInNewTab(path));
