@@ -11,6 +11,15 @@ recents = Recentes
 undo = Desfazer
 today = Hoje
 
+# Desktop view options
+desktop-view-options = Opções de visualização do desktop...
+show-on-desktop = Mostrar no desktop
+desktop-folder-content = Conteúdo da pasta do desktop
+mounted-drives = Dispositivos montados
+trash-folder-icon = Ícone da lixeira
+icon-size-and-spacing = Tamanho e espaçamento do ícone
+icon-size = Tamanho do ícone
+
 # List view
 name = Nome
 modified = Modificação
@@ -25,6 +34,9 @@ create-archive = Compactar arquivos
 ## Empty Trash Dialog
 empty-trash = Esvaziar lixeira
 empty-trash-warning = Tem certeza de que deseja apagar permanentemente todos os itens da lixeira?
+
+## Mount Error Dialog
+mount-error = Não foi possível acessar o dispositivo
 
 ## New File/Folder Dialog
 create-new-file = Criar novo arquivo
