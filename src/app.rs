@@ -1357,45 +1357,41 @@ impl Application for App {
 
     fn nav_context_menu(
         &self,
-        id: widget::nav_bar::Id,
+        entity: widget::nav_bar::Id,
     ) -> Option<Vec<widget::menu::Tree<cosmic::app::Message<Self::Message>>>> {
-        let maybe_trash_entity = self.nav_model.iter().find(|&entity| {
-            self.nav_model
-                .data::<Location>(entity)
-                .map(|loc| *loc == Location::Trash)
-                .unwrap_or_default()
-        });
-        let mut is_context_trash = false;
-        if let Some(trash_id) = maybe_trash_entity {
-            is_context_trash = trash_id == id;
+        let favorite_index_opt = self.nav_model.data::<FavoriteIndex>(entity);
+        let location_opt = self.nav_model.data::<Location>(entity);
+
+        let mut items = Vec::new();
+
+        items.push(cosmic::widget::menu::Item::Button(
+            fl!("open-in-new-tab"),
+            NavMenuAction::OpenInNewTab(entity),
+        ));
+        items.push(cosmic::widget::menu::Item::Button(
+            fl!("open-in-new-window"),
+            NavMenuAction::OpenInNewWindow(entity),
+        ));
+        items.push(cosmic::widget::menu::Item::Divider);
+        items.push(cosmic::widget::menu::Item::Button(
+            fl!("show-details"),
+            NavMenuAction::Preview(entity),
+        ));
+        items.push(cosmic::widget::menu::Item::Divider);
+        if favorite_index_opt.is_some() {
+            items.push(cosmic::widget::menu::Item::Button(
+                fl!("remove-from-sidebar"),
+                NavMenuAction::RemoveFromSidebar(entity),
+            ));
         }
-        Some(cosmic::widget::menu::items(
-            &HashMap::new(),
-            vec![
-                cosmic::widget::menu::Item::Button(
-                    fl!("open-in-new-tab"),
-                    NavMenuAction::OpenInNewTab(id),
-                ),
-                cosmic::widget::menu::Item::Button(
-                    fl!("open-in-new-window"),
-                    NavMenuAction::OpenInNewWindow(id),
-                ),
-                cosmic::widget::menu::Item::Divider,
-                cosmic::widget::menu::Item::Button(fl!("show-details"), NavMenuAction::Preview(id)),
-                cosmic::widget::menu::Item::Divider,
-                if is_context_trash {
-                    cosmic::widget::menu::Item::Button(
-                        fl!("empty-trash"),
-                        NavMenuAction::EmptyTrash,
-                    )
-                } else {
-                    cosmic::widget::menu::Item::Button(
-                        fl!("remove-from-sidebar"),
-                        NavMenuAction::RemoveFromSidebar(id),
-                    )
-                },
-            ],
-        ))
+        if matches!(location_opt, Some(Location::Trash)) {
+            items.push(cosmic::widget::menu::Item::Button(
+                fl!("empty-trash"),
+                NavMenuAction::EmptyTrash,
+            ));
+        }
+
+        Some(cosmic::widget::menu::items(&HashMap::new(), items))
     }
 
     fn nav_model(&self) -> Option<&segmented_button::SingleSelectModel> {
