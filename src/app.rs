@@ -234,6 +234,8 @@ pub enum PreviewKind {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum NavMenuAction {
+    Open(segmented_button::Entity),
+    OpenWith(segmented_button::Entity),
     OpenInNewTab(segmented_button::Entity),
     OpenInNewWindow(segmented_button::Entity),
     Preview(segmented_button::Entity),
@@ -525,6 +527,69 @@ pub struct App {
 }
 
 impl App {
+    fn open_file(&mut self, path: &PathBuf) {
+        let mut found_desktop_exec = false;
+        let mime = mime_icon::mime_for_path(path);
+        if mime == "application/x-desktop" {
+            match freedesktop_entry_parser::parse_entry(path) {
+                Ok(entry) => match entry.section("Desktop Entry").attr("Exec") {
+                    Some(exec) => match mime_app::exec_to_command(exec, None) {
+                        Some(mut command) => match spawn_detached(&mut command) {
+                            Ok(()) => {
+                                found_desktop_exec = true;
+                            }
+                            Err(err) => {
+                                log::warn!("failed to execute {:?}: {}", path, err);
+                            }
+                        },
+                        None => {
+                            log::warn!("failed to parse {:?}: invalid Desktop Entry/Exec", path);
+                        }
+                    },
+                    None => {
+                        log::warn!("failed to parse {:?}: missing Desktop Entry/Exec", path);
+                    }
+                },
+                Err(err) => {
+                    log::warn!("failed to parse {:?}: {}", path, err);
+                }
+            }
+        } else if mime == "application/x-executable" || mime == "application/vnd.appimage" {
+            let mut command = std::process::Command::new(path);
+            match spawn_detached(&mut command) {
+                Ok(()) => {}
+                Err(err) => match err.kind() {
+                    io::ErrorKind::PermissionDenied => {
+                        // If permission is denied, try marking as executable, then running
+                        self.dialog_pages
+                            .push_back(DialogPage::SetExecutableAndLaunch {
+                                path: path.to_path_buf(),
+                            });
+                    }
+                    _ => {
+                        log::warn!("failed to execute {:?}: {}", path, err);
+                    }
+                },
+            }
+            found_desktop_exec = true;
+        }
+        if !found_desktop_exec {
+            match open::that_detached(path) {
+                Ok(()) => {
+                    let _ = recently_used_xbel::update_recently_used(
+                        path,
+                        App::APP_ID.to_string(),
+                        "cosmic-files".to_string(),
+                        None,
+                    );
+                }
+                Err(err) => {
+                    log::warn!("failed to open {:?}: {}", path, err);
+                }
+            }
+        }
+    }
+
     fn open_tab_entity(
         &mut self,
         location: Location,
@@ -1364,14 +1429,28 @@ impl Application for App {
 
         let mut items = Vec::new();
 
-        items.push(cosmic::widget::menu::Item::Button(
-            fl!("open-in-new-tab"),
-            NavMenuAction::OpenInNewTab(entity),
-        ));
-        items.push(cosmic::widget::menu::Item::Button(
-            fl!("open-in-new-window"),
-            NavMenuAction::OpenInNewWindow(entity),
-        ));
+        if location_opt
+            .and_then(|x| x.path_opt())
+            .map_or(false, |x| x.is_file())
+        {
+            items.push(cosmic::widget::menu::Item::Button(
+                fl!("open"),
+                NavMenuAction::Open(entity),
+            ));
+            items.push(cosmic::widget::menu::Item::Button(
+                fl!("open-with"),
+                NavMenuAction::OpenWith(entity),
+            ));
+        } else {
+            items.push(cosmic::widget::menu::Item::Button(
+                fl!("open-in-new-tab"),
+                NavMenuAction::OpenInNewTab(entity),
+            ));
+            items.push(cosmic::widget::menu::Item::Button(
+                fl!("open-in-new-window"),
+                NavMenuAction::OpenInNewWindow(entity),
+            ));
+        }
         items.push(cosmic::widget::menu::Item::Divider);
         items.push(cosmic::widget::menu::Item::Button(
             fl!("show-details"),
@@ -2538,81 +2617,7 @@ impl Application for App {
                         tab::Command::MoveToTrash(paths) => {
                             self.operation(Operation::Delete { paths });
                         }
-                        tab::Command::OpenFile(path) => {
-                            let mut found_desktop_exec = false;
-                            let mime = mime_icon::mime_for_path(&path);
-                            if mime == "application/x-desktop" {
-                                match freedesktop_entry_parser::parse_entry(&path) {
-                                    Ok(entry) => {
-                                        match entry.section("Desktop Entry").attr("Exec") {
-                                            Some(exec) => {
-                                                match mime_app::exec_to_command(exec, None) {
-                                                    Some(mut command) => {
-                                                        match spawn_detached(&mut command) {
-                                                            Ok(()) => {
-                                                                found_desktop_exec = true;
-                                                            }
-                                                            Err(err) => {
-                                                                log::warn!(
-                                                                    "failed to execute {:?}: {}",
-                                                                    path,
-                                                                    err
-                                                                );
-                                                            }
-                                                        }
-                                                    }
-                                                    None => {
-                                                        log::warn!("failed to parse {:?}: invalid Desktop Entry/Exec", path);
-                                                    }
-                                                }
-                                            }
-                                            None => {
-                                                log::warn!("failed to parse {:?}: missing Desktop Entry/Exec", path);
-                                            }
-                                        }
-                                    }
-                                    Err(err) => {
-                                        log::warn!("failed to parse {:?}: {}", path, err);
-                                    }
-                                }
-                            } else if mime == "application/x-executable"
-                                || mime == "application/vnd.appimage"
-                            {
-                                let mut command = std::process::Command::new(&path);
-                                match spawn_detached(&mut command) {
-                                    Ok(()) => {}
-                                    Err(err) => match err.kind() {
-                                        io::ErrorKind::PermissionDenied => {
-                                            // If permission is denied, try marking as executable, then running
-                                            self.dialog_pages.push_back(
-                                                DialogPage::SetExecutableAndLaunch {
-                                                    path: path.clone(),
-                                                },
-                                            );
-                                        }
-                                        _ => {
-                                            log::warn!("failed to execute {:?}: {}", path, err);
-                                        }
-                                    },
-                                }
-                                found_desktop_exec = true;
-                            }
-                            if !found_desktop_exec {
-                                match open::that_detached(&path) {
-                                    Ok(()) => {
-                                        let _ = recently_used_xbel::update_recently_used(
-                                            &path,
-                                            App::APP_ID.to_string(),
-                                            "cosmic-files".to_string(),
-                                            None,
-                                        );
-                                    }
-                                    Err(err) => {
-                                        log::warn!("failed to open {:?}: {}", path, err);
-                                    }
-                                }
-                            }
-                        }
+                        tab::Command::OpenFile(path) => self.open_file(&path),
                         tab::Command::OpenInNewTab(path) => {
                             commands.push(self.open_tab(Location::Path(path.clone()), false, None));
                         }
@@ -2937,6 +2942,48 @@ impl Application for App {
 
             // Applies selected nav bar context menu operation.
             Message::NavMenuAction(action) => match action {
+                NavMenuAction::Open(entity) => {
+                    match self
+                        .nav_model
+                        .data::<Location>(entity)
+                        .and_then(|x| x.path_opt())
+                        .map(|x| x.to_path_buf())
+                    {
+                        Some(path) => {
+                            self.open_file(&path);
+                        }
+                        None => {}
+                    }
+                }
+                NavMenuAction::OpenWith(entity) => {
+                    match self
+                        .nav_model
+                        .data::<Location>(entity)
+                        .and_then(|x| x.path_opt())
+                        .map(|x| x.to_path_buf())
+                    {
+                        Some(path) => match tab::item_from_path(&path, IconSizes::default()) {
+                            Ok(item) => {
+                                return self.update(Message::DialogPush(DialogPage::OpenWith {
+                                    path: path.to_path_buf(),
+                                    mime: item.mime.clone(),
+                                    apps: item.open_with.clone(),
+                                    selected: 0,
+                                    store_opt: "x-scheme-handler/mime"
+                                        .parse::<mime_guess::Mime>()
+                                        .ok()
+                                        .and_then(|mime| {
+                                            mime_app::mime_apps(&mime).first().cloned()
+                                        }),
+                                }));
+                            }
+                            Err(err) => {
+                                log::warn!("failed to get item for path {:?}: {}", path, err);
+                            }
+                        },
+                        None => {}
+                    }
+                }
                 NavMenuAction::OpenInNewTab(entity) => {
                     match self.nav_model.data::<Location>(entity) {
                         Some(Location::Path(ref path)) => {
