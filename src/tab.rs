@@ -450,18 +450,18 @@ pub fn item_from_entry(
 
 pub fn item_from_path<P: Into<PathBuf>>(path: P, sizes: IconSizes) -> Result<Item, String> {
     let path = path.into();
-    let name_os = path
-        .file_name()
-        .ok_or_else(|| format!("failed to get file name from path {:?}", path))?;
-    let name = name_os
-        .to_str()
-        .ok_or_else(|| {
-            format!(
-                "failed to parse file name for {:?}: {:?} is not valid UTF-8",
-                path, name_os
-            )
-        })?
-        .to_string();
+    let name = match path.file_name() {
+        Some(name_os) => name_os
+            .to_str()
+            .ok_or_else(|| {
+                format!(
+                    "failed to parse file name for {:?}: {:?} is not valid UTF-8",
+                    path, name_os
+                )
+            })?
+            .to_string(),
+        None => fl!("filesystem"),
+    };
     let metadata = fs::metadata(&path)
         .map_err(|err| format!("failed to read metadata for {:?}: {}", path, err))?;
     Ok(item_from_entry(path, name, metadata, sizes))
@@ -942,6 +942,7 @@ impl Location {
 pub enum Command {
     Action(Action),
     AddNetworkDrive,
+    AddToSidebar(PathBuf),
     ChangeLocation(String, Location, Option<PathBuf>),
     DropFiles(PathBuf, ClipboardPaste),
     EmptyTrash,
@@ -1014,6 +1015,7 @@ pub enum LocationMenuAction {
     OpenInNewTab(usize),
     OpenInNewWindow(usize),
     Preview(usize),
+    AddToSidebar(usize),
 }
 
 impl MenuAction for LocationMenuAction {
@@ -2198,6 +2200,16 @@ impl Tab {
                                     log::warn!("failed to get item from path {:?}: {}", path, err);
                                 }
                             }
+                        }
+                    }
+                    LocationMenuAction::AddToSidebar(ancestor_index) => {
+                        if let Some(path) = path_for_index(ancestor_index) {
+                            commands.push(Command::AddToSidebar(path));
+                        } else {
+                            log::warn!(
+                                "no ancestor {ancestor_index} for location {:?}",
+                                self.location
+                            );
                         }
                     }
                 }

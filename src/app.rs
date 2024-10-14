@@ -772,7 +772,7 @@ impl App {
                 } else if let Some(file_name) = path.file_name().and_then(|x| x.to_str()) {
                     file_name.to_string()
                 } else {
-                    continue;
+                    fl!("filesystem")
                 };
                 nav_model = nav_model.insert(move |b| {
                     b.text(name.clone())
@@ -2508,6 +2508,15 @@ impl Application for App {
                             self.context_page = ContextPage::NetworkDrive;
                             self.set_show_context(true);
                             self.set_context_title(self.context_page.title());
+                        }
+                        tab::Command::AddToSidebar(path) => {
+                            let mut favorites = self.config.favorites.clone();
+                            let favorite = Favorite::from_path(path);
+                            if !favorites.iter().any(|f| f == &favorite) {
+                                favorites.push(favorite);
+                            }
+                            config_set!(favorites, favorites);
+                            commands.push(self.update_config());
                         }
                         tab::Command::ChangeLocation(tab_title, tab_path, selection_path) => {
                             self.activate_nav_model_location(&tab_path);

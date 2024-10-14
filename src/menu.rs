@@ -603,6 +603,7 @@ pub fn menu_bar<'a>(
 }
 
 pub fn location_context_menu<'a>(ancestor_index: usize) -> Element<'a, tab::Message> {
+    //TODO: only add some of these when in App mode
     let children = vec![
         menu_button!(text::body(fl!("open-in-new-tab")))
             .on_press(tab::Message::LocationMenuAction(
@@ -618,6 +619,12 @@ pub fn location_context_menu<'a>(ancestor_index: usize) -> Element<'a, tab::Mess
         menu_button!(text::body(fl!("show-details")))
             .on_press(tab::Message::LocationMenuAction(
                 LocationMenuAction::Preview(ancestor_index),
+            ))
+            .into(),
+        divider::horizontal::light().into(),
+        menu_button!(text::body(fl!("add-to-sidebar")))
+            .on_press(tab::Message::LocationMenuAction(
+                LocationMenuAction::AddToSidebar(ancestor_index),
             ))
             .into(),
     ];
