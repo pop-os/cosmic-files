@@ -96,6 +96,7 @@ pub enum Action {
     DesktopViewOptions,
     EditHistory,
     EditLocation,
+    EmptyTrash,
     ExtractHere,
     Gallery,
     HistoryNext,
@@ -155,6 +156,7 @@ impl Action {
             Action::EditLocation => {
                 Message::TabMessage(entity_opt, tab::Message::EditLocationEnable)
             }
+            Action::EmptyTrash => Message::TabMessage(None, tab::Message::EmptyTrash),
             Action::ExtractHere => Message::ExtractHere(entity_opt),
             Action::Gallery => Message::TabMessage(entity_opt, tab::Message::GalleryToggle),
             Action::HistoryNext => Message::TabMessage(entity_opt, tab::Message::GoNext),

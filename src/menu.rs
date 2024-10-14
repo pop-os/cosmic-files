@@ -89,6 +89,7 @@ pub fn context_menu<'a>(
 
     let mut selected_dir = 0;
     let mut selected = 0;
+    let mut selected_trash_only = false;
     let mut selected_types: Vec<Mime> = vec![];
     tab.items_opt().map(|items| {
         for item in items.iter() {
@@ -97,12 +98,16 @@ pub fn context_menu<'a>(
                 if item.metadata.is_dir() {
                     selected_dir += 1;
                 }
+                if item.location_opt == Some(Location::Trash) {
+                    selected_trash_only = true;
+                }
                 selected_types.push(item.mime.clone());
             }
         }
     });
     selected_types.sort_unstable();
     selected_types.dedup();
+    selected_trash_only = selected_trash_only && selected == 1;
 
     let mut children: Vec<Element<_>> = Vec::new();
     match (&tab.mode, &tab.location) {
@@ -110,7 +115,12 @@ pub fn context_menu<'a>(
             tab::Mode::App | tab::Mode::Desktop,
             Location::Desktop(..) | Location::Path(..) | Location::Search(..) | Location::Recents,
         ) => {
-            if selected > 0 {
+            if selected_trash_only {
+                children.push(menu_item(fl!("open"), Action::Open).into());
+                if tab::trash_entries() > 0 {
+                    children.push(menu_item(fl!("empty-trash"), Action::EmptyTrash).into());
+                }
+            } else if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
                     children.push(menu_item(fl!("open"), Action::Open).into());
                 }
