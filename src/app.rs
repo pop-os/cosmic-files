@@ -153,7 +153,7 @@ impl Action {
             Action::DesktopViewOptions => Message::DesktopViewOptions,
             Action::EditHistory => Message::ToggleContextPage(ContextPage::EditHistory),
             Action::EditLocation => {
-                Message::TabMessage(entity_opt, tab::Message::EditLocationToggle)
+                Message::TabMessage(entity_opt, tab::Message::EditLocationEnable)
             }
             Action::ExtractHere => Message::ExtractHere(entity_opt),
             Action::Gallery => Message::TabMessage(entity_opt, tab::Message::GalleryToggle),
@@ -1550,6 +1550,11 @@ impl Application for App {
                 return Command::none();
             }
 
+            if tab.edit_location.is_some() {
+                tab.edit_location = None;
+                return Command::none();
+            }
+
             let had_focused_button = tab.select_focus_id().is_some();
             if tab.select_none() {
                 if had_focused_button {
@@ -2937,6 +2942,12 @@ impl Application for App {
 
             // Tracks which nav bar item to show a context menu for.
             Message::NavBarContext(entity) => {
+                // Close location editing if enabled
+                let tab_entity = self.tab_model.active();
+                if let Some(tab) = self.tab_model.data_mut::<Tab>(tab_entity) {
+                    tab.edit_location = None;
+                }
+
                 self.nav_bar_context_id = entity;
             }
 

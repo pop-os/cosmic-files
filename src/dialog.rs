@@ -1035,6 +1035,12 @@ impl Application for App {
             return Command::none();
         }
 
+        if self.tab.edit_location.is_some() {
+            // Close location editing if enabled
+            self.tab.edit_location = None;
+            return Command::none();
+        }
+
         let had_focused_button = self.tab.select_focus_id().is_some();
         if self.tab.select_none() {
             if had_focused_button {
