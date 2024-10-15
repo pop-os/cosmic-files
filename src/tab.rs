@@ -118,6 +118,7 @@ static SPECIAL_DIRS: Lazy<HashMap<PathBuf, &'static str>> = Lazy::new(|| {
 fn button_appearance(
     theme: &theme::Theme,
     selected: bool,
+    highlighted: bool,
     focused: bool,
     accent: bool,
     condensed_radius: bool,
@@ -130,6 +131,14 @@ fn button_appearance(
             appearance.background = Some(Color::from(cosmic.accent_color()).into());
             appearance.icon_color = Some(Color::from(cosmic.on_accent_color()));
             appearance.text_color = Some(Color::from(cosmic.on_accent_color()));
+        } else {
+            appearance.background = Some(Color::from(cosmic.bg_component_color()).into());
+        }
+    } else if highlighted {
+        if accent {
+            appearance.background = Some(Color::from(cosmic.bg_component_color()).into());
+            appearance.icon_color = Some(Color::from(cosmic.on_bg_component_color()));
+            appearance.text_color = Some(Color::from(cosmic.on_bg_component_color()));
         } else {
             appearance.background = Some(Color::from(cosmic.bg_component_color()).into());
         }
@@ -154,6 +163,7 @@ fn button_appearance(
 
 fn button_style(
     selected: bool,
+    highlighted: bool,
     accent: bool,
     condensed_radius: bool,
     desktop: bool,
@@ -161,16 +171,48 @@ fn button_style(
     //TODO: move to libcosmic?
     theme::Button::Custom {
         active: Box::new(move |focused, theme| {
-            button_appearance(theme, selected, focused, accent, condensed_radius, desktop)
+            button_appearance(
+                theme,
+                selected,
+                highlighted,
+                focused,
+                accent,
+                condensed_radius,
+                desktop,
+            )
         }),
         disabled: Box::new(move |theme| {
-            button_appearance(theme, selected, false, accent, condensed_radius, desktop)
+            button_appearance(
+                theme,
+                selected,
+                highlighted,
+                false,
+                accent,
+                condensed_radius,
+                desktop,
+            )
         }),
         hovered: Box::new(move |focused, theme| {
-            button_appearance(theme, selected, focused, accent, condensed_radius, desktop)
+            button_appearance(
+                theme,
+                selected,
+                highlighted,
+                focused,
+                accent,
+                condensed_radius,
+                desktop,
+            )
         }),
         pressed: Box::new(move |focused, theme| {
-            button_appearance(theme, selected, focused, accent, condensed_radius, desktop)
+            button_appearance(
+                theme,
+                selected,
+                highlighted,
+                focused,
+                accent,
+                condensed_radius,
+                desktop,
+            )
         }),
     }
 }
@@ -444,6 +486,7 @@ pub fn item_from_entry(
         pos_opt: Cell::new(None),
         rect_opt: Cell::new(None),
         selected: false,
+        highlighted: false,
         overlaps_drag_rect: false,
     }
 }
@@ -672,6 +715,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     pos_opt: Cell::new(None),
                     rect_opt: Cell::new(None),
                     selected: false,
+                    highlighted: false,
                     overlaps_drag_rect: false,
                 });
             }
@@ -854,6 +898,7 @@ pub fn scan_desktop(
             pos_opt: Cell::new(None),
             rect_opt: Cell::new(None),
             selected: false,
+            highlighted: false,
             overlaps_drag_rect: false,
         })
     }
@@ -1022,6 +1067,8 @@ pub enum Message {
     WindowToggleMaximize,
     ZoomIn,
     ZoomOut,
+    HighlightDeactivate(usize),
+    HighlightActivate(usize),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -1247,6 +1294,7 @@ pub struct Item {
     pub pos_opt: Cell<Option<(usize, usize)>>,
     pub rect_opt: Cell<Option<Rectangle>>,
     pub selected: bool,
+    pub highlighted: bool,
     pub overlaps_drag_rect: bool,
 }
 
@@ -2592,6 +2640,16 @@ impl Tab {
                     }
                 }
             }
+            Message::HighlightDeactivate(i) => {
+                if let Some(item) = self.items_opt.as_mut().and_then(|f| f.get_mut(i)) {
+                    item.highlighted = false;
+                }
+            }
+            Message::HighlightActivate(i) => {
+                if let Some(item) = self.items_opt.as_mut().and_then(|f| f.get_mut(i)) {
+                    item.highlighted = true;
+                }
+            }
 
             Message::Scroll(viewport) => {
                 self.scroll_opt = Some(viewport.absolute_offset());
@@ -3554,7 +3612,13 @@ impl Tab {
                             .size(icon_sizes.grid()),
                     )
                     .padding(space_xxxs)
-                    .class(button_style(item.selected, false, false, false))
+                    .class(button_style(
+                        item.selected,
+                        item.highlighted,
+                        false,
+                        false,
+                        false,
+                    ))
                     .into(),
                     widget::tooltip(
                         widget::button::custom(widget::text::body(&item.display_name))
@@ -3562,6 +3626,7 @@ impl Tab {
                             .padding([0, space_xxxs])
                             .class(button_style(
                                 item.selected,
+                                item.highlighted,
                                 true,
                                 true,
                                 matches!(self.mode, Mode::Desktop),
@@ -3606,7 +3671,9 @@ impl Tab {
                     .on_press(move |_| Message::Click(Some(i)))
                     .on_double_click(move |_| Message::DoubleClick(Some(i)))
                     .on_release(move |_| Message::ClickRelease(Some(i)))
-                    .on_middle_press(move |_| Message::MiddleClick(i));
+                    .on_middle_press(move |_| Message::MiddleClick(i))
+                    .on_enter(move || Message::HighlightActivate(i))
+                    .on_exit(move || Message::HighlightDeactivate(i));
 
                 //TODO: error if the row or col is already set?
                 while grid_elements.len() <= row {
@@ -3703,6 +3770,7 @@ impl Tab {
                                 .padding(space_xxxs)
                                 .class(button_style(
                                     item.selected,
+                                    item.highlighted,
                                     false,
                                     false,
                                     false,
@@ -3711,7 +3779,13 @@ impl Tab {
                                     .id(item.button_id.clone())
                                     .on_press(Message::Click(Some(*i)))
                                     .padding([0, space_xxxs])
-                                    .class(button_style(item.selected, true, true, false)),
+                                    .class(button_style(
+                                        item.selected,
+                                        item.highlighted,
+                                        true,
+                                        true,
+                                        false,
+                                    )),
                             ];
 
                             let mut column = widget::column::with_capacity(buttons.len())
@@ -3922,12 +3996,20 @@ impl Tab {
                             .width(Length::Fill)
                             .id(item.button_id.clone())
                             .padding([0, space_xxs])
-                            .class(button_style(item.selected, true, false, false)),
+                            .class(button_style(
+                                item.selected,
+                                item.highlighted,
+                                true,
+                                false,
+                                false,
+                            )),
                     )
                     .on_press(move |_| Message::Click(Some(i)))
                     .on_double_click(move |_| Message::DoubleClick(Some(i)))
                     .on_release(move |_| Message::ClickRelease(Some(i)))
-                    .on_middle_press(move |_| Message::MiddleClick(i));
+                    .on_middle_press(move |_| Message::MiddleClick(i))
+                    .on_enter(move || Message::HighlightActivate(i))
+                    .on_exit(move || Message::HighlightDeactivate(i));
 
                     if self.context_menu.is_some() {
                         mouse_area
