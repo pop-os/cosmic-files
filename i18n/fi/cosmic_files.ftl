@@ -77,7 +77,7 @@ browse-store = Selaa {$store}
 
 ## Rename Dialog
 
-rename-file = Rename fileNimeä tiedosto uudelleen
+rename-file = Nimeä tiedosto uudelleen
 rename-folder = Nimeä kansio uudelleen
 
 ## Replace Dialog
@@ -87,7 +87,7 @@ replace-title = Kohde "{$filename}" on jo olemassa tässä sijainnissa.
 replace-warning = Haluatko korvata sen tallentamallasi kohteella? Korvaaminen ylikirjoittaa kohteen sisällön.
 replace-warning-operation = Haluatko korvata sen? Korvaaminen ylikirjoittaa sen sisällön.
 original-file = Alkuperäinen tiedosto
-replace-with = Replace with Korvaa kohteella
+replace-with = Korvaa kohteella
 apply-to-all = Sovella kaikkiin
 keep-both = Pidä molemmat
 skip = Jätä välistä
