@@ -737,7 +737,8 @@ impl Application for App {
         core.window.show_close = false;
         core.window.show_maximize = false;
         core.window.show_minimize = false;
-        core.window.show_context = true;
+        // Only show details context drawer by default in open dialog
+        core.window.show_context = !flags.kind.save();
 
         let title = flags.kind.title();
         let accept_label = flags.kind.accept_label();
