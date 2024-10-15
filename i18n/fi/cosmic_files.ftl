@@ -111,7 +111,7 @@ execute = Käynnistys
 
 ## About
 
-git-description = Git versio {$hash} päivänä {$date}
+git-description = Git-versio {$hash} päivänä {$date}
 
 ## Add Network Drive
 
