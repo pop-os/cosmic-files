@@ -492,10 +492,10 @@ fn update<Message: Clone>(
         }
     }
 
-    if let Event::Mouse(mouse::Event::CursorMoved { position }) = event {
+    if let Event::Mouse(mouse::Event::CursorMoved { .. }) = event {
         let position_in = cursor.position_in(layout_bounds);
         match (position_in, state.last_position) {
-            (None, Some(last)) => {
+            (None, Some(_)) => {
                 if let Some(message) = widget.on_exit.as_ref() {
                     shell.publish(message())
                 }
