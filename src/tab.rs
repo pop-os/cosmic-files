@@ -204,7 +204,7 @@ pub fn trash_entries() -> usize {
 }
 
 pub fn trash_icon(icon_size: u16) -> widget::icon::Handle {
-    widget::icon::from_name(if trash_entries() > 0 {
+    widget::icon::from_name(if !trash::os_limited::is_empty() {
         "user-trash-full"
     } else {
         "user-trash"
@@ -214,7 +214,7 @@ pub fn trash_icon(icon_size: u16) -> widget::icon::Handle {
 }
 
 pub fn trash_icon_symbolic(icon_size: u16) -> widget::icon::Handle {
-    widget::icon::from_name(if trash_entries() > 0 {
+    widget::icon::from_name(if !trash::os_limited::is_empty() {
         "user-trash-full-symbolic"
     } else {
         "user-trash-symbolic"
