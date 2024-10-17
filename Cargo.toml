@@ -81,6 +81,9 @@ wgpu = ["libcosmic/wgpu"]
 [profile.dev]
 opt-level = 1
 
+[profile.release]
+lto = "fat"
+
 [profile.release-with-debug]
 inherits = "release"
 debug = true
