@@ -528,15 +528,15 @@ pub struct App {
 
 impl App {
     fn open_file(&mut self, path: &PathBuf) {
-        let mut found_desktop_exec = false;
         let mime = mime_icon::mime_for_path(path);
         if mime == "application/x-desktop" {
+            // Try opening desktop application
             match freedesktop_entry_parser::parse_entry(path) {
                 Ok(entry) => match entry.section("Desktop Entry").attr("Exec") {
                     Some(exec) => match mime_app::exec_to_command(exec, None) {
                         Some(mut command) => match spawn_detached(&mut command) {
                             Ok(()) => {
-                                found_desktop_exec = true;
+                                return;
                             }
                             Err(err) => {
                                 log::warn!("failed to execute {:?}: {}", path, err);
@@ -555,6 +555,7 @@ impl App {
                 }
             }
         } else if mime == "application/x-executable" || mime == "application/vnd.appimage" {
+            // Try opening executable
             let mut command = std::process::Command::new(path);
             match spawn_detached(&mut command) {
                 Ok(()) => {}
@@ -571,10 +572,15 @@ impl App {
                     }
                 },
             }
-            found_desktop_exec = true;
+            return;
         }
-        if !found_desktop_exec {
-            match open::that_detached(path) {
+
+        // Try mime apps, which should be faster than xdg-open
+        for app in mime_app::mime_apps(&mime) {
+            let Some(mut command) = app.command(Some(path.clone().into())) else {
+                continue;
+            };
+            match spawn_detached(&mut command) {
                 Ok(()) => {
                     let _ = recently_used_xbel::update_recently_used(
                         path,
@@ -582,10 +588,26 @@ impl App {
                         "cosmic-files".to_string(),
                         None,
                     );
+                    return;
                 }
                 Err(err) => {
-                    log::warn!("failed to open {:?}: {}", path, err);
+                    log::warn!("failed to open {:?} with {:?}: {}", path, app.id, err);
                 }
+            }
+        }
+
+        // Fall back to using open crate
+        match open::that_detached(path) {
+            Ok(()) => {
+                let _ = recently_used_xbel::update_recently_used(
+                    path,
+                    App::APP_ID.to_string(),
+                    "cosmic-files".to_string(),
+                    None,
+                );
+            }
+            Err(err) => {
+                log::warn!("failed to open {:?}: {}", path, err);
             }
         }
     }
