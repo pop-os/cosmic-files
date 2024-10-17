@@ -96,22 +96,25 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     localize::localize();
 
-    let (config_handler, config) = Config::load();
+    let (config_handler, mut config) = Config::load();
 
     let mut locations = Vec::new();
     for arg in env::args().skip(1) {
-        let location = if &arg == "--trash" {
-            Location::Trash
-        } else {
-            match fs::canonicalize(&arg) {
-                Ok(absolute) => Location::Path(absolute),
+        match &*arg {
+            "--trash" => locations.push(Location::Trash),
+            // Override session regardless of config
+            "--no-session" => _ = config.session.tabs.take(),
+            path => match fs::canonicalize(path) {
+                Ok(absolute) => locations.push(Location::Path(absolute)),
                 Err(err) => {
                     log::warn!("failed to canonicalize {:?}: {}", arg, err);
                     continue;
                 }
-            }
-        };
-        locations.push(location);
+            } 
+        }
+    }
+    if let Some(session) = config.session.restore.then(|| config.session.tabs.take()).flatten() {
+        locations.extend(session);
     }
 
     let mut settings = Settings::default();

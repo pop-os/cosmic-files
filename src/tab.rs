@@ -861,12 +861,15 @@ pub fn scan_desktop(
     items
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
 pub enum Location {
+    #[serde(skip)]
     Desktop(PathBuf, String, DesktopConfig),
+    #[serde(skip)]
     Network(String, String),
     Path(PathBuf),
     Recents,
+    #[serde(skip)]
     Search(PathBuf, String, bool, Instant),
     Trash,
 }
