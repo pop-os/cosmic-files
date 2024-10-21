@@ -3016,19 +3016,27 @@ impl Tab {
                         ItemThumbnail::Image(handle, _) => {
                             if let Some(path) = item.path_opt() {
                                 element_opt = Some(
-                                    //TODO: use widget::image::viewer, when its zoom can be reset
-                                    widget::image(widget::image::Handle::from_path(path))
-                                        .width(Length::Fill)
-                                        .height(Length::Fill)
-                                        .into(),
+                                    widget::container(
+                                        //TODO: use widget::image::viewer, when its zoom can be reset
+                                        widget::image(widget::image::Handle::from_path(path)),
+                                    )
+                                    .align_x(Alignment::Center)
+                                    .align_y(Alignment::Center)
+                                    .width(Length::Fill)
+                                    .height(Length::Fill)
+                                    .into(),
                                 );
                             } else {
                                 element_opt = Some(
-                                    //TODO: use widget::image::viewer, when its zoom can be reset
-                                    widget::image(handle.clone())
-                                        .width(Length::Fill)
-                                        .height(Length::Fill)
-                                        .into(),
+                                    widget::container(
+                                        //TODO: use widget::image::viewer, when its zoom can be reset
+                                        widget::image(handle.clone()),
+                                    )
+                                    .align_x(Alignment::Center)
+                                    .align_y(Alignment::Center)
+                                    .width(Length::Fill)
+                                    .height(Length::Fill)
+                                    .into(),
                                 );
                             }
                         }
