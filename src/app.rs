@@ -4,11 +4,11 @@
 #[cfg(feature = "wayland")]
 use cosmic::iced::{
     event::wayland::{Event as WaylandEvent, OutputEvent},
-    wayland::{
-        actions::layer_surface::{IcedMargin, IcedOutput, SctkLayerSurfaceSettings},
-        layer_surface::{
-            destroy_layer_surface, get_layer_surface, Anchor, KeyboardInteractivity, Layer,
-        },
+    platform_specific::runtime::wayland::layer_surface::{
+        IcedMargin, IcedOutput, SctkLayerSurfaceSettings,
+    },
+    platform_specific::shell::wayland::commands::layer_surface::{
+        destroy_layer_surface, get_layer_surface, Anchor, KeyboardInteractivity, Layer,
     },
     Limits,
 };
