@@ -172,7 +172,8 @@ impl<M: Send + 'static> Dialog<M> {
 
         let (window_id, window_command) = window::open(settings.clone());
 
-        let core = Core::default();
+        let mut core = Core::default();
+        core.set_main_window_id(window_id);
         let flags = Flags {
             kind,
             path_opt: path_opt
@@ -191,9 +192,6 @@ impl<M: Send + 'static> Dialog<M> {
 
         // settings here is unused
         let (mut cosmic, cosmic_command) = Cosmic::<App>::init((core, flags, settings));
-        let update_command = cosmic.update(app::Message::Cosmic(
-            app::cosmic::Message::MainWindowCreated(window_id),
-        ));
 
         (
             Self {
@@ -204,9 +202,6 @@ impl<M: Send + 'static> Dialog<M> {
             Task::batch([
                 window_command.map(|_id| message::none()),
                 cosmic_command
-                    .map(DialogMessage)
-                    .map(move |message| app::Message::App(mapper(message))),
-                update_command
                     .map(DialogMessage)
                     .map(move |message| app::Message::App(mapper(message))),
             ]),
