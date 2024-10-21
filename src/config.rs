@@ -4,7 +4,7 @@ use std::{any::TypeId, num::NonZeroU16, path::PathBuf};
 
 use cosmic::{
     cosmic_config::{self, cosmic_config_derive::CosmicConfigEntry, CosmicConfigEntry},
-    iced::subscription::Subscription,
+    iced::Subscription,
     theme, Application,
 };
 use serde::{Deserialize, Serialize};

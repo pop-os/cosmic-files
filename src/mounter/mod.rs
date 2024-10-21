@@ -1,4 +1,4 @@
-use cosmic::{iced::subscription, widget, Command};
+use cosmic::{iced::Subscription, widget, Task};
 use once_cell::sync::Lazy;
 use std::{collections::BTreeMap, fmt, path::PathBuf, sync::Arc};
 use tokio::sync::mpsc;
@@ -93,11 +93,11 @@ pub enum MounterMessage {
 pub trait Mounter: Send + Sync {
     fn items(&self, sizes: IconSizes) -> Option<MounterItems>;
     //TODO: send result
-    fn mount(&self, item: MounterItem) -> Command<()>;
-    fn network_drive(&self, uri: String) -> Command<()>;
+    fn mount(&self, item: MounterItem) -> Task<()>;
+    fn network_drive(&self, uri: String) -> Task<()>;
     fn network_scan(&self, uri: &str, sizes: IconSizes) -> Option<Result<Vec<tab::Item>, String>>;
-    fn unmount(&self, item: MounterItem) -> Command<()>;
-    fn subscription(&self) -> subscription::Subscription<MounterMessage>;
+    fn unmount(&self, item: MounterItem) -> Task<()>;
+    fn subscription(&self) -> Subscription<MounterMessage>;
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

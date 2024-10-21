@@ -27,11 +27,11 @@ macro_rules! menu_button {
                 vec![$(Element::from($x)),+]
             )
             .height(Length::Fixed(24.0))
-            .align_items(Alignment::Center)
+            .align_y(Alignment::Center)
         )
         .padding([theme::active().cosmic().spacing.space_xxxs, 16])
         .width(Length::Fill)
-        .style(theme::Button::MenuItem)
+        .class(theme::Button::MenuItem)
     );
 }
 
@@ -62,12 +62,8 @@ pub fn context_menu<'a>(
 
     let menu_item = |label, action| {
         let key = find_key(&action);
-        menu_button!(
-            text::body(label),
-            horizontal_space(Length::Fill),
-            text::body(key)
-        )
-        .on_press(tab::Message::ContextAction(action))
+        menu_button!(text::body(label), horizontal_space(), text::body(key))
+            .on_press(tab::Message::ContextAction(action))
     };
 
     let (sort_name, sort_direction, _) = tab.sort_options();
@@ -291,10 +287,10 @@ pub fn context_menu<'a>(
     container(column::with_children(children))
         .padding(1)
         //TODO: move style to libcosmic
-        .style(theme::Container::custom(|theme| {
+        .style(|theme| {
             let cosmic = theme.cosmic();
             let component = &cosmic.background.component;
-            container::Appearance {
+            container::Style {
                 icon_color: Some(component.on.into()),
                 text_color: Some(component.on.into()),
                 background: Some(Background::Color(component.base.into())),
@@ -305,7 +301,7 @@ pub fn context_menu<'a>(
                 },
                 ..Default::default()
             }
-        }))
+        })
         .width(Length::Fixed(260.0))
         .into()
 }
@@ -641,10 +637,10 @@ pub fn location_context_menu<'a>(ancestor_index: usize) -> Element<'a, tab::Mess
 
     container(column::with_children(children))
         .padding(1)
-        .style(theme::Container::custom(|theme| {
+        .style(|theme| {
             let cosmic = theme.cosmic();
             let component = &cosmic.background.component;
-            container::Appearance {
+            container::Style {
                 icon_color: Some(component.on.into()),
                 text_color: Some(component.on.into()),
                 background: Some(Background::Color(component.base.into())),
@@ -655,7 +651,7 @@ pub fn location_context_menu<'a>(ancestor_index: usize) -> Element<'a, tab::Mess
                 },
                 ..Default::default()
             }
-        }))
+        })
         .width(Length::Fixed(240.0))
         .into()
 }
