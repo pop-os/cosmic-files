@@ -1,7 +1,7 @@
 use cosmic::{
-    app::{self, Command, Core, Settings},
+    app::{self, Core, Settings, Task},
     executor,
-    iced::{subscription::Subscription, window},
+    iced::{window, Subscription},
     widget, Application, Element,
 };
 use cosmic_files::dialog::{Dialog, DialogKind, DialogMessage, DialogResult};
@@ -42,18 +42,18 @@ impl Application for App {
         &mut self.core
     }
 
-    fn init(core: Core, _flags: Self::Flags) -> (Self, Command<Message>) {
+    fn init(core: Core, _flags: Self::Flags) -> (Self, Task<Message>) {
         (
             Self {
                 core,
                 dialog_opt: None,
                 result_opt: None,
             },
-            Command::none(),
+            Task::none(),
         )
     }
 
-    fn update(&mut self, message: Message) -> Command<Message> {
+    fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::DialogMessage(dialog_message) => {
                 if let Some(dialog) = &mut self.dialog_opt {
@@ -78,7 +78,7 @@ impl Application for App {
             }
         }
 
-        Command::none()
+        Task::none()
     }
 
     fn view_window(&self, window_id: window::Id) -> Element<Message> {

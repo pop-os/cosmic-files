@@ -170,7 +170,7 @@ impl<M: Send + 'static> Dialog<M> {
             settings.platform_specific.application_id = App::APP_ID.to_string();
         }
 
-        //let (window_id, window_command) = window::open(settings);
+        let (window_id, window_command) = window::open(settings.clone());
 
         let core = Core::default();
         let flags = Flags {
@@ -184,13 +184,16 @@ impl<M: Send + 'static> Dialog<M> {
                         None
                     }
                 }),
-            //TODO
-            window_id: window::Id::NONE,
+            window_id,
             config_handler,
             config,
         };
 
-        let (cosmic, cosmic_command) = Cosmic::<App>::init((core, flags, settings));
+        // settings here is unused
+        let (mut cosmic, cosmic_command) = Cosmic::<App>::init((core, flags, settings));
+        let update_command = cosmic.update(app::Message::Cosmic(
+            app::cosmic::Message::MainWindowCreated(window_id),
+        ));
 
         (
             Self {
@@ -198,9 +201,15 @@ impl<M: Send + 'static> Dialog<M> {
                 mapper,
                 on_result: Box::new(on_result),
             },
-            cosmic_command
-                .map(DialogMessage)
-                .map(move |message| app::Message::App(mapper(message))),
+            Task::batch([
+                window_command.map(|_id| message::none()),
+                cosmic_command
+                    .map(DialogMessage)
+                    .map(move |message| app::Message::App(mapper(message))),
+                update_command
+                    .map(DialogMessage)
+                    .map(move |message| app::Message::App(mapper(message))),
+            ]),
         )
     }
 
@@ -1582,15 +1591,21 @@ impl Application for App {
     fn subscription(&self) -> Subscription<Message> {
         struct WatcherSubscription;
         let mut subscriptions = vec![
-            event::listen_with(|event, status, _window_id| match event {
-                Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => match status {
-                    event::Status::Ignored => Some(Message::Key(modifiers, key)),
-                    event::Status::Captured => None,
-                },
-                Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
-                    Some(Message::Modifiers(modifiers))
+            event::listen_with(|event, status, window_id| {
+                //TODO: why are we getting events for this window Id?
+                if window_id == window::Id::NONE {
+                    return None;
                 }
-                _ => None,
+                match event {
+                    Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => match status {
+                        event::Status::Ignored => Some(Message::Key(modifiers, key)),
+                        event::Status::Captured => None,
+                    },
+                    Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
+                        Some(Message::Modifiers(modifiers))
+                    }
+                    _ => None,
+                }
             }),
             Config::subscription().map(|update| {
                 if !update.errors.is_empty() {
