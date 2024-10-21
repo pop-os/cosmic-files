@@ -1348,7 +1348,6 @@ impl Application for App {
         });
 
         let window_id_opt = core.main_window_id();
-        println!("WINDOW ID {:?}", window_id_opt);
 
         let mut app = App {
             core,
@@ -3927,9 +3926,23 @@ impl Application for App {
 
         let mut subscriptions = vec![
             event::listen_with(|event, status, window_id| {
-                //TODO: why are we getting events for this window Id?
+                //TODO: why are we getting keyboard events for this window Id?
                 if window_id == window::Id::NONE {
-                    return None;
+                    return match event {
+                        #[cfg(feature = "wayland")]
+                        Event::PlatformSpecific(event::PlatformSpecific::Wayland(
+                            wayland_event,
+                        )) => {
+                            println!("{:?}", wayland_event);
+                            match wayland_event {
+                                WaylandEvent::Output(output_event, output) => {
+                                    Some(Message::OutputEvent(output_event, output))
+                                }
+                                _ => None,
+                            }
+                        }
+                        _ => None,
+                    };
                 }
                 match event {
                     Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => match status {
@@ -3940,15 +3953,6 @@ impl Application for App {
                         Some(Message::Modifiers(modifiers))
                     }
                     Event::Window(WindowEvent::CloseRequested) => Some(Message::WindowClose),
-                    #[cfg(feature = "wayland")]
-                    Event::PlatformSpecific(event::PlatformSpecific::Wayland(wayland_event)) => {
-                        match wayland_event {
-                            WaylandEvent::Output(output_event, output) => {
-                                Some(Message::OutputEvent(output_event, output))
-                            }
-                            _ => None,
-                        }
-                    }
                     _ => None,
                 }
             }),
