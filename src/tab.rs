@@ -3020,10 +3020,7 @@ impl Tab {
                                         //TODO: use widget::image::viewer, when its zoom can be reset
                                         widget::image(widget::image::Handle::from_path(path)),
                                     )
-                                    .align_x(Alignment::Center)
-                                    .align_y(Alignment::Center)
-                                    .width(Length::Fill)
-                                    .height(Length::Fill)
+                                    .center(Length::Fill)
                                     .into(),
                                 );
                             } else {
@@ -3032,10 +3029,7 @@ impl Tab {
                                         //TODO: use widget::image::viewer, when its zoom can be reset
                                         widget::image(handle.clone()),
                                     )
-                                    .align_x(Alignment::Center)
-                                    .align_y(Alignment::Center)
-                                    .width(Length::Fill)
-                                    .height(Length::Fill)
+                                    .center(Length::Fill)
                                     .into(),
                                 );
                             }
