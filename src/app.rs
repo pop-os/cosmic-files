@@ -3925,36 +3925,25 @@ impl Application for App {
         struct TrashWatcherSubscription;
 
         let mut subscriptions = vec![
-            event::listen_with(|event, status, window_id| {
-                //TODO: why are we getting keyboard events for this window Id?
-                if window_id == window::Id::NONE {
-                    return match event {
-                        #[cfg(feature = "wayland")]
-                        Event::PlatformSpecific(event::PlatformSpecific::Wayland(
-                            wayland_event,
-                        )) => {
-                            println!("{:?}", wayland_event);
-                            match wayland_event {
-                                WaylandEvent::Output(output_event, output) => {
-                                    Some(Message::OutputEvent(output_event, output))
-                                }
-                                _ => None,
-                            }
+            event::listen_with(|event, status, _window_id| match event {
+                Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => match status {
+                    event::Status::Ignored => Some(Message::Key(modifiers, key)),
+                    event::Status::Captured => None,
+                },
+                Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
+                    Some(Message::Modifiers(modifiers))
+                }
+                Event::Window(WindowEvent::CloseRequested) => Some(Message::WindowClose),
+                #[cfg(feature = "wayland")]
+                Event::PlatformSpecific(event::PlatformSpecific::Wayland(wayland_event)) => {
+                    match wayland_event {
+                        WaylandEvent::Output(output_event, output) => {
+                            Some(Message::OutputEvent(output_event, output))
                         }
                         _ => None,
-                    };
-                }
-                match event {
-                    Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => match status {
-                        event::Status::Ignored => Some(Message::Key(modifiers, key)),
-                        event::Status::Captured => None,
-                    },
-                    Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
-                        Some(Message::Modifiers(modifiers))
                     }
-                    Event::Window(WindowEvent::CloseRequested) => Some(Message::WindowClose),
-                    _ => None,
                 }
+                _ => None,
             }),
             Config::subscription().map(|update| {
                 if !update.errors.is_empty() {
