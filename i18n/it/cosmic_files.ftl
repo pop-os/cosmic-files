@@ -35,6 +35,9 @@ create-archive = Crea archivio
 empty-trash = Svuota cestino
 empty-trash-warning = Sei sicuro di voler cancellare definitivamente tutti gli elementi contenuti nel cestino?
 
+## Mount Error Dialog
+mount-error = Impossibile accedere all'unità
+
 ## New File/Folder Dialog
 create-new-file = Crea file
 create-new-folder = Crea cartella
