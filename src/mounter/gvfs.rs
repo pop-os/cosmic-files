@@ -1,6 +1,6 @@
 use cosmic::{
-    iced::{futures::SinkExt, subscription},
-    widget, Command,
+    iced::{futures::SinkExt, stream, Subscription},
+    widget, Task,
 };
 use gio::{glib, prelude::*};
 use std::{any::TypeId, cell::Cell, future::pending, path::PathBuf, sync::Arc};
@@ -460,9 +460,9 @@ impl Mounter for Gvfs {
         items_rx.blocking_recv()
     }
 
-    fn mount(&self, item: MounterItem) -> Command<()> {
+    fn mount(&self, item: MounterItem) -> Task<()> {
         let command_tx = self.command_tx.clone();
-        Command::perform(
+        Task::perform(
             async move {
                 command_tx.send(Cmd::Mount(item)).unwrap();
                 ()
@@ -471,9 +471,9 @@ impl Mounter for Gvfs {
         )
     }
 
-    fn network_drive(&self, uri: String) -> Command<()> {
+    fn network_drive(&self, uri: String) -> Task<()> {
         let command_tx = self.command_tx.clone();
-        Command::perform(
+        Task::perform(
             async move {
                 command_tx.send(Cmd::NetworkDrive(uri)).unwrap();
                 ()
@@ -490,9 +490,9 @@ impl Mounter for Gvfs {
         items_rx.blocking_recv()
     }
 
-    fn unmount(&self, item: MounterItem) -> Command<()> {
+    fn unmount(&self, item: MounterItem) -> Task<()> {
         let command_tx = self.command_tx.clone();
-        Command::perform(
+        Task::perform(
             async move {
                 command_tx.send(Cmd::Unmount(item)).unwrap();
                 ()
@@ -501,30 +501,35 @@ impl Mounter for Gvfs {
         )
     }
 
-    fn subscription(&self) -> subscription::Subscription<MounterMessage> {
+    fn subscription(&self) -> Subscription<MounterMessage> {
         let command_tx = self.command_tx.clone();
         let event_rx = self.event_rx.clone();
-        subscription::channel(TypeId::of::<Self>(), 1, |mut output| async move {
-            command_tx.send(Cmd::Rescan).unwrap();
-            while let Some(event) = event_rx.lock().await.recv().await {
-                match event {
-                    Event::Changed => command_tx.send(Cmd::Rescan).unwrap(),
-                    Event::Items(items) => output.send(MounterMessage::Items(items)).await.unwrap(),
-                    Event::MountResult(item, res) => output
-                        .send(MounterMessage::MountResult(item, res))
-                        .await
-                        .unwrap(),
-                    Event::NetworkAuth(uri, auth, auth_tx) => output
-                        .send(MounterMessage::NetworkAuth(uri, auth, auth_tx))
-                        .await
-                        .unwrap(),
-                    Event::NetworkResult(uri, res) => output
-                        .send(MounterMessage::NetworkResult(uri, res))
-                        .await
-                        .unwrap(),
+        Subscription::run_with_id(
+            TypeId::of::<Self>(),
+            stream::channel(1, |mut output| async move {
+                command_tx.send(Cmd::Rescan).unwrap();
+                while let Some(event) = event_rx.lock().await.recv().await {
+                    match event {
+                        Event::Changed => command_tx.send(Cmd::Rescan).unwrap(),
+                        Event::Items(items) => {
+                            output.send(MounterMessage::Items(items)).await.unwrap()
+                        }
+                        Event::MountResult(item, res) => output
+                            .send(MounterMessage::MountResult(item, res))
+                            .await
+                            .unwrap(),
+                        Event::NetworkAuth(uri, auth, auth_tx) => output
+                            .send(MounterMessage::NetworkAuth(uri, auth, auth_tx))
+                            .await
+                            .unwrap(),
+                        Event::NetworkResult(uri, res) => output
+                            .send(MounterMessage::NetworkResult(uri, res))
+                            .await
+                            .unwrap(),
+                    }
                 }
-            }
-            pending().await
-        })
+                pending().await
+            }),
+        )
     }
 }

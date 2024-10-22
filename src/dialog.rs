@@ -1,19 +1,14 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
-#[cfg(feature = "winit")]
-use cosmic::iced::multi_window::Application as IcedApplication;
-#[cfg(feature = "wayland")]
-use cosmic::iced::Application as IcedApplication;
 use cosmic::{
-    app::{self, cosmic::Cosmic, message, Command, Core},
+    app::{self, cosmic::Cosmic, message, Core, Task},
     cosmic_config, cosmic_theme, executor,
     iced::{
         event,
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers},
-        subscription::{self, Subscription},
-        window, Alignment, Event, Length, Size,
+        stream, window, Alignment, Event, Length, Size, Subscription,
     },
     theme,
     widget::{
@@ -156,7 +151,7 @@ impl<M: Send + 'static> Dialog<M> {
         path_opt: Option<PathBuf>,
         mapper: fn(DialogMessage) -> M,
         on_result: impl Fn(DialogResult) -> M + 'static,
-    ) -> (Self, Command<M>) {
+    ) -> (Self, Task<M>) {
         //TODO: only do this once somehow?
         crate::localize::localize();
 
@@ -175,9 +170,10 @@ impl<M: Send + 'static> Dialog<M> {
             settings.platform_specific.application_id = App::APP_ID.to_string();
         }
 
-        let (window_id, window_command) = window::spawn(settings);
+        let (window_id, window_command) = window::open(settings.clone());
 
-        let core = Core::default();
+        let mut core = Core::default();
+        core.set_main_window_id(Some(window_id));
         let flags = Flags {
             kind,
             path_opt: path_opt
@@ -193,21 +189,24 @@ impl<M: Send + 'static> Dialog<M> {
             config_handler,
             config,
         };
-        let (cosmic, cosmic_command) = <Cosmic<App> as IcedApplication>::new((core, flags));
 
+        let (cosmic, cosmic_command) = Cosmic::<App>::init((core, flags));
         (
             Self {
                 cosmic,
                 mapper,
                 on_result: Box::new(on_result),
             },
-            Command::batch([window_command, cosmic_command])
-                .map(DialogMessage)
-                .map(move |message| app::Message::App(mapper(message))),
+            Task::batch([
+                window_command.map(|_id| message::none()),
+                cosmic_command
+                    .map(DialogMessage)
+                    .map(move |message| app::Message::App(mapper(message))),
+            ]),
         )
     }
 
-    pub fn set_title(&mut self, title: impl Into<String>) -> Command<M> {
+    pub fn set_title(&mut self, title: impl Into<String>) -> Task<M> {
         let mapper = self.mapper;
         self.cosmic.app.title = title.into();
         self.cosmic
@@ -237,7 +236,7 @@ impl<M: Send + 'static> Dialog<M> {
         &mut self,
         filters: impl Into<Vec<DialogFilter>>,
         filter_selected: Option<usize>,
-    ) -> Command<M> {
+    ) -> Task<M> {
         let mapper = self.mapper;
         self.cosmic.app.filters = filters.into();
         self.cosmic.app.filter_selected = filter_selected;
@@ -255,7 +254,7 @@ impl<M: Send + 'static> Dialog<M> {
             .map(self.mapper)
     }
 
-    pub fn update(&mut self, message: DialogMessage) -> Command<M> {
+    pub fn update(&mut self, message: DialogMessage) -> Task<M> {
         let mapper = self.mapper;
         let command = self
             .cosmic
@@ -264,9 +263,9 @@ impl<M: Send + 'static> Dialog<M> {
             .map(move |message| app::Message::App(mapper(message)));
         if let Some(result) = self.cosmic.app.result_opt.take() {
             let on_result_message = (self.on_result)(result);
-            Command::batch([
+            Task::batch([
                 command,
-                Command::perform(async move { app::Message::App(on_result_message) }, |x| x),
+                Task::perform(async move { app::Message::App(on_result_message) }, |x| x),
             ])
         } else {
             command
@@ -281,7 +280,7 @@ impl<M: Send + 'static> Dialog<M> {
     }
 
     pub fn window_id(&self) -> window::Id {
-        self.cosmic.app.main_window_id()
+        self.cosmic.app.flags.window_id
     }
 }
 
@@ -421,7 +420,7 @@ impl App {
         let mut row = widget::row::with_capacity(
             if !self.filters.is_empty() { 1 } else { 0 } + self.choices.len() * 2 + 3,
         )
-        .align_items(Alignment::Center)
+        .align_y(Alignment::Center)
         .spacing(space_xxs);
         if !self.filters.is_empty() {
             row = row.push(widget::dropdown(
@@ -433,7 +432,7 @@ impl App {
         for (choice_i, choice) in self.choices.iter().enumerate() {
             match choice {
                 DialogChoice::CheckBox { label, value, .. } => {
-                    row = row.push(widget::checkbox(label, *value, move |checked| {
+                    row = row.push(widget::checkbox(label, *value).on_toggle(move |checked| {
                         Message::Choice(choice_i, if checked { 1 } else { 0 })
                     }));
                 }
@@ -450,7 +449,7 @@ impl App {
                 }
             }
         }
-        row = row.push(widget::horizontal_space(Length::Fill));
+        row = row.push(widget::horizontal_space());
         row = row.push(widget::button::standard(fl!("cancel")).on_press(Message::Cancel));
         row = row.push(if self.flags.kind.save() {
             widget::button::suggested(&self.accept_label).on_press(Message::Save(false))
@@ -505,10 +504,10 @@ impl App {
         widget::settings::view_column(children).into()
     }
 
-    fn rescan_tab(&self) -> Command<Message> {
+    fn rescan_tab(&self) -> Task<Message> {
         let location = self.tab.location.clone();
         let icon_sizes = self.tab.config.icon_sizes;
-        Command::perform(
+        Task::perform(
             async move {
                 let location2 = location.clone();
                 match tokio::task::spawn_blocking(move || location2.scan(icon_sizes)).await {
@@ -532,7 +531,7 @@ impl App {
         }
     }
 
-    fn search_set(&mut self, term_opt: Option<String>) -> Command<Message> {
+    fn search_set(&mut self, term_opt: Option<String>) -> Task<Message> {
         let location_opt = match term_opt {
             Some(term) => match &self.tab.location {
                 Location::Path(path) | Location::Search(path, ..) => Some((
@@ -553,23 +552,23 @@ impl App {
         };
         if let Some((location, focus_search)) = location_opt {
             self.tab.change_location(&location, None);
-            return Command::batch([
+            return Task::batch([
                 self.update_title(),
                 self.update_watcher(),
                 self.rescan_tab(),
                 if focus_search {
                     widget::text_input::focus(self.search_id.clone())
                 } else {
-                    Command::none()
+                    Task::none()
                 },
             ]);
         }
-        Command::none()
+        Task::none()
     }
 
-    fn update_config(&mut self) -> Command<Message> {
+    fn update_config(&mut self) -> Task<Message> {
         self.update_nav_model();
-        Command::none()
+        Task::none()
     }
 
     fn activate_nav_model_location(&mut self, location: &Location) {
@@ -657,12 +656,12 @@ impl App {
         self.activate_nav_model_location(&self.tab.location.clone());
     }
 
-    fn update_title(&mut self) -> Command<Message> {
+    fn update_title(&mut self) -> Task<Message> {
         self.set_header_title(self.title.clone());
-        self.set_window_title(self.title.clone(), self.main_window_id())
+        self.set_window_title(self.title.clone(), self.flags.window_id)
     }
 
-    fn update_watcher(&mut self) -> Command<Message> {
+    fn update_watcher(&mut self) -> Task<Message> {
         if let Some((mut watcher, old_paths)) = self.watcher_opt.take() {
             let mut new_paths = HashSet::new();
             if let Some(path) = &self.tab.location.path_opt() {
@@ -705,7 +704,7 @@ impl App {
         }
 
         //TODO: should any of this run in a command?
-        Command::none()
+        Task::none()
     }
 }
 
@@ -732,7 +731,7 @@ impl Application for App {
     }
 
     /// Creates the application, and optionally emits command on initialize.
-    fn init(mut core: Core, flags: Self::Flags) -> (Self, Command<Message>) {
+    fn init(mut core: Core, flags: Self::Flags) -> (Self, Task<Message>) {
         core.window.context_is_overlay = false;
         core.window.show_close = false;
         core.window.show_maximize = false;
@@ -785,7 +784,7 @@ impl Application for App {
             watcher_opt: None,
         };
 
-        let commands = Command::batch([
+        let commands = Task::batch([
             app.update_config(),
             app.update_title(),
             app.update_watcher(),
@@ -793,10 +792,6 @@ impl Application for App {
         ]);
 
         (app, commands)
-    }
-
-    fn main_window_id(&self) -> window::Id {
-        self.flags.window_id
     }
 
     fn context_drawer(&self) -> Option<Element<Message>> {
@@ -822,7 +817,7 @@ impl Application for App {
                     widget::container(self.button_view())
                         .width(Length::Fill)
                         .padding(space_xxs)
-                        .style(theme::Container::WindowBackground)
+                        .class(theme::Container::WindowBackground)
                         .into(),
                 ])
                 .into(),
@@ -1004,7 +999,7 @@ impl Application for App {
         None
     }
 
-    fn on_nav_select(&mut self, entity: segmented_button::Entity) -> Command<Message> {
+    fn on_nav_select(&mut self, entity: segmented_button::Entity) -> Task<Message> {
         self.nav_model.activate(entity);
         if let Some(location) = self.nav_model.data::<Location>(entity) {
             let message = Message::TabMessage(tab::Message::Location(location.clone()));
@@ -1016,14 +1011,14 @@ impl Application for App {
                 return mounter.mount(data.1.clone()).map(|_| message::none());
             }
         }
-        Command::none()
+        Task::none()
     }
 
-    fn on_escape(&mut self) -> Command<Message> {
+    fn on_escape(&mut self) -> Task<Message> {
         if self.tab.gallery {
             // Close gallery if open
             self.tab.gallery = false;
-            return Command::none();
+            return Task::none();
         }
 
         if self.search_get().is_some() {
@@ -1033,13 +1028,13 @@ impl Application for App {
 
         if self.tab.context_menu.is_some() {
             self.tab.context_menu = None;
-            return Command::none();
+            return Task::none();
         }
 
         if self.tab.edit_location.is_some() {
             // Close location editing if enabled
             self.tab.edit_location = None;
-            return Command::none();
+            return Task::none();
         }
 
         let had_focused_button = self.tab.select_focus_id().is_some();
@@ -1048,19 +1043,19 @@ impl Application for App {
                 // Unfocus if there was a focused button
                 return widget::button::focus(widget::Id::unique());
             }
-            return Command::none();
+            return Task::none();
         }
 
         self.update(Message::Cancel)
     }
 
     /// Handle application events here.
-    fn update(&mut self, message: Message) -> Command<Message> {
+    fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::None => {}
             Message::Cancel => {
                 self.result_opt = Some(DialogResult::Cancel);
-                return window::close(self.main_window_id());
+                return window::close(self.flags.window_id);
             }
             Message::Choice(choice_i, option_i) => {
                 if let Some(choice) = self.choices.get_mut(choice_i) {
@@ -1187,7 +1182,7 @@ impl Application for App {
                 //TODO: this could change favorites IDs while they are in use
                 self.update_nav_model();
 
-                return Command::batch(commands);
+                return Task::batch(commands);
             }
             Message::NewFolder => {
                 if let Some(path) = self.tab.location.path_opt() {
@@ -1293,7 +1288,7 @@ impl Application for App {
                             return self.update(message);
                         } else {
                             // Otherwise, this is not a legal selection
-                            return Command::none();
+                            return Task::none();
                         }
                     }
                 }
@@ -1301,7 +1296,7 @@ impl Application for App {
                 // If there are proper matching items, return them
                 if !paths.is_empty() {
                     self.result_opt = Some(DialogResult::Open(paths));
-                    return window::close(self.main_window_id());
+                    return window::close(self.flags.window_id);
                 }
 
                 // If we are in directory mode, return the current directory
@@ -1309,7 +1304,7 @@ impl Application for App {
                     match &self.tab.location {
                         Location::Path(tab_path) => {
                             self.result_opt = Some(DialogResult::Open(vec![tab_path.clone()]));
-                            return window::close(self.main_window_id());
+                            return window::close(self.flags.window_id);
                         }
                         _ => {}
                     }
@@ -1341,7 +1336,7 @@ impl Application for App {
                                 });
                             } else {
                                 self.result_opt = Some(DialogResult::Open(vec![path]));
-                                return window::close(self.main_window_id());
+                                return window::close(self.flags.window_id);
                             }
                         }
                     }
@@ -1388,12 +1383,11 @@ impl Application for App {
                             commands.push(self.update(Message::from(action.message())));
                         }
                         tab::Command::ChangeLocation(_tab_title, _tab_path, _selection_path) => {
-                            commands
-                                .push(Command::batch([self.update_watcher(), self.rescan_tab()]));
+                            commands.push(Task::batch([self.update_watcher(), self.rescan_tab()]));
                         }
                         tab::Command::Iced(iced_command) => {
                             commands.push(
-                                iced_command.map(|tab_message| {
+                                iced_command.0.map(|tab_message| {
                                     message::app(Message::TabMessage(tab_message))
                                 }),
                             );
@@ -1411,17 +1405,17 @@ impl Application for App {
                             self.set_context_title(self.context_page.title());
                         }
                         tab::Command::WindowDrag => {
-                            commands.push(window::drag(self.main_window_id()));
+                            commands.push(window::drag(self.flags.window_id));
                         }
                         tab::Command::WindowToggleMaximize => {
-                            commands.push(window::toggle_maximize(self.main_window_id()));
+                            commands.push(window::toggle_maximize(self.flags.window_id));
                         }
                         unsupported => {
                             log::warn!("{unsupported:?} not supported in dialog mode");
                         }
                     }
                 }
-                return Command::batch(commands);
+                return Task::batch(commands);
             }
             Message::TabRescan(location, parent_item_opt, mut items) => {
                 if location == self.tab.location {
@@ -1554,7 +1548,7 @@ impl Application for App {
             }
         }
 
-        Command::none()
+        Task::none()
     }
 
     /// Creates a view after each update.
@@ -1590,7 +1584,7 @@ impl Application for App {
     fn subscription(&self) -> Subscription<Message> {
         struct WatcherSubscription;
         let mut subscriptions = vec![
-            event::listen_with(|event, status| match event {
+            event::listen_with(|event, status, _window_id| match event {
                 Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => match status {
                     event::Status::Ignored => Some(Message::Key(modifiers, key)),
                     event::Status::Captured => None,
@@ -1610,10 +1604,9 @@ impl Application for App {
                 }
                 Message::Config(update.config)
             }),
-            subscription::channel(
+            Subscription::run_with_id(
                 TypeId::of::<WatcherSubscription>(),
-                100,
-                |mut output| async move {
+                stream::channel(100, |mut output| async move {
                     let watcher_res = {
                         let mut output = output.clone();
                         new_debouncer(
@@ -1683,7 +1676,7 @@ impl Application for App {
                     }
 
                     std::future::pending().await
-                },
+                }),
             ),
             self.tab.subscription().map(Message::TabMessage),
         ];

@@ -4,26 +4,26 @@
 #[cfg(feature = "wayland")]
 use cosmic::iced::{
     event::wayland::{Event as WaylandEvent, OutputEvent},
-    wayland::{
-        actions::layer_surface::{IcedMargin, IcedOutput, SctkLayerSurfaceSettings},
-        layer_surface::{
-            destroy_layer_surface, get_layer_surface, Anchor, KeyboardInteractivity, Layer,
-        },
+    platform_specific::runtime::wayland::layer_surface::{
+        IcedMargin, IcedOutput, SctkLayerSurfaceSettings,
+    },
+    platform_specific::shell::wayland::commands::layer_surface::{
+        destroy_layer_surface, get_layer_surface, Anchor, KeyboardInteractivity, Layer,
     },
     Limits,
 };
 use cosmic::{
-    app::{self, message, Command, Core},
+    app::{self, message, Core, Task},
     cosmic_config, cosmic_theme, executor,
     iced::{
         clipboard::dnd::DndAction,
         event,
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers},
-        subscription::{self, Subscription},
+        stream,
         widget::scrollable,
         window::{self, Event as WindowEvent, Id as WindowId},
-        Alignment, Event, Length, Size,
+        Alignment, Event, Length, Size, Subscription,
     },
     iced_runtime::clipboard,
     style, theme,
@@ -619,7 +619,7 @@ impl App {
         location: Location,
         activate: bool,
         selection_path: Option<PathBuf>,
-    ) -> (Entity, Command<Message>) {
+    ) -> (Entity, Task<Message>) {
         let mut tab = Tab::new(location.clone(), self.config.tab);
         tab.mode = match self.mode {
             Mode::App => tab::Mode::App,
@@ -643,7 +643,7 @@ impl App {
 
         (
             entity,
-            Command::batch([
+            Task::batch([
                 self.update_title(),
                 self.update_watcher(),
                 self.rescan_tab(entity, location, selection_path),
@@ -656,7 +656,7 @@ impl App {
         location: Location,
         activate: bool,
         selection_path: Option<PathBuf>,
-    ) -> Command<Message> {
+    ) -> Task<Message> {
         self.open_tab_entity(location, activate, selection_path).1
     }
 
@@ -681,10 +681,10 @@ impl App {
         entity: Entity,
         location: Location,
         selection_path: Option<PathBuf>,
-    ) -> Command<Message> {
+    ) -> Task<Message> {
         log::info!("rescan_tab {entity:?} {location:?} {selection_path:?}");
         let icon_sizes = self.config.tab.icon_sizes;
-        Command::perform(
+        Task::perform(
             async move {
                 let location2 = location.clone();
                 match tokio::task::spawn_blocking(move || location2.scan(icon_sizes)).await {
@@ -705,7 +705,7 @@ impl App {
         )
     }
 
-    fn rescan_trash(&mut self) -> Command<Message> {
+    fn rescan_trash(&mut self) -> Task<Message> {
         let mut needs_reload = Vec::new();
         for entity in self.tab_model.iter() {
             if let Some(tab) = self.tab_model.data::<Tab>(entity) {
@@ -719,14 +719,14 @@ impl App {
         for (entity, location) in needs_reload {
             commands.push(self.rescan_tab(entity, location, None));
         }
-        Command::batch(commands)
+        Task::batch(commands)
     }
 
-    fn search(&mut self) -> Command<Message> {
+    fn search(&mut self) -> Task<Message> {
         if let Some(term) = self.search_get() {
             self.search_set(Some(term.to_string()))
         } else {
-            Command::none()
+            Task::none()
         }
     }
 
@@ -739,7 +739,7 @@ impl App {
         }
     }
 
-    fn search_set(&mut self, term_opt: Option<String>) -> Command<Message> {
+    fn search_set(&mut self, term_opt: Option<String>) -> Task<Message> {
         let entity = self.tab_model.active();
         let mut title_location_opt = None;
         if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
@@ -768,18 +768,18 @@ impl App {
         }
         if let Some((title, location, focus_search)) = title_location_opt {
             self.tab_model.text_set(entity, title);
-            return Command::batch([
+            return Task::batch([
                 self.update_title(),
                 self.update_watcher(),
                 self.rescan_tab(entity, location, None),
                 if focus_search {
                     widget::text_input::focus(self.search_id.clone())
                 } else {
-                    Command::none()
+                    Task::none()
                 },
             ]);
         }
-        Command::none()
+        Task::none()
     }
 
     fn selected_paths(&self, entity_opt: Option<Entity>) -> Vec<PathBuf> {
@@ -795,7 +795,7 @@ impl App {
         paths
     }
 
-    fn update_config(&mut self) -> Command<Message> {
+    fn update_config(&mut self) -> Task<Message> {
         self.update_nav_model();
         // Tabs are collected first to placate the borrowck
         let tabs: Vec<_> = self.tab_model.iter().collect();
@@ -810,10 +810,10 @@ impl App {
             ))
         }))
         .collect();
-        Command::batch(commands)
+        Task::batch(commands)
     }
 
-    fn update_desktop(&mut self) -> Command<Message> {
+    fn update_desktop(&mut self) -> Task<Message> {
         let mut needs_reload = Vec::new();
         for entity in self.tab_model.iter() {
             if let Some(tab) = self.tab_model.data::<Tab>(entity) {
@@ -826,7 +826,7 @@ impl App {
         for (entity, location) in needs_reload {
             commands.push(self.rescan_tab(entity, location, None));
         }
-        Command::batch(commands)
+        Task::batch(commands)
     }
 
     fn activate_nav_model_location(&mut self, location: &Location) {
@@ -941,12 +941,12 @@ impl App {
         }
     }
 
-    fn update_notification(&mut self) -> Command<Message> {
+    fn update_notification(&mut self) -> Task<Message> {
         // Handle closing notification if there are no operations
         if self.pending_operations.is_empty() {
             #[cfg(feature = "notify")]
             if let Some(notification_arc) = self.notification_opt.take() {
-                return Command::perform(
+                return Task::perform(
                     async move {
                         tokio::task::spawn_blocking(move || {
                             //TODO: this is nasty
@@ -963,18 +963,22 @@ impl App {
             }
         }
 
-        Command::none()
+        Task::none()
     }
 
-    fn update_title(&mut self) -> Command<Message> {
+    fn update_title(&mut self) -> Task<Message> {
         let window_title = match self.tab_model.text(self.tab_model.active()) {
             Some(tab_title) => format!("{tab_title} — {}", fl!("cosmic-files")),
             None => fl!("cosmic-files"),
         };
-        self.set_window_title(window_title, window::Id::MAIN)
+        if let Some(window_id) = &self.window_id_opt {
+            self.set_window_title(window_title, *window_id)
+        } else {
+            Task::none()
+        }
     }
 
-    fn update_watcher(&mut self) -> Command<Message> {
+    fn update_watcher(&mut self) -> Task<Message> {
         if let Some((mut watcher, old_paths)) = self.watcher_opt.take() {
             let mut new_paths = HashSet::new();
             for entity in self.tab_model.iter() {
@@ -1021,7 +1025,7 @@ impl App {
         }
 
         //TODO: should any of this run in a command?
-        Command::none()
+        Task::none()
     }
 
     fn about(&self) -> Element<Message> {
@@ -1051,7 +1055,7 @@ impl App {
                     .padding(0)
                 .into(),
             ])
-        .align_items(Alignment::Center)
+        .align_x(Alignment::Center)
         .spacing(space_xxs)
         .into()
     }
@@ -1093,11 +1097,8 @@ impl App {
             text_input.into(),
             widget::text(fl!("network-drive-description")).into(),
             table.into(),
-            widget::row::with_children(vec![
-                widget::horizontal_space(Length::Fill).into(),
-                button.into(),
-            ])
-            .into(),
+            widget::row::with_children(vec![widget::horizontal_space().into(), button.into()])
+                .into(),
         ])
         .spacing(space_m)
         .into()
@@ -1322,7 +1323,7 @@ impl Application for App {
     }
 
     /// Creates the application, and optionally emits command on initialize.
-    fn init(mut core: Core, flags: Self::Flags) -> (Self, Command<Self::Message>) {
+    fn init(mut core: Core, flags: Self::Flags) -> (Self, Task<Self::Message>) {
         core.window.context_is_overlay = false;
         match flags.mode {
             Mode::App => {
@@ -1345,6 +1346,8 @@ impl Application for App {
             Mode::App => tab::Mode::App,
             Mode::Desktop => tab::Mode::Desktop,
         });
+
+        let window_id_opt = core.main_window_id();
 
         let mut app = App {
             core,
@@ -1376,7 +1379,7 @@ impl Application for App {
             surface_names: HashMap::new(),
             toasts: widget::toaster::Toasts::new(Message::CloseToast),
             watcher_opt: None,
-            window_id_opt: Some(window::Id::MAIN),
+            window_id_opt,
             windows: HashMap::new(),
             nav_dnd_hover: None,
             tab_dnd_hover: None,
@@ -1398,11 +1401,7 @@ impl Application for App {
             }
         }
 
-        (app, Command::batch(commands))
-    }
-
-    fn main_window_id(&self) -> window::Id {
-        self.window_id_opt.unwrap_or(window::Id::MAIN)
+        (app, Task::batch(commands))
     }
 
     fn nav_bar(&self) -> Option<Element<message::Message<Self::Message>>> {
@@ -1504,7 +1503,7 @@ impl Application for App {
         }
     }
 
-    fn on_nav_select(&mut self, entity: Entity) -> Command<Self::Message> {
+    fn on_nav_select(&mut self, entity: Entity) -> Task<Self::Message> {
         self.nav_model.activate(entity);
         if let Some(location) = self.nav_model.data::<Location>(entity) {
             let message = Message::TabMessage(None, tab::Message::Location(location.clone()));
@@ -1516,7 +1515,7 @@ impl Application for App {
                 return mounter.mount(data.1.clone()).map(|_| message::none());
             }
         }
-        Command::none()
+        Task::none()
     }
 
     fn on_app_exit(&mut self) -> Option<Message> {
@@ -1527,7 +1526,7 @@ impl Application for App {
         Some(Message::WindowCloseRequested(id))
     }
 
-    fn on_context_drawer(&mut self) -> Command<Self::Message> {
+    fn on_context_drawer(&mut self) -> Task<Self::Message> {
         match self.context_page {
             ContextPage::Preview(..) => {
                 // Persist state of preview page
@@ -1537,22 +1536,22 @@ impl Application for App {
             }
             _ => {}
         }
-        Command::none()
+        Task::none()
     }
 
-    fn on_escape(&mut self) -> Command<Self::Message> {
+    fn on_escape(&mut self) -> Task<Self::Message> {
         let entity = self.tab_model.active();
 
         // Close dialog if open
         if self.dialog_pages.pop_front().is_some() {
-            return Command::none();
+            return Task::none();
         }
 
         // Close gallery mode if open
         if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
             if tab.gallery {
                 tab.gallery = false;
-                return Command::none();
+                return Task::none();
             }
         }
 
@@ -1562,7 +1561,7 @@ impl Application for App {
         // of closing everything on one press
         if self.core.window.show_context {
             self.set_show_context(false);
-            return Command::none();
+            return Task::none();
         }
         if self.search_get().is_some() {
             // Close search if open
@@ -1571,12 +1570,12 @@ impl Application for App {
         if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
             if tab.context_menu.is_some() {
                 tab.context_menu = None;
-                return Command::none();
+                return Task::none();
             }
 
             if tab.edit_location.is_some() {
                 tab.edit_location = None;
-                return Command::none();
+                return Task::none();
             }
 
             let had_focused_button = tab.select_focus_id().is_some();
@@ -1585,15 +1584,15 @@ impl Application for App {
                     // Unfocus if there was a focused button
                     return widget::button::focus(widget::Id::unique());
                 }
-                return Command::none();
+                return Task::none();
             }
         }
 
-        Command::none()
+        Task::none()
     }
 
     /// Handle application events here.
-    fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
+    fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
         // Helper for updating config values efficiently
         macro_rules! config_set {
             ($name: ident, $value: expr) => {
@@ -1709,9 +1708,9 @@ impl Application for App {
                         "com.system76.CosmicFilesDialog".to_string();
                 }
 
-                let (id, command) = window::spawn(settings);
+                let (id, command) = window::open(settings);
                 self.windows.insert(id, WindowKind::DesktopViewOptions);
-                return command;
+                return command.map(|_id| message::none());
             }
             Message::DialogCancel => {
                 self.dialog_pages.pop_front();
@@ -1755,7 +1754,7 @@ impl Application for App {
                             auth,
                             auth_tx,
                         } => {
-                            return Command::perform(
+                            return Task::perform(
                                 async move {
                                     auth_tx.send(auth).await.unwrap();
                                     message::none()
@@ -1769,7 +1768,7 @@ impl Application for App {
                             error: _,
                         } => {
                             //TODO: re-use mounter_key?
-                            return Command::batch([
+                            return Task::batch([
                                 self.update(Message::NetworkDriveInput(uri)),
                                 self.update(Message::NetworkDriveSubmit),
                             ]);
@@ -1841,7 +1840,7 @@ impl Application for App {
                 }
             }
             Message::DialogUpdateComplete(dialog_page) => {
-                return Command::batch([
+                return Task::batch([
                     self.update(Message::DialogUpdate(dialog_page)),
                     self.update(Message::DialogComplete),
                 ]);
@@ -1951,7 +1950,7 @@ impl Application for App {
                 // Update desktop tabs
                 commands.push(self.update_desktop());
 
-                return Command::batch(commands);
+                return Task::batch(commands);
             }
             Message::MountResult(mounter_key, item, res) => match res {
                 Ok(true) => {
@@ -2099,7 +2098,7 @@ impl Application for App {
                 for (entity, location) in needs_reload {
                     commands.push(self.rescan_tab(entity, location, None));
                 }
-                return Command::batch(commands);
+                return Task::batch(commands);
             }
             Message::NotifyWatcher(mut watcher_wrapper) => match watcher_wrapper.watcher_opt.take()
             {
@@ -2152,7 +2151,7 @@ impl Application for App {
                 }
             }
             Message::OpenInNewTab(entity_opt) => {
-                return Command::batch(self.selected_paths(entity_opt).into_iter().filter_map(
+                return Task::batch(self.selected_paths(entity_opt).into_iter().filter_map(
                     |path| {
                         if path.is_dir() {
                             Some(self.open_tab(Location::Path(path), false, None))
@@ -2178,7 +2177,7 @@ impl Application for App {
                 }
             },
             Message::OpenItemLocation(entity_opt) => {
-                return Command::batch(self.selected_paths(entity_opt).into_iter().filter_map(
+                return Task::batch(self.selected_paths(entity_opt).into_iter().filter_map(
                     |path| {
                         if let Some(parent) = path.parent() {
                             Some(self.open_tab(
@@ -2259,7 +2258,7 @@ impl Application for App {
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
                     if let Some(path) = tab.location.path_opt() {
                         let to = path.clone();
-                        return clipboard::read_data::<ClipboardPaste, _>(move |contents_opt| {
+                        return clipboard::read_data::<ClipboardPaste>().map(move |contents_opt| {
                             match contents_opt {
                                 Some(contents) => {
                                     message::app(Message::PasteContents(to.clone(), contents))
@@ -2340,7 +2339,7 @@ impl Application for App {
                 commands.push(self.rescan_trash());
                 // if search is active, update "search" tab view
                 commands.push(self.search());
-                return Command::batch(commands);
+                return Task::batch(commands);
             }
             Message::PendingError(id, err) => {
                 if let Some((op, _)) = self.pending_operations.remove(&id) {
@@ -2384,7 +2383,7 @@ impl Application for App {
                                     "com.system76.CosmicFilesDialog".to_string();
                             }
 
-                            let (id, command) = window::spawn(settings);
+                            let (id, command) = window::open(settings);
                             self.windows.insert(
                                 id,
                                 WindowKind::Preview(
@@ -2392,9 +2391,9 @@ impl Application for App {
                                     PreviewKind::Location(Location::Path(path)),
                                 ),
                             );
-                            commands.push(command);
+                            commands.push(command.map(|_id| message::none()));
                         }
-                        return Command::batch(commands);
+                        return Task::batch(commands);
                     }
                 }
             }
@@ -2411,7 +2410,7 @@ impl Application for App {
                         .icon_set(entity, widget::icon::icon(tab::trash_icon_symbolic(16)));
                 }
 
-                return Command::batch([self.rescan_trash(), self.update_desktop()]);
+                return Task::batch([self.rescan_trash(), self.update_desktop()]);
             }
 
             Message::Rename(entity_opt) => {
@@ -2452,7 +2451,7 @@ impl Application for App {
                 if let Some(dialog_page) = self.dialog_pages.pop_front() {
                     match dialog_page {
                         DialogPage::Replace { tx, .. } => {
-                            return Command::perform(
+                            return Task::perform(
                                 async move {
                                     let _ = tx.send(replace_result).await;
                                     message::none()
@@ -2572,10 +2571,12 @@ impl Application for App {
 
                 // If that was the last tab, close window
                 if self.tab_model.iter().next().is_none() {
-                    return window::close(window::Id::MAIN);
+                    if let Some(window_id) = &self.window_id_opt {
+                        return window::close(*window_id);
+                    }
                 }
 
-                return Command::batch([self.update_title(), self.update_watcher()]);
+                return Task::batch([self.update_title(), self.update_watcher()]);
             }
             Message::TabConfig(config) => {
                 if config != self.config.tab {
@@ -2591,7 +2592,7 @@ impl Application for App {
             Message::TabMessage(entity_opt, tab_message) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
 
-                //TODO: move to Command?
+                //TODO: move to Task?
                 if let tab::Message::ContextMenu(_point_opt) = tab_message {
                     // Disable side context page
                     self.set_show_context(false);
@@ -2626,7 +2627,7 @@ impl Application for App {
                             self.activate_nav_model_location(&tab_path);
 
                             self.tab_model.text_set(entity, tab_title);
-                            commands.push(Command::batch([
+                            commands.push(Task::batch([
                                 self.update_title(),
                                 self.update_watcher(),
                                 self.rescan_tab(entity, tab_path, selection_path),
@@ -2639,7 +2640,7 @@ impl Application for App {
                             self.dialog_pages.push_back(DialogPage::EmptyTrash);
                         }
                         tab::Command::Iced(iced_command) => {
-                            commands.push(iced_command.map(move |tab_message| {
+                            commands.push(iced_command.0.map(move |tab_message| {
                                 message::app(Message::TabMessage(Some(entity), tab_message))
                             }));
                         }
@@ -2678,14 +2679,18 @@ impl Application for App {
                             self.set_context_title(self.context_page.title());
                         }
                         tab::Command::WindowDrag => {
-                            commands.push(window::drag(self.main_window_id()));
+                            if let Some(window_id) = &self.window_id_opt {
+                                commands.push(window::drag(*window_id));
+                            }
                         }
                         tab::Command::WindowToggleMaximize => {
-                            commands.push(window::toggle_maximize(self.main_window_id()));
+                            if let Some(window_id) = &self.window_id_opt {
+                                commands.push(window::toggle_maximize(*window_id));
+                            }
                         }
                     }
                 }
-                return Command::batch(commands);
+                return Task::batch(commands);
             }
             Message::TabNew => {
                 let active = self.tab_model.active();
@@ -2766,9 +2771,9 @@ impl Application for App {
             }
             Message::WindowClose => {
                 if let Some(window_id) = self.window_id_opt.take() {
-                    return Command::batch([
+                    return Task::batch([
                         window::close(window_id),
-                        Command::perform(async move { message::app(Message::MaybeExit) }, |x| x),
+                        Task::perform(async move { message::app(Message::MaybeExit) }, |x| x),
                     ]);
                 }
             }
@@ -2849,8 +2854,8 @@ impl Application for App {
                 if let Some(location) = self.nav_model.data::<Location>(entity) {
                     self.nav_dnd_hover = Some((location.clone(), Instant::now()));
                     let location = location.clone();
-                    return Command::perform(tokio::time::sleep(HOVER_DURATION), move |_| {
-                        cosmic::app::Message::App(Message::DndHoverLocTimeout(location))
+                    return Task::perform(tokio::time::sleep(HOVER_DURATION), move |_| {
+                        cosmic::app::Message::App(Message::DndHoverLocTimeout(location.clone()))
                     });
                 }
             }
@@ -2874,11 +2879,11 @@ impl Application for App {
                         )),
                         Location::Trash if matches!(action, DndAction::Move) => {
                             self.operation(Operation::Delete { paths: data.paths });
-                            Command::none()
+                            Task::none()
                         }
                         _ => {
                             log::warn!("Copy to trash is not supported.");
-                            Command::none()
+                            Task::none()
                         }
                     };
                     return ret;
@@ -2901,7 +2906,7 @@ impl Application for App {
                     };
                     if let Some(title) = title_opt {
                         self.tab_model.text_set(entity, title);
-                        return Command::batch([
+                        return Task::batch([
                             self.update_title(),
                             self.update_watcher(),
                             self.rescan_tab(entity, location, None),
@@ -2911,7 +2916,7 @@ impl Application for App {
             }
             Message::DndEnterTab(entity) => {
                 self.tab_dnd_hover = Some((entity, Instant::now()));
-                return Command::perform(tokio::time::sleep(HOVER_DURATION), move |_| {
+                return Task::perform(tokio::time::sleep(HOVER_DURATION), move |_| {
                     cosmic::app::Message::App(Message::DndHoverTabTimeout(entity))
                 });
             }
@@ -2935,11 +2940,11 @@ impl Application for App {
                         )),
                         Location::Trash if matches!(action, DndAction::Move) => {
                             self.operation(Operation::Delete { paths: data.paths });
-                            Command::none()
+                            Task::none()
                         }
                         _ => {
                             log::warn!("Copy to trash is not supported.");
-                            Command::none()
+                            Task::none()
                         }
                     };
                     return ret;
@@ -3131,7 +3136,7 @@ impl Application for App {
                             None,
                         );
                         self.windows.insert(surface_id, WindowKind::Desktop(entity));
-                        return Command::batch([
+                        return Task::batch([
                             command,
                             get_layer_surface(SctkLayerSurfaceSettings {
                                 id: surface_id,
@@ -3173,12 +3178,12 @@ impl Application for App {
             }
             Message::Cosmic(cosmic) => {
                 // Forward cosmic messages
-                return Command::perform(async move { cosmic }, |cosmic| message::cosmic(cosmic));
+                return Task::perform(async move { cosmic }, |cosmic| message::cosmic(cosmic));
             }
             Message::None => {}
         }
 
-        Command::none()
+        Task::none()
     }
 
     fn context_drawer(&self) -> Option<Element<Message>> {
@@ -3288,7 +3293,7 @@ impl Application for App {
                                 })
                                 .into(),
                             ])
-                            .align_items(Alignment::Center)
+                            .align_y(Alignment::Center)
                             .spacing(space_xxs)
                             .into(),
                         ])
@@ -3396,18 +3401,19 @@ impl Application for App {
                     //TODO: what should submit do?
                     //TODO: button for showing password
                     controls.push(
-                        widget::checkbox(fl!("remember-password"), *remember, move |value| {
-                            Message::DialogUpdate(DialogPage::NetworkAuth {
-                                mounter_key: *mounter_key,
-                                uri: uri.clone(),
-                                auth: MounterAuth {
-                                    remember_opt: Some(value),
-                                    ..auth.clone()
-                                },
-                                auth_tx: auth_tx.clone(),
+                        widget::checkbox(fl!("remember-password"), *remember)
+                            .on_toggle(move |value| {
+                                Message::DialogUpdate(DialogPage::NetworkAuth {
+                                    mounter_key: *mounter_key,
+                                    uri: uri.clone(),
+                                    auth: MounterAuth {
+                                        remember_opt: Some(value),
+                                        ..auth.clone()
+                                    },
+                                    auth_tx: auth_tx.clone(),
+                                })
                             })
-                        })
-                        .into(),
+                            .into(),
                     );
                 }
 
@@ -3540,21 +3546,21 @@ impl Application for App {
                                 } else {
                                     widget::text(app.name.to_string()).into()
                                 },
-                                widget::horizontal_space(Length::Fill).into(),
+                                widget::horizontal_space().into(),
                                 if *selected == i {
                                     widget::icon::from_name("checkbox-checked-symbolic")
                                         .size(16)
                                         .into()
                                 } else {
-                                    widget::horizontal_space(Length::Fixed(16.0)).into()
+                                    widget::Space::with_width(Length::Fixed(16.0)).into()
                                 },
                             ])
                             .spacing(space_s)
                             .height(Length::Fixed(32.0))
-                            .align_items(Alignment::Center),
+                            .align_y(Alignment::Center),
                         )
                         .width(Length::Fill)
-                        .style(theme::Button::MenuItem)
+                        .class(theme::Button::MenuItem)
                         .on_press(Message::OpenWithSelection(i)),
                     );
                 }
@@ -3668,19 +3674,19 @@ impl Application for App {
                     ));
                 if *multiple {
                     dialog
-                        .control(widget::checkbox(
-                            fl!("apply-to-all"),
-                            *apply_to_all,
-                            |apply_to_all| {
-                                Message::DialogUpdate(DialogPage::Replace {
-                                    from: from.clone(),
-                                    to: to.clone(),
-                                    multiple: *multiple,
-                                    apply_to_all,
-                                    tx: tx.clone(),
-                                })
-                            },
-                        ))
+                        .control(
+                            widget::checkbox(fl!("apply-to-all"), *apply_to_all).on_toggle(
+                                |apply_to_all| {
+                                    Message::DialogUpdate(DialogPage::Replace {
+                                        from: from.clone(),
+                                        to: to.clone(),
+                                        multiple: *multiple,
+                                        apply_to_all,
+                                        tx: tx.clone(),
+                                    })
+                                },
+                            ),
+                        )
                         .secondary_action(
                             widget::button::standard(fl!("skip")).on_press(Message::ReplaceResult(
                                 ReplaceResult::Skip(*apply_to_all),
@@ -3710,12 +3716,12 @@ impl Application for App {
                 widget::dialog(fl!("set-executable-and-launch"))
                     .primary_action(
                         widget::button::text(fl!("set-and-launch"))
-                            .style(theme::Button::Suggested)
+                            .class(theme::Button::Suggested)
                             .on_press(Message::DialogComplete),
                     )
                     .secondary_action(
                         widget::button::text(fl!("cancel"))
-                            .style(theme::Button::Standard)
+                            .class(theme::Button::Standard)
                             .on_press(Message::DialogCancel),
                     )
                     .control(widget::text::text(fl!(
@@ -3818,7 +3824,7 @@ impl Application for App {
                         })
                         .drag_id(self.tab_drag_id),
                 )
-                .style(style::Container::Background)
+                .class(style::Container::Background)
                 .width(Length::Fill)
                 .padding([0, space_s]),
             );
@@ -3838,10 +3844,7 @@ impl Application for App {
         }
 
         // The toaster is added on top of an empty element to ensure that it does not override context menus
-        tab_column = tab_column.push(widget::toaster(
-            &self.toasts,
-            widget::horizontal_space(Length::Fill),
-        ));
+        tab_column = tab_column.push(widget::toaster(&self.toasts, widget::horizontal_space()));
 
         let content: Element<_> = tab_column.into();
 
@@ -3859,7 +3862,7 @@ impl Application for App {
                     Some(tab) => tab
                         .view(&self.key_binds)
                         .map(move |message| Message::TabMessage(Some(*entity), message)),
-                    None => widget::vertical_space(Length::Fill).into(),
+                    None => widget::vertical_space().into(),
                 };
 
                 let mut popover = widget::popover(tab_view);
@@ -3869,10 +3872,8 @@ impl Application for App {
                 tab_column = tab_column.push(popover);
 
                 // The toaster is added on top of an empty element to ensure that it does not override context menus
-                tab_column = tab_column.push(widget::toaster(
-                    &self.toasts,
-                    widget::horizontal_space(Length::Fill),
-                ));
+                tab_column =
+                    tab_column.push(widget::toaster(&self.toasts, widget::horizontal_space()));
 
                 return tab_column.into();
             }
@@ -3895,13 +3896,13 @@ impl Application for App {
         widget::container(
             widget::scrollable(widget::row::with_children(vec![
                 content,
-                widget::horizontal_space(Length::Fixed(
+                widget::Space::with_width(Length::Fixed(
                     (scrollbar_width + scrollbar_margin).into(),
                 ))
                 .into(),
             ]))
             .direction(scrollable::Direction::Vertical(
-                scrollable::Properties::new()
+                scrollable::Scrollbar::new()
                     .width(scrollbar_width)
                     .scroller_width(scrollbar_width),
             )),
@@ -3914,7 +3915,7 @@ impl Application for App {
             space_l,
             space_l,
         ])
-        .style(theme::Container::WindowBackground)
+        .class(theme::Container::WindowBackground)
         .into()
     }
 
@@ -3924,7 +3925,7 @@ impl Application for App {
         struct TrashWatcherSubscription;
 
         let mut subscriptions = vec![
-            event::listen_with(|event, status| match event {
+            event::listen_with(|event, status, _window_id| match event {
                 Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => match status {
                     event::Status::Ignored => Some(Message::Key(modifiers, key)),
                     event::Status::Captured => None,
@@ -3932,7 +3933,7 @@ impl Application for App {
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
                     Some(Message::Modifiers(modifiers))
                 }
-                Event::Window(_id, WindowEvent::CloseRequested) => Some(Message::WindowClose),
+                Event::Window(WindowEvent::CloseRequested) => Some(Message::WindowClose),
                 #[cfg(feature = "wayland")]
                 Event::PlatformSpecific(event::PlatformSpecific::Wayland(wayland_event)) => {
                     match wayland_event {
@@ -3969,10 +3970,9 @@ impl Application for App {
                 }
                 Message::SystemThemeModeChange(update.config)
             }),
-            subscription::channel(
+            Subscription::run_with_id(
                 TypeId::of::<WatcherSubscription>(),
-                100,
-                |mut output| async move {
+                stream::channel(100, |mut output| async move {
                     let watcher_res = {
                         let mut output = output.clone();
                         new_debouncer(
@@ -4044,12 +4044,11 @@ impl Application for App {
                     }
 
                     std::future::pending().await
-                },
+                }),
             ),
-            subscription::channel(
+            Subscription::run_with_id(
                 TypeId::of::<TrashWatcherSubscription>(),
-                25,
-                |mut output| async move {
+                stream::channel(25, |mut output| async move {
                     let watcher_res = new_debouncer(
                         time::Duration::from_millis(250),
                         Some(time::Duration::from_millis(250)),
@@ -4110,7 +4109,7 @@ impl Application for App {
                     }
 
                     std::future::pending().await
-                },
+                }),
             ),
         ];
 
@@ -4137,10 +4136,9 @@ impl Application for App {
                 #[cfg(feature = "notify")]
                 {
                     struct NotificationSubscription;
-                    subscriptions.push(subscription::channel(
+                    subscriptions.push(Subscription::run_with_id(
                         TypeId::of::<NotificationSubscription>(),
-                        1,
-                        move |msg_tx| async move {
+                        stream::channel(1, move |msg_tx| async move {
                             let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
                             tokio::task::spawn_blocking(move || {
                                 match notify_rust::Notification::new()
@@ -4168,7 +4166,7 @@ impl Application for App {
                             .unwrap();
 
                             std::future::pending().await
-                        },
+                        }),
                     ));
                 }
             }
@@ -4178,23 +4176,26 @@ impl Application for App {
             //TODO: use recipe?
             let id = *id;
             let pending_operation = pending_operation.clone();
-            subscriptions.push(subscription::channel(id, 16, move |msg_tx| async move {
-                let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
-                match pending_operation.perform(id, &msg_tx).await {
-                    Ok(()) => {
-                        let _ = msg_tx.lock().await.send(Message::PendingComplete(id)).await;
+            subscriptions.push(Subscription::run_with_id(
+                id,
+                stream::channel(16, move |msg_tx| async move {
+                    let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
+                    match pending_operation.perform(id, &msg_tx).await {
+                        Ok(()) => {
+                            let _ = msg_tx.lock().await.send(Message::PendingComplete(id)).await;
+                        }
+                        Err(err) => {
+                            let _ = msg_tx
+                                .lock()
+                                .await
+                                .send(Message::PendingError(id, err.to_string()))
+                                .await;
+                        }
                     }
-                    Err(err) => {
-                        let _ = msg_tx
-                            .lock()
-                            .await
-                            .send(Message::PendingError(id, err.to_string()))
-                            .await;
-                    }
-                }
 
-                std::future::pending().await
-            }));
+                    std::future::pending().await
+                }),
+            ));
         }
 
         for entity in self.tab_model.iter() {

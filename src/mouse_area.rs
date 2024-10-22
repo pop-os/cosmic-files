@@ -17,8 +17,8 @@ use cosmic::{
         overlay,
         renderer::{self, Quad, Renderer as _},
         touch,
-        widget::{tree, Operation, OperationOutputWrapper, Tree},
-        Clipboard, Color, Layout, Length, Point, Rectangle, Shell, Size, Widget,
+        widget::{tree, Operation, Tree},
+        Clipboard, Color, Layout, Length, Point, Rectangle, Shell, Size, Vector, Widget,
     },
     widget::Id,
     Element, Renderer, Theme,
@@ -218,15 +218,21 @@ impl State {
         let new = if let Some((prev_click, prev_time)) = self.prev_click.take() {
             if now.duration_since(prev_time) < DOUBLE_CLICK_DURATION {
                 match prev_click.kind() {
-                    mouse::click::Kind::Single => mouse::Click::new(pos, Some(prev_click)),
-                    mouse::click::Kind::Double => mouse::Click::new(pos, Some(prev_click)),
-                    mouse::click::Kind::Triple => mouse::Click::new(pos, Some(prev_click)),
+                    mouse::click::Kind::Single => {
+                        mouse::Click::new(pos, mouse::Button::Left, Some(prev_click))
+                    }
+                    mouse::click::Kind::Double => {
+                        mouse::Click::new(pos, mouse::Button::Left, Some(prev_click))
+                    }
+                    mouse::click::Kind::Triple => {
+                        mouse::Click::new(pos, mouse::Button::Left, Some(prev_click))
+                    }
                 }
             } else {
-                mouse::Click::new(pos, None)
+                mouse::Click::new(pos, mouse::Button::Left, None)
             }
         } else {
-            mouse::Click::new(pos, None)
+            mouse::Click::new(pos, mouse::Button::Left, None)
         };
         self.prev_click = Some((new.clone(), now));
         new
@@ -300,7 +306,7 @@ where
         tree: &mut Tree,
         layout: Layout<'_>,
         renderer: &Renderer,
-        operation: &mut dyn Operation<OperationOutputWrapper<Message>>,
+        operation: &mut dyn Operation,
     ) {
         self.content
             .as_widget()
@@ -406,10 +412,11 @@ where
         tree: &'b mut Tree,
         layout: Layout<'_>,
         renderer: &Renderer,
+        translation: Vector,
     ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
         self.content
             .as_widget_mut()
-            .overlay(&mut tree.children[0], layout, renderer)
+            .overlay(&mut tree.children[0], layout, renderer, translation)
     }
 
     fn drag_destinations(
