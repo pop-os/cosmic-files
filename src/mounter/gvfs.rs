@@ -133,6 +133,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
             pos_opt: Cell::new(None),
             rect_opt: Cell::new(None),
             selected: false,
+            highlighted: false,
             overlaps_drag_rect: false,
         });
     }

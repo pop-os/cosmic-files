@@ -47,6 +47,8 @@ pub struct MouseArea<'a, Message> {
     on_forward_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_forward_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
     on_scroll: Option<Box<dyn Fn(mouse::ScrollDelta, Modifiers) -> Option<Message> + 'a>>,
+    on_enter: Option<Box<dyn Fn() -> Message + 'a>>,
+    on_exit: Option<Box<dyn Fn() -> Message + 'a>>,
     show_drag_rect: bool,
 }
 
@@ -169,6 +171,20 @@ impl<'a, Message> MouseArea<'a, Message> {
         self
     }
 
+    /// The message to emit when a mouse enters the area.
+    #[must_use]
+    pub fn on_enter(mut self, message: impl Fn() -> Message + 'a) -> Self {
+        self.on_enter = Some(Box::new(message));
+        self
+    }
+
+    /// The message to emit when a mouse exits the area.
+    #[must_use]
+    pub fn on_exit(mut self, message: impl Fn() -> Message + 'a) -> Self {
+        self.on_exit = Some(Box::new(message));
+        self
+    }
+
     #[must_use]
     pub fn show_drag_rect(mut self, show_drag_rect: bool) -> Self {
         self.show_drag_rect = show_drag_rect;
@@ -186,7 +202,7 @@ impl<'a, Message> MouseArea<'a, Message> {
 /// Local state of the [`MouseArea`].
 #[derive(Default)]
 struct State {
-    // TODO: Support on_mouse_enter and on_mouse_exit
+    last_position: Option<Point>,
     drag_initiated: Option<Point>,
     modifiers: Modifiers,
     prev_click: Option<(mouse::Click, Instant)>,
@@ -260,6 +276,8 @@ impl<'a, Message> MouseArea<'a, Message> {
             on_back_release: None,
             on_forward_press: None,
             on_forward_release: None,
+            on_enter: None,
+            on_exit: None,
             on_scroll: None,
             show_drag_rect: false,
         }
@@ -472,6 +490,24 @@ fn update<Message: Clone>(
             state.size = Some(size);
             shell.publish(message(size));
         }
+    }
+
+    if let Event::Mouse(mouse::Event::CursorMoved { .. }) = event {
+        let position_in = cursor.position_in(layout_bounds);
+        match (position_in, state.last_position) {
+            (None, Some(_)) => {
+                if let Some(message) = widget.on_exit.as_ref() {
+                    shell.publish(message())
+                }
+            }
+            (Some(new), None) => {
+                if let Some(message) = widget.on_enter.as_ref() {
+                    shell.publish(message())
+                }
+            }
+            _ => {}
+        }
+        state.last_position = position_in;
     }
 
     if state.drag_initiated.is_none() && !cursor.is_over(layout_bounds) {
