@@ -4114,19 +4114,22 @@ impl Application for App {
         ];
 
         for (key, mounter) in MOUNTERS.iter() {
-            let key = *key;
-            subscriptions.push(mounter.subscription().map(move |mounter_message| {
-                match mounter_message {
-                    MounterMessage::Items(items) => Message::MounterItems(key, items),
-                    MounterMessage::MountResult(item, res) => Message::MountResult(key, item, res),
-                    MounterMessage::NetworkAuth(uri, auth, auth_tx) => {
-                        Message::NetworkAuth(key, uri, auth, auth_tx)
-                    }
-                    MounterMessage::NetworkResult(uri, res) => {
-                        Message::NetworkResult(key, uri, res)
-                    }
-                }
-            }));
+            subscriptions.push(
+                mounter.subscription().with(*key).map(
+                    |(key, mounter_message)| match mounter_message {
+                        MounterMessage::Items(items) => Message::MounterItems(key, items),
+                        MounterMessage::MountResult(item, res) => {
+                            Message::MountResult(key, item, res)
+                        }
+                        MounterMessage::NetworkAuth(uri, auth, auth_tx) => {
+                            Message::NetworkAuth(key, uri, auth, auth_tx)
+                        }
+                        MounterMessage::NetworkResult(uri, res) => {
+                            Message::NetworkResult(key, uri, res)
+                        }
+                    },
+                ),
+            );
         }
 
         if !self.pending_operations.is_empty() {
