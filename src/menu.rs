@@ -295,14 +295,14 @@ pub fn context_menu<'a>(
                 text_color: Some(component.on.into()),
                 background: Some(Background::Color(component.base.into())),
                 border: Border {
-                    radius: 8.0.into(),
+                    radius: cosmic.radius_s().into(),
                     width: 1.0,
                     color: component.divider.into(),
                 },
                 ..Default::default()
             }
         })
-        .width(Length::Fixed(260.0))
+        .width(Length::Fixed(280.0))
         .into()
 }
 
@@ -645,7 +645,7 @@ pub fn location_context_menu<'a>(ancestor_index: usize) -> Element<'a, tab::Mess
                 text_color: Some(component.on.into()),
                 background: Some(Background::Color(component.base.into())),
                 border: Border {
-                    radius: 8.0.into(),
+                    radius: cosmic.radius_s().into(),
                     width: 1.0,
                     color: component.divider.into(),
                 },
