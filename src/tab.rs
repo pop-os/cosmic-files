@@ -14,7 +14,7 @@ use cosmic::{
         stream,
         //TODO: export in cosmic::widget
         widget::{
-            container, horizontal_rule, rule,
+            horizontal_rule, rule,
             scrollable::{self, AbsoluteOffset, Viewport},
         },
         Alignment,
@@ -30,7 +30,7 @@ use cosmic::{
     iced_core::{mouse::ScrollDelta, widget::tree},
     theme,
     widget::{
-        self,
+        self, container,
         menu::{action::MenuAction, key_bind::KeyBind},
         DndDestination, DndSource, Id, Space, Widget,
     },
@@ -3250,7 +3250,7 @@ impl Tab {
         let heading_item = |name, width, msg| {
             let mut row = widget::row::with_capacity(2)
                 .align_y(Alignment::Center)
-                .spacing(space_xxs)
+                .spacing(space_xxxs)
                 .width(width);
             row = row.push(widget::text::heading(name));
             match (sort_name == msg, sort_direction) {
@@ -3287,8 +3287,17 @@ impl Tab {
         ])
         .align_y(Alignment::Center)
         .height(Length::Fixed((space_m + 4).into()))
-        .padding([0, space_xxs])
-        .spacing(space_xxs);
+        .padding([0, space_xxs]);
+
+        let accent_rule =
+            horizontal_rule(1).class(theme::Rule::Custom(Box::new(|theme| rule::Style {
+                color: theme.cosmic().accent_color().into(),
+                width: 1,
+                radius: 0.0.into(),
+                fill_mode: rule::FillMode::Full,
+            })));
+        let heading_rule = container(horizontal_rule(1))
+            .padding([0, theme::active().cosmic().corner_radii.radius_xs[0] as u16]);
 
         if let Some(location) = &self.edit_location {
             //TODO: allow editing other locations
@@ -3312,17 +3321,10 @@ impl Tab {
                 );
                 let mut column = widget::column::with_capacity(4).padding([0, space_s]);
                 column = column.push(row);
-                column = column.push(horizontal_rule(1).class(theme::Rule::Custom(Box::new(
-                    |theme| rule::Style {
-                        color: theme.cosmic().accent_color().into(),
-                        width: 1,
-                        radius: 0.0.into(),
-                        fill_mode: rule::FillMode::Full,
-                    },
-                ))));
+                column = column.push(accent_rule);
                 if self.config.view == View::List && !condensed {
                     column = column.push(heading_row);
-                    column = column.push(widget::divider::horizontal::default());
+                    column = column.push(heading_rule);
                 }
                 return column.into();
             }
@@ -3452,18 +3454,11 @@ impl Tab {
         }
         let mut column = widget::column::with_capacity(4).padding([0, space_s]);
         column = column.push(row);
-        column = column.push(
-            horizontal_rule(1).class(theme::Rule::Custom(Box::new(|theme| rule::Style {
-                color: theme.cosmic().accent_color().into(),
-                width: 1,
-                radius: 0.0.into(),
-                fill_mode: rule::FillMode::Full,
-            }))),
-        );
+        column = column.push(accent_rule);
 
         if self.config.view == View::List && !condensed {
             column = column.push(heading_row);
-            column = column.push(widget::divider::horizontal::default());
+            column = column.push(heading_rule);
         }
 
         let mouse_area = crate::mouse_area::MouseArea::new(column)
@@ -3507,10 +3502,7 @@ impl Tab {
             .align_x(Alignment::Center)
             .spacing(space_xxs),
         )
-        .align_x(Horizontal::Center)
-        .align_y(Vertical::Center)
-        .width(Length::Fill)
-        .height(Length::Fill)
+        .center(Length::Fill)
         .into()])
         .into()
     }
@@ -3820,7 +3812,6 @@ impl Tab {
             space_m,
             space_s,
             space_xxs,
-            space_xxxs,
             ..
         } = theme::active().cosmic().spacing;
 
@@ -3847,6 +3838,8 @@ impl Tab {
         let mut children: Vec<Element<_>> = Vec::new();
         let mut y = 0;
 
+        let rule_padding = theme::active().cosmic().corner_radii.radius_xs[0] as u16;
+
         let items = self.column_sort();
         let mut drag_items = Vec::new();
         if let Some(items) = items {
@@ -3868,7 +3861,7 @@ impl Tab {
                 if count > 0 {
                     children.push(
                         container(horizontal_rule(1))
-                            .padding([0, space_xxxs])
+                            .padding([0, rule_padding])
                             .into(),
                     );
                     y += 1;
@@ -3994,7 +3987,7 @@ impl Tab {
                                 item.selected,
                                 item.highlighted,
                                 true,
-                                false,
+                                true,
                                 false,
                             )),
                     )
