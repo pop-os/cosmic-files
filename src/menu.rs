@@ -10,6 +10,7 @@ use cosmic::{
     },
     Element,
 };
+use i18n_embed::LanguageLoader;
 use mime_guess::Mime;
 use std::collections::HashMap;
 
@@ -86,6 +87,7 @@ pub fn context_menu<'a>(
     let mut selected_dir = 0;
     let mut selected = 0;
     let mut selected_trash_only = false;
+    let mut selected_desktop_entry = None;
     let mut selected_types: Vec<Mime> = vec![];
     tab.items_opt().map(|items| {
         for item in items.iter() {
@@ -94,8 +96,16 @@ pub fn context_menu<'a>(
                 if item.metadata.is_dir() {
                     selected_dir += 1;
                 }
-                if item.location_opt == Some(Location::Trash) {
-                    selected_trash_only = true;
+                match &item.location_opt {
+                    Some(Location::Trash) => selected_trash_only = true,
+                    Some(Location::Path(path)) => {
+                        if selected == 1
+                            && path.extension().and_then(|s| s.to_str()) == Some("desktop")
+                        {
+                            selected_desktop_entry = Some(&**path);
+                        }
+                    }
+                    _ => (),
                 }
                 selected_types.push(item.mime.clone());
             }
@@ -104,6 +114,17 @@ pub fn context_menu<'a>(
     selected_types.sort_unstable();
     selected_types.dedup();
     selected_trash_only = selected_trash_only && selected == 1;
+    // Parse the desktop entry if it is the only selection
+    let selected_desktop_entry = selected_desktop_entry.and_then(|path| {
+        if selected == 1 {
+            let lang_id = crate::localize::LANGUAGE_LOADER.current_language();
+            let language = lang_id.language.as_str();
+            // Cache?
+            cosmic::desktop::load_desktop_file(Some(language), path)
+        } else {
+            None
+        }
+    });
 
     let mut children: Vec<Element<_>> = Vec::new();
     match (&tab.mode, &tab.location) {
@@ -116,6 +137,17 @@ pub fn context_menu<'a>(
                 if tab::trash_entries() > 0 {
                     children.push(menu_item(fl!("empty-trash"), Action::EmptyTrash).into());
                 }
+            } else if let Some(entry) = selected_desktop_entry {
+                children.push(menu_item(fl!("open"), Action::Open).into());
+                for (i, action) in entry.desktop_actions.into_iter().enumerate() {
+                    children.push(menu_item(action.name, Action::ExecEntryAction(i)).into())
+                }
+                children.push(divider::horizontal::light().into());
+                children.push(menu_item(fl!("rename"), Action::Rename).into());
+                children.push(menu_item(fl!("cut"), Action::Cut).into());
+                children.push(menu_item(fl!("copy"), Action::Copy).into());
+                // Should this simply bypass trash and remove the shortcut?
+                children.push(menu_item(fl!("move-to-trash"), Action::MoveToTrash).into());
             } else if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
                     children.push(menu_item(fl!("open"), Action::Open).into());
