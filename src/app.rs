@@ -97,6 +97,7 @@ pub enum Action {
     EditHistory,
     EditLocation,
     EmptyTrash,
+    ExecEntryAction(usize),
     ExtractHere,
     Gallery,
     HistoryNext,
@@ -158,6 +159,9 @@ impl Action {
             }
             Action::EmptyTrash => Message::TabMessage(None, tab::Message::EmptyTrash),
             Action::ExtractHere => Message::ExtractHere(entity_opt),
+            Action::ExecEntryAction(action) => {
+                Message::TabMessage(entity_opt, tab::Message::ExecEntryAction(None, *action))
+            }
             Action::Gallery => Message::TabMessage(entity_opt, tab::Message::GalleryToggle),
             Action::HistoryNext => Message::TabMessage(entity_opt, tab::Message::GoNext),
             Action::HistoryPrevious => Message::TabMessage(entity_opt, tab::Message::GoPrevious),
@@ -611,6 +615,30 @@ impl App {
             Err(err) => {
                 log::warn!("failed to open {:?}: {}", path, err);
             }
+        }
+    }
+
+    fn exec_entry_action(entry: cosmic::desktop::DesktopEntryData, action: usize) {
+        if let Some(action) = entry.desktop_actions.get(action) {
+            // Largely copied from COSMIC app library
+            let mut exec = shlex::Shlex::new(&action.exec);
+            match exec.next() {
+                Some(cmd) if !cmd.contains('=') => {
+                    let mut proc = tokio::process::Command::new(cmd);
+                    for arg in exec {
+                        if !arg.starts_with('%') {
+                            proc.arg(arg);
+                        }
+                    }
+                    let _ = proc.spawn();
+                }
+                _ => (),
+            }
+        } else {
+            log::warn!(
+                "Invalid actions index `{action}` for desktop entry {}",
+                entry.name
+            );
         }
     }
 
@@ -2638,6 +2666,9 @@ impl Application for App {
                         }
                         tab::Command::EmptyTrash => {
                             self.dialog_pages.push_back(DialogPage::EmptyTrash);
+                        }
+                        tab::Command::ExecEntryAction(entry, action) => {
+                            App::exec_entry_action(entry, action);
                         }
                         tab::Command::Iced(iced_command) => {
                             commands.push(iced_command.0.map(move |tab_message| {

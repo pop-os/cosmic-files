@@ -38,6 +38,7 @@ use cosmic::{
 };
 
 use chrono::{DateTime, Utc};
+use i18n_embed::LanguageLoader;
 use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -1005,6 +1006,7 @@ pub enum Command {
     ChangeLocation(String, Location, Option<PathBuf>),
     DropFiles(PathBuf, ClipboardPaste),
     EmptyTrash,
+    ExecEntryAction(cosmic::desktop::DesktopEntryData, usize),
     Iced(TaskWrapper),
     MoveToTrash(Vec<PathBuf>),
     OpenFile(PathBuf),
@@ -1034,6 +1036,7 @@ pub enum Message {
     EditLocationEnable,
     OpenInNewTab(PathBuf),
     EmptyTrash,
+    ExecEntryAction(Option<PathBuf>, usize),
     Gallery(bool),
     GalleryPrevious,
     GalleryNext,
@@ -2318,6 +2321,24 @@ impl Tab {
             }
             Message::EmptyTrash => {
                 commands.push(Command::EmptyTrash);
+            }
+            Message::ExecEntryAction(path, action) => {
+                let lang_id = crate::localize::LANGUAGE_LOADER.current_language();
+                let language = lang_id.language.as_str();
+                match path.map_or_else(
+                    || {
+                        let items = self.items_opt.as_deref()?;
+                        items.iter().find(|item| item.selected).and_then(|item| {
+                            let location = item.location_opt.as_ref()?;
+                            let path = location.path_opt()?;
+                            cosmic::desktop::load_desktop_file(Some(language), path)
+                        })
+                    },
+                    |path| cosmic::desktop::load_desktop_file(Some(language), path),
+                ) {
+                    Some(entry) => commands.push(Command::ExecEntryAction(entry, action)),
+                    None => log::warn!("Invalid desktop entry path passed to ExecEntryAction"),
+                }
             }
             Message::Gallery(gallery) => {
                 self.gallery = gallery;
