@@ -11,6 +11,15 @@ recents = Récents
 undo = Annuler
 today = Aujourd'hui
 
+# Desktop view options
+desktop-view-options = Options d'affichage du bureau...
+show-on-desktop = Afficher sur le bureau
+desktop-folder-content = Contenu du dossier du bureau
+mount-drives = Lecteurs montés
+trash-folder-icon = Icône du dossier Corbeille
+icon-size-and-spacing = Taille et espacement des icônes
+icon-size = Taille des icônes
+
 # List view
 name = Nom
 modified = Modifié
@@ -25,6 +34,9 @@ create-archive = Créer une archive
 ## Empty Trash Dialog
 empty-trash = Vider la corbeille
 empty-trash-warning = Êtes-vous sûr de vouloir supprimer définitivement tous les éléments de la corbeille ?
+
+## Mount Error Dialog
+mount-error = Impossible d'accéder au lecteur
 
 ## New File/Folder Dialog
 create-new-file = Créer un nouveau fichier
@@ -51,6 +63,10 @@ open-multiple-folders = Ouvrir plusieurs dossiers
 save = Enregistrer
 save-file = Enregistrer fichier
 
+## Open With Dialog
+open-with-title = Comment souhaitez-vous ouvrir "{$name}" ?
+browse-store = Parcourir {$store}
+
 ## Rename Dialog
 rename-file = Renommer le fichier
 rename-folder = Renommer le dossier
@@ -65,6 +81,11 @@ replace-with = Remplacer par
 apply-to-all = Appliquer à tous
 keep-both = Conserver les deux
 skip = Ignorer
+
+## Set as Executable and Launch Dialog
+set-executable-and-launch = Définir comme exécutable et lancer
+set-executable-and-launch-description = Voulez-vous définir "{$name}" comme exécutable et le lancer ?
+set-and-launch = Définir et lancer
 
 ## Metadata Dialog
 owner = Propriétaire
@@ -140,6 +161,8 @@ extracted = {$items} {$items ->
         [one] élément extrait
         *[other] éléments extraits
     } depuis {$from} vers {$to}
+setting-executable-and-launching = Paramétrage de "{$name}" comme exécutable et prêt à être lancé
+set-executable-and-launched = Définir "{$name}" comme exécutable et le lancer
 moving = Déplacement de {$items} {$items ->
         [one] élément
         *[other] éléments
@@ -191,6 +214,11 @@ sort-by-name = Trier par nom
 sort-by-modified = Trier par modification
 sort-by-size = Trier par taille
 sort-by-trashed = Trier par éléments supprimés
+
+## Desktop
+change-wallpaper = Changer le fond d'écran...
+desktop-appearance = Apparence du bureau...
+display-settings = Paramètres d'affichage...
 
 # Menu
 
