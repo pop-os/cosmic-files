@@ -73,6 +73,7 @@ grid-view = Rutnätsvy
 list-view = Listvy
 show-hidden-files = Visa dolda filer
 list-directories-first = Lista kataloger först
+gallery-preview = Galleri förhandsvisning
 menu-settings = Inställningar...
 menu-about = Om COSMIC Files...
 
