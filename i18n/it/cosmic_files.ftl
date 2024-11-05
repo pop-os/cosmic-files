@@ -8,7 +8,7 @@ networks = Rete
 notification-in-progress = Operazioni sui file in corso ...
 trash = Cestino
 recents = Recenti
-undo = Annulla ultima operazione
+undo = Annulla
 today = Oggi
 
 # Desktop view options
@@ -161,6 +161,8 @@ extracted = Estratto {$items} {$items ->
         [one] elemento
         *[other] elementi
     } da {$from} a {$to}
+setting-executable-and-launching = Impostando come esguibile e lanciando "{$name}"
+set-executable-and-launched = Imposta come eseguibile e lancia "{$name}"
 moving = Spostando {$items} {$items ->
         [one] elemento
         *[other] elementi
@@ -179,7 +181,6 @@ restored = Ripristinato {$items} {$items ->
         [one] elemento
         *[other] elementi
     } da {trash}
-undo = Annulla
 unknown-folder = cartella sconosciuta
 
 ## Open with
