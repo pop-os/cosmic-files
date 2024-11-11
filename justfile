@@ -73,6 +73,14 @@ run *args:
 test *args:
     cargo test {{args}}
 
+heaptrack *args:
+    #!/usr/bin/env bash
+    set -ex
+    rm -fv heaptrack.cosmic-files.*
+    cargo heaptrack --profile release-with-debug --bin cosmic-files -- {{args}}
+    zstd -dc < heaptrack.cosmic-files.*.raw.zst | /usr/lib/heaptrack/libexec/heaptrack_interpret | zstd -c > heaptrack.cosmic-files.zst
+    heaptrack_gui heaptrack.cosmic-files.zst
+
 # Installs files
 install:
     install -Dm0755 {{bin-src}} {{bin-dst}}

@@ -3,6 +3,7 @@
 /debian/cosmic-files.substvars
 /debian/cosmic-files/
 /debian/files
+/heaptrack.*
 /target/
 /vendor.tar
 /vendor/
