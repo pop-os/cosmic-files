@@ -1198,7 +1198,7 @@ impl App {
         children.push(section.into());
         */
 
-        widget::settings::view_column(children).into()
+        widget::column::with_children(children).into()
     }
 
     fn edit_history(&self) -> Element<Message> {
@@ -1243,7 +1243,7 @@ impl App {
             children.push(widget::text::body(fl!("no-history")).into());
         }
 
-        widget::settings::view_column(children).into()
+        widget::column::with_children(children).into()
     }
 
     fn preview<'a>(
@@ -1295,18 +1295,12 @@ impl App {
                 }
             }
         }
-
-        // View column has extra padding not wanted when not showing in context drawer
-        if context_drawer {
-            widget::settings::view_column(children).into()
-        } else {
-            widget::column::with_children(children).into()
-        }
+        widget::column::with_children(children).into()
     }
 
     fn settings(&self) -> Element<Message> {
         // TODO: Should dialog be updated here too?
-        widget::settings::view_column(vec![widget::settings::section()
+        widget::column::with_children(vec![widget::settings::section()
             .title(fl!("appearance"))
             .add({
                 let app_theme_selected = match self.config.app_theme {

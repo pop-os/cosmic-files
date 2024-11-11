@@ -30,7 +30,7 @@ use cosmic::{
     iced_core::{mouse::ScrollDelta, widget::tree},
     theme,
     widget::{
-        self, container,
+        self,
         menu::{action::MenuAction, key_bind::KeyBind},
         DndDestination, DndSource, Id, Space, Widget,
     },
@@ -1339,16 +1339,14 @@ impl Item {
                 widget::image(handle.clone()).into()
             }
             ItemThumbnail::Svg(handle) => widget::svg(handle.clone()).into(),
-            ItemThumbnail::Text(content) => widget::container(
-                widget::text_editor(content)
-                    .class(cosmic::theme::iced::TextEditor::Custom(Box::new(
-                        text_editor_class,
-                    )))
-                    .padding(spacing.space_xxs),
-            )
-            .width(Length::Fixed(THUMBNAIL_SIZE as f32))
-            .height(Length::Fixed(THUMBNAIL_SIZE as f32))
-            .into(),
+            ItemThumbnail::Text(content) => widget::text_editor(content)
+                .class(cosmic::theme::iced::TextEditor::Custom(Box::new(
+                    text_editor_class,
+                )))
+                .width(THUMBNAIL_SIZE as f32)
+                .height(Length::Fixed(THUMBNAIL_SIZE as f32))
+                .padding(spacing.space_xxs)
+                .into(),
         }
     }
 
@@ -3133,12 +3131,15 @@ impl Tab {
                         }
                         ItemThumbnail::Text(text) => {
                             element_opt = Some(
-                                widget::text_editor(text)
-                                    .padding(space_xxs)
-                                    .class(cosmic::theme::iced::TextEditor::Custom(Box::new(
-                                        text_editor_class,
-                                    )))
-                                    .into(),
+                                widget::container(
+                                    widget::text_editor(text).padding(space_xxs).class(
+                                        cosmic::theme::iced::TextEditor::Custom(Box::new(
+                                            text_editor_class,
+                                        )),
+                                    ),
+                                )
+                                .center(Length::Fill)
+                                .into(),
                             )
                         }
                     }
@@ -3334,7 +3335,7 @@ impl Tab {
                 radius: 0.0.into(),
                 fill_mode: rule::FillMode::Full,
             })));
-        let heading_rule = container(horizontal_rule(1))
+        let heading_rule = widget::container(horizontal_rule(1))
             .padding([0, theme::active().cosmic().corner_radii.radius_xs[0] as u16]);
 
         if let Some(location) = &self.edit_location {
@@ -3898,7 +3899,7 @@ impl Tab {
 
                 if count > 0 {
                     children.push(
-                        container(horizontal_rule(1))
+                        widget::container(horizontal_rule(1))
                             .padding([0, rule_padding])
                             .into(),
                     );
