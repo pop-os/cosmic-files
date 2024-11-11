@@ -115,6 +115,7 @@ pub fn context_menu<'a>(
     selected_types.dedup();
     selected_trash_only = selected_trash_only && selected == 1;
     // Parse the desktop entry if it is the only selection
+    #[cfg(feature = "desktop")]
     let selected_desktop_entry = selected_desktop_entry.and_then(|path| {
         if selected == 1 {
             let lang_id = crate::localize::LANGUAGE_LOADER.current_language();
@@ -139,8 +140,11 @@ pub fn context_menu<'a>(
                 }
             } else if let Some(entry) = selected_desktop_entry {
                 children.push(menu_item(fl!("open"), Action::Open).into());
-                for (i, action) in entry.desktop_actions.into_iter().enumerate() {
-                    children.push(menu_item(action.name, Action::ExecEntryAction(i)).into())
+                #[cfg(feature = "desktop")]
+                {
+                    for (i, action) in entry.desktop_actions.into_iter().enumerate() {
+                        children.push(menu_item(action.name, Action::ExecEntryAction(i)).into())
+                    }
                 }
                 children.push(divider::horizontal::light().into());
                 children.push(menu_item(fl!("rename"), Action::Rename).into());

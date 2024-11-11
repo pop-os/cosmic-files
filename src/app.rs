@@ -97,6 +97,7 @@ pub enum Action {
     EditHistory,
     EditLocation,
     EmptyTrash,
+    #[cfg(feature = "desktop")]
     ExecEntryAction(usize),
     ExtractHere,
     Gallery,
@@ -159,6 +160,7 @@ impl Action {
             }
             Action::EmptyTrash => Message::TabMessage(None, tab::Message::EmptyTrash),
             Action::ExtractHere => Message::ExtractHere(entity_opt),
+            #[cfg(feature = "desktop")]
             Action::ExecEntryAction(action) => {
                 Message::TabMessage(entity_opt, tab::Message::ExecEntryAction(None, *action))
             }
@@ -618,6 +620,7 @@ impl App {
         }
     }
 
+    #[cfg(feature = "desktop")]
     fn exec_entry_action(entry: cosmic::desktop::DesktopEntryData, action: usize) {
         if let Some(action) = entry.desktop_actions.get(action) {
             // Largely copied from COSMIC app library
@@ -2667,6 +2670,7 @@ impl Application for App {
                         tab::Command::EmptyTrash => {
                             self.dialog_pages.push_back(DialogPage::EmptyTrash);
                         }
+                        #[cfg(feature = "desktop")]
                         tab::Command::ExecEntryAction(entry, action) => {
                             App::exec_entry_action(entry, action);
                         }

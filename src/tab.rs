@@ -1006,6 +1006,7 @@ pub enum Command {
     ChangeLocation(String, Location, Option<PathBuf>),
     DropFiles(PathBuf, ClipboardPaste),
     EmptyTrash,
+    #[cfg(feature = "desktop")]
     ExecEntryAction(cosmic::desktop::DesktopEntryData, usize),
     Iced(TaskWrapper),
     MoveToTrash(Vec<PathBuf>),
@@ -1036,6 +1037,7 @@ pub enum Message {
     EditLocationEnable,
     OpenInNewTab(PathBuf),
     EmptyTrash,
+    #[cfg(feature = "desktop")]
     ExecEntryAction(Option<PathBuf>, usize),
     Gallery(bool),
     GalleryPrevious,
@@ -2322,6 +2324,7 @@ impl Tab {
             Message::EmptyTrash => {
                 commands.push(Command::EmptyTrash);
             }
+            #[cfg(feature = "desktop")]
             Message::ExecEntryAction(path, action) => {
                 let lang_id = crate::localize::LANGUAGE_LOADER.current_language();
                 let language = lang_id.language.as_str();
