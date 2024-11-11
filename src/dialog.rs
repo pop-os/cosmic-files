@@ -501,7 +501,7 @@ impl App {
                 }
             }
         }
-        widget::settings::view_column(children).into()
+        widget::column::with_children(children).into()
     }
 
     fn rescan_tab(&self) -> Task<Message> {
