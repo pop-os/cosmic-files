@@ -3259,7 +3259,7 @@ impl Application for App {
                 name,
                 archive_type,
             } => {
-                let mut dialog = widget::dialog(fl!("create-archive"));
+                let mut dialog = widget::dialog().title(fl!("create-archive"));
 
                 let complete_maybe = if name.is_empty() {
                     None
@@ -3331,7 +3331,8 @@ impl Application for App {
                         .spacing(space_xxs),
                     )
             }
-            DialogPage::EmptyTrash => widget::dialog(fl!("empty-trash"))
+            DialogPage::EmptyTrash => widget::dialog()
+                .title(fl!("empty-trash"))
                 .body(fl!("empty-trash-warning"))
                 .primary_action(
                     widget::button::suggested(fl!("empty-trash")).on_press(Message::DialogComplete),
@@ -3344,7 +3345,8 @@ impl Application for App {
                 let (operation, err) = self.failed_operations.get(id)?;
 
                 //TODO: nice description of error
-                widget::dialog("Failed operation")
+                widget::dialog()
+                    .title("Failed operation")
                     .body(format!("{:#?}\n{}", operation, err))
                     .icon(widget::icon::from_name("dialog-error").size(64))
                     //TODO: retry action
@@ -3356,7 +3358,8 @@ impl Application for App {
                 mounter_key: _,
                 item: _,
                 error,
-            } => widget::dialog(fl!("mount-error"))
+            } => widget::dialog()
+                .title(fl!("mount-error"))
                 .body(error)
                 .icon(widget::icon::from_name("dialog-error").size(64))
                 .primary_action(
@@ -3451,7 +3454,8 @@ impl Application for App {
                 let mut parts = auth.message.splitn(2, '\n');
                 let title = parts.next().unwrap_or_default();
                 let body = parts.next().unwrap_or_default();
-                widget::dialog(title)
+                widget::dialog()
+                    .title(title)
                     .body(body)
                     .control(widget::column::with_children(controls).spacing(space_s))
                     .primary_action(
@@ -3476,7 +3480,8 @@ impl Application for App {
                 mounter_key: _,
                 uri: _,
                 error,
-            } => widget::dialog(fl!("network-drive-error"))
+            } => widget::dialog()
+                .title(fl!("network-drive-error"))
                 .body(error)
                 .icon(widget::icon::from_name("dialog-error").size(64))
                 .primary_action(
@@ -3486,7 +3491,7 @@ impl Application for App {
                     widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
                 ),
             DialogPage::NewItem { parent, name, dir } => {
-                let mut dialog = widget::dialog(if *dir {
+                let mut dialog = widget::dialog().title(if *dir {
                     fl!("create-new-folder")
                 } else {
                     fl!("create-new-file")
@@ -3596,7 +3601,8 @@ impl Application for App {
                     );
                 }
 
-                let mut dialog = widget::dialog(fl!("open-with-title", name = name))
+                let mut dialog = widget::dialog()
+                    .title(fl!("open-with-title", name = name))
                     .primary_action(
                         widget::button::suggested(fl!("open")).on_press(Message::DialogComplete),
                     )
@@ -3621,7 +3627,7 @@ impl Application for App {
                 dir,
             } => {
                 //TODO: combine logic with NewItem
-                let mut dialog = widget::dialog(if *dir {
+                let mut dialog = widget::dialog().title(if *dir {
                     fl!("rename-folder")
                 } else {
                     fl!("rename-file")
@@ -3696,7 +3702,8 @@ impl Application for App {
                 apply_to_all,
                 tx,
             } => {
-                let dialog = widget::dialog(fl!("replace-title", filename = to.name.as_str()))
+                let dialog = widget::dialog()
+                    .title(fl!("replace-title", filename = to.name.as_str()))
                     .body(fl!("replace-warning-operation"))
                     .control(to.replace_view(fl!("original-file"), IconSizes::default()))
                     .control(from.replace_view(fl!("replace-with"), IconSizes::default()))
@@ -3744,7 +3751,8 @@ impl Application for App {
                     Some(file_name) => file_name.to_str(),
                     None => path.as_os_str().to_str(),
                 };
-                widget::dialog(fl!("set-executable-and-launch"))
+                widget::dialog()
+                    .title(fl!("set-executable-and-launch"))
                     .primary_action(
                         widget::button::text(fl!("set-and-launch"))
                             .class(theme::Button::Suggested)

@@ -831,7 +831,7 @@ impl Application for App {
 
         let dialog = match dialog_page {
             DialogPage::NewFolder { parent, name } => {
-                let mut dialog = widget::dialog(fl!("create-new-folder"));
+                let mut dialog = widget::dialog().title(fl!("create-new-folder"));
 
                 let complete_maybe = if name.is_empty() {
                     None
@@ -888,17 +888,16 @@ impl Application for App {
                         .spacing(space_xxs),
                     )
             }
-            DialogPage::Replace { filename } => {
-                widget::dialog(fl!("replace-title", filename = filename.as_str()))
-                    .icon(widget::icon::from_name("dialog-question").size(64))
-                    .body(fl!("replace-warning"))
-                    .primary_action(
-                        widget::button::suggested(fl!("replace")).on_press(Message::DialogComplete),
-                    )
-                    .secondary_action(
-                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
-                    )
-            }
+            DialogPage::Replace { filename } => widget::dialog()
+                .title(fl!("replace-title", filename = filename.as_str()))
+                .icon(widget::icon::from_name("dialog-question").size(64))
+                .body(fl!("replace-warning"))
+                .primary_action(
+                    widget::button::suggested(fl!("replace")).on_press(Message::DialogComplete),
+                )
+                .secondary_action(
+                    widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                ),
         };
 
         Some(dialog.into())

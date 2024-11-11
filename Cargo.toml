@@ -21,7 +21,7 @@ glob = "0.3"
 icu_collator = "1.5"
 icu_provider = { version = "1.5", features = ["sync"] }
 ignore = "0.4"
-image = "0.24"
+image = "0.25"
 libc = "0.2"
 log = "0.4"
 mime_guess = "2"

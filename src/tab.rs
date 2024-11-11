@@ -1185,7 +1185,7 @@ impl ItemThumbnail {
             }
         } else if mime.type_() == mime::IMAGE && check_size("image", 64 * 1000 * 1000) {
             // Try built-in image thumbnailer
-            match image::io::Reader::open(&path).and_then(|img| img.with_guessed_format()) {
+            match image::ImageReader::open(&path).and_then(|img| img.with_guessed_format()) {
                 Ok(reader) => match reader.decode() {
                     Ok(image) => {
                         let thumbnail =
@@ -1244,7 +1244,7 @@ impl ItemThumbnail {
             match command.status() {
                 Ok(status) => {
                     if status.success() {
-                        match image::io::Reader::open(file.path())
+                        match image::ImageReader::open(file.path())
                             .and_then(|img| img.with_guessed_format())
                         {
                             Ok(reader) => match reader.decode().map(|image| image.into_rgba8()) {
