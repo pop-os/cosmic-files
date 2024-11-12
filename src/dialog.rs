@@ -461,7 +461,7 @@ impl App {
 
         widget::layer_container(col)
             .layer(cosmic_theme::Layer::Primary)
-            .padding([space_xxs, space_xs])
+            .padding([8, space_xs])
             .into()
     }
 

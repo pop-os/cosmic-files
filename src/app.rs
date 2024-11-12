@@ -21,7 +21,6 @@ use cosmic::{
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers},
         stream,
-        widget::scrollable,
         window::{self, Event as WindowEvent, Id as WindowId},
         Alignment, Event, Length, Size, Subscription,
     },
@@ -1176,6 +1175,7 @@ impl App {
     }
 
     fn desktop_view_options(&self) -> Element<Message> {
+        let cosmic_theme::Spacing { space_l, .. } = theme::active().cosmic().spacing;
         let config = self.config.desktop;
 
         let mut children = Vec::new();
@@ -1238,7 +1238,9 @@ impl App {
         children.push(section.into());
         */
 
-        widget::column::with_children(children).into()
+        widget::column::with_children(children)
+            .padding([0, space_l, space_l, space_l])
+            .into()
     }
 
     fn edit_history(&self) -> Element<Message> {
@@ -1333,6 +1335,8 @@ impl App {
         kind: &'a PreviewKind,
         context_drawer: bool,
     ) -> Element<'a, Message> {
+        let cosmic_theme::Spacing { space_l, .. } = theme::active().cosmic().spacing;
+
         let mut children = Vec::with_capacity(1);
         let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
         match kind {
@@ -1376,7 +1380,9 @@ impl App {
                 }
             }
         }
-        widget::column::with_children(children).into()
+        widget::column::with_children(children)
+            .padding([0, space_l, space_l, space_l])
+            .into()
     }
 
     fn settings(&self) -> Element<Message> {
@@ -3885,10 +3891,7 @@ impl Application for App {
         }
 
         let cosmic_theme::Spacing {
-            space_xxs,
-            space_xs,
-            space_s,
-            ..
+            space_xs, space_s, ..
         } = theme::active().cosmic().spacing;
 
         let mut title = String::new();
@@ -3993,7 +3996,7 @@ impl Application for App {
             .align_y(Alignment::Center)
             .into(),
         ]))
-        .padding([space_xxs, space_xs])
+        .padding([8, space_xs])
         .layer(cosmic_theme::Layer::Primary);
 
         Some(container.into())
@@ -4146,34 +4149,11 @@ impl Application for App {
             }
         };
 
-        //TODO: these are hacks to have a sane scroll bar
-        let cosmic_theme::Spacing { space_l, .. } = theme::active().cosmic().spacing;
-        let scrollbar_width = 8;
-        let scrollbar_margin = 8;
-        widget::container(
-            widget::scrollable(widget::row::with_children(vec![
-                content,
-                widget::Space::with_width(Length::Fixed(
-                    (scrollbar_width + scrollbar_margin).into(),
-                ))
-                .into(),
-            ]))
-            .direction(scrollable::Direction::Vertical(
-                scrollable::Scrollbar::new()
-                    .width(scrollbar_width)
-                    .scroller_width(scrollbar_width),
-            )),
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .padding([
-            0,
-            space_l - (scrollbar_width + scrollbar_margin),
-            space_l,
-            space_l,
-        ])
-        .class(theme::Container::WindowBackground)
-        .into()
+        widget::container(widget::scrollable(content))
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .class(theme::Container::WindowBackground)
+            .into()
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
