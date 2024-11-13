@@ -1,5 +1,5 @@
 use cosmic_files::operation::{recursive::Context, ReplaceResult};
-use std::{error::Error, io};
+use std::{error::Error, io, path::PathBuf};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut context = Context::new()
@@ -24,7 +24,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         });
 
-    context.recursive_copy("test/a", "test/b")?;
-    context.recursive_move("test/b", "test/c")?;
+    context.recursive_copy_or_move(
+        vec![(PathBuf::from("test/a"), PathBuf::from("test/b"))],
+        false,
+    )?;
+    context.recursive_copy_or_move(
+        vec![(PathBuf::from("test/b"), PathBuf::from("test/c"))],
+        true,
+    )?;
     Ok(())
 }
