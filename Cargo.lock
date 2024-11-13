@@ -1259,7 +1259,6 @@ dependencies = [
  "flate2",
  "fork",
  "freedesktop_entry_parser",
- "fs_extra",
  "gio",
  "glib",
  "glob",
@@ -2185,11 +2184,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fs_extra"
-version = "1.3.0"
-source = "git+https://github.com/pop-os/fs_extra.git#7e7222eb2b7830d40b67cd02e6ebd156524ee866"
-
-[[package]]
 name = "fsevent-sys"
 version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2814,7 +2808,6 @@ dependencies = [
  "bytes",
  "dnd",
  "glam",
- "iced_accessibility",
  "log",
  "mime 0.1.0",
  "num-traits",
@@ -2897,7 +2890,6 @@ source = "git+https://github.com/pop-os/libcosmic.git#e3fabf7d12e4a7d2662613ce11
 dependencies = [
  "bytes",
  "dnd",
- "iced_accessibility",
  "iced_core",
  "iced_futures",
  "raw-window-handle",
@@ -2959,7 +2951,6 @@ version = "0.14.0-dev"
 source = "git+https://github.com/pop-os/libcosmic.git#e3fabf7d12e4a7d2662613ce11e5f73f3191dd17"
 dependencies = [
  "dnd",
- "iced_accessibility",
  "iced_renderer",
  "iced_runtime",
  "num-traits",
@@ -2978,7 +2969,6 @@ version = "0.14.0-dev"
 source = "git+https://github.com/pop-os/libcosmic.git#e3fabf7d12e4a7d2662613ce11e5f73f3191dd17"
 dependencies = [
  "dnd",
- "iced_accessibility",
  "iced_futures",
  "iced_graphics",
  "iced_runtime",
@@ -3574,7 +3564,6 @@ dependencies = [
  "freedesktop-desktop-entry",
  "freedesktop-icons",
  "iced",
- "iced_accessibility",
  "iced_core",
  "iced_futures",
  "iced_renderer",

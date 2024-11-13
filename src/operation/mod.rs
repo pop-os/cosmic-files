@@ -9,6 +9,7 @@ use std::{
 use tokio::sync::{mpsc, Mutex};
 use walkdir::WalkDir;
 
+use self::recursive::Context;
 use crate::{
     app::{ArchiveType, DialogPage, Message},
     config::IconSizes,
@@ -17,6 +18,8 @@ use crate::{
     spawn_detached::spawn_detached,
     tab,
 };
+
+pub mod recursive;
 
 fn handle_replace(
     msg_tx: &Arc<Mutex<Sender<Message>>>,
@@ -57,38 +60,6 @@ fn handle_replace(
     })
 }
 
-fn handle_progress_state(
-    msg_tx: &Arc<Mutex<Sender<Message>>>,
-    progress: &fs_extra::TransitProcess,
-) -> fs_extra::dir::TransitProcessResult {
-    log::warn!("{:?}", progress);
-    match progress.state {
-        fs_extra::dir::TransitState::Normal => fs_extra::dir::TransitProcessResult::ContinueOrAbort,
-        fs_extra::dir::TransitState::Exists => {
-            let Some(file_from) = progress.file_from.clone() else {
-                log::warn!("missing file_from in progress");
-                return fs_extra::dir::TransitProcessResult::Abort;
-            };
-
-            let Some(file_to) = progress.file_to.clone() else {
-                log::warn!("missing file_to in progress");
-                return fs_extra::dir::TransitProcessResult::Abort;
-            };
-
-            if file_from == file_to {
-                log::warn!("trying to copy {:?} to itself", file_from);
-                return fs_extra::dir::TransitProcessResult::Abort;
-            }
-
-            handle_replace(msg_tx, file_from, file_to, true).into()
-        }
-        fs_extra::dir::TransitState::NoAccess => {
-            //TODO: permission error dialog
-            fs_extra::dir::TransitProcessResult::ContinueOrAbort
-        }
-    }
-}
-
 fn get_directory_name(file_name: &str) -> &str {
     const SUPPORTED_EXTENSIONS: [&str; 4] = [".tar.gz", ".tgz", ".tar", ".zip"];
 
@@ -106,32 +77,6 @@ pub enum ReplaceResult {
     KeepBoth,
     Skip(bool),
     Cancel,
-}
-
-impl From<ReplaceResult> for fs_extra::dir::TransitProcessResult {
-    fn from(f: ReplaceResult) -> fs_extra::dir::TransitProcessResult {
-        match f {
-            ReplaceResult::Replace(apply_to_all) => {
-                if apply_to_all {
-                    fs_extra::dir::TransitProcessResult::OverwriteAll
-                } else {
-                    fs_extra::dir::TransitProcessResult::Overwrite
-                }
-            }
-            ReplaceResult::KeepBoth => {
-                log::warn!("tried to keep both when replacing multiple files");
-                fs_extra::dir::TransitProcessResult::Abort
-            }
-            ReplaceResult::Skip(apply_to_all) => {
-                if apply_to_all {
-                    fs_extra::dir::TransitProcessResult::SkipAll
-                } else {
-                    fs_extra::dir::TransitProcessResult::Skip
-                }
-            }
-            ReplaceResult::Cancel => fs_extra::dir::TransitProcessResult::Abort,
-        }
-    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -190,49 +135,52 @@ async fn copy_or_move(
     id: u64,
     msg_tx: &Arc<Mutex<Sender<Message>>>,
 ) -> Result<(), String> {
-    // Handle duplicate file names by renaming paths
-    let (paths, to): (Vec<_>, Vec<_>) = tokio::task::spawn_blocking(move || {
-        paths
-            .into_iter()
-            .zip(std::iter::repeat(to.as_path()))
-            .map(|(from, to)| {
-                if matches!(from.parent(), Some(parent) if parent == to) && !moving {
-                    // `from`'s parent is equal to `to` which means we're copying to the same
-                    // directory (duplicating files)
-                    let to = copy_unique_path(&from, &to);
-                    (from, to)
-                } else if let Some(name) = (from.is_file() || moving)
-                    .then(|| from.file_name())
-                    .flatten()
-                {
-                    let to = to.join(name);
-                    (from, to)
-                } else {
-                    (from, to.to_owned())
-                }
-            })
-            .unzip()
-    })
-    .await
-    .unwrap();
-
     let msg_tx = msg_tx.clone();
-    tokio::task::spawn_blocking(move || -> fs_extra::error::Result<()> {
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
         log::info!(
             "{} {:?} to {:?}",
             if moving { "Move" } else { "Copy" },
             paths,
             to
         );
-        let total_paths = paths.len();
-        for (path_i, (from, mut to)) in paths.into_iter().zip(to.into_iter()).enumerate() {
-            let handler = |copied_bytes, total_bytes| {
-                let item_progress = if total_bytes == 0 {
-                    1.0
+
+        // Handle duplicate file names by renaming paths
+        let from_to_pairs: Vec<(PathBuf, PathBuf)> = paths
+            .into_iter()
+            .zip(std::iter::repeat(to.as_path()))
+            .filter_map(|(from, to)| {
+                if matches!(from.parent(), Some(parent) if parent == to) && !moving {
+                    // `from`'s parent is equal to `to` which means we're copying to the same
+                    // directory (duplicating files)
+                    let to = copy_unique_path(&from, &to);
+                    Some((from, to))
+                } else if let Some(name) = from.file_name() {
+                    let to = to.join(name);
+                    Some((from, to))
                 } else {
-                    copied_bytes as f32 / total_bytes as f32
+                    //TODO: how to handle from missing file name?
+                    None
+                }
+            })
+            .collect();
+
+        let mut context = Context::new();
+
+        {
+            let msg_tx = msg_tx.clone();
+            context = context.on_progress(move |op, progress| {
+                let item_progress = match progress.total_bytes {
+                    Some(total_bytes) => {
+                        if total_bytes == 0 {
+                            1.0
+                        } else {
+                            progress.current_bytes as f32 / total_bytes as f32
+                        }
+                    }
+                    None => 0.0,
                 };
-                let total_progress = (item_progress + path_i as f32) / total_paths as f32;
+                let total_progress =
+                    (item_progress + progress.current_ops as f32) / progress.total_ops as f32;
                 executor::block_on(async {
                     let _ = msg_tx
                         .lock()
@@ -240,90 +188,18 @@ async fn copy_or_move(
                         .send(Message::PendingProgress(id, 100.0 * total_progress))
                         .await;
                 })
-            };
-
-            if from == to {
-                log::info!(
-                    "Skipping {} of {:?} to itself",
-                    if moving { "move" } else { "copy" },
-                    from
-                );
-                handler(0, 0);
-                continue;
-            }
-
-            if from.is_dir() {
-                let options = fs_extra::dir::CopyOptions::default().copy_inside(true);
-                if moving {
-                    fs_extra::move_items_with_progress(
-                        &[from],
-                        to,
-                        &options,
-                        |progress: fs_extra::TransitProcess| {
-                            handler(progress.copied_bytes, progress.total_bytes);
-                            handle_progress_state(&msg_tx, &progress)
-                        },
-                    )?;
-                } else {
-                    fs_extra::copy_items_with_progress(
-                        &[from],
-                        to,
-                        &options,
-                        |progress: fs_extra::TransitProcess| {
-                            handler(progress.copied_bytes, progress.total_bytes);
-                            handle_progress_state(&msg_tx, &progress)
-                        },
-                    )?;
-                }
-            } else {
-                let mut options = fs_extra::file::CopyOptions::default();
-                if to.exists() {
-                    match handle_replace(&msg_tx, from.clone(), to.clone(), false) {
-                        ReplaceResult::Replace(_) => {
-                            options.overwrite = true;
-                        }
-                        ReplaceResult::KeepBoth => {
-                            match to.parent() {
-                                Some(to_parent) => {
-                                    to = copy_unique_path(&from, &to_parent);
-                                }
-                                None => {
-                                    log::warn!("failed to get parent of {:?}", to);
-                                    //TODO: error?
-                                }
-                            }
-                        }
-                        ReplaceResult::Skip(_) => {
-                            options.skip_exist = true;
-                        }
-                        ReplaceResult::Cancel => {
-                            //TODO: be silent, but collect actual changes made for undo
-                            continue;
-                        }
-                    }
-                }
-                if moving {
-                    //TODO: optimize to fs::rename when possible
-                    fs_extra::file::move_file_with_progress(
-                        from,
-                        to,
-                        &options,
-                        |progress: fs_extra::file::TransitProcess| {
-                            handler(progress.copied_bytes, progress.total_bytes);
-                        },
-                    )?;
-                } else {
-                    fs_extra::file::copy_with_progress(
-                        from,
-                        to,
-                        &options,
-                        |progress: fs_extra::file::TransitProcess| {
-                            handler(progress.copied_bytes, progress.total_bytes);
-                        },
-                    )?;
-                }
-            }
+            });
         }
+
+        {
+            let msg_tx = msg_tx.clone();
+            context = context.on_replace(move |op| {
+                handle_replace(&msg_tx, op.from.clone(), op.to.clone(), true)
+            });
+        }
+
+        context.recursive_copy_or_move(from_to_pairs, moving)?;
+
         Ok(())
     })
     .await
@@ -578,7 +454,7 @@ impl Operation {
                             let new_paths_it = WalkDir::new(path).into_iter();
                             for entry in new_paths_it.skip(1) {
                                 let entry = entry.map_err(err_str)?;
-                                paths.push(entry.path().to_path_buf());
+                                paths.push(entry.into_path());
                             }
                         }
                     }
