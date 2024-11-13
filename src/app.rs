@@ -1945,6 +1945,13 @@ impl Application for App {
                         return self.update(action.message(Some(entity)));
                     }
                 }
+                if let Key::Character(char) = key {
+                    return self.update(Message::TabMessage(
+                        Some(entity),
+                        // TODO need to store keys and send them all
+                        tab::Message::SelectNextPrefix(char),
+                    ));
+                }
             }
             Message::MaybeExit => {
                 if self.window_id_opt.is_none() && self.pending_operations.is_empty() {

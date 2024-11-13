@@ -27,7 +27,7 @@ use cosmic::{
         Size,
         Subscription,
     },
-    iced_core::{mouse::ScrollDelta, widget::tree},
+    iced_core::{mouse::ScrollDelta, widget::tree, SmolStr},
     theme,
     widget::{
         self,
@@ -1071,6 +1071,7 @@ pub enum Message {
     SearchContext(Location, SearchContextWrapper),
     SearchReady(bool),
     SelectAll,
+    SelectNextPrefix(SmolStr),
     SetSort(HeadingOptions, bool),
     Thumbnail(PathBuf, ItemThumbnail),
     ToggleShowHidden,
@@ -1855,6 +1856,41 @@ impl Tab {
                 item.selected = item.name == name;
             }
         }
+    }
+
+    pub fn select_next_prefix(&mut self, prefix: &str) -> bool {
+        *self.cached_selected.borrow_mut() = None;
+        let mut found = false;
+        if let Some(ref mut items) = self.items_opt {
+            let focus = self.select_focus;
+            let start = focus.map(|i| i + 1).unwrap_or(0);
+            let (until, after) = items.split_at_mut(start);
+            for (i, item) in after
+                .iter_mut()
+                .enumerate()
+                .map(|x| (x.0 + start, x.1))
+                .chain(until.iter_mut().enumerate())
+            {
+                if !found
+                    && (!item.hidden || self.config.show_hidden)
+                    && item.name.to_lowercase().starts_with(prefix)
+                {
+                    item.selected = true;
+                    self.select_focus = Some(i);
+                    found = true;
+                } else {
+                    item.selected = false;
+                }
+            }
+
+            // Reselect the original selection in case no new selection was found
+            if !found {
+                if let Some(f) = focus {
+                    items[f].selected = true;
+                }
+            }
+        }
+        found
     }
 
     pub fn select_path(&mut self, path: PathBuf) {
@@ -2805,6 +2841,17 @@ impl Tab {
                     commands.push(Command::Iced(
                         widget::button::focus(widget::Id::unique()).into(),
                     ));
+                }
+            }
+            Message::SelectNextPrefix(s) => {
+                self.select_next_prefix(&s);
+                if let Some(offset) = self.select_focus_scroll() {
+                    commands.push(Command::Iced(
+                        scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                    ));
+                }
+                if let Some(id) = self.select_focus_id() {
+                    commands.push(Command::Iced(widget::button::focus(id).into()));
                 }
             }
             Message::SetSort(heading_option, dir) => {
