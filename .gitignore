@@ -5,5 +5,6 @@
 /debian/files
 /heaptrack.*
 /target/
+/test/
 /vendor.tar
 /vendor/

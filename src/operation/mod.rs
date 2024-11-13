@@ -9,6 +9,7 @@ use std::{
 use tokio::sync::{mpsc, Mutex};
 use walkdir::WalkDir;
 
+use self::recursive::Context;
 use crate::{
     app::{ArchiveType, DialogPage, Message},
     config::IconSizes,
@@ -17,6 +18,8 @@ use crate::{
     spawn_detached::spawn_detached,
     tab,
 };
+
+pub mod recursive;
 
 fn handle_replace(
     msg_tx: &Arc<Mutex<Sender<Message>>>,
@@ -253,28 +256,48 @@ async fn copy_or_move(
             }
 
             if from.is_dir() {
-                let options = fs_extra::dir::CopyOptions::default().copy_inside(true);
-                if moving {
-                    fs_extra::move_items_with_progress(
-                        &[from],
-                        to,
-                        &options,
-                        |progress: fs_extra::TransitProcess| {
-                            handler(progress.copied_bytes, progress.total_bytes);
-                            handle_progress_state(&msg_tx, &progress)
-                        },
-                    )?;
-                } else {
-                    fs_extra::copy_items_with_progress(
-                        &[from],
-                        to,
-                        &options,
-                        |progress: fs_extra::TransitProcess| {
-                            handler(progress.copied_bytes, progress.total_bytes);
-                            handle_progress_state(&msg_tx, &progress)
-                        },
-                    )?;
+                let mut context = Context::new();
+
+                {
+                    let msg_tx = msg_tx.clone();
+                    context = context.on_progress(move |op, progress| {
+                        let item_progress = match progress.total_bytes {
+                            Some(total_bytes) => {
+                                if total_bytes == 0 {
+                                    1.0
+                                } else {
+                                    progress.current_bytes as f32 / total_bytes as f32
+                                }
+                            }
+                            None => 0.0,
+                        };
+                        let total_progress = (item_progress + progress.current_ops as f32)
+                            / progress.total_ops as f32;
+                        log::info!(
+                            "{:?}: {:.0}%, {:.0}%",
+                            op,
+                            100.0 * item_progress,
+                            100.0 * total_progress
+                        );
+                        executor::block_on(async {
+                            let _ = msg_tx
+                                .lock()
+                                .await
+                                .send(Message::PendingProgress(id, 100.0 * total_progress))
+                                .await;
+                        })
+                    });
                 }
+
+                {
+                    let msg_tx = msg_tx.clone();
+                    context = context.on_replace(move |op| {
+                        handle_replace(&msg_tx, op.from.clone(), op.to.clone(), true)
+                    });
+                }
+
+                //TODO: HANDLE ERROR PROPERLY
+                context.recursive_copy_or_move(from, to, moving).unwrap();
             } else {
                 let mut options = fs_extra::file::CopyOptions::default();
                 if to.exists() {
@@ -578,7 +601,7 @@ impl Operation {
                             let new_paths_it = WalkDir::new(path).into_iter();
                             for entry in new_paths_it.skip(1) {
                                 let entry = entry.map_err(err_str)?;
-                                paths.push(entry.path().to_path_buf());
+                                paths.push(entry.into_path());
                             }
                         }
                     }
