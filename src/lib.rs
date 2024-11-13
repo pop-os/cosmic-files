@@ -17,7 +17,7 @@ mod mime_app;
 pub mod mime_icon;
 mod mounter;
 mod mouse_area;
-mod operation;
+pub mod operation;
 mod spawn_detached;
 use tab::Location;
 pub mod tab;

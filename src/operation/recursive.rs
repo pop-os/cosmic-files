@@ -28,41 +28,60 @@ impl Context {
 
     pub fn recursive_copy_or_move(
         &mut self,
-        from_parent: PathBuf,
-        to_parent: PathBuf,
+        from_to_pairs: Vec<(PathBuf, PathBuf)>,
         moving: bool,
-    ) -> Result<bool, Box<dyn Error>> {
+    ) -> Result<bool, String> {
         let mut ops = Vec::new();
         let mut cleanup_ops = Vec::new();
-        for entry in WalkDir::new(&from_parent).into_iter() {
-            let entry = entry?;
-            let file_type = entry.file_type();
-            let from = entry.into_path();
-            let kind = if file_type.is_dir() {
-                OpKind::Mkdir
-            } else if file_type.is_file() {
-                if moving {
-                    OpKind::Move
-                } else {
-                    OpKind::Copy
-                }
-            } else if file_type.is_symlink() {
-                let target = fs::read_link(&from)?;
-                OpKind::Symlink { target }
-            } else {
-                //TODO: present dialog and allow continue
-                return Err(format!("{} is not a known file type", from.display()).into());
-            };
-            let relative = from.strip_prefix(&from_parent)?;
-            //TODO: ensure to is inside of to_parent?
-            let to = to_parent.join(relative);
-            let op = Op { kind, from, to };
-            if moving {
-                if let Some(cleanup_op) = op.move_cleanup_op() {
-                    cleanup_ops.push(cleanup_op);
-                }
+        for (from_parent, to_parent) in from_to_pairs {
+            if from_parent == to_parent {
+                // Skip matching source and destination
+                continue;
             }
-            ops.push(op);
+
+            for entry in WalkDir::new(&from_parent).into_iter() {
+                let entry = entry.map_err(|err| {
+                    format!("failed to walk directory {:?}: {}", from_parent, err)
+                })?;
+                let file_type = entry.file_type();
+                let from = entry.into_path();
+                let kind = if file_type.is_dir() {
+                    OpKind::Mkdir
+                } else if file_type.is_file() {
+                    if moving {
+                        OpKind::Move
+                    } else {
+                        OpKind::Copy
+                    }
+                } else if file_type.is_symlink() {
+                    let target = fs::read_link(&from)
+                        .map_err(|err| format!("failed to read link {:?}: {}", from, err))?;
+                    OpKind::Symlink { target }
+                } else {
+                    //TODO: present dialog and allow continue
+                    return Err(format!("{} is not a known file type", from.display()).into());
+                };
+                let to = if from == from_parent {
+                    // When copying a file, from matches from_parent, and to_parent must be used
+                    to_parent.clone()
+                } else {
+                    let relative = from.strip_prefix(&from_parent).map_err(|err| {
+                        format!(
+                            "failed to remove prefix {:?} from {:?}: {}",
+                            from_parent, from, err
+                        )
+                    })?;
+                    //TODO: ensure to is inside of to_parent?
+                    to_parent.join(relative)
+                };
+                let op = Op { kind, from, to };
+                if moving {
+                    if let Some(cleanup_op) = op.move_cleanup_op() {
+                        cleanup_ops.push(cleanup_op);
+                    }
+                }
+                ops.push(op);
+            }
         }
 
         // Add cleanup ops after standard ops, in reverse
@@ -71,7 +90,7 @@ impl Context {
         }
 
         let total_ops = ops.len();
-        for (current_ops, op) in ops.into_iter().enumerate() {
+        for (current_ops, mut op) in ops.into_iter().enumerate() {
             let progress = Progress {
                 current_ops,
                 total_ops,
@@ -79,28 +98,17 @@ impl Context {
                 total_bytes: None,
             };
             (self.on_progress)(&op, &progress);
-            if !op.run(self, progress)? {
+            if !op.run(self, progress).map_err(|err| {
+                format!(
+                    "failed to {:?} {:?} to {:?}: {}",
+                    op.kind, op.from, op.to, err
+                )
+            })? {
                 return Ok(false);
             }
         }
 
         Ok(true)
-    }
-
-    pub fn recursive_copy(
-        &mut self,
-        from: impl Into<PathBuf>,
-        to: impl Into<PathBuf>,
-    ) -> Result<bool, Box<dyn Error>> {
-        self.recursive_copy_or_move(from.into(), to.into(), false)
-    }
-
-    pub fn recursive_move(
-        &mut self,
-        from: impl Into<PathBuf>,
-        to: impl Into<PathBuf>,
-    ) -> Result<bool, Box<dyn Error>> {
-        self.recursive_copy_or_move(from.into(), to.into(), true)
     }
 
     pub fn on_progress<F: Fn(&Op, &Progress) + 'static>(mut self, f: F) -> Self {
@@ -182,7 +190,7 @@ impl Op {
         })
     }
 
-    fn run(mut self, ctx: &mut Context, mut progress: Progress) -> Result<bool, Box<dyn Error>> {
+    fn run(&mut self, ctx: &mut Context, mut progress: Progress) -> Result<bool, Box<dyn Error>> {
         match self.kind {
             OpKind::Copy => {
                 let mut from_file = fs::OpenOptions::new().read(true).open(&self.from)?;
@@ -236,10 +244,10 @@ impl Op {
                         //TODO: what is the error code on Windows?
                         if err.raw_os_error() == Some(libc::EXDEV) {
                             // Try standard copy if hard link fails with cross device error
-                            let copy_op = Op {
+                            let mut copy_op = Op {
                                 kind: OpKind::Copy,
                                 from: self.from.clone(),
-                                to: self.to,
+                                to: self.to.clone(),
                             };
                             copy_op.run(ctx, progress)?;
                         } else {
