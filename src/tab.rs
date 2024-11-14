@@ -1210,6 +1210,7 @@ impl ItemThumbnail {
                 }
             }
         } else if mime.type_() == mime::TEXT && check_size("text", 8 * 1000 * 1000) {
+            /*TODO: fix performance issues, widget::text_editr::Content::with_text forces all text to shape, which blocks rendering
             match fs::read_to_string(&path) {
                 Ok(data) => {
                     return ItemThumbnail::Text(widget::text_editor::Content::with_text(&data));
@@ -1218,6 +1219,7 @@ impl ItemThumbnail {
                     log::warn!("failed to read {:?}: {}", path, err);
                 }
             }
+            */
         }
 
         // Try external thumbnailers
