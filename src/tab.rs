@@ -1396,33 +1396,39 @@ impl Item {
 
         let mut details = widget::column().spacing(space_xxxs);
         details = details.push(widget::text::heading(self.name.clone()));
-        details = details.push(widget::text(format!("Type: {}", self.mime)));
+        details = details.push(widget::text(fl!("type", mime = self.mime.to_string())));
         let mut settings = Vec::new();
-        //TODO: translate!
         //TODO: correct display of folder size?
         match &self.metadata {
             ItemMetadata::Path { metadata, children } => {
                 if metadata.is_dir() {
-                    details = details.push(widget::text(format!("Items: {}", children)));
+                    details = details.push(widget::text(fl!("items", items = children)));
                 } else {
-                    details = details.push(widget::text(format!(
-                        "Size: {}",
-                        format_size(metadata.len())
+                    details = details.push(widget::text(fl!(
+                        "item-size",
+                        size = format_size(metadata.len())
+                    )));
+                }
+                
+                if let Ok(time) = metadata.created() {
+                    details = details.push(widget::text(fl!(
+                        "item-created",
+                        created = format_time(time).to_string()
                     )));
                 }
 
-                if let Ok(time) = metadata.created() {
-                    details = details.push(widget::text(format!("Created: {}", format_time(time))));
-                }
-
                 if let Ok(time) = metadata.modified() {
-                    details =
-                        details.push(widget::text(format!("Modified: {}", format_time(time))));
+                    details = details.push(widget::text(fl!(
+                        "item-modified",
+                        modified = format_time(time).to_string()
+                    )));
                 }
 
                 if let Ok(time) = metadata.accessed() {
-                    details =
-                        details.push(widget::text(format!("Accessed: {}", format_time(time))));
+                    details = details.push(widget::text(fl!(
+                        "item-accessed",
+                        accessed = format_time(time).to_string()
+                    )));
                 }
 
                 #[cfg(not(target_os = "windows"))]

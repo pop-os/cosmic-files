@@ -201,6 +201,12 @@ default-app = {$name} (default)
 
 ## Show details
 show-details = Show details
+type = Type: {$mime}
+items = Items: {$items}
+item-size = Size: {$size}
+item-created = Created: {$created}
+item-modified = Modified: {$modified}
+item-accessed = Accessed: {$accessed}
 
 ## Settings
 settings = Settings
@@ -270,3 +276,5 @@ sort-newest-first = Newest first
 sort-oldest-first = Oldest first
 sort-smallest-to-largest = Smallest to largest
 sort-largest-to-smallest = Largest to smallest
+
+
