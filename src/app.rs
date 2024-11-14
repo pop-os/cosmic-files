@@ -43,7 +43,7 @@ use notify_debouncer_full::{
 use slotmap::Key as SlotMapKey;
 use std::{
     any::TypeId,
-    collections::{BTreeMap, HashMap, HashSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     env, fmt, fs, io,
     num::NonZeroU16,
     path::PathBuf,
@@ -523,7 +523,7 @@ pub struct App {
     notification_opt: Option<Arc<Mutex<notify_rust::NotificationHandle>>>,
     pending_operation_id: u64,
     pending_operations: BTreeMap<u64, (Operation, f32, Arc<AtomicBool>)>,
-    progress_operations: usize,
+    progress_operations: BTreeSet<u64>,
     complete_operations: BTreeMap<u64, Operation>,
     failed_operations: BTreeMap<u64, (Operation, f32, String)>,
     search_id: widget::Id,
@@ -702,7 +702,7 @@ impl App {
         let id = self.pending_operation_id;
         self.pending_operation_id += 1;
         if operation.show_progress_notification() {
-            self.progress_operations += 1;
+            self.progress_operations.insert(id);
         }
         self.pending_operations
             .insert(id, (operation, 0.0, Arc::new(AtomicBool::new(false))));
@@ -1414,7 +1414,7 @@ impl Application for App {
             notification_opt: None,
             pending_operation_id: 0,
             pending_operations: BTreeMap::new(),
-            progress_operations: 0,
+            progress_operations: BTreeSet::new(),
             complete_operations: BTreeMap::new(),
             failed_operations: BTreeMap::new(),
             search_id: widget::Id::unique(),
@@ -2336,11 +2336,13 @@ impl Application for App {
             Message::PendingCancel(id) => {
                 if let Some((_, _, cancelled)) = self.pending_operations.get(&id) {
                     cancelled.store(true, Ordering::SeqCst);
+                    self.progress_operations.remove(&id);
                 }
             }
             Message::PendingCancelAll => {
-                for (_id, (_, _, cancelled)) in self.pending_operations.iter() {
+                for (id, (_, _, cancelled)) in self.pending_operations.iter() {
                     cancelled.store(true, Ordering::SeqCst);
+                    self.progress_operations.remove(&id);
                 }
             }
             Message::PendingComplete(id) => {
@@ -2370,7 +2372,7 @@ impl Application for App {
                     .iter()
                     .any(|(_id, (op, _, _))| op.show_progress_notification())
                 {
-                    self.progress_operations = 0;
+                    self.progress_operations.clear();
                 }
                 // Potentially show a notification
                 commands.push(self.update_notification());
@@ -2381,7 +2383,7 @@ impl Application for App {
                 return Task::batch(commands);
             }
             Message::PendingDismiss => {
-                self.progress_operations = 0;
+                self.progress_operations.clear();
             }
             Message::PendingError(id, err) => {
                 if let Some((op, progress, cancelled)) = self.pending_operations.remove(&id) {
@@ -2390,6 +2392,7 @@ impl Application for App {
                     if !cancelled.load(Ordering::SeqCst) {
                         self.dialog_pages.push_back(DialogPage::FailedOperation(id));
                     }
+                    self.progress_operations.remove(&id);
                 }
                 // Manually rescan any trash tabs after any operation is completed
                 return self.rescan_trash();
@@ -3792,7 +3795,7 @@ impl Application for App {
     }
 
     fn footer(&self) -> Option<Element<Message>> {
-        if self.progress_operations == 0 {
+        if self.progress_operations.is_empty() {
             return None;
         }
 
@@ -3815,7 +3818,7 @@ impl Application for App {
                 count += 1;
             }
         }
-        while count < self.progress_operations {
+        while count < self.progress_operations.len() {
             total_progress += 100.0;
             count += 1;
         }
