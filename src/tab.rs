@@ -1398,18 +1398,20 @@ impl Item {
         details = details.push(widget::text::heading(self.name.clone()));
         details = details.push(widget::text(fl!("type", mime = self.mime.to_string())));
         let mut settings = Vec::new();
-        //TODO: correct display of folder size?
         match &self.metadata {
             ItemMetadata::Path { metadata, children } => {
                 if metadata.is_dir() {
                     details = details.push(widget::text(fl!("items", items = children)));
+                    let size = calculate_dir_size(self.path_opt().unwrap());
+                    details =
+                        details.push(widget::text(fl!("item-size", size = format_size(size))));
                 } else {
                     details = details.push(widget::text(fl!(
                         "item-size",
                         size = format_size(metadata.len())
                     )));
                 }
-                
+
                 if let Ok(time) = metadata.created() {
                     details = details.push(widget::text(fl!(
                         "item-created",
@@ -1640,6 +1642,25 @@ pub struct Tab {
     selected_clicked: bool,
     last_right_click: Option<usize>,
     search_context: Option<SearchContext>,
+}
+
+fn calculate_dir_size(path: &Path) -> u64 {
+    let mut total_size = 0;
+
+    if let Ok(entries) = fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let metadata = entry.metadata().ok();
+
+            if let Some(data) = metadata {
+                if data.is_dir() {
+                    total_size += calculate_dir_size(&entry.path());
+                } else {
+                    total_size += data.len();
+                }
+            }
+        }
+    }
+    total_size
 }
 
 fn folder_name<P: AsRef<Path>>(path: P) -> (String, bool) {
