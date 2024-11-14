@@ -43,6 +43,7 @@ use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::{
+    any::TypeId,
     cell::{Cell, RefCell},
     cmp::Ordering,
     collections::HashMap,
@@ -302,6 +303,7 @@ fn format_permissions_owner(metadata: &Metadata, owner: PermissionOwner) -> Stri
         PermissionOwner::Other => String::from(""),
     };
 }
+
 fn format_permissions(metadata: &Metadata, owner: PermissionOwner) -> String {
     let mut perms: Vec<String> = Vec::new();
     if match owner {
@@ -489,6 +491,7 @@ pub fn item_from_entry(
         selected: false,
         highlighted: false,
         overlaps_drag_rect: false,
+        size: 0,
     }
 }
 
@@ -718,6 +721,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     selected: false,
                     highlighted: false,
                     overlaps_drag_rect: false,
+                    size: 0,
                 });
             }
         }
@@ -901,6 +905,7 @@ pub fn scan_desktop(
             selected: false,
             highlighted: false,
             overlaps_drag_rect: false,
+            size: 0,
         })
     }
 
@@ -1074,6 +1079,7 @@ pub enum Message {
     ZoomOut,
     HighlightDeactivate(usize),
     HighlightActivate(usize),
+    DirecotrySize(PathBuf, u64),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -1303,6 +1309,7 @@ pub struct Item {
     pub selected: bool,
     pub highlighted: bool,
     pub overlaps_drag_rect: bool,
+    pub size: u64,
 }
 
 impl Item {
@@ -1402,7 +1409,7 @@ impl Item {
             ItemMetadata::Path { metadata, children } => {
                 if metadata.is_dir() {
                     details = details.push(widget::text(fl!("items", items = children)));
-                    let size = calculate_dir_size(self.path_opt().unwrap());
+                    let size = self.size;
                     details =
                         details.push(widget::text(fl!("item-size", size = format_size(size))));
                 } else {
@@ -2913,6 +2920,17 @@ impl Tab {
             Message::ZoomOut => {
                 commands.push(Command::Action(Action::ZoomOut));
             }
+            Message::DirecotrySize(path, dir_size) => {
+                if let Some(ref mut items) = self.items_opt {
+                    let location = Location::Path(path);
+                    for item in items.iter_mut() {
+                        if item.location_opt.as_ref() == Some(&location) {
+                            item.size = dir_size;
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
         // Scroll to top if needed
@@ -4421,6 +4439,7 @@ impl Tab {
                 continue;
             };
             let mime = item.mime.clone();
+
             subscriptions.push(Subscription::run_with_id(
                 path.clone(),
                 stream::channel(1, |mut output| async move {
@@ -4440,7 +4459,39 @@ impl Tab {
                     match output.send(message).await {
                         Ok(()) => {}
                         Err(err) => {
-                            log::warn!("failed to send thumbnail for {:?}: {}", path, err);
+                            log::warn!("failed to send thumbnail for {:?}: {}", &path, err);
+                        }
+                    }
+
+                    let mut total_size = 0;
+
+                    if let Ok(entries) = fs::read_dir(path.clone()) {
+                        for entry in entries.flatten() {
+                            let metadata = entry.metadata().ok();
+
+                            if let Some(data) = metadata {
+                                if data.is_dir() {
+                                    total_size += calculate_dir_size(&entry.path());
+                                } else {
+                                    total_size += data.len();
+                                }
+                            }
+                        }
+                    }
+
+                    total_size = calculate_dir_size(&path);
+
+                    match output
+                        .send(Message::DirecotrySize(path.clone(), total_size))
+                        .await
+                    {
+                        Ok(()) => {}
+                        Err(err) => {
+                            log::warn!(
+                                "failed to send dirsize for {:?}: {}",
+                                &path,
+                                err
+                            );
                         }
                     }
 
