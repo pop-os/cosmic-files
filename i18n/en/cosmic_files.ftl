@@ -26,6 +26,11 @@ modified = Modified
 trashed-on = Trashed
 size = Size
 
+# Progress footer
+details = Details
+dismiss = Dismiss message
+operations-in-progress = {$count} actions in progress ({$percent}%)...
+
 # Dialogs
 
 ## Compress Dialog
@@ -126,6 +131,7 @@ try-again = Try again
 username = Username
 
 ## Operations
+cancelled = Cancelled
 edit-history = Edit history
 history = History
 no-history = No items in history.
@@ -135,7 +141,7 @@ complete = Complete
 compressing = Compressing {$items} {$items ->
         [one] item
         *[other] items
-    } from "{$from}" to "{$to}"
+    } from "{$from}" to "{$to}" ({$percent}%)...
 compressed = Compressed {$items} {$items ->
         [one] item
         *[other] items
@@ -146,17 +152,17 @@ created = Created "{$name}" in "{$parent}"
 copying = Copying {$items} {$items ->
         [one] item
         *[other] items
-    } from "{$from}" to "{$to}"
+    } from "{$from}" to "{$to}" ({$percent}%)...
 copied = Copied {$items} {$items ->
         [one] item
         *[other] items
     } from "{$from}" to "{$to}"
-emptying-trash = Emptying {trash}
+emptying-trash = Emptying {trash} ({$percent}%)...
 emptied-trash = Emptied {trash}
 extracting = Extracting {$items} {$items ->
         [one] item
         *[other] items
-    } from "{$from}" to "{$to}"
+    } from "{$from}" to "{$to}" ({$percent}%)...
 extracted = Extracted {$items} {$items ->
         [one] item
         *[other] items
@@ -166,7 +172,7 @@ set-executable-and-launched = Set "{$name}" as executable and launched
 moving = Moving {$items} {$items ->
         [one] item
         *[other] items
-    } from "{$from}" to "{$to}"
+    } from "{$from}" to "{$to}" ({$percent}%)...
 moved = Moved {$items} {$items ->
         [one] item
         *[other] items
@@ -176,7 +182,7 @@ renamed = Renamed "{$from}" to "{$to}"
 restoring = Restoring {$items} {$items ->
         [one] item
         *[other] items
-    } from {trash}
+    } from {trash} ({$percent})...
 restored = Restored {$items} {$items ->
         [one] item
         *[other] items

@@ -48,7 +48,10 @@ use std::{
     num::NonZeroU16,
     path::PathBuf,
     process,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     time::{self, Instant},
 };
 use tokio::sync::mpsc;
@@ -306,7 +309,10 @@ pub enum Message {
     OpenWithSelection(usize),
     Paste(Option<Entity>),
     PasteContents(PathBuf, ClipboardPaste),
+    PendingCancel(u64),
+    PendingCancelAll,
     PendingComplete(u64),
+    PendingDismiss,
     PendingError(u64, String),
     PendingProgress(u64, f32),
     Preview(Option<Entity>),
@@ -516,9 +522,10 @@ pub struct App {
     #[cfg(feature = "notify")]
     notification_opt: Option<Arc<Mutex<notify_rust::NotificationHandle>>>,
     pending_operation_id: u64,
-    pending_operations: BTreeMap<u64, (Operation, f32)>,
+    pending_operations: BTreeMap<u64, (Operation, f32, Arc<AtomicBool>)>,
+    progress_operations: usize,
     complete_operations: BTreeMap<u64, Operation>,
-    failed_operations: BTreeMap<u64, (Operation, String)>,
+    failed_operations: BTreeMap<u64, (Operation, f32, String)>,
     search_id: widget::Id,
     #[cfg(feature = "wayland")]
     surface_ids: HashMap<WlOutput, WindowId>,
@@ -694,7 +701,11 @@ impl App {
     fn operation(&mut self, operation: Operation) {
         let id = self.pending_operation_id;
         self.pending_operation_id += 1;
-        self.pending_operations.insert(id, (operation, 0.0));
+        if operation.show_progress_notification() {
+            self.progress_operations += 1;
+        }
+        self.pending_operations
+            .insert(id, (operation, 0.0, Arc::new(AtomicBool::new(false))));
     }
 
     fn remove_window(&mut self, id: &window::Id) {
@@ -1209,12 +1220,20 @@ impl App {
 
         if !self.pending_operations.is_empty() {
             let mut section = widget::settings::section().title(fl!("pending"));
-            for (_id, (op, progress)) in self.pending_operations.iter().rev() {
+            for (id, (op, progress, _)) in self.pending_operations.iter().rev() {
                 section = section.add(widget::column::with_children(vec![
-                    widget::text(op.pending_text()).into(),
-                    widget::progress_bar(0.0..=100.0, *progress)
-                        .height(progress_bar_height)
-                        .into(),
+                    widget::row::with_children(vec![
+                        widget::progress_bar(0.0..=100.0, *progress)
+                            .height(progress_bar_height)
+                            .into(),
+                        widget::button::icon(widget::icon::from_name("window-close-symbolic"))
+                            .on_press(Message::PendingCancel(*id))
+                            .padding(8)
+                            .into(),
+                    ])
+                    .align_y(Alignment::Center)
+                    .into(),
+                    widget::text(op.pending_text(*progress as i32)).into(),
                 ]));
             }
             children.push(section.into());
@@ -1222,9 +1241,9 @@ impl App {
 
         if !self.failed_operations.is_empty() {
             let mut section = widget::settings::section().title(fl!("failed"));
-            for (_id, (op, error)) in self.failed_operations.iter().rev() {
+            for (_id, (op, progress, error)) in self.failed_operations.iter().rev() {
                 section = section.add(widget::column::with_children(vec![
-                    widget::text(op.pending_text()).into(),
+                    widget::text(op.pending_text(*progress as i32)).into(),
                     widget::text(error).into(),
                 ]));
             }
@@ -1395,6 +1414,7 @@ impl Application for App {
             notification_opt: None,
             pending_operation_id: 0,
             pending_operations: BTreeMap::new(),
+            progress_operations: 0,
             complete_operations: BTreeMap::new(),
             failed_operations: BTreeMap::new(),
             search_id: widget::Id::unique(),
@@ -2313,10 +2333,20 @@ impl Application for App {
                     }
                 }
             }
+            Message::PendingCancel(id) => {
+                if let Some((_, _, cancelled)) = self.pending_operations.get(&id) {
+                    cancelled.store(true, Ordering::SeqCst);
+                }
+            }
+            Message::PendingCancelAll => {
+                for (_id, (_, _, cancelled)) in self.pending_operations.iter() {
+                    cancelled.store(true, Ordering::SeqCst);
+                }
+            }
             Message::PendingComplete(id) => {
                 let mut commands = Vec::with_capacity(3);
 
-                if let Some((op, _)) = self.pending_operations.remove(&id) {
+                if let Some((op, _, _)) = self.pending_operations.remove(&id) {
                     if let Some(description) = op.toast() {
                         if let Operation::Delete { ref paths } = op {
                             let paths: Arc<[PathBuf]> = Arc::from(paths.as_slice());
@@ -2334,6 +2364,14 @@ impl Application for App {
                     }
                     self.complete_operations.insert(id, op);
                 }
+                // Close progress notification if all relavent operations are finished
+                if !self
+                    .pending_operations
+                    .iter()
+                    .any(|(_id, (op, _, _))| op.show_progress_notification())
+                {
+                    self.progress_operations = 0;
+                }
                 // Potentially show a notification
                 commands.push(self.update_notification());
                 // Manually rescan any trash tabs after any operation is completed
@@ -2342,16 +2380,22 @@ impl Application for App {
                 commands.push(self.search());
                 return Task::batch(commands);
             }
+            Message::PendingDismiss => {
+                self.progress_operations = 0;
+            }
             Message::PendingError(id, err) => {
-                if let Some((op, _)) = self.pending_operations.remove(&id) {
-                    self.failed_operations.insert(id, (op, err));
-                    self.dialog_pages.push_back(DialogPage::FailedOperation(id));
+                if let Some((op, progress, cancelled)) = self.pending_operations.remove(&id) {
+                    self.failed_operations.insert(id, (op, progress, err));
+                    // Only show dialog if not cancelled
+                    if !cancelled.load(Ordering::SeqCst) {
+                        self.dialog_pages.push_back(DialogPage::FailedOperation(id));
+                    }
                 }
                 // Manually rescan any trash tabs after any operation is completed
                 return self.rescan_trash();
             }
             Message::PendingProgress(id, new_progress) => {
-                if let Some((_, progress)) = self.pending_operations.get_mut(&id) {
+                if let Some((_, progress, _)) = self.pending_operations.get_mut(&id) {
                     *progress = new_progress;
                 }
                 return self.update_notification();
@@ -3316,7 +3360,7 @@ impl Application for App {
                 ),
             DialogPage::FailedOperation(id) => {
                 //TODO: try next dialog page (making sure index is used by Dialog messages)?
-                let (operation, err) = self.failed_operations.get(id)?;
+                let (operation, _, err) = self.failed_operations.get(id)?;
 
                 //TODO: nice description of error
                 widget::dialog()
@@ -3747,6 +3791,80 @@ impl Application for App {
         Some(dialog.into())
     }
 
+    fn footer(&self) -> Option<Element<Message>> {
+        if self.progress_operations == 0 {
+            return None;
+        }
+
+        let cosmic_theme::Spacing {
+            space_xxs,
+            space_xs,
+            space_s,
+            ..
+        } = theme::active().cosmic().spacing;
+
+        let mut title = String::new();
+        let mut total_progress = 0.0;
+        let mut count = 0;
+        for (_id, (op, progress, _)) in self.pending_operations.iter() {
+            if op.show_progress_notification() {
+                if title.is_empty() {
+                    title = op.pending_text(*progress as i32);
+                }
+                total_progress += progress;
+                count += 1;
+            }
+        }
+        while count < self.progress_operations {
+            total_progress += 100.0;
+            count += 1;
+        }
+        total_progress /= count as f32;
+        if count > 1 {
+            title = fl!(
+                "operations-in-progress",
+                count = count,
+                percent = (total_progress as i32)
+            );
+        }
+
+        //TODO: get height from theme?
+        let progress_bar_height = Length::Fixed(4.0);
+        let progress_bar =
+            widget::progress_bar(0.0..=100.0, total_progress).height(progress_bar_height);
+
+        let container = widget::layer_container(widget::column::with_children(vec![
+            widget::row::with_children(vec![
+                progress_bar.into(),
+                widget::button::icon(widget::icon::from_name("window-close-symbolic"))
+                    .on_press(Message::PendingCancelAll)
+                    .padding(8)
+                    .into(),
+            ])
+            .align_y(Alignment::Center)
+            .into(),
+            widget::text::body(title).into(),
+            widget::Space::with_height(space_s).into(),
+            widget::row::with_children(vec![
+                widget::button::link(fl!("details"))
+                    .on_press(Message::ToggleContextPage(ContextPage::EditHistory))
+                    .padding(0)
+                    .trailing_icon(true)
+                    .into(),
+                widget::horizontal_space().into(),
+                widget::button::standard(fl!("dismiss"))
+                    .on_press(Message::PendingDismiss)
+                    .into(),
+            ])
+            .align_y(Alignment::Center)
+            .into(),
+        ]))
+        .padding([space_xxs, space_xs])
+        .layer(cosmic_theme::Layer::Primary);
+
+        Some(container.into())
+    }
+
     fn header_start(&self) -> Vec<Element<Self::Message>> {
         vec![menu::menu_bar(
             self.tab_model.active_data::<Tab>(),
@@ -3758,14 +3876,6 @@ impl Application for App {
 
     fn header_end(&self) -> Vec<Element<Self::Message>> {
         let mut elements = Vec::with_capacity(2);
-
-        if !self.pending_operations.is_empty() {
-            elements.push(
-                widget::button::text(format!("{}", self.pending_operations.len()))
-                    .on_press(Message::ToggleContextPage(ContextPage::EditHistory))
-                    .into(),
-            );
-        }
 
         if let Some(term) = self.search_get() {
             if self.core.is_condensed() {
@@ -4188,15 +4298,16 @@ impl Application for App {
             }
         }
 
-        for (id, (pending_operation, _)) in self.pending_operations.iter() {
+        for (id, (pending_operation, _, cancelled)) in self.pending_operations.iter() {
             //TODO: use recipe?
             let id = *id;
             let pending_operation = pending_operation.clone();
+            let cancelled = cancelled.clone();
             subscriptions.push(Subscription::run_with_id(
                 id,
                 stream::channel(16, move |msg_tx| async move {
                     let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
-                    match pending_operation.perform(id, &msg_tx).await {
+                    match pending_operation.perform(id, &msg_tx, cancelled).await {
                         Ok(()) => {
                             let _ = msg_tx.lock().await.send(Message::PendingComplete(id)).await;
                         }
