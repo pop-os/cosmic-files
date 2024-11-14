@@ -500,7 +500,7 @@ fn update<Message: Clone>(
                     shell.publish(message())
                 }
             }
-            (Some(new), None) => {
+            (Some(_), None) => {
                 if let Some(message) = widget.on_enter.as_ref() {
                     shell.publish(message())
                 }
