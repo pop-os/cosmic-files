@@ -73,11 +73,15 @@ run *args:
 test *args:
     cargo test {{args}}
 
+flamegraph *args:
+    cargo flamegraph --release --bin cosmic-files -- --no-daemon {{args}}
+    xdg-open flamegraph.svg
+
 heaptrack *args:
     #!/usr/bin/env bash
     set -ex
     rm -fv heaptrack.cosmic-files.*
-    cargo heaptrack --profile release-with-debug --bin cosmic-files -- {{args}}
+    cargo heaptrack --profile release-with-debug --bin cosmic-files -- --no-daemon {{args}}
     zstd -dc < heaptrack.cosmic-files.*.raw.zst | /usr/lib/heaptrack/libexec/heaptrack_interpret | zstd -c > heaptrack.cosmic-files.zst
     heaptrack_gui heaptrack.cosmic-files.zst
 
