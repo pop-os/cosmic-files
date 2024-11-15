@@ -201,6 +201,13 @@ default-app = {$name} (default)
 
 ## Show details
 show-details = Show details
+type = Type: {$mime}
+items = Items: {$items}
+item-size = Size: {$size}
+item-created = Created: {$created}
+item-modified = Modified: {$modified}
+item-accessed = Accessed: {$accessed}
+calculating = Calculating...
 
 ## Settings
 settings = Settings

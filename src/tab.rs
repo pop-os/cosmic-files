@@ -55,6 +55,7 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 use tokio::sync::mpsc;
+use walkdir::WalkDir;
 
 use crate::{
     app::{self, Action, PreviewItem, PreviewKind},
@@ -302,6 +303,7 @@ fn format_permissions_owner(metadata: &Metadata, owner: PermissionOwner) -> Stri
         PermissionOwner::Other => String::from(""),
     };
 }
+
 fn format_permissions(metadata: &Metadata, owner: PermissionOwner) -> String {
     let mut perms: Vec<String> = Vec::new();
     if match owner {
@@ -489,6 +491,7 @@ pub fn item_from_entry(
         selected: false,
         highlighted: false,
         overlaps_drag_rect: false,
+        size: None,
     }
 }
 
@@ -718,6 +721,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     selected: false,
                     highlighted: false,
                     overlaps_drag_rect: false,
+                    size: None,
                 });
             }
         }
@@ -901,6 +905,7 @@ pub fn scan_desktop(
             selected: false,
             highlighted: false,
             overlaps_drag_rect: false,
+            size: None,
         })
     }
 
@@ -1074,6 +1079,7 @@ pub enum Message {
     ZoomOut,
     HighlightDeactivate(usize),
     HighlightActivate(usize),
+    DirectorySize(PathBuf, u64),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -1303,6 +1309,7 @@ pub struct Item {
     pub selected: bool,
     pub highlighted: bool,
     pub overlaps_drag_rect: bool,
+    pub size: Option<u64>,
 }
 
 impl Item {
@@ -1396,33 +1403,43 @@ impl Item {
 
         let mut details = widget::column().spacing(space_xxxs);
         details = details.push(widget::text::heading(self.name.clone()));
-        details = details.push(widget::text(format!("Type: {}", self.mime)));
+        details = details.push(widget::text(fl!("type", mime = self.mime.to_string())));
         let mut settings = Vec::new();
-        //TODO: translate!
-        //TODO: correct display of folder size?
         match &self.metadata {
             ItemMetadata::Path { metadata, children } => {
                 if metadata.is_dir() {
-                    details = details.push(widget::text(format!("Items: {}", children)));
+                    details = details.push(widget::text(fl!("items", items = children)));
+                    let size = match self.size {
+                        Some(size) => format_size(size),
+                        None => fl!("calculating"),
+                    };
+                    details = details.push(widget::text(fl!("item-size", size = size)));
                 } else {
-                    details = details.push(widget::text(format!(
-                        "Size: {}",
-                        format_size(metadata.len())
+                    details = details.push(widget::text(fl!(
+                        "item-size",
+                        size = format_size(metadata.len())
                     )));
                 }
 
                 if let Ok(time) = metadata.created() {
-                    details = details.push(widget::text(format!("Created: {}", format_time(time))));
+                    details = details.push(widget::text(fl!(
+                        "item-created",
+                        created = format_time(time).to_string()
+                    )));
                 }
 
                 if let Ok(time) = metadata.modified() {
-                    details =
-                        details.push(widget::text(format!("Modified: {}", format_time(time))));
+                    details = details.push(widget::text(fl!(
+                        "item-modified",
+                        modified = format_time(time).to_string()
+                    )));
                 }
 
                 if let Ok(time) = metadata.accessed() {
-                    details =
-                        details.push(widget::text(format!("Accessed: {}", format_time(time))));
+                    details = details.push(widget::text(fl!(
+                        "item-accessed",
+                        accessed = format_time(time).to_string()
+                    )));
                 }
 
                 #[cfg(not(target_os = "windows"))]
@@ -1634,6 +1651,16 @@ pub struct Tab {
     selected_clicked: bool,
     last_right_click: Option<usize>,
     search_context: Option<SearchContext>,
+}
+
+fn calculate_dir_size(path: &Path) -> u64 {
+    WalkDir::new(path)
+        .into_iter()
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| fs::metadata(entry.path()).ok())
+        .filter(|metadata| metadata.is_file())
+        .map(|metadata| metadata.len())
+        .sum()
 }
 
 fn folder_name<P: AsRef<Path>>(path: P) -> (String, bool) {
@@ -2885,6 +2912,22 @@ impl Tab {
             }
             Message::ZoomOut => {
                 commands.push(Command::Action(Action::ZoomOut));
+            }
+            Message::DirectorySize(path, dir_size) => {
+                let location = Location::Path(path);
+                if let Some(ref mut item) = self.parent_item_opt {
+                    if item.location_opt.as_ref() == Some(&location) {
+                        item.size = Some(dir_size);
+                    }
+                }
+                if let Some(ref mut items) = self.items_opt {
+                    for item in items.iter_mut() {
+                        if item.location_opt.as_ref() == Some(&location) {
+                            item.size = Some(dir_size);
+                            break;
+                        }
+                    }
+                }
             }
         }
 
@@ -4394,8 +4437,9 @@ impl Tab {
                 continue;
             };
             let mime = item.mime.clone();
+
             subscriptions.push(Subscription::run_with_id(
-                path.clone(),
+                ("thumbnail", path.clone()),
                 stream::channel(1, |mut output| async move {
                     let message = {
                         let path = path.clone();
@@ -4413,7 +4457,7 @@ impl Tab {
                     match output.send(message).await {
                         Ok(()) => {}
                         Err(err) => {
-                            log::warn!("failed to send thumbnail for {:?}: {}", path, err);
+                            log::warn!("failed to send thumbnail for {:?}: {}", &path, err);
                         }
                     }
 
@@ -4424,6 +4468,41 @@ impl Tab {
             if subscriptions.len() >= jobs {
                 break;
             }
+        }
+
+        // Load directory size for selected items
+        for item in items
+            .iter()
+            .filter(|item| {
+                // Item must be a selected directory
+                item.selected && item.metadata.is_dir()
+            })
+            .chain(&self.parent_item_opt)
+        {
+            // Item must have a path
+            let Some(path) = item.path_opt().map(|path| path.to_path_buf()) else {
+                continue;
+            };
+            subscriptions.push(Subscription::run_with_id(
+                ("dir_size", path.clone()),
+                stream::channel(1, |mut output| async move {
+                    let total_size = calculate_dir_size(&path);
+
+                    match output
+                        .send(Message::DirectorySize(path.clone(), total_size))
+                        .await
+                    {
+                        Ok(()) => {}
+                        Err(err) => {
+                            log::warn!("failed to send dirsize for {:?}: {}", &path, err);
+                        }
+                    }
+
+                    std::future::pending().await
+                }),
+            ));
+            // Only calculate size for one directory
+            break;
         }
 
         // Load search items incrementally
