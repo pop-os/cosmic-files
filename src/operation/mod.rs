@@ -224,8 +224,15 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
     Ok(())
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum ControllerState {
+    Cancelled,
+    Paused,
+    Running,
+}
+
 struct ControllerInner {
-    state: Mutex<u32>,
+    state: Mutex<ControllerState>,
     condvar: Condvar,
 }
 
@@ -235,14 +242,10 @@ pub struct Controller {
 }
 
 impl Controller {
-    const RUNNING: u32 = 0;
-    const PAUSED: u32 = 1;
-    const CANCELLED: u32 = 2;
-
     pub fn new() -> Self {
         Self {
             inner: Arc::new(ControllerInner {
-                state: Mutex::new(Self::RUNNING),
+                state: Mutex::new(ControllerState::Running),
                 condvar: Condvar::new(),
             }),
         }
@@ -251,42 +254,44 @@ impl Controller {
     pub fn check(&self) -> Result<(), String> {
         let mut state = self.inner.state.lock().unwrap();
         loop {
-            if *state == Self::CANCELLED {
-                return Err(fl!("cancelled"));
-            } else if *state == Self::PAUSED {
-                state = self.inner.condvar.wait(state).unwrap();
-            } else {
-                return Ok(());
+            match *state {
+                ControllerState::Cancelled => return Err(fl!("cancelled")),
+                ControllerState::Paused => {
+                    state = self.inner.condvar.wait(state).unwrap();
+                }
+                ControllerState::Running => return Ok(()),
             }
         }
     }
 
+    pub fn state(&self) -> ControllerState {
+        *self.inner.state.lock().unwrap()
+    }
+
+    pub fn set_state(&self, state: ControllerState) {
+        *self.inner.state.lock().unwrap() = state;
+        self.inner.condvar.notify_all();
+    }
+
     pub fn is_cancelled(&self) -> bool {
-        let state = self.inner.state.lock().unwrap();
-        *state == Self::CANCELLED
+        matches!(self.state(), ControllerState::Cancelled)
     }
 
     pub fn cancel(&self) {
-        let mut state = self.inner.state.lock().unwrap();
-        *state = Self::CANCELLED;
-        self.inner.condvar.notify_all();
+        self.set_state(ControllerState::Cancelled);
     }
 
     pub fn is_paused(&self) -> bool {
-        let state = self.inner.state.lock().unwrap();
-        *state == Self::PAUSED
+        matches!(self.state(), ControllerState::Paused)
     }
 
     pub fn pause(&self) {
-        let mut state = self.inner.state.lock().unwrap();
-        *state = Self::PAUSED;
-        self.inner.condvar.notify_all();
+        self.set_state(ControllerState::Paused);
     }
 
     pub fn unpause(&self) {
-        let mut state = self.inner.state.lock().unwrap();
-        *state = Self::RUNNING;
-        self.inner.condvar.notify_all();
+        //TODO: ensure this does not override Cancel?
+        self.set_state(ControllerState::Running);
     }
 }
 
@@ -528,43 +533,48 @@ fn paths_parent_name<'a>(paths: &'a Vec<PathBuf>) -> Cow<'a, str> {
 }
 
 impl Operation {
-    pub fn pending_text(&self, percent: i32) -> String {
+    pub fn pending_text(&self, percent: i32, state: ControllerState) -> String {
+        let progress = || match state {
+            ControllerState::Running => fl!("progress", percent = percent),
+            ControllerState::Paused => fl!("progress-paused", percent = percent),
+            ControllerState::Cancelled => fl!("progress-cancelled", percent = percent),
+        };
         match self {
             Self::Compress { paths, to, .. } => fl!(
                 "compressing",
                 items = paths.len(),
                 from = paths_parent_name(paths),
                 to = file_name(to),
-                percent = percent
+                progress = progress()
             ),
             Self::Copy { paths, to } => fl!(
                 "copying",
                 items = paths.len(),
                 from = paths_parent_name(paths),
                 to = file_name(to),
-                percent = percent
+                progress = progress()
             ),
             Self::Delete { paths } => fl!(
                 "moving",
                 items = paths.len(),
                 from = paths_parent_name(paths),
                 to = fl!("trash"),
-                percent = percent
+                progress = progress()
             ),
-            Self::EmptyTrash => fl!("emptying-trash", percent = percent),
+            Self::EmptyTrash => fl!("emptying-trash", progress = progress()),
             Self::Extract { paths, to } => fl!(
                 "extracting",
                 items = paths.len(),
                 from = paths_parent_name(paths),
                 to = file_name(to),
-                percent = percent
+                progress = progress()
             ),
             Self::Move { paths, to } => fl!(
                 "moving",
                 items = paths.len(),
                 from = paths_parent_name(paths),
                 to = file_name(to),
-                percent = percent
+                progress = progress()
             ),
             Self::NewFile { path } => fl!(
                 "creating",
@@ -579,7 +589,7 @@ impl Operation {
             Self::Rename { from, to } => {
                 fl!("renaming", from = file_name(from), to = file_name(to))
             }
-            Self::Restore { paths } => fl!("restoring", items = paths.len(), percent = percent),
+            Self::Restore { paths } => fl!("restoring", items = paths.len(), progress = progress()),
             Self::SetExecutableAndLaunch { path } => {
                 fl!("setting-executable-and-launching", name = file_name(path))
             }

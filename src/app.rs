@@ -524,7 +524,7 @@ pub struct App {
     pending_operations: BTreeMap<u64, (Operation, f32, Controller)>,
     progress_operations: BTreeSet<u64>,
     complete_operations: BTreeMap<u64, Operation>,
-    failed_operations: BTreeMap<u64, (Operation, f32, String)>,
+    failed_operations: BTreeMap<u64, (Operation, f32, Controller, String)>,
     search_id: widget::Id,
     #[cfg(feature = "wayland")]
     surface_ids: HashMap<WlOutput, WindowId>,
@@ -1218,6 +1218,8 @@ impl App {
     }
 
     fn edit_history(&self) -> Element<Message> {
+        let cosmic_theme::Spacing { space_m, .. } = theme::active().cosmic().spacing;
+
         let mut children = Vec::new();
 
         //TODO: get height from theme?
@@ -1265,7 +1267,7 @@ impl App {
                     ])
                     .align_y(Alignment::Center)
                     .into(),
-                    widget::text(op.pending_text(*progress as i32)).into(),
+                    widget::text(op.pending_text(*progress as i32, controller.state())).into(),
                 ]));
             }
             children.push(section.into());
@@ -1273,9 +1275,9 @@ impl App {
 
         if !self.failed_operations.is_empty() {
             let mut section = widget::settings::section().title(fl!("failed"));
-            for (_id, (op, progress, error)) in self.failed_operations.iter().rev() {
+            for (_id, (op, progress, controller, error)) in self.failed_operations.iter().rev() {
                 section = section.add(widget::column::with_children(vec![
-                    widget::text(op.pending_text(*progress as i32)).into(),
+                    widget::text(op.pending_text(*progress as i32, controller.state())).into(),
                     widget::text(error).into(),
                 ]));
             }
@@ -1294,7 +1296,9 @@ impl App {
             children.push(widget::text::body(fl!("no-history")).into());
         }
 
-        widget::column::with_children(children).into()
+        widget::column::with_children(children)
+            .spacing(space_m)
+            .into()
     }
 
     fn preview<'a>(
@@ -2419,12 +2423,14 @@ impl Application for App {
             }
             Message::PendingError(id, err) => {
                 if let Some((op, progress, controller)) = self.pending_operations.remove(&id) {
-                    self.failed_operations.insert(id, (op, progress, err));
                     // Only show dialog if not cancelled
                     if !controller.is_cancelled() {
                         self.dialog_pages.push_back(DialogPage::FailedOperation(id));
                     }
+                    // Remove from progress
                     self.progress_operations.remove(&id);
+                    self.failed_operations
+                        .insert(id, (op, progress, controller, err));
                 }
                 // Close progress notification if all relavent operations are finished
                 if !self
@@ -3421,7 +3427,7 @@ impl Application for App {
                 ),
             DialogPage::FailedOperation(id) => {
                 //TODO: try next dialog page (making sure index is used by Dialog messages)?
-                let (operation, _, err) = self.failed_operations.get(id)?;
+                let (operation, _, _, err) = self.failed_operations.get(id)?;
 
                 //TODO: nice description of error
                 widget::dialog()
@@ -3874,25 +3880,37 @@ impl Application for App {
             }
             if op.show_progress_notification() {
                 if title.is_empty() {
-                    title = op.pending_text(*progress as i32);
+                    title = op.pending_text(*progress as i32, controller.state());
                 }
                 total_progress += progress;
                 count += 1;
             }
         }
-        let in_progress_count = count;
+        let running = count;
         // Adjust the progress bar so it does not jump around when operations finish
-        while count < self.progress_operations.len() {
-            total_progress += 100.0;
-            count += 1;
+        for id in self.progress_operations.iter() {
+            if self.complete_operations.contains_key(&id) {
+                total_progress += 100.0;
+                count += 1;
+            }
         }
+        let finished = count - running;
         total_progress /= count as f32;
-        if in_progress_count > 1 {
-            title = fl!(
-                "operations-in-progress",
-                count = in_progress_count,
-                percent = (total_progress as i32)
-            );
+        if running > 1 {
+            if finished > 0 {
+                title = fl!(
+                    "operations-running-finished",
+                    running = running,
+                    finished = finished,
+                    percent = (total_progress as i32)
+                );
+            } else {
+                title = fl!(
+                    "operations-running",
+                    running = running,
+                    percent = (total_progress as i32)
+                );
+            }
         }
 
         //TODO: get height from theme?

@@ -29,7 +29,8 @@ size = Size
 # Progress footer
 details = Details
 dismiss = Dismiss message
-operations-in-progress = {$count} actions in progress ({$percent}%)...
+operations-running = {$running} operations running ({$percent}%)...
+operations-running-finished = {$running} operations running ({$percent}%), {$finished} finished...
 pause = Pause
 resume = Resume
 
@@ -138,12 +139,15 @@ edit-history = Edit history
 history = History
 no-history = No items in history.
 pending = Pending
+progress = {$percent}%
+progress-cancelled = {$percent}%, cancelled
+progress-paused = {$percent}%, paused
 failed = Failed
 complete = Complete
 compressing = Compressing {$items} {$items ->
         [one] item
         *[other] items
-    } from "{$from}" to "{$to}" ({$percent}%)...
+    } from "{$from}" to "{$to}" ({$progress})...
 compressed = Compressed {$items} {$items ->
         [one] item
         *[other] items
@@ -154,17 +158,17 @@ created = Created "{$name}" in "{$parent}"
 copying = Copying {$items} {$items ->
         [one] item
         *[other] items
-    } from "{$from}" to "{$to}" ({$percent}%)...
+    } from "{$from}" to "{$to}" ({$progress})...
 copied = Copied {$items} {$items ->
         [one] item
         *[other] items
     } from "{$from}" to "{$to}"
-emptying-trash = Emptying {trash} ({$percent}%)...
+emptying-trash = Emptying {trash} ({$progress})...
 emptied-trash = Emptied {trash}
 extracting = Extracting {$items} {$items ->
         [one] item
         *[other] items
-    } from "{$from}" to "{$to}" ({$percent}%)...
+    } from "{$from}" to "{$to}" ({$progress})...
 extracted = Extracted {$items} {$items ->
         [one] item
         *[other] items
@@ -174,7 +178,7 @@ set-executable-and-launched = Set "{$name}" as executable and launched
 moving = Moving {$items} {$items ->
         [one] item
         *[other] items
-    } from "{$from}" to "{$to}" ({$percent}%)...
+    } from "{$from}" to "{$to}" ({$progress})...
 moved = Moved {$items} {$items ->
         [one] item
         *[other] items
@@ -184,7 +188,7 @@ renamed = Renamed "{$from}" to "{$to}"
 restoring = Restoring {$items} {$items ->
         [one] item
         *[other] items
-    } from {trash} ({$percent})...
+    } from {trash} ({$progress})...
 restored = Restored {$items} {$items ->
         [one] item
         *[other] items
