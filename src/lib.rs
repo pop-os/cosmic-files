@@ -68,11 +68,12 @@ pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
         settings = settings.no_main_window(true);
     }
 
+    let locations = vec![tab::Location::Desktop(desktop_dir(), String::new(), config.desktop)];
     let flags = Flags {
         config_handler,
         config,
         mode: app::Mode::Desktop,
-        locations: vec![tab::Location::Path(desktop_dir())],
+        locations,
     };
     cosmic::app::run::<App>(settings, flags)?;
 

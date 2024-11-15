@@ -859,13 +859,19 @@ impl App {
         let mut needs_reload = Vec::new();
         for entity in self.tab_model.iter() {
             if let Some(tab) = self.tab_model.data::<Tab>(entity) {
-                if let Location::Desktop(..) = &tab.location {
-                    needs_reload.push((entity, tab.location.clone()));
+                if let Location::Desktop(path, output, _) = &tab.location {
+                    needs_reload.push((
+                        entity,
+                        Location::Desktop(path.clone(), output.clone(), self.config.desktop),
+                    ));
                 };
             }
         }
         let mut commands = Vec::with_capacity(needs_reload.len());
         for (entity, location) in needs_reload {
+            if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                tab.location = location.clone();
+            }
             commands.push(self.rescan_tab(entity, location, None));
         }
         Task::batch(commands)
