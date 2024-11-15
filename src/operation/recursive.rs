@@ -4,29 +4,24 @@ use std::{
     io::{Read, Write},
     ops::ControlFlow,
     path::PathBuf,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
 };
 use walkdir::WalkDir;
 
-use super::{copy_unique_path, ReplaceResult};
-use crate::fl;
+use super::{copy_unique_path, Controller, ReplaceResult};
 
 pub struct Context {
     buf: Vec<u8>,
-    cancelled: Arc<AtomicBool>,
+    controller: Controller,
     on_progress: Box<dyn Fn(&Op, &Progress) + 'static>,
     on_replace: Box<dyn Fn(&Op) -> ReplaceResult + 'static>,
     replace_result_opt: Option<ReplaceResult>,
 }
 
 impl Context {
-    pub fn new(cancelled: Arc<AtomicBool>) -> Self {
+    pub fn new(controller: Controller) -> Self {
         Self {
             buf: vec![0; 4 * 1024 * 1024],
-            cancelled,
+            controller,
             on_progress: Box::new(|_op, _progress| {}),
             on_replace: Box::new(|_op| ReplaceResult::Cancel),
             replace_result_opt: None,
@@ -41,9 +36,7 @@ impl Context {
         let mut ops = Vec::new();
         let mut cleanup_ops = Vec::new();
         for (from_parent, to_parent) in from_to_pairs {
-            if self.cancelled.load(Ordering::SeqCst) {
-                return Err(fl!("cancelled"));
-            }
+            self.controller.check()?;
 
             if from_parent == to_parent {
                 // Skip matching source and destination
@@ -51,9 +44,7 @@ impl Context {
             }
 
             for entry in WalkDir::new(&from_parent).into_iter() {
-                if self.cancelled.load(Ordering::SeqCst) {
-                    return Err(fl!("cancelled"));
-                }
+                self.controller.check()?;
 
                 let entry = entry.map_err(|err| {
                     format!("failed to walk directory {:?}: {}", from_parent, err)
@@ -106,9 +97,7 @@ impl Context {
 
         let total_ops = ops.len();
         for (current_ops, mut op) in ops.into_iter().enumerate() {
-            if self.cancelled.load(Ordering::SeqCst) {
-                return Err(fl!("cancelled"));
-            }
+            self.controller.check()?;
 
             let progress = Progress {
                 current_ops,
@@ -234,9 +223,7 @@ impl Op {
                     .open(&self.to)?;
                 to_file.set_permissions(metadata.permissions())?;
                 loop {
-                    if ctx.cancelled.load(Ordering::SeqCst) {
-                        return Err(fl!("cancelled").into());
-                    }
+                    ctx.controller.check()?;
 
                     let count = from_file.read(&mut ctx.buf)?;
                     if count == 0 {

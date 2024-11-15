@@ -1,15 +1,9 @@
 use cosmic::iced::futures::{channel::mpsc::Sender, executor, SinkExt};
-use std::{
-    fs, io,
-    path::Path,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-};
+use std::{fs, io, path::Path, sync::Arc};
 use tokio::sync::Mutex;
 
-use crate::{app::Message, fl};
+use super::Controller;
+use crate::app::Message;
 
 // Special reader just for operations, handling cancel and progress
 pub struct OpReader {
@@ -18,7 +12,7 @@ pub struct OpReader {
     current: u64,
     id: u64,
     msg_tx: Arc<Mutex<Sender<Message>>>,
-    cancelled: Arc<AtomicBool>,
+    controller: Controller,
 }
 
 impl OpReader {
@@ -26,7 +20,7 @@ impl OpReader {
         path: P,
         id: u64,
         msg_tx: Arc<Mutex<Sender<Message>>>,
-        cancelled: Arc<AtomicBool>,
+        controller: Controller,
     ) -> io::Result<Self> {
         let file = fs::File::open(&path)?;
         let metadata = file.metadata()?;
@@ -36,16 +30,16 @@ impl OpReader {
             current: 0,
             id,
             msg_tx,
-            cancelled,
+            controller,
         })
     }
 }
 
 impl io::Read for OpReader {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        if self.cancelled.load(Ordering::SeqCst) {
-            return Err(io::Error::new(io::ErrorKind::Other, fl!("cancelled")));
-        }
+        self.controller
+            .check()
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
         let count = self.file.read(buf)?;
         self.current += count as u64;

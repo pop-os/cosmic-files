@@ -48,10 +48,7 @@ use std::{
     num::NonZeroU16,
     path::PathBuf,
     process,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
-    },
+    sync::{Arc, Mutex},
     time::{self, Instant},
 };
 use tokio::sync::mpsc;
@@ -67,7 +64,7 @@ use crate::{
     localize::LANGUAGE_SORTER,
     menu, mime_app, mime_icon,
     mounter::{MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage, MOUNTERS},
-    operation::{Operation, ReplaceResult},
+    operation::{Controller, Operation, ReplaceResult},
     spawn_detached::spawn_detached,
     tab::{self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION},
 };
@@ -314,6 +311,8 @@ pub enum Message {
     PendingComplete(u64),
     PendingDismiss,
     PendingError(u64, String),
+    PendingPause(u64, bool),
+    PendingPauseAll(bool),
     PendingProgress(u64, f32),
     Preview(Option<Entity>),
     RescanTrash,
@@ -522,7 +521,7 @@ pub struct App {
     #[cfg(feature = "notify")]
     notification_opt: Option<Arc<Mutex<notify_rust::NotificationHandle>>>,
     pending_operation_id: u64,
-    pending_operations: BTreeMap<u64, (Operation, f32, Arc<AtomicBool>)>,
+    pending_operations: BTreeMap<u64, (Operation, f32, Controller)>,
     progress_operations: BTreeSet<u64>,
     complete_operations: BTreeMap<u64, Operation>,
     failed_operations: BTreeMap<u64, (Operation, f32, String)>,
@@ -705,7 +704,7 @@ impl App {
             self.progress_operations.insert(id);
         }
         self.pending_operations
-            .insert(id, (operation, 0.0, Arc::new(AtomicBool::new(false))));
+            .insert(id, (operation, 0.0, Controller::new()));
     }
 
     fn remove_window(&mut self, id: &window::Id) {
@@ -1226,12 +1225,35 @@ impl App {
 
         if !self.pending_operations.is_empty() {
             let mut section = widget::settings::section().title(fl!("pending"));
-            for (id, (op, progress, _)) in self.pending_operations.iter().rev() {
+            for (id, (op, progress, controller)) in self.pending_operations.iter().rev() {
                 section = section.add(widget::column::with_children(vec![
                     widget::row::with_children(vec![
                         widget::progress_bar(0.0..=100.0, *progress)
                             .height(progress_bar_height)
                             .into(),
+                        if controller.is_paused() {
+                            widget::tooltip(
+                                widget::button::icon(widget::icon::from_name(
+                                    "media-playback-start-symbolic",
+                                ))
+                                .on_press(Message::PendingPause(*id, false))
+                                .padding(8),
+                                widget::text::body(fl!("resume")),
+                                widget::tooltip::Position::Top,
+                            )
+                            .into()
+                        } else {
+                            widget::tooltip(
+                                widget::button::icon(widget::icon::from_name(
+                                    "media-playback-pause-symbolic",
+                                ))
+                                .on_press(Message::PendingPause(*id, true))
+                                .padding(8),
+                                widget::text::body(fl!("pause")),
+                                widget::tooltip::Position::Top,
+                            )
+                            .into()
+                        },
                         widget::tooltip(
                             widget::button::icon(widget::icon::from_name("window-close-symbolic"))
                                 .on_press(Message::PendingCancel(*id))
@@ -2344,14 +2366,14 @@ impl Application for App {
                 }
             }
             Message::PendingCancel(id) => {
-                if let Some((_, _, cancelled)) = self.pending_operations.get(&id) {
-                    cancelled.store(true, Ordering::SeqCst);
+                if let Some((_, _, controller)) = self.pending_operations.get(&id) {
+                    controller.cancel();
                     self.progress_operations.remove(&id);
                 }
             }
             Message::PendingCancelAll => {
-                for (id, (_, _, cancelled)) in self.pending_operations.iter() {
-                    cancelled.store(true, Ordering::SeqCst);
+                for (id, (_, _, controller)) in self.pending_operations.iter() {
+                    controller.cancel();
                     self.progress_operations.remove(&id);
                 }
             }
@@ -2396,16 +2418,42 @@ impl Application for App {
                 self.progress_operations.clear();
             }
             Message::PendingError(id, err) => {
-                if let Some((op, progress, cancelled)) = self.pending_operations.remove(&id) {
+                if let Some((op, progress, controller)) = self.pending_operations.remove(&id) {
                     self.failed_operations.insert(id, (op, progress, err));
                     // Only show dialog if not cancelled
-                    if !cancelled.load(Ordering::SeqCst) {
+                    if !controller.is_cancelled() {
                         self.dialog_pages.push_back(DialogPage::FailedOperation(id));
                     }
                     self.progress_operations.remove(&id);
                 }
+                // Close progress notification if all relavent operations are finished
+                if !self
+                    .pending_operations
+                    .iter()
+                    .any(|(_id, (op, _, _))| op.show_progress_notification())
+                {
+                    self.progress_operations.clear();
+                }
                 // Manually rescan any trash tabs after any operation is completed
                 return self.rescan_trash();
+            }
+            Message::PendingPause(id, pause) => {
+                if let Some((_, _, controller)) = self.pending_operations.get(&id) {
+                    if pause {
+                        controller.pause();
+                    } else {
+                        controller.unpause();
+                    }
+                }
+            }
+            Message::PendingPauseAll(pause) => {
+                for (id, (_, _, controller)) in self.pending_operations.iter() {
+                    if pause {
+                        controller.pause();
+                    } else {
+                        controller.unpause();
+                    }
+                }
             }
             Message::PendingProgress(id, new_progress) => {
                 if let Some((_, progress, _)) = self.pending_operations.get_mut(&id) {
@@ -3819,7 +3867,11 @@ impl Application for App {
         let mut title = String::new();
         let mut total_progress = 0.0;
         let mut count = 0;
-        for (_id, (op, progress, _)) in self.pending_operations.iter() {
+        let mut all_paused = true;
+        for (_id, (op, progress, controller)) in self.pending_operations.iter() {
+            if !controller.is_paused() {
+                all_paused = false;
+            }
             if op.show_progress_notification() {
                 if title.is_empty() {
                     title = op.pending_text(*progress as i32);
@@ -3851,6 +3903,29 @@ impl Application for App {
         let container = widget::layer_container(widget::column::with_children(vec![
             widget::row::with_children(vec![
                 progress_bar.into(),
+                if all_paused {
+                    widget::tooltip(
+                        widget::button::icon(widget::icon::from_name(
+                            "media-playback-start-symbolic",
+                        ))
+                        .on_press(Message::PendingPauseAll(false))
+                        .padding(8),
+                        widget::text::body(fl!("resume")),
+                        widget::tooltip::Position::Top,
+                    )
+                    .into()
+                } else {
+                    widget::tooltip(
+                        widget::button::icon(widget::icon::from_name(
+                            "media-playback-pause-symbolic",
+                        ))
+                        .on_press(Message::PendingPauseAll(true))
+                        .padding(8),
+                        widget::text::body(fl!("pause")),
+                        widget::tooltip::Position::Top,
+                    )
+                    .into()
+                },
                 widget::tooltip(
                     widget::button::icon(widget::icon::from_name("window-close-symbolic"))
                         .on_press(Message::PendingCancelAll)

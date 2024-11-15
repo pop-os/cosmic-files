@@ -30,6 +30,8 @@ size = Size
 details = Details
 dismiss = Dismiss message
 operations-in-progress = {$count} actions in progress ({$percent}%)...
+pause = Pause
+resume = Resume
 
 # Dialogs
 
