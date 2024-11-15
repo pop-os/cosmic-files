@@ -4457,23 +4457,7 @@ impl Tab {
                         }
                     }
 
-                    let mut total_size = 0;
-
-                    if let Ok(entries) = fs::read_dir(path.clone()) {
-                        for entry in entries.flatten() {
-                            let metadata = entry.metadata().ok();
-
-                            if let Some(data) = metadata {
-                                if data.is_dir() {
-                                    total_size += calculate_dir_size(&entry.path());
-                                } else {
-                                    total_size += data.len();
-                                }
-                            }
-                        }
-                    }
-
-                    total_size = calculate_dir_size(&path);
+                    let total_size = calculate_dir_size(&path);
 
                     match output
                         .send(Message::DirecotrySize(path.clone(), total_size))
