@@ -4386,7 +4386,7 @@ impl Tab {
         widget::responsive(|size| self.view_responsive(key_binds, size)).into()
     }
 
-    pub fn subscription(&self) -> Subscription<Message> {
+    pub fn subscription(&self, preview: bool) -> Subscription<Message> {
         let Some(items) = &self.items_opt else {
             return Subscription::none();
         };
@@ -4470,39 +4470,56 @@ impl Tab {
             }
         }
 
-        // Load directory size for selected items
-        for item in items
-            .iter()
-            .filter(|item| {
-                // Item must be a selected directory
-                item.selected && item.metadata.is_dir()
-            })
-            .chain(&self.parent_item_opt)
-        {
-            // Item must have a path
-            let Some(path) = item.path_opt().map(|path| path.to_path_buf()) else {
-                continue;
-            };
-            subscriptions.push(Subscription::run_with_id(
-                ("dir_size", path.clone()),
-                stream::channel(1, |mut output| async move {
-                    let total_size = calculate_dir_size(&path);
+        if preview {
+            // Load directory size for selected items
+            for item in items
+                .iter()
+                .filter(|item| {
+                    // Item must be a selected directory
+                    item.selected && item.metadata.is_dir()
+                })
+                .chain(&self.parent_item_opt)
+            {
+                // Item must have a path
+                let Some(path) = item.path_opt().map(|path| path.to_path_buf()) else {
+                    continue;
+                };
+                subscriptions.push(Subscription::run_with_id(
+                    ("dir_size", path.clone()),
+                    stream::channel(1, |mut output| async move {
+                        let message = {
+                            let path = path.clone();
+                            tokio::task::spawn_blocking(move || {
+                                let start = Instant::now();
+                                let total_size = calculate_dir_size(&path);
+                                log::debug!(
+                                    "calculated directory size of {:?} in {:?}",
+                                    path,
+                                    start.elapsed()
+                                );
+                                Message::DirectorySize(path.clone(), total_size)
+                            })
+                            .await
+                            .unwrap()
+                        };
 
-                    match output
-                        .send(Message::DirectorySize(path.clone(), total_size))
-                        .await
-                    {
-                        Ok(()) => {}
-                        Err(err) => {
-                            log::warn!("failed to send dirsize for {:?}: {}", &path, err);
+                        match output.send(message).await {
+                            Ok(()) => {}
+                            Err(err) => {
+                                log::warn!(
+                                    "failed to send directory size for {:?}: {}",
+                                    &path,
+                                    err
+                                );
+                            }
                         }
-                    }
 
-                    std::future::pending().await
-                }),
-            ));
-            // Only calculate size for one directory
-            break;
+                        std::future::pending().await
+                    }),
+                ));
+                // Only calculate size for one directory
+                break;
+            }
         }
 
         // Load search items incrementally

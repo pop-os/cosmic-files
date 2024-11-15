@@ -2453,7 +2453,7 @@ impl Application for App {
                 }
             }
             Message::PendingPauseAll(pause) => {
-                for (id, (_, _, controller)) in self.pending_operations.iter() {
+                for (_id, (_, _, controller)) in self.pending_operations.iter() {
                     if pause {
                         controller.pause();
                     } else {
@@ -4437,10 +4437,16 @@ impl Application for App {
             ));
         }
 
+        let mut selected_preview = None;
+        if self.core.window.show_context {
+            if let ContextPage::Preview(entity_opt, PreviewKind::Selected) = self.context_page {
+                selected_preview = Some(entity_opt.unwrap_or_else(|| self.tab_model.active()));
+            }
+        }
         for entity in self.tab_model.iter() {
             if let Some(tab) = self.tab_model.data::<Tab>(entity) {
                 subscriptions.push(
-                    tab.subscription()
+                    tab.subscription(selected_preview == Some(entity))
                         .with(entity)
                         .map(|(entity, tab_msg)| Message::TabMessage(Some(entity), tab_msg)),
                 );

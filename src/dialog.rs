@@ -1677,7 +1677,15 @@ impl Application for App {
                     std::future::pending().await
                 }),
             ),
-            self.tab.subscription().map(Message::TabMessage),
+            self.tab
+                .subscription(
+                    self.core.window.show_context
+                        && matches!(
+                            self.context_page,
+                            ContextPage::Preview(_, PreviewKind::Selected)
+                        ),
+                )
+                .map(Message::TabMessage),
         ];
 
         for (key, mounter) in MOUNTERS.iter() {
