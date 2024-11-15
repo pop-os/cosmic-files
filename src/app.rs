@@ -3205,7 +3205,7 @@ impl Application for App {
                                     left: 0,
                                     right: 0,
                                 },
-                                exclusive_zone: -1,
+                                exclusive_zone: 0,
                                 size_limits: Limits::NONE.min_width(1.0).min_height(1.0),
                             }),
                         ]);
