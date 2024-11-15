@@ -1657,7 +1657,7 @@ fn calculate_dir_size(path: &Path) -> u64 {
     WalkDir::new(path)
         .into_iter()
         .filter_map(|entry| entry.ok())
-        .filter_map(|entry| fs::metadata(entry.path()).ok())
+        .filter_map(|entry| entry.metadata().ok())
         .filter(|metadata| metadata.is_file())
         .map(|metadata| metadata.len())
         .sum()
