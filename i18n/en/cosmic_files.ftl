@@ -106,7 +106,8 @@ execute = Execute
 # Context Pages
 
 ## About
-git-description = Git commit {$hash} on {$date}
+repository = Repository
+support = Support
 
 ## Add Network Drive
 add-network-drive = Add network drive

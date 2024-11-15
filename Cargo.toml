@@ -6,9 +6,6 @@ edition = "2021"
 license = "GPL-3.0-only"
 rust-version = "1.71"
 
-[build-dependencies]
-vergen = { version = "8", features = ["git", "gitcl"] }
-
 [dependencies]
 chrono = { version = "0.4", features = ["unstable-locales"] }
 dirs = "5.0.1"
@@ -67,7 +64,7 @@ features = ["multi-window", "tokio", "winit"]
 
 [features]
 default = ["bzip2", "desktop", "gvfs", "liblzma", "notify", "wgpu"]
-desktop = ["libcosmic/desktop", "dep:xdg"]
+desktop = ["libcosmic/desktop", "libcosmic/about", "dep:xdg"]
 gvfs = ["dep:gio", "dep:glib"]
 jemalloc = ["dep:tikv-jemallocator"]
 notify = ["dep:notify-rust"]

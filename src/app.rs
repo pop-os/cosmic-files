@@ -32,6 +32,7 @@ use cosmic::{
         dnd_destination::DragId,
         menu::{action::MenuAction, key_bind::KeyBind},
         segmented_button::{self, Entity},
+        about::About,
     },
     Application, ApplicationExt, Element,
 };
@@ -503,6 +504,7 @@ impl PartialEq for WatcherWrapper {
 /// The [`App`] stores application-specific state.
 pub struct App {
     core: Core,
+    about: About,
     nav_bar_context_id: segmented_button::Entity,
     nav_model: segmented_button::SingleSelectModel,
     tab_model: segmented_button::Model<segmented_button::SingleSelect>,
@@ -1075,38 +1077,6 @@ impl App {
         Task::none()
     }
 
-    fn about(&self) -> Element<Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
-        let repository = "https://github.com/pop-os/cosmic-files";
-        let hash = env!("VERGEN_GIT_SHA");
-        let short_hash: String = hash.chars().take(7).collect();
-        let date = env!("VERGEN_GIT_COMMIT_DATE");
-        widget::column::with_children(vec![
-                widget::svg(widget::svg::Handle::from_memory(
-                    &include_bytes!(
-                        "../res/icons/hicolor/128x128/apps/com.system76.CosmicFiles.svg"
-                    )[..],
-                ))
-                .into(),
-                widget::text::title3(fl!("cosmic-files")).into(),
-                widget::button::link(repository)
-                    .on_press(Message::LaunchUrl(repository.to_string()))
-                    .padding(0)
-                    .into(),
-                widget::button::link(fl!(
-                    "git-description",
-                    hash = short_hash.as_str(),
-                    date = date
-                ))
-                    .on_press(Message::LaunchUrl(format!("{}/commits/{}", repository, hash)))
-                    .padding(0)
-                .into(),
-            ])
-        .align_x(Alignment::Center)
-        .spacing(space_xxs)
-        .into()
-    }
-
     fn network_drive(&self) -> Element<Message> {
         let cosmic_theme::Spacing {
             space_xxs, space_m, ..
@@ -1429,8 +1399,21 @@ impl Application for App {
 
         let window_id_opt = core.main_window_id();
 
+        let about = About::default()
+            .name(fl!("cosmic-files"))
+            .icon(Self::APP_ID)
+            .version(env!("CARGO_PKG_VERSION"))
+            .author("System76")
+            .license("GPL-3.0-only")
+            .developers([("Jeremy Soller", "jeremy@system76.com")])
+            .links([
+                (fl!("repository"), "https://github.com/pop-os/cosmic-files"),
+                (fl!("support"), "https://github.com/pop-os/cosmic-files/issues"),
+            ]);
+
         let mut app = App {
             core,
+            about,
             nav_bar_context_id: segmented_button::Entity::null(),
             nav_model: segmented_button::ModelBuilder::default().build(),
             tab_model: segmented_button::ModelBuilder::default().build(),
@@ -3308,7 +3291,7 @@ impl Application for App {
         }
 
         Some(match &self.context_page {
-            ContextPage::About => self.about(),
+            ContextPage::About => widget::about(&self.about, Message::LaunchUrl),
             ContextPage::EditHistory => self.edit_history(),
             ContextPage::NetworkDrive => self.network_drive(),
             ContextPage::Preview(entity_opt, kind) => self.preview(entity_opt, kind, true),
