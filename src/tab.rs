@@ -43,7 +43,6 @@ use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::{
-    any::TypeId,
     cell::{Cell, RefCell},
     cmp::Ordering,
     collections::HashMap,
@@ -1080,7 +1079,7 @@ pub enum Message {
     ZoomOut,
     HighlightDeactivate(usize),
     HighlightActivate(usize),
-    DirecotrySize(PathBuf, u64),
+    DirectorySize(PathBuf, u64),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -2914,9 +2913,14 @@ impl Tab {
             Message::ZoomOut => {
                 commands.push(Command::Action(Action::ZoomOut));
             }
-            Message::DirecotrySize(path, dir_size) => {
+            Message::DirectorySize(path, dir_size) => {
+                let location = Location::Path(path);
+                if let Some(ref mut item) = self.parent_item_opt {
+                    if item.location_opt.as_ref() == Some(&location) {
+                        item.size = Some(dir_size);
+                    }
+                }
                 if let Some(ref mut items) = self.items_opt {
-                    let location = Location::Path(path);
                     for item in items.iter_mut() {
                         if item.location_opt.as_ref() == Some(&location) {
                             item.size = Some(dir_size);
@@ -4435,7 +4439,7 @@ impl Tab {
             let mime = item.mime.clone();
 
             subscriptions.push(Subscription::run_with_id(
-                path.clone(),
+                ("thumbnail", path.clone()),
                 stream::channel(1, |mut output| async move {
                     let message = {
                         let path = path.clone();
@@ -4457,10 +4461,35 @@ impl Tab {
                         }
                     }
 
+                    std::future::pending().await
+                }),
+            ));
+
+            if subscriptions.len() >= jobs {
+                break;
+            }
+        }
+
+        // Load directory size for selected items
+        for item in items
+            .iter()
+            .filter(|item| {
+                // Item must be a selected directory
+                item.selected && item.metadata.is_dir()
+            })
+            .chain(&self.parent_item_opt)
+        {
+            // Item must have a path
+            let Some(path) = item.path_opt().map(|path| path.to_path_buf()) else {
+                continue;
+            };
+            subscriptions.push(Subscription::run_with_id(
+                ("dir_size", path.clone()),
+                stream::channel(1, |mut output| async move {
                     let total_size = calculate_dir_size(&path);
 
                     match output
-                        .send(Message::DirecotrySize(path.clone(), total_size))
+                        .send(Message::DirectorySize(path.clone(), total_size))
                         .await
                     {
                         Ok(()) => {}
@@ -4472,10 +4501,8 @@ impl Tab {
                     std::future::pending().await
                 }),
             ));
-
-            if subscriptions.len() >= jobs {
-                break;
-            }
+            // Only calculate size for one directory
+            break;
         }
 
         // Load search items incrementally
