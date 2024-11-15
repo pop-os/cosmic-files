@@ -1232,10 +1232,14 @@ impl App {
                         widget::progress_bar(0.0..=100.0, *progress)
                             .height(progress_bar_height)
                             .into(),
-                        widget::button::icon(widget::icon::from_name("window-close-symbolic"))
-                            .on_press(Message::PendingCancel(*id))
-                            .padding(8)
-                            .into(),
+                        widget::tooltip(
+                            widget::button::icon(widget::icon::from_name("window-close-symbolic"))
+                                .on_press(Message::PendingCancel(*id))
+                                .padding(8),
+                            widget::text::body(fl!("cancel")),
+                            widget::tooltip::Position::Top,
+                        )
+                        .into(),
                     ])
                     .align_y(Alignment::Center)
                     .into(),
@@ -3847,10 +3851,14 @@ impl Application for App {
         let container = widget::layer_container(widget::column::with_children(vec![
             widget::row::with_children(vec![
                 progress_bar.into(),
-                widget::button::icon(widget::icon::from_name("window-close-symbolic"))
-                    .on_press(Message::PendingCancelAll)
-                    .padding(8)
-                    .into(),
+                widget::tooltip(
+                    widget::button::icon(widget::icon::from_name("window-close-symbolic"))
+                        .on_press(Message::PendingCancelAll)
+                        .padding(8),
+                    widget::text::body(fl!("cancel")),
+                    widget::tooltip::Position::Top,
+                )
+                .into(),
             ])
             .align_y(Alignment::Center)
             .into(),
