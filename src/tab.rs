@@ -492,7 +492,7 @@ pub fn item_from_entry(
         selected: false,
         highlighted: false,
         overlaps_drag_rect: false,
-        size: 0,
+        size: None,
     }
 }
 
@@ -722,7 +722,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     selected: false,
                     highlighted: false,
                     overlaps_drag_rect: false,
-                    size: 0,
+                    size: None,
                 });
             }
         }
@@ -906,7 +906,7 @@ pub fn scan_desktop(
             selected: false,
             highlighted: false,
             overlaps_drag_rect: false,
-            size: 0,
+            size: None,
         })
     }
 
@@ -1310,7 +1310,7 @@ pub struct Item {
     pub selected: bool,
     pub highlighted: bool,
     pub overlaps_drag_rect: bool,
-    pub size: u64,
+    pub size: Option<u64>,
 }
 
 impl Item {
@@ -1410,9 +1410,11 @@ impl Item {
             ItemMetadata::Path { metadata, children } => {
                 if metadata.is_dir() {
                     details = details.push(widget::text(fl!("items", items = children)));
-                    let size = self.size;
-                    details =
-                        details.push(widget::text(fl!("item-size", size = format_size(size))));
+                    let size = match self.size {
+                        Some(size) => format_size(size),
+                        None => fl!("calculating"),
+                    };
+                    details = details.push(widget::text(fl!("item-size", size = size)));
                 } else {
                     details = details.push(widget::text(fl!(
                         "item-size",
@@ -2917,7 +2919,7 @@ impl Tab {
                     let location = Location::Path(path);
                     for item in items.iter_mut() {
                         if item.location_opt.as_ref() == Some(&location) {
-                            item.size = dir_size;
+                            item.size = Some(dir_size);
                             break;
                         }
                     }

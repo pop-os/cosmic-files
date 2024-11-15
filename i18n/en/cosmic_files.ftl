@@ -207,6 +207,7 @@ item-size = Size: {$size}
 item-created = Created: {$created}
 item-modified = Modified: {$modified}
 item-accessed = Accessed: {$accessed}
+calculating = Calculating...
 
 ## Settings
 settings = Settings
@@ -276,5 +277,3 @@ sort-newest-first = Newest first
 sort-oldest-first = Oldest first
 sort-smallest-to-largest = Smallest to largest
 sort-largest-to-smallest = Largest to smallest
-
-

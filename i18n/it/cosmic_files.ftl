@@ -195,6 +195,7 @@ item-size = Dimensione: {$size}
 item-created = Creato: {$created}
 item-modified = Modificato: {$modified}
 item-accessed = Ultimo accesso: {$accessed}
+calculating = Calcolando...
 
 
 ## Settings
