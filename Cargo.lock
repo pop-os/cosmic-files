@@ -800,9 +800,9 @@ dependencies = [
 
 [[package]]
 name = "bstr"
-version = "1.10.0"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40723b8fb387abc38f4f4a37c09073622e41dd12327033091ef8950659e6dc0c"
+checksum = "1a68f1f47cdf0ec8ee4b941b2eee2a80cb796db73118c0dd09ac63fbe405be22"
 dependencies = [
  "memchr",
  "serde",
@@ -913,9 +913,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.0"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1aeb932158bd710538c73702db6945cb68a8fb08c519e6e12706b94263b36db8"
+checksum = "fd9de9f2205d5ef3fd67e685b0df337994ddd4495e2a28d185500d0e1edfea47"
 dependencies = [
  "jobserver",
  "libc",
@@ -951,9 +951,9 @@ dependencies = [
 
 [[package]]
 name = "cfg-expr"
-version = "0.17.0"
+version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0890061c4d3223e7267f3bad2ec40b997d64faac1c2815a4a9d95018e2b9e9c"
+checksum = "c360837f8f19e2e4468275138f1c0dec1647d1e17bb7c0215fe3cd7530e93c25"
 dependencies = [
  "smallvec",
  "target-lexicon",
@@ -1222,7 +1222,7 @@ dependencies = [
 [[package]]
 name = "cosmic-config"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e3fabf7d12e4a7d2662613ce11e5f73f3191dd17"
+source = "git+https://github.com/pop-os/libcosmic.git#aaadf7199ebed8a5a04ebed559f62455d622689e"
 dependencies = [
  "atomicwrites",
  "cosmic-config-derive",
@@ -1241,7 +1241,7 @@ dependencies = [
 [[package]]
 name = "cosmic-config-derive"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e3fabf7d12e4a7d2662613ce11e5f73f3191dd17"
+source = "git+https://github.com/pop-os/libcosmic.git#aaadf7199ebed8a5a04ebed559f62455d622689e"
 dependencies = [
  "quote",
  "syn 1.0.109",
@@ -1287,6 +1287,7 @@ dependencies = [
  "tar",
  "tempfile",
  "test-log",
+ "tikv-jemallocator",
  "tokio",
  "trash",
  "unix_permissions_ext",
@@ -1347,7 +1348,7 @@ dependencies = [
 [[package]]
 name = "cosmic-theme"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e3fabf7d12e4a7d2662613ce11e5f73f3191dd17"
+source = "git+https://github.com/pop-os/libcosmic.git#aaadf7199ebed8a5a04ebed559f62455d622689e"
 dependencies = [
  "almost",
  "cosmic-config",
@@ -1976,9 +1977,9 @@ dependencies = [
 
 [[package]]
 name = "flate2"
-version = "1.0.34"
+version = "1.0.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1b589b4dc103969ad3cf85c950899926ec64300a1a46d76c03a6072957036f0"
+checksum = "c936bfdafb507ebbf50b8074c54fa31c5be9a1e7e5f467dd659697041407d07c"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
@@ -2775,7 +2776,7 @@ dependencies = [
 [[package]]
 name = "iced"
 version = "0.14.0-dev"
-source = "git+https://github.com/pop-os/libcosmic.git#e3fabf7d12e4a7d2662613ce11e5f73f3191dd17"
+source = "git+https://github.com/pop-os/libcosmic.git#aaadf7199ebed8a5a04ebed559f62455d622689e"
 dependencies = [
  "dnd",
  "iced_accessibility",
@@ -2793,7 +2794,7 @@ dependencies = [
 [[package]]
 name = "iced_accessibility"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e3fabf7d12e4a7d2662613ce11e5f73f3191dd17"
+source = "git+https://github.com/pop-os/libcosmic.git#aaadf7199ebed8a5a04ebed559f62455d622689e"
 dependencies = [
  "accesskit",
  "accesskit_winit",
@@ -2802,7 +2803,7 @@ dependencies = [
 [[package]]
 name = "iced_core"
 version = "0.14.0-dev"
-source = "git+https://github.com/pop-os/libcosmic.git#e3fabf7d12e4a7d2662613ce11e5f73f3191dd17"
+source = "git+https://github.com/pop-os/libcosmic.git#aaadf7199ebed8a5a04ebed559f62455d622689e"
 dependencies = [
  "bitflags 2.6.0",
  "bytes",
@@ -2826,7 +2827,7 @@ dependencies = [
 [[package]]
 name = "iced_futures"
 version = "0.14.0-dev"
-source = "git+https://github.com/pop-os/libcosmic.git#e3fabf7d12e4a7d2662613ce11e5f73f3191dd17"
+source = "git+https://github.com/pop-os/libcosmic.git#aaadf7199ebed8a5a04ebed559f62455d622689e"
 dependencies = [
  "futures",
  "iced_core",
@@ -2852,7 +2853,7 @@ dependencies = [
 [[package]]
 name = "iced_graphics"
 version = "0.14.0-dev"
-source = "git+https://github.com/pop-os/libcosmic.git#e3fabf7d12e4a7d2662613ce11e5f73f3191dd17"
+source = "git+https://github.com/pop-os/libcosmic.git#aaadf7199ebed8a5a04ebed559f62455d622689e"
 dependencies = [
  "bitflags 2.6.0",
  "bytemuck",
@@ -2874,7 +2875,7 @@ dependencies = [
 [[package]]
 name = "iced_renderer"
 version = "0.14.0-dev"
-source = "git+https://github.com/pop-os/libcosmic.git#e3fabf7d12e4a7d2662613ce11e5f73f3191dd17"
+source = "git+https://github.com/pop-os/libcosmic.git#aaadf7199ebed8a5a04ebed559f62455d622689e"
 dependencies = [
  "iced_graphics",
  "iced_tiny_skia",
@@ -2886,7 +2887,7 @@ dependencies = [
 [[package]]
 name = "iced_runtime"
 version = "0.14.0-dev"
-source = "git+https://github.com/pop-os/libcosmic.git#e3fabf7d12e4a7d2662613ce11e5f73f3191dd17"
+source = "git+https://github.com/pop-os/libcosmic.git#aaadf7199ebed8a5a04ebed559f62455d622689e"
 dependencies = [
  "bytes",
  "dnd",
@@ -2901,7 +2902,7 @@ dependencies = [
 [[package]]
 name = "iced_tiny_skia"
 version = "0.14.0-dev"
-source = "git+https://github.com/pop-os/libcosmic.git#e3fabf7d12e4a7d2662613ce11e5f73f3191dd17"
+source = "git+https://github.com/pop-os/libcosmic.git#aaadf7199ebed8a5a04ebed559f62455d622689e"
 dependencies = [
  "bytemuck",
  "cosmic-text",
@@ -2917,7 +2918,7 @@ dependencies = [
 [[package]]
 name = "iced_wgpu"
 version = "0.14.0-dev"
-source = "git+https://github.com/pop-os/libcosmic.git#e3fabf7d12e4a7d2662613ce11e5f73f3191dd17"
+source = "git+https://github.com/pop-os/libcosmic.git#aaadf7199ebed8a5a04ebed559f62455d622689e"
 dependencies = [
  "as-raw-xcb-connection",
  "bitflags 2.6.0",
@@ -2948,7 +2949,7 @@ dependencies = [
 [[package]]
 name = "iced_widget"
 version = "0.14.0-dev"
-source = "git+https://github.com/pop-os/libcosmic.git#e3fabf7d12e4a7d2662613ce11e5f73f3191dd17"
+source = "git+https://github.com/pop-os/libcosmic.git#aaadf7199ebed8a5a04ebed559f62455d622689e"
 dependencies = [
  "dnd",
  "iced_renderer",
@@ -2966,7 +2967,7 @@ dependencies = [
 [[package]]
 name = "iced_winit"
 version = "0.14.0-dev"
-source = "git+https://github.com/pop-os/libcosmic.git#e3fabf7d12e4a7d2662613ce11e5f73f3191dd17"
+source = "git+https://github.com/pop-os/libcosmic.git#aaadf7199ebed8a5a04ebed559f62455d622689e"
 dependencies = [
  "dnd",
  "iced_futures",
@@ -3550,7 +3551,7 @@ checksum = "18d287de67fe55fd7e1581fe933d965a5a9477b38e949cfa9f8574ef01506398"
 [[package]]
 name = "libcosmic"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e3fabf7d12e4a7d2662613ce11e5f73f3191dd17"
+source = "git+https://github.com/pop-os/libcosmic.git#aaadf7199ebed8a5a04ebed559f62455d622689e"
 dependencies = [
  "apply",
  "ashpd 0.9.2",
@@ -4512,9 +4513,9 @@ checksum = "1261fe7e33c73b354eab43b1273a57c8f967d0391e80353e51f764ac02cf6775"
 
 [[package]]
 name = "open"
-version = "5.3.0"
+version = "5.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61a877bf6abd716642a53ef1b89fb498923a4afca5c754f9050b4d081c05c4b3"
+checksum = "3ecd52f0b8d15c40ce4820aa251ed5de032e5d91fab27f7db2f40d42a8bdf69c"
 dependencies = [
  "is-wsl",
  "libc",
@@ -5872,7 +5873,7 @@ version = "7.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "66d23aaf9f331227789a99e8de4c91bf46703add012bdfd45fdecdfb2975a005"
 dependencies = [
- "cfg-expr 0.17.0",
+ "cfg-expr 0.17.1",
  "heck 0.5.0",
  "pkg-config",
  "toml 0.8.19",
@@ -6007,6 +6008,26 @@ dependencies = [
  "flate2",
  "jpeg-decoder",
  "weezl",
+]
+
+[[package]]
+name = "tikv-jemalloc-sys"
+version = "0.6.0+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd3c60906412afa9c2b5b5a48ca6a5abe5736aec9eb48ad05037a677e52e4e2d"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
+name = "tikv-jemallocator"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4cec5ff18518d81584f477e9bfdf957f5bb0979b0bac3af4ca30b5b3ae2d2865"
+dependencies = [
+ "libc",
+ "tikv-jemalloc-sys",
 ]
 
 [[package]]
