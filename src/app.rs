@@ -25,6 +25,7 @@ use cosmic::{
         window::{self, Event as WindowEvent, Id as WindowId},
         Alignment, Event, Length, Size, Subscription,
     },
+    iced_core::SmolStr,
     iced_runtime::clipboard,
     style, theme,
     widget::{
@@ -278,7 +279,7 @@ pub enum Message {
     DialogUpdate(DialogPage),
     DialogUpdateComplete(DialogPage),
     ExtractHere(Option<Entity>),
-    Key(Modifiers, Key),
+    Key(Modifiers, Key, Option<SmolStr>),
     LaunchUrl(String),
     MaybeExit,
     Modifiers(Modifiers),
@@ -1983,7 +1984,7 @@ impl Application for App {
                     }
                 }
             }
-            Message::Key(modifiers, key) => {
+            Message::Key(modifiers, key, text) => {
                 let entity = self.tab_model.active();
                 for (key_bind, action) in self.key_binds.iter() {
                     if key_bind.matches(modifiers, &key) {
@@ -1991,8 +1992,8 @@ impl Application for App {
                         return self.update(action.message(Some(entity)));
                     }
                 }
-                if let Key::Character(char) = key {
-                    self.prefix_search.update_search(&char);
+                if let Some(text) = text {
+                    self.prefix_search.update_search(&text);
                     return self.update(Message::TabMessage(
                         Some(entity),
                         tab::Message::SelectNextPrefix(self.prefix_search.word().into()),
@@ -4214,8 +4215,8 @@ impl Application for App {
 
         let mut subscriptions = vec![
             event::listen_with(|event, status, _window_id| match event {
-                Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => match status {
-                    event::Status::Ignored => Some(Message::Key(modifiers, key)),
+                Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, text, ..}) => match status {
+                    event::Status::Ignored => Some(Message::Key(modifiers, key, text)),
                     event::Status::Captured => None,
                 },
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
