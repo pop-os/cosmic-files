@@ -3824,15 +3824,17 @@ impl Application for App {
                 count += 1;
             }
         }
+        let in_progress_count = count;
+        // Adjust the progress bar so it does not jump around when operations finish
         while count < self.progress_operations.len() {
             total_progress += 100.0;
             count += 1;
         }
         total_progress /= count as f32;
-        if count > 1 {
+        if in_progress_count > 1 {
             title = fl!(
                 "operations-in-progress",
-                count = count,
+                count = in_progress_count,
                 percent = (total_progress as i32)
             );
         }
