@@ -56,6 +56,7 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 use tokio::sync::mpsc;
+use walkdir::WalkDir;
 
 use crate::{
     app::{self, Action, PreviewItem, PreviewKind},
@@ -1652,22 +1653,13 @@ pub struct Tab {
 }
 
 fn calculate_dir_size(path: &Path) -> u64 {
-    let mut total_size = 0;
-
-    if let Ok(entries) = fs::read_dir(path) {
-        for entry in entries.flatten() {
-            let metadata = entry.metadata().ok();
-
-            if let Some(data) = metadata {
-                if data.is_dir() {
-                    total_size += calculate_dir_size(&entry.path());
-                } else {
-                    total_size += data.len();
-                }
-            }
-        }
-    }
-    total_size
+    WalkDir::new(path)
+        .into_iter()
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| fs::metadata(entry.path()).ok())
+        .filter(|metadata| metadata.is_file())
+        .map(|metadata| metadata.len())
+        .sum()
 }
 
 fn folder_name<P: AsRef<Path>>(path: P) -> (String, bool) {
@@ -4487,11 +4479,7 @@ impl Tab {
                     {
                         Ok(()) => {}
                         Err(err) => {
-                            log::warn!(
-                                "failed to send dirsize for {:?}: {}",
-                                &path,
-                                err
-                            );
+                            log::warn!("failed to send dirsize for {:?}: {}", &path, err);
                         }
                     }
 
