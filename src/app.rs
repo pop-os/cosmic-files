@@ -471,6 +471,49 @@ pub struct FavoriteIndex(usize);
 
 pub struct MounterData(MounterKey, MounterItem);
 
+struct PrefixSearch {
+    search: String,
+    reset_delay: u64,
+    next_reset: Option<Instant>,
+}
+
+impl PrefixSearch {
+    pub fn new(reset_delay: u64) -> PrefixSearch {
+        PrefixSearch {
+            search: String::new(),
+            reset_delay,
+            next_reset: None,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.search.clear();
+        self.next_reset = None;
+    }
+
+    pub fn update_search(&mut self, string: &str) {
+        // Clear the word when the last typed character is older then the reset delay
+        if let Some(next_reset) = self.next_reset {
+            if next_reset <= Instant::now() {
+                self.reset();
+            }
+        }
+        // Add the typed character
+        self.search.push_str(string);
+        // Restart the reset timeout
+        let delay = time::Duration::from_millis(self.reset_delay);
+        self.next_reset = Instant::now().checked_add(delay);
+        // Reset the search term when calculating the next reset failed
+        if self.next_reset.is_none() {
+            self.search.clear();
+        }
+    }
+
+    pub fn word(&self) -> &str {
+        &self.search
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum WindowKind {
     Desktop(Entity),
@@ -538,6 +581,7 @@ pub struct App {
     tab_dnd_hover: Option<(Entity, Instant)>,
     nav_drag_id: DragId,
     tab_drag_id: DragId,
+    prefix_search: PrefixSearch,
 }
 
 impl App {
@@ -1466,6 +1510,7 @@ impl Application for App {
             tab_dnd_hover: None,
             nav_drag_id: DragId::new(),
             tab_drag_id: DragId::new(),
+            prefix_search: PrefixSearch::new(500), // TODO do not hardcode delay?
         };
 
         let mut commands = vec![app.update_config()];
@@ -1942,14 +1987,15 @@ impl Application for App {
                 let entity = self.tab_model.active();
                 for (key_bind, action) in self.key_binds.iter() {
                     if key_bind.matches(modifiers, &key) {
+                        self.prefix_search.reset();
                         return self.update(action.message(Some(entity)));
                     }
                 }
                 if let Key::Character(char) = key {
+                    self.prefix_search.update_search(&char);
                     return self.update(Message::TabMessage(
                         Some(entity),
-                        // TODO need to store keys and send them all
-                        tab::Message::SelectNextPrefix(char),
+                        tab::Message::SelectNextPrefix(self.prefix_search.word().into()),
                     ));
                 }
             }

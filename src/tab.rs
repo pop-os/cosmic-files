@@ -1859,6 +1859,16 @@ impl Tab {
     }
 
     pub fn select_next_prefix(&mut self, prefix: &str) -> bool {
+        // Special case: when all entered characters are the same, only search for said character. This allows quickly cycling through items starting with the same character.
+        let term = match prefix.chars().next() {
+            Some(first) => if prefix.chars().all(|c| c == first) {
+                &prefix[..1]
+            } else {
+                prefix
+            },
+            None => return false,
+        };
+
         *self.cached_selected.borrow_mut() = None;
         let mut found = false;
         if let Some(ref mut items) = self.items_opt {
@@ -1873,7 +1883,7 @@ impl Tab {
             {
                 if !found
                     && (!item.hidden || self.config.show_hidden)
-                    && item.name.to_lowercase().starts_with(prefix)
+                    && item.name.to_lowercase().starts_with(term)
                 {
                     item.selected = true;
                     self.select_focus = Some(i);
