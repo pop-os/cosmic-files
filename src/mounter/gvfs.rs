@@ -10,7 +10,7 @@ use super::{Mounter, MounterAuth, MounterItem, MounterItems, MounterMessage};
 use crate::{
     config::IconSizes,
     err_str,
-    tab::{self, ItemMetadata, ItemThumbnail, Location},
+    tab::{self, DirSize, ItemMetadata, ItemThumbnail, Location},
 };
 
 fn gio_icon_to_path(icon: &gio::Icon, size: u16) -> Option<PathBuf> {
@@ -135,7 +135,8 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
             selected: false,
             highlighted: false,
             overlaps_drag_rect: false,
-            size: None,
+            //TODO: scan directory size on gvfs mounts?
+            dir_size: DirSize::NotDirectory,
         });
     }
     Ok(items)

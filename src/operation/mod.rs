@@ -231,19 +231,22 @@ pub enum ControllerState {
     Running,
 }
 
+#[derive(Debug)]
 struct ControllerInner {
     state: Mutex<ControllerState>,
     condvar: Condvar,
 }
 
-#[derive(Clone)]
+#[derive(Debug)]
 pub struct Controller {
+    primary: bool,
     inner: Arc<ControllerInner>,
 }
 
 impl Controller {
     pub fn new() -> Self {
         Self {
+            primary: true,
             inner: Arc::new(ControllerInner {
                 state: Mutex::new(ControllerState::Running),
                 condvar: Condvar::new(),
@@ -292,6 +295,24 @@ impl Controller {
     pub fn unpause(&self) {
         //TODO: ensure this does not override Cancel?
         self.set_state(ControllerState::Running);
+    }
+}
+
+impl Clone for Controller {
+    fn clone(&self) -> Self {
+        Self {
+            primary: false,
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+impl Drop for Controller {
+    fn drop(&mut self) {
+        // Cancel operations if primary controller is dropped
+        if self.primary {
+            self.cancel();
+        }
     }
 }
 

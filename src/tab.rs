@@ -69,6 +69,7 @@ use crate::{
     mime_icon::{mime_for_path, mime_icon},
     mounter::MOUNTERS,
     mouse_area,
+    operation::Controller,
     thumbnailer::thumbnailer,
 };
 use unix_permissions_ext::UNIXPermissionsExt;
@@ -473,6 +474,12 @@ pub fn item_from_entry(
         0
     };
 
+    let dir_size = if metadata.is_dir() {
+        DirSize::Calculating(Controller::new())
+    } else {
+        DirSize::NotDirectory
+    };
+
     Item {
         name,
         display_name,
@@ -491,7 +498,7 @@ pub fn item_from_entry(
         selected: false,
         highlighted: false,
         overlaps_drag_rect: false,
-        size: None,
+        dir_size,
     }
 }
 
@@ -721,7 +728,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     selected: false,
                     highlighted: false,
                     overlaps_drag_rect: false,
-                    size: None,
+                    dir_size: DirSize::NotDirectory,
                 });
             }
         }
@@ -905,7 +912,7 @@ pub fn scan_desktop(
             selected: false,
             highlighted: false,
             overlaps_drag_rect: false,
-            size: None,
+            dir_size: DirSize::NotDirectory,
         })
     }
 
@@ -1079,7 +1086,7 @@ pub enum Message {
     ZoomOut,
     HighlightDeactivate(usize),
     HighlightActivate(usize),
-    DirectorySize(PathBuf, u64),
+    DirectorySize(PathBuf, DirSize),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -1096,6 +1103,14 @@ impl MenuAction for LocationMenuAction {
     fn message(&self) -> Self::Message {
         Message::LocationMenuAction(*self)
     }
+}
+
+#[derive(Clone, Debug)]
+pub enum DirSize {
+    Calculating(Controller),
+    Directory(u64),
+    NotDirectory,
+    Error(String),
 }
 
 #[derive(Clone, Debug)]
@@ -1309,7 +1324,7 @@ pub struct Item {
     pub selected: bool,
     pub highlighted: bool,
     pub overlaps_drag_rect: bool,
-    pub size: Option<u64>,
+    pub dir_size: DirSize,
 }
 
 impl Item {
@@ -1409,9 +1424,11 @@ impl Item {
             ItemMetadata::Path { metadata, children } => {
                 if metadata.is_dir() {
                     details = details.push(widget::text(fl!("items", items = children)));
-                    let size = match self.size {
-                        Some(size) => format_size(size),
-                        None => fl!("calculating"),
+                    let size = match &self.dir_size {
+                        DirSize::Calculating(_) => fl!("calculating"),
+                        DirSize::Directory(size) => format_size(*size),
+                        DirSize::NotDirectory => String::new(),
+                        DirSize::Error(err) => err.clone(),
                     };
                     details = details.push(widget::text(fl!("item-size", size = size)));
                 } else {
@@ -1653,14 +1670,20 @@ pub struct Tab {
     search_context: Option<SearchContext>,
 }
 
-fn calculate_dir_size(path: &Path) -> u64 {
-    WalkDir::new(path)
-        .into_iter()
-        .filter_map(|entry| entry.ok())
-        .filter_map(|entry| entry.metadata().ok())
-        .filter(|metadata| metadata.is_file())
-        .map(|metadata| metadata.len())
-        .sum()
+fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, String> {
+    let mut total = 0;
+    for entry_res in WalkDir::new(path) {
+        controller.check()?;
+        //TODO: report more errors?
+        if let Ok(entry) = entry_res {
+            if let Ok(metadata) = entry.metadata() {
+                if metadata.is_file() {
+                    total += metadata.len();
+                }
+            }
+        }
+    }
+    Ok(total)
 }
 
 fn folder_name<P: AsRef<Path>>(path: P) -> (String, bool) {
@@ -2917,13 +2940,13 @@ impl Tab {
                 let location = Location::Path(path);
                 if let Some(ref mut item) = self.parent_item_opt {
                     if item.location_opt.as_ref() == Some(&location) {
-                        item.size = Some(dir_size);
+                        item.dir_size = dir_size.clone();
                     }
                 }
                 if let Some(ref mut items) = self.items_opt {
                     for item in items.iter_mut() {
                         if item.location_opt.as_ref() == Some(&location) {
-                            item.size = Some(dir_size);
+                            item.dir_size = dir_size;
                             break;
                         }
                     }
@@ -4472,53 +4495,69 @@ impl Tab {
 
         if preview {
             // Load directory size for selected items
-            for item in items
+            if let Some(item) = items
                 .iter()
-                .filter(|item| {
-                    // Item must be a selected directory
-                    item.selected && item.metadata.is_dir()
-                })
-                .chain(&self.parent_item_opt)
+                .filter(|item| item.selected)
+                .next()
+                .or(self.parent_item_opt.as_ref())
             {
                 // Item must have a path
-                let Some(path) = item.path_opt().map(|path| path.to_path_buf()) else {
-                    continue;
-                };
-                subscriptions.push(Subscription::run_with_id(
-                    ("dir_size", path.clone()),
-                    stream::channel(1, |mut output| async move {
-                        let message = {
-                            let path = path.clone();
-                            tokio::task::spawn_blocking(move || {
-                                let start = Instant::now();
-                                let total_size = calculate_dir_size(&path);
-                                log::debug!(
-                                    "calculated directory size of {:?} in {:?}",
-                                    path,
-                                    start.elapsed()
-                                );
-                                Message::DirectorySize(path.clone(), total_size)
-                            })
-                            .await
-                            .unwrap()
-                        };
+                if let Some(path) = item.path_opt().map(|path| path.to_path_buf()) {
+                    // Item must be calculating directory size
+                    if let DirSize::Calculating(controller) = &item.dir_size {
+                        let controller = controller.clone();
+                        subscriptions.push(Subscription::run_with_id(
+                            ("dir_size", path.clone()),
+                            stream::channel(1, |mut output| async move {
+                                let message = {
+                                    let path = path.clone();
+                                    tokio::task::spawn_blocking(move || {
+                                        let start = Instant::now();
+                                        match calculate_dir_size(&path, controller) {
+                                            Ok(size) => {
+                                                log::debug!(
+                                                    "calculated directory size of {:?} in {:?}",
+                                                    path,
+                                                    start.elapsed()
+                                                );
+                                                Message::DirectorySize(
+                                                    path.clone(),
+                                                    DirSize::Directory(size),
+                                                )
+                                            }
+                                            Err(err) => {
+                                                log::warn!(
+                                                "failed to calculate directory size of {:?}: {}",
+                                                path,
+                                                err
+                                            );
+                                                Message::DirectorySize(
+                                                    path.clone(),
+                                                    DirSize::Error(err),
+                                                )
+                                            }
+                                        }
+                                    })
+                                    .await
+                                    .unwrap()
+                                };
 
-                        match output.send(message).await {
-                            Ok(()) => {}
-                            Err(err) => {
-                                log::warn!(
-                                    "failed to send directory size for {:?}: {}",
-                                    &path,
-                                    err
-                                );
-                            }
-                        }
+                                match output.send(message).await {
+                                    Ok(()) => {}
+                                    Err(err) => {
+                                        log::warn!(
+                                            "failed to send directory size for {:?}: {}",
+                                            &path,
+                                            err
+                                        );
+                                    }
+                                }
 
-                        std::future::pending().await
-                    }),
-                ));
-                // Only calculate size for one directory
-                break;
+                                std::future::pending().await
+                            }),
+                        ));
+                    }
+                }
             }
         }
 
