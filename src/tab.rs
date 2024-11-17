@@ -1858,49 +1858,66 @@ impl Tab {
         }
     }
 
-    pub fn select_next_prefix(&mut self, prefix: &str) -> bool {
-        // Special case: when all entered characters are the same, only search for said character. This allows quickly cycling through items starting with the same character.
-        let term = match prefix.chars().next() {
-            Some(first) => if prefix.chars().all(|c| c == first) {
-                &prefix[..1]
-            } else {
-                prefix
-            },
-            None => return false,
-        };
-
+    pub fn select_next_prefix(&mut self, prefix: &str) {
         *self.cached_selected.borrow_mut() = None;
-        let mut found = false;
         if let Some(ref mut items) = self.items_opt {
-            let focus = self.select_focus;
-            let start = focus.map(|i| i + 1).unwrap_or(0);
+            // Special case: when all entered characters are the same, only search for said character.
+            // This allows quickly cycling through items starting with the same character.
+            let term = match prefix.chars().next() {
+                Some(first) if prefix.chars().all(|c| c == first) => &prefix[..1],
+                Some(_) => prefix,
+                None => return (),
+            };
+
+            // Have to add 1 to the start index when not reversing because the
+            // currently selected item should be included in until so it gets
+            // considered last instead of first.
+            // When ordered reverse, we don't want to do so because moving it
+            // last would put it as first item when iterating in reverse.
+            let start = self
+                .select_focus
+                .map_or(0, |i| if self.sort_direction { i + 1 } else { i });
             let (until, after) = items.split_at_mut(start);
-            for (i, item) in after
+
+            // First iterate over all items after the current selection, then wrap around
+            let iter = after
                 .iter_mut()
                 .enumerate()
                 .map(|x| (x.0 + start, x.1))
-                .chain(until.iter_mut().enumerate())
-            {
-                if !found
-                    && (!item.hidden || self.config.show_hidden)
-                    && item.name.to_lowercase().starts_with(term)
-                {
-                    item.selected = true;
-                    self.select_focus = Some(i);
-                    found = true;
-                } else {
-                    item.selected = false;
-                }
-            }
+                .chain(until.iter_mut().enumerate());
 
-            // Reselect the original selection in case no new selection was found
-            if !found {
-                if let Some(f) = focus {
-                    items[f].selected = true;
-                }
+            let found = if self.sort_direction {
+                Self::select_first_prefix(term, iter, self.config.show_hidden)
+            } else {
+                Self::select_first_prefix(term, iter.rev(), self.config.show_hidden)
+            };
+
+            if found.is_some() {
+                self.select_focus = found;
+            } else if let Some(focus) = self.select_focus {
+                items[focus].selected = true;
+            };
+        }
+    }
+
+    fn select_first_prefix<'a>(
+        prefix: &str,
+        iterator: impl Iterator<Item = (usize, &'a mut Item)>,
+        consider_hidden: bool,
+    ) -> Option<usize> {
+        let mut selected = None;
+        for (i, item) in iterator {
+            if selected.is_none()
+                && (!item.hidden || consider_hidden)
+                && item.display_name.to_lowercase().starts_with(prefix)
+            {
+                selected = Some(i);
+                item.selected = true;
+            } else {
+                item.selected = false;
             }
         }
-        found
+        selected
     }
 
     pub fn select_path(&mut self, path: PathBuf) {
