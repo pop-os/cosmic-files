@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{
-    app::{self, cosmic::Cosmic, message, Core, Task},
+    app::{self, context_drawer, cosmic::Cosmic, message, Core, Task},
     cosmic_config, cosmic_theme, executor,
     iced::{
         event,
@@ -469,13 +469,13 @@ impl App {
         let mut children = Vec::with_capacity(1);
         match kind {
             PreviewKind::Custom(PreviewItem(item)) => {
-                children.push(item.preview_view(IconSizes::default(), true));
+                children.push(item.preview_view(IconSizes::default()));
             }
             PreviewKind::Location(location) => {
                 if let Some(items) = self.tab.items_opt() {
                     for item in items.iter() {
                         if item.location_opt.as_ref() == Some(location) {
-                            children.push(item.preview_view(self.tab.config.icon_sizes, true));
+                            children.push(item.preview_view(self.tab.config.icon_sizes));
                             // Only show one property view to avoid issues like hangs when generating
                             // preview images on thousands of files
                             break;
@@ -487,7 +487,7 @@ impl App {
                 if let Some(items) = self.tab.items_opt() {
                     for item in items.iter() {
                         if item.selected {
-                            children.push(item.preview_view(self.tab.config.icon_sizes, true));
+                            children.push(item.preview_view(self.tab.config.icon_sizes));
                             // Only show one property view to avoid issues like hangs when generating
                             // preview images on thousands of files
                             break;
@@ -495,7 +495,7 @@ impl App {
                     }
                     if children.is_empty() {
                         if let Some(item) = &self.tab.parent_item_opt {
-                            children.push(item.preview_view(self.tab.config.icon_sizes, true));
+                            children.push(item.preview_view(self.tab.config.icon_sizes));
                         }
                     }
                 }
@@ -794,13 +794,33 @@ impl Application for App {
         (app, commands)
     }
 
-    fn context_drawer(&self) -> Option<Element<Message>> {
+    fn context_drawer(&self) -> Option<context_drawer::ContextDrawer<Message>> {
         if !self.core.window.show_context {
             return None;
         }
 
         match &self.context_page {
-            ContextPage::Preview(_, kind) => Some(self.preview(kind).map(Message::from)),
+            ContextPage::Preview(_, kind) => {
+                let mut actions = Vec::with_capacity(3);
+                if let Some(items) = self.tab.items_opt() {
+                    for item in items.iter() {
+                        if item.selected {
+                            actions.extend(
+                                item.preview_header().into_iter().map(|element| {
+                                    element.map(move |message| Message::from(message))
+                                }),
+                            )
+                        }
+                    }
+                };
+                Some(
+                    context_drawer::context_drawer(
+                        self.preview(kind).map(Message::from),
+                        Message::Preview,
+                    )
+                    .header_actions(actions),
+                )
+            }
             _ => None,
         }
     }
@@ -1401,7 +1421,6 @@ impl Application for App {
                         tab::Command::Preview(kind) => {
                             self.context_page = ContextPage::Preview(None, kind);
                             self.set_show_context(true);
-                            self.set_context_title(self.context_page.title());
                         }
                         tab::Command::WindowDrag => {
                             commands.push(window::drag(self.flags.window_id));

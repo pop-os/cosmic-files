@@ -13,7 +13,7 @@ use cosmic::iced::{
     Limits,
 };
 use cosmic::{
-    app::{self, message, Core, Task},
+    app::{self, context_drawer, message, Core, Task},
     cosmic_config, cosmic_theme, executor,
     iced::{
         clipboard::dnd::DndAction,
@@ -369,18 +369,6 @@ pub enum ContextPage {
     NetworkDrive,
     Preview(Option<Entity>, PreviewKind),
     Settings,
-}
-
-impl ContextPage {
-    pub fn title(&self) -> String {
-        match self {
-            Self::About => String::new(),
-            Self::EditHistory => fl!("edit-history"),
-            Self::NetworkDrive => fl!("add-network-drive"),
-            Self::Preview(..) => String::default(),
-            Self::Settings => fl!("settings"),
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
@@ -1134,16 +1122,6 @@ impl App {
         let cosmic_theme::Spacing {
             space_xxs, space_m, ..
         } = theme::active().cosmic().spacing;
-        let mut text_input =
-            widget::text_input(fl!("enter-server-address"), &self.network_drive_input);
-        let button = if self.network_drive_connecting.is_some() {
-            widget::button::standard(fl!("connecting"))
-        } else {
-            text_input = text_input
-                .on_input(Message::NetworkDriveInput)
-                .on_submit(Message::NetworkDriveSubmit);
-            widget::button::standard(fl!("connect")).on_press(Message::NetworkDriveSubmit)
-        };
         let mut table = widget::column::with_capacity(8);
         for (i, line) in fl!("network-drive-schemes").lines().enumerate() {
             let mut row = widget::row::with_capacity(2);
@@ -1164,11 +1142,8 @@ impl App {
             }
         }
         widget::column::with_children(vec![
-            text_input.into(),
             widget::text(fl!("network-drive-description")).into(),
             table.into(),
-            widget::row::with_children(vec![widget::horizontal_space().into(), button.into()])
-                .into(),
         ])
         .spacing(space_m)
         .into()
@@ -1341,15 +1316,14 @@ impl App {
         let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
         match kind {
             PreviewKind::Custom(PreviewItem(item)) => {
-                children.push(item.preview_view(IconSizes::default(), context_drawer));
+                children.push(item.preview_view(IconSizes::default()));
             }
             PreviewKind::Location(location) => {
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
                     if let Some(items) = tab.items_opt() {
                         for item in items.iter() {
                             if item.location_opt.as_ref() == Some(location) {
-                                children
-                                    .push(item.preview_view(tab.config.icon_sizes, context_drawer));
+                                children.push(item.preview_view(tab.config.icon_sizes));
                                 // Only show one property view to avoid issues like hangs when generating
                                 // preview images on thousands of files
                                 break;
@@ -1363,8 +1337,7 @@ impl App {
                     if let Some(items) = tab.items_opt() {
                         for item in items.iter() {
                             if item.selected {
-                                children
-                                    .push(item.preview_view(tab.config.icon_sizes, context_drawer));
+                                children.push(item.preview_view(tab.config.icon_sizes));
                                 // Only show one property view to avoid issues like hangs when generating
                                 // preview images on thousands of files
                                 break;
@@ -1372,8 +1345,7 @@ impl App {
                         }
                         if children.is_empty() {
                             if let Some(item) = &tab.parent_item_opt {
-                                children
-                                    .push(item.preview_view(tab.config.icon_sizes, context_drawer));
+                                children.push(item.preview_view(tab.config.icon_sizes));
                             }
                         }
                     }
@@ -1381,7 +1353,11 @@ impl App {
             }
         }
         widget::column::with_children(children)
-            .padding([0, space_l, space_l, space_l])
+            .padding(if context_drawer {
+                [0, 0, 0, 0]
+            } else {
+                [0, space_l, space_l, space_l]
+            })
             .into()
     }
 
@@ -2751,7 +2727,6 @@ impl Application for App {
                         tab::Command::AddNetworkDrive => {
                             self.context_page = ContextPage::NetworkDrive;
                             self.set_show_context(true);
-                            self.set_context_title(self.context_page.title());
                         }
                         tab::Command::AddToSidebar(path) => {
                             let mut favorites = self.config.favorites.clone();
@@ -2819,7 +2794,6 @@ impl Application for App {
                         tab::Command::Preview(kind) => {
                             self.context_page = ContextPage::Preview(Some(entity), kind);
                             self.set_show_context(true);
-                            self.set_context_title(self.context_page.title());
                         }
                         tab::Command::WindowDrag => {
                             if let Some(window_id) = &self.window_id_opt {
@@ -2874,7 +2848,6 @@ impl Application for App {
                     self.set_show_context(true);
                 }
                 self.context_page = context_page;
-                self.set_context_title(self.context_page.title());
             }
             Message::Undo(_id) => {
                 // TODO: undo
@@ -3210,7 +3183,6 @@ impl Application for App {
                                     PreviewKind::Custom(PreviewItem(item)),
                                 );
                                 self.set_show_context(true);
-                                self.set_context_title(self.context_page.title());
                             }
                             Err(err) => {
                                 log::warn!("failed to get item from path {:?}: {}", path, err);
@@ -3329,17 +3301,69 @@ impl Application for App {
         Task::none()
     }
 
-    fn context_drawer(&self) -> Option<Element<Message>> {
+    fn context_drawer(&self) -> Option<context_drawer::ContextDrawer<Message>> {
         if !self.core.window.show_context {
             return None;
         }
 
         Some(match &self.context_page {
-            ContextPage::About => self.about(),
-            ContextPage::EditHistory => self.edit_history(),
-            ContextPage::NetworkDrive => self.network_drive(),
-            ContextPage::Preview(entity_opt, kind) => self.preview(entity_opt, kind, true),
-            ContextPage::Settings => self.settings(),
+            ContextPage::About => context_drawer::context_drawer(
+                self.about(),
+                Message::ToggleContextPage(ContextPage::About),
+            ),
+            ContextPage::EditHistory => context_drawer::context_drawer(
+                self.edit_history(),
+                Message::ToggleContextPage(ContextPage::EditHistory),
+            )
+            .title(fl!("edit-history")),
+            ContextPage::NetworkDrive => {
+                let mut text_input =
+                    widget::text_input(fl!("enter-server-address"), &self.network_drive_input);
+                let button = if self.network_drive_connecting.is_some() {
+                    widget::button::standard(fl!("connecting"))
+                } else {
+                    text_input = text_input
+                        .on_input(Message::NetworkDriveInput)
+                        .on_submit(Message::NetworkDriveSubmit);
+                    widget::button::standard(fl!("connect")).on_press(Message::NetworkDriveSubmit)
+                };
+                context_drawer::context_drawer(
+                    self.network_drive(),
+                    Message::ToggleContextPage(ContextPage::NetworkDrive),
+                )
+                .title(fl!("add-network-drive"))
+                .header(text_input)
+                .footer(widget::row::with_children(vec![
+                    widget::horizontal_space().into(),
+                    button.into(),
+                ]))
+            }
+            ContextPage::Preview(entity_opt, kind) => {
+                let mut actions = Vec::with_capacity(3);
+                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+                    if let Some(items) = tab.items_opt() {
+                        for item in items.iter() {
+                            if item.selected {
+                                actions.extend(item.preview_header())
+                            }
+                        }
+                    }
+                };
+                context_drawer::context_drawer(
+                    self.preview(entity_opt, kind, true),
+                    Message::ToggleContextPage(ContextPage::Preview(
+                        entity_opt.clone(),
+                        kind.clone(),
+                    )),
+                )
+                .header_actions(actions)
+            }
+            ContextPage::Settings => context_drawer::context_drawer(
+                self.settings(),
+                Message::ToggleContextPage(ContextPage::Settings),
+            )
+            .title(fl!("settings")),
         })
     }
 
