@@ -2,9 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{app::Settings, iced::Limits};
-use std::{env, fs, path::PathBuf, process};
+use std::{env, fs, path::PathBuf, process, sync::Mutex};
 
-use app::{App, Flags};
+use app::{
+    icons::{IconCache, ICON_CACHE},
+    App, Flags,
+};
 pub mod app;
 pub mod clipboard;
 use config::Config;
@@ -86,6 +89,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
 
     localize::localize();
+
+    ICON_CACHE.get_or_init(|| Mutex::new(IconCache::new()));
 
     let (config_handler, config) = Config::load();
 
