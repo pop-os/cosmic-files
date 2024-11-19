@@ -1096,7 +1096,7 @@ mod tests {
     use test_log::test;
     use tokio::sync;
 
-    use super::{Operation, ReplaceResult};
+    use super::{Controller, Operation, ReplaceResult};
     use crate::{
         app::{
             test_utils::{
@@ -1122,7 +1122,7 @@ mod tests {
                 paths: paths_clone,
                 to: to_clone,
             }
-            .perform(id, &Mutex::new(tx).into())
+            .perform(id, &sync::Mutex::new(tx).into(), Controller::new())
             .await
         });
 
