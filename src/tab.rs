@@ -27,7 +27,7 @@ use cosmic::{
         Size,
         Subscription,
     },
-    iced_core::{mouse::ScrollDelta, widget::tree},
+    iced_core::{mouse::ScrollDelta, widget::tree, SmolStr},
     theme,
     widget::{
         self,
@@ -1071,6 +1071,7 @@ pub enum Message {
     SearchContext(Location, SearchContextWrapper),
     SearchReady(bool),
     SelectAll,
+    SelectNextPrefix(SmolStr),
     SetSort(HeadingOptions, bool),
     Thumbnail(PathBuf, ItemThumbnail),
     ToggleShowHidden,
@@ -1855,6 +1856,68 @@ impl Tab {
                 item.selected = item.name == name;
             }
         }
+    }
+
+    pub fn select_next_prefix(&mut self, prefix: &str) {
+        *self.cached_selected.borrow_mut() = None;
+        if let Some(ref mut items) = self.items_opt {
+            // Special case: when all entered characters are the same, only search for said character.
+            // This allows quickly cycling through items starting with the same character.
+            let term = match prefix.chars().next() {
+                Some(first) if prefix.chars().all(|c| c == first) => &prefix[..1],
+                Some(_) => prefix,
+                None => return (),
+            };
+
+            // Have to add 1 to the start index when not reversing because the
+            // currently selected item should be included in until so it gets
+            // considered last instead of first.
+            // When ordered reverse, we don't want to do so because moving it
+            // last would put it as first item when iterating in reverse.
+            let start = self
+                .select_focus
+                .map_or(0, |i| if self.sort_direction { i + 1 } else { i });
+            let (until, after) = items.split_at_mut(start);
+
+            // First iterate over all items after the current selection, then wrap around
+            let iter = after
+                .iter_mut()
+                .enumerate()
+                .map(|x| (x.0 + start, x.1))
+                .chain(until.iter_mut().enumerate());
+
+            let found = if self.sort_direction {
+                Self::select_first_prefix(term, iter, self.config.show_hidden)
+            } else {
+                Self::select_first_prefix(term, iter.rev(), self.config.show_hidden)
+            };
+
+            if found.is_some() {
+                self.select_focus = found;
+            } else if let Some(focus) = self.select_focus {
+                items[focus].selected = true;
+            };
+        }
+    }
+
+    fn select_first_prefix<'a>(
+        prefix: &str,
+        iterator: impl Iterator<Item = (usize, &'a mut Item)>,
+        consider_hidden: bool,
+    ) -> Option<usize> {
+        let mut selected = None;
+        for (i, item) in iterator {
+            if selected.is_none()
+                && (!item.hidden || consider_hidden)
+                && item.display_name.to_lowercase().starts_with(prefix)
+            {
+                selected = Some(i);
+                item.selected = true;
+            } else {
+                item.selected = false;
+            }
+        }
+        selected
     }
 
     pub fn select_path(&mut self, path: PathBuf) {
@@ -2805,6 +2868,17 @@ impl Tab {
                     commands.push(Command::Iced(
                         widget::button::focus(widget::Id::unique()).into(),
                     ));
+                }
+            }
+            Message::SelectNextPrefix(s) => {
+                self.select_next_prefix(&s);
+                if let Some(offset) = self.select_focus_scroll() {
+                    commands.push(Command::Iced(
+                        scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                    ));
+                }
+                if let Some(id) = self.select_focus_id() {
+                    commands.push(Command::Iced(widget::button::focus(id).into()));
                 }
             }
             Message::SetSort(heading_option, dir) => {
