@@ -13,7 +13,7 @@ use cosmic::iced::{
     Limits,
 };
 use cosmic::{
-    app::{self, message, Core, Task},
+    app::{self, context_drawer, message, Core, Task},
     cosmic_config, cosmic_theme, executor,
     iced::{
         clipboard::dnd::DndAction,
@@ -29,6 +29,7 @@ use cosmic::{
     style, theme,
     widget::{
         self,
+        about::About,
         dnd_destination::DragId,
         menu::{action::MenuAction, key_bind::KeyBind},
         segmented_button::{self, Entity},
@@ -68,6 +69,8 @@ use crate::{
     spawn_detached::spawn_detached,
     tab::{self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION},
 };
+
+pub mod icons;
 
 #[derive(Clone, Debug)]
 pub enum Mode {
@@ -338,6 +341,7 @@ pub enum Message {
     ),
     TabView(Option<Entity>, tab::View),
     ToggleContextPage(ContextPage),
+    ToggleContextDrawer,
     ToggleFoldersFirst,
     Undo(usize),
     UndoTrash(widget::ToastId, Arc<[PathBuf]>),
@@ -502,6 +506,7 @@ impl PartialEq for WatcherWrapper {
 /// The [`App`] stores application-specific state.
 pub struct App {
     core: Core,
+    about: About,
     nav_bar_context_id: segmented_button::Entity,
     nav_model: segmented_button::SingleSelectModel,
     tab_model: segmented_button::Model<segmented_button::SingleSelect>,
@@ -1455,8 +1460,24 @@ impl Application for App {
 
         let window_id_opt = core.main_window_id();
 
+        let about = About::default()
+            .name(fl!("cosmic-files"))
+            .author("System 76")
+            .icon(Self::APP_ID)
+            .version("0.1.0")
+            .license("GPL-3.0-only")
+            .links([
+                (fl!("repository"), "https://github.com/pop-os/cosmic-files"),
+                (
+                    fl!("support"),
+                    "https://github.com/pop-os/cosmic-files/issues",
+                ),
+            ])
+            .developers([("Jeremy Soller", "jeremy@system76.com")]);
+
         let mut app = App {
             core,
+            about,
             nav_bar_context_id: segmented_button::Entity::null(),
             nav_model: segmented_button::ModelBuilder::default().build(),
             tab_model: segmented_button::ModelBuilder::default().build(),
@@ -1565,37 +1586,44 @@ impl Application for App {
         {
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("open"),
+                Some(icons::get_handle("document-open-symbolic", 14)),
                 NavMenuAction::Open(entity),
             ));
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("open-with"),
+                Some(icons::get_handle("external-link-symbolic", 14)),
                 NavMenuAction::OpenWith(entity),
             ));
         } else {
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("open-in-new-tab"),
+                Some(icons::get_handle("tab-new-filled-symbolic", 14)),
                 NavMenuAction::OpenInNewTab(entity),
             ));
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("open-in-new-window"),
+                Some(icons::get_handle("edit-copy-symbolic", 14)),
                 NavMenuAction::OpenInNewWindow(entity),
             ));
         }
         items.push(cosmic::widget::menu::Item::Divider);
         items.push(cosmic::widget::menu::Item::Button(
             fl!("show-details"),
+            Some(icons::get_handle("info-outline-symbolic", 14)),
             NavMenuAction::Preview(entity),
         ));
         items.push(cosmic::widget::menu::Item::Divider);
         if favorite_index_opt.is_some() {
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("remove-from-sidebar"),
+                Some(icons::get_handle("cross-small-square-filled-symbolic", 14)),
                 NavMenuAction::RemoveFromSidebar(entity),
             ));
         }
         if matches!(location_opt, Some(Location::Trash)) {
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("empty-trash"),
+                Some(icons::get_handle("user-trash-symbolic", 14)),
                 NavMenuAction::EmptyTrash,
             ));
         }
@@ -2745,7 +2773,6 @@ impl Application for App {
                         tab::Command::AddNetworkDrive => {
                             self.context_page = ContextPage::NetworkDrive;
                             self.set_show_context(true);
-                            self.set_context_title(self.context_page.title());
                         }
                         tab::Command::AddToSidebar(path) => {
                             let mut favorites = self.config.favorites.clone();
@@ -2813,7 +2840,6 @@ impl Application for App {
                         tab::Command::Preview(kind) => {
                             self.context_page = ContextPage::Preview(Some(entity), kind);
                             self.set_show_context(true);
-                            self.set_context_title(self.context_page.title());
                         }
                         tab::Command::WindowDrag => {
                             if let Some(window_id) = &self.window_id_opt {
@@ -2868,7 +2894,9 @@ impl Application for App {
                     self.set_show_context(true);
                 }
                 self.context_page = context_page;
-                self.set_context_title(self.context_page.title());
+            }
+            Message::ToggleContextDrawer => {
+                self.set_show_context(!self.core.window.show_context);
             }
             Message::Undo(_id) => {
                 // TODO: undo
@@ -3204,7 +3232,6 @@ impl Application for App {
                                     PreviewKind::Custom(PreviewItem(item)),
                                 );
                                 self.set_show_context(true);
-                                self.set_context_title(self.context_page.title());
                             }
                             Err(err) => {
                                 log::warn!("failed to get item from path {:?}: {}", path, err);
@@ -3323,17 +3350,34 @@ impl Application for App {
         Task::none()
     }
 
-    fn context_drawer(&self) -> Option<Element<Message>> {
+    fn context_drawer(&self) -> Option<context_drawer::ContextDrawer<Self::Message>> {
         if !self.core.window.show_context {
             return None;
         }
 
         Some(match &self.context_page {
-            ContextPage::About => self.about(),
-            ContextPage::EditHistory => self.edit_history(),
-            ContextPage::NetworkDrive => self.network_drive(),
-            ContextPage::Preview(entity_opt, kind) => self.preview(entity_opt, kind, true),
-            ContextPage::Settings => self.settings(),
+            ContextPage::About => context_drawer::about(
+                &self.about,
+                Message::LaunchUrl,
+                Message::ToggleContextDrawer,
+            ),
+            ContextPage::EditHistory => {
+                context_drawer::context_drawer(self.edit_history(), Message::ToggleContextDrawer)
+                    .title(self.context_page.title())
+            }
+            ContextPage::NetworkDrive => {
+                context_drawer::context_drawer(self.network_drive(), Message::ToggleContextDrawer)
+                    .title(self.context_page.title())
+            }
+            ContextPage::Preview(entity_opt, kind) => context_drawer::context_drawer(
+                self.preview(entity_opt, kind, true),
+                Message::ToggleContextDrawer,
+            )
+            .title(self.context_page.title()),
+            ContextPage::Settings => {
+                context_drawer::context_drawer(self.settings(), Message::ToggleContextDrawer)
+                    .title(self.context_page.title())
+            }
         })
     }
 

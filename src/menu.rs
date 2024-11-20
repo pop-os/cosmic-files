@@ -15,7 +15,7 @@ use mime_guess::Mime;
 use std::collections::HashMap;
 
 use crate::{
-    app::{Action, Message},
+    app::{icons, Action, Message},
     config::Config,
     fl,
     tab::{self, HeadingOptions, Location, LocationMenuAction, Tab},
@@ -38,13 +38,14 @@ macro_rules! menu_button {
 
 fn menu_button_optional(
     label: String,
+    icon: Option<widget::icon::Handle>,
     action: Action,
     enabled: bool,
 ) -> menu::Item<Action, String> {
     if enabled {
-        menu::Item::Button(label, action)
+        menu::Item::Button(label, icon, action)
     } else {
-        menu::Item::ButtonDisabled(label, action)
+        menu::Item::ButtonDisabled(label, icon, action)
     }
 }
 
@@ -61,14 +62,25 @@ pub fn context_menu<'a>(
         String::new()
     };
 
-    let menu_item = |label, action| {
+    let menu_item = |label, icon, action| {
         let key = find_key(&action);
-        menu_button!(text::body(label), horizontal_space(), text::body(key))
+        if let Some(icon) = icon {
+            menu_button!(
+                widget::icon(icon),
+                widget::Space::with_width(8.0),
+                text::body(label),
+                horizontal_space(),
+                text::body(key)
+            )
             .on_press(tab::Message::ContextAction(action))
+        } else {
+            menu_button!(text::body(label), horizontal_space(), text::body(key))
+                .on_press(tab::Message::ContextAction(action))
+        }
     };
 
     let (sort_name, sort_direction, _) = tab.sort_options();
-    let sort_item = |label, variant| {
+    let sort_item = |label, icon, variant| {
         menu_item(
             format!(
                 "{} {}",
@@ -79,6 +91,7 @@ pub fn context_menu<'a>(
                     _ => "",
                 }
             ),
+            icon,
             Action::ToggleSort(variant),
         )
         .into()
@@ -134,50 +147,159 @@ pub fn context_menu<'a>(
             Location::Desktop(..) | Location::Path(..) | Location::Search(..) | Location::Recents,
         ) => {
             if selected_trash_only {
-                children.push(menu_item(fl!("open"), Action::Open).into());
+                children.push(
+                    menu_item(
+                        fl!("open"),
+                        Some(icons::get_handle("document-open-symbolic", 14)),
+                        Action::Open,
+                    )
+                    .into(),
+                );
                 if tab::trash_entries() > 0 {
-                    children.push(menu_item(fl!("empty-trash"), Action::EmptyTrash).into());
+                    children.push(
+                        menu_item(
+                            fl!("empty-trash"),
+                            Some(icons::get_handle("user-trash-symbolic", 14)),
+                            Action::EmptyTrash,
+                        )
+                        .into(),
+                    );
                 }
             } else if let Some(entry) = selected_desktop_entry {
-                children.push(menu_item(fl!("open"), Action::Open).into());
+                children.push(
+                    menu_item(
+                        fl!("open"),
+                        Some(icons::get_handle("document-open-symbolic", 14)),
+                        Action::Open,
+                    )
+                    .into(),
+                );
                 #[cfg(feature = "desktop")]
                 {
                     for (i, action) in entry.desktop_actions.into_iter().enumerate() {
-                        children.push(menu_item(action.name, Action::ExecEntryAction(i)).into())
+                        children
+                            .push(menu_item(action.name, None, Action::ExecEntryAction(i)).into())
                     }
                 }
                 children.push(divider::horizontal::light().into());
-                children.push(menu_item(fl!("rename"), Action::Rename).into());
-                children.push(menu_item(fl!("cut"), Action::Cut).into());
-                children.push(menu_item(fl!("copy"), Action::Copy).into());
+                children.push(
+                    menu_item(
+                        fl!("rename"),
+                        Some(icons::get_handle("edit-symbolic", 14)),
+                        Action::Rename,
+                    )
+                    .into(),
+                );
+                children.push(
+                    menu_item(
+                        fl!("cut"),
+                        Some(icons::get_handle("cut-symbolic", 14)),
+                        Action::Cut,
+                    )
+                    .into(),
+                );
+                children.push(
+                    menu_item(
+                        fl!("copy"),
+                        Some(icons::get_handle("copy-symbolic", 14)),
+                        Action::Copy,
+                    )
+                    .into(),
+                );
                 // Should this simply bypass trash and remove the shortcut?
-                children.push(menu_item(fl!("move-to-trash"), Action::MoveToTrash).into());
+                children.push(
+                    menu_item(
+                        fl!("move-to-trash"),
+                        Some(icons::get_handle("user-trash-symbolic", 14)),
+                        Action::MoveToTrash,
+                    )
+                    .into(),
+                );
             } else if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
-                    children.push(menu_item(fl!("open"), Action::Open).into());
+                    children.push(
+                        menu_item(
+                            fl!("open"),
+                            Some(icons::get_handle("document-open-symbolic", 14)),
+                            Action::Open,
+                        )
+                        .into(),
+                    );
                 }
                 if selected == 1 {
-                    children.push(menu_item(fl!("open-with"), Action::OpenWith).into());
+                    children.push(
+                        menu_item(
+                            fl!("open-with"),
+                            Some(icons::get_handle("external-link-symbolic", 14)),
+                            Action::OpenWith,
+                        )
+                        .into(),
+                    );
                     if selected_dir == 1 {
-                        children
-                            .push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
+                        children.push(
+                            menu_item(
+                                fl!("open-in-terminal"),
+                                Some(icons::get_handle("terminal-symbolic", 14)),
+                                Action::OpenTerminal,
+                            )
+                            .into(),
+                        );
                     }
                 }
                 if matches!(tab.location, Location::Search(..)) {
                     children.push(
-                        menu_item(fl!("open-item-location"), Action::OpenItemLocation).into(),
+                        menu_item(
+                            fl!("open-item-location"),
+                            Some(icons::get_handle("symbolic-link-symbolic", 14)),
+                            Action::OpenItemLocation,
+                        )
+                        .into(),
                     );
                 }
                 // All selected items are directories
                 if selected == selected_dir && matches!(tab.mode, tab::Mode::App) {
-                    children.push(menu_item(fl!("open-in-new-tab"), Action::OpenInNewTab).into());
-                    children
-                        .push(menu_item(fl!("open-in-new-window"), Action::OpenInNewWindow).into());
+                    children.push(
+                        menu_item(
+                            fl!("open-in-new-tab"),
+                            Some(icons::get_handle("tab-new-filled-symbolic", 14)),
+                            Action::OpenInNewTab,
+                        )
+                        .into(),
+                    );
+                    children.push(
+                        menu_item(
+                            fl!("open-in-new-window"),
+                            Some(icons::get_handle("edit-copy-symbolic", 14)),
+                            Action::OpenInNewWindow,
+                        )
+                        .into(),
+                    );
                 }
                 children.push(divider::horizontal::light().into());
-                children.push(menu_item(fl!("rename"), Action::Rename).into());
-                children.push(menu_item(fl!("cut"), Action::Cut).into());
-                children.push(menu_item(fl!("copy"), Action::Copy).into());
+                children.push(
+                    menu_item(
+                        fl!("rename"),
+                        Some(icons::get_handle("edit-symbolic", 14)),
+                        Action::Rename,
+                    )
+                    .into(),
+                );
+                children.push(
+                    menu_item(
+                        fl!("cut"),
+                        Some(icons::get_handle("cut-symbolic", 14)),
+                        Action::Cut,
+                    )
+                    .into(),
+                );
+                children.push(
+                    menu_item(
+                        fl!("copy"),
+                        Some(icons::get_handle("copy-symbolic", 14)),
+                        Action::Copy,
+                    )
+                    .into(),
+                );
 
                 children.push(divider::horizontal::light().into());
                 let supported_archive_types = [
@@ -199,55 +321,148 @@ pub fn context_menu<'a>(
                 .collect::<Vec<_>>();
                 selected_types.retain(|t| !supported_archive_types.contains(t));
                 if selected_types.is_empty() {
-                    children.push(menu_item(fl!("extract-here"), Action::ExtractHere).into());
+                    children.push(
+                        menu_item(
+                            fl!("extract-here"),
+                            Some(icons::get_handle("archive-extract-symbolic", 14)),
+                            Action::ExtractHere,
+                        )
+                        .into(),
+                    );
                 }
-                children.push(menu_item(fl!("compress"), Action::Compress).into());
+                children.push(
+                    menu_item(
+                        fl!("compress"),
+                        Some(icons::get_handle("package-x-generic-symbolic", 14)),
+                        Action::Compress,
+                    )
+                    .into(),
+                );
                 children.push(divider::horizontal::light().into());
 
                 //TODO: Print?
-                children.push(menu_item(fl!("show-details"), Action::Preview).into());
+                children.push(
+                    menu_item(
+                        fl!("show-details"),
+                        Some(icons::get_handle("info-outline-symbolic", 14)),
+                        Action::Preview,
+                    )
+                    .into(),
+                );
                 if matches!(tab.mode, tab::Mode::App) {
                     children.push(divider::horizontal::light().into());
-                    children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
+                    children.push(
+                        menu_item(
+                            fl!("add-to-sidebar"),
+                            Some(icons::get_handle("dock-left-symbolic", 14)),
+                            Action::AddToSidebar,
+                        )
+                        .into(),
+                    );
                 }
                 children.push(divider::horizontal::light().into());
-                children.push(menu_item(fl!("move-to-trash"), Action::MoveToTrash).into());
+                children.push(
+                    menu_item(
+                        fl!("move-to-trash"),
+                        Some(icons::get_handle("user-trash-symbolic", 14)),
+                        Action::MoveToTrash,
+                    )
+                    .into(),
+                );
             } else {
                 //TODO: need better designs for menu with no selection
                 //TODO: have things like properties but they apply to the folder?
-                children.push(menu_item(fl!("new-folder"), Action::NewFolder).into());
-                children.push(menu_item(fl!("new-file"), Action::NewFile).into());
-                children.push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
+                children.push(
+                    menu_item(
+                        fl!("new-folder"),
+                        Some(icons::get_handle("folder-new-symbolic", 14)),
+                        Action::NewFolder,
+                    )
+                    .into(),
+                );
+                children.push(
+                    menu_item(
+                        fl!("new-file"),
+                        Some(icons::get_handle("paper-symbolic", 14)),
+                        Action::NewFile,
+                    )
+                    .into(),
+                );
+                children.push(
+                    menu_item(
+                        fl!("open-in-terminal"),
+                        Some(icons::get_handle("terminal-symbolic", 14)),
+                        Action::OpenTerminal,
+                    )
+                    .into(),
+                );
                 children.push(divider::horizontal::light().into());
                 if tab.mode.multiple() {
-                    children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
+                    children.push(
+                        menu_item(
+                            fl!("select-all"),
+                            Some(icons::get_handle("edit-select-all-symbolic", 14)),
+                            Action::SelectAll,
+                        )
+                        .into(),
+                    );
                 }
-                children.push(menu_item(fl!("paste"), Action::Paste).into());
+                children.push(
+                    menu_item(
+                        fl!("paste"),
+                        Some(icons::get_handle("clipboard-symbolic", 14)),
+                        Action::Paste,
+                    )
+                    .into(),
+                );
 
                 //TODO: only show if cosmic-settings is found?
                 if matches!(tab.mode, tab::Mode::Desktop) {
                     children.push(divider::horizontal::light().into());
                     children.push(
-                        menu_item(fl!("change-wallpaper"), Action::CosmicSettingsWallpaper).into(),
+                        menu_item(
+                            fl!("change-wallpaper"),
+                            Some(icons::get_handle("image-symbolic", 14)),
+                            Action::CosmicSettingsWallpaper,
+                        )
+                        .into(),
                     );
                     children.push(
-                        menu_item(fl!("desktop-appearance"), Action::CosmicSettingsAppearance)
-                            .into(),
+                        menu_item(
+                            fl!("desktop-appearance"),
+                            Some(icons::get_handle("brush-monitor-symbolic", 14)),
+                            Action::CosmicSettingsAppearance,
+                        )
+                        .into(),
                     );
                     children.push(
-                        menu_item(fl!("display-settings"), Action::CosmicSettingsDisplays).into(),
+                        menu_item(
+                            fl!("display-settings"),
+                            Some(icons::get_handle("display-symbolic", 14)),
+                            Action::CosmicSettingsDisplays,
+                        )
+                        .into(),
                     );
                 }
 
                 children.push(divider::horizontal::light().into());
                 // TODO: Nested menu
-                children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
-                children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
-                children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
+                children.push(sort_item(fl!("sort-by-name"), None, HeadingOptions::Name));
+                children.push(sort_item(
+                    fl!("sort-by-modified"),
+                    None,
+                    HeadingOptions::Modified,
+                ));
+                children.push(sort_item(fl!("sort-by-size"), None, HeadingOptions::Size));
                 if matches!(tab.location, Location::Desktop(..)) {
                     children.push(divider::horizontal::light().into());
                     children.push(
-                        menu_item(fl!("desktop-view-options"), Action::DesktopViewOptions).into(),
+                        menu_item(
+                            fl!("desktop-view-options"),
+                            Some(icons::get_handle("shell-overview-symbolic", 14)),
+                            Action::DesktopViewOptions,
+                        )
+                        .into(),
                     );
                 }
             }
@@ -258,64 +473,143 @@ pub fn context_menu<'a>(
         ) => {
             if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
-                    children.push(menu_item(fl!("open"), Action::Open).into());
+                    children.push(
+                        menu_item(
+                            fl!("open"),
+                            Some(icons::get_handle("document-open-symbolic", 14)),
+                            Action::Open,
+                        )
+                        .into(),
+                    );
                 }
                 if matches!(tab.location, Location::Search(..)) {
                     children.push(
-                        menu_item(fl!("open-item-location"), Action::OpenItemLocation).into(),
+                        menu_item(
+                            fl!("open-item-location"),
+                            Some(icons::get_handle("symbolic-link-symbolic", 14)),
+                            Action::OpenItemLocation,
+                        )
+                        .into(),
                     );
                 }
                 children.push(divider::horizontal::light().into());
-                children.push(menu_item(fl!("show-details"), Action::Preview).into());
+                children.push(
+                    menu_item(
+                        fl!("show-details"),
+                        Some(icons::get_handle("info-outline-symbolic", 14)),
+                        Action::Preview,
+                    )
+                    .into(),
+                );
             } else {
                 if dialog_kind.save() {
-                    children.push(menu_item(fl!("new-folder"), Action::NewFolder).into());
+                    children.push(
+                        menu_item(
+                            fl!("new-folder"),
+                            Some(icons::get_handle("folder-new-symbolic", 14)),
+                            Action::NewFolder,
+                        )
+                        .into(),
+                    );
                 }
                 if tab.mode.multiple() {
-                    children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
+                    children.push(
+                        menu_item(
+                            fl!("select-all"),
+                            Some(icons::get_handle("edit-select-all-symbolic", 14)),
+                            Action::SelectAll,
+                        )
+                        .into(),
+                    );
                 }
                 if !children.is_empty() {
                     children.push(divider::horizontal::light().into());
                 }
-                children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
-                children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
-                children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
+                children.push(sort_item(fl!("sort-by-name"), None, HeadingOptions::Name));
+                children.push(sort_item(
+                    fl!("sort-by-modified"),
+                    None,
+                    HeadingOptions::Modified,
+                ));
+                children.push(sort_item(fl!("sort-by-size"), None, HeadingOptions::Size));
             }
         }
         (_, Location::Network(..)) => {
             if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
-                    children.push(menu_item(fl!("open"), Action::Open).into());
+                    children.push(
+                        menu_item(
+                            fl!("open"),
+                            Some(icons::get_handle("document-open-symbolic", 14)),
+                            Action::Open,
+                        )
+                        .into(),
+                    );
                 }
             } else {
                 if tab.mode.multiple() {
-                    children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
+                    children.push(
+                        menu_item(
+                            fl!("select-all"),
+                            Some(icons::get_handle("edit-select-all-symbolic", 14)),
+                            Action::SelectAll,
+                        )
+                        .into(),
+                    );
                 }
                 if !children.is_empty() {
                     children.push(divider::horizontal::light().into());
                 }
-                children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
-                children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
-                children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
+                children.push(sort_item(fl!("sort-by-name"), None, HeadingOptions::Name));
+                children.push(sort_item(
+                    fl!("sort-by-modified"),
+                    None,
+                    HeadingOptions::Modified,
+                ));
+                children.push(sort_item(fl!("sort-by-size"), None, HeadingOptions::Size));
             }
         }
         (_, Location::Trash) => {
             if tab.mode.multiple() {
-                children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
+                children.push(
+                    menu_item(
+                        fl!("select-all"),
+                        Some(icons::get_handle("edit-select-all-symbolic", 14)),
+                        Action::SelectAll,
+                    )
+                    .into(),
+                );
             }
             if !children.is_empty() {
                 children.push(divider::horizontal::light().into());
             }
             if selected > 0 {
-                children.push(menu_item(fl!("show-details"), Action::Preview).into());
+                children.push(
+                    menu_item(
+                        fl!("show-details"),
+                        Some(icons::get_handle("info-outline-symbolic", 14)),
+                        Action::Preview,
+                    )
+                    .into(),
+                );
                 children.push(divider::horizontal::light().into());
-                children
-                    .push(menu_item(fl!("restore-from-trash"), Action::RestoreFromTrash).into());
+                children.push(
+                    menu_item(
+                        fl!("restore-from-trash"),
+                        Some(icons::get_handle("empty-trash-bin-symbolic", 14)),
+                        Action::RestoreFromTrash,
+                    )
+                    .into(),
+                );
             } else {
                 // TODO: Nested menu
-                children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
-                children.push(sort_item(fl!("sort-by-trashed"), HeadingOptions::TrashedOn));
-                children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
+                children.push(sort_item(fl!("sort-by-name"), None, HeadingOptions::Name));
+                children.push(sort_item(
+                    fl!("sort-by-trashed"),
+                    None,
+                    HeadingOptions::TrashedOn,
+                ));
+                children.push(sort_item(fl!("sort-by-size"), None, HeadingOptions::Size));
             }
         }
     }
@@ -351,6 +645,7 @@ pub fn dialog_menu<'a>(
     let sort_item = |label, sort, dir| {
         menu::Item::CheckBox(
             label,
+            None,
             sort_name == sort && sort_direction == dir,
             Action::SetSort(sort, dir),
         )
@@ -382,11 +677,13 @@ pub fn dialog_menu<'a>(
                 vec![
                     menu::Item::CheckBox(
                         fl!("grid-view"),
+                        Some(icons::get_handle("grid-symbolic", 14)),
                         matches!(tab.config.view, tab::View::Grid),
                         Action::TabViewGrid,
                     ),
                     menu::Item::CheckBox(
                         fl!("list-view"),
+                        Some(icons::get_handle("list-large-symbolic", 14)),
                         matches!(tab.config.view, tab::View::List),
                         Action::TabViewList,
                     ),
@@ -447,24 +744,44 @@ pub fn dialog_menu<'a>(
             menu::items(
                 key_binds,
                 vec![
-                    menu::Item::Button(fl!("zoom-in"), Action::ZoomIn),
-                    menu::Item::Button(fl!("default-size"), Action::ZoomDefault),
-                    menu::Item::Button(fl!("zoom-out"), Action::ZoomOut),
+                    menu::Item::Button(
+                        fl!("zoom-in"),
+                        Some(icons::get_handle("value-increase-symbolic", 14)),
+                        Action::ZoomIn,
+                    ),
+                    menu::Item::Button(
+                        fl!("default-size"),
+                        Some(icons::get_handle("loupe-symbolic", 14)),
+                        Action::ZoomDefault,
+                    ),
+                    menu::Item::Button(
+                        fl!("zoom-out"),
+                        Some(icons::get_handle("value-decrease-symbolic", 14)),
+                        Action::ZoomOut,
+                    ),
                     menu::Item::Divider,
                     menu::Item::CheckBox(
                         fl!("show-hidden-files"),
+                        Some(icons::get_handle("view-conceal-symbolic", 14)),
                         tab.config.show_hidden,
                         Action::ToggleShowHidden,
                     ),
                     menu::Item::CheckBox(
                         fl!("list-directories-first"),
+                        Some(icons::get_handle("folder-symbolic", 14)),
                         tab.config.folders_first,
                         Action::ToggleFoldersFirst,
                     ),
-                    menu::Item::CheckBox(fl!("show-details"), show_details, Action::Preview),
+                    menu::Item::CheckBox(
+                        fl!("show-details"),
+                        Some(icons::get_handle("info-outline-symbolic", 14)),
+                        show_details,
+                        Action::Preview,
+                    ),
                     menu::Item::Divider,
                     menu_button_optional(
                         fl!("gallery-preview"),
+                        Some(icons::get_handle("image-round-symbolic", 14)),
                         Action::Gallery,
                         selected_gallery > 0,
                     ),
@@ -487,6 +804,7 @@ pub fn menu_bar<'a>(
     let sort_item = |label, sort, dir| {
         menu::Item::CheckBox(
             label,
+            None,
             sort_options.map_or(false, |(sort_name, sort_direction, _)| {
                 sort_name == sort && sort_direction == dir
             }),
@@ -518,25 +836,70 @@ pub fn menu_bar<'a>(
             menu::items(
                 key_binds,
                 vec![
-                    menu::Item::Button(fl!("new-tab"), Action::TabNew),
-                    menu::Item::Button(fl!("new-window"), Action::WindowNew),
-                    menu::Item::Button(fl!("new-folder"), Action::NewFolder),
-                    menu::Item::Button(fl!("new-file"), Action::NewFile),
+                    menu::Item::Button(
+                        fl!("new-tab"),
+                        Some(icons::get_handle("tab-new-filled-symbolic", 14)),
+                        Action::TabNew,
+                    ),
+                    menu::Item::Button(
+                        fl!("new-window"),
+                        Some(icons::get_handle("edit-copy-symbolic", 14)),
+                        Action::WindowNew,
+                    ),
+                    menu::Item::Button(
+                        fl!("new-folder"),
+                        Some(icons::get_handle("folder-new-symbolic", 14)),
+                        Action::NewFolder,
+                    ),
+                    menu::Item::Button(
+                        fl!("new-file"),
+                        Some(icons::get_handle("paper-symbolic", 14)),
+                        Action::NewFile,
+                    ),
                     menu_button_optional(
                         fl!("open"),
+                        Some(icons::get_handle("document-open-symbolic", 14)),
                         Action::Open,
                         (selected > 0 && selected_dir == 0) || (selected_dir == 1 && selected == 1),
                     ),
-                    menu_button_optional(fl!("open-with"), Action::OpenWith, selected == 1),
+                    menu_button_optional(
+                        fl!("open-with"),
+                        Some(icons::get_handle("external-link-symbolic", 14)),
+                        Action::OpenWith,
+                        selected == 1,
+                    ),
                     menu::Item::Divider,
-                    menu_button_optional(fl!("rename"), Action::Rename, selected > 0),
+                    menu_button_optional(
+                        fl!("rename"),
+                        Some(icons::get_handle("edit-symbolic", 14)),
+                        Action::Rename,
+                        selected > 0,
+                    ),
                     menu::Item::Divider,
-                    menu_button_optional(fl!("add-to-sidebar"), Action::AddToSidebar, selected > 0),
+                    menu_button_optional(
+                        fl!("add-to-sidebar"),
+                        Some(icons::get_handle("dock-left-symbolic", 14)),
+                        Action::AddToSidebar,
+                        selected > 0,
+                    ),
                     menu::Item::Divider,
-                    menu_button_optional(fl!("move-to-trash"), Action::MoveToTrash, selected > 0),
+                    menu_button_optional(
+                        fl!("move-to-trash"),
+                        Some(icons::get_handle("user-trash-symbolic", 14)),
+                        Action::MoveToTrash,
+                        selected > 0,
+                    ),
                     menu::Item::Divider,
-                    menu::Item::Button(fl!("close-tab"), Action::TabClose),
-                    menu::Item::Button(fl!("quit"), Action::WindowClose),
+                    menu::Item::Button(
+                        fl!("close-tab"),
+                        Some(icons::get_handle("cross-small-square-filled-symbolic", 14)),
+                        Action::TabClose,
+                    ),
+                    menu::Item::Button(
+                        fl!("quit"),
+                        Some(icons::get_handle("arrow-into-box-symbolic", 14)),
+                        Action::WindowClose,
+                    ),
                 ],
             ),
         ),
@@ -545,12 +908,35 @@ pub fn menu_bar<'a>(
             menu::items(
                 key_binds,
                 vec![
-                    menu_button_optional(fl!("cut"), Action::Cut, selected > 0),
-                    menu_button_optional(fl!("copy"), Action::Copy, selected > 0),
-                    menu_button_optional(fl!("paste"), Action::Paste, selected > 0),
-                    menu::Item::Button(fl!("select-all"), Action::SelectAll),
+                    menu_button_optional(
+                        fl!("cut"),
+                        Some(icons::get_handle("cut-symbolic", 14)),
+                        Action::Cut,
+                        selected > 0,
+                    ),
+                    menu_button_optional(
+                        fl!("copy"),
+                        Some(icons::get_handle("copy-symbolic", 14)),
+                        Action::Copy,
+                        selected > 0,
+                    ),
+                    menu_button_optional(
+                        fl!("paste"),
+                        Some(icons::get_handle("clipboard-symbolic", 14)),
+                        Action::Paste,
+                        selected > 0,
+                    ),
+                    menu::Item::Button(
+                        fl!("select-all"),
+                        Some(icons::get_handle("edit-select-all-symbolic", 14)),
+                        Action::SelectAll,
+                    ),
                     menu::Item::Divider,
-                    menu::Item::Button(fl!("history"), Action::EditHistory),
+                    menu::Item::Button(
+                        fl!("history"),
+                        Some(icons::get_handle("history-undo-symbolic", 14)),
+                        Action::EditHistory,
+                    ),
                 ],
             ),
         ),
@@ -559,42 +945,72 @@ pub fn menu_bar<'a>(
             menu::items(
                 key_binds,
                 vec![
-                    menu::Item::Button(fl!("zoom-in"), Action::ZoomIn),
-                    menu::Item::Button(fl!("default-size"), Action::ZoomDefault),
-                    menu::Item::Button(fl!("zoom-out"), Action::ZoomOut),
+                    menu::Item::Button(
+                        fl!("zoom-in"),
+                        Some(icons::get_handle("value-increase-symbolic", 14)),
+                        Action::ZoomIn,
+                    ),
+                    menu::Item::Button(
+                        fl!("default-size"),
+                        Some(icons::get_handle("loupe-symbolic", 14)),
+                        Action::ZoomDefault,
+                    ),
+                    menu::Item::Button(
+                        fl!("zoom-out"),
+                        Some(icons::get_handle("value-decrease-symbolic", 14)),
+                        Action::ZoomOut,
+                    ),
                     menu::Item::Divider,
                     menu::Item::CheckBox(
                         fl!("grid-view"),
+                        Some(icons::get_handle("grid-symbolic", 14)),
                         tab_opt.map_or(false, |tab| matches!(tab.config.view, tab::View::Grid)),
                         Action::TabViewGrid,
                     ),
                     menu::Item::CheckBox(
                         fl!("list-view"),
+                        Some(icons::get_handle("list-large-symbolic", 14)),
                         tab_opt.map_or(false, |tab| matches!(tab.config.view, tab::View::List)),
                         Action::TabViewList,
                     ),
                     menu::Item::Divider,
                     menu::Item::CheckBox(
                         fl!("show-hidden-files"),
+                        Some(icons::get_handle("view-conceal-symbolic", 14)),
                         tab_opt.map_or(false, |tab| tab.config.show_hidden),
                         Action::ToggleShowHidden,
                     ),
                     menu::Item::CheckBox(
                         fl!("list-directories-first"),
+                        Some(icons::get_handle("folder-symbolic", 14)),
                         tab_opt.map_or(false, |tab| tab.config.folders_first),
                         Action::ToggleFoldersFirst,
                     ),
-                    menu::Item::CheckBox(fl!("show-details"), config.show_details, Action::Preview),
+                    menu::Item::CheckBox(
+                        fl!("show-details"),
+                        Some(icons::get_handle("info-outline-symbolic", 14)),
+                        config.show_details,
+                        Action::Preview,
+                    ),
                     menu::Item::Divider,
                     menu_button_optional(
                         fl!("gallery-preview"),
+                        Some(icons::get_handle("image-round-symbolic", 14)),
                         Action::Gallery,
                         selected_gallery > 0,
                     ),
                     menu::Item::Divider,
-                    menu::Item::Button(fl!("menu-settings"), Action::Settings),
+                    menu::Item::Button(
+                        fl!("menu-settings"),
+                        Some(icons::get_handle("settings-symbolic", 14)),
+                        Action::Settings,
+                    ),
                     menu::Item::Divider,
-                    menu::Item::Button(fl!("menu-about"), Action::About),
+                    menu::Item::Button(
+                        fl!("menu-about"),
+                        Some(icons::get_handle("info-outline-symbolic", 14)),
+                        Action::About,
+                    ),
                 ],
             ),
         ),

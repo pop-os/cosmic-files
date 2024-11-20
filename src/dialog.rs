@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{
-    app::{self, cosmic::Cosmic, message, Core, Task},
+    app::{self, context_drawer, cosmic::Cosmic, message, Core, Task},
     cosmic_config, cosmic_theme, executor,
     iced::{
         event,
@@ -794,13 +794,16 @@ impl Application for App {
         (app, commands)
     }
 
-    fn context_drawer(&self) -> Option<Element<Message>> {
+    fn context_drawer(&self) -> Option<context_drawer::ContextDrawer<Self::Message>> {
         if !self.core.window.show_context {
             return None;
         }
 
         match &self.context_page {
-            ContextPage::Preview(_, kind) => Some(self.preview(kind).map(Message::from)),
+            ContextPage::Preview(_, kind) => Some(context_drawer::context_drawer(
+                self.preview(kind).map(Message::from),
+                Message::DialogCancel,
+            )),
             _ => None,
         }
     }
@@ -1401,7 +1404,6 @@ impl Application for App {
                         tab::Command::Preview(kind) => {
                             self.context_page = ContextPage::Preview(None, kind);
                             self.set_show_context(true);
-                            self.set_context_title(self.context_page.title());
                         }
                         tab::Command::WindowDrag => {
                             commands.push(window::drag(self.flags.window_id));
