@@ -7,13 +7,14 @@ use std::{
 };
 use walkdir::WalkDir;
 
-use super::{copy_unique_path, Controller, ReplaceResult};
+use super::{copy_unique_path, Controller, OperationSelection, ReplaceResult};
 
 pub struct Context {
     buf: Vec<u8>,
     controller: Controller,
     on_progress: Box<dyn Fn(&Op, &Progress) + 'static>,
     on_replace: Box<dyn Fn(&Op) -> ReplaceResult + 'static>,
+    pub(crate) op_sel: OperationSelection,
     replace_result_opt: Option<ReplaceResult>,
 }
 
@@ -24,6 +25,7 @@ impl Context {
             controller,
             on_progress: Box::new(|_op, _progress| {}),
             on_replace: Box::new(|_op| ReplaceResult::Cancel),
+            op_sel: OperationSelection::default(),
             replace_result_opt: None,
         }
     }
@@ -88,6 +90,8 @@ impl Context {
                 }
                 ops.push(op);
             }
+
+            self.op_sel.ignored.push(from_parent);
         }
 
         // Add cleanup ops after standard ops, in reverse
@@ -106,12 +110,19 @@ impl Context {
                 total_bytes: None,
             };
             (self.on_progress)(&op, &progress);
-            if !op.run(self, progress).map_err(|err| {
+            if op.run(self, progress).map_err(|err| {
                 format!(
                     "failed to {:?} {:?} to {:?}: {}",
                     op.kind, op.from, op.to, err
                 )
             })? {
+                // The from path is ignored in the operation selection if it is a top level item
+                if self.op_sel.ignored.contains(&op.from) {
+                    // So add the to path to the selection
+                    self.op_sel.selected.push(op.to.clone());
+                }
+            } else {
+                // Cancelled
                 return Ok(false);
             }
         }

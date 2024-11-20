@@ -43,7 +43,7 @@ use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::{
-    cell::{Cell, RefCell},
+    cell::Cell,
     cmp::Ordering,
     collections::HashMap,
     fmt::{self, Display},
@@ -1015,7 +1015,7 @@ pub enum Command {
     Action(Action),
     AddNetworkDrive,
     AddToSidebar(PathBuf),
-    ChangeLocation(String, Location, Option<PathBuf>),
+    ChangeLocation(String, Location, Option<Vec<PathBuf>>),
     DropFiles(PathBuf, ClipboardPaste),
     EmptyTrash,
     #[cfg(feature = "desktop")]
@@ -1663,7 +1663,6 @@ pub struct Tab {
     scrollable_id: widget::Id,
     select_focus: Option<usize>,
     select_range: Option<(usize, usize)>,
-    cached_selected: RefCell<Option<bool>>,
     clicked: Option<usize>,
     selected_clicked: bool,
     last_right_click: Option<usize>,
@@ -1751,7 +1750,6 @@ impl Tab {
             scrollable_id: widget::Id::unique(),
             select_focus: None,
             select_range: None,
-            cached_selected: RefCell::new(None),
             clicked: None,
             dnd_hovered: None,
             selected_clicked: false,
@@ -1821,7 +1819,6 @@ impl Tab {
     }
 
     pub fn select_all(&mut self) {
-        *self.cached_selected.borrow_mut() = None;
         if let Some(ref mut items) = self.items_opt {
             for item in items.iter_mut() {
                 if !self.config.show_hidden && item.hidden {
@@ -1834,7 +1831,6 @@ impl Tab {
     }
 
     pub fn select_none(&mut self) -> bool {
-        *self.cached_selected.borrow_mut() = None;
         self.select_focus = None;
         let mut had_selection = false;
         if let Some(ref mut items) = self.items_opt {
@@ -1849,7 +1845,6 @@ impl Tab {
     }
 
     pub fn select_name(&mut self, name: &str) {
-        *self.cached_selected.borrow_mut() = None;
         if let Some(ref mut items) = self.items_opt {
             for item in items.iter_mut() {
                 item.selected = item.name == name;
@@ -1857,18 +1852,20 @@ impl Tab {
         }
     }
 
-    pub fn select_path(&mut self, path: PathBuf) {
-        let location = Location::Path(path);
-        *self.cached_selected.borrow_mut() = None;
+    pub fn select_paths(&mut self, paths: Vec<PathBuf>) {
         if let Some(ref mut items) = self.items_opt {
             for item in items.iter_mut() {
-                item.selected = item.location_opt.as_ref() == Some(&location);
+                item.selected = false;
+                if let Some(path) = item.path_opt() {
+                    if paths.contains(path) {
+                        item.selected = true;
+                    }
+                }
             }
         }
     }
 
     fn select_position(&mut self, row: usize, col: usize, mod_shift: bool) -> bool {
-        *self.cached_selected.borrow_mut() = None;
         let mut start = (row, col);
         let mut end = (row, col);
         if mod_shift {
@@ -1919,7 +1916,6 @@ impl Tab {
     }
 
     pub fn select_rect(&mut self, rect: Rectangle, mod_ctrl: bool, mod_shift: bool) {
-        *self.cached_selected.borrow_mut() = None;
         if let Some(ref mut items) = self.items_opt {
             for item in items.iter_mut() {
                 let was_overlapped = item.overlaps_drag_rect;
@@ -1996,7 +1992,6 @@ impl Tab {
     }
 
     fn select_first_pos_opt(&self) -> Option<(usize, usize)> {
-        *self.cached_selected.borrow_mut() = None;
         let items = self.items_opt.as_ref()?;
         let mut first = None;
         for item in items.iter() {
@@ -2026,7 +2021,6 @@ impl Tab {
     }
 
     fn select_last_pos_opt(&self) -> Option<(usize, usize)> {
-        *self.cached_selected.borrow_mut() = None;
         let items = self.items_opt.as_ref()?;
         let mut last = None;
         for item in items.iter() {
@@ -2231,7 +2225,6 @@ impl Tab {
                             l.iter()
                                 .any(|(e_i, e)| Some(e_i) == click_i_opt.as_ref() && e.selected)
                         });
-                    *self.cached_selected.borrow_mut() = None;
                     if let Some(ref mut items) = self.items_opt {
                         for (i, item) in items.iter_mut().enumerate() {
                             if Some(i) == click_i_opt {
@@ -2680,7 +2673,6 @@ impl Tab {
             }
             Message::RightClick(click_i_opt) => {
                 self.update(Message::Click(click_i_opt), modifiers);
-                *self.cached_selected.borrow_mut() = None;
                 if let Some(ref mut items) = self.items_opt {
                     if !click_i_opt.map_or(false, |click_i| {
                         items.get(click_i).map_or(false, |x| x.selected)
@@ -2978,7 +2970,7 @@ impl Tab {
             } else if location != self.location {
                 if location.path_opt().map_or(true, |path| path.is_dir()) {
                     let prev_path = if let Some(path) = self.location.path_opt() {
-                        Some(path.to_path_buf())
+                        Some(vec![path.to_path_buf()])
                     } else {
                         None
                     };

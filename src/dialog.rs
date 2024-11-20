@@ -1381,7 +1381,7 @@ impl Application for App {
                         tab::Command::Action(action) => {
                             commands.push(self.update(Message::from(action.message())));
                         }
-                        tab::Command::ChangeLocation(_tab_title, _tab_path, _selection_path) => {
+                        tab::Command::ChangeLocation(_tab_title, _tab_path, _selection_paths) => {
                             commands.push(Task::batch([self.update_watcher(), self.rescan_tab()]));
                         }
                         tab::Command::Iced(iced_command) => {

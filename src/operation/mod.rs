@@ -324,55 +324,6 @@ pub enum ReplaceResult {
     Cancel,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub enum Operation {
-    /// Compress files
-    Compress {
-        paths: Vec<PathBuf>,
-        to: PathBuf,
-        archive_type: ArchiveType,
-    },
-    /// Copy items
-    Copy {
-        paths: Vec<PathBuf>,
-        to: PathBuf,
-    },
-    /// Move items to the trash
-    Delete {
-        paths: Vec<PathBuf>,
-    },
-    /// Empty the trash
-    EmptyTrash,
-    /// Uncompress files
-    Extract {
-        paths: Vec<PathBuf>,
-        to: PathBuf,
-    },
-    /// Move items
-    Move {
-        paths: Vec<PathBuf>,
-        to: PathBuf,
-    },
-    NewFile {
-        path: PathBuf,
-    },
-    NewFolder {
-        path: PathBuf,
-    },
-    Rename {
-        from: PathBuf,
-        to: PathBuf,
-    },
-    /// Restore a path from the trash
-    Restore {
-        paths: Vec<trash::TrashItem>,
-    },
-    /// Set executable and launch
-    SetExecutableAndLaunch {
-        path: PathBuf,
-    },
-}
-
 async fn copy_or_move(
     paths: Vec<PathBuf>,
     to: PathBuf,
@@ -380,9 +331,9 @@ async fn copy_or_move(
     id: u64,
     msg_tx: &Arc<TokioMutex<Sender<Message>>>,
     controller: Controller,
-) -> Result<(), String> {
+) -> Result<OperationSelection, String> {
     let msg_tx = msg_tx.clone();
-    tokio::task::spawn_blocking(move || -> Result<(), String> {
+    tokio::task::spawn_blocking(move || -> Result<OperationSelection, String> {
         log::info!(
             "{} {:?} to {:?}",
             if moving { "Move" } else { "Copy" },
@@ -446,7 +397,7 @@ async fn copy_or_move(
 
         context.recursive_copy_or_move(from_to_pairs, moving)?;
 
-        Ok(())
+        Ok(context.op_sel)
     })
     .await
     .map_err(err_str)?
@@ -553,6 +504,63 @@ fn paths_parent_name<'a>(paths: &'a Vec<PathBuf>) -> Cow<'a, str> {
     file_name(parent)
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct OperationSelection {
+    // Paths to ignore if they are already selected
+    pub ignored: Vec<PathBuf>,
+    // Paths to select
+    pub selected: Vec<PathBuf>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum Operation {
+    /// Compress files
+    Compress {
+        paths: Vec<PathBuf>,
+        to: PathBuf,
+        archive_type: ArchiveType,
+    },
+    /// Copy items
+    Copy {
+        paths: Vec<PathBuf>,
+        to: PathBuf,
+    },
+    /// Move items to the trash
+    Delete {
+        paths: Vec<PathBuf>,
+    },
+    /// Empty the trash
+    EmptyTrash,
+    /// Uncompress files
+    Extract {
+        paths: Vec<PathBuf>,
+        to: PathBuf,
+    },
+    /// Move items
+    Move {
+        paths: Vec<PathBuf>,
+        to: PathBuf,
+    },
+    NewFile {
+        path: PathBuf,
+    },
+    NewFolder {
+        path: PathBuf,
+    },
+    Rename {
+        from: PathBuf,
+        to: PathBuf,
+    },
+    /// Restore a path from the trash
+    Restore {
+        items: Vec<trash::TrashItem>,
+    },
+    /// Set executable and launch
+    SetExecutableAndLaunch {
+        path: PathBuf,
+    },
+}
+
 impl Operation {
     pub fn pending_text(&self, percent: i32, state: ControllerState) -> String {
         let progress = || match state {
@@ -610,7 +618,7 @@ impl Operation {
             Self::Rename { from, to } => {
                 fl!("renaming", from = file_name(from), to = file_name(to))
             }
-            Self::Restore { paths } => fl!("restoring", items = paths.len(), progress = progress()),
+            Self::Restore { items } => fl!("restoring", items = items.len(), progress = progress()),
             Self::SetExecutableAndLaunch { path } => {
                 fl!("setting-executable-and-launching", name = file_name(path))
             }
@@ -661,7 +669,7 @@ impl Operation {
                 parent = parent_name(path)
             ),
             Self::Rename { from, to } => fl!("renamed", from = file_name(from), to = file_name(to)),
-            Self::Restore { paths } => fl!("restored", items = paths.len()),
+            Self::Restore { items } => fl!("restored", items = items.len()),
             Self::SetExecutableAndLaunch { path } => {
                 fl!("set-executable-and-launched", name = file_name(path))
             }
@@ -701,7 +709,7 @@ impl Operation {
         id: u64,
         msg_tx: &Arc<TokioMutex<Sender<Message>>>,
         controller: Controller,
-    ) -> Result<(), String> {
+    ) -> Result<OperationSelection, String> {
         let _ = msg_tx
             .lock()
             .await
@@ -709,16 +717,21 @@ impl Operation {
             .await;
 
         //TODO: IF ERROR, RETURN AN Operation THAT CAN UNDO THE CURRENT STATE
-        match self {
+        let paths = match self {
             Self::Compress {
                 paths,
                 to,
                 archive_type,
             } => {
                 let msg_tx = msg_tx.clone();
-                tokio::task::spawn_blocking(move || -> Result<(), String> {
+                tokio::task::spawn_blocking(move || -> Result<OperationSelection, String> {
                     let Some(relative_root) = to.parent() else {
                         return Err(format!("path {:?} has no parent directory", to));
+                    };
+
+                    let op_sel = OperationSelection {
+                        ignored: paths.clone(),
+                        selected: vec![to.clone()],
                     };
 
                     let mut paths = paths;
@@ -844,14 +857,14 @@ impl Operation {
                         }
                     }
 
-                    Ok(())
+                    Ok(op_sel)
                 })
                 .await
                 .map_err(err_str)?
-                .map_err(err_str)?;
+                .map_err(err_str)?
             }
             Self::Copy { paths, to } => {
-                copy_or_move(paths, to, false, id, msg_tx, controller).await?;
+                copy_or_move(paths, to, false, id, msg_tx, controller).await?
             }
             Self::Delete { paths } => {
                 let total = paths.len();
@@ -873,6 +886,7 @@ impl Operation {
                         .map_err(err_str)?;
                     //TODO: items_opt allows for easy restore
                 }
+                OperationSelection::default()
             }
             Self::EmptyTrash => {
                 #[cfg(any(
@@ -908,11 +922,13 @@ impl Operation {
                     .await
                     .map_err(err_str)??;
                 }
+                OperationSelection::default()
             }
             Self::Extract { paths, to } => {
                 let msg_tx = msg_tx.clone();
-                tokio::task::spawn_blocking(move || -> Result<(), String> {
+                tokio::task::spawn_blocking(move || -> Result<OperationSelection, String> {
                     let total_paths = paths.len();
+                    let mut op_sel = OperationSelection::default();
                     for (i, path) in paths.iter().enumerate() {
                         controller.check()?;
 
@@ -936,6 +952,9 @@ impl Operation {
                                     new_dir = copy_unique_path(&new_dir, new_dir_parent);
                                 }
                             }
+
+                            op_sel.ignored.push(path.clone());
+                            op_sel.selected.push(new_dir.clone());
 
                             let msg_tx = msg_tx.clone();
                             let controller = controller.clone();
@@ -968,7 +987,7 @@ impl Operation {
                                         .map(io::BufReader::new)
                                         .map(bzip2::read::BzDecoder::new)
                                         .map(tar::Archive::new)
-                                        .and_then(|mut archive| archive.unpack(new_dir))
+                                        .and_then(|mut archive| archive.unpack(&new_dir))
                                         .map_err(err_str)?
                                 }
                                 #[cfg(feature = "liblzma")]
@@ -977,7 +996,7 @@ impl Operation {
                                         .map(io::BufReader::new)
                                         .map(liblzma::read::XzDecoder::new)
                                         .map(tar::Archive::new)
-                                        .and_then(|mut archive| archive.unpack(new_dir))
+                                        .and_then(|mut archive| archive.unpack(&new_dir))
                                         .map_err(err_str)?
                                 }
                                 _ => Err(format!("unsupported mime type {:?}", mime))?,
@@ -985,38 +1004,50 @@ impl Operation {
                         }
                     }
 
-                    Ok(())
+                    Ok(op_sel)
                 })
                 .await
                 .map_err(err_str)?
-                .map_err(err_str)?;
+                .map_err(err_str)?
             }
             Self::Move { paths, to } => {
-                copy_or_move(paths, to, true, id, msg_tx, controller).await?;
+                copy_or_move(paths, to, true, id, msg_tx, controller).await?
             }
             Self::NewFolder { path } => {
-                controller.check()?;
-
-                tokio::task::spawn_blocking(|| fs::create_dir(path))
-                    .await
-                    .map_err(err_str)?
-                    .map_err(err_str)?;
+                tokio::task::spawn_blocking(move || -> Result<OperationSelection, String> {
+                    controller.check()?;
+                    fs::create_dir(&path).map_err(err_str)?;
+                    Ok(OperationSelection {
+                        ignored: Vec::new(),
+                        selected: vec![path],
+                    })
+                })
+                .await
+                .map_err(err_str)??
             }
             Self::NewFile { path } => {
-                controller.check()?;
-
-                tokio::task::spawn_blocking(|| fs::File::create(path))
-                    .await
-                    .map_err(err_str)?
-                    .map_err(err_str)?;
+                tokio::task::spawn_blocking(move || -> Result<OperationSelection, String> {
+                    controller.check()?;
+                    fs::File::create(&path).map_err(err_str)?;
+                    Ok(OperationSelection {
+                        ignored: Vec::new(),
+                        selected: vec![path],
+                    })
+                })
+                .await
+                .map_err(err_str)??
             }
             Self::Rename { from, to } => {
-                controller.check()?;
-
-                tokio::task::spawn_blocking(|| fs::rename(from, to))
-                    .await
-                    .map_err(err_str)?
-                    .map_err(err_str)?;
+                tokio::task::spawn_blocking(move || -> Result<OperationSelection, String> {
+                    controller.check()?;
+                    fs::rename(&from, &to).map_err(err_str)?;
+                    Ok(OperationSelection {
+                        ignored: vec![from],
+                        selected: vec![to],
+                    })
+                })
+                .await
+                .map_err(err_str)??
             }
             #[cfg(target_os = "macos")]
             Self::Restore { .. } => {
@@ -1024,9 +1055,10 @@ impl Operation {
                 return Err("Restoring from trash is not supported on macos".to_string());
             }
             #[cfg(not(target_os = "macos"))]
-            Self::Restore { paths } => {
-                let total = paths.len();
-                for (i, path) in paths.into_iter().enumerate() {
+            Self::Restore { items } => {
+                let total = items.len();
+                let mut paths = Vec::with_capacity(total);
+                for (i, item) in items.into_iter().enumerate() {
                     controller.check()?;
 
                     let _ = msg_tx
@@ -1038,10 +1070,16 @@ impl Operation {
                         ))
                         .await;
 
-                    tokio::task::spawn_blocking(|| trash::os_limited::restore_all([path]))
+                    paths.push(item.original_path());
+
+                    tokio::task::spawn_blocking(|| trash::os_limited::restore_all([item]))
                         .await
                         .map_err(err_str)?
                         .map_err(err_str)?;
+                }
+                OperationSelection {
+                    ignored: Vec::new(),
+                    selected: paths,
                 }
             }
             Self::SetExecutableAndLaunch { path } => {
@@ -1070,8 +1108,9 @@ impl Operation {
                 .await
                 .map_err(err_str)?
                 .map_err(err_str)?;
+                OperationSelection::default()
             }
-        }
+        };
 
         let _ = msg_tx
             .lock()
@@ -1079,7 +1118,7 @@ impl Operation {
             .send(Message::PendingProgress(id, 100.0))
             .await;
 
-        Ok(())
+        Ok(paths)
     }
 }
 
@@ -1112,7 +1151,10 @@ mod tests {
     const BUF_SIZE: usize = 8;
 
     /// Simple wrapper around `[Operation::Copy]`
-    pub async fn operation_copy(paths: Vec<PathBuf>, to: PathBuf) -> Result<(), String> {
+    pub async fn operation_copy(
+        paths: Vec<PathBuf>,
+        to: PathBuf,
+    ) -> Result<OperationSelection, String> {
         let id = fastrand::u64(0..u64::MAX);
         let (tx, mut rx) = mpsc::channel(BUF_SIZE);
         let paths_clone = paths.clone();

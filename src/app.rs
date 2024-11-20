@@ -64,7 +64,7 @@ use crate::{
     localize::LANGUAGE_SORTER,
     menu, mime_app, mime_icon,
     mounter::{MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage, MOUNTERS},
-    operation::{Controller, Operation, ReplaceResult},
+    operation::{Controller, Operation, OperationSelection, ReplaceResult},
     spawn_detached::spawn_detached,
     tab::{self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION},
 };
@@ -308,7 +308,7 @@ pub enum Message {
     PasteContents(PathBuf, ClipboardPaste),
     PendingCancel(u64),
     PendingCancelAll,
-    PendingComplete(u64),
+    PendingComplete(u64, OperationSelection),
     PendingDismiss,
     PendingError(u64, String),
     PendingPause(u64, bool),
@@ -335,7 +335,7 @@ pub enum Message {
         Location,
         Option<tab::Item>,
         Vec<tab::Item>,
-        Option<PathBuf>,
+        Option<Vec<PathBuf>>,
     ),
     TabView(Option<Entity>, tab::View),
     ToggleContextPage(ContextPage),
@@ -655,7 +655,7 @@ impl App {
         &mut self,
         location: Location,
         activate: bool,
-        selection_path: Option<PathBuf>,
+        selection_paths: Option<Vec<PathBuf>>,
     ) -> (Entity, Task<Message>) {
         let mut tab = Tab::new(location.clone(), self.config.tab);
         tab.mode = match self.mode {
@@ -683,7 +683,7 @@ impl App {
             Task::batch([
                 self.update_title(),
                 self.update_watcher(),
-                self.rescan_tab(entity, location, selection_path),
+                self.rescan_tab(entity, location, selection_paths),
             ]),
         )
     }
@@ -692,9 +692,9 @@ impl App {
         &mut self,
         location: Location,
         activate: bool,
-        selection_path: Option<PathBuf>,
+        selection_paths: Option<Vec<PathBuf>>,
     ) -> Task<Message> {
-        self.open_tab_entity(location, activate, selection_path).1
+        self.open_tab_entity(location, activate, selection_paths).1
     }
 
     fn operation(&mut self, operation: Operation) {
@@ -717,13 +717,38 @@ impl App {
         }
     }
 
+    fn rescan_operation_selection(&mut self, op_sel: OperationSelection) -> Task<Message> {
+        log::info!("rescan_operation_selection {:?}", op_sel);
+        let entity = self.tab_model.active();
+        let Some(tab) = self.tab_model.data::<Tab>(entity) else {
+            return Task::none();
+        };
+        let Some(ref items) = tab.items_opt() else {
+            return Task::none();
+        };
+        for item in items.iter() {
+            if item.selected {
+                if let Some(path) = item.path_opt() {
+                    if op_sel.selected.contains(path) || op_sel.ignored.contains(path) {
+                        // Ignore if path in selected or ignored paths
+                        continue;
+                    }
+                }
+
+                // Return if there is a previous selection not matching
+                return Task::none();
+            }
+        }
+        self.rescan_tab(entity, tab.location.clone(), Some(op_sel.selected))
+    }
+
     fn rescan_tab(
         &mut self,
         entity: Entity,
         location: Location,
-        selection_path: Option<PathBuf>,
+        selection_paths: Option<Vec<PathBuf>>,
     ) -> Task<Message> {
-        log::info!("rescan_tab {entity:?} {location:?} {selection_path:?}");
+        log::info!("rescan_tab {entity:?} {location:?} {selection_paths:?}");
         let icon_sizes = self.config.tab.icon_sizes;
         Task::perform(
             async move {
@@ -734,7 +759,7 @@ impl App {
                         location,
                         parent_item_opt,
                         items,
-                        selection_path,
+                        selection_paths,
                     )),
                     Err(err) => {
                         log::warn!("failed to rescan: {}", err);
@@ -2264,7 +2289,7 @@ impl Application for App {
                             Some(self.open_tab(
                                 Location::Path(parent.to_path_buf()),
                                 true,
-                                Some(path),
+                                Some(vec![path]),
                             ))
                         } else {
                             None
@@ -2381,9 +2406,9 @@ impl Application for App {
                     self.progress_operations.remove(&id);
                 }
             }
-            Message::PendingComplete(id) => {
-                let mut commands = Vec::with_capacity(3);
-
+            Message::PendingComplete(id, op_sel) => {
+                let mut commands = Vec::with_capacity(4);
+                // Show toast for some operations
                 if let Some((op, _, _)) = self.pending_operations.remove(&id) {
                     if let Some(description) = op.toast() {
                         if let Operation::Delete { ref paths } = op {
@@ -2412,6 +2437,8 @@ impl Application for App {
                 }
                 // Potentially show a notification
                 commands.push(self.update_notification());
+                // Rescan and select based on operation
+                commands.push(self.rescan_operation_selection(op_sel));
                 // Manually rescan any trash tabs after any operation is completed
                 commands.push(self.rescan_trash());
                 // if search is active, update "search" tab view
@@ -2579,7 +2606,7 @@ impl Application for App {
                 }
             }
             Message::RestoreFromTrash(entity_opt) => {
-                let mut paths = Vec::new();
+                let mut trash_items = Vec::new();
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
                     if let Some(items) = tab.items_opt() {
@@ -2587,7 +2614,7 @@ impl Application for App {
                             if item.selected {
                                 match &item.metadata {
                                     ItemMetadata::Trash { entry, .. } => {
-                                        paths.push(entry.clone());
+                                        trash_items.push(entry.clone());
                                     }
                                     _ => {
                                         //TODO: error on trying to restore non-trash file?
@@ -2597,8 +2624,8 @@ impl Application for App {
                         }
                     }
                 }
-                if !paths.is_empty() {
-                    self.operation(Operation::Restore { paths });
+                if !trash_items.is_empty() {
+                    self.operation(Operation::Restore { items: trash_items });
                 }
             }
             Message::SearchActivate => {
@@ -2735,14 +2762,14 @@ impl Application for App {
                             config_set!(favorites, favorites);
                             commands.push(self.update_config());
                         }
-                        tab::Command::ChangeLocation(tab_title, tab_path, selection_path) => {
+                        tab::Command::ChangeLocation(tab_title, tab_path, selection_paths) => {
                             self.activate_nav_model_location(&tab_path);
 
                             self.tab_model.text_set(entity, tab_title);
                             commands.push(Task::batch([
                                 self.update_title(),
                                 self.update_watcher(),
-                                self.rescan_tab(entity, tab_path, selection_path),
+                                self.rescan_tab(entity, tab_path, selection_paths),
                             ]));
                         }
                         tab::Command::DropFiles(to, from) => {
@@ -2816,14 +2843,14 @@ impl Application for App {
                 };
                 return self.open_tab(location, true, None);
             }
-            Message::TabRescan(entity, location, parent_item_opt, items, selection_path) => {
+            Message::TabRescan(entity, location, parent_item_opt, items, selection_paths) => {
                 match self.tab_model.data_mut::<Tab>(entity) {
                     Some(tab) => {
                         if location == tab.location {
                             tab.parent_item_opt = parent_item_opt;
                             tab.set_items(items);
-                            if let Some(selection_path) = selection_path {
-                                tab.select_path(selection_path);
+                            if let Some(selection_paths) = selection_paths {
+                                tab.select_paths(selection_paths);
                             }
                         }
                     }
@@ -2882,8 +2909,8 @@ impl Application for App {
                     Message::UndoTrashStart(paths)
                 });
             }
-            Message::UndoTrashStart(paths) => {
-                self.operation(Operation::Restore { paths });
+            Message::UndoTrashStart(items) => {
+                self.operation(Operation::Restore { items });
             }
             Message::WindowClose => {
                 if let Some(window_id) = self.window_id_opt.take() {
@@ -4420,8 +4447,12 @@ impl Application for App {
                 stream::channel(16, move |msg_tx| async move {
                     let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
                     match pending_operation.perform(id, &msg_tx, cancelled).await {
-                        Ok(()) => {
-                            let _ = msg_tx.lock().await.send(Message::PendingComplete(id)).await;
+                        Ok(result_paths) => {
+                            let _ = msg_tx
+                                .lock()
+                                .await
+                                .send(Message::PendingComplete(id, result_paths))
+                                .await;
                         }
                         Err(err) => {
                             let _ = msg_tx
