@@ -313,7 +313,6 @@ pub enum Message {
     PendingError(u64, String),
     PendingPause(u64, bool),
     PendingPauseAll(bool),
-    PendingProgress(u64, f32),
     Preview(Option<Entity>),
     RescanTrash,
     Rename(Option<Entity>),
@@ -521,10 +520,10 @@ pub struct App {
     #[cfg(feature = "notify")]
     notification_opt: Option<Arc<Mutex<notify_rust::NotificationHandle>>>,
     pending_operation_id: u64,
-    pending_operations: BTreeMap<u64, (Operation, f32, Controller)>,
+    pending_operations: BTreeMap<u64, (Operation, Controller)>,
     progress_operations: BTreeSet<u64>,
     complete_operations: BTreeMap<u64, Operation>,
-    failed_operations: BTreeMap<u64, (Operation, f32, Controller, String)>,
+    failed_operations: BTreeMap<u64, (Operation, Controller, String)>,
     search_id: widget::Id,
     #[cfg(feature = "wayland")]
     surface_ids: HashMap<WlOutput, WindowId>,
@@ -704,7 +703,7 @@ impl App {
             self.progress_operations.insert(id);
         }
         self.pending_operations
-            .insert(id, (operation, 0.0, Controller::new()));
+            .insert(id, (operation, Controller::new()));
     }
 
     fn remove_window(&mut self, id: &window::Id) {
@@ -1252,10 +1251,11 @@ impl App {
 
         if !self.pending_operations.is_empty() {
             let mut section = widget::settings::section().title(fl!("pending"));
-            for (id, (op, progress, controller)) in self.pending_operations.iter().rev() {
+            for (id, (op, controller)) in self.pending_operations.iter().rev() {
+                let progress = controller.progress();
                 section = section.add(widget::column::with_children(vec![
                     widget::row::with_children(vec![
-                        widget::progress_bar(0.0..=100.0, *progress)
+                        widget::progress_bar(0.0..=1.0, progress)
                             .height(progress_bar_height)
                             .into(),
                         if controller.is_paused() {
@@ -1292,7 +1292,7 @@ impl App {
                     ])
                     .align_y(Alignment::Center)
                     .into(),
-                    widget::text(op.pending_text(*progress as i32, controller.state())).into(),
+                    widget::text(op.pending_text(progress, controller.state())).into(),
                 ]));
             }
             children.push(section.into());
@@ -1300,9 +1300,10 @@ impl App {
 
         if !self.failed_operations.is_empty() {
             let mut section = widget::settings::section().title(fl!("failed"));
-            for (_id, (op, progress, controller, error)) in self.failed_operations.iter().rev() {
+            for (_id, (op, controller, error)) in self.failed_operations.iter().rev() {
+                let progress = controller.progress();
                 section = section.add(widget::column::with_children(vec![
-                    widget::text(op.pending_text(*progress as i32, controller.state())).into(),
+                    widget::text(op.pending_text(progress, controller.state())).into(),
                     widget::text(error).into(),
                 ]));
             }
@@ -2395,13 +2396,13 @@ impl Application for App {
                 }
             }
             Message::PendingCancel(id) => {
-                if let Some((_, _, controller)) = self.pending_operations.get(&id) {
+                if let Some((_, controller)) = self.pending_operations.get(&id) {
                     controller.cancel();
                     self.progress_operations.remove(&id);
                 }
             }
             Message::PendingCancelAll => {
-                for (id, (_, _, controller)) in self.pending_operations.iter() {
+                for (id, (_, controller)) in self.pending_operations.iter() {
                     controller.cancel();
                     self.progress_operations.remove(&id);
                 }
@@ -2409,7 +2410,7 @@ impl Application for App {
             Message::PendingComplete(id, op_sel) => {
                 let mut commands = Vec::with_capacity(4);
                 // Show toast for some operations
-                if let Some((op, _, _)) = self.pending_operations.remove(&id) {
+                if let Some((op, _)) = self.pending_operations.remove(&id) {
                     if let Some(description) = op.toast() {
                         if let Operation::Delete { ref paths } = op {
                             let paths: Arc<[PathBuf]> = Arc::from(paths.as_slice());
@@ -2431,7 +2432,7 @@ impl Application for App {
                 if !self
                     .pending_operations
                     .iter()
-                    .any(|(_id, (op, _, _))| op.show_progress_notification())
+                    .any(|(_id, (op, _))| op.show_progress_notification())
                 {
                     self.progress_operations.clear();
                 }
@@ -2449,21 +2450,20 @@ impl Application for App {
                 self.progress_operations.clear();
             }
             Message::PendingError(id, err) => {
-                if let Some((op, progress, controller)) = self.pending_operations.remove(&id) {
+                if let Some((op, controller)) = self.pending_operations.remove(&id) {
                     // Only show dialog if not cancelled
                     if !controller.is_cancelled() {
                         self.dialog_pages.push_back(DialogPage::FailedOperation(id));
                     }
                     // Remove from progress
                     self.progress_operations.remove(&id);
-                    self.failed_operations
-                        .insert(id, (op, progress, controller, err));
+                    self.failed_operations.insert(id, (op, controller, err));
                 }
                 // Close progress notification if all relavent operations are finished
                 if !self
                     .pending_operations
                     .iter()
-                    .any(|(_id, (op, _, _))| op.show_progress_notification())
+                    .any(|(_id, (op, _))| op.show_progress_notification())
                 {
                     self.progress_operations.clear();
                 }
@@ -2471,7 +2471,7 @@ impl Application for App {
                 return self.rescan_trash();
             }
             Message::PendingPause(id, pause) => {
-                if let Some((_, _, controller)) = self.pending_operations.get(&id) {
+                if let Some((_, controller)) = self.pending_operations.get(&id) {
                     if pause {
                         controller.pause();
                     } else {
@@ -2480,19 +2480,13 @@ impl Application for App {
                 }
             }
             Message::PendingPauseAll(pause) => {
-                for (_id, (_, _, controller)) in self.pending_operations.iter() {
+                for (_id, (_, controller)) in self.pending_operations.iter() {
                     if pause {
                         controller.pause();
                     } else {
                         controller.unpause();
                     }
                 }
-            }
-            Message::PendingProgress(id, new_progress) => {
-                if let Some((_, progress, _)) = self.pending_operations.get_mut(&id) {
-                    *progress = new_progress;
-                }
-                return self.update_notification();
             }
             Message::Preview(entity_opt) => {
                 match self.mode {
@@ -3454,7 +3448,7 @@ impl Application for App {
                 ),
             DialogPage::FailedOperation(id) => {
                 //TODO: try next dialog page (making sure index is used by Dialog messages)?
-                let (operation, _, _, err) = self.failed_operations.get(id)?;
+                let (operation, _, err) = self.failed_operations.get(id)?;
 
                 //TODO: nice description of error
                 widget::dialog()
@@ -3901,13 +3895,14 @@ impl Application for App {
         let mut total_progress = 0.0;
         let mut count = 0;
         let mut all_paused = true;
-        for (_id, (op, progress, controller)) in self.pending_operations.iter() {
+        for (_id, (op, controller)) in self.pending_operations.iter() {
             if !controller.is_paused() {
                 all_paused = false;
             }
             if op.show_progress_notification() {
+                let progress = controller.progress();
                 if title.is_empty() {
-                    title = op.pending_text(*progress as i32, controller.state());
+                    title = op.pending_text(progress, controller.state());
                 }
                 total_progress += progress;
                 count += 1;
@@ -3917,7 +3912,7 @@ impl Application for App {
         // Adjust the progress bar so it does not jump around when operations finish
         for id in self.progress_operations.iter() {
             if self.complete_operations.contains_key(&id) {
-                total_progress += 100.0;
+                total_progress += 1.0;
                 count += 1;
             }
         }
@@ -3943,7 +3938,7 @@ impl Application for App {
         //TODO: get height from theme?
         let progress_bar_height = Length::Fixed(4.0);
         let progress_bar =
-            widget::progress_bar(0.0..=100.0, total_progress).height(progress_bar_height);
+            widget::progress_bar(0.0..=1.0, total_progress).height(progress_bar_height);
 
         let container = widget::layer_container(widget::column::with_children(vec![
             widget::row::with_children(vec![
@@ -4397,7 +4392,11 @@ impl Application for App {
         if !self.pending_operations.is_empty() {
             //TODO: inhibit suspend/shutdown?
 
-            if self.window_id_opt.is_none() {
+            if self.window_id_opt.is_some() {
+                // Refresh progress when window is open and operations are in progress
+                subscriptions.push(window::frames().map(|_| Message::None));
+            } else {
+                // Handle notification when window is closed and operations are in progress
                 #[cfg(feature = "notify")]
                 {
                     struct NotificationSubscription;
@@ -4437,16 +4436,16 @@ impl Application for App {
             }
         }
 
-        for (id, (pending_operation, _, cancelled)) in self.pending_operations.iter() {
+        for (id, (pending_operation, controller)) in self.pending_operations.iter() {
             //TODO: use recipe?
             let id = *id;
             let pending_operation = pending_operation.clone();
-            let cancelled = cancelled.clone();
+            let controller = controller.clone();
             subscriptions.push(Subscription::run_with_id(
                 id,
                 stream::channel(16, move |msg_tx| async move {
                     let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
-                    match pending_operation.perform(id, &msg_tx, cancelled).await {
+                    match pending_operation.perform(&msg_tx, controller).await {
                         Ok(result_paths) => {
                             let _ = msg_tx
                                 .lock()

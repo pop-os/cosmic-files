@@ -1,35 +1,23 @@
-use cosmic::iced::futures::{channel::mpsc::Sender, executor, SinkExt};
-use std::{fs, io, path::Path, sync::Arc};
-use tokio::sync::Mutex;
+use std::{fs, io, path::Path};
 
 use super::Controller;
-use crate::app::Message;
 
 // Special reader just for operations, handling cancel and progress
 pub struct OpReader {
     file: fs::File,
     metadata: fs::Metadata,
     current: u64,
-    id: u64,
-    msg_tx: Arc<Mutex<Sender<Message>>>,
     controller: Controller,
 }
 
 impl OpReader {
-    pub fn new<P: AsRef<Path>>(
-        path: P,
-        id: u64,
-        msg_tx: Arc<Mutex<Sender<Message>>>,
-        controller: Controller,
-    ) -> io::Result<Self> {
+    pub fn new<P: AsRef<Path>>(path: P, controller: Controller) -> io::Result<Self> {
         let file = fs::File::open(&path)?;
         let metadata = file.metadata()?;
         Ok(Self {
             file,
             metadata,
             current: 0,
-            id,
-            msg_tx,
             controller,
         })
     }
@@ -45,14 +33,7 @@ impl io::Read for OpReader {
         self.current += count as u64;
 
         let progress = self.current as f32 / self.metadata.len() as f32;
-        executor::block_on(async {
-            let _ = self
-                .msg_tx
-                .lock()
-                .await
-                .send(Message::PendingProgress(self.id, 100.0 * progress))
-                .await;
-        });
+        self.controller.set_progress(progress);
 
         Ok(count)
     }

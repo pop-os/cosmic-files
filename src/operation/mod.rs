@@ -4,13 +4,11 @@ use std::{
     fs,
     io::{self, Read, Write},
     path::{Path, PathBuf},
-    sync::{Arc, Condvar, Mutex},
+    sync::Arc,
 };
 use tokio::sync::{mpsc, Mutex as TokioMutex};
 use walkdir::WalkDir;
 
-use self::reader::OpReader;
-use self::recursive::Context;
 use crate::{
     app::{ArchiveType, DialogPage, Message},
     config::IconSizes,
@@ -20,7 +18,13 @@ use crate::{
     tab,
 };
 
+pub use self::controller::{Controller, ControllerState};
+pub mod controller;
+
+use self::reader::OpReader;
 pub mod reader;
+
+use self::recursive::Context;
 pub mod recursive;
 
 fn handle_replace(
@@ -77,8 +81,6 @@ fn get_directory_name(file_name: &str) -> &str {
 fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
     archive: &mut zip::ZipArchive<R>,
     directory: P,
-    id: u64,
-    msg_tx: Arc<TokioMutex<Sender<Message>>>,
     controller: Controller,
 ) -> zip::result::ZipResult<()> {
     use std::{ffi::OsString, fs};
@@ -109,14 +111,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
             .check()
             .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-        executor::block_on(async {
-            let total_progress = (i as f32) / total_files as f32;
-            let _ = msg_tx
-                .lock()
-                .await
-                .send(Message::PendingProgress(id, 100.0 * total_progress))
-                .await;
-        });
+        controller.set_progress((i as f32) / total_files as f32);
 
         let mut file = archive.by_index(i)?;
         let filepath = file
@@ -188,15 +183,9 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
             current += count as u64;
 
             if current < total {
-                executor::block_on(async {
-                    let file_progress = current as f32 / total as f32;
-                    let total_progress = (i as f32 + file_progress) / total_files as f32;
-                    let _ = msg_tx
-                        .lock()
-                        .await
-                        .send(Message::PendingProgress(id, 100.0 * total_progress))
-                        .await;
-                });
+                let file_progress = current as f32 / total as f32;
+                let total_progress = (i as f32 + file_progress) / total_files as f32;
+                controller.set_progress(total_progress);
             }
         }
         outfile.sync_all()?;
@@ -224,98 +213,6 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
     Ok(())
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum ControllerState {
-    Cancelled,
-    Paused,
-    Running,
-}
-
-#[derive(Debug)]
-struct ControllerInner {
-    state: Mutex<ControllerState>,
-    condvar: Condvar,
-}
-
-#[derive(Debug)]
-pub struct Controller {
-    primary: bool,
-    inner: Arc<ControllerInner>,
-}
-
-impl Controller {
-    pub fn new() -> Self {
-        Self {
-            primary: true,
-            inner: Arc::new(ControllerInner {
-                state: Mutex::new(ControllerState::Running),
-                condvar: Condvar::new(),
-            }),
-        }
-    }
-
-    pub fn check(&self) -> Result<(), String> {
-        let mut state = self.inner.state.lock().unwrap();
-        loop {
-            match *state {
-                ControllerState::Cancelled => return Err(fl!("cancelled")),
-                ControllerState::Paused => {
-                    state = self.inner.condvar.wait(state).unwrap();
-                }
-                ControllerState::Running => return Ok(()),
-            }
-        }
-    }
-
-    pub fn state(&self) -> ControllerState {
-        *self.inner.state.lock().unwrap()
-    }
-
-    pub fn set_state(&self, state: ControllerState) {
-        *self.inner.state.lock().unwrap() = state;
-        self.inner.condvar.notify_all();
-    }
-
-    pub fn is_cancelled(&self) -> bool {
-        matches!(self.state(), ControllerState::Cancelled)
-    }
-
-    pub fn cancel(&self) {
-        self.set_state(ControllerState::Cancelled);
-    }
-
-    pub fn is_paused(&self) -> bool {
-        matches!(self.state(), ControllerState::Paused)
-    }
-
-    pub fn pause(&self) {
-        self.set_state(ControllerState::Paused);
-    }
-
-    pub fn unpause(&self) {
-        //TODO: ensure this does not override Cancel?
-        self.set_state(ControllerState::Running);
-    }
-}
-
-impl Clone for Controller {
-    fn clone(&self) -> Self {
-        Self {
-            primary: false,
-            inner: self.inner.clone(),
-        }
-    }
-}
-
-impl Drop for Controller {
-    fn drop(&mut self) {
-        // Cancel operations if primary controller is dropped
-        if self.primary {
-            self.cancel();
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ReplaceResult {
     Replace(bool),
@@ -328,7 +225,6 @@ async fn copy_or_move(
     paths: Vec<PathBuf>,
     to: PathBuf,
     moving: bool,
-    id: u64,
     msg_tx: &Arc<TokioMutex<Sender<Message>>>,
     controller: Controller,
 ) -> Result<OperationSelection, String> {
@@ -361,10 +257,9 @@ async fn copy_or_move(
             })
             .collect();
 
-        let mut context = Context::new(controller);
+        let mut context = Context::new(controller.clone());
 
         {
-            let msg_tx = msg_tx.clone();
             context = context.on_progress(move |_op, progress| {
                 let item_progress = match progress.total_bytes {
                     Some(total_bytes) => {
@@ -378,13 +273,7 @@ async fn copy_or_move(
                 };
                 let total_progress =
                     (item_progress + progress.current_ops as f32) / progress.total_ops as f32;
-                executor::block_on(async {
-                    let _ = msg_tx
-                        .lock()
-                        .await
-                        .send(Message::PendingProgress(id, 100.0 * total_progress))
-                        .await;
-                })
+                controller.set_progress(total_progress);
             });
         }
 
@@ -562,7 +451,8 @@ pub enum Operation {
 }
 
 impl Operation {
-    pub fn pending_text(&self, percent: i32, state: ControllerState) -> String {
+    pub fn pending_text(&self, ratio: f32, state: ControllerState) -> String {
+        let percent = (ratio * 100.0) as i32;
         let progress = || match state {
             ControllerState::Running => fl!("progress", percent = percent),
             ControllerState::Paused => fl!("progress-paused", percent = percent),
@@ -706,15 +596,10 @@ impl Operation {
     /// Perform the operation
     pub async fn perform(
         self,
-        id: u64,
         msg_tx: &Arc<TokioMutex<Sender<Message>>>,
         controller: Controller,
     ) -> Result<OperationSelection, String> {
-        let _ = msg_tx
-            .lock()
-            .await
-            .send(Message::PendingProgress(id, 0.0))
-            .await;
+        let controller_clone = controller.clone();
 
         //TODO: IF ERROR, RETURN AN Operation THAT CAN UNDO THE CURRENT STATE
         let paths = match self {
@@ -723,7 +608,6 @@ impl Operation {
                 to,
                 archive_type,
             } => {
-                let msg_tx = msg_tx.clone();
                 tokio::task::spawn_blocking(move || -> Result<OperationSelection, String> {
                     let Some(relative_root) = to.parent() else {
                         return Err(format!("path {:?} has no parent directory", to));
@@ -759,14 +643,7 @@ impl Operation {
                             for (i, path) in paths.iter().enumerate() {
                                 controller.check()?;
 
-                                executor::block_on(async {
-                                    let total_progress = (i as f32) / total_paths as f32;
-                                    let _ = msg_tx
-                                        .lock()
-                                        .await
-                                        .send(Message::PendingProgress(id, 100.0 * total_progress))
-                                        .await;
-                                });
+                                controller.set_progress((i as f32) / total_paths as f32);
 
                                 if let Some(relative_path) =
                                     path.strip_prefix(relative_root).map_err(err_str)?.to_str()
@@ -790,14 +667,7 @@ impl Operation {
                             for (i, path) in paths.iter().enumerate() {
                                 controller.check()?;
 
-                                executor::block_on(async {
-                                    let total_progress = (i as f32) / total_paths as f32;
-                                    let _ = msg_tx
-                                        .lock()
-                                        .await
-                                        .send(Message::PendingProgress(id, 100.0 * total_progress))
-                                        .await;
-                                });
+                                controller.set_progress((i as f32) / total_paths as f32);
 
                                 let mut zip_options = zip::write::SimpleFileOptions::default();
                                 if let Some(relative_path) =
@@ -831,19 +701,10 @@ impl Operation {
                                             archive.write_all(&buffer[..count]).map_err(err_str)?;
                                             current += count;
 
-                                            executor::block_on(async {
-                                                let file_progress = current as f32 / total as f32;
-                                                let total_progress =
-                                                    (i as f32 + file_progress) / total_paths as f32;
-                                                let _ = msg_tx
-                                                    .lock()
-                                                    .await
-                                                    .send(Message::PendingProgress(
-                                                        id,
-                                                        100.0 * total_progress,
-                                                    ))
-                                                    .await;
-                                            });
+                                            let file_progress = current as f32 / total as f32;
+                                            let total_progress =
+                                                (i as f32 + file_progress) / total_paths as f32;
+                                            controller.set_progress(total_progress);
                                         }
                                     } else {
                                         archive
@@ -863,22 +724,13 @@ impl Operation {
                 .map_err(err_str)?
                 .map_err(err_str)?
             }
-            Self::Copy { paths, to } => {
-                copy_or_move(paths, to, false, id, msg_tx, controller).await?
-            }
+            Self::Copy { paths, to } => copy_or_move(paths, to, false, msg_tx, controller).await?,
             Self::Delete { paths } => {
                 let total = paths.len();
                 for (i, path) in paths.into_iter().enumerate() {
                     controller.check()?;
 
-                    let _ = msg_tx
-                        .lock()
-                        .await
-                        .send(Message::PendingProgress(
-                            id,
-                            100.0 * (i as f32) / (total as f32),
-                        ))
-                        .await;
+                    controller.set_progress((i as f32) / (total as f32));
 
                     let _items_opt = tokio::task::spawn_blocking(|| trash::delete(path))
                         .await
@@ -899,21 +751,13 @@ impl Operation {
                     )
                 ))]
                 {
-                    let msg_tx = msg_tx.clone();
                     tokio::task::spawn_blocking(move || -> Result<(), String> {
                         let items = trash::os_limited::list().map_err(err_str)?;
                         let count = items.len();
                         for (i, item) in items.into_iter().enumerate() {
                             controller.check()?;
 
-                            executor::block_on(async {
-                                let total_progress = i as f32 / count as f32;
-                                let _ = msg_tx
-                                    .lock()
-                                    .await
-                                    .send(Message::PendingProgress(id, 100.0 * total_progress))
-                                    .await;
-                            });
+                            controller.set_progress(i as f32 / count as f32);
 
                             trash::os_limited::purge_all([item]).map_err(err_str)?;
                         }
@@ -925,21 +769,13 @@ impl Operation {
                 OperationSelection::default()
             }
             Self::Extract { paths, to } => {
-                let msg_tx = msg_tx.clone();
                 tokio::task::spawn_blocking(move || -> Result<OperationSelection, String> {
                     let total_paths = paths.len();
                     let mut op_sel = OperationSelection::default();
                     for (i, path) in paths.iter().enumerate() {
                         controller.check()?;
 
-                        executor::block_on(async {
-                            let total_progress = (i as f32) / total_paths as f32;
-                            let _ = msg_tx
-                                .lock()
-                                .await
-                                .send(Message::PendingProgress(id, 100.0 * total_progress))
-                                .await;
-                        });
+                        controller.set_progress((i as f32) / total_paths as f32);
 
                         let to = to.to_owned();
 
@@ -956,19 +792,18 @@ impl Operation {
                             op_sel.ignored.push(path.clone());
                             op_sel.selected.push(new_dir.clone());
 
-                            let msg_tx = msg_tx.clone();
                             let controller = controller.clone();
                             let mime = mime_for_path(&path);
                             match mime.essence_str() {
                                 "application/gzip" | "application/x-compressed-tar" => {
-                                    OpReader::new(path, id, msg_tx, controller)
+                                    OpReader::new(path, controller)
                                         .map(io::BufReader::new)
                                         .map(flate2::read::GzDecoder::new)
                                         .map(tar::Archive::new)
                                         .and_then(|mut archive| archive.unpack(&new_dir))
                                         .map_err(err_str)?
                                 }
-                                "application/x-tar" => OpReader::new(path, id, msg_tx, controller)
+                                "application/x-tar" => OpReader::new(path, controller)
                                     .map(io::BufReader::new)
                                     .map(tar::Archive::new)
                                     .and_then(|mut archive| archive.unpack(&new_dir))
@@ -978,12 +813,12 @@ impl Operation {
                                     .map(zip::ZipArchive::new)
                                     .map_err(err_str)?
                                     .and_then(move |mut archive| {
-                                        zip_extract(&mut archive, &new_dir, id, msg_tx, controller)
+                                        zip_extract(&mut archive, &new_dir, controller)
                                     })
                                     .map_err(err_str)?,
                                 #[cfg(feature = "bzip2")]
                                 "application/x-bzip" | "application/x-bzip-compressed-tar" => {
-                                    OpReader::new(path, id, msg_tx, controller)
+                                    OpReader::new(path, controller)
                                         .map(io::BufReader::new)
                                         .map(bzip2::read::BzDecoder::new)
                                         .map(tar::Archive::new)
@@ -992,7 +827,7 @@ impl Operation {
                                 }
                                 #[cfg(feature = "liblzma")]
                                 "application/x-xz" | "application/x-xz-compressed-tar" => {
-                                    OpReader::new(path, id, msg_tx, controller)
+                                    OpReader::new(path, controller)
                                         .map(io::BufReader::new)
                                         .map(liblzma::read::XzDecoder::new)
                                         .map(tar::Archive::new)
@@ -1010,9 +845,7 @@ impl Operation {
                 .map_err(err_str)?
                 .map_err(err_str)?
             }
-            Self::Move { paths, to } => {
-                copy_or_move(paths, to, true, id, msg_tx, controller).await?
-            }
+            Self::Move { paths, to } => copy_or_move(paths, to, true, msg_tx, controller).await?,
             Self::NewFolder { path } => {
                 tokio::task::spawn_blocking(move || -> Result<OperationSelection, String> {
                     controller.check()?;
@@ -1061,14 +894,7 @@ impl Operation {
                 for (i, item) in items.into_iter().enumerate() {
                     controller.check()?;
 
-                    let _ = msg_tx
-                        .lock()
-                        .await
-                        .send(Message::PendingProgress(
-                            id,
-                            100.0 * (i as f32) / (total as f32),
-                        ))
-                        .await;
+                    controller.set_progress((i as f32) / (total as f32));
 
                     paths.push(item.original_path());
 
@@ -1112,11 +938,7 @@ impl Operation {
             }
         };
 
-        let _ = msg_tx
-            .lock()
-            .await
-            .send(Message::PendingProgress(id, 100.0))
-            .await;
+        controller_clone.set_progress(100.0);
 
         Ok(paths)
     }
@@ -1164,15 +986,12 @@ mod tests {
                 paths: paths_clone,
                 to: to_clone,
             }
-            .perform(id, &sync::Mutex::new(tx).into(), Controller::new())
+            .perform(&sync::Mutex::new(tx).into(), Controller::new())
             .await
         });
 
         while let Some(msg) = rx.next().await {
             match msg {
-                Message::PendingProgress(id, progress) => {
-                    trace!("({id}) [ {paths:?} => {to:?} ] {progress}% complete)")
-                }
                 Message::DialogPush(DialogPage::Replace { tx, .. }) => {
                     debug!("[{id}] Replace request");
                     tx.send(ReplaceResult::Cancel).await.expect("Sending a response to a replace request should succeed")
