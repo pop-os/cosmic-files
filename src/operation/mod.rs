@@ -1135,7 +1135,7 @@ mod tests {
     use test_log::test;
     use tokio::sync;
 
-    use super::{Controller, Operation, ReplaceResult};
+    use super::{Controller, Operation, OperationSelection, ReplaceResult};
     use crate::{
         app::{
             test_utils::{
