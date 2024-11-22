@@ -1374,41 +1374,38 @@ impl Item {
         }
     }
 
-    pub fn preview_view<'a>(
-        &'a self,
-        sizes: IconSizes,
-        nav_row: bool,
-    ) -> Element<'a, app::Message> {
+    pub fn preview_header(&self) -> Vec<Element<app::Message>> {
+        let mut row = Vec::with_capacity(3);
+        row.push(
+            widget::button::icon(widget::icon::from_name("go-previous-symbolic"))
+                .on_press(app::Message::TabMessage(None, Message::ItemLeft))
+                .into(),
+        );
+        row.push(
+            widget::button::icon(widget::icon::from_name("go-next-symbolic"))
+                .on_press(app::Message::TabMessage(None, Message::ItemRight))
+                .into(),
+        );
+        if self.can_gallery() {
+            if let Some(_path) = self.path_opt() {
+                row.push(
+                    widget::button::icon(widget::icon::from_name("view-fullscreen-symbolic"))
+                        .on_press(app::Message::TabMessage(None, Message::Gallery(true)))
+                        .into(),
+                );
+            }
+        }
+        row
+    }
+
+    pub fn preview_view<'a>(&'a self, sizes: IconSizes) -> Element<'a, app::Message> {
         let cosmic_theme::Spacing {
             space_xxxs,
-            space_xxs,
             space_m,
             ..
         } = theme::active().cosmic().spacing;
 
         let mut column = widget::column().spacing(space_m);
-
-        if nav_row {
-            let mut row = widget::row::with_capacity(3).spacing(space_xxs);
-            row = row.push(
-                widget::button::icon(widget::icon::from_name("go-previous-symbolic"))
-                    .on_press(app::Message::TabMessage(None, Message::ItemLeft)),
-            );
-            row = row.push(
-                widget::button::icon(widget::icon::from_name("go-next-symbolic"))
-                    .on_press(app::Message::TabMessage(None, Message::ItemRight)),
-            );
-
-            if self.can_gallery() {
-                if let Some(_path) = self.path_opt() {
-                    row = row.push(
-                        widget::button::icon(widget::icon::from_name("view-fullscreen-symbolic"))
-                            .on_press(app::Message::TabMessage(None, Message::Gallery(true))),
-                    );
-                }
-            }
-            column = column.push(row);
-        }
 
         column = column.push(widget::row::with_children(vec![
             widget::horizontal_space().into(),
