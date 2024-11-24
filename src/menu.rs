@@ -30,7 +30,7 @@ macro_rules! menu_button {
             .height(Length::Fixed(24.0))
             .align_y(Alignment::Center)
         )
-        .padding([theme::active().cosmic().spacing.space_xxxs, 16])
+        .padding([theme::active().cosmic().spacing.space_xxs, 16])
         .width(Length::Fill)
         .class(theme::Button::MenuItem)
     );
