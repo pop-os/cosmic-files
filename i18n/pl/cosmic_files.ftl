@@ -26,6 +26,14 @@ modified = Zmodyfikowano
 trashed-on = Wyrzucono do kosza
 size = Rozmiar
 
+# Progress footer
+details = Detale
+dismiss = Odrzuć wiadomość
+operations-running = {$running} bieżące działania ({$percent}%)...
+operations-running-finished = {$running} bieżące działania ({$percent}%), {$finished} ukończone...
+pause = Wstrzymaj
+resume = Wznów
+
 # Dialogs
 
 ## Compress Dialog
@@ -34,6 +42,9 @@ create-archive = Utwórz archiwum
 ## Empty Trash Dialog
 empty-trash = Opróżnij kosz
 empty-trash-warning = Czy chcesz bezpowrotnie usunąć zawartość Kosza?
+
+## Mount Error Dialog
+mount-error = Brak dostępu do dysku
 
 # New File/Folder Dialog
 create-new-file = Utwórz nowy plik
@@ -123,60 +134,64 @@ try-again = Spróbuj ponownie
 username = Nazwa użytkownika
 
 ## Operations
+cancelled = Anulowano
 edit-history = Edytuj historię
 history = Historia
 no-history = Brak pozycji w historii.
 pending = Oczekujące
+progress = {$percent}%
+progress-cancelled = {$percent}%, anulowano
+progress-paused = {$percent}%, wstrzymano
 failed = Nieudane
 complete = Ukończone
 compressing = Spakuj {$items} {$items ->
         [one] element
         [few] elementy
         *[other] elementów
-    } z {$from} do {$to}
+    } z "{$from}" do "{$to}" ({$progress})...
 compressed = Spakowano {$items} {$items ->
         [one] element
         [few] elementy
         *[other] elementów
-    } z {$from} do {$to}
+    } z "{$from}" do "{$to}"
 copy_noun = Kopiuj
 creating = Tworzy {$name} w {$parent}
 created = Stworzono {$name} w {$parent}
 copying = Kopiowanie {$items} {$items ->
         [one] elementu
         *[other] elementów
-    } z {$from} do {$to}
+    } z "{$from}" do "{$to}" ({$progress})...
 copied = Skopiowano {$items} {$items ->
         [one] element
         [few] elementy
         *[other] elementów
-    } z {$from} do {$to}
-emptying-trash = Opróżnianie {trash}
+    } z "{$from}" do "{$to}"
+emptying-trash = Opróżnianie {trash} ({$progress})...
 emptied-trash = Opróżniono {trash}
 extracting = Wypakowywanie {$items} {$items ->
         [one] elementu
         *[other] elementów
-    } z {$from} do {$to}
+    } z "{$from}" do "{$to}" ({$progress})...
 extracted = Wypakowano {$items} {$items ->
         [one] element
         [few] elementy
         *[other] elementów
-    } z {$from} do {$to}
+    } z "{$from}" do "{$to}"
 moving = Przenoszenie {$items} {$items ->
         [one] elementu
         *[other] elementów
-    } z {$from} do {$to}
+    } z "{$from}" do "{$to}" ({$progress})...
 moved = Przeniesiono {$items} {$items ->
         [one] element
         [few] elementy
         *[other] elementów
-    } z {$from} do {$to}
+    } z "{$from}" do "{$to}"
 renaming = Zmieniana nazwa {$from} na {$to}
 renamed = Zmieniono nazwę {$from} na {$to}
 restoring = Przywracanie {$items} {$items ->
         [one] elementu
         *[other] elementów
-    } z {trash}
+    } z {trash} ({$progress})...
 restored = Przywrócono {$items} {$items ->
         [one] element
         [few] elementy
@@ -190,6 +205,13 @@ default-app = {$name} (domyślnie)
 
 ## Show details
 show-details = Pokaż szczegóły
+type = Typ: {$mime}
+items = Elementy: {$items}
+item-size = Rozmiar: {$size}
+item-created = Utworzono: {$created}
+item-modified = Zmodyfikowano: {$modified}
+item-accessed = Otwarto: {$accessed}
+calculating = Obliczanie...
 
 ## Settings
 settings = Ustawienia
@@ -202,7 +224,6 @@ dark = Ciemny
 light = Jasny
 
 # Context menu
-extract-here = Wypakuj
 add-to-sidebar = Dodaj do bocznego panelu
 compress = Spakuj
 extract-here = Wypakuj
@@ -229,7 +250,6 @@ file = Plik
 new-tab = Nowa karta
 new-window = Nowe okno
 rename = Zmień nazwę...
-menu-show-details = Pokaż szczegóły...
 close-tab = Zamknij kartę
 quit = Zamknij
 
