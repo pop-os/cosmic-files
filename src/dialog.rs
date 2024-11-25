@@ -806,9 +806,9 @@ impl Application for App {
                     for item in items.iter() {
                         if item.selected {
                             actions.extend(
-                                item.preview_header().into_iter().map(|element| {
-                                    element.map(move |message| Message::from(message))
-                                }),
+                                item.preview_header()
+                                    .into_iter()
+                                    .map(|element| element.map(Message::from)),
                             )
                         }
                     }

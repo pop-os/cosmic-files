@@ -1415,42 +1415,45 @@ impl Item {
 
         let mut details = widget::column().spacing(space_xxxs);
         details = details.push(widget::text::heading(self.name.clone()));
-        details = details.push(widget::text(fl!("type", mime = self.mime.to_string())));
+        details = details.push(widget::text::body(fl!(
+            "type",
+            mime = self.mime.to_string()
+        )));
         let mut settings = Vec::new();
         match &self.metadata {
             ItemMetadata::Path { metadata, children } => {
                 if metadata.is_dir() {
-                    details = details.push(widget::text(fl!("items", items = children)));
+                    details = details.push(widget::text::body(fl!("items", items = children)));
                     let size = match &self.dir_size {
                         DirSize::Calculating(_) => fl!("calculating"),
                         DirSize::Directory(size) => format_size(*size),
                         DirSize::NotDirectory => String::new(),
                         DirSize::Error(err) => err.clone(),
                     };
-                    details = details.push(widget::text(fl!("item-size", size = size)));
+                    details = details.push(widget::text::body(fl!("item-size", size = size)));
                 } else {
-                    details = details.push(widget::text(fl!(
+                    details = details.push(widget::text::body(fl!(
                         "item-size",
                         size = format_size(metadata.len())
                     )));
                 }
 
                 if let Ok(time) = metadata.created() {
-                    details = details.push(widget::text(fl!(
+                    details = details.push(widget::text::body(fl!(
                         "item-created",
                         created = format_time(time).to_string()
                     )));
                 }
 
                 if let Ok(time) = metadata.modified() {
-                    details = details.push(widget::text(fl!(
+                    details = details.push(widget::text::body(fl!(
                         "item-modified",
                         modified = format_time(time).to_string()
                     )));
                 }
 
                 if let Ok(time) = metadata.accessed() {
-                    details = details.push(widget::text(fl!(
+                    details = details.push(widget::text::body(fl!(
                         "item-accessed",
                         accessed = format_time(time).to_string()
                     )));
@@ -1464,7 +1467,7 @@ impl Item {
                             PermissionOwner::Owner,
                         ))
                         .description(fl!("owner"))
-                        .control(widget::text(format_permissions(
+                        .control(widget::text::body(format_permissions(
                             metadata,
                             PermissionOwner::Owner,
                         ))),
@@ -1476,14 +1479,14 @@ impl Item {
                             PermissionOwner::Group,
                         ))
                         .description(fl!("group"))
-                        .control(widget::text(format_permissions(
+                        .control(widget::text::body(format_permissions(
                             metadata,
                             PermissionOwner::Group,
                         ))),
                     );
 
                     settings.push(widget::settings::item::builder(fl!("other")).control(
-                        widget::text(format_permissions(metadata, PermissionOwner::Other)),
+                        widget::text::body(format_permissions(metadata, PermissionOwner::Other)),
                     ));
                 }
             }
@@ -1497,7 +1500,7 @@ impl Item {
             .unwrap_or(&ItemThumbnail::NotImage)
         {
             ItemThumbnail::Image(_, Some((width, height))) => {
-                details = details.push(widget::text(format!("{}x{}", width, height)));
+                details = details.push(widget::text::body(format!("{}x{}", width, height)));
             }
             _ => {}
         }
@@ -1538,15 +1541,15 @@ impl Item {
         match &self.metadata {
             ItemMetadata::Path { metadata, children } => {
                 if metadata.is_dir() {
-                    column = column.push(widget::text(format!("Items: {}", children)));
+                    column = column.push(widget::text::body(format!("Items: {}", children)));
                 } else {
-                    column = column.push(widget::text(format!(
+                    column = column.push(widget::text::body(format!(
                         "Size: {}",
                         format_size(metadata.len())
                     )));
                 }
                 if let Ok(time) = metadata.modified() {
-                    column = column.push(widget::text(format!(
+                    column = column.push(widget::text::body(format!(
                         "Last modified: {}",
                         format_time(time)
                     )));
@@ -3584,7 +3587,7 @@ impl Tab {
                         .size(64)
                         .icon()
                         .into(),
-                    widget::text(if has_hidden {
+                    widget::text::body(if has_hidden {
                         fl!("empty-folder-hidden")
                     } else if matches!(self.location, Location::Search(..)) {
                         fl!("no-results")
@@ -3857,17 +3860,19 @@ impl Tab {
                                     false,
                                     false,
                                 )),
-                                widget::button::custom(widget::text(item.display_name.clone()))
-                                    .id(item.button_id.clone())
-                                    .on_press(Message::Click(Some(*i)))
-                                    .padding([0, space_xxxs])
-                                    .class(button_style(
-                                        item.selected,
-                                        item.highlighted,
-                                        true,
-                                        true,
-                                        false,
-                                    )),
+                                widget::button::custom(widget::text::body(
+                                    item.display_name.clone(),
+                                ))
+                                .id(item.button_id.clone())
+                                .on_press(Message::Click(Some(*i)))
+                                .padding([0, space_xxxs])
+                                .class(button_style(
+                                    item.selected,
+                                    item.highlighted,
+                                    true,
+                                    true,
+                                    false,
+                                )),
                             ];
 
                             let mut column = widget::column::with_capacity(buttons.len())
@@ -4016,7 +4021,7 @@ impl Tab {
                             .size(icon_size)
                             .into(),
                         widget::column::with_children(vec![
-                            widget::text(item.display_name.clone()).into(),
+                            widget::text::body(item.display_name.clone()).into(),
                             //TODO: translate?
                             widget::text::caption(format!("{} - {}", modified_text, size_text))
                                 .into(),
@@ -4033,7 +4038,7 @@ impl Tab {
                             .size(icon_size)
                             .into(),
                         widget::column::with_children(vec![
-                            widget::text(item.display_name.clone()).into(),
+                            widget::text::body(item.display_name.clone()).into(),
                             widget::text::caption(match item.path_opt() {
                                 Some(path) => path.display().to_string(),
                                 None => String::new(),
@@ -4042,10 +4047,10 @@ impl Tab {
                         ])
                         .width(Length::Fill)
                         .into(),
-                        widget::text(modified_text.clone())
+                        widget::text::body(modified_text.clone())
                             .width(Length::Fixed(modified_width))
                             .into(),
-                        widget::text(size_text.clone())
+                        widget::text::body(size_text.clone())
                             .width(Length::Fixed(size_width))
                             .into(),
                     ])
@@ -4058,13 +4063,13 @@ impl Tab {
                             .content_fit(ContentFit::Contain)
                             .size(icon_size)
                             .into(),
-                        widget::text(item.display_name.clone())
+                        widget::text::body(item.display_name.clone())
                             .width(Length::Fill)
                             .into(),
-                        widget::text(modified_text.clone())
+                        widget::text::body(modified_text.clone())
                             .width(Length::Fixed(modified_width))
                             .into(),
-                        widget::text(size_text.clone())
+                        widget::text::body(size_text.clone())
                             .width(Length::Fixed(size_width))
                             .into(),
                     ])
@@ -4121,9 +4126,10 @@ impl Tab {
                                 .size(icon_size)
                                 .into(),
                             widget::column::with_children(vec![
-                                widget::text(item.display_name.clone()).into(),
+                                widget::text::body(item.display_name.clone()).into(),
                                 //TODO: translate?
-                                widget::text(format!("{} - {}", modified_text, size_text)).into(),
+                                widget::text::body(format!("{} - {}", modified_text, size_text))
+                                    .into(),
                             ])
                             .into(),
                         ])
@@ -4137,7 +4143,7 @@ impl Tab {
                                 .size(icon_size)
                                 .into(),
                             widget::column::with_children(vec![
-                                widget::text(item.display_name.clone()).into(),
+                                widget::text::body(item.display_name.clone()).into(),
                                 widget::text::caption(match item.path_opt() {
                                     Some(path) => path.display().to_string(),
                                     None => String::new(),
@@ -4146,10 +4152,10 @@ impl Tab {
                             ])
                             .width(Length::Fill)
                             .into(),
-                            widget::text(modified_text.clone())
+                            widget::text::body(modified_text.clone())
                                 .width(Length::Fixed(modified_width))
                                 .into(),
-                            widget::text(size_text.clone())
+                            widget::text::body(size_text.clone())
                                 .width(Length::Fixed(size_width))
                                 .into(),
                         ])
@@ -4162,13 +4168,13 @@ impl Tab {
                                 .content_fit(ContentFit::Contain)
                                 .size(icon_size)
                                 .into(),
-                            widget::text(item.display_name.clone())
+                            widget::text::body(item.display_name.clone())
                                 .width(Length::Fill)
                                 .into(),
                             widget::text(modified_text)
                                 .width(Length::Fixed(modified_width))
                                 .into(),
-                            widget::text(size_text)
+                            widget::text::body(size_text)
                                 .width(Length::Fixed(size_width))
                                 .into(),
                         ])

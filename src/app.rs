@@ -1142,7 +1142,7 @@ impl App {
             }
         }
         widget::column::with_children(vec![
-            widget::text(fl!("network-drive-description")).into(),
+            widget::text::body(fl!("network-drive-description")).into(),
             table.into(),
         ])
         .spacing(space_m)
@@ -1269,7 +1269,7 @@ impl App {
                     ])
                     .align_y(Alignment::Center)
                     .into(),
-                    widget::text(op.pending_text(progress, controller.state())).into(),
+                    widget::text::body(op.pending_text(progress, controller.state())).into(),
                 ]));
             }
             children.push(section.into());
@@ -1280,8 +1280,8 @@ impl App {
             for (_id, (op, controller, error)) in self.failed_operations.iter().rev() {
                 let progress = controller.progress();
                 section = section.add(widget::column::with_children(vec![
-                    widget::text(op.pending_text(progress, controller.state())).into(),
-                    widget::text(error).into(),
+                    widget::text::body(op.pending_text(progress, controller.state())).into(),
+                    widget::text::body(error).into(),
                 ]));
             }
             children.push(section.into());
@@ -1290,7 +1290,7 @@ impl App {
         if !self.complete_operations.is_empty() {
             let mut section = widget::settings::section().title(fl!("complete"));
             for (_id, op) in self.complete_operations.iter().rev() {
-                section = section.add(widget::text(op.completed_text()));
+                section = section.add(widget::text::body(op.completed_text()));
             }
             children.push(section.into());
         }
@@ -3713,10 +3713,10 @@ impl Application for App {
                             widget::row::with_children(vec![
                                 widget::icon(app.icon.clone()).size(32).into(),
                                 if app.is_default {
-                                    widget::text(fl!("default-app", name = app.name.as_str()))
+                                    widget::text::body(fl!("default-app", name = app.name.as_str()))
                                         .into()
                                 } else {
-                                    widget::text(app.name.to_string()).into()
+                                    widget::text::body(app.name.to_string()).into()
                                 },
                                 widget::horizontal_space().into(),
                                 if *selected == i {

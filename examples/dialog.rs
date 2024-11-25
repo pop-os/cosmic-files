@@ -84,12 +84,12 @@ impl Application for App {
     fn view_window(&self, window_id: window::Id) -> Element<Message> {
         match &self.dialog_opt {
             Some(dialog) => dialog.view(window_id),
-            None => widget::text("No dialog").into(),
+            None => widget::text::body("No dialog").into(),
         }
     }
 
     fn view(&self) -> Element<Message> {
-        let mut column = widget::column().spacing(8);
+        let mut column = widget::column().spacing(8).padding(8);
         {
             let mut button = widget::button::standard("Open File");
             if self.dialog_opt.is_none() {
@@ -130,11 +130,11 @@ impl Application for App {
         if let Some(result) = &self.result_opt {
             match result {
                 DialogResult::Cancel => {
-                    column = column.push(widget::text("Cancel"));
+                    column = column.push(widget::text::body("Cancel"));
                 }
                 DialogResult::Open(paths) => {
                     for path in paths.iter() {
-                        column = column.push(widget::text(format!("{}", path.display())));
+                        column = column.push(widget::text::body(format!("{}", path.display())));
                     }
                 }
             }
