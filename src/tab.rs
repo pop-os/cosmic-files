@@ -8,8 +8,7 @@ use cosmic::{
         alignment::{Horizontal, Vertical},
         clipboard::dnd::DndAction,
         event,
-        futures,
-        futures::SinkExt,
+        futures::{self, SinkExt},
         keyboard::Modifiers,
         stream,
         //TODO: export in cosmic::widget
@@ -28,6 +27,7 @@ use cosmic::{
         Subscription,
     },
     iced_core::{mouse::ScrollDelta, widget::tree},
+    mime_app::{mime_apps, MimeApp},
     theme,
     widget::{
         self,
@@ -65,7 +65,6 @@ use crate::{
     fl,
     localize::{LANGUAGE_CHRONO, LANGUAGE_SORTER},
     menu,
-    mime_app::{mime_apps, MimeApp},
     mime_icon::{mime_for_path, mime_icon},
     mounter::MOUNTERS,
     mouse_area,
