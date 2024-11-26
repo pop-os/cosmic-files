@@ -1547,37 +1547,44 @@ impl Application for App {
         {
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("open"),
+                None,
                 NavMenuAction::Open(entity),
             ));
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("open-with"),
+                None,
                 NavMenuAction::OpenWith(entity),
             ));
         } else {
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("open-in-new-tab"),
+                None,
                 NavMenuAction::OpenInNewTab(entity),
             ));
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("open-in-new-window"),
+                None,
                 NavMenuAction::OpenInNewWindow(entity),
             ));
         }
         items.push(cosmic::widget::menu::Item::Divider);
         items.push(cosmic::widget::menu::Item::Button(
             fl!("show-details"),
+            None,
             NavMenuAction::Preview(entity),
         ));
         items.push(cosmic::widget::menu::Item::Divider);
         if favorite_index_opt.is_some() {
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("remove-from-sidebar"),
+                None,
                 NavMenuAction::RemoveFromSidebar(entity),
             ));
         }
         if matches!(location_opt, Some(Location::Trash)) {
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("empty-trash"),
+                None,
                 NavMenuAction::EmptyTrash,
             ));
         }
@@ -2858,7 +2865,7 @@ impl Application for App {
                 let mut paths = Vec::with_capacity(recently_trashed.len());
                 let icon_sizes = self.config.tab.icon_sizes;
 
-                return cosmic::command::future(async move {
+                return cosmic::task::future(async move {
                     match tokio::task::spawn_blocking(move || Location::Trash.scan(icon_sizes))
                         .await
                     {
