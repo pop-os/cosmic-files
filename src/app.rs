@@ -27,7 +27,7 @@ use cosmic::{
         Alignment, Event, Length, Point, Rectangle, Size, Subscription,
     },
     iced_runtime::clipboard,
-    style, theme,
+    mime_app, style, theme,
     widget::{
         self,
         dnd_destination::DragId,
@@ -65,7 +65,7 @@ use crate::{
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
-    menu, mime_app, mime_icon,
+    menu, mime_icon,
     mounter::{MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage, MOUNTERS},
     operation::{Controller, Operation, OperationSelection, ReplaceResult},
     spawn_detached::spawn_detached,
@@ -1600,6 +1600,8 @@ impl Application for App {
             nav_drag_id: DragId::new(),
             tab_drag_id: DragId::new(),
         };
+
+        mime_app::reload(Some(&LANGUAGE_SORTER));
 
         let mut commands = vec![app.update_config()];
 
