@@ -13,7 +13,6 @@ pub mod dialog;
 mod key_bind;
 mod localize;
 mod menu;
-mod mime_app;
 pub mod mime_icon;
 mod mounter;
 mod mouse_area;

@@ -25,7 +25,7 @@ use cosmic::{
         Alignment, Event, Length, Size, Subscription,
     },
     iced_runtime::clipboard,
-    style, theme,
+    mime_app, style, theme,
     widget::{
         self,
         dnd_destination::DragId,
@@ -61,7 +61,7 @@ use crate::{
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
-    menu, mime_app, mime_icon,
+    menu, mime_icon,
     mounter::{MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage, MOUNTERS},
     operation::{Controller, Operation, OperationSelection, ReplaceResult},
     spawn_detached::spawn_detached,
@@ -1476,6 +1476,8 @@ impl Application for App {
             tab_drag_id: DragId::new(),
         };
 
+        mime_app::reload(Some(&LANGUAGE_SORTER));
+
         let mut commands = vec![app.update_config()];
 
         for location in flags.locations {
@@ -1547,37 +1549,44 @@ impl Application for App {
         {
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("open"),
+                None,
                 NavMenuAction::Open(entity),
             ));
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("open-with"),
+                None,
                 NavMenuAction::OpenWith(entity),
             ));
         } else {
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("open-in-new-tab"),
+                None,
                 NavMenuAction::OpenInNewTab(entity),
             ));
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("open-in-new-window"),
+                None,
                 NavMenuAction::OpenInNewWindow(entity),
             ));
         }
         items.push(cosmic::widget::menu::Item::Divider);
         items.push(cosmic::widget::menu::Item::Button(
             fl!("show-details"),
+            None,
             NavMenuAction::Preview(entity),
         ));
         items.push(cosmic::widget::menu::Item::Divider);
         if favorite_index_opt.is_some() {
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("remove-from-sidebar"),
+                None,
                 NavMenuAction::RemoveFromSidebar(entity),
             ));
         }
         if matches!(location_opt, Some(Location::Trash)) {
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("empty-trash"),
+                None,
                 NavMenuAction::EmptyTrash,
             ));
         }
@@ -2858,7 +2867,7 @@ impl Application for App {
                 let mut paths = Vec::with_capacity(recently_trashed.len());
                 let icon_sizes = self.config.tab.icon_sizes;
 
-                return cosmic::command::future(async move {
+                return cosmic::task::future(async move {
                     match tokio::task::spawn_blocking(move || Location::Trash.scan(icon_sizes))
                         .await
                     {
@@ -3713,8 +3722,11 @@ impl Application for App {
                             widget::row::with_children(vec![
                                 widget::icon(app.icon.clone()).size(32).into(),
                                 if app.is_default {
-                                    widget::text::body(fl!("default-app", name = app.name.as_str()))
-                                        .into()
+                                    widget::text::body(fl!(
+                                        "default-app",
+                                        name = Some(app.name.as_str())
+                                    ))
+                                    .into()
                                 } else {
                                     widget::text::body(app.name.to_string()).into()
                                 },
