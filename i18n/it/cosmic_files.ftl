@@ -26,6 +26,14 @@ modified = Modificato
 trashed-on = Spostato nel cestino
 size = Dimensioni
 
+# Progress footer
+details = Dettagli
+dismiss = Nascondi messaggio
+operations-running = {$running} operazioni in corso ({$percent}%)...
+operations-running-finished = {$running} operazioni in corso ({$percent}%), {$finished} completate...
+pause = Pausa
+resume = Riprendi
+
 # Dialogs
 
 ## Compress Dialog
