@@ -3,7 +3,7 @@
 
 #[cfg(feature = "wayland")]
 use cosmic::iced::{
-    event::wayland::{Event as WaylandEvent, OutputEvent},
+    event::wayland::{Event as WaylandEvent, OutputEvent, OverlapNotifyEvent},
     platform_specific::runtime::wayland::layer_surface::{
         IcedMargin, IcedOutput, SctkLayerSurfaceSettings,
     },
@@ -12,6 +12,8 @@ use cosmic::iced::{
     },
     Limits,
 };
+#[cfg(feature = "wayland")]
+use cosmic::iced_winit::commands::overlap_notify::overlap_notify;
 use cosmic::{
     app::{self, context_drawer, message, Core, Task},
     cosmic_config, cosmic_theme, executor,
@@ -22,15 +24,17 @@ use cosmic::{
         keyboard::{Event as KeyEvent, Key, Modifiers},
         stream,
         window::{self, Event as WindowEvent, Id as WindowId},
-        Alignment, Event, Length, Size, Subscription,
+        Alignment, Background, Border, Event, Length, Point, Rectangle, Size, Subscription,
     },
     iced_runtime::clipboard,
     style, theme,
     widget::{
         self,
         dnd_destination::DragId,
+        horizontal_space,
         menu::{action::MenuAction, key_bind::KeyBind},
         segmented_button::{self, Entity},
+        vertical_space,
     },
     Application, ApplicationExt, Element,
 };
@@ -303,6 +307,8 @@ pub enum Message {
     OpenWithBrowse,
     OpenWithDialog(Option<Entity>),
     OpenWithSelection(usize),
+    #[cfg(all(feature = "desktop", feature = "wayland"))]
+    Overlap(OverlapNotifyEvent, window::Id),
     Paste(Option<Entity>),
     PasteContents(PathBuf, ClipboardPaste),
     PendingCancel(u64),
@@ -321,6 +327,7 @@ pub enum Message {
     SearchClear,
     SearchInput(String),
     SystemThemeModeChange(cosmic_theme::ThemeMode),
+    Size(Size),
     TabActivate(Entity),
     TabNext,
     TabPrev,
@@ -500,18 +507,21 @@ pub struct App {
     dialog_pages: VecDeque<DialogPage>,
     dialog_text_input: widget::Id,
     key_binds: HashMap<KeyBind, Action>,
+    margin: HashMap<window::Id, (i32, i32, i32, i32)>,
     modifiers: Modifiers,
     mounter_items: HashMap<MounterKey, MounterItems>,
     network_drive_connecting: Option<(MounterKey, String)>,
     network_drive_input: String,
     #[cfg(feature = "notify")]
     notification_opt: Option<Arc<Mutex<notify_rust::NotificationHandle>>>,
+    overlap: HashMap<String, (window::Id, Rectangle)>,
     pending_operation_id: u64,
     pending_operations: BTreeMap<u64, (Operation, Controller)>,
     progress_operations: BTreeSet<u64>,
     complete_operations: BTreeMap<u64, Operation>,
     failed_operations: BTreeMap<u64, (Operation, Controller, String)>,
     search_id: widget::Id,
+    size: Option<Size>,
     #[cfg(feature = "wayland")]
     surface_ids: HashMap<WlOutput, WindowId>,
     #[cfg(feature = "wayland")]
@@ -635,6 +645,57 @@ impl App {
                 entry.name
             );
         }
+    }
+
+    fn handle_overlap(&mut self) {
+        let Some((bl, br, tl, tr)) = self.size.as_ref().map(|s| {
+            (
+                Rectangle::new(
+                    Point::new(0., s.height / 2.),
+                    Size::new(s.width / 2., s.height / 2.),
+                ),
+                Rectangle::new(
+                    Point::new(s.width / 2., s.height / 2.),
+                    Size::new(s.width / 2., s.height / 2.),
+                ),
+                Rectangle::new(Point::new(0., 0.), Size::new(s.width / 2., s.height / 2.)),
+                Rectangle::new(
+                    Point::new(s.width / 2., 0.),
+                    Size::new(s.width / 2., s.height / 2.),
+                ),
+            )
+        }) else {
+            return;
+        };
+
+        let mut overlaps: HashMap<_, _> = self
+            .windows
+            .keys()
+            .into_iter()
+            .map(|k| (*k, (0, 0, 0, 0)))
+            .collect();
+        for (w_id, overlap) in self.overlap.values() {
+            let tl = tl.intersects(overlap);
+            let tr = tr.intersects(overlap);
+            let bl = bl.intersects(overlap);
+            let br = br.intersects(overlap);
+            let Some((top, left, bottom, right)) = overlaps.get_mut(&w_id) else {
+                continue;
+            };
+            if tl && tr {
+                *top += overlap.height as i32;
+            }
+            if tl && bl {
+                *left += overlap.width as i32;
+            }
+            if bl && br {
+                *bottom += overlap.height as i32;
+            }
+            if tr && br {
+                *right += overlap.width as i32;
+            }
+        }
+        self.margin = overlaps;
     }
 
     fn open_tab_entity(
@@ -1450,18 +1511,21 @@ impl Application for App {
             dialog_pages: VecDeque::new(),
             dialog_text_input: widget::Id::unique(),
             key_binds,
+            margin: HashMap::new(),
             modifiers: Modifiers::empty(),
             mounter_items: HashMap::new(),
             network_drive_connecting: None,
             network_drive_input: String::new(),
             #[cfg(feature = "notify")]
             notification_opt: None,
+            overlap: HashMap::new(),
             pending_operation_id: 0,
             pending_operations: BTreeMap::new(),
             progress_operations: BTreeSet::new(),
             complete_operations: BTreeMap::new(),
             failed_operations: BTreeMap::new(),
             search_id: widget::Id::unique(),
+            size: None,
             #[cfg(feature = "wayland")]
             surface_ids: HashMap::new(),
             #[cfg(feature = "wayland")]
@@ -3278,6 +3342,8 @@ impl Application for App {
                                 exclusive_zone: 0,
                                 size_limits: Limits::NONE.min_width(1.0).min_height(1.0),
                             }),
+                            #[cfg(feature = "wayland")]
+                            overlap_notify(surface_id, true),
                         ]);
                     }
                     OutputEvent::Removed => {
@@ -3303,6 +3369,30 @@ impl Application for App {
                 return Task::perform(async move { cosmic }, |cosmic| message::cosmic(cosmic));
             }
             Message::None => {}
+            #[cfg(all(feature = "desktop", feature = "wayland"))]
+            Message::Overlap(overlap_notify_event, w_id) => match overlap_notify_event {
+                OverlapNotifyEvent::OverlapLayerAdd {
+                    identifier,
+                    namespace,
+                    logical_rect,
+                    exclusive,
+                    ..
+                } => {
+                    if exclusive > 0 || namespace == "Dock" || namespace == "Panel" {
+                        self.overlap.insert(identifier, (w_id, logical_rect));
+                        self.handle_overlap();
+                    }
+                }
+                OverlapNotifyEvent::OverlapLayerRemove { identifier } => {
+                    self.overlap.remove(&identifier);
+                    self.handle_overlap();
+                }
+                _ => {}
+            },
+            Message::Size(size) => {
+                self.size = Some(size);
+                self.handle_overlap();
+            }
         }
 
         Task::none()
@@ -3720,8 +3810,11 @@ impl Application for App {
                             widget::row::with_children(vec![
                                 widget::icon(app.icon.clone()).size(32).into(),
                                 if app.is_default {
-                                    widget::text::body(fl!("default-app", name = app.name.as_str()))
-                                        .into()
+                                    widget::text::body(fl!(
+                                        "default-app",
+                                        name = Some(app.name.as_str())
+                                    ))
+                                    .into()
                                 } else {
                                     widget::text::body(app.name.to_string()).into()
                                 },
@@ -4165,8 +4258,26 @@ impl Application for App {
                 // The toaster is added on top of an empty element to ensure that it does not override context menus
                 tab_column =
                     tab_column.push(widget::toaster(&self.toasts, widget::horizontal_space()));
-
-                return tab_column.into();
+                return if let Some(margin) = self.margin.get(&id) {
+                    if margin.0 != 0 || margin.2 != 0 {
+                        tab_column = widget::column::with_children(vec![
+                            vertical_space().height(margin.0 as f32).into(),
+                            tab_column.into(),
+                            vertical_space().height(margin.2 as f32).into(),
+                        ])
+                    }
+                    if margin.1 != 0 || margin.3 != 0 {
+                        Element::from(widget::row::with_children(vec![
+                            horizontal_space().width(margin.1 as f32).into(),
+                            tab_column.into(),
+                            horizontal_space().width(margin.3 as f32).into(),
+                        ]))
+                    } else {
+                        tab_column.into()
+                    }
+                } else {
+                    tab_column.into()
+                };
             }
             Some(WindowKind::DesktopViewOptions) => self.desktop_view_options(),
             Some(WindowKind::Preview(entity_opt, kind)) => self.preview(entity_opt, kind, false),
@@ -4193,7 +4304,7 @@ impl Application for App {
         struct TrashWatcherSubscription;
 
         let mut subscriptions = vec![
-            event::listen_with(|event, status, _window_id| match event {
+            event::listen_with(|event, status, window_id| match event {
                 Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => match status {
                     event::Status::Ignored => Some(Message::Key(modifiers, key)),
                     event::Status::Captured => None,
@@ -4202,11 +4313,19 @@ impl Application for App {
                     Some(Message::Modifiers(modifiers))
                 }
                 Event::Window(WindowEvent::CloseRequested) => Some(Message::WindowClose),
+                Event::Window(WindowEvent::Opened { position: _, size }) => {
+                    Some(Message::Size(size))
+                }
+                Event::Window(WindowEvent::Resized(s)) => Some(Message::Size(s)),
                 #[cfg(feature = "wayland")]
                 Event::PlatformSpecific(event::PlatformSpecific::Wayland(wayland_event)) => {
                     match wayland_event {
                         WaylandEvent::Output(output_event, output) => {
                             Some(Message::OutputEvent(output_event, output))
+                        }
+                        #[cfg(feature = "desktop")]
+                        WaylandEvent::OverlapNotify(event) => {
+                            Some(Message::Overlap(event, window_id))
                         }
                         _ => None,
                     }
