@@ -326,6 +326,7 @@ pub enum Message {
     SearchActivate,
     SearchClear,
     SearchInput(String),
+    SetShowDetails(bool),
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     Size(Size),
     TabActivate(Entity),
@@ -1762,7 +1763,7 @@ impl Application for App {
         // of closing everything on one press
         if self.core.window.show_context {
             self.set_show_context(false);
-            return Task::none();
+            return cosmic::task::message(app::Message::App(Message::SetShowDetails(false)));
         }
         if self.search_get().is_some() {
             // Close search if open
@@ -2728,6 +2729,10 @@ impl Application for App {
             }
             Message::SearchInput(input) => {
                 return self.search_set(Some(input));
+            }
+            Message::SetShowDetails(show_details) => {
+                config_set!(show_details, show_details);
+                return self.update_config();
             }
             Message::SystemThemeModeChange(_theme_mode) => {
                 return self.update_config();
