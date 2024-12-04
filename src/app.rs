@@ -24,7 +24,7 @@ use cosmic::{
         keyboard::{Event as KeyEvent, Key, Modifiers},
         stream,
         window::{self, Event as WindowEvent, Id as WindowId},
-        Alignment, Background, Border, Event, Length, Point, Rectangle, Size, Subscription,
+        Alignment, Event, Length, Point, Rectangle, Size, Subscription,
     },
     iced_runtime::clipboard,
     style, theme,
@@ -507,7 +507,7 @@ pub struct App {
     dialog_pages: VecDeque<DialogPage>,
     dialog_text_input: widget::Id,
     key_binds: HashMap<KeyBind, Action>,
-    margin: HashMap<window::Id, (i32, i32, i32, i32)>,
+    margin: HashMap<window::Id, (f32, f32, f32, f32)>,
     modifiers: Modifiers,
     mounter_items: HashMap<MounterKey, MounterItems>,
     network_drive_connecting: Option<(MounterKey, String)>,
@@ -648,7 +648,7 @@ impl App {
     }
 
     fn handle_overlap(&mut self) {
-        let Some((bl, br, tl, tr)) = self.size.as_ref().map(|s| {
+        let Some((bl, br, tl, tr, mut size)) = self.size.as_ref().map(|s| {
             (
                 Rectangle::new(
                     Point::new(0., s.height / 2.),
@@ -663,6 +663,7 @@ impl App {
                     Point::new(s.width / 2., 0.),
                     Size::new(s.width / 2., s.height / 2.),
                 ),
+                *s,
             )
         }) else {
             return;
@@ -672,9 +673,13 @@ impl App {
             .windows
             .keys()
             .into_iter()
-            .map(|k| (*k, (0, 0, 0, 0)))
+            .map(|k| (*k, (0., 0., 0., 0.)))
             .collect();
-        for (w_id, overlap) in self.overlap.values() {
+        let mut sorted_overlaps: Vec<_> = self.overlap.values().collect();
+        sorted_overlaps
+            .sort_by(|a, b| (b.1.width * b.1.height).total_cmp(&(a.1.width * b.1.height)));
+
+        for (w_id, overlap) in sorted_overlaps {
             let tl = tl.intersects(overlap);
             let tr = tr.intersects(overlap);
             let bl = bl.intersects(overlap);
@@ -683,16 +688,52 @@ impl App {
                 continue;
             };
             if tl && tr {
-                *top += overlap.height as i32;
+                *top += overlap.height;
             }
             if tl && bl {
-                *left += overlap.width as i32;
+                *left += overlap.width;
             }
             if bl && br {
-                *bottom += overlap.height as i32;
+                *bottom += overlap.height;
             }
             if tr && br {
-                *right += overlap.width as i32;
+                *right += overlap.width;
+            }
+
+            let min_dim =
+                if overlap.width / size.width.max(1.) > overlap.height / size.height.max(1.) {
+                    (0., overlap.height)
+                } else {
+                    (overlap.width, 0.)
+                };
+            // just one quadrant with overlap
+            if tl && !(tr || bl) {
+                *top += min_dim.1;
+                *left += min_dim.0;
+
+                size.height -= min_dim.1;
+                size.width -= min_dim.0;
+            }
+            if tr && !(tl || br) {
+                *top += min_dim.1;
+                *right += min_dim.0;
+
+                size.height -= min_dim.1;
+                size.width -= min_dim.0;
+            }
+            if bl && !(br || tl) {
+                *bottom += min_dim.1;
+                *left += min_dim.0;
+
+                size.height -= min_dim.1;
+                size.width -= min_dim.0;
+            }
+            if br && !(bl || tr) {
+                *bottom += min_dim.1;
+                *right += min_dim.0;
+
+                size.height -= min_dim.1;
+                size.width -= min_dim.0;
             }
         }
         self.margin = overlaps;
@@ -4259,14 +4300,14 @@ impl Application for App {
                 tab_column =
                     tab_column.push(widget::toaster(&self.toasts, widget::horizontal_space()));
                 return if let Some(margin) = self.margin.get(&id) {
-                    if margin.0 != 0 || margin.2 != 0 {
+                    if margin.0 >= 0. || margin.2 >= 0. {
                         tab_column = widget::column::with_children(vec![
                             vertical_space().height(margin.0 as f32).into(),
                             tab_column.into(),
                             vertical_space().height(margin.2 as f32).into(),
                         ])
                     }
-                    if margin.1 != 0 || margin.3 != 0 {
+                    if margin.1 >= 0. || margin.3 >= 0. {
                         Element::from(widget::row::with_children(vec![
                             horizontal_space().width(margin.1 as f32).into(),
                             tab_column.into(),
