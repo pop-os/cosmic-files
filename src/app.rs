@@ -2587,11 +2587,9 @@ impl Application for App {
                 match self.mode {
                     Mode::App => {
                         let show_details = !self.config.show_details;
-                        //TODO: move to update_config?
                         self.context_page = ContextPage::Preview(None, PreviewKind::Selected);
                         self.core.window.show_context = show_details;
-                        config_set!(show_details, show_details);
-                        return self.update_config();
+                        return cosmic::task::message(Message::SetShowDetails(show_details));
                     }
                     Mode::Desktop => {
                         let selected_paths = self.selected_paths(entity_opt);
@@ -2965,6 +2963,12 @@ impl Application for App {
                     self.set_show_context(true);
                 }
                 self.context_page = context_page;
+                // Preview status is preserved across restarts
+                if matches!(self.context_page, ContextPage::Preview(_, _)) {
+                    return cosmic::task::message(app::Message::App(Message::SetShowDetails(
+                        self.core.window.show_context,
+                    )));
+                }
             }
             Message::Undo(_id) => {
                 // TODO: undo
@@ -3495,10 +3499,7 @@ impl Application for App {
                 };
                 context_drawer::context_drawer(
                     self.preview(entity_opt, kind, true),
-                    Message::ToggleContextPage(ContextPage::Preview(
-                        entity_opt.clone(),
-                        kind.clone(),
-                    )),
+                    Message::ToggleContextPage(ContextPage::Preview(*entity_opt, kind.clone())),
                 )
                 .header_actions(actions)
             }
