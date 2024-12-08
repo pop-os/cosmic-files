@@ -2258,8 +2258,10 @@ impl Tab {
             Message::Config(config) => {
                 // View is preserved for existing tabs
                 let view = self.config.view;
+                let show_hidden = self.config.show_hidden;
                 self.config = config;
                 self.config.view = view;
+                self.config.show_hidden = show_hidden;
             }
             Message::ContextAction(action) => {
                 // Close context menu
