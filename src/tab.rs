@@ -2844,6 +2844,7 @@ impl Tab {
                         Instant::now(),
                     ));
                 }
+                commands.push(Command::Action(Action::ToggleShowHidden));
             }
             Message::View(view) => {
                 self.config.view = view;

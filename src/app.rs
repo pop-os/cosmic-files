@@ -201,9 +201,7 @@ impl Action {
             Action::TabViewGrid => Message::TabView(entity_opt, tab::View::Grid),
             Action::TabViewList => Message::TabView(entity_opt, tab::View::List),
             Action::ToggleFoldersFirst => Message::ToggleFoldersFirst,
-            Action::ToggleShowHidden => {
-                Message::TabMessage(entity_opt, tab::Message::ToggleShowHidden)
-            }
+            Action::ToggleShowHidden => Message::ToggleShowHidden,
             Action::ToggleSort(sort) => {
                 Message::TabMessage(entity_opt, tab::Message::ToggleSort(*sort))
             }
@@ -346,6 +344,7 @@ pub enum Message {
     TabView(Option<Entity>, tab::View),
     ToggleContextPage(ContextPage),
     ToggleFoldersFirst,
+    ToggleShowHidden,
     Undo(usize),
     UndoTrash(widget::ToastId, Arc<[PathBuf]>),
     UndoTrashStart(Vec<TrashItem>),
@@ -2965,6 +2964,11 @@ impl Application for App {
                     self.set_show_context(true);
                 }
                 self.context_page = context_page;
+            }
+            Message::ToggleShowHidden => {
+                let mut config = self.config.tab;
+                config.show_hidden = !config.show_hidden;
+                return self.update(Message::TabConfig(config));
             }
             Message::Undo(_id) => {
                 // TODO: undo
