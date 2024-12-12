@@ -134,16 +134,16 @@ try-again = Tente novamente
 username = Usuário
 
 ## Operations
-cancelled = Canceladas
+cancelled = Cancelado
 edit-history = Editar histórico
 history = Histórico
 no-history = Nenhum item no histórico.
-pending = Pendentes
+pending = Pendente
 progress = {$percent}%
 progress-cancelled = {$percent}%, cancelado
 progress-paused = {$percent}%, pausado
 failed = Com falha
-complete = Concluídas
+complete = Concluído
 compressing = Compactando {$items} {$items ->
         [one] item
         *[other] itens
