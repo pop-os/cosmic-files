@@ -26,6 +26,14 @@ modified = Modificação
 trashed-on = Exclusão
 size = Tamanho
 
+# Progress footer
+details = Detalhes
+dismiss = Dispensar mensagem
+operations-running = {$running} operações em andamento ({$percent}%)...
+operations-running-finished = {$running} operações em andamento ({$percent}%), {$finished} finalizadas...
+pause = Pausar
+resume = Continuar
+
 # Dialogs
 
 ## Compress Dialog
@@ -126,12 +134,16 @@ try-again = Tente novamente
 username = Usuário
 
 ## Operations
+cancelled = Cancelado
 edit-history = Editar histórico
 history = Histórico
 no-history = Nenhum item no histórico.
 pending = Pendente
+progress = {$percent}%
+progress-cancelled = {$percent}%, cancelado
+progress-paused = {$percent}%, pausado
 failed = Com falha
-complete = Completo
+complete = Concluído
 compressing = Compactando {$items} {$items ->
         [one] item
         *[other] itens
@@ -189,6 +201,13 @@ default-app = {$name} (padrão)
 
 ## Show details
 show-details = Mostrar detalhes
+type = Tipo: {$mime}
+items = Itens: {$items}
+item-size = Tamanho: {$size}
+item-created = Criado: {$created}
+item-modified = Modificado: {$modified}
+item-accessed = Acessado: {$accessed}
+calculating = Calculando...
 
 ## Settings
 settings = Configurações
