@@ -12,7 +12,7 @@ undo = Geri al
 today = Bugün
 
 # Desktop view options
-desktop-view-options = Desktop view options...
+desktop-view-options = Masaüstü görünüm seçenekleri...
 show-on-desktop = Masaüstünde göster
 desktop-folder-content = Masaüstü klasörü içeriği
 mounted-drives = Bağlı sürücüler
