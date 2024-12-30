@@ -5,11 +5,20 @@ no-results = Keine Ergebnisse gefunden
 filesystem = Dateisystem
 home = Benutzerordner
 networks = Netzwerke
-notification-in-progress = Dateioperationen sind im Gange.
+notification-in-progress = Dateivorgänge sind im Gange.
 trash = Papierkorb
 recents = Zuletzt benutzt
 undo = Rückgängig
 today = Heute
+
+# Optionen für die Desktop-Ansicht
+desktop-view-options = Optionen für die Desktop-Ansicht...
+show-on-desktop = Auf Desktop anzeigen
+desktop-folder-content = Inhalt des Desktop-Ordners
+mounted-drives = Eingehängte Laufwerke
+trash-folder-icon = Ordnersymbol des Papierkorbs
+icon-size-and-spacing = Symbolgröße und -abstand
+icon-size = Symbolgröße
 
 # Listenansicht
 name = Name
@@ -17,14 +26,25 @@ modified = Geändert
 trashed-on = In den Papierkorb verschoben
 size = Größe
 
+# Fortschrittsfußzeile
+details = Details
+dismiss = Meldung verwerfen
+operations-running = {$running} laufende Vorgänge ({$percent} %)...
+operations-running-finished = {$running} laufende Vorgänge ({$percent} %), {$finished} abgeschlossen...
+pause = Pause
+resume = Fortsetzen
+
 # Dialoge
 
 ## Komprimieren-Dialog
 create-archive = Archiv erstellen
 
-## Dialogfeld zum Leeren des Papierkorbs
+## Dialog zum Leeren des Papierkorbs
 empty-trash = Papierkorb leeren?
 empty-trash-warning = Bist du sicher, dass du alle Elemente im Papierkorb endgültig löschen möchtest?
+
+## Einhängefehler-Dialog
+mount-error = Zugriff auf Laufwerk nicht möglich
 
 # Neue(r) Datei/Ordner-Dialog
 create-new-file = Neue Datei erstellen
@@ -51,6 +71,10 @@ open-multiple-folders = Mehrere Ordner öffnen
 save = Speichern
 save-file = Datei speichern
 
+## Öffnen-mit-Dialog
+open-with-title = Wie möchtest du „{$name}“ öffnen?
+browse-store = {$store} durchsuchen
+
 # Umbenennen-Dialog
 rename-file = Datei umbenennen
 rename-folder = Ordner umbenennen
@@ -65,6 +89,11 @@ replace-with = Ersetzen mit
 apply-to-all = Auf alle anwenden
 keep-both = Beide behalten
 skip = Überspringen
+
+## Dialog zum Festlegen als ausführbar und starten
+set-executable-and-launch = Als ausführbar festlegen und starten
+set-executable-and-launch-description = Möchtest du „{$name}“ als ausführbar festlegen und starten?
+set-and-launch = Festlegen und starten
 
 ## Metadaten-Dialog
 owner = Eigentümer
@@ -104,56 +133,62 @@ remember-password = Passwort merken
 try-again = Erneut versuchen
 username = Benutzername
 
-## Operationen
+## Vorgänge
+cancelled = Abgebrochen
 edit-history = Verlauf bearbeiten
 history = Verlauf
 no-history = Keine Einträge im Verlauf.
 pending = Ausstehend
+progress = {$percent} %
+progress-cancelled = {$percent} %, abgeschlossen
+progress-paused = {$percent} %, pausiert
 failed = Fehlgeschlagen
 complete = Abgeschlossen
 compressing = {$items} {$items ->
-[one] Element wird
-*[other] Elemente werden
-    } von {$from} nach {$to} komprimiert
+        [one] Element wird
+        *[other] Elemente werden
+    } von „{$from}“ nach „{$to}“ komprimiert ({$progress})...
 compressed = {$items} {$items ->
-[one] Element wurde
-*[other] Elemente wurden
-    } von {$from} nach {$to} komprimiert
+        [one] Element wurde
+        *[other] Elemente wurden
+    } von „{$from}“ nach „{$to}“ komprimiert
 copy_noun = Kopie
-creating = {$name} in {$parent} wird erstellt
-created = {$name} in {$parent} wurde erstellt
+creating = „{$name}“ in „{$parent}“ wird erstellt
+created = „{$name}“ in „{$parent}“ wurde erstellt
 copying = {$items} {$items ->
         [one] Element wird
         *[other] Elemente werden
-    } von {$from} nach {$to} kopiert
+    } von „{$from}“ nach „{$to}“ kopiert ({$progress})...
 copied = {$items} {$items ->
         [one] Element wurde
         *[other] Elemente wurden
-    } von {$from} nach {$to} kopiert
-emptying-trash = {trash} wird geleert
+    } „{$from}“ nach „{$to}“ kopiert
+emptying-trash = {trash} wird geleert ({$progress})...
 emptied-trash = {trash} geleert
 extracting = {$items} {$items ->
-[one] Element wird
-*[other] Elemente werden
-    } von {$from} nach {$to} entpackt
+        [one] Element wird
+        *[other] Elemente werden
+    } von „{$from}“ nach „{$to}“ entpackt ({$progress})...
 extracted = {$items} {$items ->
-[one] Element wurde
-*[other] Elemente wurden
-    } von {$from} nach {$to} entpackt
+        [one] Element wurde
+        *[other] Elemente wurden
+    } von „{$from}“ nach „{$to}“ entpackt
+setting-executable-and-launching = „{$name}“ wird als ausführbar festgelegt und gestartet
+set-executable-and-launched = „{$name}“ als ausführbar festgelegt und gestartet
 moving = {$items} {$items ->
         [one] Element wird
         *[other] Elemente werden
-    } von {$from} nach {$to} verschoben
+    } von „{$from}“ nach „{$to}“ verschoben ({$progress})...
 moved = {$items} {$items ->
         [one] Element wurde
         *[other] Elemente wurden
-    } von {$from} nach {$to} verschoben
-renaming = {$from} wird in {$to} umbenannt
-renamed = {$from} wurde in {$to} umbenannt
+    } von „{$from}“ nach „{$to}“ verschoben
+renaming = „{$from}“ wird in „{$to}“ umbenannt
+renamed = „{$from}“ wurde in „{$to}“ umbenannt
 restoring = {$items} {$items ->
         [one] Element wird
         *[other] Elemente werden
-    } aus dem {trash} wiederhergestellt 
+    } aus dem {trash} wiederhergestellt ({$progress})...
 restored = {$items} {$items ->
         [one] Element wurde
         *[other] Elemente wurden
@@ -164,8 +199,15 @@ unknown-folder = unbekannter Ordner
 open-with = Öffnen mit
 default-app = {$name} (Standard)
 
-## Eigenschaften
-properties = Eigenschaften
+## Details anzeigen
+show-details = Details anzeigen
+type = Typ: {$mime}
+items = Elemente: {$items}
+item-size = Größe: {$size}
+item-created = Erstellt: {$created}
+item-modified = Geändert: {$modified}
+item-accessed = Zugegriffen: {$accessed}
+calculating = Wird berechnet...
 
 ## Einstellungen
 settings = Einstellungen
@@ -192,14 +234,18 @@ sort-by-modified = Nach Änderung sortieren
 sort-by-size = Nach Größe sortieren
 sort-by-trashed = Nach Löschzeitpunkt sortieren
 
+## Desktop
+change-wallpaper = Hintergrundbild ändern...
+desktop-appearance = Desktop-Aussehen...
+display-settings = Anzeigeeinstellungen...
+
 # Menü
 
 ## Datei
 file = Datei
 new-tab = Neuer Tab
 new-window = Neues Fenster
-rename = Umbenennen
-menu-show-details = Details anzeigen...
+rename = Umbenennen...
 close-tab = Tab schließen
 quit = Beenden
 
@@ -219,6 +265,7 @@ grid-view = Rasteransicht
 list-view = Listenansicht
 show-hidden-files = Versteckte Dateien anzeigen
 list-directories-first = Verzeichnisse zuerst auflisten
+gallery-preview = Galerie-Vorschau
 menu-settings = Einstellungen...
 menu-about = Über COSMIC Dateien...
 
