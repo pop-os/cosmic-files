@@ -2642,7 +2642,6 @@ impl Application for App {
             Message::Rename(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-                    if let Some(parent) = tab.location.path_opt() {
                         if let Some(items) = tab.items_opt() {
                             let mut selected = Vec::new();
                             for item in items.iter() {
@@ -2655,6 +2654,10 @@ impl Application for App {
                             if !selected.is_empty() {
                                 //TODO: batch rename
                                 for path in selected {
+                                    let parent = match path.parent() {
+                                        Some(some) => some.to_path_buf(),
+                                        None => continue,
+                                    };
                                     let name = match path.file_name().and_then(|x| x.to_str()) {
                                         Some(some) => some.to_string(),
                                         None => continue,
@@ -2662,7 +2665,7 @@ impl Application for App {
                                     let dir = path.is_dir();
                                     self.dialog_pages.push_back(DialogPage::RenameItem {
                                         from: path,
-                                        parent: parent.clone(),
+                                        parent,
                                         name,
                                         dir,
                                     });
@@ -2670,7 +2673,6 @@ impl Application for App {
                                 return widget::text_input::focus(self.dialog_text_input.clone());
                             }
                         }
-                    }
                 }
             }
             Message::ReplaceResult(replace_result) => {
