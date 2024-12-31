@@ -772,7 +772,7 @@ impl App {
             Task::batch([
                 self.update_title(),
                 self.update_watcher(),
-                self.rescan_tab(entity, location, selection_paths),
+                self.update_tab(entity, location, selection_paths),
             ]),
         )
     }
@@ -828,7 +828,20 @@ impl App {
                 return Task::none();
             }
         }
-        self.rescan_tab(entity, tab.location.clone(), Some(op_sel.selected))
+        self.update_tab(entity, tab.location.clone(), Some(op_sel.selected))
+    }
+
+    fn update_tab(
+        &mut self,
+        entity: Entity,
+        location: Location,
+        selection_paths: Option<Vec<PathBuf>>,
+    ) -> Task<Message> {
+        if let Location::Search(_, term, ..) = location {
+            self.search_set(entity, Some(term), selection_paths)
+        } else {
+            self.rescan_tab(entity, location, selection_paths)
+        }
     }
 
     fn rescan_tab(
@@ -872,17 +885,9 @@ impl App {
 
         let mut commands = Vec::with_capacity(needs_reload.len());
         for (entity, location) in needs_reload {
-            commands.push(self.rescan_tab(entity, location, None));
+            commands.push(self.update_tab(entity, location, None));
         }
         Task::batch(commands)
-    }
-
-    fn search(&mut self) -> Task<Message> {
-        if let Some(term) = self.search_get() {
-            self.search_set_active(Some(term.to_string()))
-        } else {
-            Task::none()
-        }
     }
 
     fn search_get(&self) -> Option<&str> {
@@ -896,10 +901,15 @@ impl App {
 
     fn search_set_active(&mut self, term_opt: Option<String>) -> Task<Message> {
         let entity = self.tab_model.active();
-        self.search_set(entity, term_opt)
+        self.search_set(entity, term_opt, None)
     }
 
-    fn search_set(&mut self,tab: Entity, term_opt: Option<String>) -> Task<Message> {
+    fn search_set(
+        &mut self,
+        tab: Entity,
+        term_opt: Option<String>,
+        selection_paths: Option<Vec<PathBuf>>,
+    ) -> Task<Message> {
         let mut title_location_opt = None;
         if let Some(tab) = self.tab_model.data_mut::<Tab>(tab) {
             let location_opt = match term_opt {
@@ -930,7 +940,7 @@ impl App {
             return Task::batch([
                 self.update_title(),
                 self.update_watcher(),
-                self.rescan_tab(tab, location, None),
+                self.rescan_tab(tab, location, selection_paths),
                 if focus_search {
                     widget::text_input::focus(self.search_id.clone())
                 } else {
@@ -989,7 +999,7 @@ impl App {
             if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
                 tab.location = location.clone();
             }
-            commands.push(self.rescan_tab(entity, location, None));
+            commands.push(self.update_tab(entity, location, None));
         }
         Task::batch(commands)
     }
@@ -2137,7 +2147,7 @@ impl Application for App {
                         };
                         if let Some(title) = title_opt {
                             self.tab_model.text_set(entity, title);
-                            commands.push(self.rescan_tab(entity, home_location.clone(), None));
+                            commands.push(self.update_tab(entity, home_location.clone(), None));
                         }
                     }
                     if !commands.is_empty() {
@@ -2302,11 +2312,7 @@ impl Application for App {
 
                 let mut commands = Vec::with_capacity(needs_reload.len());
                 for (entity, location) in needs_reload {
-                    if let Location::Search(_, term, ..) = location {
-                        commands.push(self.search_set(entity, Some(term)));
-                    } else {
-                        commands.push(self.rescan_tab(entity, location, None));
-                    }
+                    commands.push(self.update_tab(entity, location, None));
                 }
                 return Task::batch(commands);
             }
@@ -2545,8 +2551,6 @@ impl Application for App {
                 commands.push(self.rescan_operation_selection(op_sel));
                 // Manually rescan any trash tabs after any operation is completed
                 commands.push(self.rescan_trash());
-                // if search is active, update "search" tab view
-                commands.push(self.search());
                 return Task::batch(commands);
             }
             Message::PendingDismiss => {
@@ -2869,7 +2873,7 @@ impl Application for App {
                             commands.push(Task::batch([
                                 self.update_title(),
                                 self.update_watcher(),
-                                self.rescan_tab(entity, tab_path, selection_paths),
+                                self.update_tab(entity, tab_path, selection_paths),
                             ]));
                         }
                         tab::Command::DropFiles(to, from) => {
@@ -3156,7 +3160,7 @@ impl Application for App {
                         return Task::batch([
                             self.update_title(),
                             self.update_watcher(),
-                            self.rescan_tab(entity, location, None),
+                            self.update_tab(entity, location, None),
                         ]);
                     }
                 }
