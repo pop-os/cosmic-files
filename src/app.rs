@@ -2181,6 +2181,7 @@ impl Application for App {
                     auth,
                     auth_tx,
                 });
+                return widget::text_input::focus(self.dialog_text_input.clone());
             }
             Message::NetworkDriveInput(input) => {
                 self.network_drive_input = input;
@@ -3666,61 +3667,71 @@ impl Application for App {
             } => {
                 //TODO: use URI!
                 let mut controls = Vec::with_capacity(4);
+                let mut id_assigned = false;
+
                 if let Some(username) = &auth.username_opt {
                     //TODO: what should submit do?
-                    controls.push(
-                        widget::text_input(fl!("username"), username)
-                            .on_input(move |value| {
-                                Message::DialogUpdate(DialogPage::NetworkAuth {
-                                    mounter_key: *mounter_key,
-                                    uri: uri.clone(),
-                                    auth: MounterAuth {
-                                        username_opt: Some(value),
-                                        ..auth.clone()
-                                    },
-                                    auth_tx: auth_tx.clone(),
-                                })
+                    let mut input = widget::text_input(fl!("username"), username)
+                        .on_input(move |value| {
+                            Message::DialogUpdate(DialogPage::NetworkAuth {
+                                mounter_key: *mounter_key,
+                                uri: uri.clone(),
+                                auth: MounterAuth {
+                                    username_opt: Some(value),
+                                    ..auth.clone()
+                                },
+                                auth_tx: auth_tx.clone(),
                             })
-                            .into(),
-                    );
+                        });
+                    if !id_assigned {
+                        input = input.id(self.dialog_text_input.clone());
+                        id_assigned = true;
+                    }
+                    controls.push(input.into());
                 }
+
                 if let Some(domain) = &auth.domain_opt {
                     //TODO: what should submit do?
-                    controls.push(
-                        widget::text_input(fl!("domain"), domain)
-                            .on_input(move |value| {
-                                Message::DialogUpdate(DialogPage::NetworkAuth {
-                                    mounter_key: *mounter_key,
-                                    uri: uri.clone(),
-                                    auth: MounterAuth {
-                                        domain_opt: Some(value),
-                                        ..auth.clone()
-                                    },
-                                    auth_tx: auth_tx.clone(),
-                                })
+                    let mut input = widget::text_input(fl!("domain"), domain)
+                        .on_input(move |value| {
+                            Message::DialogUpdate(DialogPage::NetworkAuth {
+                                mounter_key: *mounter_key,
+                                uri: uri.clone(),
+                                auth: MounterAuth {
+                                    domain_opt: Some(value),
+                                    ..auth.clone()
+                                },
+                                auth_tx: auth_tx.clone(),
                             })
-                            .into(),
-                    );
+                        });
+                    if !id_assigned {
+                        input = input.id(self.dialog_text_input.clone());
+                        id_assigned = true;
+                    }
+                    controls.push(input.into());
                 }
+
                 if let Some(password) = &auth.password_opt {
                     //TODO: what should submit do?
                     //TODO: button for showing password
-                    controls.push(
-                        widget::secure_input(fl!("password"), password, None, true)
-                            .on_input(move |value| {
-                                Message::DialogUpdate(DialogPage::NetworkAuth {
-                                    mounter_key: *mounter_key,
-                                    uri: uri.clone(),
-                                    auth: MounterAuth {
-                                        password_opt: Some(value),
-                                        ..auth.clone()
-                                    },
-                                    auth_tx: auth_tx.clone(),
-                                })
+                    let mut input = widget::secure_input(fl!("password"), password, None, true)
+                        .on_input(move |value| {
+                            Message::DialogUpdate(DialogPage::NetworkAuth {
+                                mounter_key: *mounter_key,
+                                uri: uri.clone(),
+                                auth: MounterAuth {
+                                    password_opt: Some(value),
+                                    ..auth.clone()
+                                },
+                                auth_tx: auth_tx.clone(),
                             })
-                            .into(),
-                    );
+                        });
+                    if !id_assigned {
+                        input = input.id(self.dialog_text_input.clone());
+                    }
+                    controls.push(input.into());
                 }
+
                 if let Some(remember) = &auth.remember_opt {
                     //TODO: what should submit do?
                     //TODO: button for showing password
