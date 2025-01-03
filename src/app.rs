@@ -3681,6 +3681,7 @@ impl Application for App {
                                     auth_tx: auth_tx.clone(),
                                 })
                             })
+                            .on_submit(Message::DialogComplete)
                             .into(),
                     );
                 }
@@ -3699,6 +3700,7 @@ impl Application for App {
                                     auth_tx: auth_tx.clone(),
                                 })
                             })
+                            .on_submit(Message::DialogComplete)
                             .into(),
                     );
                 }
@@ -3718,6 +3720,7 @@ impl Application for App {
                                     auth_tx: auth_tx.clone(),
                                 })
                             })
+                            .on_submit(Message::DialogComplete)
                             .into(),
                     );
                 }
