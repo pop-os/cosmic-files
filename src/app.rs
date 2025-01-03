@@ -899,7 +899,7 @@ impl App {
         self.search_set(entity, term_opt)
     }
 
-    fn search_set(&mut self,tab: Entity, term_opt: Option<String>) -> Task<Message> {
+    fn search_set(&mut self, tab: Entity, term_opt: Option<String>) -> Task<Message> {
         let mut title_location_opt = None;
         if let Some(tab) = self.tab_model.data_mut::<Tab>(tab) {
             let location_opt = match term_opt {
@@ -3744,7 +3744,8 @@ impl Application for App {
                 let mut parts = auth.message.splitn(2, '\n');
                 let title = parts.next().unwrap_or_default();
                 let body = parts.next().unwrap_or_default();
-                widget::dialog()
+
+                let mut widget = widget::dialog()
                     .title(title)
                     .body(body)
                     .control(widget::column::with_children(controls).spacing(space_s))
@@ -3753,18 +3754,25 @@ impl Application for App {
                     )
                     .secondary_action(
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
-                    )
-                    .tertiary_action(widget::button::text(fl!("connect-anonymously")).on_press(
-                        Message::DialogUpdateComplete(DialogPage::NetworkAuth {
-                            mounter_key: *mounter_key,
-                            uri: uri.clone(),
-                            auth: MounterAuth {
-                                anonymous_opt: Some(true),
-                                ..auth.clone()
-                            },
-                            auth_tx: auth_tx.clone(),
-                        }),
-                    ))
+                    );
+
+                if let Some(_anonymous) = &auth.anonymous_opt {
+                    widget = widget.tertiary_action(
+                        widget::button::text(fl!("connect-anonymously")).on_press(
+                            Message::DialogUpdateComplete(DialogPage::NetworkAuth {
+                                mounter_key: *mounter_key,
+                                uri: uri.clone(),
+                                auth: MounterAuth {
+                                    anonymous_opt: Some(true),
+                                    ..auth.clone()
+                                },
+                                auth_tx: auth_tx.clone(),
+                            }),
+                        ),
+                    );
+                }
+
+                widget
             }
             DialogPage::NetworkError {
                 mounter_key: _,
