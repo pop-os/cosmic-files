@@ -2049,14 +2049,15 @@ impl Application for App {
             }
             Message::ExtractHere(entity_opt) => {
                 let paths = self.selected_paths(entity_opt);
-                if let Some(current_path) = paths.get(0) {
-                    if let Some(destination) = current_path.parent().zip(current_path.file_stem()) {
-                        let destination_path = destination.0.to_path_buf();
-                        self.operation(Operation::Extract {
-                            paths,
-                            to: destination_path,
-                        });
-                    }
+                if let Some(destination) = paths
+                    .first()
+                    .and_then(|first| first.parent())
+                    .map(|parent| parent.to_path_buf())
+                {
+                    self.operation(Operation::Extract {
+                        paths,
+                        to: destination,
+                    });
                 }
             }
             Message::Key(modifiers, key) => {
@@ -2642,37 +2643,37 @@ impl Application for App {
             Message::Rename(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-                        if let Some(items) = tab.items_opt() {
-                            let mut selected = Vec::new();
-                            for item in items.iter() {
-                                if item.selected {
-                                    if let Some(path) = item.path_opt() {
-                                        selected.push(path.to_path_buf());
-                                    }
+                    if let Some(items) = tab.items_opt() {
+                        let mut selected = Vec::new();
+                        for item in items.iter() {
+                            if item.selected {
+                                if let Some(path) = item.path_opt() {
+                                    selected.push(path.to_path_buf());
                                 }
-                            }
-                            if !selected.is_empty() {
-                                //TODO: batch rename
-                                for path in selected {
-                                    let parent = match path.parent() {
-                                        Some(some) => some.to_path_buf(),
-                                        None => continue,
-                                    };
-                                    let name = match path.file_name().and_then(|x| x.to_str()) {
-                                        Some(some) => some.to_string(),
-                                        None => continue,
-                                    };
-                                    let dir = path.is_dir();
-                                    self.dialog_pages.push_back(DialogPage::RenameItem {
-                                        from: path,
-                                        parent,
-                                        name,
-                                        dir,
-                                    });
-                                }
-                                return widget::text_input::focus(self.dialog_text_input.clone());
                             }
                         }
+                        if !selected.is_empty() {
+                            //TODO: batch rename
+                            for path in selected {
+                                let parent = match path.parent() {
+                                    Some(some) => some.to_path_buf(),
+                                    None => continue,
+                                };
+                                let name = match path.file_name().and_then(|x| x.to_str()) {
+                                    Some(some) => some.to_string(),
+                                    None => continue,
+                                };
+                                let dir = path.is_dir();
+                                self.dialog_pages.push_back(DialogPage::RenameItem {
+                                    from: path,
+                                    parent,
+                                    name,
+                                    dir,
+                                });
+                            }
+                            return widget::text_input::focus(self.dialog_text_input.clone());
+                        }
+                    }
                 }
             }
             Message::ReplaceResult(replace_result) => {

@@ -67,11 +67,20 @@ fn handle_replace(
 }
 
 fn get_directory_name(file_name: &str) -> &str {
-    const SUPPORTED_EXTENSIONS: [&str; 4] = [".tar.gz", ".tgz", ".tar", ".zip"];
+    // TODO: Chain with COMPOUND_EXTENSIONS once more formats are supported
+    const SUPPORTED_EXTENSIONS: &[&str] = &[
+        ".tar.bz2",
+        ".tar.gz",
+        ".tar.lzma",
+        ".tar.xz",
+        ".tgz",
+        ".tar",
+        ".zip",
+    ];
 
-    for ext in &SUPPORTED_EXTENSIONS {
-        if file_name.ends_with(ext) {
-            return &file_name[..file_name.len() - ext.len()];
+    for ext in SUPPORTED_EXTENSIONS {
+        if let Some(stripped) = file_name.strip_suffix(ext) {
+            return stripped;
         }
     }
     file_name
@@ -245,7 +254,7 @@ async fn copy_or_move(
                 if matches!(from.parent(), Some(parent) if parent == to) && !moving {
                     // `from`'s parent is equal to `to` which means we're copying to the same
                     // directory (duplicating files)
-                    let to = copy_unique_path(&from, &to);
+                    let to = copy_unique_path(&from, to);
                     Some((from, to))
                 } else if let Some(name) = from.file_name() {
                     let to = to.join(name);
@@ -361,12 +370,12 @@ fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
     to
 }
 
-fn file_name<'a>(path: &'a Path) -> Cow<'a, str> {
+fn file_name(path: &Path) -> Cow<'_, str> {
     path.file_name()
         .map_or_else(|| fl!("unknown-folder").into(), |x| x.to_string_lossy())
 }
 
-fn parent_name<'a>(path: &'a Path) -> Cow<'a, str> {
+fn parent_name(path: &Path) -> Cow<'_, str> {
     let Some(parent) = path.parent() else {
         return fl!("unknown-folder").into();
     };
@@ -374,7 +383,7 @@ fn parent_name<'a>(path: &'a Path) -> Cow<'a, str> {
     file_name(parent)
 }
 
-fn paths_parent_name<'a>(paths: &'a Vec<PathBuf>) -> Cow<'a, str> {
+fn paths_parent_name(paths: &[PathBuf]) -> Cow<'_, str> {
     let Some(first_path) = paths.first() else {
         return fl!("unknown-folder").into();
     };
@@ -776,8 +785,6 @@ impl Operation {
                         controller.check()?;
 
                         controller.set_progress((i as f32) / total_paths as f32);
-
-                        let to = to.to_owned();
 
                         if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
                             let dir_name = get_directory_name(file_name);
