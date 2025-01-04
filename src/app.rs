@@ -879,7 +879,7 @@ impl App {
 
     fn search(&mut self) -> Task<Message> {
         if let Some(term) = self.search_get() {
-            self.search_set(Some(term.to_string()))
+            self.search_set_active(Some(term.to_string()))
         } else {
             Task::none()
         }
@@ -894,10 +894,14 @@ impl App {
         }
     }
 
-    fn search_set(&mut self, term_opt: Option<String>) -> Task<Message> {
+    fn search_set_active(&mut self, term_opt: Option<String>) -> Task<Message> {
         let entity = self.tab_model.active();
+        self.search_set(entity, term_opt)
+    }
+
+    fn search_set(&mut self,tab: Entity, term_opt: Option<String>) -> Task<Message> {
         let mut title_location_opt = None;
-        if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+        if let Some(tab) = self.tab_model.data_mut::<Tab>(tab) {
             let location_opt = match term_opt {
                 Some(term) => match &tab.location {
                     Location::Path(path) | Location::Search(path, ..) => Some((
@@ -922,11 +926,11 @@ impl App {
             }
         }
         if let Some((title, location, focus_search)) = title_location_opt {
-            self.tab_model.text_set(entity, title);
+            self.tab_model.text_set(tab, title);
             return Task::batch([
                 self.update_title(),
                 self.update_watcher(),
-                self.rescan_tab(entity, location, None),
+                self.rescan_tab(tab, location, None),
                 if focus_search {
                     widget::text_input::focus(self.search_id.clone())
                 } else {
@@ -1767,7 +1771,7 @@ impl Application for App {
         }
         if self.search_get().is_some() {
             // Close search if open
-            return self.search_set(None);
+            return self.search_set_active(None);
         }
         if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
             if tab.context_menu.is_some() {
@@ -2298,7 +2302,11 @@ impl Application for App {
 
                 let mut commands = Vec::with_capacity(needs_reload.len());
                 for (entity, location) in needs_reload {
-                    commands.push(self.rescan_tab(entity, location, None));
+                    if let Location::Search(_, term, ..) = location {
+                        commands.push(self.search_set(entity, Some(term)));
+                    } else {
+                        commands.push(self.rescan_tab(entity, location, None));
+                    }
                 }
                 return Task::batch(commands);
             }
@@ -2642,33 +2650,35 @@ impl Application for App {
             Message::Rename(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-                    if let Some(parent) = tab.location.path_opt() {
-                        if let Some(items) = tab.items_opt() {
-                            let mut selected = Vec::new();
-                            for item in items.iter() {
-                                if item.selected {
-                                    if let Some(path) = item.path_opt() {
-                                        selected.push(path.to_path_buf());
-                                    }
+                    if let Some(items) = tab.items_opt() {
+                        let mut selected = Vec::new();
+                        for item in items.iter() {
+                            if item.selected {
+                                if let Some(path) = item.path_opt() {
+                                    selected.push(path.to_path_buf());
                                 }
                             }
-                            if !selected.is_empty() {
-                                //TODO: batch rename
-                                for path in selected {
-                                    let name = match path.file_name().and_then(|x| x.to_str()) {
-                                        Some(some) => some.to_string(),
-                                        None => continue,
-                                    };
-                                    let dir = path.is_dir();
-                                    self.dialog_pages.push_back(DialogPage::RenameItem {
-                                        from: path,
-                                        parent: parent.clone(),
-                                        name,
-                                        dir,
-                                    });
-                                }
-                                return widget::text_input::focus(self.dialog_text_input.clone());
+                        }
+                        if !selected.is_empty() {
+                            //TODO: batch rename
+                            for path in selected {
+                                let parent = match path.parent() {
+                                    Some(some) => some.to_path_buf(),
+                                    None => continue,
+                                };
+                                let name = match path.file_name().and_then(|x| x.to_str()) {
+                                    Some(some) => some.to_string(),
+                                    None => continue,
+                                };
+                                let dir = path.is_dir();
+                                self.dialog_pages.push_back(DialogPage::RenameItem {
+                                    from: path,
+                                    parent,
+                                    name,
+                                    dir,
+                                });
                             }
+                            return widget::text_input::focus(self.dialog_text_input.clone());
                         }
                     }
                 }
@@ -2717,16 +2727,16 @@ impl Application for App {
             }
             Message::SearchActivate => {
                 return if self.search_get().is_none() {
-                    self.search_set(Some(String::new()))
+                    self.search_set_active(Some(String::new()))
                 } else {
                     widget::text_input::focus(self.search_id.clone())
                 };
             }
             Message::SearchClear => {
-                return self.search_set(None);
+                return self.search_set_active(None);
             }
             Message::SearchInput(input) => {
-                return self.search_set(Some(input));
+                return self.search_set_active(Some(input));
             }
             Message::SetShowDetails(show_details) => {
                 config_set!(show_details, show_details);
