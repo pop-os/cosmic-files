@@ -89,3 +89,47 @@ replace-with = Vervangen door
 apply-to-all = Op alles toepassen
 keep-both = Beide behouden
 skip = Overslaan
+
+## Set as Executable and Launch Dialog
+set-executable-and-launch = Bestand uitvoerbaar maken en dan openen
+set-executable-and-launch-description = Wilt u '{$name}' uitvoerbaar maken en dan openen?
+set-and-launch = Maak uitvoerbaar en open
+
+## Metadata Dialog
+owner = Eigenaar
+group = Groep
+other = Anderen
+read = Lezen
+write = Schrijven
+execute = Uitvoeren
+
+# Context Pages
+
+## About
+git-description = Git commit {$hash} op {$date}
+
+## Add Network Drive
+add-network-drive = Netwerkschijf toevoegen
+connect = Verbinden
+connect-anonymously = Anoniem verbinden
+connecting = Verbinding maken...
+domain = Domein
+enter-server-address = Serveradres invoeren
+network-drive-description =
+    Serveradressen bestaan uit protocolvoorvoegsel en netwerkadres.
+    Voorbeelden: ssh://192.168.0.1, ftp://[2001:db8::1]
+### Make sure to keep the comma which separates the columns
+network-drive-schemes =
+    Beschikbare protocollen,Voorvoegsel
+    AppleTalk,afp://
+    File Transfer Protocol,ftp:// of ftps://
+    Network File System,nfs://
+    Server Message Block,smb://
+    SSH File Transfer Protocol,sftp:// of ssh://
+    WebDav,dav:// of davs://
+network-drive-error = Geen toegang tot de netwerkschijf
+password = Wachtwoord
+remember-password = Wachtwoord onthouden
+try-again = Opnieuw proberen
+username = Gebruikersnaam
+
