@@ -133,3 +133,30 @@ remember-password = Wachtwoord onthouden
 try-again = Opnieuw proberen
 username = Gebruikersnaam
 
+## Operations
+cancelled = Geannuleerd
+edit-history = Geschiedenis bewerken
+history = Geschiedenis
+no-history = Geen items in de geschiedenis.
+pending = In afwachting
+progress = {$percent}%
+progress-cancelled = {$percent}%, geannuleerd
+progress-paused = {$percent}%, gepauzeerd
+failed = Mislukt
+complete = Voltooid
+compressing = { $items}  {$items -> 
+        [one] bestand wordt
+        *[other] bestanden worden
+    } van '{$from}' naar '{$to}' gecomprimeerd ({$progress})...
+compressed = { $items}  {$items -> 
+        [one] bestand
+        *[other] bestanden
+    } gecomprimeerd van '{$from}' naar '{$to}'
+copy_noun = Kopie
+creating = '{$name}' in '{$parent}' aanmaken
+created = '{$name}' in '{$parent}' aangemaakt
+copying = {$items} {$items ->
+        [one] bestand wordt
+        *[other] bestanden worden
+    } van '{$from}' naar '{$to}' gekopieerd ({$progress})...
+
