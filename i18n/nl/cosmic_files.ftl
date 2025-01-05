@@ -159,4 +159,14 @@ copying = {$items} {$items ->
         [one] bestand wordt
         *[other] bestanden worden
     } van '{$from}' naar '{$to}' gekopieerd ({$progress})...
-
+emptying-trash = {trash} wordt geleegd ({$progress})...
+emptied-trash = {trash} geleegd
+extracting = {$items} {$items -> 
+        [one] bestand wordt
+        *[other] bestanden worden
+    } van '{$from}' naar '{$to}' uitgepakt ({$progress})...
+extracted = {$items} {$items ->
+        [one] bestand
+        *[other] bestanden
+    } uitgepakt van '{$from}' naar '{$to}'
+setting-executable-and-launching = 
