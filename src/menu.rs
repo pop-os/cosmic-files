@@ -163,7 +163,7 @@ pub fn context_menu<'a>(
                             .push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
                     }
                 }
-                if matches!(tab.location, Location::Search(..)) {
+                if matches!(tab.location, Location::Search(..) | Location::Recents) {
                     children.push(
                         menu_item(fl!("open-item-location"), Action::OpenItemLocation).into(),
                     );
@@ -260,7 +260,7 @@ pub fn context_menu<'a>(
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
                     children.push(menu_item(fl!("open"), Action::Open).into());
                 }
-                if matches!(tab.location, Location::Search(..)) {
+                if matches!(tab.location, Location::Search(..) | Location::Recents) {
                     children.push(
                         menu_item(fl!("open-item-location"), Action::OpenItemLocation).into(),
                     );
