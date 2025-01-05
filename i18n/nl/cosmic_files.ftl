@@ -191,3 +191,43 @@ restored = {$items} {$items ->
     } uit {trash} teruggezet
 unknown-folder = Onbekende map
 
+## Open with
+open-with = Openen met...
+default-app = {$name} (standaard)
+
+## Show details
+show-details = Details weergeven
+type = Type: {$mime}
+items = Bestanden: {$items}
+item-size = Grootte: {$size}
+item-created = Aangemaakt op: {$created}
+item-modified = Bewerkt op: {$modified}
+item-accessed = Geopend op: {$accessed}
+calculating = Wordt berekend...
+
+## Settings
+settings = Instellingen
+
+### Appearance
+appearance = Uiterlijk
+theme = Thema
+match-desktop = Systeemstandaard
+dark = Donker
+light = Licht
+
+# Context menu
+add-to-sidebar = Aan de zijbalk toevoegen
+compress = Comprimeren
+extract-here = Uitpakken
+new-file = Nieuw bestand...
+new-folder = Nieuwe map...
+open-in-terminal = Openen in terminal
+move-to-trash = Naar prullenbak verplaatsen
+restore-from-trash = Uit prullenbak terugzetten
+remove-from-sidebar = Uit de zijbalk verwijderen
+sort-by-name = Sorteren op naam
+sort-by-modified = Sorteren op laatst bewerkt
+sort-by-size = Sorteren op grootte
+sort-by-trashed = Sorteren op tijdstip van verwijderen
+
+
