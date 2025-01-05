@@ -169,4 +169,25 @@ extracted = {$items} {$items ->
         [one] bestand
         *[other] bestanden
     } uitgepakt van '{$from}' naar '{$to}'
-setting-executable-and-launching = 
+setting-executable-and-launching = '{$name}' wordt uitvoerbaar gemaakt en geopend
+set-executable-and-launched = '{$name}' uitvoerbaar maken en openen
+moving = {$items} {$items ->
+        [one] bestand wordt
+        *[other] bestanden worden
+    } van '{$from}' naar '{$to}' verplaatst ({$progress})...
+moved = {$items} {$items ->
+        [one] bestand
+        *[other] bestanden
+    } verplaatst van '{$form}' naar '{$to}'
+renaming = '{$from}' als '{$to}' hernoemen
+renamed = '{$form}' als '{$to}' hernoemd
+restoring = {$items} {$items ->
+        [one] bestand wordt
+        *[other] bestanden worden
+    } uit {trash} teruggezet ({$progress})...
+restored = {$items} {$items ->
+        [one] bestand
+        *[other] bestanden
+    } uit {trash} teruggezet
+unknown-folder = Onbekende map
+
