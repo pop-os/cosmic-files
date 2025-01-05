@@ -344,6 +344,7 @@ impl From<AppMessage> for Message {
             AppMessage::ZoomDefault(_entity_opt) => Message::ZoomDefault,
             AppMessage::ZoomIn(_entity_opt) => Message::ZoomIn,
             AppMessage::ZoomOut(_entity_opt) => Message::ZoomOut,
+            AppMessage::NewItem(_entity_opt, true) => Message::NewFolder,
             unsupported => {
                 log::warn!("{unsupported:?} not supported in dialog mode");
                 Message::None
