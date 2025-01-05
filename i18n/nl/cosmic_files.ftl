@@ -1,4 +1,4 @@
-cosmic-files = COSMIC-bestandsbeheerder
+cosmic-files = COSMIC bestandsbeheerder
 empty-folder = Lege map
 empty-folder-hidden = Lege map (met verborgen bestanden)
 no-results = Geen resultaten gevonden
@@ -16,7 +16,7 @@ desktop-view-options = Opties voor bureaubladweergave
 show-on-desktop = Op bureaublad weergeven
 desktop-folder-content = Bestanden in Bureaublad
 mounted-drives = Gekoppelde schijven
-trash-folder-icon = Prullenbak-icoon
+trash-folder-icon = Prullenbakicoon
 icon-size-and-spacing = Grootte en ruimte tussen iconen
 icon-size = Icoon grootte
 
@@ -83,7 +83,7 @@ rename-folder = Map hernoemen
 replace = Vervangen
 replace-title = '{$filename}' bestaat al op deze locatie.
 replace-warning = Wilt u het bestand vervangen door de nieuwe versie? Dit zal de bestaande inhoud overschrijven.
-replace-warning-operation = Wilt u het bestand vervangen? Bestaande inhoud wordt overscheven!
+replace-warning-operation = Wilt u het bestand vervangen? Bestaande inhoud wordt overschreven!
 original-file = Oorspronkelijk bestand
 replace-with = Vervangen door
 apply-to-all = Op alles toepassen
@@ -230,4 +230,46 @@ sort-by-modified = Sorteren op laatst bewerkt
 sort-by-size = Sorteren op grootte
 sort-by-trashed = Sorteren op tijdstip van verwijderen
 
+## Desktop
+change-wallpaper = Schermachtergrond wijzigen...
+desktop-appearance = Bureaublad uiterlijk...
+display-settings = Beeldschermbeheer...
 
+# Menu
+
+## File
+file = Bestand
+new-tab = Nieuw tabblad
+new-window = Nieuw venster
+rename = Hernoemen...
+close-tab = Tabblad sluiten
+quit = Sluiten
+
+## Edit
+edit = Bewerken
+cut = Knippen
+copy = Kopiëren
+paste = Plakken
+select-all = Alles selecteren
+
+## View
+zoom-in = Inzoomen
+default-size = Zoomniveau terugzetten
+zoom-out = Uitzoomen
+view = Aanzicht
+grid-view = Rasterweergave
+list-view = Lijstweergave
+show-hidden-files = Verborgen bestanden tonen
+list-directories-first = Mappen bovenaan weergeven
+gallery-preview = Galerijweergave
+menu-settings = Instellingen...
+menu-about = Over COSMIC bestandsbeheerder...
+
+## Sort
+sort = Sorteren
+sort-a-z = A-Z
+sort-z-a = Z-A
+sort-newest-first = Nieuwste bovenaan
+sort-oldest-first = Oudste bovenaan
+sort-smallest-to-largest = Van klein naar groot
+sort-largest-to-smallest = Van groot naar klein
