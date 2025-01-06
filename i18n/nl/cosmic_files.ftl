@@ -1,4 +1,4 @@
-cosmic-files = COSMIC bestandsbeheerder
+cosmic-files = COSMIC-bestandsbeheerder
 empty-folder = Lege map
 empty-folder-hidden = Lege map (met verborgen bestanden)
 no-results = Geen resultaten gevonden
