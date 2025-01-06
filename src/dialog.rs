@@ -251,7 +251,8 @@ impl<M: Send + 'static> Dialog<M> {
         self.cosmic
             .subscription()
             .map(DialogMessage)
-            .map(self.mapper)
+            .with(self.mapper)
+            .map(|(mapper, message)| mapper(message))
     }
 
     pub fn update(&mut self, message: DialogMessage) -> Task<M> {
@@ -344,6 +345,7 @@ impl From<AppMessage> for Message {
             AppMessage::ZoomDefault(_entity_opt) => Message::ZoomDefault,
             AppMessage::ZoomIn(_entity_opt) => Message::ZoomIn,
             AppMessage::ZoomOut(_entity_opt) => Message::ZoomOut,
+            AppMessage::NewItem(_entity_opt, true) => Message::NewFolder,
             unsupported => {
                 log::warn!("{unsupported:?} not supported in dialog mode");
                 Message::None
@@ -1708,16 +1710,17 @@ impl Application for App {
         ];
 
         for (key, mounter) in MOUNTERS.iter() {
-            let key = *key;
-            subscriptions.push(mounter.subscription().map(move |mounter_message| {
-                match mounter_message {
-                    MounterMessage::Items(items) => Message::MounterItems(key, items),
-                    _ => {
-                        log::warn!("{:?} not supported in dialog mode", mounter_message);
-                        Message::None
-                    }
-                }
-            }));
+            subscriptions.push(
+                mounter.subscription().with(*key).map(
+                    |(key, mounter_message)| match mounter_message {
+                        MounterMessage::Items(items) => Message::MounterItems(key, items),
+                        _ => {
+                            log::warn!("{:?} not supported in dialog mode", mounter_message);
+                            Message::None
+                        }
+                    },
+                ),
+            );
         }
 
         Subscription::batch(subscriptions)
