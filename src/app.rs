@@ -352,6 +352,7 @@ pub enum Message {
     WindowClose,
     WindowCloseRequested(window::Id),
     WindowNew,
+    WindowUnfocus,
     ZoomDefault(Option<Entity>),
     ZoomIn(Option<Entity>),
     ZoomOut(Option<Entity>),
@@ -899,7 +900,7 @@ impl App {
         self.search_set(entity, term_opt)
     }
 
-    fn search_set(&mut self,tab: Entity, term_opt: Option<String>) -> Task<Message> {
+    fn search_set(&mut self, tab: Entity, term_opt: Option<String>) -> Task<Message> {
         let mut title_location_opt = None;
         if let Some(tab) = self.tab_model.data_mut::<Tab>(tab) {
             let location_opt = match term_opt {
@@ -3024,6 +3025,12 @@ impl Application for App {
                     ]);
                 }
             }
+            Message::WindowUnfocus => {
+                let tab_entity = self.tab_model.active();
+                if let Some(tab) = self.tab_model.data_mut::<Tab>(tab_entity) {
+                    tab.context_menu = None;
+                }
+            }
             Message::WindowCloseRequested(id) => {
                 self.remove_window(&id);
             }
@@ -4369,6 +4376,7 @@ impl Application for App {
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
                     Some(Message::Modifiers(modifiers))
                 }
+                Event::Window(WindowEvent::Unfocused) => Some(Message::WindowUnfocus),
                 Event::Window(WindowEvent::CloseRequested) => Some(Message::WindowClose),
                 Event::Window(WindowEvent::Opened { position: _, size }) => {
                     Some(Message::Size(size))
