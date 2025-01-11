@@ -352,6 +352,7 @@ pub enum Message {
     WindowClose,
     WindowCloseRequested(window::Id),
     WindowNew,
+    WindowUnfocus,
     ZoomDefault(Option<Entity>),
     ZoomIn(Option<Entity>),
     ZoomOut(Option<Entity>),
@@ -3025,6 +3026,12 @@ impl Application for App {
                     ]);
                 }
             }
+            Message::WindowUnfocus => {
+                let tab_entity = self.tab_model.active();
+                if let Some(tab) = self.tab_model.data_mut::<Tab>(tab_entity) {
+                    tab.context_menu = None;
+                }
+            }
             Message::WindowCloseRequested(id) => {
                 self.remove_window(&id);
             }
@@ -4370,6 +4377,7 @@ impl Application for App {
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
                     Some(Message::Modifiers(modifiers))
                 }
+                Event::Window(WindowEvent::Unfocused) => Some(Message::WindowUnfocus),
                 Event::Window(WindowEvent::CloseRequested) => Some(Message::WindowClose),
                 Event::Window(WindowEvent::Opened { position: _, size }) => {
                     Some(Message::Size(size))
