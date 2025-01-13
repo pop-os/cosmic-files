@@ -899,7 +899,7 @@ impl App {
         self.search_set(entity, term_opt)
     }
 
-    fn search_set(&mut self,tab: Entity, term_opt: Option<String>) -> Task<Message> {
+    fn search_set(&mut self, tab: Entity, term_opt: Option<String>) -> Task<Message> {
         let mut title_location_opt = None;
         if let Some(tab) = self.tab_model.data_mut::<Tab>(tab) {
             let location_opt = match term_opt {
