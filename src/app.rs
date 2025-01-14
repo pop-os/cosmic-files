@@ -352,6 +352,7 @@ pub enum Message {
     WindowClose,
     WindowCloseRequested(window::Id),
     WindowNew,
+    WindowUnfocus,
     ZoomDefault(Option<Entity>),
     ZoomIn(Option<Entity>),
     ZoomOut(Option<Entity>),
@@ -2063,14 +2064,15 @@ impl Application for App {
             }
             Message::ExtractHere(entity_opt) => {
                 let paths = self.selected_paths(entity_opt);
-                if let Some(current_path) = paths.get(0) {
-                    if let Some(destination) = current_path.parent().zip(current_path.file_stem()) {
-                        let destination_path = destination.0.to_path_buf();
-                        self.operation(Operation::Extract {
-                            paths,
-                            to: destination_path,
-                        });
-                    }
+                if let Some(destination) = paths
+                    .first()
+                    .and_then(|first| first.parent())
+                    .map(|parent| parent.to_path_buf())
+                {
+                    self.operation(Operation::Extract {
+                        paths,
+                        to: destination,
+                    });
                 }
             }
             Message::Key(modifiers, key) => {
@@ -3026,6 +3028,12 @@ impl Application for App {
                         window::close(window_id),
                         Task::perform(async move { message::app(Message::MaybeExit) }, |x| x),
                     ]);
+                }
+            }
+            Message::WindowUnfocus => {
+                let tab_entity = self.tab_model.active();
+                if let Some(tab) = self.tab_model.data_mut::<Tab>(tab_entity) {
+                    tab.context_menu = None;
                 }
             }
             Message::WindowCloseRequested(id) => {
@@ -4373,6 +4381,7 @@ impl Application for App {
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
                     Some(Message::Modifiers(modifiers))
                 }
+                Event::Window(WindowEvent::Unfocused) => Some(Message::WindowUnfocus),
                 Event::Window(WindowEvent::CloseRequested) => Some(Message::WindowClose),
                 Event::Window(WindowEvent::Opened { position: _, size }) => {
                     Some(Message::Size(size))
