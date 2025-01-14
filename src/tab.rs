@@ -4285,9 +4285,9 @@ impl Tab {
                     .drag_content(move || {
                         ClipboardCopy::new(crate::clipboard::ClipboardKind::Copy, &files)
                     })
-                    .drag_icon(move || {
+                    .drag_icon(move |v| {
                         let state: tree::State = Widget::<Message, _, _>::state(&drag_list);
-                        (Element::from(drag_list.clone()).map(|_m| ()), state)
+                        (Element::from(drag_list.clone()).map(|_m| ()), state, v)
                     })
             }
             _ => item_view,
