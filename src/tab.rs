@@ -2245,8 +2245,8 @@ impl Tab {
                                 if !item.selected {
                                     self.clicked = click_i_opt;
                                     item.selected = true;
-                                    self.select_range = Some((i, i));
                                 }
+                                self.select_range = Some((i, i));
                                 self.select_focus = click_i_opt;
                                 self.selected_clicked = true;
                             } else if !dont_unset && item.selected {
