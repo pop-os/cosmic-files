@@ -1071,6 +1071,8 @@ pub enum Message {
     SearchContext(Location, SearchContextWrapper),
     SearchReady(bool),
     SelectAll,
+    SelectFirst,
+    SelectLast,
     SetSort(HeadingOptions, bool),
     Thumbnail(PathBuf, ItemThumbnail),
     ToggleShowHidden,
@@ -2799,6 +2801,36 @@ impl Tab {
                     commands.push(Command::Iced(
                         widget::button::focus(widget::Id::unique()).into(),
                     ));
+                }
+            }
+            Message::SelectFirst => {
+                if self.select_position(0, 0, mod_shift) {
+                    if let Some(offset) = self.select_focus_scroll() {
+                        commands.push(Command::Iced(
+                            scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                        ));
+                    }
+                    if let Some(id) = self.select_focus_id() {
+                        commands.push(Command::Iced(widget::button::focus(id).into()));
+                    }
+                }
+            }
+            Message::SelectLast => {
+                if let Some(ref items) = self.items_opt {
+                    if let Some(last_pos) = items.iter().filter_map(|item| item.pos_opt.get()).max()
+                    {
+                        if self.select_position(last_pos.0, last_pos.1, mod_shift) {
+                            if let Some(offset) = self.select_focus_scroll() {
+                                commands.push(Command::Iced(
+                                    scrollable::scroll_to(self.scrollable_id.clone(), offset)
+                                        .into(),
+                                ));
+                            }
+                            if let Some(id) = self.select_focus_id() {
+                                commands.push(Command::Iced(widget::button::focus(id).into()));
+                            }
+                        }
+                    }
                 }
             }
             Message::SetSort(heading_option, dir) => {
