@@ -125,6 +125,8 @@ pub enum Action {
     Rename,
     RestoreFromTrash,
     SearchActivate,
+    SelectFirst,
+    SelectLast,
     SelectAll,
     SetSort(HeadingOptions, bool),
     Settings,
@@ -190,6 +192,8 @@ impl Action {
             Action::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
             Action::SearchActivate => Message::SearchActivate,
             Action::SelectAll => Message::TabMessage(entity_opt, tab::Message::SelectAll),
+            Action::SelectFirst => Message::TabMessage(entity_opt, tab::Message::SelectFirst),
+            Action::SelectLast => Message::TabMessage(entity_opt, tab::Message::SelectLast),
             Action::SetSort(sort, dir) => {
                 Message::TabMessage(entity_opt, tab::Message::SetSort(*sort, *dir))
             }
