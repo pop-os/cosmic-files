@@ -2754,9 +2754,7 @@ impl Tab {
                     if let Some(items) = &mut self.items_opt {
                         if finished || context.ready.swap(false, atomic::Ordering::SeqCst) {
                             let duration = Instant::now();
-                            while let Some((path, name, metadata)) =
-                                context.results_rx.blocking_recv()
-                            {
+                            while let Ok((path, name, metadata)) = context.results_rx.try_recv() {
                                 //TODO: combine this with column_sort logic, they must match!
                                 let item_modified = metadata.modified().ok();
                                 let index = match items.binary_search_by(|other| {
