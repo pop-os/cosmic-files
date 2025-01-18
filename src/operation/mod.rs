@@ -683,7 +683,7 @@ impl Operation {
                                     path.strip_prefix(relative_root).map_err(err_str)?.to_str()
                                 {
                                     if path.is_file() {
-                                        let mut file = fs::File::open(&path).map_err(err_str)?;
+                                        let mut file = fs::File::open(path).map_err(err_str)?;
                                         let metadata = file.metadata().map_err(err_str)?;
                                         let total = metadata.len();
                                         if total >= 4 * 1024 * 1024 * 1024 {
@@ -800,7 +800,7 @@ impl Operation {
                             op_sel.selected.push(new_dir.clone());
 
                             let controller = controller.clone();
-                            let mime = mime_for_path(&path);
+                            let mime = mime_for_path(path);
                             match mime.essence_str() {
                                 "application/gzip" | "application/x-compressed-tar" => {
                                     OpReader::new(path, controller)
@@ -960,7 +960,7 @@ mod tests {
     };
 
     use cosmic::iced::futures::{channel::mpsc, StreamExt};
-    use log::{debug, trace};
+    use log::debug;
     use test_log::test;
     use tokio::sync;
 
@@ -968,8 +968,8 @@ mod tests {
     use crate::{
         app::{
             test_utils::{
-                empty_fs, filter_dirs, filter_files, read_dir_sorted, simple_fs, NAME_LEN,
-                NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED,
+                empty_fs, filter_dirs, filter_files, simple_fs, NAME_LEN, NUM_DIRS, NUM_FILES,
+                NUM_HIDDEN, NUM_NESTED,
             },
             DialogPage, Message,
         },
