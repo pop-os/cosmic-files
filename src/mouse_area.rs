@@ -31,156 +31,150 @@ use crate::tab::DOUBLE_CLICK_DURATION;
 pub struct MouseArea<'a, Message> {
     id: Id,
     content: Element<'a, Message>,
-    on_drag: Option<Box<dyn Fn(Option<Rectangle>) -> Message + 'a>>,
-    on_double_click: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
-    on_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
-    on_drag_end: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
-    on_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
-    on_resize: Option<Box<dyn Fn(Size) -> Message + 'a>>,
-    on_right_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
-    on_right_press_no_capture: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
-    on_right_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
-    on_middle_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
-    on_middle_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
-    on_back_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
-    on_back_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
-    on_forward_press: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
-    on_forward_release: Option<Box<dyn Fn(Option<Point>) -> Message + 'a>>,
-    on_scroll: Option<Box<dyn Fn(mouse::ScrollDelta, Modifiers) -> Option<Message> + 'a>>,
-    on_enter: Option<Box<dyn Fn() -> Message + 'a>>,
-    on_exit: Option<Box<dyn Fn() -> Message + 'a>>,
+    on_drag: Option<Box<dyn OnDrag<'a, Message>>>,
+    on_double_click: Option<Box<dyn OnMouseButton<'a, Message>>>,
+    on_press: Option<Box<dyn OnMouseButton<'a, Message>>>,
+    on_drag_end: Option<Box<dyn OnMouseButton<'a, Message>>>,
+    on_release: Option<Box<dyn OnMouseButton<'a, Message>>>,
+    on_resize: Option<Box<dyn OnResize<'a, Message>>>,
+    on_right_press: Option<Box<dyn OnMouseButton<'a, Message>>>,
+    on_right_press_no_capture: Option<Box<dyn OnMouseButton<'a, Message>>>,
+    on_right_release: Option<Box<dyn OnMouseButton<'a, Message>>>,
+    on_middle_press: Option<Box<dyn OnMouseButton<'a, Message>>>,
+    on_middle_release: Option<Box<dyn OnMouseButton<'a, Message>>>,
+    on_back_press: Option<Box<dyn OnMouseButton<'a, Message>>>,
+    on_back_release: Option<Box<dyn OnMouseButton<'a, Message>>>,
+    on_forward_press: Option<Box<dyn OnMouseButton<'a, Message>>>,
+    on_forward_release: Option<Box<dyn OnMouseButton<'a, Message>>>,
+    on_scroll: Option<Box<dyn OnScroll<'a, Message>>>,
+    on_enter: Option<Box<dyn OnEnterExit<'a, Message>>>,
+    on_exit: Option<Box<dyn OnEnterExit<'a, Message>>>,
     show_drag_rect: bool,
 }
 
 impl<'a, Message> MouseArea<'a, Message> {
     /// The message to emit when a drag is initiated.
     #[must_use]
-    pub fn on_drag(mut self, message: impl Fn(Option<Rectangle>) -> Message + 'a) -> Self {
+    pub fn on_drag(mut self, message: impl OnDrag<'a, Message>) -> Self {
         self.on_drag = Some(Box::new(message));
         self
     }
 
     /// The message to emit when a drag ends.
     #[must_use]
-    pub fn on_drag_end(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
+    pub fn on_drag_end(mut self, message: impl OnMouseButton<'a, Message>) -> Self {
         self.on_drag_end = Some(Box::new(message));
         self
     }
 
     /// The message to emit on a double click.
     #[must_use]
-    pub fn on_double_click(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
+    pub fn on_double_click(mut self, message: impl OnMouseButton<'a, Message>) -> Self {
         self.on_double_click = Some(Box::new(message));
         self
     }
 
     /// The message to emit on a left button press.
     #[must_use]
-    pub fn on_press(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
+    pub fn on_press(mut self, message: impl OnMouseButton<'a, Message>) -> Self {
         self.on_press = Some(Box::new(message));
         self
     }
 
     /// The message to emit on a left button release.
     #[must_use]
-    pub fn on_release(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
+    pub fn on_release(mut self, message: impl OnMouseButton<'a, Message>) -> Self {
         self.on_release = Some(Box::new(message));
         self
     }
 
     /// The message to emit on resizing.
     #[must_use]
-    pub fn on_resize(mut self, message: impl Fn(Size) -> Message + 'a) -> Self {
+    pub fn on_resize(mut self, message: impl OnResize<'a, Message>) -> Self {
         self.on_resize = Some(Box::new(message));
         self
     }
 
     /// The message to emit on a right button press.
     #[must_use]
-    pub fn on_right_press(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
+    pub fn on_right_press(mut self, message: impl OnMouseButton<'a, Message>) -> Self {
         self.on_right_press = Some(Box::new(message));
         self
     }
 
     /// The message to emit on a right button press without capturing.
     #[must_use]
-    pub fn on_right_press_no_capture(
-        mut self,
-        message: impl Fn(Option<Point>) -> Message + 'a,
-    ) -> Self {
+    pub fn on_right_press_no_capture(mut self, message: impl OnMouseButton<'a, Message>) -> Self {
         self.on_right_press_no_capture = Some(Box::new(message));
         self
     }
 
     /// The message to emit on a right button release.
     #[must_use]
-    pub fn on_right_release(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
+    pub fn on_right_release(mut self, message: impl OnMouseButton<'a, Message>) -> Self {
         self.on_right_release = Some(Box::new(message));
         self
     }
 
     /// The message to emit on a middle button press.
     #[must_use]
-    pub fn on_middle_press(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
+    pub fn on_middle_press(mut self, message: impl OnMouseButton<'a, Message>) -> Self {
         self.on_middle_press = Some(Box::new(message));
         self
     }
 
     /// The message to emit on a middle button release.
     #[must_use]
-    pub fn on_middle_release(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
+    pub fn on_middle_release(mut self, message: impl OnMouseButton<'a, Message>) -> Self {
         self.on_middle_release = Some(Box::new(message));
         self
     }
 
     /// The message to emit on a back button press.
     #[must_use]
-    pub fn on_back_press(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
+    pub fn on_back_press(mut self, message: impl OnMouseButton<'a, Message>) -> Self {
         self.on_back_press = Some(Box::new(message));
         self
     }
 
     /// The message to emit on a back button release.
     #[must_use]
-    pub fn on_back_release(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
+    pub fn on_back_release(mut self, message: impl OnMouseButton<'a, Message>) -> Self {
         self.on_back_release = Some(Box::new(message));
         self
     }
 
     /// The message to emit on a forward button press.
     #[must_use]
-    pub fn on_forward_press(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
+    pub fn on_forward_press(mut self, message: impl OnMouseButton<'a, Message>) -> Self {
         self.on_forward_press = Some(Box::new(message));
         self
     }
 
     /// The message to emit on a forward button release.
     #[must_use]
-    pub fn on_forward_release(mut self, message: impl Fn(Option<Point>) -> Message + 'a) -> Self {
+    pub fn on_forward_release(mut self, message: impl OnMouseButton<'a, Message>) -> Self {
         self.on_forward_release = Some(Box::new(message));
         self
     }
 
     /// The message to emit on a scroll.
     #[must_use]
-    pub fn on_scroll(
-        mut self,
-        message: impl Fn(mouse::ScrollDelta, Modifiers) -> Option<Message> + 'a,
-    ) -> Self {
+    pub fn on_scroll(mut self, message: impl OnScroll<'a, Message>) -> Self {
         self.on_scroll = Some(Box::new(message));
         self
     }
 
     /// The message to emit when a mouse enters the area.
     #[must_use]
-    pub fn on_enter(mut self, message: impl Fn() -> Message + 'a) -> Self {
+    pub fn on_enter(mut self, message: impl OnEnterExit<'a, Message>) -> Self {
         self.on_enter = Some(Box::new(message));
         self
     }
 
     /// The message to emit when a mouse exits the area.
     #[must_use]
-    pub fn on_exit(mut self, message: impl Fn() -> Message + 'a) -> Self {
+    pub fn on_exit(mut self, message: impl OnEnterExit<'a, Message>) -> Self {
         self.on_exit = Some(Box::new(message));
         self
     }
@@ -198,6 +192,24 @@ impl<'a, Message> MouseArea<'a, Message> {
         self
     }
 }
+
+pub trait OnMouseButton<'a, Message>: Fn(Option<Point>) -> Message + 'a {}
+impl<'a, Message, F> OnMouseButton<'a, Message> for F where F: Fn(Option<Point>) -> Message + 'a {}
+
+pub trait OnDrag<'a, Message>: Fn(Option<Rectangle>) -> Message + 'a {}
+impl<'a, Message, F> OnDrag<'a, Message> for F where F: Fn(Option<Rectangle>) -> Message + 'a {}
+
+pub trait OnResize<'a, Message>: Fn(Size) -> Message + 'a {}
+impl<'a, Message, F> OnResize<'a, Message> for F where F: Fn(Size) -> Message + 'a {}
+
+pub trait OnScroll<'a, Message>: Fn(mouse::ScrollDelta, Modifiers) -> Option<Message> + 'a {}
+impl<'a, Message, F> OnScroll<'a, Message> for F where
+    F: Fn(mouse::ScrollDelta, Modifiers) -> Option<Message> + 'a
+{
+}
+
+pub trait OnEnterExit<'a, Message>: Fn() -> Message + 'a {}
+impl<'a, Message, F> OnEnterExit<'a, Message> for F where F: Fn() -> Message + 'a {}
 
 /// Local state of the [`MouseArea`].
 #[derive(Default)]
@@ -250,7 +262,7 @@ impl State {
         } else {
             mouse::Click::new(pos, mouse::Button::Left, None)
         };
-        self.prev_click = Some((new.clone(), now));
+        self.prev_click = Some((new, now));
         new
     }
 }

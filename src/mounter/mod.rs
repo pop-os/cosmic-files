@@ -117,4 +117,4 @@ pub fn mounters() -> Mounters {
     Mounters::new(mounters)
 }
 
-pub static MOUNTERS: Lazy<Mounters> = Lazy::new(|| mounters());
+pub static MOUNTERS: Lazy<Mounters> = Lazy::new(mounters);
