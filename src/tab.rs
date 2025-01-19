@@ -475,7 +475,7 @@ pub fn item_from_entry(
     };
 
     let dir_size = if metadata.is_dir() {
-        DirSize::Calculating(Controller::new())
+        DirSize::Calculating(Controller::default())
     } else {
         DirSize::NotDirectory
     };
