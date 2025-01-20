@@ -296,7 +296,7 @@ impl<'a, Message> MouseArea<'a, Message> {
     }
 }
 
-impl<'a, Message> Widget<Message, Theme, Renderer> for MouseArea<'a, Message>
+impl<Message> Widget<Message, Theme, Renderer> for MouseArea<'_, Message>
 where
     Message: Clone,
 {
@@ -671,7 +671,7 @@ fn update<Message: Clone>(
 
     if let Some(on_scroll) = widget.on_scroll.as_ref() {
         if let Event::Mouse(mouse::Event::WheelScrolled { delta }) = event {
-            if let Some(message) = on_scroll(delta.clone(), state.modifiers) {
+            if let Some(message) = on_scroll(*delta, state.modifiers) {
                 shell.publish(message);
                 return event::Status::Captured;
             }

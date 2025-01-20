@@ -993,7 +993,7 @@ mod tests {
                 paths: paths_clone,
                 to: to_clone,
             }
-            .perform(&sync::Mutex::new(tx).into(), Controller::new())
+            .perform(&sync::Mutex::new(tx).into(), Controller::default())
             .await
         });
 
