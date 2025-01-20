@@ -89,7 +89,7 @@ pub fn context_menu<'a>(
     let mut selected_trash_only = false;
     let mut selected_desktop_entry = None;
     let mut selected_types: Vec<Mime> = vec![];
-    tab.items_opt().map(|items| {
+    if let Some(items) = tab.items_opt() {
         for item in items.iter() {
             if item.selected {
                 selected += 1;
@@ -110,7 +110,7 @@ pub fn context_menu<'a>(
                 selected_types.push(item.mime.clone());
             }
         }
-    });
+    };
     selected_types.sort_unstable();
     selected_types.dedup();
     selected_trash_only = selected_trash_only && selected == 1;
@@ -342,7 +342,7 @@ pub fn context_menu<'a>(
         .into()
 }
 
-pub fn dialog_menu<'a>(
+pub fn dialog_menu(
     tab: &Tab,
     key_binds: &HashMap<KeyBind, Action>,
     show_details: bool,
@@ -359,15 +359,13 @@ pub fn dialog_menu<'a>(
     let in_trash = tab.location == Location::Trash;
 
     let mut selected_gallery = 0;
-    tab.items_opt().map(|items| {
+    if let Some(items) = tab.items_opt() {
         for item in items.iter() {
-            if item.selected {
-                if item.can_gallery() {
-                    selected_gallery += 1;
-                }
+            if item.selected && item.can_gallery() {
+                selected_gallery += 1;
             }
         }
-    });
+    };
 
     MenuBar::new(vec![
         menu::Tree::with_children(
@@ -504,7 +502,7 @@ pub fn menu_bar<'a>(
     let mut selected_dir = 0;
     let mut selected = 0;
     let mut selected_gallery = 0;
-    tab_opt.and_then(|tab| tab.items_opt()).map(|items| {
+    if let Some(items) = tab_opt.and_then(|tab| tab.items_opt()) {
         for item in items.iter() {
             if item.selected {
                 selected += 1;
@@ -516,7 +514,7 @@ pub fn menu_bar<'a>(
                 }
             }
         }
-    });
+    };
 
     MenuBar::new(vec![
         menu::Tree::with_children(

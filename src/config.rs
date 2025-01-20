@@ -68,7 +68,7 @@ impl Favorite {
             Self::Videos,
         ] {
             if let Some(favorite_path) = favorite.path_opt() {
-                if &favorite_path == &path {
+                if favorite_path == path {
                     return favorite.clone();
                 }
             }
