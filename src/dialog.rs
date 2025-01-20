@@ -157,13 +157,15 @@ impl<M: Send + 'static> Dialog<M> {
 
         let (config_handler, config) = Config::load();
 
-        let mut settings = window::Settings::default();
-        settings.decorations = false;
-        settings.exit_on_close_request = false;
-        settings.min_size = Some(Size::new(360.0, 180.0));
-        settings.resizable = true;
-        settings.size = Size::new(1024.0, 640.0);
-        settings.transparent = true;
+        let mut settings = window::Settings {
+            decorations: false,
+            exit_on_close_request: false,
+            min_size: Some(Size::new(360.0, 180.0)),
+            resizable: true,
+            size: Size::new(1024.0, 640.0),
+            transparent: true,
+            ..Default::default()
+        };
 
         #[cfg(target_os = "linux")]
         {
@@ -296,6 +298,7 @@ struct Flags {
     kind: DialogKind,
     path_opt: Option<PathBuf>,
     window_id: window::Id,
+    #[expect(dead_code)]
     config_handler: Option<cosmic_config::Config>,
     config: Config,
 }
@@ -324,6 +327,7 @@ enum Message {
     SearchActivate,
     SearchClear,
     SearchInput(String),
+    #[allow(clippy::enum_variant_names)]
     TabMessage(tab::Message),
     TabRescan(Location, Option<tab::Item>, Vec<tab::Item>),
     TabView(tab::View),
@@ -598,7 +602,7 @@ impl App {
                 .data(Location::Recents)
         });
 
-        for (_favorite_i, favorite) in self.flags.config.favorites.iter().enumerate() {
+        for favorite in self.flags.config.favorites.iter() {
             if let Some(path) = favorite.path_opt() {
                 let name = if matches!(favorite, Favorite::Home) {
                     fl!("home")
@@ -974,11 +978,8 @@ impl Application for App {
             ContextPage::Preview(..) => self.core.window.show_context,
             _ => false,
         };
-        elements.push(
-            menu::dialog_menu(&self.tab, &self.key_binds, show_details)
-                .map(Message::from)
-                .into(),
-        );
+        elements
+            .push(menu::dialog_menu(&self.tab, &self.key_binds, show_details).map(Message::from));
 
         elements
     }
@@ -1027,7 +1028,7 @@ impl Application for App {
             return self.update(message);
         }
 
-        if let Some(data) = self.nav_model.data::<MounterData>(entity).clone() {
+        if let Some(data) = self.nav_model.data::<MounterData>(entity) {
             if let Some(mounter) = MOUNTERS.get(&data.0) {
                 return mounter.mount(data.1.clone()).map(|_| message::none());
             }
@@ -1169,11 +1170,9 @@ impl Application for App {
                                 let mut still_mounted = false;
                                 for item in mounter_items.iter() {
                                     if let Some(path) = item.path() {
-                                        if path == old_path {
-                                            if item.is_mounted() {
-                                                still_mounted = true;
-                                                break;
-                                            }
+                                        if path == old_path && item.is_mounted() {
+                                            still_mounted = true;
+                                            break;
                                         }
                                     }
                                 }
@@ -1221,7 +1220,7 @@ impl Application for App {
                     let mut contains_change = false;
                     for event in events.iter() {
                         for event_path in event.paths.iter() {
-                            if event_path.starts_with(&path) {
+                            if event_path.starts_with(path) {
                                 match event.kind {
                                     notify::EventKind::Modify(
                                         notify::event::ModifyKind::Metadata(_),
@@ -1235,14 +1234,14 @@ impl Application for App {
                                             for item in items.iter_mut() {
                                                 if item.path_opt() == Some(event_path) {
                                                     //TODO: reload more, like mime types?
-                                                    match fs::metadata(&event_path) {
+                                                    match fs::metadata(event_path) {
                                                         Ok(new_metadata) => {
-                                                            match &mut item.metadata {
-                                                                ItemMetadata::Path {
-                                                                    metadata,
-                                                                    ..
-                                                                } => *metadata = new_metadata,
-                                                                _ => {}
+                                                            if let ItemMetadata::Path {
+                                                                metadata,
+                                                                ..
+                                                            } = &mut item.metadata
+                                                            {
+                                                                *metadata = new_metadata;
                                                             }
                                                         }
                                                         Err(err) => {
@@ -1322,12 +1321,9 @@ impl Application for App {
 
                 // If we are in directory mode, return the current directory
                 if self.flags.kind.is_dir() {
-                    match &self.tab.location {
-                        Location::Path(tab_path) => {
-                            self.result_opt = Some(DialogResult::Open(vec![tab_path.clone()]));
-                            return window::close(self.flags.window_id);
-                        }
-                        _ => {}
+                    if let Location::Path(tab_path) = &self.tab.location {
+                        self.result_opt = Some(DialogResult::Open(vec![tab_path.clone()]));
+                        return window::close(self.flags.window_id);
                     }
                 }
             }
@@ -1344,7 +1340,7 @@ impl Application for App {
                 if let DialogKind::SaveFile { filename } = &self.flags.kind {
                     if !filename.is_empty() {
                         if let Some(tab_path) = self.tab.location.path_opt() {
-                            let path = tab_path.join(&filename);
+                            let path = tab_path.join(filename);
                             if path.is_dir() {
                                 // cd to directory
                                 let message = Message::TabMessage(tab::Message::Location(
@@ -1592,11 +1588,7 @@ impl Application for App {
             }
         }
 
-        col = col.push(
-            self.tab
-                .view(&self.key_binds)
-                .map(move |message| Message::TabMessage(message)),
-        );
+        col = col.push(self.tab.view(&self.key_binds).map(Message::TabMessage));
 
         col.into()
     }
