@@ -125,6 +125,8 @@ pub enum Action {
     Rename,
     RestoreFromTrash,
     SearchActivate,
+    SelectFirst,
+    SelectLast,
     SelectAll,
     SetSort(HeadingOptions, bool),
     Settings,
@@ -190,6 +192,8 @@ impl Action {
             Action::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
             Action::SearchActivate => Message::SearchActivate,
             Action::SelectAll => Message::TabMessage(entity_opt, tab::Message::SelectAll),
+            Action::SelectFirst => Message::TabMessage(entity_opt, tab::Message::SelectFirst),
+            Action::SelectLast => Message::TabMessage(entity_opt, tab::Message::SelectLast),
             Action::SetSort(sort, dir) => {
                 Message::TabMessage(entity_opt, tab::Message::SetSort(*sort, *dir))
             }
@@ -352,6 +356,7 @@ pub enum Message {
     WindowClose,
     WindowCloseRequested(window::Id),
     WindowNew,
+    WindowUnfocus,
     ZoomDefault(Option<Entity>),
     ZoomIn(Option<Entity>),
     ZoomOut(Option<Entity>),
@@ -772,7 +777,7 @@ impl App {
             Task::batch([
                 self.update_title(),
                 self.update_watcher(),
-                self.rescan_tab(entity, location, selection_paths),
+                self.update_tab(entity, location, selection_paths),
             ]),
         )
     }
@@ -793,7 +798,7 @@ impl App {
             self.progress_operations.insert(id);
         }
         self.pending_operations
-            .insert(id, (operation, Controller::new()));
+            .insert(id, (operation, Controller::default()));
     }
 
     fn remove_window(&mut self, id: &window::Id) {
@@ -828,7 +833,20 @@ impl App {
                 return Task::none();
             }
         }
-        self.rescan_tab(entity, tab.location.clone(), Some(op_sel.selected))
+        self.update_tab(entity, tab.location.clone(), Some(op_sel.selected))
+    }
+
+    fn update_tab(
+        &mut self,
+        entity: Entity,
+        location: Location,
+        selection_paths: Option<Vec<PathBuf>>,
+    ) -> Task<Message> {
+        if let Location::Search(_, term, ..) = location {
+            self.search_set(entity, Some(term), selection_paths)
+        } else {
+            self.rescan_tab(entity, location, selection_paths)
+        }
     }
 
     fn rescan_tab(
@@ -872,17 +890,9 @@ impl App {
 
         let mut commands = Vec::with_capacity(needs_reload.len());
         for (entity, location) in needs_reload {
-            commands.push(self.rescan_tab(entity, location, None));
+            commands.push(self.update_tab(entity, location, None));
         }
         Task::batch(commands)
-    }
-
-    fn search(&mut self) -> Task<Message> {
-        if let Some(term) = self.search_get() {
-            self.search_set_active(Some(term.to_string()))
-        } else {
-            Task::none()
-        }
     }
 
     fn search_get(&self) -> Option<&str> {
@@ -896,10 +906,15 @@ impl App {
 
     fn search_set_active(&mut self, term_opt: Option<String>) -> Task<Message> {
         let entity = self.tab_model.active();
-        self.search_set(entity, term_opt)
+        self.search_set(entity, term_opt, None)
     }
 
-    fn search_set(&mut self, tab: Entity, term_opt: Option<String>) -> Task<Message> {
+    fn search_set(
+        &mut self,
+        tab: Entity,
+        term_opt: Option<String>,
+        selection_paths: Option<Vec<PathBuf>>,
+    ) -> Task<Message> {
         let mut title_location_opt = None;
         if let Some(tab) = self.tab_model.data_mut::<Tab>(tab) {
             let location_opt = match term_opt {
@@ -930,7 +945,7 @@ impl App {
             return Task::batch([
                 self.update_title(),
                 self.update_watcher(),
-                self.rescan_tab(tab, location, None),
+                self.rescan_tab(tab, location, selection_paths),
                 if focus_search {
                     widget::text_input::focus(self.search_id.clone())
                 } else {
@@ -989,7 +1004,7 @@ impl App {
             if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
                 tab.location = location.clone();
             }
-            commands.push(self.rescan_tab(entity, location, None));
+            commands.push(self.update_tab(entity, location, None));
         }
         Task::batch(commands)
     }
@@ -1589,6 +1604,18 @@ impl Application for App {
         let mut commands = vec![app.update_config()];
 
         for location in flags.locations {
+            if let Some(path) = location.path_opt() {
+                if path.is_file() {
+                    if let Some(parent) = path.parent() {
+                        commands.push(app.open_tab(
+                            Location::Path(parent.to_path_buf()),
+                            true,
+                            Some(vec![path.to_path_buf()]),
+                        ));
+                        continue;
+                    }
+                }
+            }
             commands.push(app.open_tab(location, true, None));
         }
 
@@ -2053,14 +2080,15 @@ impl Application for App {
             }
             Message::ExtractHere(entity_opt) => {
                 let paths = self.selected_paths(entity_opt);
-                if let Some(current_path) = paths.get(0) {
-                    if let Some(destination) = current_path.parent().zip(current_path.file_stem()) {
-                        let destination_path = destination.0.to_path_buf();
-                        self.operation(Operation::Extract {
-                            paths,
-                            to: destination_path,
-                        });
-                    }
+                if let Some(destination) = paths
+                    .first()
+                    .and_then(|first| first.parent())
+                    .map(|parent| parent.to_path_buf())
+                {
+                    self.operation(Operation::Extract {
+                        paths,
+                        to: destination,
+                    });
                 }
             }
             Message::Key(modifiers, key) => {
@@ -2137,7 +2165,7 @@ impl Application for App {
                         };
                         if let Some(title) = title_opt {
                             self.tab_model.text_set(entity, title);
-                            commands.push(self.rescan_tab(entity, home_location.clone(), None));
+                            commands.push(self.update_tab(entity, home_location.clone(), None));
                         }
                     }
                     if !commands.is_empty() {
@@ -2302,11 +2330,7 @@ impl Application for App {
 
                 let mut commands = Vec::with_capacity(needs_reload.len());
                 for (entity, location) in needs_reload {
-                    if let Location::Search(_, term, ..) = location {
-                        commands.push(self.search_set(entity, Some(term)));
-                    } else {
-                        commands.push(self.rescan_tab(entity, location, None));
-                    }
+                    commands.push(self.update_tab(entity, location, None));
                 }
                 return Task::batch(commands);
             }
@@ -2545,8 +2569,6 @@ impl Application for App {
                 commands.push(self.rescan_operation_selection(op_sel));
                 // Manually rescan any trash tabs after any operation is completed
                 commands.push(self.rescan_trash());
-                // if search is active, update "search" tab view
-                commands.push(self.search());
                 return Task::batch(commands);
             }
             Message::PendingDismiss => {
@@ -2869,7 +2891,7 @@ impl Application for App {
                             commands.push(Task::batch([
                                 self.update_title(),
                                 self.update_watcher(),
-                                self.rescan_tab(entity, tab_path, selection_paths),
+                                self.update_tab(entity, tab_path, selection_paths),
                             ]));
                         }
                         tab::Command::DropFiles(to, from) => {
@@ -3024,6 +3046,12 @@ impl Application for App {
                     ]);
                 }
             }
+            Message::WindowUnfocus => {
+                let tab_entity = self.tab_model.active();
+                if let Some(tab) = self.tab_model.data_mut::<Tab>(tab_entity) {
+                    tab.context_menu = None;
+                }
+            }
             Message::WindowCloseRequested(id) => {
                 self.remove_window(&id);
             }
@@ -3156,7 +3184,7 @@ impl Application for App {
                         return Task::batch([
                             self.update_title(),
                             self.update_watcher(),
-                            self.rescan_tab(entity, location, None),
+                            self.update_tab(entity, location, None),
                         ]);
                     }
                 }
@@ -4377,6 +4405,7 @@ impl Application for App {
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
                     Some(Message::Modifiers(modifiers))
                 }
+                Event::Window(WindowEvent::Unfocused) => Some(Message::WindowUnfocus),
                 Event::Window(WindowEvent::CloseRequested) => Some(Message::WindowClose),
                 Event::Window(WindowEvent::Opened { position: _, size }) => {
                     Some(Message::Size(size))

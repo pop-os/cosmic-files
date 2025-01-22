@@ -475,7 +475,7 @@ pub fn item_from_entry(
     };
 
     let dir_size = if metadata.is_dir() {
-        DirSize::Calculating(Controller::new())
+        DirSize::Calculating(Controller::default())
     } else {
         DirSize::NotDirectory
     };
@@ -1071,6 +1071,8 @@ pub enum Message {
     SearchContext(Location, SearchContextWrapper),
     SearchReady(bool),
     SelectAll,
+    SelectFirst,
+    SelectLast,
     SetSort(HeadingOptions, bool),
     Thumbnail(PathBuf, ItemThumbnail),
     ToggleShowHidden,
@@ -2243,8 +2245,8 @@ impl Tab {
                                 if !item.selected {
                                     self.clicked = click_i_opt;
                                     item.selected = true;
-                                    self.select_range = Some((i, i));
                                 }
+                                self.select_range = Some((i, i));
                                 self.select_focus = click_i_opt;
                                 self.selected_clicked = true;
                             } else if !dont_unset && item.selected {
@@ -2752,9 +2754,7 @@ impl Tab {
                     if let Some(items) = &mut self.items_opt {
                         if finished || context.ready.swap(false, atomic::Ordering::SeqCst) {
                             let duration = Instant::now();
-                            while let Some((path, name, metadata)) =
-                                context.results_rx.blocking_recv()
-                            {
+                            while let Ok((path, name, metadata)) = context.results_rx.try_recv() {
                                 //TODO: combine this with column_sort logic, they must match!
                                 let item_modified = metadata.modified().ok();
                                 let index = match items.binary_search_by(|other| {
@@ -2799,6 +2799,36 @@ impl Tab {
                     commands.push(Command::Iced(
                         widget::button::focus(widget::Id::unique()).into(),
                     ));
+                }
+            }
+            Message::SelectFirst => {
+                if self.select_position(0, 0, mod_shift) {
+                    if let Some(offset) = self.select_focus_scroll() {
+                        commands.push(Command::Iced(
+                            scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                        ));
+                    }
+                    if let Some(id) = self.select_focus_id() {
+                        commands.push(Command::Iced(widget::button::focus(id).into()));
+                    }
+                }
+            }
+            Message::SelectLast => {
+                if let Some(ref items) = self.items_opt {
+                    if let Some(last_pos) = items.iter().filter_map(|item| item.pos_opt.get()).max()
+                    {
+                        if self.select_position(last_pos.0, last_pos.1, mod_shift) {
+                            if let Some(offset) = self.select_focus_scroll() {
+                                commands.push(Command::Iced(
+                                    scrollable::scroll_to(self.scrollable_id.clone(), offset)
+                                        .into(),
+                                ));
+                            }
+                            if let Some(id) = self.select_focus_id() {
+                                commands.push(Command::Iced(widget::button::focus(id).into()));
+                            }
+                        }
+                    }
                 }
             }
             Message::SetSort(heading_option, dir) => {
@@ -2865,7 +2895,7 @@ impl Tab {
             Message::Drop(Some((to, mut from))) => {
                 self.dnd_hovered = None;
                 match to {
-                    Location::Path(to) => {
+                    Location::Desktop(to, ..) | Location::Path(to) => {
                         if let Ok(entries) = fs::read_dir(&to) {
                             for i in entries.into_iter().filter_map(|e| e.ok()) {
                                 let i = i.path();
@@ -3581,8 +3611,7 @@ impl Tab {
     pub fn empty_view(&self, has_hidden: bool) -> Element<Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
 
-        //TODO: left clicking on an empty folder does not clear context menu
-        widget::column::with_children(vec![widget::container(
+        mouse_area::MouseArea::new(widget::column::with_children(vec![widget::container(
             widget::column::with_children(match self.mode {
                 Mode::App | Mode::Dialog(_) => vec![
                     widget::icon::from_name("folder-symbolic")
@@ -3604,7 +3633,8 @@ impl Tab {
             .spacing(space_xxs),
         )
         .center(Length::Fill)
-        .into()])
+        .into()]))
+        .on_press(|_| Message::Click(None))
         .into()
     }
 
@@ -4285,9 +4315,9 @@ impl Tab {
                     .drag_content(move || {
                         ClipboardCopy::new(crate::clipboard::ClipboardKind::Copy, &files)
                     })
-                    .drag_icon(move || {
+                    .drag_icon(move |v| {
                         let state: tree::State = Widget::<Message, _, _>::state(&drag_list);
-                        (Element::from(drag_list.clone()).map(|_m| ()), state)
+                        (Element::from(drag_list.clone()).map(|_m| ()), state, v)
                     })
             }
             _ => item_view,
