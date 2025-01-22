@@ -798,7 +798,7 @@ impl App {
             self.progress_operations.insert(id);
         }
         self.pending_operations
-            .insert(id, (operation, Controller::new()));
+            .insert(id, (operation, Controller::default()));
     }
 
     fn remove_window(&mut self, id: &window::Id) {

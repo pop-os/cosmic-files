@@ -22,8 +22,8 @@ pub struct Controller {
     inner: Arc<ControllerInner>,
 }
 
-impl Controller {
-    pub fn new() -> Self {
+impl Default for Controller {
+    fn default() -> Self {
         Self {
             primary: true,
             inner: Arc::new(ControllerInner {
@@ -33,7 +33,9 @@ impl Controller {
             }),
         }
     }
+}
 
+impl Controller {
     pub fn check(&self) -> Result<(), String> {
         let mut state = self.inner.state.lock().unwrap();
         loop {

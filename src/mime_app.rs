@@ -120,7 +120,7 @@ impl MimeAppCache {
                     .cache
                     .entry(mime.clone())
                     .or_insert_with(|| Vec::with_capacity(1));
-                if apps.iter().find(|x| x.id == app.id).is_none() {
+                if !apps.iter().any(|x| x.id == app.id) {
                     apps.push(MimeApp::from(app));
                 }
             }
@@ -191,11 +191,7 @@ impl MimeAppCache {
                                 .cache
                                 .entry(mime.clone())
                                 .or_insert_with(|| Vec::with_capacity(1));
-                            if apps
-                                .iter()
-                                .find(|x| filename_eq(&x.path, filename))
-                                .is_none()
-                            {
+                            if !apps.iter().any(|x| filename_eq(&x.path, filename)) {
                                 if let Some(app) =
                                     all_apps.iter().find(|x| filename_eq(&x.path, filename))
                                 {
@@ -263,9 +259,7 @@ impl MimeAppCache {
     }
 
     pub fn get(&self, key: &Mime) -> Vec<MimeApp> {
-        self.cache
-            .get(&key)
-            .map_or_else(|| Vec::new(), |x| x.clone())
+        self.cache.get(key).map_or_else(Vec::new, |x| x.clone())
     }
 }
 
@@ -292,5 +286,5 @@ pub fn terminal() -> Option<MimeApp> {
     }
 
     // Return whatever was the first terminal found
-    mime_app_cache.terminals.first().map(|x| x.clone())
+    mime_app_cache.terminals.first().cloned()
 }

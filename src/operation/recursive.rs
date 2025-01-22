@@ -12,11 +12,17 @@ use super::{copy_unique_path, Controller, OperationSelection, ReplaceResult};
 pub struct Context {
     buf: Vec<u8>,
     controller: Controller,
-    on_progress: Box<dyn Fn(&Op, &Progress) + 'static>,
-    on_replace: Box<dyn Fn(&Op) -> ReplaceResult + 'static>,
+    on_progress: Box<dyn OnProgress>,
+    on_replace: Box<dyn OnReplace>,
     pub(crate) op_sel: OperationSelection,
     replace_result_opt: Option<ReplaceResult>,
 }
+
+pub trait OnProgress: Fn(&Op, &Progress) + 'static {}
+impl<F> OnProgress for F where F: Fn(&Op, &Progress) + 'static {}
+
+pub trait OnReplace: Fn(&Op) -> ReplaceResult + 'static {}
+impl<F> OnReplace for F where F: Fn(&Op) -> ReplaceResult + 'static {}
 
 impl Context {
     pub fn new(controller: Controller) -> Self {
@@ -67,7 +73,7 @@ impl Context {
                     OpKind::Symlink { target }
                 } else {
                     //TODO: present dialog and allow continue
-                    return Err(format!("{} is not a known file type", from.display()).into());
+                    return Err(format!("{} is not a known file type", from.display()));
                 };
                 let to = if from == from_parent {
                     // When copying a file, from matches from_parent, and to_parent must be used
@@ -130,12 +136,12 @@ impl Context {
         Ok(true)
     }
 
-    pub fn on_progress<F: Fn(&Op, &Progress) + 'static>(mut self, f: F) -> Self {
+    pub fn on_progress<F: OnProgress>(mut self, f: F) -> Self {
         self.on_progress = Box::new(f);
         self
     }
 
-    pub fn on_replace<F: Fn(&Op) -> ReplaceResult + 'static>(mut self, f: F) -> Self {
+    pub fn on_replace<F: OnReplace>(mut self, f: F) -> Self {
         self.on_replace = Box::new(f);
         self
     }
@@ -153,9 +159,7 @@ impl Context {
                 Ok(ControlFlow::Continue(op.to.clone()))
             }
             ReplaceResult::KeepBoth => match op.to.parent() {
-                Some(to_parent) => Ok(ControlFlow::Continue(copy_unique_path(
-                    &op.from, &to_parent,
-                ))),
+                Some(to_parent) => Ok(ControlFlow::Continue(copy_unique_path(&op.from, to_parent))),
                 None => Err(format!("failed to get parent of {:?}", op.to).into()),
             },
             ReplaceResult::Skip(apply_to_all) => {
@@ -216,7 +220,7 @@ impl Op {
                 let metadata = from_file.metadata()?;
                 // Remove `to` if overwriting and it is an existing file
                 if self.to.is_file() {
-                    match ctx.replace(&self)? {
+                    match ctx.replace(self)? {
                         ControlFlow::Continue(to) => {
                             self.to = to;
                         }
@@ -226,7 +230,7 @@ impl Op {
                     }
                 }
                 progress.total_bytes = Some(metadata.len());
-                (ctx.on_progress)(&self, &progress);
+                (ctx.on_progress)(self, &progress);
                 // This is atomic and ensures `to` is not created by any other process
                 let mut to_file = fs::OpenOptions::new()
                     .create_new(true)
@@ -242,14 +246,14 @@ impl Op {
                     }
                     to_file.write_all(&ctx.buf[..count])?;
                     progress.current_bytes += count as u64;
-                    (ctx.on_progress)(&self, &progress);
+                    (ctx.on_progress)(self, &progress);
                 }
                 to_file.sync_all()?;
             }
             OpKind::Move => {
                 // Remove `to` if overwriting and it is an existing file
                 if self.to.is_file() {
-                    match ctx.replace(&self)? {
+                    match ctx.replace(self)? {
                         ControlFlow::Continue(to) => {
                             self.to = to;
                         }
@@ -289,7 +293,7 @@ impl Op {
             OpKind::Symlink { ref target } => {
                 // Remove `to` if overwriting and it is an existing file
                 if self.to.is_file() {
-                    match ctx.replace(&self)? {
+                    match ctx.replace(self)? {
                         ControlFlow::Continue(to) => {
                             self.to = to;
                         }
@@ -298,8 +302,18 @@ impl Op {
                         }
                     }
                 }
-                //TODO: use OS-specific function
-                fs::soft_link(&target, &self.to)?;
+                #[cfg(unix)]
+                {
+                    std::os::unix::fs::symlink(target, &self.to)?;
+                }
+                #[cfg(windows)]
+                {
+                    if target.is_dir() {
+                        std::os::windows::fs::symlink_dir(target, &self.to)?;
+                    } else {
+                        std::os::windows::fs::symlink_file(target, &self.to)?;
+                    }
+                }
             }
         }
         Ok(true)
