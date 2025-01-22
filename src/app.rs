@@ -1604,6 +1604,18 @@ impl Application for App {
         let mut commands = vec![app.update_config()];
 
         for location in flags.locations {
+            if let Some(path) = location.path_opt() {
+                if path.is_file() {
+                    if let Some(parent) = path.parent() {
+                        commands.push(app.open_tab(
+                            Location::Path(parent.to_path_buf()),
+                            true,
+                            Some(vec![path.to_path_buf()]),
+                        ));
+                        continue;
+                    }
+                }
+            }
             commands.push(app.open_tab(location, true, None));
         }
 
