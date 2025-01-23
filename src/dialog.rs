@@ -298,7 +298,7 @@ struct Flags {
     kind: DialogKind,
     path_opt: Option<PathBuf>,
     window_id: window::Id,
-    #[expect(dead_code)]
+    #[allow(dead_code)]
     config_handler: Option<cosmic_config::Config>,
     config: Config,
 }
