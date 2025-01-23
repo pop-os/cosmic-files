@@ -98,10 +98,21 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else if &arg == "--trash" {
             Location::Trash
         } else {
-            match fs::canonicalize(&arg) {
+            //TODO: support more URLs
+            let path = match url::Url::parse(&arg) {
+                Ok(url) => match url.to_file_path() {
+                    Ok(path) => path,
+                    Err(()) => {
+                        log::warn!("invalid argument {:?}", arg);
+                        continue;
+                    }
+                },
+                Err(_) => PathBuf::from(arg),
+            };
+            match fs::canonicalize(&path) {
                 Ok(absolute) => Location::Path(absolute),
                 Err(err) => {
-                    log::warn!("failed to canonicalize {:?}: {}", arg, err);
+                    log::warn!("failed to canonicalize {:?}: {}", path, err);
                     continue;
                 }
             }

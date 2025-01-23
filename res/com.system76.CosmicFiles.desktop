@@ -3,7 +3,7 @@
 Name=COSMIC Files
 Name[pl]=Pliki COSMIC
 Name[pt-BR]=Arquivos do COSMIC
-Exec=cosmic-files %F
+Exec=cosmic-files %U
 Terminal=false
 Type=Application
 StartupNotify=true
