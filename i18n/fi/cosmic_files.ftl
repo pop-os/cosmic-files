@@ -201,7 +201,7 @@ restored = Palautettu {$items} {$items ->
 unknown-folder = Tuntematon kansio
 
 ## Open with
-open-with = Avaa ohjelmalla…
+menu-open-with = Avaa ohjelmalla…
 default-app = {$name} (oletus)
 
 ## Show details

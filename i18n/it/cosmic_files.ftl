@@ -192,7 +192,7 @@ restored = Ripristinato {$items} {$items ->
 unknown-folder = cartella sconosciuta
 
 ## Open with
-open-with = Apri con
+menu-open-with = Apri con
 default-app = {$name} (default)
 
 ## Show details

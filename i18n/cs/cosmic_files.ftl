@@ -62,7 +62,7 @@ complete = Hotovo
 copy_noun = Kopírovat
 
 ## Open with
-open-with = Otevřít v
+menu-open-with = Otevřít v
 default-app = {$name} (výchozí)
 
 ## Properties

@@ -471,17 +471,17 @@ impl App {
             .into()
     }
 
-    fn preview<'a>(&'a self, kind: &'a PreviewKind) -> Element<'a, AppMessage> {
+    fn preview<'a>(&'a self, kind: &'a PreviewKind) -> Element<'a, tab::Message> {
         let mut children = Vec::with_capacity(1);
         match kind {
             PreviewKind::Custom(PreviewItem(item)) => {
-                children.push(item.preview_view(IconSizes::default()));
+                children.push(item.preview_view(None, IconSizes::default()));
             }
             PreviewKind::Location(location) => {
                 if let Some(items) = self.tab.items_opt() {
                     for item in items.iter() {
                         if item.location_opt.as_ref() == Some(location) {
-                            children.push(item.preview_view(self.tab.config.icon_sizes));
+                            children.push(item.preview_view(None, self.tab.config.icon_sizes));
                             // Only show one property view to avoid issues like hangs when generating
                             // preview images on thousands of files
                             break;
@@ -493,7 +493,7 @@ impl App {
                 if let Some(items) = self.tab.items_opt() {
                     for item in items.iter() {
                         if item.selected {
-                            children.push(item.preview_view(self.tab.config.icon_sizes));
+                            children.push(item.preview_view(None, self.tab.config.icon_sizes));
                             // Only show one property view to avoid issues like hangs when generating
                             // preview images on thousands of files
                             break;
@@ -501,7 +501,7 @@ impl App {
                     }
                     if children.is_empty() {
                         if let Some(item) = &self.tab.parent_item_opt {
-                            children.push(item.preview_view(self.tab.config.icon_sizes));
+                            children.push(item.preview_view(None, self.tab.config.icon_sizes));
                         }
                     }
                 }
@@ -814,14 +814,14 @@ impl Application for App {
                             actions.extend(
                                 item.preview_header()
                                     .into_iter()
-                                    .map(|element| element.map(Message::from)),
+                                    .map(|element| element.map(Message::TabMessage)),
                             )
                         }
                     }
                 };
                 Some(
                     context_drawer::context_drawer(
-                        self.preview(kind).map(Message::from),
+                        self.preview(kind).map(Message::TabMessage),
                         Message::Preview,
                     )
                     .header_actions(actions),

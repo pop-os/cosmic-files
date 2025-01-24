@@ -157,7 +157,7 @@ pub fn context_menu<'a>(
                     children.push(menu_item(fl!("open"), Action::Open).into());
                 }
                 if selected == 1 {
-                    children.push(menu_item(fl!("open-with"), Action::OpenWith).into());
+                    children.push(menu_item(fl!("menu-open-with"), Action::OpenWith).into());
                     if selected_dir == 1 {
                         children
                             .push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
@@ -531,7 +531,7 @@ pub fn menu_bar<'a>(
                         Action::Open,
                         (selected > 0 && selected_dir == 0) || (selected_dir == 1 && selected == 1),
                     ),
-                    menu_button_optional(fl!("open-with"), Action::OpenWith, selected == 1),
+                    menu_button_optional(fl!("menu-open-with"), Action::OpenWith, selected == 1),
                     menu::Item::Divider,
                     menu_button_optional(fl!("rename"), Action::Rename, selected > 0),
                     menu::Item::Divider,

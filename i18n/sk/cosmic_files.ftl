@@ -195,7 +195,7 @@ undo = Späť
 unknown-folder = neznámy priečinok
 
 ## Open with
-open-with = Otvoriť s
+menu-open-with = Otvoriť s
 default-app = {$name} (Predvolené)
 
 ## Show details

@@ -166,7 +166,7 @@ restored = 已从 {trash} 还原 {$items} 个项目
 unknown-folder = 未知文件夹
 
 ## Open with
-open-with = 打开方式...
+menu-open-with = 打开方式...
 default-app = {$name} （默认）
 
 ## Show details

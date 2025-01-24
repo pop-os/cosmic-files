@@ -444,7 +444,6 @@ pub enum DialogPage {
     OpenWith {
         path: PathBuf,
         mime: mime_guess::Mime,
-        apps: Vec<mime_app::MimeApp>,
         selected: usize,
         store_opt: Option<mime_app::MimeApp>,
     },
@@ -514,6 +513,7 @@ pub struct App {
     dialog_text_input: widget::Id,
     key_binds: HashMap<KeyBind, Action>,
     margin: HashMap<window::Id, (f32, f32, f32, f32)>,
+    mime_app_cache: mime_app::MimeAppCache,
     modifiers: Modifiers,
     mounter_items: HashMap<MounterKey, MounterItems>,
     network_drive_connecting: Option<(MounterKey, String)>,
@@ -592,7 +592,7 @@ impl App {
         }
 
         // Try mime apps, which should be faster than xdg-open
-        for app in mime_app::mime_apps(&mime) {
+        for app in self.mime_app_cache.get(&mime) {
             let Some(mut command) = app.command(Some(path.clone().into())) else {
                 continue;
             };
@@ -1431,21 +1431,24 @@ impl App {
         entity_opt: &Option<Entity>,
         kind: &'a PreviewKind,
         context_drawer: bool,
-    ) -> Element<'a, Message> {
+    ) -> Element<'a, tab::Message> {
         let cosmic_theme::Spacing { space_l, .. } = theme::active().cosmic().spacing;
 
         let mut children = Vec::with_capacity(1);
         let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
         match kind {
             PreviewKind::Custom(PreviewItem(item)) => {
-                children.push(item.preview_view(IconSizes::default()));
+                children.push(item.preview_view(Some(&self.mime_app_cache), IconSizes::default()));
             }
             PreviewKind::Location(location) => {
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
                     if let Some(items) = tab.items_opt() {
                         for item in items.iter() {
                             if item.location_opt.as_ref() == Some(location) {
-                                children.push(item.preview_view(tab.config.icon_sizes));
+                                children.push(item.preview_view(
+                                    Some(&self.mime_app_cache),
+                                    tab.config.icon_sizes,
+                                ));
                                 // Only show one property view to avoid issues like hangs when generating
                                 // preview images on thousands of files
                                 break;
@@ -1459,7 +1462,10 @@ impl App {
                     if let Some(items) = tab.items_opt() {
                         for item in items.iter() {
                             if item.selected {
-                                children.push(item.preview_view(tab.config.icon_sizes));
+                                children.push(item.preview_view(
+                                    Some(&self.mime_app_cache),
+                                    tab.config.icon_sizes,
+                                ));
                                 // Only show one property view to avoid issues like hangs when generating
                                 // preview images on thousands of files
                                 break;
@@ -1467,7 +1473,10 @@ impl App {
                         }
                         if children.is_empty() {
                             if let Some(item) = &tab.parent_item_opt {
-                                children.push(item.preview_view(tab.config.icon_sizes));
+                                children.push(item.preview_view(
+                                    Some(&self.mime_app_cache),
+                                    tab.config.icon_sizes,
+                                ));
                             }
                         }
                     }
@@ -1573,6 +1582,7 @@ impl Application for App {
             dialog_text_input: widget::Id::unique(),
             key_binds,
             margin: HashMap::new(),
+            mime_app_cache: mime_app::MimeAppCache::new(),
             modifiers: Modifiers::empty(),
             mounter_items: HashMap::new(),
             network_drive_connecting: None,
@@ -1688,7 +1698,7 @@ impl Application for App {
                 NavMenuAction::Open(entity),
             ));
             items.push(cosmic::widget::menu::Item::Button(
-                fl!("open-with"),
+                fl!("menu-open-with"),
                 None,
                 NavMenuAction::OpenWith(entity),
             ));
@@ -2016,11 +2026,11 @@ impl Application for App {
                         }
                         DialogPage::OpenWith {
                             path,
-                            apps,
+                            mime,
                             selected,
                             ..
                         } => {
-                            if let Some(app) = apps.get(selected) {
+                            if let Some(app) = self.mime_app_cache.get(&mime).get(selected) {
                                 if let Some(mut command) = app.command(Some(path.clone().into())) {
                                     match spawn_detached(&mut command) {
                                         Ok(()) => {
@@ -2345,7 +2355,7 @@ impl Application for App {
                 }
             },
             Message::OpenTerminal(entity_opt) => {
-                if let Some(terminal) = mime_app::terminal() {
+                if let Some(terminal) = self.mime_app_cache.terminal() {
                     let mut paths = Vec::new();
                     let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                     if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
@@ -2471,12 +2481,13 @@ impl Application for App {
                             return self.update(Message::DialogPush(DialogPage::OpenWith {
                                 path: path.to_path_buf(),
                                 mime: item.mime.clone(),
-                                apps: item.open_with.clone(),
                                 selected: 0,
                                 store_opt: "x-scheme-handler/mime"
                                     .parse::<mime_guess::Mime>()
                                     .ok()
-                                    .and_then(|mime| mime_app::mime_apps(&mime).first().cloned()),
+                                    .and_then(|mime| {
+                                        self.mime_app_cache.get(&mime).first().cloned()
+                                    }),
                             }));
                         }
                     }
@@ -2905,9 +2916,11 @@ impl Application for App {
                             App::exec_entry_action(entry, action);
                         }
                         tab::Command::Iced(iced_command) => {
-                            commands.push(iced_command.0.map(move |tab_message| {
-                                message::app(Message::TabMessage(Some(entity), tab_message))
-                            }));
+                            commands.push(
+                                iced_command.0.map(move |x| {
+                                    message::app(Message::TabMessage(Some(entity), x))
+                                }),
+                            );
                         }
                         tab::Command::MoveToTrash(paths) => {
                             self.operation(Operation::Delete { paths });
@@ -2941,6 +2954,10 @@ impl Application for App {
                         tab::Command::Preview(kind) => {
                             self.context_page = ContextPage::Preview(Some(entity), kind);
                             self.set_show_context(true);
+                        }
+                        tab::Command::SetOpenWith(mime, id) => {
+                            //TODO: this will block for a few ms, run in background?
+                            self.mime_app_cache.set_default(mime, id);
                         }
                         tab::Command::WindowDrag => {
                             if let Some(window_id) = &self.window_id_opt {
@@ -3282,13 +3299,12 @@ impl Application for App {
                                 return self.update(Message::DialogPush(DialogPage::OpenWith {
                                     path: path.to_path_buf(),
                                     mime: item.mime.clone(),
-                                    apps: item.open_with.clone(),
                                     selected: 0,
                                     store_opt: "x-scheme-handler/mime"
                                         .parse::<mime_guess::Mime>()
                                         .ok()
                                         .and_then(|mime| {
-                                            mime_app::mime_apps(&mime).first().cloned()
+                                            self.mime_app_cache.get(&mime).first().cloned()
                                         }),
                                 }));
                             }
@@ -3530,14 +3546,17 @@ impl Application for App {
                     if let Some(items) = tab.items_opt() {
                         for item in items.iter() {
                             if item.selected {
-                                actions.extend(item.preview_header())
+                                actions.extend(item.preview_header().into_iter().map(|element| {
+                                    element.map(move |x| Message::TabMessage(Some(entity), x))
+                                }));
                             }
                         }
                     }
                 };
                 context_drawer::context_drawer(
-                    self.preview(entity_opt, kind, true),
-                    Message::ToggleContextPage(ContextPage::Preview(*entity_opt, kind.clone())),
+                    self.preview(entity_opt, kind, true)
+                        .map(move |x| Message::TabMessage(Some(entity), x)),
+                    Message::ToggleContextPage(ContextPage::Preview(Some(entity), kind.clone())),
                 )
                 .header_actions(actions)
             }
@@ -3556,7 +3575,7 @@ impl Application for App {
             if tab.gallery {
                 return Some(
                     tab.gallery_view()
-                        .map(move |tab_message| Message::TabMessage(Some(entity), tab_message)),
+                        .map(move |x| Message::TabMessage(Some(entity), x)),
                 );
             }
         }
@@ -3878,7 +3897,7 @@ impl Application for App {
             }
             DialogPage::OpenWith {
                 path,
-                apps,
+                mime,
                 selected,
                 store_opt,
                 ..
@@ -3889,7 +3908,7 @@ impl Application for App {
                 };
 
                 let mut column = widget::list_column();
-                for (i, app) in apps.iter().enumerate() {
+                for (i, app) in self.mime_app_cache.get(mime).iter().enumerate() {
                     column = column.add(
                         widget::button::custom(
                             widget::row::with_children(vec![
@@ -4026,8 +4045,14 @@ impl Application for App {
                 let dialog = widget::dialog()
                     .title(fl!("replace-title", filename = to.name.as_str()))
                     .body(fl!("replace-warning-operation"))
-                    .control(to.replace_view(fl!("original-file"), IconSizes::default()))
-                    .control(from.replace_view(fl!("replace-with"), IconSizes::default()))
+                    .control(
+                        to.replace_view(fl!("original-file"), IconSizes::default())
+                            .map(|x| Message::TabMessage(None, x)),
+                    )
+                    .control(
+                        from.replace_view(fl!("replace-with"), IconSizes::default())
+                            .map(|x| Message::TabMessage(None, x)),
+                    )
                     .primary_action(widget::button::suggested(fl!("replace")).on_press(
                         Message::ReplaceResult(ReplaceResult::Replace(*apply_to_all)),
                     ));
@@ -4365,7 +4390,9 @@ impl Application for App {
                 };
             }
             Some(WindowKind::DesktopViewOptions) => self.desktop_view_options(),
-            Some(WindowKind::Preview(entity_opt, kind)) => self.preview(entity_opt, kind, false),
+            Some(WindowKind::Preview(entity_opt, kind)) => self
+                .preview(entity_opt, kind, false)
+                .map(|x| Message::TabMessage(*entity_opt, x)),
             None => {
                 //TODO: distinct views per monitor in desktop mode
                 return self.view_main().map(|message| match message {

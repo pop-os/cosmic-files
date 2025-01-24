@@ -106,7 +106,7 @@ undo = Скасувати
 unknown-folder = невідома тека
 
 ## Open with
-open-with = Відкрити за допомогою
+menu-open-with = Відкрити за допомогою
 default-app = {$name} (типово)
 
 ## Properties

@@ -62,7 +62,7 @@ complete = Completadas
 copy_noun = Copia
 
 ## Open with
-open-with = Abrir con
+menu-open-with = Abrir con
 default-app = {$name} (por defecto)
 
 ## Properties

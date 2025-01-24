@@ -196,7 +196,7 @@ restored = Restaurado {$items} {$items ->
 unknown-folder = pasta desconhecida
 
 ## Open with
-open-with = Abrir com...
+menu-open-with = Abrir com...
 default-app = {$name} (padrão)
 
 ## Show details

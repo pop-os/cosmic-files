@@ -181,7 +181,7 @@ restored = Se ha restaurado {$items} {$items ->
 unknown-folder = carpeta desconocida
 
 ## Open with
-open-with = Abrir con
+menu-open-with = Abrir con
 default-app = {$name} (predeterminado)
 
 ## Show details

@@ -184,7 +184,7 @@ restored = {$items} {$items ->
 unknown-folder = Dossier inconnu
 
 ## Open with
-open-with = Ouvrir avec
+menu-open-with = Ouvrir avec
 default-app = {$name} (défaut)
 
 ## Show details

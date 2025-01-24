@@ -159,7 +159,7 @@ restored = Адноўлена {$items} {$items ->
 unknown-folder = невядомая папка
 
 ## Open with
-open-with = Адкрыць з дапамогай
+menu-open-with = Адкрыць з дапамогай
 default-app = {$name} (па змаўчанні)
 
 ## Properties

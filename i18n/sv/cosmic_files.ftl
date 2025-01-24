@@ -203,7 +203,7 @@ restored = Återställt {$items} {$items ->
 unknown-folder = okänd katalog
 
 ## Öppna med
-open-with = Öppna med...
+menu-open-with = Öppna med...
 default-app = {$name} (default)
 
 ## Visa detaljer

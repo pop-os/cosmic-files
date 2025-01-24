@@ -200,7 +200,7 @@ restored = Przywrócono {$items} {$items ->
 unknown-folder = nieznany katalog
 
 ## Open with
-open-with = Otwórz za pomocą…
+menu-open-with = Otwórz za pomocą…
 default-app = {$name} (domyślnie)
 
 ## Show details

@@ -102,7 +102,7 @@ undo = Visszavonás
 unknown-folder = ismeretlen mappa
 
 ## Open with
-open-with = Megnyitás ezzel
+menu-open-with = Megnyitás ezzel
 default-app = {$name} (alapértelmezett)
 
 ## Properties

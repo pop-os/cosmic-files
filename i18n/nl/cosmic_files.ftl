@@ -192,7 +192,7 @@ restored = {$items} {$items ->
 unknown-folder = Onbekende map
 
 ## Open with
-open-with = Openen met...
+menu-open-with = Openen met...
 default-app = {$name} (standaard)
 
 ## Show details
