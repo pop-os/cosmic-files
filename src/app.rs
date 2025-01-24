@@ -3962,7 +3962,7 @@ impl Application for App {
                     None
                 } else {
                     let path = parent.join(name);
-                    if path.exists() {
+                    if from != &path && path.exists() {
                         if path.is_dir() {
                             dialog = dialog
                                 .tertiary_action(widget::text::body(fl!("folder-already-exists")));
