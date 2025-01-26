@@ -86,6 +86,7 @@ set-executable-and-launch-description = Vill du ställa in "{$name}" som körbar
 set-and-launch = Ställ in och starta
 
 ## Metadata dialogruta
+open-with = Öppna med
 owner = Ägare
 group = Grupp
 other = Andra
@@ -208,12 +209,12 @@ default-app = {$name} (default)
 
 ## Visa detaljer
 show-details = Visa detaljer
-type = Type: {$mime}
-items = Items: {$items}
-item-size = Size: {$size}
-item-created = Created: {$created}
-item-modified = Modified: {$modified}
-item-accessed = Accessed: {$accessed}
+type = Typ: {$mime}
+items = Objekt: {$items}
+item-size = Storlek: {$size}
+item-created = Skapad: {$created}
+item-modified = Modifierad: {$modified}
+item-accessed = Åtkomst: {$accessed}
 calculating = Beräknar...
 
 ## Egenskaper
