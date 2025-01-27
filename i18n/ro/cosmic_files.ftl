@@ -181,7 +181,7 @@ restored = Restaurat {$items} {$items ->
 unknown-folder = dosar necunoscut
 
 ## Open with
-open-with = Deschide cu...
+menu-open-with = Deschide cu...
 default-app = {$name} (implicit)
 
 ## Show details

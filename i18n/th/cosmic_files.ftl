@@ -196,7 +196,7 @@ restored = Restored {$items} {$items ->
 unknown-folder = แฟ้มที่ไม่รู้จัก
 
 ## Open with
-open-with = เปิดด้วย...
+menu-open-with = เปิดด้วย...
 default-app = {$name} (ค่าเริ่มต้น)
 
 ## Show details

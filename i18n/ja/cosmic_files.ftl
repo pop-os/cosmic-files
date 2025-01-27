@@ -128,7 +128,7 @@ undo = 元に戻す
 unknown-folder = 不明なフォルダー
 
 ## Open with
-open-with = 別のアプリケーションで開く
+menu-open-with = 別のアプリケーションで開く
 default-app = {$name} (デフォルト)
 
 ## Properties

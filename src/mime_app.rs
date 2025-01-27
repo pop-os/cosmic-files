@@ -5,9 +5,8 @@
 use cosmic::desktop;
 use cosmic::widget;
 pub use mime_guess::Mime;
-use once_cell::sync::Lazy;
 use std::{
-    cmp::Ordering, collections::HashMap, env, ffi::OsString, path::PathBuf, process, sync::Mutex,
+    cmp::Ordering, collections::HashMap, env, ffi::OsString, fs, io, path::PathBuf, process,
     time::Instant,
 };
 
@@ -52,6 +51,13 @@ impl MimeApp {
     }
 }
 
+// This allows usage of MimeApp in a dropdown
+impl AsRef<str> for MimeApp {
+    fn as_ref(&self) -> &str {
+        &self.name
+    }
+}
+
 #[cfg(feature = "desktop")]
 impl From<&desktop::DesktopEntryData> for MimeApp {
     fn from(app: &desktop::DesktopEntryData) -> Self {
@@ -82,6 +88,7 @@ fn filename_eq(path_opt: &Option<PathBuf>, filename: &str) -> bool {
 
 pub struct MimeAppCache {
     cache: HashMap<Mime, Vec<MimeApp>>,
+    icons: HashMap<Mime, Vec<widget::icon::Handle>>,
     terminals: Vec<MimeApp>,
 }
 
@@ -89,6 +96,7 @@ impl MimeAppCache {
     pub fn new() -> Self {
         let mut mime_app_cache = Self {
             cache: HashMap::new(),
+            icons: HashMap::new(),
             terminals: Vec::new(),
         };
         mime_app_cache.reload();
@@ -106,6 +114,7 @@ impl MimeAppCache {
         let start = Instant::now();
 
         self.cache.clear();
+        self.icons.clear();
         self.terminals.clear();
 
         //TODO: get proper locale?
@@ -120,7 +129,7 @@ impl MimeAppCache {
                     .cache
                     .entry(mime.clone())
                     .or_insert_with(|| Vec::with_capacity(1));
-                if apps.iter().find(|x| x.id == app.id).is_none() {
+                if !apps.iter().any(|x| x.id == app.id) {
                     apps.push(MimeApp::from(app));
                 }
             }
@@ -191,11 +200,7 @@ impl MimeAppCache {
                                 .cache
                                 .entry(mime.clone())
                                 .or_insert_with(|| Vec::with_capacity(1));
-                            if apps
-                                .iter()
-                                .find(|x| filename_eq(&x.path, filename))
-                                .is_none()
-                            {
+                            if !apps.iter().any(|x| filename_eq(&x.path, filename)) {
                                 if let Some(app) =
                                     all_apps.iter().find(|x| filename_eq(&x.path, filename))
                                 {
@@ -258,39 +263,94 @@ impl MimeAppCache {
             });
         }
 
+        // Copy icons to special cache
+        //TODO: adjust dropdown API so this is no longer needed
+        for (mime, apps) in self.cache.iter() {
+            self.icons.insert(
+                mime.clone(),
+                apps.iter().map(|app| app.icon.clone()).collect(),
+            );
+        }
+
         let elapsed = start.elapsed();
         log::info!("loaded mime app cache in {:?}", elapsed);
     }
 
-    pub fn get(&self, key: &Mime) -> Vec<MimeApp> {
-        self.cache
-            .get(&key)
-            .map_or_else(|| Vec::new(), |x| x.clone())
+    pub fn get(&self, key: &Mime) -> &[MimeApp] {
+        static EMPTY: Vec<MimeApp> = Vec::new();
+        self.cache.get(key).unwrap_or(&EMPTY)
     }
-}
 
-static MIME_APP_CACHE: Lazy<Mutex<MimeAppCache>> = Lazy::new(|| Mutex::new(MimeAppCache::new()));
+    pub fn icons(&self, key: &Mime) -> &[widget::icon::Handle] {
+        static EMPTY: Vec<widget::icon::Handle> = Vec::new();
+        self.icons.get(key).unwrap_or(&EMPTY)
+    }
 
-pub fn mime_apps(mime: &Mime) -> Vec<MimeApp> {
-    let mime_app_cache = MIME_APP_CACHE.lock().unwrap();
-    mime_app_cache.get(mime)
-}
+    pub fn terminal(&self) -> Option<&MimeApp> {
+        //TODO: consider rules in https://github.com/Vladimir-csp/xdg-terminal-exec
 
-pub fn terminal() -> Option<MimeApp> {
-    let mime_app_cache = MIME_APP_CACHE.lock().unwrap();
+        // Look for and return preferred terminals
+        //TODO: fallback order beyond cosmic-term?
+        for id in &["com.system76.CosmicTerm"] {
+            for terminal in self.terminals.iter() {
+                if &terminal.id == id {
+                    return Some(terminal);
+                }
+            }
+        }
 
-    //TODO: consider rules in https://github.com/Vladimir-csp/xdg-terminal-exec
+        // Return whatever was the first terminal found
+        self.terminals.first()
+    }
 
-    // Look for and return preferred terminals
-    //TODO: fallback order beyond cosmic-term?
-    for id in &["com.system76.CosmicTerm"] {
-        for terminal in mime_app_cache.terminals.iter() {
-            if &terminal.id == id {
-                return Some(terminal.clone());
+    #[cfg(not(feature = "desktop"))]
+    pub fn set_default(&mut self, mime: Mime, id: String) {
+        log::warn!(
+            "failed to set default handler for {mime:?} to {id:?}: desktop feature not enabled"
+        );
+    }
+
+    #[cfg(feature = "desktop")]
+    pub fn set_default(&mut self, mime: Mime, mut id: String) {
+        let Some(path) = cosmic_mime_apps::local_list_path() else {
+            log::warn!("failed to find mimeapps.list path");
+            return;
+        };
+
+        let mut list = cosmic_mime_apps::List::default();
+        match fs::read_to_string(&path) {
+            Ok(string) => {
+                list.load_from(&string);
+            }
+            Err(err) => {
+                if err.kind() != io::ErrorKind::NotFound {
+                    log::warn!("failed to read {path:?}: {err}");
+                    return;
+                }
+            }
+        }
+
+        let suffix = ".desktop";
+        if !id.ends_with(suffix) {
+            id.push_str(suffix);
+        }
+        list.set_default_app(mime, id);
+
+        let mut string = list.to_string();
+        string.push('\n');
+        match fs::write(&path, string) {
+            Ok(()) => {
+                self.reload();
+            }
+            Err(err) => {
+                log::warn!("failed to write {path:?}: {err}");
             }
         }
     }
+}
 
-    // Return whatever was the first terminal found
-    mime_app_cache.terminals.first().map(|x| x.clone())
+impl Default for MimeAppCache {
+    fn default() -> Self {
+        Self::new()
+    }
 }

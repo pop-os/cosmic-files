@@ -196,7 +196,7 @@ restored = Genoprettet {$items} {$items ->
 unknown-folder = ukendt mappe
 
 ## Open with
-open-with = Åbn med...
+menu-open-with = Åbn med...
 default-app = {$name} (standardindstilling)
 
 ## Show details

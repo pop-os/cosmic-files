@@ -2,7 +2,7 @@ use cosmic_files::operation::{recursive::Context, Controller, ReplaceResult};
 use std::{error::Error, io, path::PathBuf};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut context = Context::new(Controller::new())
+    let mut context = Context::new(Controller::default())
         .on_progress(|op, progress| {
             println!("{:?}: {:?}", op.to, progress);
         })

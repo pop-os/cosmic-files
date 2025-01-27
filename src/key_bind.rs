@@ -29,10 +29,14 @@ pub fn key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
     bind!([], Key::Named(Named::ArrowLeft), ItemLeft);
     bind!([], Key::Named(Named::ArrowRight), ItemRight);
     bind!([], Key::Named(Named::ArrowUp), ItemUp);
+    bind!([], Key::Named(Named::Home), SelectFirst);
+    bind!([], Key::Named(Named::End), SelectLast);
     bind!([Shift], Key::Named(Named::ArrowDown), ItemDown);
     bind!([Shift], Key::Named(Named::ArrowLeft), ItemLeft);
     bind!([Shift], Key::Named(Named::ArrowRight), ItemRight);
     bind!([Shift], Key::Named(Named::ArrowUp), ItemUp);
+    bind!([Shift], Key::Named(Named::Home), SelectFirst);
+    bind!([Shift], Key::Named(Named::End), SelectLast);
     bind!([Ctrl, Shift], Key::Character("n".into()), NewFolder);
     bind!([], Key::Named(Named::Enter), Open);
     bind!([Ctrl], Key::Named(Named::Space), Preview);

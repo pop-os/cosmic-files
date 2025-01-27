@@ -62,7 +62,7 @@ complete = انتهى
 copy_noun = ينسخ
 
 ## Open with
-open-with = افتح ب‍استخدام
+menu-open-with = افتح ب‍استخدام
 default-app = {$name} (المبدئي)
 
 ## Properties

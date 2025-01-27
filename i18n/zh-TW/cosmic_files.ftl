@@ -159,7 +159,7 @@ restored = 已還原 {$items} 項目 {$items ->
 unknown-folder = 未知資料夾
 
 ## Open with
-open-with = 開啟方式...
+menu-open-with = 開啟方式...
 default-app = {$name} （預設）
 
 ## Show details

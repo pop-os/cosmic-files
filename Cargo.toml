@@ -11,6 +11,7 @@ vergen = { version = "8", features = ["git", "gitcl"] }
 
 [dependencies]
 chrono = { version = "0.4", features = ["unstable-locales"] }
+cosmic-mime-apps = { git = "https://github.com/pop-os/cosmic-mime-apps.git", optional = true }
 dirs = "5.0.1"
 env_logger = "0.11"
 freedesktop_entry_parser = "1.3"
@@ -67,7 +68,7 @@ features = ["multi-window", "tokio", "winit"]
 
 [features]
 default = ["bzip2", "desktop", "gvfs", "liblzma", "notify", "wgpu"]
-desktop = ["libcosmic/desktop", "dep:xdg"]
+desktop = ["libcosmic/desktop", "dep:cosmic-mime-apps", "dep:xdg"]
 gvfs = ["dep:gio", "dep:glib"]
 jemalloc = ["dep:tikv-jemallocator"]
 notify = ["dep:notify-rust"]

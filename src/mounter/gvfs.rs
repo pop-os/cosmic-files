@@ -97,7 +97,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
                 info.icon()
                     .as_ref()
                     .and_then(|icon| gio_icon_to_path(icon, size))
-                    .map(|path| widget::icon::from_path(path))
+                    .map(widget::icon::from_path)
                     .unwrap_or(
                         widget::icon::from_name(if metadata.is_dir() {
                             "folder"
@@ -127,7 +127,6 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
             icon_handle_grid,
             icon_handle_list,
             icon_handle_list_condensed,
-            open_with: Vec::new(),
             thumbnail_opt: Some(ItemThumbnail::NotImage),
             button_id: widget::Id::unique(),
             pos_opt: Cell::new(None),
@@ -388,10 +387,7 @@ impl Gvfs {
                             let file = gio::File::for_uri(&uri);
                             let needs_mount = match file.find_enclosing_mount(gio::Cancellable::NONE) {
                                 Ok(_) => false,
-                                Err(err) => match err.kind::<gio::IOErrorEnum>() {
-                                    Some(gio::IOErrorEnum::NotMounted) => true,
-                                    _ => false
-                                }
+                                Err(err) => matches!(err.kind::<gio::IOErrorEnum>(), Some(gio::IOErrorEnum::NotMounted))
                             };
                             if needs_mount {
                                 let mount_op = mount_op(uri.clone(), event_tx.clone());
@@ -468,7 +464,6 @@ impl Mounter for Gvfs {
         Task::perform(
             async move {
                 command_tx.send(Cmd::Mount(item)).unwrap();
-                ()
             },
             |x| x,
         )
@@ -479,7 +474,6 @@ impl Mounter for Gvfs {
         Task::perform(
             async move {
                 command_tx.send(Cmd::NetworkDrive(uri)).unwrap();
-                ()
             },
             |x| x,
         )
@@ -498,7 +492,6 @@ impl Mounter for Gvfs {
         Task::perform(
             async move {
                 command_tx.send(Cmd::Unmount(item)).unwrap();
-                ()
             },
             |x| x,
         )

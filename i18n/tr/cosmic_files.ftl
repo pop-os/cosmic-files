@@ -166,7 +166,7 @@ restored = {$items} öge "{$trash}"ten "{$to}" dizinine geri yüklenildi ({$prog
 unknown-folder = bilinmeyen klasör
 
 ## Open with
-open-with = Birlikte aç...
+menu-open-with = Birlikte aç...
 default-app = {$name} (varsayılan)
 
 ## Show details

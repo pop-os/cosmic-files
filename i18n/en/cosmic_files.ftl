@@ -96,6 +96,7 @@ set-executable-and-launch-description = Do you want to set "{$name}" as executab
 set-and-launch = Set and launch
 
 ## Metadata Dialog
+open-with = Open with
 owner = Owner
 group = Group
 other = Other
@@ -196,7 +197,7 @@ restored = Restored {$items} {$items ->
 unknown-folder = unknown folder
 
 ## Open with
-open-with = Open with...
+menu-open-with = Open with...
 default-app = {$name} (default)
 
 ## Show details

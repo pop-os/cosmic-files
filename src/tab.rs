@@ -58,14 +58,13 @@ use tokio::sync::mpsc;
 use walkdir::WalkDir;
 
 use crate::{
-    app::{self, Action, PreviewItem, PreviewKind},
+    app::{Action, PreviewItem, PreviewKind},
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{DesktopConfig, IconSizes, TabConfig, ICON_SCALE_MAX, ICON_SIZE_GRID},
     dialog::DialogKind,
     fl,
     localize::{LANGUAGE_CHRONO, LANGUAGE_SORTER},
-    menu,
-    mime_app::{mime_apps, MimeApp},
+    menu, mime_app,
     mime_icon::{mime_for_path, mime_icon},
     mounter::MOUNTERS,
     mouse_area,
@@ -459,8 +458,6 @@ pub fn item_from_entry(
             }
         };
 
-    let open_with = mime_apps(&mime);
-
     let children = if metadata.is_dir() {
         //TODO: calculate children in the background (and make it cancellable?)
         match fs::read_dir(&path) {
@@ -475,7 +472,7 @@ pub fn item_from_entry(
     };
 
     let dir_size = if metadata.is_dir() {
-        DirSize::Calculating(Controller::new())
+        DirSize::Calculating(Controller::default())
     } else {
         DirSize::NotDirectory
     };
@@ -490,7 +487,6 @@ pub fn item_from_entry(
         icon_handle_grid,
         icon_handle_list,
         icon_handle_list_condensed,
-        open_with,
         thumbnail_opt: None,
         button_id: widget::Id::unique(),
         pos_opt: Cell::new(None),
@@ -720,7 +716,6 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     icon_handle_grid,
                     icon_handle_list,
                     icon_handle_list_condensed,
-                    open_with: Vec::new(),
                     thumbnail_opt: Some(ItemThumbnail::NotImage),
                     button_id: widget::Id::unique(),
                     pos_opt: Cell::new(None),
@@ -904,7 +899,6 @@ pub fn scan_desktop(
             icon_handle_grid,
             icon_handle_list,
             icon_handle_list_condensed,
-            open_with: Vec::new(),
             thumbnail_opt: Some(ItemThumbnail::NotImage),
             button_id: widget::Id::unique(),
             pos_opt: Cell::new(None),
@@ -1027,6 +1021,7 @@ pub enum Command {
     OpenInNewWindow(PathBuf),
     OpenTrash,
     Preview(PreviewKind),
+    SetOpenWith(Mime, String),
     WindowDrag,
     WindowToggleMaximize,
 }
@@ -1071,6 +1066,9 @@ pub enum Message {
     SearchContext(Location, SearchContextWrapper),
     SearchReady(bool),
     SelectAll,
+    SelectFirst,
+    SelectLast,
+    SetOpenWith(Mime, String),
     SetSort(HeadingOptions, bool),
     Thumbnail(PathBuf, ItemThumbnail),
     ToggleShowHidden,
@@ -1316,7 +1314,6 @@ pub struct Item {
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
     pub icon_handle_list_condensed: widget::icon::Handle,
-    pub open_with: Vec<MimeApp>,
     pub thumbnail_opt: Option<ItemThumbnail>,
     pub button_id: widget::Id,
     pub pos_opt: Cell<Option<(usize, usize)>>,
@@ -1341,7 +1338,7 @@ impl Item {
         self.mime.type_() == mime::IMAGE || self.mime.type_() == mime::TEXT
     }
 
-    fn preview<'a>(&'a self, sizes: IconSizes) -> Element<'a, app::Message> {
+    fn preview<'a>(&'a self, sizes: IconSizes) -> Element<'a, Message> {
         let spacing = cosmic::theme::active().cosmic().spacing;
         // This loads the image only if thumbnailing worked
         let icon = widget::icon::icon(self.icon_handle_grid.clone())
@@ -1374,23 +1371,23 @@ impl Item {
         }
     }
 
-    pub fn preview_header(&self) -> Vec<Element<app::Message>> {
+    pub fn preview_header(&self) -> Vec<Element<Message>> {
         let mut row = Vec::with_capacity(3);
         row.push(
             widget::button::icon(widget::icon::from_name("go-previous-symbolic"))
-                .on_press(app::Message::TabMessage(None, Message::ItemLeft))
+                .on_press(Message::ItemLeft)
                 .into(),
         );
         row.push(
             widget::button::icon(widget::icon::from_name("go-next-symbolic"))
-                .on_press(app::Message::TabMessage(None, Message::ItemRight))
+                .on_press(Message::ItemRight)
                 .into(),
         );
         if self.can_gallery() {
             if let Some(_path) = self.path_opt() {
                 row.push(
                     widget::button::icon(widget::icon::from_name("view-fullscreen-symbolic"))
-                        .on_press(app::Message::TabMessage(None, Message::Gallery(true)))
+                        .on_press(Message::Gallery(true))
                         .into(),
                 );
             }
@@ -1398,7 +1395,11 @@ impl Item {
         row
     }
 
-    pub fn preview_view<'a>(&'a self, sizes: IconSizes) -> Element<'a, app::Message> {
+    pub fn preview_view<'a>(
+        &'a self,
+        mime_app_cache_opt: Option<&'a mime_app::MimeAppCache>,
+        sizes: IconSizes,
+    ) -> Element<'a, Message> {
         let cosmic_theme::Spacing {
             space_xxxs,
             space_m,
@@ -1420,6 +1421,24 @@ impl Item {
             mime = self.mime.to_string()
         )));
         let mut settings = Vec::new();
+        if let Some(mime_app_cache) = mime_app_cache_opt {
+            let mime_apps = mime_app_cache.get(&self.mime);
+            if !mime_apps.is_empty() {
+                settings.push(
+                    widget::settings::item::builder(fl!("open-with")).control(
+                        widget::dropdown(
+                            mime_apps,
+                            mime_apps.iter().position(|x| x.is_default),
+                            |index| {
+                                let mime_app = &mime_apps[index];
+                                Message::SetOpenWith(self.mime.clone(), mime_app.id.clone())
+                            },
+                        )
+                        .icons(mime_app_cache.icons(&self.mime)),
+                    ),
+                );
+            }
+        }
         match &self.metadata {
             ItemMetadata::Path { metadata, children } => {
                 if metadata.is_dir() {
@@ -1507,9 +1526,10 @@ impl Item {
         column = column.push(details);
 
         if let Some(path) = self.path_opt() {
-            column = column.push(widget::button::standard(fl!("open")).on_press(
-                app::Message::TabMessage(None, Message::Open(Some(path.to_path_buf()))),
-            ));
+            column = column.push(
+                widget::button::standard(fl!("open"))
+                    .on_press(Message::Open(Some(path.to_path_buf()))),
+            );
         }
 
         if !settings.is_empty() {
@@ -1523,11 +1543,7 @@ impl Item {
         column.into()
     }
 
-    pub fn replace_view<'a>(
-        &'a self,
-        heading: String,
-        sizes: IconSizes,
-    ) -> Element<'a, app::Message> {
+    pub fn replace_view<'a>(&'a self, heading: String, sizes: IconSizes) -> Element<'a, Message> {
         let cosmic_theme::Spacing { space_xxxs, .. } = theme::active().cosmic().spacing;
 
         let mut row = widget::row().spacing(space_xxxs);
@@ -2243,8 +2259,8 @@ impl Tab {
                                 if !item.selected {
                                     self.clicked = click_i_opt;
                                     item.selected = true;
-                                    self.select_range = Some((i, i));
                                 }
+                                self.select_range = Some((i, i));
                                 self.select_focus = click_i_opt;
                                 self.selected_clicked = true;
                             } else if !dont_unset && item.selected {
@@ -2752,9 +2768,7 @@ impl Tab {
                     if let Some(items) = &mut self.items_opt {
                         if finished || context.ready.swap(false, atomic::Ordering::SeqCst) {
                             let duration = Instant::now();
-                            while let Some((path, name, metadata)) =
-                                context.results_rx.blocking_recv()
-                            {
+                            while let Ok((path, name, metadata)) = context.results_rx.try_recv() {
                                 //TODO: combine this with column_sort logic, they must match!
                                 let item_modified = metadata.modified().ok();
                                 let index = match items.binary_search_by(|other| {
@@ -2800,6 +2814,39 @@ impl Tab {
                         widget::button::focus(widget::Id::unique()).into(),
                     ));
                 }
+            }
+            Message::SelectFirst => {
+                if self.select_position(0, 0, mod_shift) {
+                    if let Some(offset) = self.select_focus_scroll() {
+                        commands.push(Command::Iced(
+                            scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                        ));
+                    }
+                    if let Some(id) = self.select_focus_id() {
+                        commands.push(Command::Iced(widget::button::focus(id).into()));
+                    }
+                }
+            }
+            Message::SelectLast => {
+                if let Some(ref items) = self.items_opt {
+                    if let Some(last_pos) = items.iter().filter_map(|item| item.pos_opt.get()).max()
+                    {
+                        if self.select_position(last_pos.0, last_pos.1, mod_shift) {
+                            if let Some(offset) = self.select_focus_scroll() {
+                                commands.push(Command::Iced(
+                                    scrollable::scroll_to(self.scrollable_id.clone(), offset)
+                                        .into(),
+                                ));
+                            }
+                            if let Some(id) = self.select_focus_id() {
+                                commands.push(Command::Iced(widget::button::focus(id).into()));
+                            }
+                        }
+                    }
+                }
+            }
+            Message::SetOpenWith(mime, id) => {
+                commands.push(Command::SetOpenWith(mime, id));
             }
             Message::SetSort(heading_option, dir) => {
                 if !matches!(self.location, Location::Search(..)) {
@@ -2865,7 +2912,7 @@ impl Tab {
             Message::Drop(Some((to, mut from))) => {
                 self.dnd_hovered = None;
                 match to {
-                    Location::Path(to) => {
+                    Location::Desktop(to, ..) | Location::Path(to) => {
                         if let Ok(entries) = fs::read_dir(&to) {
                             for i in entries.into_iter().filter_map(|e| e.ok()) {
                                 let i = i.path();
@@ -3581,8 +3628,7 @@ impl Tab {
     pub fn empty_view(&self, has_hidden: bool) -> Element<Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
 
-        //TODO: left clicking on an empty folder does not clear context menu
-        widget::column::with_children(vec![widget::container(
+        mouse_area::MouseArea::new(widget::column::with_children(vec![widget::container(
             widget::column::with_children(match self.mode {
                 Mode::App | Mode::Dialog(_) => vec![
                     widget::icon::from_name("folder-symbolic")
@@ -3604,7 +3650,8 @@ impl Tab {
             .spacing(space_xxs),
         )
         .center(Length::Fill)
-        .into()])
+        .into()]))
+        .on_press(|_| Message::Click(None))
         .into()
     }
 
@@ -4285,9 +4332,9 @@ impl Tab {
                     .drag_content(move || {
                         ClipboardCopy::new(crate::clipboard::ClipboardKind::Copy, &files)
                     })
-                    .drag_icon(move || {
+                    .drag_icon(move |v| {
                         let state: tree::State = Widget::<Message, _, _>::state(&drag_list);
-                        (Element::from(drag_list.clone()).map(|_m| ()), state)
+                        (Element::from(drag_list.clone()).map(|_m| ()), state, v)
                     })
             }
             _ => item_view,
@@ -4402,7 +4449,7 @@ impl Tab {
         dnd_dest.into()
     }
 
-    pub fn view<'a>(&'a self, key_binds: &'a HashMap<KeyBind, Action>) -> Element<Message> {
+    pub fn view<'a>(&'a self, key_binds: &'a HashMap<KeyBind, Action>) -> Element<'a, Message> {
         widget::responsive(|size| self.view_responsive(key_binds, size)).into()
     }
 

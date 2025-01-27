@@ -28,6 +28,8 @@ impl ClipboardCopy {
     pub fn new<P: AsRef<Path>>(kind: ClipboardKind, paths: &[P]) -> Self {
         let available = vec![
             "text/plain".to_string(),
+            "text/plain;charset=utf-8".to_string(),
+            "UTF8_STRING".to_string(),
             "text/uri-list".to_string(),
             "x-special/gnome-copied-files".to_string(),
         ];
@@ -94,7 +96,9 @@ impl AsMimeTypes for ClipboardCopy {
 
     fn as_bytes(&self, mime_type: &str) -> Option<Cow<'static, [u8]>> {
         match mime_type {
-            "text/plain" => Some(self.text_plain.clone()),
+            "text/plain" | "text/plain;charset=utf-8" | "UTF8_STRING" => {
+                Some(self.text_plain.clone())
+            }
             "text/uri-list" => Some(self.text_uri_list.clone()),
             "x-special/gnome-copied-files" => Some(self.x_special_gnome_copied_files.clone()),
             _ => None,

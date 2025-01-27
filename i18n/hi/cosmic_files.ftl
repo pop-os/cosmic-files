@@ -181,7 +181,7 @@ restored = {$items} {$items ->
 unknown-folder = अज्ञात फ़ोल्डर
 
 ## Open with
-open-with = इसके साथ खोलें
+menu-open-with = इसके साथ खोलें
 default-app = {$name} (डिफ़ॉल्ट)
 
 ## Show details

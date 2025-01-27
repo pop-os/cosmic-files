@@ -161,7 +161,7 @@ restored = Восстановлено {$items} {$items ->
 unknown-folder = неизвестная папка
 
 ## Open with
-open-with = Открыть с помощью
+menu-open-with = Открыть с помощью
 default-app = {$name} (по умолчанию)
 
 ## Show details

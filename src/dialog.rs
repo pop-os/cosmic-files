@@ -157,13 +157,15 @@ impl<M: Send + 'static> Dialog<M> {
 
         let (config_handler, config) = Config::load();
 
-        let mut settings = window::Settings::default();
-        settings.decorations = false;
-        settings.exit_on_close_request = false;
-        settings.min_size = Some(Size::new(360.0, 180.0));
-        settings.resizable = true;
-        settings.size = Size::new(1024.0, 640.0);
-        settings.transparent = true;
+        let mut settings = window::Settings {
+            decorations: false,
+            exit_on_close_request: false,
+            min_size: Some(Size::new(360.0, 180.0)),
+            resizable: true,
+            size: Size::new(1024.0, 640.0),
+            transparent: true,
+            ..Default::default()
+        };
 
         #[cfg(target_os = "linux")]
         {
@@ -251,7 +253,8 @@ impl<M: Send + 'static> Dialog<M> {
         self.cosmic
             .subscription()
             .map(DialogMessage)
-            .map(self.mapper)
+            .with(self.mapper)
+            .map(|(mapper, message)| mapper(message))
     }
 
     pub fn update(&mut self, message: DialogMessage) -> Task<M> {
@@ -295,6 +298,7 @@ struct Flags {
     kind: DialogKind,
     path_opt: Option<PathBuf>,
     window_id: window::Id,
+    #[allow(dead_code)]
     config_handler: Option<cosmic_config::Config>,
     config: Config,
 }
@@ -323,6 +327,7 @@ enum Message {
     SearchActivate,
     SearchClear,
     SearchInput(String),
+    #[allow(clippy::enum_variant_names)]
     TabMessage(tab::Message),
     TabRescan(Location, Option<tab::Item>, Vec<tab::Item>),
     TabView(tab::View),
@@ -344,6 +349,7 @@ impl From<AppMessage> for Message {
             AppMessage::ZoomDefault(_entity_opt) => Message::ZoomDefault,
             AppMessage::ZoomIn(_entity_opt) => Message::ZoomIn,
             AppMessage::ZoomOut(_entity_opt) => Message::ZoomOut,
+            AppMessage::NewItem(_entity_opt, true) => Message::NewFolder,
             unsupported => {
                 log::warn!("{unsupported:?} not supported in dialog mode");
                 Message::None
@@ -465,17 +471,17 @@ impl App {
             .into()
     }
 
-    fn preview<'a>(&'a self, kind: &'a PreviewKind) -> Element<'a, AppMessage> {
+    fn preview<'a>(&'a self, kind: &'a PreviewKind) -> Element<'a, tab::Message> {
         let mut children = Vec::with_capacity(1);
         match kind {
             PreviewKind::Custom(PreviewItem(item)) => {
-                children.push(item.preview_view(IconSizes::default()));
+                children.push(item.preview_view(None, IconSizes::default()));
             }
             PreviewKind::Location(location) => {
                 if let Some(items) = self.tab.items_opt() {
                     for item in items.iter() {
                         if item.location_opt.as_ref() == Some(location) {
-                            children.push(item.preview_view(self.tab.config.icon_sizes));
+                            children.push(item.preview_view(None, self.tab.config.icon_sizes));
                             // Only show one property view to avoid issues like hangs when generating
                             // preview images on thousands of files
                             break;
@@ -487,7 +493,7 @@ impl App {
                 if let Some(items) = self.tab.items_opt() {
                     for item in items.iter() {
                         if item.selected {
-                            children.push(item.preview_view(self.tab.config.icon_sizes));
+                            children.push(item.preview_view(None, self.tab.config.icon_sizes));
                             // Only show one property view to avoid issues like hangs when generating
                             // preview images on thousands of files
                             break;
@@ -495,7 +501,7 @@ impl App {
                     }
                     if children.is_empty() {
                         if let Some(item) = &self.tab.parent_item_opt {
-                            children.push(item.preview_view(self.tab.config.icon_sizes));
+                            children.push(item.preview_view(None, self.tab.config.icon_sizes));
                         }
                     }
                 }
@@ -596,7 +602,7 @@ impl App {
                 .data(Location::Recents)
         });
 
-        for (_favorite_i, favorite) in self.flags.config.favorites.iter().enumerate() {
+        for favorite in self.flags.config.favorites.iter() {
             if let Some(path) = favorite.path_opt() {
                 let name = if matches!(favorite, Favorite::Home) {
                     fl!("home")
@@ -808,14 +814,14 @@ impl Application for App {
                             actions.extend(
                                 item.preview_header()
                                     .into_iter()
-                                    .map(|element| element.map(Message::from)),
+                                    .map(|element| element.map(Message::TabMessage)),
                             )
                         }
                     }
                 };
                 Some(
                     context_drawer::context_drawer(
-                        self.preview(kind).map(Message::from),
+                        self.preview(kind).map(Message::TabMessage),
                         Message::Preview,
                     )
                     .header_actions(actions),
@@ -972,11 +978,8 @@ impl Application for App {
             ContextPage::Preview(..) => self.core.window.show_context,
             _ => false,
         };
-        elements.push(
-            menu::dialog_menu(&self.tab, &self.key_binds, show_details)
-                .map(Message::from)
-                .into(),
-        );
+        elements
+            .push(menu::dialog_menu(&self.tab, &self.key_binds, show_details).map(Message::from));
 
         elements
     }
@@ -1025,7 +1028,7 @@ impl Application for App {
             return self.update(message);
         }
 
-        if let Some(data) = self.nav_model.data::<MounterData>(entity).clone() {
+        if let Some(data) = self.nav_model.data::<MounterData>(entity) {
             if let Some(mounter) = MOUNTERS.get(&data.0) {
                 return mounter.mount(data.1.clone()).map(|_| message::none());
             }
@@ -1167,11 +1170,9 @@ impl Application for App {
                                 let mut still_mounted = false;
                                 for item in mounter_items.iter() {
                                     if let Some(path) = item.path() {
-                                        if path == old_path {
-                                            if item.is_mounted() {
-                                                still_mounted = true;
-                                                break;
-                                            }
+                                        if path == old_path && item.is_mounted() {
+                                            still_mounted = true;
+                                            break;
                                         }
                                     }
                                 }
@@ -1219,7 +1220,7 @@ impl Application for App {
                     let mut contains_change = false;
                     for event in events.iter() {
                         for event_path in event.paths.iter() {
-                            if event_path.starts_with(&path) {
+                            if event_path.starts_with(path) {
                                 match event.kind {
                                     notify::EventKind::Modify(
                                         notify::event::ModifyKind::Metadata(_),
@@ -1233,14 +1234,14 @@ impl Application for App {
                                             for item in items.iter_mut() {
                                                 if item.path_opt() == Some(event_path) {
                                                     //TODO: reload more, like mime types?
-                                                    match fs::metadata(&event_path) {
+                                                    match fs::metadata(event_path) {
                                                         Ok(new_metadata) => {
-                                                            match &mut item.metadata {
-                                                                ItemMetadata::Path {
-                                                                    metadata,
-                                                                    ..
-                                                                } => *metadata = new_metadata,
-                                                                _ => {}
+                                                            if let ItemMetadata::Path {
+                                                                metadata,
+                                                                ..
+                                                            } = &mut item.metadata
+                                                            {
+                                                                *metadata = new_metadata;
                                                             }
                                                         }
                                                         Err(err) => {
@@ -1320,12 +1321,9 @@ impl Application for App {
 
                 // If we are in directory mode, return the current directory
                 if self.flags.kind.is_dir() {
-                    match &self.tab.location {
-                        Location::Path(tab_path) => {
-                            self.result_opt = Some(DialogResult::Open(vec![tab_path.clone()]));
-                            return window::close(self.flags.window_id);
-                        }
-                        _ => {}
+                    if let Location::Path(tab_path) = &self.tab.location {
+                        self.result_opt = Some(DialogResult::Open(vec![tab_path.clone()]));
+                        return window::close(self.flags.window_id);
                     }
                 }
             }
@@ -1342,7 +1340,7 @@ impl Application for App {
                 if let DialogKind::SaveFile { filename } = &self.flags.kind {
                     if !filename.is_empty() {
                         if let Some(tab_path) = self.tab.location.path_opt() {
-                            let path = tab_path.join(&filename);
+                            let path = tab_path.join(filename);
                             if path.is_dir() {
                                 // cd to directory
                                 let message = Message::TabMessage(tab::Message::Location(
@@ -1590,11 +1588,7 @@ impl Application for App {
             }
         }
 
-        col = col.push(
-            self.tab
-                .view(&self.key_binds)
-                .map(move |message| Message::TabMessage(message)),
-        );
+        col = col.push(self.tab.view(&self.key_binds).map(Message::TabMessage));
 
         col.into()
     }
@@ -1708,16 +1702,17 @@ impl Application for App {
         ];
 
         for (key, mounter) in MOUNTERS.iter() {
-            let key = *key;
-            subscriptions.push(mounter.subscription().map(move |mounter_message| {
-                match mounter_message {
-                    MounterMessage::Items(items) => Message::MounterItems(key, items),
-                    _ => {
-                        log::warn!("{:?} not supported in dialog mode", mounter_message);
-                        Message::None
-                    }
-                }
-            }));
+            subscriptions.push(
+                mounter.subscription().with(*key).map(
+                    |(key, mounter_message)| match mounter_message {
+                        MounterMessage::Items(items) => Message::MounterItems(key, items),
+                        _ => {
+                            log::warn!("{:?} not supported in dialog mode", mounter_message);
+                            Message::None
+                        }
+                    },
+                ),
+            );
         }
 
         Subscription::batch(subscriptions)

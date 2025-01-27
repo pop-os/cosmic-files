@@ -89,7 +89,7 @@ pub fn context_menu<'a>(
     let mut selected_trash_only = false;
     let mut selected_desktop_entry = None;
     let mut selected_types: Vec<Mime> = vec![];
-    tab.items_opt().map(|items| {
+    if let Some(items) = tab.items_opt() {
         for item in items.iter() {
             if item.selected {
                 selected += 1;
@@ -110,7 +110,7 @@ pub fn context_menu<'a>(
                 selected_types.push(item.mime.clone());
             }
         }
-    });
+    };
     selected_types.sort_unstable();
     selected_types.dedup();
     selected_trash_only = selected_trash_only && selected == 1;
@@ -157,13 +157,13 @@ pub fn context_menu<'a>(
                     children.push(menu_item(fl!("open"), Action::Open).into());
                 }
                 if selected == 1 {
-                    children.push(menu_item(fl!("open-with"), Action::OpenWith).into());
+                    children.push(menu_item(fl!("menu-open-with"), Action::OpenWith).into());
                     if selected_dir == 1 {
                         children
                             .push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
                     }
                 }
-                if matches!(tab.location, Location::Search(..)) {
+                if matches!(tab.location, Location::Search(..) | Location::Recents) {
                     children.push(
                         menu_item(fl!("open-item-location"), Action::OpenItemLocation).into(),
                     );
@@ -260,7 +260,7 @@ pub fn context_menu<'a>(
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
                     children.push(menu_item(fl!("open"), Action::Open).into());
                 }
-                if matches!(tab.location, Location::Search(..)) {
+                if matches!(tab.location, Location::Search(..) | Location::Recents) {
                     children.push(
                         menu_item(fl!("open-item-location"), Action::OpenItemLocation).into(),
                     );
@@ -342,7 +342,7 @@ pub fn context_menu<'a>(
         .into()
 }
 
-pub fn dialog_menu<'a>(
+pub fn dialog_menu(
     tab: &Tab,
     key_binds: &HashMap<KeyBind, Action>,
     show_details: bool,
@@ -359,15 +359,13 @@ pub fn dialog_menu<'a>(
     let in_trash = tab.location == Location::Trash;
 
     let mut selected_gallery = 0;
-    tab.items_opt().map(|items| {
+    if let Some(items) = tab.items_opt() {
         for item in items.iter() {
-            if item.selected {
-                if item.can_gallery() {
-                    selected_gallery += 1;
-                }
+            if item.selected && item.can_gallery() {
+                selected_gallery += 1;
             }
         }
-    });
+    };
 
     MenuBar::new(vec![
         menu::Tree::with_children(
@@ -504,7 +502,7 @@ pub fn menu_bar<'a>(
     let mut selected_dir = 0;
     let mut selected = 0;
     let mut selected_gallery = 0;
-    tab_opt.and_then(|tab| tab.items_opt()).map(|items| {
+    if let Some(items) = tab_opt.and_then(|tab| tab.items_opt()) {
         for item in items.iter() {
             if item.selected {
                 selected += 1;
@@ -516,7 +514,7 @@ pub fn menu_bar<'a>(
                 }
             }
         }
-    });
+    };
 
     MenuBar::new(vec![
         menu::Tree::with_children(
@@ -533,7 +531,7 @@ pub fn menu_bar<'a>(
                         Action::Open,
                         (selected > 0 && selected_dir == 0) || (selected_dir == 1 && selected == 1),
                     ),
-                    menu_button_optional(fl!("open-with"), Action::OpenWith, selected == 1),
+                    menu_button_optional(fl!("menu-open-with"), Action::OpenWith, selected == 1),
                     menu::Item::Divider,
                     menu_button_optional(fl!("rename"), Action::Rename, selected > 0),
                     menu::Item::Divider,

@@ -52,7 +52,7 @@ failed = 실패
 complete = 완료
 
 ## Open with
-open-with = 다른 앱으로 열기
+menu-open-with = 다른 앱으로 열기
 default-app = {$name} (기본)
 
 ## Properties

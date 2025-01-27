@@ -144,9 +144,7 @@ impl ThumbnailerCache {
     }
 
     pub fn get(&self, key: &Mime) -> Vec<Thumbnailer> {
-        self.cache
-            .get(&key)
-            .map_or_else(|| Vec::new(), |x| x.clone())
+        self.cache.get(key).map_or_else(Vec::new, |x| x.clone())
     }
 }
 
