@@ -3705,7 +3705,8 @@ impl Application for App {
                                 },
                                 auth_tx: auth_tx.clone(),
                             })
-                        });
+                        })
+                        .on_submit(Message::DialogComplete);
                     if !id_assigned {
                         input = input.id(self.dialog_text_input.clone());
                         id_assigned = true;
@@ -3726,7 +3727,8 @@ impl Application for App {
                                 },
                                 auth_tx: auth_tx.clone(),
                             })
-                        });
+                        })
+                        .on_submit(Message::DialogComplete);
                     if !id_assigned {
                         input = input.id(self.dialog_text_input.clone());
                         id_assigned = true;
@@ -3748,7 +3750,8 @@ impl Application for App {
                                 },
                                 auth_tx: auth_tx.clone(),
                             })
-                        });
+                        })
+                        .on_submit(Message::DialogComplete);
                     if !id_assigned {
                         input = input.id(self.dialog_text_input.clone());
                     }
