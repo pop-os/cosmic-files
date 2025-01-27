@@ -278,12 +278,12 @@ impl MimeAppCache {
 
     pub fn get(&self, key: &Mime) -> &[MimeApp] {
         static EMPTY: Vec<MimeApp> = Vec::new();
-        self.cache.get(key).unwrap_or_else(|| &EMPTY)
+        self.cache.get(key).unwrap_or(&EMPTY)
     }
 
     pub fn icons(&self, key: &Mime) -> &[widget::icon::Handle] {
         static EMPTY: Vec<widget::icon::Handle> = Vec::new();
-        self.icons.get(key).unwrap_or_else(|| &EMPTY)
+        self.icons.get(key).unwrap_or(&EMPTY)
     }
 
     pub fn terminal(&self) -> Option<&MimeApp> {
@@ -346,5 +346,11 @@ impl MimeAppCache {
                 log::warn!("failed to write {path:?}: {err}");
             }
         }
+    }
+}
+
+impl Default for MimeAppCache {
+    fn default() -> Self {
+        Self::new()
     }
 }
