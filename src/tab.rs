@@ -83,8 +83,8 @@ const MAX_SEARCH_RESULTS: usize = 200;
 const THUMBNAIL_SIZE: u32 = (ICON_SIZE_GRID as u32) * (ICON_SCALE_MAX as u32);
 
 //TODO: adjust for locales?
-const DATE_TIME_FORMAT: &'static str = "%b %-d, %-Y, %-I:%M %p";
-const TIME_FORMAT: &'static str = "%-I:%M %p";
+const DATE_TIME_FORMAT: &str = "%b %-d, %-Y, %-I:%M %p";
+const TIME_FORMAT: &str = "%-I:%M %p";
 static SPECIAL_DIRS: Lazy<HashMap<PathBuf, &'static str>> = Lazy::new(|| {
     let mut special_dirs = HashMap::new();
     if let Some(dir) = dirs::document_dir() {
@@ -293,7 +293,7 @@ enum PermissionOwner {
 }
 
 fn format_permissions_owner(metadata: &Metadata, owner: PermissionOwner) -> String {
-    return match owner {
+    match owner {
         PermissionOwner::Owner => get_user_by_uid(metadata.uid())
             .and_then(|user| user.name().to_str().map(ToOwned::to_owned))
             .unwrap_or_default(),
@@ -301,7 +301,7 @@ fn format_permissions_owner(metadata: &Metadata, owner: PermissionOwner) -> Stri
             .and_then(|group| group.name().to_str().map(ToOwned::to_owned))
             .unwrap_or_default(),
         PermissionOwner::Other => String::from(""),
-    };
+    }
 }
 
 fn format_permissions(metadata: &Metadata, owner: PermissionOwner) -> String {
@@ -570,11 +570,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
         _ => LANGUAGE_SORTER.compare(&a.display_name, &b.display_name),
     });
     items.iter_mut().for_each(|item| {
-        if hidden_files
-            .iter()
-            .find(|hidden| &&item.name == hidden)
-            .is_some()
-        {
+        if hidden_files.iter().any(|hidden| &item.name == hidden) {
             item.hidden = true;
         }
     });
@@ -591,7 +587,7 @@ pub fn scan_search<F: Fn(&Path, &str, Metadata) -> bool + Sync>(
         return;
     }
 
-    let pattern = regex::escape(&term);
+    let pattern = regex::escape(term);
     let regex = match regex::RegexBuilder::new(&pattern)
         .case_insensitive(true)
         .build()
@@ -741,12 +737,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
 
 fn uri_to_path(uri: String) -> Option<PathBuf> {
     //TODO support for external drive or cloud?
-    if uri.starts_with("file://") {
-        let path_str = &uri[7..];
-        Some(PathBuf::from(path_str))
-    } else {
-        None
-    }
+    uri.strip_prefix("file://").map(PathBuf::from)
 }
 
 pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
@@ -768,28 +759,27 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
                     Ok(last_visit) => last_visit,
                     Err(_) => continue,
                 };
-                let path_buf = PathBuf::from(path);
-                let path_exist = path_buf.exists();
+                let path_exist = path.exists();
 
                 if path_exist {
-                    let file_name = path_buf.file_name();
+                    let file_name = path.file_name();
 
                     if let Some(name) = file_name {
                         let name = name.to_string_lossy().to_string();
 
-                        let metadata = match path_buf.metadata() {
+                        let metadata = match path.metadata() {
                             Ok(ok) => ok,
                             Err(err) => {
                                 log::warn!(
                                     "failed to read metadata for entry at {:?}: {}",
-                                    path_buf.clone(),
+                                    path,
                                     err
                                 );
                                 continue;
                             }
                         };
 
-                        let item = item_from_entry(path_buf, name, metadata, sizes);
+                        let item = item_from_entry(path, name, metadata, sizes);
                         recents.push((
                             item,
                             if last_edit.le(&last_visit) {
@@ -800,7 +790,7 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
                         ))
                     }
                 } else {
-                    log::warn!("recent file path not exist: {:?}", path_buf);
+                    log::warn!("recent file path not exist: {:?}", path);
                 }
             }
         }
@@ -941,9 +931,9 @@ impl std::fmt::Display for Location {
 impl Location {
     pub fn path_opt(&self) -> Option<&PathBuf> {
         match self {
-            Self::Desktop(path, ..) => Some(&path),
-            Self::Path(path) => Some(&path),
-            Self::Search(path, ..) => Some(&path),
+            Self::Desktop(path, ..) => Some(path),
+            Self::Path(path) => Some(path),
+            Self::Search(path, ..) => Some(path),
             _ => None,
         }
     }
@@ -1195,7 +1185,7 @@ impl ItemThumbnail {
             && check_size("svg", 8 * 1000 * 1000)
         {
             // Try built-in svg thumbnailer
-            match fs::read(&path) {
+            match fs::read(path) {
                 Ok(data) => {
                     //TODO: validate SVG data
                     return ItemThumbnail::Svg(widget::svg::Handle::from_memory(data));
@@ -1206,7 +1196,7 @@ impl ItemThumbnail {
             }
         } else if mime.type_() == mime::IMAGE && check_size("image", 64 * 1000 * 1000) {
             // Try built-in image thumbnailer
-            match image::ImageReader::open(&path).and_then(|img| img.with_guessed_format()) {
+            match image::ImageReader::open(path).and_then(|img| img.with_guessed_format()) {
                 Ok(reader) => match reader.decode() {
                     Ok(image) => {
                         let thumbnail =
@@ -1261,7 +1251,7 @@ impl ItemThumbnail {
                 }
             };
 
-            let Some(mut command) = thumbnailer.command(&path, file.path(), thumbnail_size) else {
+            let Some(mut command) = thumbnailer.command(path, file.path(), thumbnail_size) else {
                 continue;
             };
             match command.status() {
@@ -1338,7 +1328,7 @@ impl Item {
         self.mime.type_() == mime::IMAGE || self.mime.type_() == mime::TEXT
     }
 
-    fn preview<'a>(&'a self, sizes: IconSizes) -> Element<'a, Message> {
+    fn preview(&self, sizes: IconSizes) -> Element<'_, Message> {
         let spacing = cosmic::theme::active().cosmic().spacing;
         // This loads the image only if thumbnailing worked
         let icon = widget::icon::icon(self.icon_handle_grid.clone())
@@ -1513,15 +1503,12 @@ impl Item {
                 //TODO: other metadata types
             }
         }
-        match self
+        if let ItemThumbnail::Image(_, Some((width, height))) = self
             .thumbnail_opt
             .as_ref()
             .unwrap_or(&ItemThumbnail::NotImage)
         {
-            ItemThumbnail::Image(_, Some((width, height))) => {
-                details = details.push(widget::text::body(format!("{}x{}", width, height)));
-            }
-            _ => {}
+            details = details.push(widget::text::body(format!("{}x{}", width, height)));
         }
         column = column.push(details);
 
@@ -1543,7 +1530,7 @@ impl Item {
         column.into()
     }
 
-    pub fn replace_view<'a>(&'a self, heading: String, sizes: IconSizes) -> Element<'a, Message> {
+    pub fn replace_view(&self, heading: String, sizes: IconSizes) -> Element<'_, Message> {
         let cosmic_theme::Spacing { space_xxxs, .. } = theme::active().cosmic().spacing;
 
         let mut row = widget::row().spacing(space_xxxs);
@@ -1727,18 +1714,14 @@ fn parse_hidden_file(path: &PathBuf) -> Vec<String> {
         Err(_) => return Vec::new(),
     };
 
-    let reader = BufReader::new(file);
-    let mut paths: Vec<String> = Vec::new();
-
-    for line in reader.lines() {
-        if let Ok(line) = line {
-            if !line.is_empty() {
-                paths.push(line.trim().to_string());
-            }
-        }
-    }
-
-    paths
+    BufReader::new(file)
+        .lines()
+        .map_while(Result::ok)
+        .flat_map(|line| {
+            let line = line.trim();
+            (!line.is_empty()).then_some(line.to_owned())
+        })
+        .collect()
 }
 
 impl Tab {
@@ -2021,15 +2004,11 @@ impl Tab {
             };
 
             first = Some(match first {
-                Some((first_row, first_col)) => {
-                    if row < first_row {
-                        (row, col)
-                    } else if row == first_row {
-                        (row, col.min(first_row))
-                    } else {
-                        (first_row, first_col)
-                    }
-                }
+                Some((first_row, first_col)) => match row.cmp(&first_row) {
+                    Ordering::Less => (row, col),
+                    Ordering::Equal => (row, col.min(first_row)),
+                    Ordering::Greater => (first_row, first_col),
+                },
                 None => (row, col),
             });
         }
@@ -2050,15 +2029,11 @@ impl Tab {
             };
 
             last = Some(match last {
-                Some((last_row, last_col)) => {
-                    if row > last_row {
-                        (row, col)
-                    } else if row == last_row {
-                        (row, col.max(last_row))
-                    } else {
-                        (last_row, last_col)
-                    }
-                }
+                Some((last_row, last_col)) => match row.cmp(&last_row) {
+                    Ordering::Greater => (row, col),
+                    Ordering::Equal => (row, col.max(last_row)),
+                    Ordering::Less => (last_row, last_col),
+                },
                 None => (row, col),
             });
         }
@@ -2133,12 +2108,10 @@ impl Tab {
                     if let Some(location) = &clicked_item.location_opt {
                         if clicked_item.metadata.is_dir() {
                             cd = Some(location.clone());
+                        } else if let Some(path) = location.path_opt() {
+                            commands.push(Command::OpenFile(path.to_path_buf()));
                         } else {
-                            if let Some(path) = location.path_opt() {
-                                commands.push(Command::OpenFile(path.to_path_buf()));
-                            } else {
-                                log::warn!("no path for item {:?}", clicked_item);
-                            }
+                            log::warn!("no path for item {:?}", clicked_item);
                         }
                     } else {
                         log::warn!("no location for item {:?}", clicked_item);
@@ -2214,7 +2187,7 @@ impl Tab {
                                 let max = indices
                                     .iter()
                                     .position(|&offset| offset == max)
-                                    .unwrap_or_else(|| indices.len());
+                                    .unwrap_or(indices.len());
                                 let min_real = min.min(max);
                                 let max_real = max.max(min);
 
@@ -2351,8 +2324,8 @@ impl Tab {
                     }
                 }
             }
-            Message::Drag(rect_opt) => match rect_opt {
-                Some(rect) => {
+            Message::Drag(rect_opt) => {
+                if let Some(rect) = rect_opt {
                     self.context_menu = None;
                     self.location_context_menu_index = None;
                     self.select_rect(rect, mod_ctrl, mod_shift);
@@ -2363,8 +2336,7 @@ impl Tab {
                         ));
                     }
                 }
-                None => {}
-            },
+            }
             Message::EditLocation(edit_location) => {
                 if self.edit_location.is_none() && edit_location.is_some() {
                     commands.push(Command::Iced(
@@ -2415,19 +2387,17 @@ impl Tab {
                     }
                     let mut found = false;
                     for (index, item) in indices {
-                        if self.select_focus == None {
+                        if self.select_focus.is_none() {
                             found = true;
                         }
                         if self.select_focus == Some(index) {
                             found = true;
                             continue;
                         }
-                        if found {
-                            if item.can_gallery() {
-                                pos_opt = item.pos_opt.get();
-                                if pos_opt.is_some() {
-                                    break;
-                                }
+                        if found && item.can_gallery() {
+                            pos_opt = item.pos_opt.get();
+                            if pos_opt.is_some() {
+                                break;
                             }
                         }
                     }
@@ -2674,11 +2644,8 @@ impl Tab {
                                         if item.metadata.is_dir() {
                                             //TODO: allow opening multiple tabs?
                                             cd = Some(location.clone());
-                                        } else {
-                                            if let Some(path) = location.path_opt() {
-                                                commands
-                                                    .push(Command::OpenFile(path.to_path_buf()));
-                                            }
+                                        } else if let Some(path) = location.path_opt() {
+                                            commands.push(Command::OpenFile(path.to_path_buf()));
                                         }
                                     } else {
                                         //TODO: open properties?
@@ -3018,11 +2985,10 @@ impl Tab {
                 }
             } else if location != self.location {
                 if location.path_opt().map_or(true, |path| path.is_dir()) {
-                    let prev_path = if let Some(path) = self.location.path_opt() {
-                        Some(vec![path.to_path_buf()])
-                    } else {
-                        None
-                    };
+                    let prev_path = self
+                        .location
+                        .path_opt()
+                        .map(|path| vec![path.to_path_buf()]);
                     self.change_location(&location, history_i_opt);
                     commands.push(Command::ChangeLocation(self.title(), location, prev_path));
                 } else {
@@ -3149,7 +3115,7 @@ impl Tab {
         let location1 = location.clone();
         let location2 = location.clone();
         let location3 = location.clone();
-        let is_dnd_hovered = self.dnd_hovered.as_ref().map(|(l, _)| l) == Some(&location);
+        let is_dnd_hovered = self.dnd_hovered.as_ref().map(|(l, _)| l) == Some(location);
         let mut container = widget::container(
             DndDestination::for_data::<ClipboardPaste>(element, move |data, action| {
                 if let Some(mut data) = data {
@@ -3342,11 +3308,11 @@ impl Tab {
                 .min_bounds()
                 .width
         }
-        fn text_width_body<'a>(content: &'a str) -> f32 {
+        fn text_width_body(content: &str) -> f32 {
             //TODO: should libcosmic set the font when using widget::text::body?
             text_width(content, font::default(), 14.0, 20.0)
         }
-        fn text_width_heading<'a>(content: &'a str) -> f32 {
+        fn text_width_heading(content: &str) -> f32 {
             text_width(content, font::semibold(), 14.0, 20.0)
         }
 
@@ -3411,9 +3377,9 @@ impl Tab {
                 _ => {}
             }
             //TODO: make it possible to resize with the mouse
-            return mouse_area::MouseArea::new(row)
+            mouse_area::MouseArea::new(row)
                 .on_press(move |_point_opt| Message::ToggleSort(msg))
-                .into();
+                .into()
         };
 
         let heading_row = widget::row::with_children(vec![
@@ -3495,7 +3461,7 @@ impl Tab {
                 let excess_str = "...";
                 let excess_width = text_width_body(excess_str);
                 for (index, ancestor) in path.ancestors().enumerate() {
-                    let (name, found_home) = folder_name(&ancestor);
+                    let (name, found_home) = folder_name(ancestor);
                     let (name_width, name_text) = if children.is_empty() {
                         (
                             text_width_heading(&name),
@@ -3677,8 +3643,7 @@ impl Tab {
         let (width, height) = match self.size_opt.get() {
             Some(size) => (
                 (size.width.floor() as usize)
-                    .checked_sub(2 * (space_m as usize))
-                    .unwrap_or(0)
+                    .saturating_sub(2 * (space_m as usize))
                     .max(item_width),
                 (size.height.floor() as usize).max(item_height),
             ),
@@ -3686,19 +3651,18 @@ impl Tab {
         };
 
         let (cols, column_spacing) = {
-            let width_m1 = width.checked_sub(item_width).unwrap_or(0);
+            let width_m1 = width.saturating_sub(item_width);
             let cols_m1 = width_m1 / (item_width + space_xxs as usize);
             let cols = cols_m1 + 1;
             let spacing = width_m1
                 .checked_div(cols_m1)
                 .unwrap_or(0)
-                .checked_sub(item_width)
-                .unwrap_or(0);
+                .saturating_sub(item_width);
             (cols, spacing as u16)
         };
 
         let rows = {
-            let height_m1 = height.checked_sub(item_height).unwrap_or(0);
+            let height_m1 = height.saturating_sub(item_height);
             let rows_m1 = height_m1 / (item_height + space_xxs as usize);
             rows_m1 + 1
         };
@@ -3869,7 +3833,7 @@ impl Tab {
                         height: s.height - top_deduct as f32,
                     }));
 
-                let spacer_height = height.checked_sub(max_bottom + top_deduct).unwrap_or(0);
+                let spacer_height = height.saturating_sub(max_bottom + top_deduct);
                 if spacer_height > 0 {
                     children.push(
                         widget::container(Space::with_height(Length::Fixed(spacer_height as f32)))
@@ -4318,7 +4282,7 @@ impl Tab {
                 items
                     .iter()
                     .filter(|item| item.selected)
-                    .filter_map(|item| item.path_opt().map(|x| x.clone()))
+                    .filter_map(|item| item.path_opt().cloned())
                     .collect::<Vec<PathBuf>>()
             })
             .unwrap_or_default();
@@ -4360,7 +4324,7 @@ impl Tab {
 
         if let Some(point) = self.context_menu {
             popover = popover
-                .popup(menu::context_menu(&self, &key_binds))
+                .popup(menu::context_menu(self, key_binds))
                 .position(widget::popover::Position::Point(point));
         }
         let mut tab_column = widget::column::with_capacity(3);
@@ -4541,8 +4505,7 @@ impl Tab {
             // Load directory size for selected items
             if let Some(item) = items
                 .iter()
-                .filter(|item| item.selected)
-                .next()
+                .find(|item| item.selected)
                 .or(self.parent_item_opt.as_ref())
             {
                 // Item must have a path
@@ -4611,7 +4574,7 @@ impl Tab {
             let path = path.clone();
             let term = term.clone();
             let show_hidden = *show_hidden;
-            let start = start.clone();
+            let start = *start;
             subscriptions.push(Subscription::run_with_id(
                 location.clone(),
                 stream::channel(2, move |mut output| async move {
@@ -4721,6 +4684,200 @@ pub fn respond_to_scroll_direction(delta: ScrollDelta, modifiers: Modifiers) -> 
     None
 }
 
+#[derive(Clone)]
+pub struct ArcElementWrapper<M>(pub Arc<Mutex<Element<'static, M>>>);
+
+impl<M> Widget<M, cosmic::Theme, cosmic::Renderer> for ArcElementWrapper<M> {
+    fn size(&self) -> Size<Length> {
+        self.0.lock().unwrap().as_widget().size()
+    }
+
+    fn size_hint(&self) -> Size<Length> {
+        self.0.lock().unwrap().as_widget().size_hint()
+    }
+
+    fn layout(
+        &self,
+        tree: &mut tree::Tree,
+        renderer: &cosmic::Renderer,
+        limits: &cosmic::iced_core::layout::Limits,
+    ) -> cosmic::iced_core::layout::Node {
+        self.0
+            .lock()
+            .unwrap()
+            .as_widget_mut()
+            .layout(tree, renderer, limits)
+    }
+
+    fn draw(
+        &self,
+        tree: &tree::Tree,
+        renderer: &mut cosmic::Renderer,
+        theme: &cosmic::Theme,
+        style: &cosmic::iced_core::renderer::Style,
+        layout: cosmic::iced_core::Layout<'_>,
+        cursor: cosmic::iced_core::mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        self.0
+            .lock()
+            .unwrap()
+            .as_widget()
+            .draw(tree, renderer, theme, style, layout, cursor, viewport)
+    }
+
+    fn tag(&self) -> tree::Tag {
+        self.0.lock().unwrap().as_widget().tag()
+    }
+
+    fn state(&self) -> tree::State {
+        self.0.lock().unwrap().as_widget().state()
+    }
+
+    fn children(&self) -> Vec<tree::Tree> {
+        self.0.lock().unwrap().as_widget().children()
+    }
+
+    fn diff(&mut self, tree: &mut tree::Tree) {
+        self.0.lock().unwrap().as_widget_mut().diff(tree)
+    }
+
+    fn operate(
+        &self,
+        state: &mut tree::Tree,
+        layout: cosmic::iced_core::Layout<'_>,
+        renderer: &cosmic::Renderer,
+        operation: &mut dyn widget::Operation,
+    ) {
+        self.0
+            .lock()
+            .unwrap()
+            .as_widget()
+            .operate(state, layout, renderer, operation)
+    }
+
+    fn on_event(
+        &mut self,
+        _state: &mut tree::Tree,
+        _event: cosmic::iced::Event,
+        _layout: cosmic::iced_core::Layout<'_>,
+        _cursor: cosmic::iced_core::mouse::Cursor,
+        _renderer: &cosmic::Renderer,
+        _clipboard: &mut dyn cosmic::iced_core::Clipboard,
+        _shell: &mut cosmic::iced_core::Shell<'_, M>,
+        _viewport: &Rectangle,
+    ) -> event::Status {
+        self.0.lock().unwrap().as_widget_mut().on_event(
+            _state, _event, _layout, _cursor, _renderer, _clipboard, _shell, _viewport,
+        )
+    }
+
+    fn mouse_interaction(
+        &self,
+        _state: &tree::Tree,
+        _layout: cosmic::iced_core::Layout<'_>,
+        _cursor: cosmic::iced_core::mouse::Cursor,
+        _viewport: &Rectangle,
+        _renderer: &cosmic::Renderer,
+    ) -> cosmic::iced_core::mouse::Interaction {
+        self.0
+            .lock()
+            .unwrap()
+            .as_widget()
+            .mouse_interaction(_state, _layout, _cursor, _viewport, _renderer)
+    }
+
+    fn overlay<'a>(
+        &'a mut self,
+        _state: &'a mut tree::Tree,
+        _layout: cosmic::iced_core::Layout<'_>,
+        _renderer: &cosmic::Renderer,
+        _translation: cosmic::iced_core::Vector,
+    ) -> Option<cosmic::iced_core::overlay::Element<'a, M, cosmic::Theme, cosmic::Renderer>> {
+        // TODO
+        None
+    }
+
+    fn id(&self) -> Option<Id> {
+        self.0.lock().unwrap().as_widget().id()
+    }
+
+    fn set_id(&mut self, _id: Id) {
+        self.0.lock().unwrap().as_widget_mut().set_id(_id)
+    }
+
+    fn drag_destinations(
+        &self,
+        _state: &tree::Tree,
+        _layout: cosmic::iced_core::Layout<'_>,
+        renderer: &cosmic::Renderer,
+        _dnd_rectangles: &mut cosmic::iced_core::clipboard::DndDestinationRectangles,
+    ) {
+        self.0.lock().unwrap().as_widget().drag_destinations(
+            _state,
+            _layout,
+            renderer,
+            _dnd_rectangles,
+        )
+    }
+}
+
+impl<Message: 'static> From<ArcElementWrapper<Message>> for Element<'static, Message> {
+    fn from(wrapper: ArcElementWrapper<Message>) -> Self {
+        Element::new(wrapper)
+    }
+}
+
+fn text_editor_class(
+    theme: &cosmic::Theme,
+    status: cosmic::widget::text_editor::Status,
+) -> cosmic::iced_widget::text_editor::Style {
+    let cosmic = theme.cosmic();
+    let container = theme.current_container();
+
+    let mut background: cosmic::iced::Color = container.component.base.into();
+    background.a = 0.25;
+    let selection = cosmic.accent.base.into();
+    let value = cosmic.palette.neutral_9.into();
+    let mut placeholder = cosmic.palette.neutral_9;
+    placeholder.alpha = 0.7;
+    let placeholder = placeholder.into();
+    let icon = cosmic.background.on.into();
+
+    match status {
+        cosmic::iced_widget::text_editor::Status::Active
+        | cosmic::iced_widget::text_editor::Status::Disabled => {
+            cosmic::iced_widget::text_editor::Style {
+                background: background.into(),
+                border: cosmic::iced::Border {
+                    radius: cosmic.corner_radii.radius_m.into(),
+                    width: 2.0,
+                    color: container.component.divider.into(),
+                },
+                icon,
+                placeholder,
+                value,
+                selection,
+            }
+        }
+        cosmic::iced_widget::text_editor::Status::Hovered
+        | cosmic::iced_widget::text_editor::Status::Focused => {
+            cosmic::iced_widget::text_editor::Style {
+                background: background.into(),
+                border: cosmic::iced::Border {
+                    radius: cosmic.corner_radii.radius_m.into(),
+                    width: 2.0,
+                    color: cosmic::iced::Color::from(cosmic.accent.base),
+                },
+                icon,
+                placeholder,
+                value,
+                selection,
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{fs, io, path::PathBuf};
@@ -4758,7 +4915,7 @@ mod tests {
             .as_deref()
             .expect("tab should be populated with items");
 
-        for (i, (&expected, actual)) in expected_selected.into_iter().zip(items).enumerate() {
+        for (i, (&expected, actual)) in expected_selected.iter().zip(items).enumerate() {
             assert_eq!(
                 expected,
                 actual.selected,
@@ -4971,7 +5128,7 @@ mod tests {
     fn tab_scroll_up_with_ctrl_modifier_zooms() -> io::Result<()> {
         let message_maybe =
             respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, Modifiers::CTRL);
-        assert!(!message_maybe.is_none());
+        assert!(message_maybe.is_some());
         assert!(matches!(message_maybe.unwrap(), Message::ZoomIn));
         Ok(())
     }
@@ -4988,7 +5145,7 @@ mod tests {
     fn tab_scroll_down_with_ctrl_modifier_zooms() -> io::Result<()> {
         let message_maybe =
             respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: -1.0 }, Modifiers::CTRL);
-        assert!(!message_maybe.is_none());
+        assert!(message_maybe.is_some());
         assert!(matches!(message_maybe.unwrap(), Message::ZoomOut));
         Ok(())
     }
@@ -5047,7 +5204,7 @@ mod tests {
         // Create files with names 255 characters long that only contain a single number
         // Example: 0000...0 for 255 characters
         // https://en.wikipedia.org/wiki/Filename#Comparison_of_filename_limitations
-        let mut base_nums: Vec<_> = ('0'..'9').collect();
+        let mut base_nums: Vec<_> = ('0'..='9').collect();
         fastrand::shuffle(&mut base_nums);
         debug!("Shuffled numbers for paths: {base_nums:?}");
         let paths: Vec<_> = base_nums
@@ -5064,199 +5221,5 @@ mod tests {
         Tab::new(Location::Path(path.into()), TabConfig::default());
 
         Ok(())
-    }
-}
-
-#[derive(Clone)]
-pub struct ArcElementWrapper<M>(pub Arc<Mutex<Element<'static, M>>>);
-
-impl<M> Widget<M, cosmic::Theme, cosmic::Renderer> for ArcElementWrapper<M> {
-    fn size(&self) -> Size<Length> {
-        self.0.lock().unwrap().as_widget().size()
-    }
-
-    fn size_hint(&self) -> Size<Length> {
-        self.0.lock().unwrap().as_widget().size_hint()
-    }
-
-    fn layout(
-        &self,
-        tree: &mut tree::Tree,
-        renderer: &cosmic::Renderer,
-        limits: &cosmic::iced_core::layout::Limits,
-    ) -> cosmic::iced_core::layout::Node {
-        self.0
-            .lock()
-            .unwrap()
-            .as_widget_mut()
-            .layout(tree, renderer, limits)
-    }
-
-    fn draw(
-        &self,
-        tree: &tree::Tree,
-        renderer: &mut cosmic::Renderer,
-        theme: &cosmic::Theme,
-        style: &cosmic::iced_core::renderer::Style,
-        layout: cosmic::iced_core::Layout<'_>,
-        cursor: cosmic::iced_core::mouse::Cursor,
-        viewport: &Rectangle,
-    ) {
-        self.0
-            .lock()
-            .unwrap()
-            .as_widget()
-            .draw(tree, renderer, theme, style, layout, cursor, viewport)
-    }
-
-    fn tag(&self) -> tree::Tag {
-        self.0.lock().unwrap().as_widget().tag()
-    }
-
-    fn state(&self) -> tree::State {
-        self.0.lock().unwrap().as_widget().state()
-    }
-
-    fn children(&self) -> Vec<tree::Tree> {
-        self.0.lock().unwrap().as_widget().children()
-    }
-
-    fn diff(&mut self, tree: &mut tree::Tree) {
-        self.0.lock().unwrap().as_widget_mut().diff(tree)
-    }
-
-    fn operate(
-        &self,
-        state: &mut tree::Tree,
-        layout: cosmic::iced_core::Layout<'_>,
-        renderer: &cosmic::Renderer,
-        operation: &mut dyn widget::Operation,
-    ) {
-        self.0
-            .lock()
-            .unwrap()
-            .as_widget()
-            .operate(state, layout, renderer, operation)
-    }
-
-    fn on_event(
-        &mut self,
-        _state: &mut tree::Tree,
-        _event: cosmic::iced::Event,
-        _layout: cosmic::iced_core::Layout<'_>,
-        _cursor: cosmic::iced_core::mouse::Cursor,
-        _renderer: &cosmic::Renderer,
-        _clipboard: &mut dyn cosmic::iced_core::Clipboard,
-        _shell: &mut cosmic::iced_core::Shell<'_, M>,
-        _viewport: &Rectangle,
-    ) -> event::Status {
-        self.0.lock().unwrap().as_widget_mut().on_event(
-            _state, _event, _layout, _cursor, _renderer, _clipboard, _shell, _viewport,
-        )
-    }
-
-    fn mouse_interaction(
-        &self,
-        _state: &tree::Tree,
-        _layout: cosmic::iced_core::Layout<'_>,
-        _cursor: cosmic::iced_core::mouse::Cursor,
-        _viewport: &Rectangle,
-        _renderer: &cosmic::Renderer,
-    ) -> cosmic::iced_core::mouse::Interaction {
-        self.0
-            .lock()
-            .unwrap()
-            .as_widget()
-            .mouse_interaction(_state, _layout, _cursor, _viewport, _renderer)
-    }
-
-    fn overlay<'a>(
-        &'a mut self,
-        _state: &'a mut tree::Tree,
-        _layout: cosmic::iced_core::Layout<'_>,
-        _renderer: &cosmic::Renderer,
-        _translation: cosmic::iced_core::Vector,
-    ) -> Option<cosmic::iced_core::overlay::Element<'a, M, cosmic::Theme, cosmic::Renderer>> {
-        // TODO
-        None
-    }
-
-    fn id(&self) -> Option<Id> {
-        self.0.lock().unwrap().as_widget().id()
-    }
-
-    fn set_id(&mut self, _id: Id) {
-        self.0.lock().unwrap().as_widget_mut().set_id(_id)
-    }
-
-    fn drag_destinations(
-        &self,
-        _state: &tree::Tree,
-        _layout: cosmic::iced_core::Layout<'_>,
-        renderer: &cosmic::Renderer,
-        _dnd_rectangles: &mut cosmic::iced_core::clipboard::DndDestinationRectangles,
-    ) {
-        self.0.lock().unwrap().as_widget().drag_destinations(
-            _state,
-            _layout,
-            renderer,
-            _dnd_rectangles,
-        )
-    }
-}
-
-impl<Message: 'static> From<ArcElementWrapper<Message>> for Element<'static, Message> {
-    fn from(wrapper: ArcElementWrapper<Message>) -> Self {
-        Element::new(wrapper)
-    }
-}
-
-fn text_editor_class(
-    theme: &cosmic::Theme,
-    status: cosmic::widget::text_editor::Status,
-) -> cosmic::iced_widget::text_editor::Style {
-    let cosmic = theme.cosmic();
-    let container = theme.current_container();
-
-    let mut background: cosmic::iced::Color = container.component.base.into();
-    background.a = 0.25;
-    let selection = cosmic.accent.base.into();
-    let value = cosmic.palette.neutral_9.into();
-    let mut placeholder = cosmic.palette.neutral_9;
-    placeholder.alpha = 0.7;
-    let placeholder = placeholder.into();
-    let icon = cosmic.background.on.into();
-
-    match status {
-        cosmic::iced_widget::text_editor::Status::Active
-        | cosmic::iced_widget::text_editor::Status::Disabled => {
-            cosmic::iced_widget::text_editor::Style {
-                background: background.into(),
-                border: cosmic::iced::Border {
-                    radius: cosmic.corner_radii.radius_m.into(),
-                    width: 2.0,
-                    color: container.component.divider.into(),
-                },
-                icon,
-                placeholder,
-                value,
-                selection,
-            }
-        }
-        cosmic::iced_widget::text_editor::Status::Hovered
-        | cosmic::iced_widget::text_editor::Status::Focused => {
-            cosmic::iced_widget::text_editor::Style {
-                background: background.into(),
-                border: cosmic::iced::Border {
-                    radius: cosmic.corner_radii.radius_m.into(),
-                    width: 2.0,
-                    color: cosmic::iced::Color::from(cosmic.accent.base),
-                },
-                icon,
-                placeholder,
-                value,
-                selection,
-            }
-        }
     }
 }
