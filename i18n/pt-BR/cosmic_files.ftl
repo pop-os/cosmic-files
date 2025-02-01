@@ -96,6 +96,7 @@ set-executable-and-launch-description = Deseja marcar "{$name}" como executável
 set-and-launch = Marcar e iniciar
 
 ## Metadata Dialog
+open-with = Abrir com
 owner = Proprietário
 group = Grupo
 other = Outros
