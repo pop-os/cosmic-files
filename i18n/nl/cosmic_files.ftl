@@ -12,7 +12,7 @@ undo = Ongedaan maken
 today = Vandaag
 
 # Desktop view options
-desktop-view-options = Opties voor bureaubladweergave
+desktop-view-options = Opties voor bureaubladweergave...
 show-on-desktop = Op bureaublad weergeven
 desktop-folder-content = Bestanden in Bureaublad
 mounted-drives = Gekoppelde schijven
@@ -96,6 +96,7 @@ set-executable-and-launch-description = Wilt u '{$name}' uitvoerbaar maken en da
 set-and-launch = Maak uitvoerbaar en open
 
 ## Metadata Dialog
+open-with = Openen met
 owner = Eigenaar
 group = Groep
 other = Anderen
@@ -159,6 +160,10 @@ copying = {$items} {$items ->
         [one] bestand wordt
         *[other] bestanden worden
     } van '{$from}' naar '{$to}' gekopieerd ({$progress})...
+copied = {$items} {$items ->
+        [one] bestand
+        *[other] bestanden
+    } gekopieerd van '$from}' naar '{$to}'
 emptying-trash = {trash} wordt geleegd ({$progress})...
 emptied-trash = {trash} geleegd
 extracting = {$items} {$items -> 
