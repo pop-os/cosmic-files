@@ -119,6 +119,8 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
     let mut files_by_unix_mode = Vec::new();
     let mut buffer = vec![0; 4 * 1024 * 1024];
     let total_files = archive.len();
+    let mut pending_directory_creates = Vec::new();
+
     for i in 0..total_files {
         controller
             .check()
@@ -137,7 +139,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
         let outpath = directory.as_ref().join(filepath);
 
         if file.is_dir() {
-            make_writable_dir_all(&outpath)?;
+            pending_directory_creates.push(outpath.clone());
             continue;
         }
         let symlink_target = if file.is_symlink() && (cfg!(unix) || cfg!(windows)) {
@@ -148,10 +150,16 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
             None
         };
         drop(file);
-        if let Some(p) = outpath.parent() {
-            make_writable_dir_all(p)?;
-        }
         if let Some(target) = symlink_target {
+            // create all pending dirs
+            while let Some(pending_dir) = pending_directory_creates.pop() {
+                make_writable_dir_all(pending_dir)?;
+            }
+
+            if let Some(p) = outpath.parent() {
+                make_writable_dir_all(p)?;
+            }
+
             #[cfg(unix)]
             {
                 use std::os::unix::ffi::OsStringExt;
@@ -186,6 +194,16 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
             None => archive.by_index(i),
             Some(pwd) => archive.by_index_decrypt(i, pwd.as_bytes())
         }.map_err(|e| e)?;
+
+        // create all pending dirs
+        while let Some(pending_dir) = pending_directory_creates.pop() {
+            make_writable_dir_all(pending_dir)?;
+        }
+
+        if let Some(p) = outpath.parent() {
+            make_writable_dir_all(p)?;
+        }
+
         let total = file.size();
         let mut outfile = fs::File::create(&outpath)?;
         let mut current = 0;

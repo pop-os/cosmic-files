@@ -3677,7 +3677,7 @@ impl Application for App {
                     let password_unwrapped = password.clone().unwrap_or_else(String::default);
                     dialog = dialog.control(
                         widget::column::with_children(vec![
-                            widget::text::body("Password").into(),
+                            widget::text::body(fl!("password")).into(),
                             widget::text_input("", password_unwrapped).password().on_input(move |password_unwrapped| {
                                 Message::DialogUpdate(DialogPage::Compress {
                                     paths: paths.clone(),
@@ -3723,7 +3723,7 @@ impl Application for App {
                 password
             } => {
                 widget::dialog()
-                    .title("Password required")
+                    .title(fl!("extract-password-required"))
                     .icon(widget::icon::from_name("dialog-error").size(64))
                     .control(widget::text_input("", password).password().on_input(move |password| {
                         Message::DialogUpdate(DialogPage::ExtractPassword {
@@ -3732,7 +3732,7 @@ impl Application for App {
                         })
                     }))
                     .primary_action(
-                        widget::button::suggested(fl!("create")).on_press(Message::DialogComplete),
+                        widget::button::suggested(fl!("extract-here")).on_press(Message::DialogComplete),
                     )
             }
             DialogPage::MountError {
