@@ -3734,6 +3734,9 @@ impl Application for App {
                     .primary_action(
                         widget::button::suggested(fl!("extract-here")).on_press(Message::DialogComplete),
                     )
+                    .secondary_action(
+                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                    )
             }
             DialogPage::MountError {
                 mounter_key: _,
