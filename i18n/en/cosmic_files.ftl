@@ -39,6 +39,9 @@ resume = Resume
 ## Compress Dialog
 create-archive = Create archive
 
+## Extract Dialog
+extract-password-required = Password required
+
 ## Empty Trash Dialog
 empty-trash = Empty trash
 empty-trash-warning = Are you sure you want to permanently delete all the items in Trash?
