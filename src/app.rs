@@ -59,6 +59,7 @@ use trash::TrashItem;
 #[cfg(feature = "wayland")]
 use wayland_client::{protocol::wl_output::WlOutput, Proxy};
 
+use crate::operation::{OperationError, OperationErrorType};
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{AppTheme, Config, DesktopConfig, Favorite, IconSizes, TabConfig},
@@ -71,7 +72,6 @@ use crate::{
     spawn_detached::spawn_detached,
     tab::{self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION},
 };
-use crate::operation::{OperationError, OperationErrorType};
 
 #[derive(Clone, Debug)]
 pub enum Mode {
@@ -418,13 +418,13 @@ pub enum DialogPage {
         to: PathBuf,
         name: String,
         archive_type: ArchiveType,
-        password: Option<String>
+        password: Option<String>,
     },
     EmptyTrash,
     FailedOperation(u64),
     ExtractPassword {
         id: u64,
-        password: String
+        password: String,
     },
     MountError {
         mounter_key: MounterKey,
@@ -1890,7 +1890,7 @@ impl Application for App {
                             to,
                             name,
                             archive_type,
-                            password: None
+                            password: None,
                         });
                         return widget::text_input::focus(self.dialog_text_input.clone());
                     }
@@ -1968,7 +1968,7 @@ impl Application for App {
                             to,
                             name,
                             archive_type,
-                            password
+                            password,
                         } => {
                             let extension = archive_type.extension();
                             let name = format!("{}{}", name, extension);
@@ -1977,7 +1977,7 @@ impl Application for App {
                                 paths,
                                 to,
                                 archive_type,
-                                password
+                                password,
                             })
                         }
                         DialogPage::EmptyTrash => {
@@ -1986,18 +1986,15 @@ impl Application for App {
                         DialogPage::FailedOperation(id) => {
                             log::warn!("TODO: retry operation {}", id);
                         }
-                        DialogPage::ExtractPassword {
-                            id,
-                            password
-                        } => {
+                        DialogPage::ExtractPassword { id, password } => {
                             let (operation, _, _err) = self.failed_operations.get(&id).unwrap();
                             let new_op = match &operation {
                                 Operation::Extract { to, paths, .. } => Operation::Extract {
                                     to: to.clone(),
                                     paths: paths.clone(),
-                                    password: Some(password)
+                                    password: Some(password),
                                 },
-                                _ => unreachable!()
+                                _ => unreachable!(),
                             };
                             self.operation(new_op);
                         }
@@ -2117,7 +2114,7 @@ impl Application for App {
                     self.operation(Operation::Extract {
                         paths,
                         to: destination,
-                        password: None
+                        password: None,
                     });
                 }
             }
@@ -2598,19 +2595,18 @@ impl Application for App {
                 if let Some((op, controller)) = self.pending_operations.remove(&id) {
                     // Only show dialog if not cancelled
                     if !controller.is_cancelled() {
-                        self.dialog_pages.push_back(
-                            match err.kind {
-                                OperationErrorType::Generic(_) => DialogPage::FailedOperation(id),
-                                OperationErrorType::PasswordRequired => DialogPage::ExtractPassword {
-                                    id: id,
-                                    password: String::from("")
-                                }
-                            }
-                        );
+                        self.dialog_pages.push_back(match err.kind {
+                            OperationErrorType::Generic(_) => DialogPage::FailedOperation(id),
+                            OperationErrorType::PasswordRequired => DialogPage::ExtractPassword {
+                                id: id,
+                                password: String::from(""),
+                            },
+                        });
                     }
                     // Remove from progress
                     self.progress_operations.remove(&id);
-                    self.failed_operations.insert(id, (op, controller, err.to_string()));
+                    self.failed_operations
+                        .insert(id, (op, controller, err.to_string()));
                 }
                 // Close progress notification if all relavent operations are finished
                 if !self
@@ -3605,7 +3601,7 @@ impl Application for App {
                 to,
                 name,
                 archive_type,
-                password
+                password,
             } => {
                 let mut dialog = widget::dialog().title(fl!("create-archive"));
 
@@ -3683,10 +3679,11 @@ impl Application for App {
 
                 if *archive_type == ArchiveType::Zip {
                     let password_unwrapped = password.clone().unwrap_or_else(String::default);
-                    dialog = dialog.control(
-                        widget::column::with_children(vec![
-                            widget::text::body(fl!("password")).into(),
-                            widget::text_input("", password_unwrapped).password().on_input(move |password_unwrapped| {
+                    dialog = dialog.control(widget::column::with_children(vec![
+                        widget::text::body(fl!("password")).into(),
+                        widget::text_input("", password_unwrapped)
+                            .password()
+                            .on_input(move |password_unwrapped| {
                                 Message::DialogUpdate(DialogPage::Compress {
                                     paths: paths.clone(),
                                     to: to.clone(),
@@ -3695,10 +3692,9 @@ impl Application for App {
                                     password: Some(password_unwrapped),
                                 })
                             })
-                                .on_submit_maybe(complete_maybe)
-                                .into(),
-                        ])
-                    );
+                            .on_submit_maybe(complete_maybe)
+                            .into(),
+                    ]));
                 }
 
                 dialog
@@ -3726,21 +3722,18 @@ impl Application for App {
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
                     )
             }
-            DialogPage::ExtractPassword {
-                id,
-                password
-            } => {
+            DialogPage::ExtractPassword { id, password } => {
                 widget::dialog()
                     .title(fl!("extract-password-required"))
                     .icon(widget::icon::from_name("dialog-error").size(64))
-                    .control(widget::text_input("", password).password().on_input(move |password| {
-                        Message::DialogUpdate(DialogPage::ExtractPassword {
-                            id: *id,
-                            password
-                        })
-                    }))
+                    .control(widget::text_input("", password).password().on_input(
+                        move |password| {
+                            Message::DialogUpdate(DialogPage::ExtractPassword { id: *id, password })
+                        },
+                    ))
                     .primary_action(
-                        widget::button::suggested(fl!("extract-here")).on_press(Message::DialogComplete),
+                        widget::button::suggested(fl!("extract-here"))
+                            .on_press(Message::DialogComplete),
                     )
                     .secondary_action(
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
@@ -4777,7 +4770,6 @@ impl Application for App {
                                 .await
                                 .send(Message::PendingError(id, err))
                                 .await;
-
                         }
                     }
 
