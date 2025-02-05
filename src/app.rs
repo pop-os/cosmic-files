@@ -54,6 +54,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{self, Instant},
 };
+use cosmic::widget::{Button, ListColumn};
 use tokio::sync::mpsc;
 use trash::TrashItem;
 #[cfg(feature = "wayland")]
@@ -72,6 +73,7 @@ use crate::{
     spawn_detached::spawn_detached,
     tab::{self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION},
 };
+use crate::mime_app::MimeApp;
 
 #[derive(Clone, Debug)]
 pub enum Mode {
@@ -551,6 +553,7 @@ pub struct App {
 impl App {
     fn open_file(&mut self, path: &PathBuf) {
         let mime = mime_icon::mime_for_path(path);
+
         if mime == "application/x-desktop" {
             // Try opening desktop application
             match freedesktop_entry_parser::parse_entry(path) {
@@ -614,6 +617,31 @@ impl App {
                 }
                 Err(err) => {
                     log::warn!("failed to open {:?} with {:?}: {}", path, app.id, err);
+                }
+            }
+        }
+
+        // loop through subclasses if available
+        if let Some(mime_sub_classes) = mime_icon::parent_mime_types(&mime) {
+            for sub_class in mime_sub_classes {
+                for app in self.mime_app_cache.get(&sub_class) {
+                    let Some(mut command) = app.command(Some(path.clone().into())) else {
+                        continue;
+                    };
+                    match spawn_detached(&mut command) {
+                        Ok(()) => {
+                            let _ = recently_used_xbel::update_recently_used(
+                                path,
+                                App::APP_ID.to_string(),
+                                "cosmic-files".to_string(),
+                                None,
+                            );
+                            return;
+                        }
+                        Err(err) => {
+                            log::warn!("failed to open {:?} with {:?}: {}", path, app.id, err);
+                        }
+                    }
                 }
             }
         }
@@ -2046,7 +2074,8 @@ impl Application for App {
                             selected,
                             ..
                         } => {
-                            if let Some(app) = self.mime_app_cache.get(&mime).get(selected) {
+                            let direct_apps = self.mime_app_cache.get(&mime);
+                            if let Some(app) = direct_apps.get(selected) {
                                 if let Some(mut command) = app.command(Some(path.clone().into())) {
                                     match spawn_detached(&mut command) {
                                         Ok(()) => {
@@ -2074,6 +2103,46 @@ impl Application for App {
                                     );
                                 }
                             }
+
+                            let mut sub_class_index = selected - direct_apps.len();
+                            if let Some(sub_classes) = mime_icon::parent_mime_types(&mime) {
+                                for sub_class in sub_classes {
+                                    let sub_class_apps = self.mime_app_cache.get(&sub_class);
+                                    if let Some(app) = sub_class_apps.get(sub_class_index) {
+                                        if let Some(mut command) = app.command(Some(path.clone().into())) {
+                                            match spawn_detached(&mut command) {
+                                                Ok(()) => {
+                                                    let _ = recently_used_xbel::update_recently_used(
+                                                        &path,
+                                                        App::APP_ID.to_string(),
+                                                        "cosmic-files".to_string(),
+                                                        None,
+                                                    );
+                                                }
+                                                Err(err) => {
+                                                    log::warn!(
+                                                "failed to open {:?} with {:?}: {}",
+                                                path,
+                                                app.id,
+                                                err
+                                            )
+                                                }
+                                            }
+                                        } else {
+                                            log::warn!(
+                                        "failed to open {:?} with {:?}: failed to get command",
+                                        path,
+                                        app.id
+                                    );
+                                        }
+                                    }
+                                    else {
+                                        sub_class_index -= sub_class_apps.len();
+                                    }
+
+                                }
+                            }
+
                         }
                         DialogPage::RenameItem {
                             from, parent, name, ..
@@ -3977,6 +4046,7 @@ impl Application for App {
                 };
 
                 let mut column = widget::list_column();
+                let mut open_index = 0;
                 for (i, app) in self.mime_app_cache.get(mime).iter().enumerate() {
                     column = column.add(
                         widget::button::custom(
@@ -4008,7 +4078,47 @@ impl Application for App {
                         .class(theme::Button::MenuItem)
                         .on_press(Message::OpenWithSelection(i)),
                     );
+                    open_index += 1;
                 }
+
+                if let Some(sub_classes) = mime_icon::parent_mime_types(&mime) {
+                    for sub_class in sub_classes {
+                        for (i, app) in self.mime_app_cache.get(&sub_class).iter().enumerate() {
+                            column = column.add(
+                                widget::button::custom(
+                                    widget::row::with_children(vec![
+                                        widget::icon(app.icon.clone()).size(32).into(),
+                                        if app.is_default {
+                                            widget::text::body(fl!(
+                                        "default-app",
+                                        name = Some(app.name.as_str())
+                                    ))
+                                                .into()
+                                        } else {
+                                            widget::text::body(app.name.to_string()).into()
+                                        },
+                                        widget::horizontal_space().into(),
+                                        if *selected == open_index {
+                                            widget::icon::from_name("checkbox-checked-symbolic")
+                                                .size(16)
+                                                .into()
+                                        } else {
+                                            widget::Space::with_width(Length::Fixed(16.0)).into()
+                                        },
+                                    ])
+                                        .spacing(space_s)
+                                        .height(Length::Fixed(32.0))
+                                        .align_y(Alignment::Center),
+                                )
+                                    .width(Length::Fill)
+                                    .class(theme::Button::MenuItem)
+                                    .on_press(Message::OpenWithSelection(open_index)),
+                            );
+                            open_index += 1;
+                        }
+                    }
+                }
+
 
                 let mut dialog = widget::dialog()
                     .title(fl!("open-with-title", name = name))
