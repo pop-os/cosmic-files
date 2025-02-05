@@ -9,9 +9,12 @@
   <url type="homepage">https://github.com/pop-os/cosmic-files</url>
   <url type="bugtracker">https://github.com/pop-os/cosmic-files</url>
   <name>COSMIC Files</name>
+  <name xml:lang="pl">Pliki COSMIC</name>
   <summary>File manager for the COSMIC desktop</summary>
+  <summary xml:lang="pl">Menedżer plików pulpitu COSMIC</summary>
   <description>
     <p>File manager for the COSMIC desktop</p>
+    <p xml:lang="pl">Menedżer plików pulpitu COSMIC</p>
   </description>
   <launchable type="desktop-id">com.system76.CosmicFiles.desktop</launchable>
   <icon type="remote" height="256" width="256">https://raw.githubusercontent.com/pop-os/cosmic-files/master/res/icons/hicolor/256x256/apps/com.system76.CosmicFiles.svg</icon>
