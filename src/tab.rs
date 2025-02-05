@@ -545,7 +545,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                     }
                 };
 
-                if name == ".hidden" {
+                if name == ".hidden" && path.is_file() {
                     hidden_files = parse_hidden_file(&path);
                 }
 
