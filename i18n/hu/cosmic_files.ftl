@@ -19,10 +19,11 @@ mounted-drives = Csatolt meghajtók
 trash-folder-icon = Kuka ikon
 icon-size-and-spacing = Ikonméret és távolság
 icon-size = Ikonméret
+grid-spacing = Rácsköz
 
 # List view
 name = Név
-modified = Szerkesztve
+modified = Módosítva
 trashed-on = Kukába helyezve
 size = Méret
 
@@ -38,6 +39,9 @@ resume = Folytatás
 
 ## Compress Dialog
 create-archive = Tömörített fájl létrehozása
+
+## Extract Dialog
+extract-password-required = Jelszó szükséges
 
 ## Empty Trash Dialog
 empty-trash = Kuka ürítése
@@ -92,7 +96,7 @@ skip = Kihagyás
 
 ## Set as Executable and Launch Dialog
 set-executable-and-launch = Futtathatóvá tétele, majd indítása
-set-executable-and-launch-description = Szeretnéd futtathatóvá tenni a "{$name}" fájlt és elindítani?
+set-executable-and-launch-description = Szeretnéd futtathatóvá tenni a(z) "{$name}" fájlt és elindítani?
 set-and-launch = Alkalmazás és indítás
 
 ## Metadata Dialog
