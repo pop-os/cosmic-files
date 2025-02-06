@@ -1315,19 +1315,30 @@ impl App {
         );
         children.push(section.into());
 
-        /*TODO: Desktop icon size and spacing
         let mut section = widget::settings::section().title(fl!("icon-size-and-spacing"));
-        let grid: u16 = config.icon_sizes.grid.into();
+        let icon_size: u16 = config.icon_size.into();
         section = section.add(
             widget::settings::item::builder(fl!("icon-size"))
-                .description(format!("{}%", grid))
+                .description(format!("{}%", icon_size))
                 .control(
-                    widget::slider(50..=500, grid, move |grid| {
+                    widget::slider(50..=500, icon_size, move |icon_size| {
                         Message::DesktopConfig(DesktopConfig {
-                            icon_sizes: IconSizes {
-                                grid: NonZeroU16::new(grid).unwrap(),
-                                ..config.icon_sizes
-                            },
+                            icon_size: NonZeroU16::new(icon_size).unwrap(),
+                            ..config
+                        })
+                    })
+                    .step(25u16),
+                ),
+        );
+
+        let grid_spacing: u16 = config.grid_spacing.into();
+        section = section.add(
+            widget::settings::item::builder(fl!("grid-spacing"))
+                .description(format!("{}%", grid_spacing))
+                .control(
+                    widget::slider(50..=500, grid_spacing, move |grid_spacing| {
+                        Message::DesktopConfig(DesktopConfig {
+                            grid_spacing: NonZeroU16::new(grid_spacing).unwrap(),
                             ..config
                         })
                     })
@@ -1335,7 +1346,6 @@ impl App {
                 ),
         );
         children.push(section.into());
-        */
 
         widget::column::with_children(children)
             .padding([0, space_l, space_l, space_l])

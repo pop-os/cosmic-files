@@ -822,8 +822,10 @@ pub fn scan_desktop(
     tab_path: &PathBuf,
     _display: &str,
     desktop_config: DesktopConfig,
-    sizes: IconSizes,
+    mut sizes: IconSizes,
 ) -> Vec<Item> {
+    sizes.grid = desktop_config.icon_size;
+
     let mut items = Vec::new();
 
     if desktop_config.show_content {
@@ -3637,9 +3639,15 @@ impl Tab {
 
         let TabConfig {
             show_hidden,
-            icon_sizes,
+            mut icon_sizes,
             ..
         } = self.config;
+
+        let mut grid_spacing = space_xxs;
+        if let Location::Desktop(_path, _output, desktop_config) = &self.location {
+            icon_sizes.grid = desktop_config.icon_size;
+            grid_spacing = desktop_config.grid_spacing_for(space_xxs);
+        };
 
         let text_height = 3 * 20; // 3 lines of text
         let item_width = (3 * space_xxs + icon_sizes.grid() + 3 * space_xxs) as usize;
@@ -3658,7 +3666,7 @@ impl Tab {
 
         let (cols, column_spacing) = {
             let width_m1 = width.saturating_sub(item_width);
-            let cols_m1 = width_m1 / (item_width + space_xxs as usize);
+            let cols_m1 = width_m1 / (item_width + grid_spacing as usize);
             let cols = cols_m1 + 1;
             let spacing = width_m1
                 .checked_div(cols_m1)
@@ -3669,13 +3677,13 @@ impl Tab {
 
         let rows = {
             let height_m1 = height.saturating_sub(item_height);
-            let rows_m1 = height_m1 / (item_height + space_xxs as usize);
+            let rows_m1 = height_m1 / (item_height + grid_spacing as usize);
             rows_m1 + 1
         };
 
         let mut grid = widget::grid()
             .column_spacing(column_spacing)
-            .row_spacing(space_xxs)
+            .row_spacing(grid_spacing)
             .padding(space_xxs.into());
         let mut dnd_items: Vec<(usize, (usize, usize), &Item)> = Vec::new();
         let mut drag_w_i = usize::MAX;
@@ -3703,7 +3711,7 @@ impl Tab {
                 item.rect_opt.set(Some(Rectangle::new(
                     Point::new(
                         (col * (item_width + column_spacing as usize) + space_m as usize) as f32,
-                        (row * (item_height + space_xxs as usize)) as f32,
+                        (row * (item_height + grid_spacing as usize)) as f32,
                     ),
                     Size::new(item_width as f32, item_height as f32),
                 )));
@@ -3853,7 +3861,7 @@ impl Tab {
             (!dnd_items.is_empty()).then(|| {
                 let mut dnd_grid = widget::grid()
                     .column_spacing(column_spacing)
-                    .row_spacing(space_xxs)
+                    .row_spacing(grid_spacing)
                     .padding(space_xxs.into());
 
                 let mut dnd_item_i = 0;

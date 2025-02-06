@@ -19,6 +19,7 @@ mounted-drives = Mounted drives
 trash-folder-icon = Trash folder icon
 icon-size-and-spacing = Icon size and spacing
 icon-size = Icon size
+grid-spacing = Grid spacing
 
 # List view
 name = Name
