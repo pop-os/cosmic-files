@@ -1844,20 +1844,26 @@ impl Tab {
     }
 
     pub fn select_name(&mut self, name: &str) {
+        self.select_focus = None;
         if let Some(ref mut items) = self.items_opt {
-            for item in items.iter_mut() {
+            for (i, item) in items.iter_mut().enumerate() {
                 item.selected = item.name == name;
+                if item.selected {
+                    self.select_focus = Some(i);
+                }
             }
         }
     }
 
     pub fn select_paths(&mut self, paths: Vec<PathBuf>) {
+        self.select_focus = None;
         if let Some(ref mut items) = self.items_opt {
-            for item in items.iter_mut() {
+            for (i, item) in items.iter_mut().enumerate() {
                 item.selected = false;
                 if let Some(path) = item.path_opt() {
                     if paths.contains(path) {
                         item.selected = true;
+                        self.select_focus = Some(i);
                     }
                 }
             }
