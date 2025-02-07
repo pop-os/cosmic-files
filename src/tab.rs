@@ -237,13 +237,14 @@ pub fn folder_icon_symbolic(path: &PathBuf, icon_size: u16) -> widget::icon::Han
 
 fn tab_complete(path: &Path) -> Result<Vec<(String, PathBuf)>, Box<dyn Error>> {
     let parent = if path.exists() {
-        path
+        // Do not show completion if already on an existing path
+        return Ok(Vec::new());
     } else {
         path.parent()
             .ok_or_else(|| format!("path has no parent {:?}", path))?
     };
 
-    let child_os = path.strip_prefix(&parent).unwrap_or_else(|_| Path::new(""));
+    let child_os = path.strip_prefix(&parent)?;
     let child = child_os
         .to_str()
         .ok_or_else(|| format!("invalid UTF-8 {:?}", child_os))?;
