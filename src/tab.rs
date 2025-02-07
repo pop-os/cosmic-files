@@ -266,6 +266,8 @@ fn tab_complete(path: &Path) -> Result<Vec<(String, PathBuf)>, Box<dyn Error>> {
     }
 
     completions.sort_by(|a, b| LANGUAGE_SORTER.compare(&a.0, &b.0));
+    //TODO: make the list scrollable?
+    completions.truncate(8);
     Ok(completions)
 }
 
