@@ -266,7 +266,6 @@ fn tab_complete(path: &Path) -> Result<Vec<(String, PathBuf)>, Box<dyn Error>> {
     }
 
     completions.sort_by(|a, b| LANGUAGE_SORTER.compare(&a.0, &b.0));
-    println!("{:?}", completions);
     Ok(completions)
 }
 
@@ -3116,7 +3115,7 @@ impl Tab {
                         }
                     }
                 }
-                if location != self.location {
+                if location != self.location || selected_paths.is_some() {
                     if location.path_opt().map_or(true, |path| path.is_dir()) {
                         if selected_paths.is_none() {
                             selected_paths = self
@@ -3585,15 +3584,20 @@ impl Tab {
                                 let selected = edit_location.selected == Some(i);
                                 column = column.push(
                                     widget::button::custom(widget::text::body(name))
-                                        .class(button_style(selected, false, false, false, false))
+                                        //TODO: match to design
+                                        .class(if selected {
+                                            theme::Button::Standard
+                                        } else {
+                                            theme::Button::ListItem
+                                        })
                                         .on_press(Message::EditLocationComplete(i))
                                         .padding(space_xxs)
                                         .width(Length::Fill),
                                 );
                             }
                             popover = popover.popup(
-                                widget::layer_container(column)
-                                    .layer(cosmic_theme::Layer::Background)
+                                widget::container(column)
+                                    .class(theme::Container::Dropdown)
                                     //TODO: This is a hack to get the popover to be the right width
                                     .max_width(size.width - 124.0),
                             );
