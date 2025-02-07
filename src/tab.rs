@@ -3591,7 +3591,7 @@ impl Tab {
                                         .class(if selected {
                                             theme::Button::Standard
                                         } else {
-                                            theme::Button::ListItem
+                                            theme::Button::HeaderBar
                                         })
                                         .on_press(Message::EditLocationComplete(i))
                                         .padding(space_xxs)
@@ -3602,7 +3602,7 @@ impl Tab {
                                 widget::container(column)
                                     .class(theme::Container::Dropdown)
                                     //TODO: This is a hack to get the popover to be the right width
-                                    .max_width(size.width - 124.0),
+                                    .max_width(size.width - 140.0),
                             );
                         }
                     }
