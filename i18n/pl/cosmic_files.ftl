@@ -19,6 +19,7 @@ mounted-drives = Podpięte dyski
 trash-folder-icon = Ikona kosza
 icon-size-and-spacing = Rozmiar i rozstaw ikon
 icon-size = Rozmiar ikon
+grid-spacing = Rozstaw siatki
 
 # List view
 name = Nazwa
@@ -38,6 +39,9 @@ resume = Wznów
 
 ## Compress Dialog
 create-archive = Utwórz archiwum
+
+## Extract Dialog
+extract-password-required = Wymagane hasło
 
 ## Empty Trash Dialog
 empty-trash = Opróżnij kosz
@@ -96,6 +100,7 @@ set-executable-and-launch-description = Czy chcesz ustawić plik „{$name}” j
 set-and-launch = Ustaw i uruchom
 
 ## Metadata Dialog
+open-with = Otwórz za pomocą
 owner = Właściciel
 group = Grupa
 other = Inni
