@@ -1289,6 +1289,7 @@ dependencies = [
  "liblzma",
  "log",
  "mime_guess",
+ "notify",
  "notify-debouncer-full",
  "notify-rust",
  "once_cell",
