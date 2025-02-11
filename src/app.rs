@@ -1274,7 +1274,9 @@ impl App {
     }
 
     fn desktop_view_options(&self) -> Element<Message> {
-        let cosmic_theme::Spacing { space_l, .. } = theme::active().cosmic().spacing;
+        let cosmic_theme::Spacing {
+            space_m, space_l, ..
+        } = theme::active().cosmic().spacing;
         let config = self.config.desktop;
 
         let mut children = Vec::new();
@@ -1349,6 +1351,7 @@ impl App {
 
         widget::column::with_children(children)
             .padding([0, space_l, space_l, space_l])
+            .spacing(space_m)
             .into()
     }
 

@@ -1491,11 +1491,11 @@ impl Item {
 
         let mut column = widget::column().spacing(space_m);
 
-        column = column.push(widget::row::with_children(vec![
-            widget::horizontal_space().into(),
-            self.preview(sizes),
-            widget::horizontal_space().into(),
-        ]));
+        column = column.push(
+            widget::container(self.preview(sizes))
+                .center_x(Length::Fill)
+                .max_height(THUMBNAIL_SIZE as f32),
+        );
 
         let mut details = widget::column().spacing(space_xxxs);
         details = details.push(widget::text::heading(self.name.clone()));
@@ -4089,15 +4089,13 @@ impl Tab {
                 }
                 Element::from(dnd_grid)
             }),
-            mouse_area::MouseArea::new(
-                widget::container(widget::column::with_children(children)).width(Length::Fill),
-            )
-            .on_press(|_| Message::Click(None))
-            .on_drag(Message::Drag)
-            .on_drag_end(|_| Message::DragEnd(None))
-            .show_drag_rect(true)
-            .on_release(|_| Message::ClickRelease(None))
-            .into(),
+            mouse_area::MouseArea::new(widget::column::with_children(children).width(Length::Fill))
+                .on_press(|_| Message::Click(None))
+                .on_drag(Message::Drag)
+                .on_drag_end(|_| Message::DragEnd(None))
+                .show_drag_rect(true)
+                .on_release(|_| Message::ClickRelease(None))
+                .into(),
             true,
         )
     }
