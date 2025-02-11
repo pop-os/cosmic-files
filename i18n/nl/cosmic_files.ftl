@@ -19,6 +19,7 @@ mounted-drives = Gekoppelde schijven
 trash-folder-icon = Prullenbakicoon
 icon-size-and-spacing = Grootte en ruimte tussen iconen
 icon-size = Icoon grootte
+grid-spacing = Rastergrootte
 
 # List view
 name = Naam
@@ -38,6 +39,9 @@ resume = Hervatten
 
 ## Compress Dialog
 create-archive = Maak een archiefbestand
+
+## Extract Dialog
+extract-password-required = Wachtwoord vereist
 
 ## Empty Trash Dialog
 empty-trash = Prullenbak legen?
@@ -214,7 +218,7 @@ calculating = Wordt berekend...
 settings = Instellingen
 
 ### Appearance
-appearance = Uiterlijk
+appearance = Weergave
 theme = Thema
 match-desktop = Systeemstandaard
 dark = Donker
