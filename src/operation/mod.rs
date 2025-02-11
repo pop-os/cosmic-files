@@ -1087,7 +1087,7 @@ mod tests {
     use test_log::test;
     use tokio::sync;
 
-    use super::{Controller, Operation, OperationSelection, ReplaceResult};
+    use super::{Controller, Operation, OperationError, OperationSelection, ReplaceResult};
     use crate::{
         app::{
             test_utils::{
@@ -1106,7 +1106,7 @@ mod tests {
     pub async fn operation_copy(
         paths: Vec<PathBuf>,
         to: PathBuf,
-    ) -> Result<OperationSelection, String> {
+    ) -> Result<OperationSelection, OperationError> {
         let id = fastrand::u64(0..u64::MAX);
         let (tx, mut rx) = mpsc::channel(BUF_SIZE);
         let paths_clone = paths.clone();
