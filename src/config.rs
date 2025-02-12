@@ -197,6 +197,8 @@ pub struct TabConfig {
     pub show_hidden: bool,
     /// Icon zoom
     pub icon_sizes: IconSizes,
+    /// Single click to open
+    pub single_click: bool,
 }
 
 impl Default for TabConfig {
@@ -206,6 +208,7 @@ impl Default for TabConfig {
             folders_first: true,
             show_hidden: false,
             icon_sizes: IconSizes::default(),
+            single_click: false,
         }
     }
 }

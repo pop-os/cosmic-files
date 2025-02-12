@@ -1508,28 +1508,47 @@ impl App {
     }
 
     fn settings(&self) -> Element<Message> {
+        let tab_config = self.config.tab;
+
         // TODO: Should dialog be updated here too?
-        widget::column::with_children(vec![widget::settings::section()
-            .title(fl!("appearance"))
-            .add({
-                let app_theme_selected = match self.config.app_theme {
-                    AppTheme::Dark => 1,
-                    AppTheme::Light => 2,
-                    AppTheme::System => 0,
-                };
-                widget::settings::item::builder(fl!("theme")).control(widget::dropdown(
-                    &self.app_themes,
-                    Some(app_theme_selected),
-                    move |index| {
-                        Message::AppTheme(match index {
-                            1 => AppTheme::Dark,
-                            2 => AppTheme::Light,
-                            _ => AppTheme::System,
-                        })
-                    },
-                ))
-            })
-            .into()])
+        widget::column::with_children(vec![
+            widget::settings::section()
+                .title(fl!("appearance"))
+                .add({
+                    let app_theme_selected = match self.config.app_theme {
+                        AppTheme::Dark => 1,
+                        AppTheme::Light => 2,
+                        AppTheme::System => 0,
+                    };
+                    widget::settings::item::builder(fl!("theme")).control(widget::dropdown(
+                        &self.app_themes,
+                        Some(app_theme_selected),
+                        move |index| {
+                            Message::AppTheme(match index {
+                                1 => AppTheme::Dark,
+                                2 => AppTheme::Light,
+                                _ => AppTheme::System,
+                            })
+                        },
+                    ))
+                })
+                .into(),
+            widget::settings::section()
+                .title(fl!("other"))
+                .add({
+                    widget::settings::item::builder(fl!("single-click")).toggler(
+                        tab_config.single_click,
+                        move |single_click| {
+                            Message::TabConfig(TabConfig {
+                                single_click,
+                                ..tab_config
+                            })
+                        },
+                    )
+                })
+                .into(),
+        ])
+        .spacing(theme::active().cosmic().space_m())
         .into()
     }
 }

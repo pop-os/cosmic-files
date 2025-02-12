@@ -229,6 +229,7 @@ calculating = Calculating...
 
 ## Settings
 settings = Settings
+single-click = Single click to open
 
 ### Appearance
 appearance = Appearance
