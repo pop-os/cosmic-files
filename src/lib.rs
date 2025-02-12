@@ -137,6 +137,11 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
     settings = settings.exit_on_close(false);
 
+    #[cfg(feature = "jemalloc")]
+    {
+        settings = settings.default_mmap_threshold(None);
+    }
+
     let flags = Flags {
         config_handler,
         config,
