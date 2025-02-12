@@ -104,9 +104,22 @@ open-with = Open with
 owner = Owner
 group = Group
 other = Other
-read = Read
-write = Write
-execute = Execute
+### Mode 0
+none = None
+### Mode 1 (unusual)
+execute-only = Execute-only
+### Mode 2 (unusual)
+write-only = Write-only
+### Mode 3 (unusual)
+write-execute = Write and execute
+### Mode 4
+read-only = Read-only
+### Mode 5
+read-execute = Read and execute
+### Mode 6
+read-write = Read and write
+### Mode 7
+read-write-execute = Read, write, and execute
 
 # Context Pages
 

@@ -343,30 +343,39 @@ fn format_permissions_owner(metadata: &Metadata, owner: PermissionOwner) -> Stri
 }
 
 fn format_permissions(metadata: &Metadata, owner: PermissionOwner) -> String {
-    let mut perms: Vec<String> = Vec::new();
+    let mut mode = 0;
     if match owner {
         PermissionOwner::Owner => metadata.permissions().readable_by_owner(),
         PermissionOwner::Group => metadata.permissions().readable_by_group(),
         PermissionOwner::Other => metadata.permissions().readable_by_other(),
     } {
-        perms.push(fl!("read"));
+        mode |= 4;
     }
     if match owner {
         PermissionOwner::Owner => metadata.permissions().writable_by_owner(),
         PermissionOwner::Group => metadata.permissions().writable_by_group(),
         PermissionOwner::Other => metadata.permissions().writable_by_other(),
     } {
-        perms.push(fl!("write"));
+        mode |= 2;
     }
     if match owner {
         PermissionOwner::Owner => metadata.permissions().executable_by_owner(),
         PermissionOwner::Group => metadata.permissions().executable_by_group(),
         PermissionOwner::Other => metadata.permissions().executable_by_other(),
     } {
-        perms.push(fl!("execute"));
+        mode |= 1;
     }
-
-    perms.join(" ")
+    match mode {
+        0 => fl!("none"),
+        1 => fl!("execute-only"),
+        2 => fl!("write-only"),
+        3 => fl!("write-execute"),
+        4 => fl!("read-only"),
+        5 => fl!("read-execute"),
+        6 => fl!("read-write"),
+        7 => fl!("read-write-execute"),
+        _ => unreachable!(),
+    }
 }
 
 struct FormatTime(SystemTime);
