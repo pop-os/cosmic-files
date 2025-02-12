@@ -286,6 +286,8 @@ pub enum Message {
     DialogUpdate(DialogPage),
     DialogUpdateComplete(DialogPage),
     ExtractHere(Option<Entity>),
+    #[cfg(all(feature = "desktop", feature = "wayland"))]
+    Focused(window::Id),
     Key(Modifiers, Key),
     LaunchUrl(String),
     MaybeExit,
@@ -3516,6 +3518,15 @@ impl Application for App {
                 self.size = Some(size);
                 self.handle_overlap();
             }
+            #[cfg(all(feature = "desktop", feature = "wayland"))]
+            Message::Focused(id) => {
+                if let Some(w) = self.windows.get(&id) {
+                    match w {
+                        WindowKind::Desktop(entity) => self.tab_model.activate(*entity),
+                        _ => {}
+                    };
+                }
+            }
         }
 
         Task::none()
@@ -4506,6 +4517,8 @@ impl Application for App {
                     Some(Message::Modifiers(modifiers))
                 }
                 Event::Window(WindowEvent::Unfocused) => Some(Message::WindowUnfocus),
+                #[cfg(all(feature = "desktop", feature = "wayland"))]
+                Event::Window(WindowEvent::Focused) => Some(Message::Focused(window_id)),
                 Event::Window(WindowEvent::CloseRequested) => Some(Message::WindowClose),
                 Event::Window(WindowEvent::Opened { position: _, size }) => {
                     Some(Message::Size(size))
