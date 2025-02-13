@@ -29,7 +29,7 @@ size = Méret
 
 # Progress footer
 details = Részletek
-dismiss = Üzenet elvetése
+dismiss = Üzenet eltüntetése
 operations-running = {$running} művelet fut ({$percent}%)...
 operations-running-finished = {$running} művelet fut ({$percent}%), {$finished} befejezve...
 pause = Szünet
@@ -95,8 +95,8 @@ keep-both = Mindkettő megtartása
 skip = Kihagyás
 
 ## Set as Executable and Launch Dialog
-set-executable-and-launch = Futtathatóvá tétele, majd indítása
-set-executable-and-launch-description = Szeretnéd futtathatóvá tenni a(z) "{$name}" fájlt és elindítani?
+set-executable-and-launch = Végrehajthatóvá tétele, majd indítása
+set-executable-and-launch-description = Szeretnéd végrehajthatóvá tenni a(z) "{$name}" fájlt és elindítani?
 set-and-launch = Alkalmazás és indítás
 
 ## Metadata Dialog
@@ -104,14 +104,27 @@ open-with = Megnyitás ezzel
 owner = Tulajdonos
 group = Csoport
 other = Többi
-read = Olvasás
-write = Írás
-execute = Futtatás
+### Mode 0
+none = Nincs
+### Mode 1 (unusual)
+execute-only = Csak végrehajtás
+### Mode 2 (unusual)
+write-only = Csak írás
+### Mode 3 (unusual)
+write-execute = Írás és végrehajtás
+### Mode 4
+read-only = Csak olvasás
+### Mode 5
+read-execute = Olvasás és végrehajtás
+### Mode 6
+read-write = Olvasás és írás
+### Mode 7
+read-write-execute = Olvasás, írás és végrehajtás
 
 # Context Pages
 
 ## About
-git-description = Git commit {$hash} {$date}-kor
+git-description = Git commit {$hash} ekkor: {$date}
 
 ## Add Network Drive
 add-network-drive = Hálózati meghajtó hozzáadása
@@ -121,7 +134,7 @@ connecting = Csatlakozás...
 domain = Tartomány
 enter-server-address = Add meg a szerver címét
 network-drive-description =
-    A szerver címek tartalmazzák a protokoll előtagot és a címet.
+    A szervercímek tartalmazzák a protokoll előtagot és a címet.
     Példák: ssh://192.168.0.1, ftp://[2001:db8::1]
 ### Make sure to keep the comma which separates the columns
 network-drive-schemes =
@@ -212,7 +225,7 @@ item-size = Méret: {$size}
 item-created = Létrehozva: {$created}
 item-modified = Módosítva: {$modified}
 item-accessed = Hozzáférve: {$accessed}
-calculating = Számítás...
+calculating = Számolás...
 
 ## Settings
 settings = Beállítások
