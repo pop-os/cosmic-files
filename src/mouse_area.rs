@@ -199,8 +199,8 @@ impl<'a, Message, F> OnMouseButton<'a, Message> for F where F: Fn(Option<Point>)
 pub trait OnDrag<'a, Message>: Fn(Option<Rectangle>) -> Message + 'a {}
 impl<'a, Message, F> OnDrag<'a, Message> for F where F: Fn(Option<Rectangle>) -> Message + 'a {}
 
-pub trait OnResize<'a, Message>: Fn(Size) -> Message + 'a {}
-impl<'a, Message, F> OnResize<'a, Message> for F where F: Fn(Size) -> Message + 'a {}
+pub trait OnResize<'a, Message>: Fn(Size, Rectangle) -> Message + 'a {}
+impl<'a, Message, F> OnResize<'a, Message> for F where F: Fn(Size, Rectangle) -> Message + 'a {}
 
 pub trait OnScroll<'a, Message>: Fn(mouse::ScrollDelta, Modifiers) -> Option<Message> + 'a {}
 impl<'a, Message, F> OnScroll<'a, Message> for F where
@@ -374,6 +374,7 @@ where
             cursor,
             shell,
             tree.state.downcast_mut::<State>(),
+            viewport,
         )
     }
 
@@ -493,6 +494,7 @@ fn update<Message: Clone>(
     cursor: mouse::Cursor,
     shell: &mut Shell<'_, Message>,
     state: &mut State,
+    viewport: &Rectangle
 ) -> event::Status {
     let layout_bounds = layout.bounds();
 
@@ -500,7 +502,7 @@ fn update<Message: Clone>(
         let size = layout_bounds.size();
         if state.size != Some(size) {
             state.size = Some(size);
-            shell.publish(message(size));
+            shell.publish(message(size, *viewport));
         }
     }
 

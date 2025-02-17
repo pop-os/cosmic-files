@@ -54,6 +54,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{self, Instant},
 };
+use cosmic::iced::mouse::Event::CursorMoved;
 use tokio::sync::mpsc;
 use trash::TrashItem;
 #[cfg(feature = "wayland")]
@@ -277,6 +278,7 @@ pub enum Message {
     Config(Config),
     Copy(Option<Entity>),
     CosmicSettings(&'static str),
+    CursorMoved(Point),
     Cut(Option<Entity>),
     DesktopConfig(DesktopConfig),
     DesktopViewOptions,
@@ -1925,6 +1927,10 @@ impl Application for App {
                 let paths = self.selected_paths(entity_opt);
                 let contents = ClipboardCopy::new(ClipboardKind::Copy, &paths);
                 return clipboard::write_data(contents);
+            }
+            Message::CursorMoved(pos) => {
+                let entity = self.tab_model.active();
+                return self.update(Message::TabMessage(Some(entity), tab::Message::CursorMoved(pos)));
             }
             Message::Cut(entity_opt) => {
                 let paths = self.selected_paths(entity_opt);
@@ -4536,7 +4542,8 @@ impl Application for App {
                         }
                         _ => None,
                     }
-                }
+                },
+                Event::Mouse(CursorMoved { position: pos }) => Some(Message::CursorMoved(pos)),
                 _ => None,
             }),
             Config::subscription().map(|update| {

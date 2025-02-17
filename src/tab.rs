@@ -83,6 +83,8 @@ const MAX_SEARCH_RESULTS: usize = 200;
 //TODO: configurable thumbnail size?
 const THUMBNAIL_SIZE: u32 = (ICON_SIZE_GRID as u32) * (ICON_SCALE_MAX as u32);
 
+const DRAG_SCROLL_DISTANCE: u8 = 5;
+
 //TODO: adjust for locales?
 const DATE_TIME_FORMAT: &str = "%b %-d, %-Y, %-I:%M %p";
 const TIME_FORMAT: &str = "%-I:%M %p";
@@ -1121,6 +1123,8 @@ pub enum Message {
     Click(Option<usize>),
     DoubleClick(Option<usize>),
     ClickRelease(Option<usize>),
+    CursorMoved(Point),
+    MouseAreaResized(Size, Rectangle),
     DragEnd(Option<usize>),
     Config(TabConfig),
     ContextAction(Action),
@@ -1772,6 +1776,9 @@ pub struct Tab {
     selected_clicked: bool,
     last_right_click: Option<usize>,
     search_context: Option<SearchContext>,
+    global_cursor_position: Option<Point>,
+    current_drag_rect: Option<Rectangle>,
+    viewport_rect: Option<Rectangle>,
 }
 
 fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, String> {
@@ -1856,6 +1863,9 @@ impl Tab {
             selected_clicked: false,
             last_right_click: None,
             search_context: None,
+            global_cursor_position: None,
+            current_drag_rect: None,
+            viewport_rect: None,
         }
     }
 
@@ -2199,8 +2209,40 @@ impl Tab {
                     }
                 }
             }
+            Message::CursorMoved(pos) => {
+                self.global_cursor_position = Some(pos);
+
+                // we're currently dragging
+                if self.current_drag_rect.is_some() {
+                    if let Some(viewport) = self.viewport_rect {
+                        if !viewport.contains(pos) {
+                            // diff_y should be NEGATIVE here when close to y=0 (above the MouseArea)
+                            // and positive when below the viewport
+                            let diff_y = pos.y - viewport.y;
+                            let scroll_y: i8 = if diff_y > 0.0 {
+                                DRAG_SCROLL_DISTANCE as i8
+                            } else if diff_y < 0.0 {
+                                DRAG_SCROLL_DISTANCE as i8 * -1
+                            } else {
+                                0
+                            };
+
+                            commands.push(Command::Iced(
+                                scrollable::scroll_by(self.scrollable_id.clone(), AbsoluteOffset {
+                                    x: 0.0,
+                                    y: scroll_y as f32
+                                }).into(),
+                            ));
+                        }
+                    }
+                }
+            }
+            Message::MouseAreaResized(_size, viewport) => {
+                self.viewport_rect = Some(viewport);
+            }
             Message::DragEnd(_) => {
                 self.clicked = None;
+                self.current_drag_rect = None;
                 if let Some(ref mut items) = self.items_opt {
                     for item in items.iter_mut() {
                         item.overlaps_drag_rect = false;
@@ -2433,6 +2475,7 @@ impl Tab {
                 }
             }
             Message::Drag(rect_opt) => {
+                self.current_drag_rect = rect_opt;
                 if let Some(rect) = rect_opt {
                     self.context_menu = None;
                     self.location_context_menu_index = None;
@@ -4434,6 +4477,7 @@ impl Tab {
             .on_drag_end(|_| Message::DragEnd(None))
             .show_drag_rect(true)
             .on_release(|_| Message::ClickRelease(None))
+            .on_resize(Message::MouseAreaResized)
             .into(),
             true,
         )
@@ -4497,7 +4541,7 @@ impl Tab {
             .on_press(move |_point_opt| Message::Click(None))
             .on_release(|_| Message::ClickRelease(None))
             //TODO: better way to keep focused item in view
-            .on_resize(|_| Message::ScrollToFocus)
+            .on_resize(|_, _| Message::ScrollToFocus)
             .on_back_press(move |_point_opt| Message::GoPrevious)
             .on_forward_press(move |_point_opt| Message::GoNext)
             .on_scroll(respond_to_scroll_direction);
