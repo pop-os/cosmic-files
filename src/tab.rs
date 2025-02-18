@@ -2298,7 +2298,20 @@ impl Tab {
                 }
             }
             Message::MouseAreaResized(_size, viewport) => {
-                self.viewport_rect = Some(viewport);
+                // if we have a scroll position, we want to subtract it from the viewport
+                // so that we don't desync when swapping
+                if let Some(scroll_pos) = self.scroll_opt {
+                    self.viewport_rect = Some(Rectangle {
+                        x: viewport.x - scroll_pos.x,
+                        y: viewport.y - scroll_pos.y,
+                        width: viewport.width,
+                        height: viewport.height
+                    });
+                }
+                else {
+                    self.viewport_rect = Some(viewport);
+                }
+
             }
             Message::DragEnd(_) => {
                 self.clicked = None;
