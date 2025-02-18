@@ -4147,6 +4147,7 @@ impl Tab {
                 .on_drag_end(|_| Message::DragEnd(None))
                 .show_drag_rect(true)
                 .on_release(|_| Message::ClickRelease(None))
+                .on_resize(Message::MouseAreaResized)
                 .into(),
             true,
         )
