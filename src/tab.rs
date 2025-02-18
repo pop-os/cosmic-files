@@ -83,7 +83,7 @@ const MAX_SEARCH_RESULTS: usize = 200;
 //TODO: configurable thumbnail size?
 const THUMBNAIL_SIZE: u32 = (ICON_SIZE_GRID as u32) * (ICON_SCALE_MAX as u32);
 
-const DRAG_SCROLL_DISTANCE: u8 = 5;
+const DRAG_SCROLL_DISTANCE: u8 = 1;
 
 //TODO: adjust for locales?
 const DATE_TIME_FORMAT: &str = "%b %-d, %-Y, %-I:%M %p";
@@ -1779,6 +1779,7 @@ pub struct Tab {
     global_cursor_position: Option<Point>,
     current_drag_rect: Option<Rectangle>,
     viewport_rect: Option<Rectangle>,
+    virtual_cursor_offset: Option<Point>,
 }
 
 fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, String> {
@@ -1866,6 +1867,7 @@ impl Tab {
             global_cursor_position: None,
             current_drag_rect: None,
             viewport_rect: None,
+            virtual_cursor_offset: None
         }
     }
 
@@ -2216,23 +2218,56 @@ impl Tab {
                 if self.current_drag_rect.is_some() {
                     if let Some(viewport) = self.viewport_rect {
                         if !viewport.contains(pos) {
-                            // diff_y should be NEGATIVE here when close to y=0 (above the MouseArea)
-                            // and positive when below the viewport
-                            let diff_y = pos.y - viewport.y;
-                            let scroll_y: i8 = if diff_y > 0.0 {
-                                DRAG_SCROLL_DISTANCE as i8
-                            } else if diff_y < 0.0 {
-                                DRAG_SCROLL_DISTANCE as i8 * -1
-                            } else {
-                                0
-                            };
+                            if pos.y < viewport.y || pos.y > (viewport.y + viewport.height) {
+                                // if our mouse is above the scrollable viewport, we want to scroll up
+                                let drag_start_point = Point {
+                                    x: viewport.x,
+                                    y: viewport.y
+                                };
+                                // diff_y should be NEGATIVE here when close to y=0 (above the MouseArea)
+                                // and positive when below the viewport
+                                let diff_y = pos.y - drag_start_point.y;
+                                let scroll_y: i8 = if diff_y > 0.0 {
+                                    DRAG_SCROLL_DISTANCE as i8
+                                } else if diff_y < 0.0 {
+                                    DRAG_SCROLL_DISTANCE as i8 * -1
+                                } else {
+                                    0
+                                };
 
-                            commands.push(Command::Iced(
-                                scrollable::scroll_by(self.scrollable_id.clone(), AbsoluteOffset {
+                                let mut new_offset = Point {
                                     x: 0.0,
                                     y: scroll_y as f32
-                                }).into(),
-                            ));
+                                };
+
+                                if let Some(offset) = self.virtual_cursor_offset {
+                                    new_offset = Point {
+                                        x: new_offset.x + offset.x,
+                                        y: new_offset.y + offset.y,
+                                    };
+                                }
+
+                                self.virtual_cursor_offset = Some(new_offset);
+
+                                commands.push(Command::Iced(
+                                    scrollable::scroll_by(self.scrollable_id.clone(), AbsoluteOffset {
+                                        x: 0.0,
+                                        y: scroll_y as f32
+                                    }).into(),
+                                ));
+                            }
+                            else {
+                                if self.virtual_cursor_offset.is_none() {
+                                    self.virtual_cursor_offset = Some(Point {
+                                        x: 0.0,
+                                        y: 0.0
+                                    });
+                                }
+                            }
+                        }
+                        else {
+                            // reset our virtual cursor offset when we're back in bounds
+                            self.virtual_cursor_offset = None;
                         }
                     }
                 }
@@ -4148,6 +4183,7 @@ impl Tab {
                 .show_drag_rect(true)
                 .on_release(|_| Message::ClickRelease(None))
                 .on_resize(Message::MouseAreaResized)
+                .cursor_offset(self.virtual_cursor_offset)
                 .into(),
             true,
         )
@@ -4479,6 +4515,7 @@ impl Tab {
             .show_drag_rect(true)
             .on_release(|_| Message::ClickRelease(None))
             .on_resize(Message::MouseAreaResized)
+            .cursor_offset(self.virtual_cursor_offset)
             .into(),
             true,
         )
