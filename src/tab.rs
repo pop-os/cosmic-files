@@ -1780,6 +1780,8 @@ pub struct Tab {
     current_drag_rect: Option<Rectangle>,
     viewport_rect: Option<Rectangle>,
     virtual_cursor_offset: Option<Point>,
+    last_scroll_position: Option<Point>,
+    last_scroll_offset: Option<Point>,
 }
 
 fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, String> {
@@ -1867,7 +1869,9 @@ impl Tab {
             global_cursor_position: None,
             current_drag_rect: None,
             viewport_rect: None,
-            virtual_cursor_offset: None
+            virtual_cursor_offset: None,
+            last_scroll_position: None,
+            last_scroll_offset: None
         }
     }
 
@@ -2248,6 +2252,7 @@ impl Tab {
                                 }
 
                                 self.virtual_cursor_offset = Some(new_offset);
+                                self.last_scroll_offset = Some(new_offset);
 
                                 commands.push(Command::Iced(
                                     scrollable::scroll_by(self.scrollable_id.clone(), AbsoluteOffset {
@@ -2257,17 +2262,37 @@ impl Tab {
                                 ));
                             }
                             else {
-                                if self.virtual_cursor_offset.is_none() {
-                                    self.virtual_cursor_offset = Some(Point {
-                                        x: 0.0,
-                                        y: 0.0
-                                    });
+                                if let Some(last_scroll_offset) = self.last_scroll_offset {
+                                    if let Some(last_scroll_position) = self.last_scroll_position {
+                                        self.virtual_cursor_offset = Some(Point {
+                                            x: 0.0,
+                                            y: (pos.y - last_scroll_position.y + last_scroll_offset.y)
+                                        });
+                                    }
+
+                                }
+                                else {
+                                    if let Some(last_scroll_position) = self.last_scroll_position {
+                                        self.virtual_cursor_offset = Some(Point {
+                                            x: 0.0,
+                                            y: (pos.y - last_scroll_position.y)
+                                        });
+                                    }
+                                    else {
+                                        self.virtual_cursor_offset = Some(Point {
+                                            x: 0.0,
+                                            y: 0.0
+                                        });
+                                    }
+
                                 }
                             }
                         }
                         else {
                             // reset our virtual cursor offset when we're back in bounds
                             self.virtual_cursor_offset = None;
+                            self.last_scroll_position = Some(pos);
+                            self.last_scroll_offset = None;
                         }
                     }
                 }
@@ -2277,6 +2302,10 @@ impl Tab {
             }
             Message::DragEnd(_) => {
                 self.clicked = None;
+                self.virtual_cursor_offset = None;
+                self.last_scroll_offset = None;
+                self.last_scroll_position = None;
+
                 self.current_drag_rect = None;
                 if let Some(ref mut items) = self.items_opt {
                     for item in items.iter_mut() {
