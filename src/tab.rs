@@ -2244,11 +2244,15 @@ impl Tab {
                                     y: scroll_y as f32
                                 };
 
-                                if let Some(offset) = self.virtual_cursor_offset {
+                                if let Some(virtual_cursor_offset) = self.virtual_cursor_offset {
                                     new_offset = Point {
-                                        x: new_offset.x + offset.x,
-                                        y: new_offset.y + offset.y,
+                                        x: new_offset.x + virtual_cursor_offset.x,
+                                        y: new_offset.y + virtual_cursor_offset.y,
                                     };
+                                }
+
+                                if let Some(last_scroll_position) = self.last_scroll_position {
+                                    new_offset.x = (pos.x - last_scroll_position.x);
                                 }
 
                                 self.virtual_cursor_offset = Some(new_offset);
