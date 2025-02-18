@@ -9,6 +9,8 @@ use std::{
     cmp::Ordering, collections::HashMap, env, ffi::OsString, fs, io, path::PathBuf, process,
     time::Instant,
 };
+#[cfg(feature = "desktop")]
+use cosmic::desktop::DesktopEntry;
 
 pub fn exec_to_command(exec: &str, path_opt: Option<OsString>) -> Option<process::Command> {
     let args_vec: Vec<String> = shlex::split(exec)?;
@@ -47,7 +49,62 @@ pub struct MimeApp {
 impl MimeApp {
     //TODO: move to libcosmic, support multiple files
     pub fn command(&self, path_opt: Option<OsString>) -> Option<process::Command> {
-        exec_to_command(self.exec.as_deref()?, path_opt)
+        let exec = self.exec.as_deref()?;
+        
+        // Special handling for terminals when we have a path
+        if self.is_terminal() && path_opt.is_some() {
+            // Check if the terminal has a special working directory argument
+            let working_dir_arg = if exec.contains("warp") {
+                "--working-directory"
+            } else if exec.contains("gnome-terminal") {
+                "--working-directory"
+            } else if exec.contains("xfce4-terminal") {
+                "--working-directory"
+            } else if exec.contains("konsole") {
+                "--workdir"
+            } else {
+                // Default to no special argument, will use current_dir instead
+                ""
+            };
+
+            // If we have a special working directory argument, use it
+            if !working_dir_arg.is_empty() {
+                let mut args_vec = shlex::split(exec)?;
+                if let Some(path) = &path_opt {
+                    args_vec.push(working_dir_arg.to_string());
+                    args_vec.push(path.to_string_lossy().into_owned());
+                }
+                let mut args = args_vec.iter();
+                let mut command = process::Command::new(args.next()?);
+                for arg in args {
+                    command.arg(arg);
+                }
+                return Some(command);
+            }
+        }
+        
+        // Default handling for non-terminals or terminals without path
+        exec_to_command(exec, path_opt)
+    }
+
+    #[cfg(feature = "desktop")]
+    pub fn is_terminal(&self) -> bool {
+        // Check if this app is a terminal emulator
+        if let Some(path) = &self.path {
+            if let Ok(bytes) = std::fs::read_to_string(path) {
+                if let Ok(entry) = DesktopEntry::decode(path, &bytes) {
+                    return entry.categories()
+                        .map(|cats| cats.split(';').any(|c| c == "TerminalEmulator"))
+                        .unwrap_or(false);
+                }
+            }
+        }
+        false
+    }
+
+    #[cfg(not(feature = "desktop"))]
+    pub fn is_terminal(&self) -> bool {
+        false
     }
 }
 
@@ -94,13 +151,15 @@ pub struct MimeAppCache {
 
 impl MimeAppCache {
     pub fn new() -> Self {
-        let mut mime_app_cache = Self {
+        let mut cache = Self {
             cache: HashMap::new(),
             icons: HashMap::new(),
             terminals: Vec::new(),
         };
-        mime_app_cache.reload();
-        mime_app_cache
+        cache.reload();
+        #[cfg(feature = "desktop")]
+        cache.start_watcher();
+        cache
     }
 
     #[cfg(not(feature = "desktop"))]
@@ -287,20 +346,104 @@ impl MimeAppCache {
     }
 
     pub fn terminal(&self) -> Option<&MimeApp> {
-        //TODO: consider rules in https://github.com/Vladimir-csp/xdg-terminal-exec
+        // First check MIME-based default
+        let mime_default = self.get_default_terminal_from_mime();
+        if let Some(term) = mime_default {
+            return Some(term);
+        }
 
-        // Look for and return preferred terminals
-        //TODO: fallback order beyond cosmic-term?
-        for id in &["com.system76.CosmicTerm"] {
-            for terminal in self.terminals.iter() {
-                if &terminal.id == id {
-                    return Some(terminal);
+        // Fallback to update-alternatives system
+        self.get_system_default_terminal()
+    }
+
+    fn get_default_terminal_from_mime(&self) -> Option<&MimeApp> {
+        // Check both common terminal MIME types
+        let mime_types = [
+            "x-scheme-handler/terminal",
+            "application/x-terminal-emulator"
+        ];
+
+        for mime_str in mime_types {
+            if let Ok(mime) = mime_str.parse::<Mime>() {
+                if let Some(apps) = self.cache.get(&mime) {
+                    if let Some(default) = apps.iter().find(|app| app.is_default) {
+                        return Some(default);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn get_system_default_terminal(&self) -> Option<&MimeApp> {
+        if let Ok(output) = std::process::Command::new("update-alternatives")
+            .arg("--query")
+            .arg("x-terminal-emulator")
+            .output() 
+        {
+            if let Ok(query_output) = String::from_utf8(output.stdout) {
+                // First find the current value (executable path)
+                let mut current_exec = None;
+                for line in query_output.lines() {
+                    if line.starts_with("Value: ") {
+                        current_exec = Some(line.trim_start_matches("Value: ").to_string());
+                        break;
+                    }
+                }
+
+                // Try to find a terminal that matches this executable
+                if let Some(exec_path) = current_exec {
+                    for terminal in &self.terminals {
+                        if let Some(exec) = &terminal.exec {
+                            // Extract the executable from the Exec= line
+                            if let Some(cmd) = exec.split_whitespace().next() {
+                                // Compare just the binary name as a fallback
+                                if exec_path.ends_with(cmd) {
+                                    return Some(terminal);
+                                }
+                                // Also try comparing the full path
+                                if exec_path == cmd {
+                                    return Some(terminal);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        // Return whatever was the first terminal found
+        // Fallback to first available terminal if no system default is set
         self.terminals.first()
+    }
+
+    #[cfg(feature = "desktop")]
+    fn start_watcher(&mut self) {
+        use notify::{RecommendedWatcher, Watcher, RecursiveMode};
+        use std::time::Duration;
+
+        let paths = vec![
+            dirs::config_dir().unwrap().join("mimeapps.list"),
+            dirs::config_local_dir().unwrap().join("applications/mimeapps.list")
+        ];
+
+        let watcher = RecommendedWatcher::new(
+            move |res: Result<notify::Event, _>| {
+                if let Ok(event) = res {
+                    if event.kind.is_modify() {
+                        // Note: Since we can't directly access self here,
+                        // we'll need to use a channel or other mechanism to trigger reload
+                        log::info!("MIME associations changed, reload needed");
+                    }
+                }
+            },
+            notify::Config::default().with_poll_interval(Duration::from_secs(2))
+        );
+
+        if let Ok(mut watcher) = watcher {
+            for path in paths {
+                let _ = watcher.watch(&path, RecursiveMode::NonRecursive);
+            }
+        }
     }
 
     #[cfg(not(feature = "desktop"))]
