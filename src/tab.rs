@@ -84,7 +84,6 @@ const MAX_SEARCH_RESULTS: usize = 200;
 const THUMBNAIL_SIZE: u32 = (ICON_SIZE_GRID as u32) * (ICON_SCALE_MAX as u32);
 
 const DRAG_SCROLL_DISTANCE: f32 = 15.0;
-const DRAG_SCROLL_RATIO_MAXIMUM: f32 = 3.0;
 
 //TODO: adjust for locales?
 const DATE_TIME_FORMAT: &str = "%b %-d, %-Y, %-I:%M %p";
@@ -2234,32 +2233,13 @@ impl Tab {
                                 // diff_y should be NEGATIVE here when close to y=0 (above the MouseArea)
                                 // and positive when below the viewport
                                 let diff_y = pos.y - drag_start_point.y;
-                                let mut scroll_y: f32 = if diff_y > 0.0 {
+                                let scroll_y: f32 = if diff_y > 0.0 {
                                     DRAG_SCROLL_DISTANCE
                                 } else if diff_y < 0.0 {
                                     DRAG_SCROLL_DISTANCE * -1.0
                                 } else {
                                     0.0
                                 };
-
-
-                                // estimate distance and use that to control speed
-                                // go up to 3x speed
-                                let quarter_height = viewport.height / 4.0;
-                                let cursor_y_distance = if diff_y > 0.0 {
-                                    pos.y - (viewport.y + viewport.height)
-                                } else if diff_y < 0.0 {
-                                    pos.y - viewport.y
-                                } else {
-                                    0.0
-                                }.abs();
-
-                                let mut speed_ratio = (cursor_y_distance / quarter_height) + 1.0;
-                                if speed_ratio > DRAG_SCROLL_RATIO_MAXIMUM {
-                                    speed_ratio = DRAG_SCROLL_RATIO_MAXIMUM;
-                                }
-
-                                scroll_y = scroll_y * speed_ratio;
 
                                 let mut new_offset = Point {
                                     x: 0.0,
@@ -2274,7 +2254,7 @@ impl Tab {
                                 }
 
                                 if let Some(last_scroll_position) = self.last_scroll_position {
-                                    new_offset.x = (pos.x - last_scroll_position.x);
+                                    new_offset.x = pos.x - last_scroll_position.x;
                                 }
 
                                 self.virtual_cursor_offset = Some(new_offset);

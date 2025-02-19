@@ -333,7 +333,7 @@ pub enum Message {
     Rename(Option<Entity>),
     ReplaceResult(ReplaceResult),
     RestoreFromTrash(Option<Entity>),
-    ScrollTab(f32),
+    ScrollTab(i16),
     SearchActivate,
     SearchClear,
     SearchInput(String),
@@ -552,7 +552,7 @@ pub struct App {
     tab_dnd_hover: Option<(Entity, Instant)>,
     nav_drag_id: DragId,
     tab_drag_id: DragId,
-    auto_scroll_speed: Option<f32>
+    auto_scroll_speed: Option<i16>
 }
 
 impl App {
@@ -2800,7 +2800,7 @@ impl Application for App {
             }
             Message::ScrollTab(scroll_speed) => {
                 let entity = self.tab_model.active();
-                return self.update(Message::TabMessage(Some(entity), tab::Message::ScrollTab(scroll_speed)));
+                return self.update(Message::TabMessage(Some(entity), tab::Message::ScrollTab((scroll_speed as f32) / 10.0)));
             }
             Message::SearchActivate => {
                 return if self.search_get().is_none() {
@@ -2940,7 +2940,15 @@ impl Application for App {
                             commands.push(self.update_config());
                         }
                         tab::Command::AutoScroll(scroll_speed) => {
-                            self.auto_scroll_speed = scroll_speed;
+                            // converting an f32 to an i16 here by multiplying by 10 and casting to i16
+                            // further resolution isn't necessary
+                            if let Some(scroll_speed_float) = scroll_speed {
+                                self.auto_scroll_speed = Some((scroll_speed_float * 10.0) as i16);
+                            }
+                            else {
+                                self.auto_scroll_speed = None;
+                            }
+
                         }
                         tab::Command::ChangeLocation(tab_title, tab_path, selection_paths) => {
                             self.activate_nav_model_location(&tab_path);
@@ -4727,8 +4735,8 @@ impl Application for App {
 
         if let Some(scroll_speed) = self.auto_scroll_speed {
             subscriptions.push(
-                iced::time::every(time::Duration::from_millis(10))
-                    .map(move |_| Message::ScrollTab(scroll_speed))
+                iced::time::every(time::Duration::from_millis(10)).with(scroll_speed)
+                    .map(|(scroll_speed, _)| Message::ScrollTab(scroll_speed))
             );
         }
 
