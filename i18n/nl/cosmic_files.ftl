@@ -104,9 +104,22 @@ open-with = Openen met
 owner = Eigenaar
 group = Groep
 other = Anderen
-read = Lezen
-write = Schrijven
-execute = Uitvoeren
+### Mode 0
+none = Geen
+### Mode 1 (unusual)
+execute-only = Alleen uitvoerbaar
+### Mode 2 (unusual)
+write-only = Alleen schrijfbaar
+### Mode 3 (unusual)
+write-execute = Schrijf- en uitvoerbaar
+### Mode 4
+read-only = Alleen leesbaar
+### Mode 5
+read-execute = Lees- en uitvoerbaar
+### Mode 6
+read-write = Lees- en schrijfbaar
+### Mode 7
+read-write-execute = Lees-, schrijf- en uitvoerbaar
 
 # Context Pages
 
