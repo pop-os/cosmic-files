@@ -50,6 +50,7 @@ pub struct MouseArea<'a, Message> {
     on_enter: Option<Box<dyn OnEnterExit<'a, Message>>>,
     on_exit: Option<Box<dyn OnEnterExit<'a, Message>>>,
     show_drag_rect: bool,
+    cursor_offset: Option<Point>
 }
 
 impl<'a, Message> MouseArea<'a, Message> {
@@ -185,6 +186,11 @@ impl<'a, Message> MouseArea<'a, Message> {
         self
     }
 
+    pub fn cursor_offset(mut self, offset: Option<Point>) -> Self {
+        self.cursor_offset = offset;
+        self
+    }
+
     /// Sets the widget's unique identifier.
     #[must_use]
     pub fn with_id(mut self, id: Id) -> Self {
@@ -199,8 +205,8 @@ impl<'a, Message, F> OnMouseButton<'a, Message> for F where F: Fn(Option<Point>)
 pub trait OnDrag<'a, Message>: Fn(Option<Rectangle>) -> Message + 'a {}
 impl<'a, Message, F> OnDrag<'a, Message> for F where F: Fn(Option<Rectangle>) -> Message + 'a {}
 
-pub trait OnResize<'a, Message>: Fn(Size) -> Message + 'a {}
-impl<'a, Message, F> OnResize<'a, Message> for F where F: Fn(Size) -> Message + 'a {}
+pub trait OnResize<'a, Message>: Fn(Size, Rectangle) -> Message + 'a {}
+impl<'a, Message, F> OnResize<'a, Message> for F where F: Fn(Size, Rectangle) -> Message + 'a {}
 
 pub trait OnScroll<'a, Message>: Fn(mouse::ScrollDelta, Modifiers) -> Option<Message> + 'a {}
 impl<'a, Message, F> OnScroll<'a, Message> for F where
@@ -215,6 +221,8 @@ impl<'a, Message, F> OnEnterExit<'a, Message> for F where F: Fn() -> Message + '
 #[derive(Default)]
 struct State {
     last_position: Option<Point>,
+    last_virtual_position: Option<Point>,
+    last_in_bounds_position: Option<Point>,
     drag_initiated: Option<Point>,
     modifiers: Modifiers,
     prev_click: Option<(mouse::Click, Instant)>,
@@ -224,7 +232,7 @@ struct State {
 impl State {
     fn drag_rect(&self, cursor: mouse::Cursor) -> Option<Rectangle> {
         if let Some(drag_source) = self.drag_initiated {
-            if let Some(position) = cursor.position() {
+            if let Some(position) = cursor.position().or(self.last_virtual_position) {
                 if position.distance(drag_source) > 1.0 {
                     let min_x = drag_source.x.min(position.x);
                     let max_x = drag_source.x.max(position.x);
@@ -292,6 +300,7 @@ impl<'a, Message> MouseArea<'a, Message> {
             on_exit: None,
             on_scroll: None,
             show_drag_rect: false,
+            cursor_offset: None
         }
     }
 }
@@ -374,6 +383,7 @@ where
             cursor,
             shell,
             tree.state.downcast_mut::<State>(),
+            viewport,
         )
     }
 
@@ -493,6 +503,7 @@ fn update<Message: Clone>(
     cursor: mouse::Cursor,
     shell: &mut Shell<'_, Message>,
     state: &mut State,
+    viewport: &Rectangle
 ) -> event::Status {
     let layout_bounds = layout.bounds();
 
@@ -500,7 +511,7 @@ fn update<Message: Clone>(
         let size = layout_bounds.size();
         if state.size != Some(size) {
             state.size = Some(size);
-            shell.publish(message(size));
+            shell.publish(message(size, *viewport));
         }
     }
 
@@ -520,6 +531,42 @@ fn update<Message: Clone>(
             _ => {}
         }
         state.last_position = position_in;
+
+        // if we have a cursor_offset, we need to calculate our "virtual" position
+        // (where we think the ABSOLUTE cursor is) - we'll take the last in bounds position and
+        // clamp it to the layout bounds
+        if let Some(offset) = widget.cursor_offset {
+            if let Some(in_bounds_pos) = state.last_in_bounds_position {
+                let mut new_virtual_pos = Point {
+                    x: in_bounds_pos.x + offset.x,
+                    y: in_bounds_pos.y + offset.y
+                };
+
+                // clamp to the viewport
+                new_virtual_pos.x = if new_virtual_pos.x > (layout_bounds.width + layout_bounds.x) {
+                    layout_bounds.width + layout_bounds.x
+                } else if new_virtual_pos.x < 0.0 {
+                    0.0
+                } else {
+                    new_virtual_pos.x
+                };
+
+                new_virtual_pos.y = if new_virtual_pos.y > (layout_bounds.height + layout_bounds.y) {
+                    layout_bounds.height + layout_bounds.y
+                } else if new_virtual_pos.y < 0.0 {
+                    0.0
+                } else {
+                    new_virtual_pos.y
+                };
+
+                state.last_virtual_position = Some(new_virtual_pos);
+            }
+        }
+
+        // set the last in bounds position to be the ABSOLUTE version of position_in
+        if position_in.is_some() {
+            state.last_in_bounds_position = cursor.position_over(layout_bounds);
+        }
     }
 
     if state.drag_initiated.is_none() && !cursor.is_over(layout_bounds) {

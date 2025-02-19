@@ -83,6 +83,8 @@ const MAX_SEARCH_RESULTS: usize = 200;
 //TODO: configurable thumbnail size?
 const THUMBNAIL_SIZE: u32 = (ICON_SIZE_GRID as u32) * (ICON_SCALE_MAX as u32);
 
+const DRAG_SCROLL_DISTANCE: f32 = 15.0;
+
 //TODO: adjust for locales?
 const DATE_TIME_FORMAT: &str = "%b %-d, %-Y, %-I:%M %p";
 const TIME_FORMAT: &str = "%-I:%M %p";
@@ -1098,6 +1100,7 @@ pub enum Command {
     Action(Action),
     AddNetworkDrive,
     AddToSidebar(PathBuf),
+    AutoScroll(Option<f32>),
     ChangeLocation(String, Location, Option<Vec<PathBuf>>),
     DropFiles(PathBuf, ClipboardPaste),
     EmptyTrash,
@@ -1121,6 +1124,8 @@ pub enum Message {
     Click(Option<usize>),
     DoubleClick(Option<usize>),
     ClickRelease(Option<usize>),
+    CursorMoved(Point),
+    MouseAreaResized(Size, Rectangle),
     DragEnd(Option<usize>),
     Config(TabConfig),
     ContextAction(Action),
@@ -1153,6 +1158,7 @@ pub enum Message {
     RightClick(Option<usize>),
     MiddleClick(usize),
     Scroll(Viewport),
+    ScrollTab(f32),
     ScrollToFocus,
     SearchContext(Location, SearchContextWrapper),
     SearchReady(bool),
@@ -1772,6 +1778,12 @@ pub struct Tab {
     selected_clicked: bool,
     last_right_click: Option<usize>,
     search_context: Option<SearchContext>,
+    global_cursor_position: Option<Point>,
+    current_drag_rect: Option<Rectangle>,
+    viewport_rect: Option<Rectangle>,
+    virtual_cursor_offset: Option<Point>,
+    last_scroll_position: Option<Point>,
+    last_scroll_offset: Option<Point>,
 }
 
 fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, String> {
@@ -1856,6 +1868,12 @@ impl Tab {
             selected_clicked: false,
             last_right_click: None,
             search_context: None,
+            global_cursor_position: None,
+            current_drag_rect: None,
+            viewport_rect: None,
+            virtual_cursor_offset: None,
+            last_scroll_position: None,
+            last_scroll_offset: None
         }
     }
 
@@ -2199,13 +2217,120 @@ impl Tab {
                     }
                 }
             }
+            Message::CursorMoved(pos) => {
+                self.global_cursor_position = Some(pos);
+
+                // we're currently dragging
+                if self.current_drag_rect.is_some() {
+                    if let Some(viewport) = self.viewport_rect {
+                        if !viewport.contains(pos) {
+                            if pos.y < viewport.y || pos.y > (viewport.y + viewport.height) {
+                                // if our mouse is above the scrollable viewport, we want to scroll up
+                                let drag_start_point = Point {
+                                    x: viewport.x,
+                                    y: viewport.y
+                                };
+                                // diff_y should be NEGATIVE here when close to y=0 (above the MouseArea)
+                                // and positive when below the viewport
+                                let diff_y = pos.y - drag_start_point.y;
+                                let scroll_y: f32 = if diff_y > 0.0 {
+                                    DRAG_SCROLL_DISTANCE
+                                } else if diff_y < 0.0 {
+                                    DRAG_SCROLL_DISTANCE * -1.0
+                                } else {
+                                    0.0
+                                };
+
+                                let mut new_offset = Point {
+                                    x: 0.0,
+                                    y: scroll_y
+                                };
+
+                                if let Some(virtual_cursor_offset) = self.virtual_cursor_offset {
+                                    new_offset = Point {
+                                        x: new_offset.x + virtual_cursor_offset.x,
+                                        y: new_offset.y + virtual_cursor_offset.y,
+                                    };
+                                }
+
+                                if let Some(last_scroll_position) = self.last_scroll_position {
+                                    new_offset.x = pos.x - last_scroll_position.x;
+                                }
+
+                                self.virtual_cursor_offset = Some(new_offset);
+                                self.last_scroll_offset = Some(new_offset);
+
+                                commands.push(Command::AutoScroll(Some(scroll_y)));
+                            }
+                            else {
+                                if let Some(last_scroll_offset) = self.last_scroll_offset {
+                                    if let Some(last_scroll_position) = self.last_scroll_position {
+                                        self.virtual_cursor_offset = Some(Point {
+                                            x: 0.0,
+                                            y: (pos.y - last_scroll_position.y + last_scroll_offset.y)
+                                        });
+                                    }
+
+                                }
+                                else {
+                                    if let Some(last_scroll_position) = self.last_scroll_position {
+                                        self.virtual_cursor_offset = Some(Point {
+                                            x: 0.0,
+                                            y: (pos.y - last_scroll_position.y)
+                                        });
+                                    }
+                                    else {
+                                        self.virtual_cursor_offset = Some(Point {
+                                            x: 0.0,
+                                            y: 0.0
+                                        });
+                                    }
+                                }
+
+                                commands.push(Command::AutoScroll(None));
+                            }
+                        }
+                        else {
+                            // reset our virtual cursor offset when we're back in bounds
+                            self.virtual_cursor_offset = None;
+                            self.last_scroll_position = Some(pos);
+                            self.last_scroll_offset = None;
+
+                            commands.push(Command::AutoScroll(None));
+                        }
+                    }
+                }
+            }
+            Message::MouseAreaResized(_size, viewport) => {
+                // if we have a scroll position, we want to subtract it from the viewport
+                // so that we don't desync when swapping
+                if let Some(scroll_pos) = self.scroll_opt {
+                    self.viewport_rect = Some(Rectangle {
+                        x: viewport.x - scroll_pos.x,
+                        y: viewport.y - scroll_pos.y,
+                        width: viewport.width,
+                        height: viewport.height
+                    });
+                }
+                else {
+                    self.viewport_rect = Some(viewport);
+                }
+
+            }
             Message::DragEnd(_) => {
                 self.clicked = None;
+                self.virtual_cursor_offset = None;
+                self.last_scroll_offset = None;
+                self.last_scroll_position = None;
+
+                self.current_drag_rect = None;
                 if let Some(ref mut items) = self.items_opt {
                     for item in items.iter_mut() {
                         item.overlaps_drag_rect = false;
                     }
                 }
+
+                commands.push(Command::AutoScroll(None));
             }
             Message::DoubleClick(click_i_opt) => {
                 if let Some(clicked_item) = self
@@ -2433,6 +2558,7 @@ impl Tab {
                 }
             }
             Message::Drag(rect_opt) => {
+                self.current_drag_rect = rect_opt;
                 if let Some(rect) = rect_opt {
                     self.context_menu = None;
                     self.location_context_menu_index = None;
@@ -2834,6 +2960,14 @@ impl Tab {
 
             Message::Scroll(viewport) => {
                 self.scroll_opt = Some(viewport.absolute_offset());
+            }
+            Message::ScrollTab(scroll_speed) => {
+                commands.push(Command::Iced(
+                    scrollable::scroll_by(self.scrollable_id.clone(), AbsoluteOffset {
+                        x: 0.0,
+                        y: scroll_speed
+                    }).into(),
+                ));
             }
             Message::ScrollToFocus => {
                 if let Some(offset) = self.select_focus_scroll() {
@@ -4104,6 +4238,8 @@ impl Tab {
                 .on_drag_end(|_| Message::DragEnd(None))
                 .show_drag_rect(true)
                 .on_release(|_| Message::ClickRelease(None))
+                .on_resize(Message::MouseAreaResized)
+                .cursor_offset(self.virtual_cursor_offset)
                 .into(),
             true,
         )
@@ -4434,6 +4570,8 @@ impl Tab {
             .on_drag_end(|_| Message::DragEnd(None))
             .show_drag_rect(true)
             .on_release(|_| Message::ClickRelease(None))
+            .on_resize(Message::MouseAreaResized)
+            .cursor_offset(self.virtual_cursor_offset)
             .into(),
             true,
         )
@@ -4497,7 +4635,7 @@ impl Tab {
             .on_press(move |_point_opt| Message::Click(None))
             .on_release(|_| Message::ClickRelease(None))
             //TODO: better way to keep focused item in view
-            .on_resize(|_| Message::ScrollToFocus)
+            .on_resize(|_, _| Message::ScrollToFocus)
             .on_back_press(move |_point_opt| Message::GoPrevious)
             .on_forward_press(move |_point_opt| Message::GoNext)
             .on_scroll(respond_to_scroll_direction);
