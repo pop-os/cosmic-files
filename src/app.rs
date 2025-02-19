@@ -18,6 +18,7 @@ use cosmic::{
     app::{self, context_drawer, message, Core, Task},
     cosmic_config, cosmic_theme, executor,
     iced::{
+        self,
         clipboard::dnd::DndAction,
         event,
         futures::{self, SinkExt},
@@ -332,6 +333,7 @@ pub enum Message {
     Rename(Option<Entity>),
     ReplaceResult(ReplaceResult),
     RestoreFromTrash(Option<Entity>),
+    ScrollTab(f32),
     SearchActivate,
     SearchClear,
     SearchInput(String),
@@ -550,6 +552,7 @@ pub struct App {
     tab_dnd_hover: Option<(Entity, Instant)>,
     nav_drag_id: DragId,
     tab_drag_id: DragId,
+    auto_scroll_speed: Option<f32>
 }
 
 impl App {
@@ -1628,6 +1631,7 @@ impl Application for App {
             tab_dnd_hover: None,
             nav_drag_id: DragId::new(),
             tab_drag_id: DragId::new(),
+            auto_scroll_speed: None,
         };
 
         let mut commands = vec![app.update_config()];
@@ -2794,6 +2798,10 @@ impl Application for App {
                     self.operation(Operation::Restore { items: trash_items });
                 }
             }
+            Message::ScrollTab(scroll_speed) => {
+                let entity = self.tab_model.active();
+                return self.update(Message::TabMessage(Some(entity), tab::Message::ScrollTab(scroll_speed)));
+            }
             Message::SearchActivate => {
                 return if self.search_get().is_none() {
                     self.search_set_active(Some(String::new()))
@@ -2930,6 +2938,9 @@ impl Application for App {
                             }
                             config_set!(favorites, favorites);
                             commands.push(self.update_config());
+                        }
+                        tab::Command::AutoScroll(scroll_speed) => {
+                            self.auto_scroll_speed = scroll_speed;
                         }
                         tab::Command::ChangeLocation(tab_title, tab_path, selection_paths) => {
                             self.activate_nav_model_location(&tab_path);
@@ -4713,6 +4724,13 @@ impl Application for App {
                 }),
             ),
         ];
+
+        if let Some(scroll_speed) = self.auto_scroll_speed {
+            subscriptions.push(
+                iced::time::every(time::Duration::from_millis(10))
+                    .map(move |_| Message::ScrollTab(scroll_speed))
+            );
+        }
 
         for (key, mounter) in MOUNTERS.iter() {
             subscriptions.push(

@@ -83,7 +83,8 @@ const MAX_SEARCH_RESULTS: usize = 200;
 //TODO: configurable thumbnail size?
 const THUMBNAIL_SIZE: u32 = (ICON_SIZE_GRID as u32) * (ICON_SCALE_MAX as u32);
 
-const DRAG_SCROLL_DISTANCE: u8 = 1;
+const DRAG_SCROLL_DISTANCE: f32 = 15.0;
+const DRAG_SCROLL_RATIO_MAXIMUM: f32 = 3.0;
 
 //TODO: adjust for locales?
 const DATE_TIME_FORMAT: &str = "%b %-d, %-Y, %-I:%M %p";
@@ -1100,6 +1101,7 @@ pub enum Command {
     Action(Action),
     AddNetworkDrive,
     AddToSidebar(PathBuf),
+    AutoScroll(Option<f32>),
     ChangeLocation(String, Location, Option<Vec<PathBuf>>),
     DropFiles(PathBuf, ClipboardPaste),
     EmptyTrash,
@@ -1157,6 +1159,7 @@ pub enum Message {
     RightClick(Option<usize>),
     MiddleClick(usize),
     Scroll(Viewport),
+    ScrollTab(f32),
     ScrollToFocus,
     SearchContext(Location, SearchContextWrapper),
     SearchReady(bool),
@@ -2231,17 +2234,36 @@ impl Tab {
                                 // diff_y should be NEGATIVE here when close to y=0 (above the MouseArea)
                                 // and positive when below the viewport
                                 let diff_y = pos.y - drag_start_point.y;
-                                let scroll_y: i8 = if diff_y > 0.0 {
-                                    DRAG_SCROLL_DISTANCE as i8
+                                let mut scroll_y: f32 = if diff_y > 0.0 {
+                                    DRAG_SCROLL_DISTANCE
                                 } else if diff_y < 0.0 {
-                                    DRAG_SCROLL_DISTANCE as i8 * -1
+                                    DRAG_SCROLL_DISTANCE * -1.0
                                 } else {
-                                    0
+                                    0.0
                                 };
+
+
+                                // estimate distance and use that to control speed
+                                // go up to 3x speed
+                                let quarter_height = viewport.height / 4.0;
+                                let cursor_y_distance = if diff_y > 0.0 {
+                                    pos.y - (viewport.y + viewport.height)
+                                } else if diff_y < 0.0 {
+                                    pos.y - viewport.y
+                                } else {
+                                    0.0
+                                }.abs();
+
+                                let mut speed_ratio = (cursor_y_distance / quarter_height) + 1.0;
+                                if speed_ratio > DRAG_SCROLL_RATIO_MAXIMUM {
+                                    speed_ratio = DRAG_SCROLL_RATIO_MAXIMUM;
+                                }
+
+                                scroll_y = scroll_y * speed_ratio;
 
                                 let mut new_offset = Point {
                                     x: 0.0,
-                                    y: scroll_y as f32
+                                    y: scroll_y
                                 };
 
                                 if let Some(virtual_cursor_offset) = self.virtual_cursor_offset {
@@ -2258,12 +2280,7 @@ impl Tab {
                                 self.virtual_cursor_offset = Some(new_offset);
                                 self.last_scroll_offset = Some(new_offset);
 
-                                commands.push(Command::Iced(
-                                    scrollable::scroll_by(self.scrollable_id.clone(), AbsoluteOffset {
-                                        x: 0.0,
-                                        y: scroll_y as f32
-                                    }).into(),
-                                ));
+                                commands.push(Command::AutoScroll(Some(scroll_y)));
                             }
                             else {
                                 if let Some(last_scroll_offset) = self.last_scroll_offset {
@@ -2288,8 +2305,9 @@ impl Tab {
                                             y: 0.0
                                         });
                                     }
-
                                 }
+
+                                commands.push(Command::AutoScroll(None));
                             }
                         }
                         else {
@@ -2297,6 +2315,8 @@ impl Tab {
                             self.virtual_cursor_offset = None;
                             self.last_scroll_position = Some(pos);
                             self.last_scroll_offset = None;
+
+                            commands.push(Command::AutoScroll(None));
                         }
                     }
                 }
@@ -2329,6 +2349,8 @@ impl Tab {
                         item.overlaps_drag_rect = false;
                     }
                 }
+
+                commands.push(Command::AutoScroll(None));
             }
             Message::DoubleClick(click_i_opt) => {
                 if let Some(clicked_item) = self
@@ -2958,6 +2980,14 @@ impl Tab {
 
             Message::Scroll(viewport) => {
                 self.scroll_opt = Some(viewport.absolute_offset());
+            }
+            Message::ScrollTab(scroll_speed) => {
+                commands.push(Command::Iced(
+                    scrollable::scroll_by(self.scrollable_id.clone(), AbsoluteOffset {
+                        x: 0.0,
+                        y: scroll_speed
+                    }).into(),
+                ));
             }
             Message::ScrollToFocus => {
                 if let Some(offset) = self.select_focus_scroll() {
