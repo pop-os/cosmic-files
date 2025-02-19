@@ -104,9 +104,22 @@ open-with = Otwórz za pomocą
 owner = Właściciel
 group = Grupa
 other = Inni
-read = Odczyt
-write = Zapis
-execute = Wykonywanie
+### Mode 0
+none = Brak
+### Mode 1 (unusual)
+execute-only = Tylko wykonywanie
+### Mode 2 (unusual)
+write-only = Tylko zapis
+### Mode 3 (unusual)
+write-execute = Zapis i wykonywanie
+### Mode 4
+read-only = Tylko odczyt
+### Mode 5
+read-execute = Odczyt i wykonywanie
+### Mode 6
+read-write = Odczyt i zapis
+### Mode 7
+read-write-execute = Odczyt, zapis i wykonywanie
 
 # Context Pages
 
