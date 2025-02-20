@@ -23,7 +23,6 @@ use cosmic::{
     widget::Id,
     Element, Renderer, Theme,
 };
-use cosmic::iced::window::RedrawRequest;
 use crate::tab::DOUBLE_CLICK_DURATION;
 
 /// Emit messages on mouse events.
