@@ -23,7 +23,6 @@ use cosmic::{
     widget::Id,
     Element, Renderer, Theme,
 };
-
 use crate::tab::DOUBLE_CLICK_DURATION;
 
 /// Emit messages on mouse events.
@@ -223,6 +222,7 @@ struct State {
     last_position: Option<Point>,
     last_virtual_position: Option<Point>,
     last_in_bounds_position: Option<Point>,
+    last_cursor_offset: Option<Point>,
     drag_initiated: Option<Point>,
     modifiers: Modifiers,
     prev_click: Option<(mouse::Click, Instant)>,
@@ -515,23 +515,31 @@ fn update<Message: Clone>(
         }
     }
 
-    if let Event::Mouse(mouse::Event::CursorMoved { .. }) = event {
-        let position_in = cursor.position_in(layout_bounds);
-        match (position_in, state.last_position) {
-            (None, Some(_)) => {
-                if let Some(message) = widget.on_exit.as_ref() {
-                    shell.publish(message())
-                }
+    // check if offset differs to calculate virtual position
+    let mut need_to_recalculate = false;
+    match (state.last_cursor_offset, widget.cursor_offset) {
+        // check if offset has changed between updates
+        (Some(last_cursor_offset), Some(cursor_offset)) => {
+            if last_cursor_offset != cursor_offset {
+                state.last_cursor_offset = Some(cursor_offset);
+                need_to_recalculate = true;
             }
-            (Some(_), None) => {
-                if let Some(message) = widget.on_enter.as_ref() {
-                    shell.publish(message())
-                }
-            }
-            _ => {}
-        }
-        state.last_position = position_in;
+        },
 
+        // we've started moving out of bounds
+        (None, Some(cursor_offset)) => {
+            state.last_cursor_offset = Some(cursor_offset);
+            need_to_recalculate = true;
+        },
+
+        // we've moved inbounds
+        (Some(_), None) => {
+            state.last_cursor_offset = None;
+        }
+        _ => {}
+    }
+
+    if need_to_recalculate {
         // if we have a cursor_offset, we need to calculate our "virtual" position
         // (where we think the ABSOLUTE cursor is) - we'll take the last in bounds position and
         // clamp it to the layout bounds
@@ -562,6 +570,25 @@ fn update<Message: Clone>(
                 state.last_virtual_position = Some(new_virtual_pos);
             }
         }
+    }
+
+
+    if let Event::Mouse(mouse::Event::CursorMoved { .. }) = event {
+        let position_in = cursor.position_in(layout_bounds);
+        match (position_in, state.last_position) {
+            (None, Some(_)) => {
+                if let Some(message) = widget.on_exit.as_ref() {
+                    shell.publish(message())
+                }
+            }
+            (Some(_), None) => {
+                if let Some(message) = widget.on_enter.as_ref() {
+                    shell.publish(message())
+                }
+            }
+            _ => {}
+        }
+        state.last_position = position_in;
 
         // set the last in bounds position to be the ABSOLUTE version of position_in
         if position_in.is_some() {

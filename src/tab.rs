@@ -2241,24 +2241,7 @@ impl Tab {
                                     0.0
                                 };
 
-                                let mut new_offset = Point {
-                                    x: 0.0,
-                                    y: scroll_y
-                                };
 
-                                if let Some(virtual_cursor_offset) = self.virtual_cursor_offset {
-                                    new_offset = Point {
-                                        x: new_offset.x + virtual_cursor_offset.x,
-                                        y: new_offset.y + virtual_cursor_offset.y,
-                                    };
-                                }
-
-                                if let Some(last_scroll_position) = self.last_scroll_position {
-                                    new_offset.x = pos.x - last_scroll_position.x;
-                                }
-
-                                self.virtual_cursor_offset = Some(new_offset);
-                                self.last_scroll_offset = Some(new_offset);
 
                                 commands.push(Command::AutoScroll(Some(scroll_y)));
                             }
@@ -2962,6 +2945,28 @@ impl Tab {
                 self.scroll_opt = Some(viewport.absolute_offset());
             }
             Message::ScrollTab(scroll_speed) => {
+                let mut new_offset = Point {
+                    x: 0.0,
+                    y: scroll_speed
+                };
+
+                if let Some(virtual_cursor_offset) = self.virtual_cursor_offset {
+                    new_offset = Point {
+                        x: new_offset.x + virtual_cursor_offset.x,
+                        y: new_offset.y + virtual_cursor_offset.y,
+                    };
+                }
+
+                if let Some(last_scroll_position) = self.last_scroll_position {
+                    if let Some(global_cursor_position) = self.global_cursor_position {
+                        new_offset.x = global_cursor_position.x - last_scroll_position.x;
+                    }
+
+                }
+
+                self.virtual_cursor_offset = Some(new_offset);
+                self.last_scroll_offset = Some(new_offset);
+
                 commands.push(Command::Iced(
                     scrollable::scroll_by(self.scrollable_id.clone(), AbsoluteOffset {
                         x: 0.0,
