@@ -1,6 +1,7 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
+use cosmic::iced::mouse::Event::CursorMoved;
 #[cfg(feature = "wayland")]
 use cosmic::iced::{
     event::wayland::{Event as WaylandEvent, OutputEvent, OverlapNotifyEvent},
@@ -55,7 +56,6 @@ use std::{
     sync::{Arc, Mutex},
     time::{self, Instant},
 };
-use cosmic::iced::mouse::Event::CursorMoved;
 use tokio::sync::mpsc;
 use trash::TrashItem;
 #[cfg(feature = "wayland")]
@@ -552,7 +552,7 @@ pub struct App {
     tab_dnd_hover: Option<(Entity, Instant)>,
     nav_drag_id: DragId,
     tab_drag_id: DragId,
-    auto_scroll_speed: Option<i16>
+    auto_scroll_speed: Option<i16>,
 }
 
 impl App {
@@ -1458,9 +1458,14 @@ impl App {
 
         let mut children = Vec::with_capacity(1);
         let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+        let military_time = self.config.tab.military_time;
         match kind {
             PreviewKind::Custom(PreviewItem(item)) => {
-                children.push(item.preview_view(Some(&self.mime_app_cache), IconSizes::default()));
+                children.push(item.preview_view(
+                    Some(&self.mime_app_cache),
+                    IconSizes::default(),
+                    military_time,
+                ));
             }
             PreviewKind::Location(location) => {
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
@@ -1470,6 +1475,7 @@ impl App {
                                 children.push(item.preview_view(
                                     Some(&self.mime_app_cache),
                                     tab.config.icon_sizes,
+                                    military_time,
                                 ));
                                 // Only show one property view to avoid issues like hangs when generating
                                 // preview images on thousands of files
@@ -1487,6 +1493,7 @@ impl App {
                                 children.push(item.preview_view(
                                     Some(&self.mime_app_cache),
                                     tab.config.icon_sizes,
+                                    military_time,
                                 ));
                                 // Only show one property view to avoid issues like hangs when generating
                                 // preview images on thousands of files
@@ -1498,6 +1505,7 @@ impl App {
                                 children.push(item.preview_view(
                                     Some(&self.mime_app_cache),
                                     tab.config.icon_sizes,
+                                    military_time,
                                 ));
                             }
                         }
@@ -1934,7 +1942,10 @@ impl Application for App {
             }
             Message::CursorMoved(pos) => {
                 let entity = self.tab_model.active();
-                return self.update(Message::TabMessage(Some(entity), tab::Message::CursorMoved(pos)));
+                return self.update(Message::TabMessage(
+                    Some(entity),
+                    tab::Message::CursorMoved(pos),
+                ));
             }
             Message::Cut(entity_opt) => {
                 let paths = self.selected_paths(entity_opt);
@@ -2800,7 +2811,10 @@ impl Application for App {
             }
             Message::ScrollTab(scroll_speed) => {
                 let entity = self.tab_model.active();
-                return self.update(Message::TabMessage(Some(entity), tab::Message::ScrollTab((scroll_speed as f32) / 10.0)));
+                return self.update(Message::TabMessage(
+                    Some(entity),
+                    tab::Message::ScrollTab((scroll_speed as f32) / 10.0),
+                ));
             }
             Message::SearchActivate => {
                 return if self.search_get().is_none() {
@@ -2944,11 +2958,9 @@ impl Application for App {
                             // further resolution isn't necessary
                             if let Some(scroll_speed_float) = scroll_speed {
                                 self.auto_scroll_speed = Some((scroll_speed_float * 10.0) as i16);
-                            }
-                            else {
+                            } else {
                                 self.auto_scroll_speed = None;
                             }
-
                         }
                         tab::Command::ChangeLocation(tab_title, tab_path, selection_paths) => {
                             self.activate_nav_model_location(&tab_path);
@@ -4160,15 +4172,16 @@ impl Application for App {
                 apply_to_all,
                 tx,
             } => {
+                let military_time = self.config.tab.military_time;
                 let dialog = widget::dialog()
                     .title(fl!("replace-title", filename = to.name.as_str()))
                     .body(fl!("replace-warning-operation"))
                     .control(
-                        to.replace_view(fl!("original-file"), IconSizes::default())
+                        to.replace_view(fl!("original-file"), IconSizes::default(), military_time)
                             .map(|x| Message::TabMessage(None, x)),
                     )
                     .control(
-                        from.replace_view(fl!("replace-with"), IconSizes::default())
+                        from.replace_view(fl!("replace-with"), IconSizes::default(), military_time)
                             .map(|x| Message::TabMessage(None, x)),
                     )
                     .primary_action(widget::button::suggested(fl!("replace")).on_press(
@@ -4561,7 +4574,7 @@ impl Application for App {
                         }
                         _ => None,
                     }
-                },
+                }
                 Event::Mouse(CursorMoved { position: pos }) => Some(Message::CursorMoved(pos)),
                 _ => None,
             }),
@@ -4735,8 +4748,9 @@ impl Application for App {
 
         if let Some(scroll_speed) = self.auto_scroll_speed {
             subscriptions.push(
-                iced::time::every(time::Duration::from_millis(10)).with(scroll_speed)
-                    .map(|(scroll_speed, _)| Message::ScrollTab(scroll_speed))
+                iced::time::every(time::Duration::from_millis(10))
+                    .with(scroll_speed)
+                    .map(|(scroll_speed, _)| Message::ScrollTab(scroll_speed)),
             );
         }
 
