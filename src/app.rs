@@ -4292,13 +4292,13 @@ impl Application for App {
                     "operations-running-finished",
                     running = running,
                     finished = finished,
-                    percent = (total_progress as i32)
+                    percent = ((total_progress * 100.0) as i32)
                 );
             } else {
                 title = fl!(
                     "operations-running",
                     running = running,
-                    percent = (total_progress as i32)
+                    percent = ((total_progress * 100.0) as i32)
                 );
             }
         }
