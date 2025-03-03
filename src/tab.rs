@@ -398,7 +398,7 @@ impl FormatTime {
             .ok()
             .and_then(|now_secs| now_secs.checked_sub(secs))
             .map(Duration::from_secs)?;
-        now.checked_add(filetime_diff).map(|time| Self {
+        now.checked_sub(filetime_diff).map(|time| Self {
             time,
             military_time,
         })
