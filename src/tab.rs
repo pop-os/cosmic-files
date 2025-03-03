@@ -1127,12 +1127,12 @@ pub enum Command {
     AddToSidebar(PathBuf),
     AutoScroll(Option<f32>),
     ChangeLocation(String, Location, Option<Vec<PathBuf>>),
+    Delete(Vec<PathBuf>),
     DropFiles(PathBuf, ClipboardPaste),
     EmptyTrash,
     #[cfg(feature = "desktop")]
     ExecEntryAction(cosmic::desktop::DesktopEntryData, usize),
     Iced(TaskWrapper),
-    MoveToTrash(Vec<PathBuf>),
     OpenFile(PathBuf),
     OpenInNewTab(PathBuf),
     OpenInNewWindow(PathBuf),
@@ -3188,7 +3188,7 @@ impl Tab {
                         commands.push(Command::DropFiles(to, from))
                     }
                     Location::Trash if matches!(from.kind, ClipboardKind::Cut) => {
-                        commands.push(Command::MoveToTrash(from.paths))
+                        commands.push(Command::Delete(from.paths))
                     }
                     _ => {
                         log::warn!("{:?} to {:?} is not supported.", from.kind, to);

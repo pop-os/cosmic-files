@@ -460,6 +460,10 @@ pub enum Operation {
     Delete {
         paths: Vec<PathBuf>,
     },
+    /// Delete a path from the trash
+    DeleteTrash {
+        items: Vec<trash::TrashItem>,
+    },
     /// Empty the trash
     EmptyTrash,
     /// Uncompress files
@@ -550,6 +554,9 @@ impl Operation {
                 to = fl!("trash"),
                 progress = progress()
             ),
+            Self::DeleteTrash { items } => {
+                fl!("deleting", items = items.len(), progress = progress())
+            }
             Self::EmptyTrash => fl!("emptying-trash", progress = progress()),
             Self::Extract {
                 paths,
@@ -609,6 +616,7 @@ impl Operation {
                 from = paths_parent_name(paths),
                 to = fl!("trash")
             ),
+            Self::DeleteTrash { items } => fl!("deleted", items = items.len()),
             Self::EmptyTrash => fl!("emptied-trash"),
             Self::Extract {
                 paths,
@@ -650,6 +658,7 @@ impl Operation {
             Self::Compress { .. }
             | Self::Copy { .. }
             | Self::Delete { .. }
+            | Self::DeleteTrash { .. }
             | Self::EmptyTrash
             | Self::Extract { .. }
             | Self::Move { .. }
@@ -843,6 +852,34 @@ impl Operation {
                         .map_err(OperationError::from_str)?
                         .map_err(OperationError::from_str)?;
                     //TODO: items_opt allows for easy restore
+                }
+                Ok(OperationSelection::default())
+            }
+            Self::DeleteTrash { items } => {
+                #[cfg(any(
+                    target_os = "windows",
+                    all(
+                        unix,
+                        not(target_os = "macos"),
+                        not(target_os = "ios"),
+                        not(target_os = "android")
+                    )
+                ))]
+                {
+                    tokio::task::spawn_blocking(move || -> Result<(), OperationError> {
+                        let count = items.len();
+                        for (i, item) in items.into_iter().enumerate() {
+                            controller.check().map_err(OperationError::from_str)?;
+
+                            controller.set_progress(i as f32 / count as f32);
+
+                            trash::os_limited::purge_all([item])
+                                .map_err(OperationError::from_str)?;
+                        }
+                        Ok(())
+                    })
+                    .await
+                    .map_err(OperationError::from_str)??;
                 }
                 Ok(OperationSelection::default())
             }

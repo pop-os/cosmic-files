@@ -181,6 +181,14 @@ copied = Copied {$items} {$items ->
         [one] item
         *[other] items
     } from "{$from}" to "{$to}"
+deleting = Deleting {$items} {$items ->
+        [one] item
+        *[other] items
+    } from {trash} ({$progress})...
+deleted = Deleted {$items} {$items ->
+        [one] item
+        *[other] items
+    } from {trash}
 emptying-trash = Emptying {trash} ({$progress})...
 emptied-trash = Emptied {trash}
 extracting = Extracting {$items} {$items ->
@@ -240,6 +248,7 @@ light = Light
 # Context menu
 add-to-sidebar = Add to sidebar
 compress = Compress
+delete-permanently = Delete permanently
 extract-here = Extract
 new-file = New file...
 new-folder = New folder...

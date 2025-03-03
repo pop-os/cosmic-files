@@ -100,6 +100,7 @@ pub enum Action {
     CosmicSettingsDisplays,
     CosmicSettingsWallpaper,
     DesktopViewOptions,
+    Delete,
     EditHistory,
     EditLocation,
     EmptyTrash,
@@ -114,7 +115,6 @@ pub enum Action {
     ItemRight,
     ItemUp,
     LocationUp,
-    MoveToTrash,
     NewFile,
     NewFolder,
     Open,
@@ -161,6 +161,7 @@ impl Action {
             Action::CosmicSettingsAppearance => Message::CosmicSettings("appearance"),
             Action::CosmicSettingsDisplays => Message::CosmicSettings("displays"),
             Action::CosmicSettingsWallpaper => Message::CosmicSettings("wallpaper"),
+            Action::Delete => Message::Delete(entity_opt),
             Action::DesktopViewOptions => Message::DesktopViewOptions,
             Action::EditHistory => Message::ToggleContextPage(ContextPage::EditHistory),
             Action::EditLocation => {
@@ -180,7 +181,6 @@ impl Action {
             Action::ItemRight => Message::TabMessage(entity_opt, tab::Message::ItemRight),
             Action::ItemUp => Message::TabMessage(entity_opt, tab::Message::ItemUp),
             Action::LocationUp => Message::TabMessage(entity_opt, tab::Message::LocationUp),
-            Action::MoveToTrash => Message::MoveToTrash(entity_opt),
             Action::NewFile => Message::NewItem(entity_opt, false),
             Action::NewFolder => Message::NewItem(entity_opt, true),
             Action::Open => Message::TabMessage(entity_opt, tab::Message::Open(None)),
@@ -281,6 +281,7 @@ pub enum Message {
     CosmicSettings(&'static str),
     CursorMoved(Point),
     Cut(Option<Entity>),
+    Delete(Option<Entity>),
     DesktopConfig(DesktopConfig),
     DesktopViewOptions,
     DialogCancel,
@@ -295,7 +296,6 @@ pub enum Message {
     LaunchUrl(String),
     MaybeExit,
     Modifiers(Modifiers),
-    MoveToTrash(Option<Entity>),
     MounterItems(MounterKey, MounterItems),
     MountResult(MounterKey, MounterItem, Result<bool, String>),
     NavBarClose(Entity),
@@ -1966,6 +1966,39 @@ impl Application for App {
                     }
                 }
             }
+            Message::Delete(entity_opt) => {
+                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+                    match &tab.location {
+                        Location::Trash => {
+                            if let Some(items) = tab.items_opt() {
+                                let mut trash_items = Vec::new();
+                                for item in items.iter() {
+                                    if item.selected {
+                                        match &item.metadata {
+                                            ItemMetadata::Trash { entry, .. } => {
+                                                trash_items.push(entry.clone());
+                                            }
+                                            _ => {
+                                                //TODO: error on trying to permanently delete non-trash file?
+                                            }
+                                        }
+                                    }
+                                }
+                                if !trash_items.is_empty() {
+                                    self.operation(Operation::DeleteTrash { items: trash_items });
+                                }
+                            }
+                        }
+                        _ => {
+                            let paths = dbg!(self.selected_paths(entity_opt));
+                            if !paths.is_empty() {
+                                self.operation(Operation::Delete { paths });
+                            }
+                        }
+                    }
+                }
+            }
             Message::DesktopConfig(config) => {
                 if config != self.config.desktop {
                     config_set!(desktop, config);
@@ -2176,12 +2209,6 @@ impl Application for App {
             },
             Message::Modifiers(modifiers) => {
                 self.modifiers = modifiers;
-            }
-            Message::MoveToTrash(entity_opt) => {
-                let paths = self.selected_paths(entity_opt);
-                if !paths.is_empty() {
-                    self.operation(Operation::Delete { paths });
-                }
             }
             Message::MounterItems(mounter_key, mounter_items) => {
                 // Check for unmounted folders
@@ -2972,6 +2999,9 @@ impl Application for App {
                                 self.update_tab(entity, tab_path, selection_paths),
                             ]));
                         }
+                        tab::Command::Delete(paths) => {
+                            self.operation(Operation::Delete { paths });
+                        }
                         tab::Command::DropFiles(to, from) => {
                             commands.push(self.update(Message::PasteContents(to, from)));
                         }
@@ -2988,9 +3018,6 @@ impl Application for App {
                                     message::app(Message::TabMessage(Some(entity), x))
                                 }),
                             );
-                        }
-                        tab::Command::MoveToTrash(paths) => {
-                            self.operation(Operation::Delete { paths });
                         }
                         tab::Command::OpenFile(path) => self.open_file(&path),
                         tab::Command::OpenInNewTab(path) => {
