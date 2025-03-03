@@ -482,7 +482,11 @@ impl App {
                 if let Some(items) = self.tab.items_opt() {
                     for item in items.iter() {
                         if item.location_opt.as_ref() == Some(location) {
-                            children.push(item.preview_view(None, self.tab.config.icon_sizes, military_time));
+                            children.push(item.preview_view(
+                                None,
+                                self.tab.config.icon_sizes,
+                                military_time,
+                            ));
                             // Only show one property view to avoid issues like hangs when generating
                             // preview images on thousands of files
                             break;
@@ -494,7 +498,11 @@ impl App {
                 if let Some(items) = self.tab.items_opt() {
                     for item in items.iter() {
                         if item.selected {
-                            children.push(item.preview_view(None, self.tab.config.icon_sizes, military_time));
+                            children.push(item.preview_view(
+                                None,
+                                self.tab.config.icon_sizes,
+                                military_time,
+                            ));
                             // Only show one property view to avoid issues like hangs when generating
                             // preview images on thousands of files
                             break;
@@ -502,7 +510,11 @@ impl App {
                     }
                     if children.is_empty() {
                         if let Some(item) = &self.tab.parent_item_opt {
-                            children.push(item.preview_view(None, self.tab.config.icon_sizes, military_time));
+                            children.push(item.preview_view(
+                                None,
+                                self.tab.config.icon_sizes,
+                                military_time,
+                            ));
                         }
                     }
                 }

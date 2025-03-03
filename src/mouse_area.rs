@@ -2,6 +2,7 @@
 
 use std::time::Instant;
 
+use crate::tab::DOUBLE_CLICK_DURATION;
 use cosmic::{
     iced_core::{
         border::Border,
@@ -23,7 +24,6 @@ use cosmic::{
     widget::Id,
     Element, Renderer, Theme,
 };
-use crate::tab::DOUBLE_CLICK_DURATION;
 
 /// Emit messages on mouse events.
 #[allow(missing_debug_implementations)]
@@ -49,7 +49,7 @@ pub struct MouseArea<'a, Message> {
     on_enter: Option<Box<dyn OnEnterExit<'a, Message>>>,
     on_exit: Option<Box<dyn OnEnterExit<'a, Message>>>,
     show_drag_rect: bool,
-    cursor_offset: Option<Point>
+    cursor_offset: Option<Point>,
 }
 
 impl<'a, Message> MouseArea<'a, Message> {
@@ -300,7 +300,7 @@ impl<'a, Message> MouseArea<'a, Message> {
             on_exit: None,
             on_scroll: None,
             show_drag_rect: false,
-            cursor_offset: None
+            cursor_offset: None,
         }
     }
 }
@@ -503,7 +503,7 @@ fn update<Message: Clone>(
     cursor: mouse::Cursor,
     shell: &mut Shell<'_, Message>,
     state: &mut State,
-    viewport: &Rectangle
+    viewport: &Rectangle,
 ) -> event::Status {
     let layout_bounds = layout.bounds();
 
@@ -524,13 +524,13 @@ fn update<Message: Clone>(
                 state.last_cursor_offset = Some(cursor_offset);
                 need_to_recalculate = true;
             }
-        },
+        }
 
         // we've started moving out of bounds
         (None, Some(cursor_offset)) => {
             state.last_cursor_offset = Some(cursor_offset);
             need_to_recalculate = true;
-        },
+        }
 
         // we've moved inbounds
         (Some(_), None) => {
@@ -547,7 +547,7 @@ fn update<Message: Clone>(
             if let Some(in_bounds_pos) = state.last_in_bounds_position {
                 let mut new_virtual_pos = Point {
                     x: in_bounds_pos.x + offset.x,
-                    y: in_bounds_pos.y + offset.y
+                    y: in_bounds_pos.y + offset.y,
                 };
 
                 // clamp to the viewport
@@ -559,7 +559,8 @@ fn update<Message: Clone>(
                     new_virtual_pos.x
                 };
 
-                new_virtual_pos.y = if new_virtual_pos.y > (layout_bounds.height + layout_bounds.y) {
+                new_virtual_pos.y = if new_virtual_pos.y > (layout_bounds.height + layout_bounds.y)
+                {
                     layout_bounds.height + layout_bounds.y
                 } else if new_virtual_pos.y < 0.0 {
                     0.0
@@ -571,7 +572,6 @@ fn update<Message: Clone>(
             }
         }
     }
-
 
     if let Event::Mouse(mouse::Event::CursorMoved { .. }) = event {
         let position_in = cursor.position_in(layout_bounds);
