@@ -2704,7 +2704,7 @@ impl Application for App {
                 match self.mode {
                     Mode::App => {
                         let show_details = !self.config.show_details;
-                        self.context_page = ContextPage::Preview(None, PreviewKind::Selected);
+                        self.context_page = ContextPage::Preview(entity_opt, PreviewKind::Selected);
                         self.core.window.show_context = show_details;
                         return cosmic::task::message(Message::SetShowDetails(show_details));
                     }
