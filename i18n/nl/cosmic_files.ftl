@@ -181,6 +181,14 @@ copied = {$items} {$items ->
         [one] bestand
         *[other] bestanden
     } gekopieerd van '$from}' naar '{$to}'
+deleting = {$items} {$items ->
+        [one] bestand wordt
+        *[other] bestanden worden
+    } verwijderd uit {trash} ({$progress})...
+deleted = {$items} {$items ->
+        [one] bestand
+        *[other] bestanden
+    } verwijderd uit {trash}
 emptying-trash = {trash} wordt geleegd ({$progress})...
 emptied-trash = {trash} geleegd
 extracting = {$items} {$items -> 
@@ -240,6 +248,7 @@ light = Licht
 # Context menu
 add-to-sidebar = Aan de zijbalk toevoegen
 compress = Comprimeren
+delete-permanently = Permanent verwijderen
 extract-here = Uitpakken
 new-file = Nieuw bestand...
 new-folder = Nieuwe map...
