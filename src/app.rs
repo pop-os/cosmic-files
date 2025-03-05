@@ -61,7 +61,6 @@ use trash::TrashItem;
 #[cfg(feature = "wayland")]
 use wayland_client::{protocol::wl_output::WlOutput, Proxy};
 
-use crate::operation::{OperationError, OperationErrorType};
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{AppTheme, Config, DesktopConfig, Favorite, IconSizes, TabConfig},
@@ -73,6 +72,10 @@ use crate::{
     operation::{Controller, Operation, OperationSelection, ReplaceResult},
     spawn_detached::spawn_detached,
     tab::{self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION},
+};
+use crate::{
+    config::NavBarSize,
+    operation::{OperationError, OperationErrorType},
 };
 
 #[derive(Clone, Debug)]
@@ -274,6 +277,7 @@ impl MenuAction for NavMenuAction {
 pub enum Message {
     AddToSidebar(Option<Entity>),
     AppTheme(AppTheme),
+    NavBarSize(NavBarSize),
     CloseToast(widget::ToastId),
     Compress(Option<Entity>),
     Config(Config),
@@ -520,6 +524,7 @@ pub struct App {
     config: Config,
     mode: Mode,
     app_themes: Vec<String>,
+    bar_sizes: Vec<String>,
     context_page: ContextPage,
     dialog_pages: VecDeque<DialogPage>,
     dialog_text_input: widget::Id,
@@ -1544,6 +1549,24 @@ impl App {
                     },
                 ))
             })
+            .add({
+                let nav_bar_size_selected = match self.config.nav_bar_size {
+                    NavBarSize::Small => 0,
+                    NavBarSize::Medium => 1,
+                    NavBarSize::Large => 2,
+                };
+                widget::settings::item::builder(fl!("navbar-size")).control(widget::dropdown(
+                    &self.bar_sizes,
+                    Some(nav_bar_size_selected),
+                    move |index| {
+                        Message::NavBarSize(match index {
+                            0 => NavBarSize::Small,
+                            1 => NavBarSize::Medium,
+                            _ => NavBarSize::Large,
+                        })
+                    },
+                ))
+            })
             .into()])
         .into()
     }
@@ -1590,6 +1613,7 @@ impl Application for App {
         }
 
         let app_themes = vec![fl!("match-desktop"), fl!("dark"), fl!("light")];
+        let bar_sizes = vec![fl!("small"), fl!("medium"), fl!("large")];
 
         let key_binds = key_binds(&match flags.mode {
             Mode::App => tab::Mode::App,
@@ -1607,6 +1631,7 @@ impl Application for App {
             config: flags.config,
             mode: flags.mode,
             app_themes,
+            bar_sizes,
             context_page: ContextPage::Preview(None, PreviewKind::Selected),
             dialog_pages: VecDeque::new(),
             dialog_text_input: widget::Id::unique(),
@@ -1701,7 +1726,7 @@ impl Application for App {
         .into_container();
 
         if !self.core().is_condensed() {
-            nav = nav.max_width(280);
+            nav = nav.max_width(self.config.nav_bar_size.size());
         }
 
         Some(Element::from(
@@ -1905,6 +1930,10 @@ impl Application for App {
             }
             Message::AppTheme(app_theme) => {
                 config_set!(app_theme, app_theme);
+                return self.update_config();
+            }
+            Message::NavBarSize(nav_bar_size) => {
+                config_set!(nav_bar_size, nav_bar_size);
                 return self.update_config();
             }
             Message::Compress(entity_opt) => {
