@@ -16,7 +16,7 @@ desktop-view-options = Asztali nézet beállításai...
 show-on-desktop = Megjelenítés az asztalon
 desktop-folder-content = Asztal mappa tartalma
 mounted-drives = Csatolt meghajtók
-trash-folder-icon = Kuka ikon
+trash-folder-icon = A Kuka ikonja
 icon-size-and-spacing = Ikonméret és távolság
 icon-size = Ikonméret
 grid-spacing = Rácsköz
@@ -29,7 +29,7 @@ size = Méret
 
 # Progress footer
 details = Részletek
-dismiss = Üzenet eltüntetése
+dismiss = Üzenet elvetése
 operations-running = {$running} művelet fut ({$percent}%)...
 operations-running-finished = {$running} művelet fut ({$percent}%), {$finished} befejezve...
 pause = Szünet
@@ -45,7 +45,7 @@ extract-password-required = Jelszó szükséges
 
 ## Empty Trash Dialog
 empty-trash = Kuka ürítése
-empty-trash-warning = Biztosan véglegesen törölni szeretnéd a kukában lévő összes elemet?
+empty-trash-warning = Biztosan véglegesen törölni szeretné a kukában lévő összes elemet?
 
 ## Mount Error Dialog
 mount-error = A meghajtó nem elérhető
@@ -86,7 +86,7 @@ rename-folder = Mappa átnevezése
 ## Replace Dialog
 replace = Csere
 replace-title = "{$filename}" már létezik.
-replace-warning = Le szeretnéd cserélni a mentett fájlra? A cseréje felülírja annak tartalmát.
+replace-warning = Szeretné lecserélni a meglévő fájlt? A cseréje felülírja annak tartalmát.
 replace-warning-operation = Ki szeretnéd cserélni? A csere felülírja annak tartalmát.
 original-file = Eredeti fájl
 replace-with = Csere erre
@@ -96,7 +96,7 @@ skip = Kihagyás
 
 ## Set as Executable and Launch Dialog
 set-executable-and-launch = Végrehajthatóvá tétele, majd indítása
-set-executable-and-launch-description = Szeretnéd végrehajthatóvá tenni a(z) "{$name}" fájlt és elindítani?
+set-executable-and-launch-description = Szeretné végrehajthatóvá tenni a(z) "{$name}" fájlt és elindítani?
 set-and-launch = Alkalmazás és indítás
 
 ## Metadata Dialog
@@ -181,6 +181,14 @@ copied = {$items} {$items ->
         [one] elem
         *[other] elem
     } másolva innen: "{$from}" ide: "{$to}"
+deleting = {$items} {$items ->
+        [one] elem
+        *[other] elem
+    } törlése a Kukából ({$progress})...
+deleted = {$items} {$items ->
+        [one] elem
+        *[other] elem
+    } törölve a Kukából
 emptying-trash = {trash} kiürítése ({$progress})...
 emptied-trash = {trash} kiürítve
 extracting = {$items} {$items ->
@@ -191,8 +199,8 @@ extracted = {$items} {$items ->
         [one] elem
         *[other] elem
     } kicsomagolva innen: "{$from}" ide: "{$to}"
-setting-executable-and-launching = Setting "{$name}" as executable and launching
-set-executable-and-launched = Set "{$name}" as executable and launched
+setting-executable-and-launching = "{$name}" végrehajthatóvá tétele és futtatása
+set-executable-and-launched = "{$name}" végrehajthatóvá lett téve és futtatva
 moving = {$items} {$items ->
         [one] elem
         *[other] elem
@@ -233,14 +241,15 @@ settings = Beállítások
 ### Appearance
 appearance = Megjelenés
 theme = Téma
-match-desktop = Asztallal egyező
+match-desktop = Rendszertéma
 dark = Sötét
 light = Világos
 
 # Context menu
 add-to-sidebar = Hozzáadás az oldalsávhoz
 compress = Tömörítés
-extract-here = Kicsomagolás itt
+delete-permanently = Végleges törlés
+extract-here = Kicsomagolás
 new-file = Új fájl...
 new-folder = Új mappa...
 open-in-terminal = Megnyitás a terminálban
@@ -261,10 +270,10 @@ display-settings = Képernyő beállításai...
 
 ## File
 file = Fájl
-new-tab = Új fül
+new-tab = Új lap
 new-window = Új ablak
 rename = Átnevezés...
-close-tab = Ablak bezárása
+close-tab = Lap bezárása
 quit = Kilépés
 
 ## Edit
@@ -285,7 +294,7 @@ show-hidden-files = Rejtett fájlok megjelenítése
 list-directories-first = Könyvtárak listázása először
 gallery-preview = Galéria előnézet
 menu-settings = Beállítások...
-menu-about = A COSMIC Fájlokról...
+menu-about = A COSMIC Fájlok névjegye...
 
 ## Sort
 sort = Rendezés
