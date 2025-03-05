@@ -3645,6 +3645,7 @@ impl Application for App {
                                 actions.extend(item.preview_header().into_iter().map(|element| {
                                     element.map(move |x| Message::TabMessage(Some(entity), x))
                                 }));
+                                break;
                             }
                         }
                     }
