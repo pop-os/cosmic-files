@@ -51,6 +51,23 @@ impl AppTheme {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum NavBarSize {
+    Small,
+    Medium,
+    Large,
+}
+
+impl NavBarSize {
+    pub fn size(&self) -> f32 {
+        match self {
+            NavBarSize::Small => 64.0,
+            NavBarSize::Medium => 160.0,
+            NavBarSize::Large => 280.0,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum Favorite {
     Home,
@@ -99,6 +116,7 @@ impl Favorite {
 #[serde(default)]
 pub struct Config {
     pub app_theme: AppTheme,
+    pub nav_bar_size: NavBarSize,
     pub desktop: DesktopConfig,
     pub favorites: Vec<Favorite>,
     pub show_details: bool,
@@ -139,6 +157,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             app_theme: AppTheme::System,
+            nav_bar_size: NavBarSize::Large,
             desktop: DesktopConfig::default(),
             favorites: vec![
                 Favorite::Home,

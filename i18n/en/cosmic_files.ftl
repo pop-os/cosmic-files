@@ -245,6 +245,12 @@ match-desktop = Match desktop
 dark = Dark
 light = Light
 
+## NavBar Size
+navbar-size = Sidebar Size
+small = Small
+medium = Medium
+large = Large
+
 # Context menu
 add-to-sidebar = Add to sidebar
 compress = Compress
