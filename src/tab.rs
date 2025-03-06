@@ -45,7 +45,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     cell::Cell,
     cmp::Ordering,
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     error::Error,
     fmt::{self, Display},
     fs::{self, File, Metadata},
