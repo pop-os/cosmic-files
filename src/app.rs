@@ -61,7 +61,6 @@ use trash::TrashItem;
 #[cfg(feature = "wayland")]
 use wayland_client::{protocol::wl_output::WlOutput, Proxy};
 
-use crate::operation::{OperationError, OperationErrorType};
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{AppTheme, Config, DesktopConfig, Favorite, IconSizes, TabConfig},
@@ -73,6 +72,10 @@ use crate::{
     operation::{Controller, Operation, OperationSelection, ReplaceResult},
     spawn_detached::spawn_detached,
     tab::{self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION},
+};
+use crate::{
+    operation::{OperationError, OperationErrorType},
+    tab::Item,
 };
 
 #[derive(Clone, Debug)]
@@ -1488,16 +1491,21 @@ impl App {
             PreviewKind::Selected => {
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
                     if let Some(items) = tab.items_opt() {
-                        for item in items.iter() {
-                            if item.selected {
-                                children.push(item.preview_view(
-                                    Some(&self.mime_app_cache),
-                                    tab.config.icon_sizes,
-                                    military_time,
-                                ));
-                                // Only show one property view to avoid issues like hangs when generating
-                                // preview images on thousands of files
-                                break;
+                        let items_selected = items.iter().filter(|v| v.selected).count();
+                        if items_selected > 1 {
+                            children.push(Item::preview_view_multiple(items))
+                        } else {
+                            for item in items.iter() {
+                                if item.selected {
+                                    children.push(item.preview_view(
+                                        Some(&self.mime_app_cache),
+                                        tab.config.icon_sizes,
+                                        military_time,
+                                    ));
+                                    // Only show one property view to avoid issues like hangs when generating
+                                    // preview images on thousands of files
+                                    break;
+                                }
                             }
                         }
                         if children.is_empty() {
