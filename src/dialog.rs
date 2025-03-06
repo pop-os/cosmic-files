@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{
-    app::{self, context_drawer, cosmic::Cosmic, message, Core, Task},
+    app::{self, context_drawer, cosmic::Cosmic, Core, Task},
     cosmic_config, cosmic_theme, executor,
     iced::{
         event,
@@ -46,7 +46,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub struct DialogMessage(app::Message<Message>);
+pub struct DialogMessage(cosmic::Action<Message>);
 
 #[derive(Clone, Debug)]
 pub enum DialogResult {
@@ -200,10 +200,10 @@ impl<M: Send + 'static> Dialog<M> {
                 on_result: Box::new(on_result),
             },
             Task::batch([
-                window_command.map(|_id| message::none()),
+                window_command.map(|_id| cosmic::action::none()),
                 cosmic_command
                     .map(DialogMessage)
-                    .map(move |message| app::Message::App(mapper(message))),
+                    .map(move |message| cosmic::action::app(mapper(message))),
             ]),
         )
     }
@@ -215,7 +215,7 @@ impl<M: Send + 'static> Dialog<M> {
             .app
             .update_title()
             .map(DialogMessage)
-            .map(move |message| app::Message::App(mapper(message)))
+            .map(move |message| cosmic::action::app(mapper(message)))
     }
 
     pub fn set_accept_label(&mut self, accept_label: impl Into<String>) {
@@ -246,7 +246,7 @@ impl<M: Send + 'static> Dialog<M> {
             .app
             .rescan_tab()
             .map(DialogMessage)
-            .map(move |message| app::Message::App(mapper(message)))
+            .map(move |message| cosmic::action::app(mapper(message)))
     }
 
     pub fn subscription(&self) -> Subscription<M> {
@@ -263,12 +263,12 @@ impl<M: Send + 'static> Dialog<M> {
             .cosmic
             .update(message.0)
             .map(DialogMessage)
-            .map(move |message| app::Message::App(mapper(message)));
+            .map(move |message| cosmic::action::app(mapper(message)));
         if let Some(result) = self.cosmic.app.result_opt.take() {
             let on_result_message = (self.on_result)(result);
             Task::batch([
                 command,
-                Task::perform(async move { app::Message::App(on_result_message) }, |x| x),
+                Task::perform(async move { cosmic::action::app(on_result_message) }, |x| x),
             ])
         } else {
             command
@@ -327,6 +327,7 @@ enum Message {
     SearchActivate,
     SearchClear,
     SearchInput(String),
+    Surface(cosmic::surface::Action),
     #[allow(clippy::enum_variant_names)]
     TabMessage(tab::Message),
     TabRescan(Location, Option<tab::Item>, Vec<tab::Item>),
@@ -419,7 +420,7 @@ impl App {
                 widget::text_input("", filename)
                     .id(self.filename_id.clone())
                     .on_input(Message::Filename)
-                    .on_submit(Message::Save(false)),
+                    .on_submit(|_| Message::Save(false)),
             );
         }
 
@@ -531,11 +532,11 @@ impl App {
                 let location2 = location.clone();
                 match tokio::task::spawn_blocking(move || location2.scan(icon_sizes)).await {
                     Ok((parent_item_opt, items)) => {
-                        message::app(Message::TabRescan(location, parent_item_opt, items))
+                        cosmic::action::app(Message::TabRescan(location, parent_item_opt, items))
                     }
                     Err(err) => {
                         log::warn!("failed to rescan: {}", err);
-                        message::none()
+                        cosmic::action::none()
                     }
                 }
             },
@@ -921,7 +922,9 @@ impl Application for App {
                                         name,
                                     })
                                 })
-                                .on_submit_maybe(complete_maybe)
+                                .on_submit_maybe(
+                                    complete_maybe.clone().map(|maybe| move |_| maybe.clone()),
+                                )
                                 .into(),
                         ])
                         .spacing(space_xxs),
@@ -997,7 +1000,7 @@ impl Application for App {
         elements
     }
 
-    fn nav_bar(&self) -> Option<Element<message::Message<Self::Message>>> {
+    fn nav_bar(&self) -> Option<Element<cosmic::Action<Self::Message>>> {
         if !self.core().nav_bar_active() {
             return None;
         }
@@ -1005,9 +1008,9 @@ impl Application for App {
         let nav_model = self.nav_model()?;
 
         let mut nav = cosmic::widget::nav_bar(nav_model, |entity| {
-            cosmic::app::Message::Cosmic(cosmic::app::cosmic::Message::NavBar(entity))
+            cosmic::action::cosmic(cosmic::app::Action::NavBar(entity))
         })
-        //TODO .on_close(|entity| cosmic::app::Message::App(Message::NavBarClose(entity)))
+        //TODO .on_close(|entity| cosmic::cosmic::action::app(Message::NavBarClose(entity)))
         .close_icon(
             widget::icon::from_name("media-eject-symbolic")
                 .size(16)
@@ -1043,7 +1046,9 @@ impl Application for App {
 
         if let Some(data) = self.nav_model.data::<MounterData>(entity) {
             if let Some(mounter) = MOUNTERS.get(&data.0) {
-                return mounter.mount(data.1.clone()).map(|_| message::none());
+                return mounter
+                    .mount(data.1.clone())
+                    .map(|_| cosmic::action::none());
             }
         }
         Task::none()
@@ -1416,11 +1421,9 @@ impl Application for App {
                             commands.push(Task::batch([self.update_watcher(), self.rescan_tab()]));
                         }
                         tab::Command::Iced(iced_command) => {
-                            commands.push(
-                                iced_command.0.map(|tab_message| {
-                                    message::app(Message::TabMessage(tab_message))
-                                }),
-                            );
+                            commands.push(iced_command.0.map(|tab_message| {
+                                cosmic::action::app(Message::TabMessage(tab_message))
+                            }));
                         }
                         tab::Command::OpenFile(_item_path) => {
                             if self.flags.kind.save() {
@@ -1574,6 +1577,11 @@ impl Application for App {
                     tab::View::List => zoom_out(&mut self.tab.config.icon_sizes.list, 50, 500),
                     tab::View::Grid => zoom_out(&mut self.tab.config.icon_sizes.grid, 50, 500),
                 }
+            }
+            Message::Surface(a) => {
+                return cosmic::task::message(cosmic::Action::Cosmic(
+                    cosmic::app::Action::Surface(a),
+                ));
             }
         }
 
