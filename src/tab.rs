@@ -2208,7 +2208,6 @@ impl Tab {
     }
 
     pub fn change_location(&mut self, location: &Location, history_i_opt: Option<usize>) {
-        println!("change_location {:?}", location);
         self.location = location.normalize();
         self.context_menu = None;
         self.edit_location = None;
