@@ -2208,6 +2208,7 @@ impl Tab {
     }
 
     pub fn change_location(&mut self, location: &Location, history_i_opt: Option<usize>) {
+        println!("change_location {:?}", location);
         self.location = location.normalize();
         self.context_menu = None;
         self.edit_location = None;
@@ -2222,6 +2223,21 @@ impl Tab {
         } else {
             // Truncate history to remove next entries
             self.history.truncate(self.history_i + 1);
+
+            // Compact consecutive search locations
+            {
+                let mut remove = false;
+                if let Some(last_location) = self.history.last() {
+                    if let Location::Search(last_path, ..) = last_location {
+                        if let Location::Search(path, ..) = location {
+                            remove = last_path == path;
+                        }
+                    }
+                }
+                if remove {
+                    self.history.pop();
+                }
+            }
 
             // Push to the front of history
             self.history_i = self.history.len();
