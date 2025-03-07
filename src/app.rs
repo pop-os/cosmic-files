@@ -1765,11 +1765,13 @@ impl Application for App {
             ));
         }
         items.push(cosmic::widget::menu::Item::Divider);
-        items.push(cosmic::widget::menu::Item::Button(
-            fl!("show-details"),
-            None,
-            NavMenuAction::Preview(entity),
-        ));
+        if matches!(location_opt, Some(Location::Path(..))) {
+            items.push(cosmic::widget::menu::Item::Button(
+                fl!("show-details"),
+                None,
+                NavMenuAction::Preview(entity),
+            ));
+        }
         items.push(cosmic::widget::menu::Item::Divider);
         if favorite_index_opt.is_some() {
             items.push(cosmic::widget::menu::Item::Button(
