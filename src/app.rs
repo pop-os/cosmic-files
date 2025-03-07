@@ -2194,6 +2194,16 @@ impl Application for App {
                         return self.update(action.message(Some(entity)));
                     }
                 }
+
+                // Uncaptured keys with only shift modifiers go to the search or location box
+                if self.search_get().is_none() {
+                    if !modifiers.logo() && !modifiers.control() && !modifiers.alt() {
+                        if let Key::Character(ref c) = key {
+                            //TODO: fix shift and caps lock behavior
+                            return self.search_set_active(Some(c.to_string()));
+                        }
+                    }
+                }
             }
             Message::MaybeExit => {
                 if self.window_id_opt.is_none() && self.pending_operations.is_empty() {
