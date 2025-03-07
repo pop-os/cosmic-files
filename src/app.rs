@@ -21,6 +21,7 @@ use cosmic::{
     iced::{
         self,
         clipboard::dnd::DndAction,
+        core::SmolStr,
         event,
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers},
@@ -64,7 +65,7 @@ use wayland_client::{protocol::wl_output::WlOutput, Proxy};
 use crate::operation::{OperationError, OperationErrorType};
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
-    config::{AppTheme, Config, DesktopConfig, Favorite, IconSizes, TabConfig},
+    config::{AppTheme, Config, DesktopConfig, Favorite, IconSizes, TabConfig, TypeToSearch},
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
@@ -292,7 +293,7 @@ pub enum Message {
     ExtractHere(Option<Entity>),
     #[cfg(all(feature = "desktop", feature = "wayland"))]
     Focused(window::Id),
-    Key(Modifiers, Key),
+    Key(Modifiers, Key, Option<SmolStr>),
     LaunchUrl(String),
     MaybeExit,
     Modifiers(Modifiers),
@@ -338,6 +339,7 @@ pub enum Message {
     SearchClear,
     SearchInput(String),
     SetShowDetails(bool),
+    SetTypeToSearch(TypeToSearch),
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     Size(Size),
     TabActivate(Entity),
@@ -1524,27 +1526,44 @@ impl App {
 
     fn settings(&self) -> Element<Message> {
         // TODO: Should dialog be updated here too?
-        widget::column::with_children(vec![widget::settings::section()
-            .title(fl!("appearance"))
-            .add({
-                let app_theme_selected = match self.config.app_theme {
-                    AppTheme::Dark => 1,
-                    AppTheme::Light => 2,
-                    AppTheme::System => 0,
-                };
-                widget::settings::item::builder(fl!("theme")).control(widget::dropdown(
-                    &self.app_themes,
-                    Some(app_theme_selected),
-                    move |index| {
-                        Message::AppTheme(match index {
-                            1 => AppTheme::Dark,
-                            2 => AppTheme::Light,
-                            _ => AppTheme::System,
-                        })
-                    },
+        widget::settings::view_column(vec![
+            widget::settings::section()
+                .title(fl!("appearance"))
+                .add({
+                    let app_theme_selected = match self.config.app_theme {
+                        AppTheme::Dark => 1,
+                        AppTheme::Light => 2,
+                        AppTheme::System => 0,
+                    };
+                    widget::settings::item::builder(fl!("theme")).control(widget::dropdown(
+                        &self.app_themes,
+                        Some(app_theme_selected),
+                        move |index| {
+                            Message::AppTheme(match index {
+                                1 => AppTheme::Dark,
+                                2 => AppTheme::Light,
+                                _ => AppTheme::System,
+                            })
+                        },
+                    ))
+                })
+                .into(),
+            widget::settings::section()
+                .title(fl!("type-to-search"))
+                .add(widget::radio(
+                    widget::text::body(fl!("type-to-search-recursive")),
+                    TypeToSearch::Recursive,
+                    Some(self.config.type_to_search),
+                    Message::SetTypeToSearch,
                 ))
-            })
-            .into()])
+                .add(widget::radio(
+                    widget::text::body(fl!("type-to-search-enter-path")),
+                    TypeToSearch::EnterPath,
+                    Some(self.config.type_to_search),
+                    Message::SetTypeToSearch,
+                ))
+                .into(),
+        ])
         .into()
     }
 }
@@ -2187,11 +2206,44 @@ impl Application for App {
                     });
                 }
             }
-            Message::Key(modifiers, key) => {
+            Message::Key(modifiers, key, text) => {
                 let entity = self.tab_model.active();
                 for (key_bind, action) in self.key_binds.iter() {
                     if key_bind.matches(modifiers, &key) {
                         return self.update(action.message(Some(entity)));
+                    }
+                }
+
+                // Uncaptured keys with only shift modifiers go to the search or location box
+                if !modifiers.logo()
+                    && !modifiers.control()
+                    && !modifiers.alt()
+                    && matches!(key, Key::Character(_))
+                {
+                    if let Some(text) = text {
+                        match self.config.type_to_search {
+                            TypeToSearch::Recursive => {
+                                let mut term = self.search_get().unwrap_or_default().to_string();
+                                term.push_str(&text);
+                                return self.search_set_active(Some(term));
+                            }
+                            TypeToSearch::EnterPath => {
+                                if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                                    let location = tab.edit_location.as_ref().map_or_else(
+                                        || tab.location.clone(),
+                                        |x| x.location.clone(),
+                                    );
+                                    // Try to add text to end of location
+                                    if let Some(path) = location.path_opt() {
+                                        let mut path_string = path.to_string_lossy().to_string();
+                                        path_string.push_str(&text);
+                                        tab.edit_location = Some(
+                                            location.with_path(PathBuf::from(path_string)).into(),
+                                        );
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -2858,6 +2910,10 @@ impl Application for App {
             }
             Message::SetShowDetails(show_details) => {
                 config_set!(show_details, show_details);
+                return self.update_config();
+            }
+            Message::SetTypeToSearch(type_to_search) => {
+                config_set!(type_to_search, type_to_search);
                 return self.update_config();
             }
             Message::SystemThemeModeChange(_theme_mode) => {
@@ -4577,8 +4633,13 @@ impl Application for App {
 
         let mut subscriptions = vec![
             event::listen_with(|event, status, window_id| match event {
-                Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => match status {
-                    event::Status::Ignored => Some(Message::Key(modifiers, key)),
+                Event::Keyboard(KeyEvent::KeyPressed {
+                    key,
+                    modifiers,
+                    text,
+                    ..
+                }) => match status {
+                    event::Status::Ignored => Some(Message::Key(modifiers, key, text)),
                     event::Status::Captured => None,
                 },
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {

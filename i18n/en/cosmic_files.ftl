@@ -245,6 +245,11 @@ match-desktop = Match desktop
 dark = Dark
 light = Light
 
+### Type to Search
+type-to-search = Type to Search
+type-to-search-recursive = Searches the current folder and all sub-folders
+type-to-search-enter-path = Enters the path to the directory or file
+
 # Context menu
 add-to-sidebar = Add to sidebar
 compress = Compress
