@@ -3462,8 +3462,18 @@ impl Application for App {
                 }
                 NavMenuAction::OpenInNewTab(entity) => {
                     match self.nav_model.data::<Location>(entity) {
+                        Some(Location::Network(ref uri, ref display_name)) => {
+                            return self.open_tab(
+                                Location::Network(uri.clone(), display_name.clone()),
+                                false,
+                                None,
+                            );
+                        }
                         Some(Location::Path(ref path)) => {
                             return self.open_tab(Location::Path(path.clone()), false, None);
+                        }
+                        Some(Location::Recents) => {
+                            return self.open_tab(Location::Recents, false, None);
                         }
                         Some(Location::Trash) => {
                             return self.open_tab(Location::Trash, false, None);
