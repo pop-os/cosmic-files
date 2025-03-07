@@ -95,6 +95,12 @@ impl Favorite {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum TypeToSearch {
+    Recursive,
+    EnterPath,
+}
+
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(default)]
 pub struct Config {
@@ -103,6 +109,7 @@ pub struct Config {
     pub favorites: Vec<Favorite>,
     pub show_details: bool,
     pub tab: TabConfig,
+    pub type_to_search: TypeToSearch,
 }
 
 impl Config {
@@ -150,6 +157,7 @@ impl Default for Config {
             ],
             show_details: false,
             tab: TabConfig::default(),
+            type_to_search: TypeToSearch::Recursive,
         }
     }
 }

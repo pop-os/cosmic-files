@@ -1055,6 +1055,16 @@ impl std::fmt::Display for Location {
 }
 
 impl Location {
+    pub fn normalize(&self) -> Self {
+        if let Some(mut path) = self.path_opt().map(|x| x.to_path_buf()) {
+            // Add trailing slash if location is a path
+            path.push("");
+            self.with_path(path)
+        } else {
+            self.clone()
+        }
+    }
+
     pub fn path_opt(&self) -> Option<&PathBuf> {
         match self {
             Self::Desktop(path, ..) => Some(path),
@@ -1873,7 +1883,7 @@ impl Tab {
     pub fn new(location: Location, config: TabConfig) -> Self {
         let history = vec![location.clone()];
         Self {
-            location,
+            location: location.normalize(),
             context_menu: None,
             location_context_menu_point: None,
             location_context_menu_index: None,
@@ -2198,7 +2208,7 @@ impl Tab {
     }
 
     pub fn change_location(&mut self, location: &Location, history_i_opt: Option<usize>) {
-        self.location = location.clone();
+        self.location = location.normalize();
         self.context_menu = None;
         self.edit_location = None;
         self.items_opt = None;
