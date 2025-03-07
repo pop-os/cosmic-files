@@ -1779,11 +1779,13 @@ impl Application for App {
             ));
         }
         if matches!(location_opt, Some(Location::Trash)) {
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("empty-trash"),
-                None,
-                NavMenuAction::EmptyTrash,
-            ));
+            if tab::trash_entries() > 0 {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("empty-trash"),
+                    None,
+                    NavMenuAction::EmptyTrash,
+                ));
+            }
         }
 
         Some(cosmic::widget::menu::items(&HashMap::new(), items))
