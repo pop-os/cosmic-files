@@ -50,7 +50,8 @@ use slotmap::Key as SlotMapKey;
 use std::{
     any::TypeId,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
-    env, fmt, fs, io,
+    env,
+    fmt, fs, io,
     num::NonZeroU16,
     path::{Path, PathBuf},
     process,
@@ -3487,15 +3488,39 @@ impl Application for App {
                 }
 
                 // Open the selected path in a new cosmic-files window.
-                NavMenuAction::OpenInNewWindow(entity) => {
-                    if let Some(Location::Path(path)) = self.nav_model.data::<Location>(entity) {
+                NavMenuAction::OpenInNewWindow(entity) => 'open_in_new_window: {
+                    if let Some(location) = self.nav_model.data::<Location>(entity) {
                         match env::current_exe() {
-                            Ok(exe) => match process::Command::new(&exe).arg(path).spawn() {
-                                Ok(_child) => {}
-                                Err(err) => {
-                                    log::error!("failed to execute {:?}: {}", exe, err);
-                                }
-                            },
+                            Ok(exe) => {
+                                let mut command = process::Command::new(&exe);
+                                match location {
+                                    Location::Path(path) => {
+                                        command.arg(path);
+                                    }
+                                    Location::Trash => {
+                                        command.arg("--trash");
+                                    }
+                                    Location::Network(..) => {
+                                        command.arg("--network");
+                                    }
+                                    Location::Recents => {
+                                        command.arg("--recents");
+                                    }
+                                    _ => {
+                                        log::error!(
+                                            "unsupported location for open in new window: {:?}",
+                                            location
+                                        );
+                                        break 'open_in_new_window;
+                                    }
+                                };
+                                match command.spawn() {
+                                    Ok(_child) => {}
+                                    Err(err) => {
+                                        log::error!("failed to execute {:?}: {}", exe, err);
+                                    }
+                                };
+                            }
                             Err(err) => {
                                 log::error!("failed to get current executable path: {}", err);
                             }
