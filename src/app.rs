@@ -50,7 +50,8 @@ use slotmap::Key as SlotMapKey;
 use std::{
     any::TypeId,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
-    env, fmt, fs, io,
+    env,
+    fmt, fs, io,
     num::NonZeroU16,
     path::{Path, PathBuf},
     process,
@@ -1765,11 +1766,13 @@ impl Application for App {
             ));
         }
         items.push(cosmic::widget::menu::Item::Divider);
-        items.push(cosmic::widget::menu::Item::Button(
-            fl!("show-details"),
-            None,
-            NavMenuAction::Preview(entity),
-        ));
+        if matches!(location_opt, Some(Location::Path(..))) {
+            items.push(cosmic::widget::menu::Item::Button(
+                fl!("show-details"),
+                None,
+                NavMenuAction::Preview(entity),
+            ));
+        }
         items.push(cosmic::widget::menu::Item::Divider);
         if favorite_index_opt.is_some() {
             items.push(cosmic::widget::menu::Item::Button(
@@ -1779,11 +1782,13 @@ impl Application for App {
             ));
         }
         if matches!(location_opt, Some(Location::Trash)) {
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("empty-trash"),
-                None,
-                NavMenuAction::EmptyTrash,
-            ));
+            if tab::trash_entries() > 0 {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("empty-trash"),
+                    None,
+                    NavMenuAction::EmptyTrash,
+                ));
+            }
         }
 
         Some(cosmic::widget::menu::items(&HashMap::new(), items))
@@ -3462,8 +3467,18 @@ impl Application for App {
                 }
                 NavMenuAction::OpenInNewTab(entity) => {
                     match self.nav_model.data::<Location>(entity) {
+                        Some(Location::Network(ref uri, ref display_name)) => {
+                            return self.open_tab(
+                                Location::Network(uri.clone(), display_name.clone()),
+                                false,
+                                None,
+                            );
+                        }
                         Some(Location::Path(ref path)) => {
                             return self.open_tab(Location::Path(path.clone()), false, None);
+                        }
+                        Some(Location::Recents) => {
+                            return self.open_tab(Location::Recents, false, None);
                         }
                         Some(Location::Trash) => {
                             return self.open_tab(Location::Trash, false, None);
@@ -3473,15 +3488,39 @@ impl Application for App {
                 }
 
                 // Open the selected path in a new cosmic-files window.
-                NavMenuAction::OpenInNewWindow(entity) => {
-                    if let Some(Location::Path(path)) = self.nav_model.data::<Location>(entity) {
+                NavMenuAction::OpenInNewWindow(entity) => 'open_in_new_window: {
+                    if let Some(location) = self.nav_model.data::<Location>(entity) {
                         match env::current_exe() {
-                            Ok(exe) => match process::Command::new(&exe).arg(path).spawn() {
-                                Ok(_child) => {}
-                                Err(err) => {
-                                    log::error!("failed to execute {:?}: {}", exe, err);
-                                }
-                            },
+                            Ok(exe) => {
+                                let mut command = process::Command::new(&exe);
+                                match location {
+                                    Location::Path(path) => {
+                                        command.arg(path);
+                                    }
+                                    Location::Trash => {
+                                        command.arg("--trash");
+                                    }
+                                    Location::Network(..) => {
+                                        command.arg("--network");
+                                    }
+                                    Location::Recents => {
+                                        command.arg("--recents");
+                                    }
+                                    _ => {
+                                        log::error!(
+                                            "unsupported location for open in new window: {:?}",
+                                            location
+                                        );
+                                        break 'open_in_new_window;
+                                    }
+                                };
+                                match command.spawn() {
+                                    Ok(_child) => {}
+                                    Err(err) => {
+                                        log::error!("failed to execute {:?}: {}", exe, err);
+                                    }
+                                };
+                            }
                             Err(err) => {
                                 log::error!("failed to get current executable path: {}", err);
                             }
