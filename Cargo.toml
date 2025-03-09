@@ -96,6 +96,7 @@ tokio = { version = "1", features = ["rt", "macros"] }
 [patch.crates-io]
 # https://github.com/alexcrichton/filetime/pull/104
 filetime = { git = "https://github.com/jackpot51/filetime" }
+# https://github.com/ebassi/xdg-mime-rs/pull/31
 xdg-mime = { git = "https://github.com/ellieplayswow/xdg-mime-rs", branch = "feature/get-same-as" }
 
 # [patch.'https://github.com/pop-os/cosmic-text']
