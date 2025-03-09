@@ -1,6 +1,7 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
+use cosmic::iced::mouse::Event::CursorMoved;
 #[cfg(feature = "wayland")]
 use cosmic::iced::{
     event::wayland::{Event as WaylandEvent, OutputEvent, OverlapNotifyEvent},
@@ -58,7 +59,6 @@ use std::{
     sync::{Arc, Mutex},
     time::{self, Instant},
 };
-use cosmic::iced::mouse::Event::CursorMoved;
 use tokio::sync::mpsc;
 use trash::TrashItem;
 #[cfg(feature = "wayland")]
