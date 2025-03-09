@@ -15,6 +15,7 @@ use cosmic::iced::{
 };
 #[cfg(feature = "wayland")]
 use cosmic::iced_winit::commands::overlap_notify::overlap_notify;
+use cosmic::widget::{Button, ListColumn};
 use cosmic::{
     app::{self, context_drawer, message, Core, Task},
     cosmic_config, cosmic_theme, executor,
@@ -41,6 +42,7 @@ use cosmic::{
     },
     Application, ApplicationExt, Element,
 };
+use mime_guess::Mime;
 use notify_debouncer_full::{
     new_debouncer,
     notify::{self, RecommendedWatcher, Watcher},
@@ -62,6 +64,7 @@ use trash::TrashItem;
 #[cfg(feature = "wayland")]
 use wayland_client::{protocol::wl_output::WlOutput, Proxy};
 
+use crate::mime_app::MimeApp;
 use crate::operation::{OperationError, OperationErrorType};
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
@@ -560,6 +563,7 @@ pub struct App {
 impl App {
     fn open_file(&mut self, path: &PathBuf) {
         let mime = mime_icon::mime_for_path(path);
+
         if mime == "application/x-desktop" {
             // Try opening desktop application
             match freedesktop_entry_parser::parse_entry(path) {
@@ -623,6 +627,31 @@ impl App {
                 }
                 Err(err) => {
                     log::warn!("failed to open {:?} with {:?}: {}", path, app.id, err);
+                }
+            }
+        }
+
+        // loop through subclasses if available
+        if let Some(mime_sub_classes) = mime_icon::parent_mime_types(&mime) {
+            for sub_class in mime_sub_classes {
+                for app in self.mime_app_cache.get(&sub_class) {
+                    let Some(mut command) = app.command(Some(path.clone().into())) else {
+                        continue;
+                    };
+                    match spawn_detached(&mut command) {
+                        Ok(()) => {
+                            let _ = recently_used_xbel::update_recently_used(
+                                path,
+                                App::APP_ID.to_string(),
+                                "cosmic-files".to_string(),
+                                None,
+                            );
+                            return;
+                        }
+                        Err(err) => {
+                            log::warn!("failed to open {:?} with {:?}: {}", path, app.id, err);
+                        }
+                    }
                 }
             }
         }
@@ -1567,6 +1596,36 @@ impl App {
         .into()
     }
 
+    fn get_programs_for_mime(&self, mime_type: &Mime) -> Vec<&MimeApp> {
+        let mut results = Vec::new();
+
+        let mut dedupe = HashSet::new();
+
+        // start with exact matches
+        for mime_app in self.mime_app_cache.get(mime_type) {
+            let app_id = &mime_app.id;
+            if !dedupe.contains(app_id) {
+                results.push(mime_app);
+                dedupe.insert(app_id);
+            }
+        }
+
+        // grab matches based off of subclass / parent mime type
+        if let Some(parent_types) = mime_icon::parent_mime_types(mime_type) {
+            for parent_type in parent_types {
+                for mime_app in self.mime_app_cache.get(&parent_type) {
+                    let app_id = &mime_app.id;
+                    if !dedupe.contains(app_id) {
+                        results.push(mime_app);
+                        dedupe.insert(app_id);
+                    }
+                }
+            }
+        }
+
+        results
+    }
+
     // Update favorites based on renaming or moving dirs.
     fn update_favorites(&mut self, path_changes: &[(PathBuf, PathBuf)]) -> bool {
         let mut favorites_changed = false;
@@ -2187,7 +2246,9 @@ impl Application for App {
                             selected,
                             ..
                         } => {
-                            if let Some(app) = self.mime_app_cache.get(&mime).get(selected) {
+                            let all_apps = self.get_programs_for_mime(&mime);
+
+                            if let Some(app) = all_apps.get(selected) {
                                 if let Some(mut command) = app.command(Some(path.clone().into())) {
                                     match spawn_detached(&mut command) {
                                         Ok(()) => {
@@ -4229,7 +4290,7 @@ impl Application for App {
                 };
 
                 let mut column = widget::list_column();
-                for (i, app) in self.mime_app_cache.get(mime).iter().enumerate() {
+                for (i, app) in self.get_programs_for_mime(&mime).iter().enumerate() {
                     column = column.add(
                         widget::button::custom(
                             widget::row::with_children(vec![
