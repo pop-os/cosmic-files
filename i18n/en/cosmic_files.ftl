@@ -121,6 +121,16 @@ read-write = Read and write
 ### Mode 7
 read-write-execute = Read, write, and execute
 
+## Favorite Path Error Dialog
+favorite-path-error = Error opening directory
+favorite-path-error-description =
+    Unable to open "{$path}".
+    It may not exist or you don't have permission to open it.
+    
+    Would you like to remove it from the sidebar?
+remove = Remove
+keep = Keep
+
 # Context Pages
 
 ## About

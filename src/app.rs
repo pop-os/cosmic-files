@@ -480,6 +480,10 @@ pub enum DialogPage {
     SetExecutableAndLaunch {
         path: PathBuf,
     },
+    FavoritePathError {
+        path: PathBuf,
+        entity: Entity,
+    },
 }
 
 pub struct FavoriteIndex(usize);
@@ -1911,8 +1915,33 @@ impl Application for App {
     fn on_nav_select(&mut self, entity: Entity) -> Task<Self::Message> {
         self.nav_model.activate(entity);
         if let Some(location) = self.nav_model.data::<Location>(entity) {
-            let message = Message::TabMessage(None, tab::Message::Location(location.clone()));
-            return self.update(message);
+            let should_open = match location {
+                Location::Path(path) => match path.try_exists() {
+                    Ok(true) => true,
+                    Ok(false) => {
+                        log::warn!("failed to open favorite, path does not exist: {:?}", path);
+                        self.dialog_pages.push_back(DialogPage::FavoritePathError {
+                            path: path.clone(),
+                            entity,
+                        });
+                        false
+                    }
+                    Err(err) => {
+                        log::warn!("failed to open favorite for path: {:?}, {}", path, err);
+                        self.dialog_pages.push_back(DialogPage::FavoritePathError {
+                            path: path.clone(),
+                            entity,
+                        });
+                        false
+                    }
+                },
+                _ => true,
+            };
+
+            if should_open {
+                let message = Message::TabMessage(None, tab::Message::Location(location.clone()));
+                return self.update(message);
+            }
         }
 
         if let Some(data) = self.nav_model.data::<MounterData>(entity) {
@@ -2288,6 +2317,16 @@ impl Application for App {
                         }
                         DialogPage::SetExecutableAndLaunch { path } => {
                             self.operation(Operation::SetExecutableAndLaunch { path });
+                        }
+                        DialogPage::FavoritePathError { entity, .. } => {
+                            if let Some(FavoriteIndex(favorite_i)) =
+                                self.nav_model.data::<FavoriteIndex>(entity)
+                            {
+                                let mut favorites = self.config.favorites.clone();
+                                favorites.remove(*favorite_i);
+                                config_set!(favorites, favorites);
+                                return self.update_config();
+                            }
                         }
                     }
                 }
@@ -4497,6 +4536,19 @@ impl Application for App {
                         name = name
                     )))
             }
+            DialogPage::FavoritePathError { path, .. } => widget::dialog()
+                .title(fl!("favorite-path-error"))
+                .body(fl!(
+                    "favorite-path-error-description",
+                    path = path.as_os_str().to_str()
+                ))
+                .icon(widget::icon::from_name("dialog-error").size(64))
+                .primary_action(
+                    widget::button::destructive(fl!("remove")).on_press(Message::DialogComplete),
+                )
+                .secondary_action(
+                    widget::button::standard(fl!("keep")).on_press(Message::DialogCancel),
+                ),
         };
 
         Some(dialog.into())
