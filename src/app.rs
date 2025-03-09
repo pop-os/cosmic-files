@@ -1567,8 +1567,8 @@ impl App {
         .into()
     }
 
-    // Update favorites based on a rename or a move.
-    fn update_favorites(&mut self, from: &Path, to: &Path) -> bool {
+    // Update favorites based on renaming or moving dirs.
+    fn update_favorites(&mut self, path_changes: &[(PathBuf, PathBuf)]) -> bool {
         let mut favorites_changed = false;
         let favorites = self
             .config
@@ -1577,10 +1577,12 @@ impl App {
             .cloned()
             .map(|favorite| {
                 if let Favorite::Path(ref path) = favorite {
-                    if path.starts_with(from) {
-                        if let Ok(relative) = path.strip_prefix(from) {
-                            favorites_changed = true;
-                            return Favorite::from_path(to.join(relative));
+                    for (from, to) in path_changes {
+                        if path.starts_with(from) {
+                            if let Ok(relative) = path.strip_prefix(from) {
+                                favorites_changed = true;
+                                return Favorite::from_path(to.join(relative));
+                            }
                         }
                     }
                 }
@@ -1598,9 +1600,7 @@ impl App {
                     }
                     Err(err) => {
                         log::warn!(
-                            "failed to update favorites after moving {} to {}: {}",
-                            from.display(),
-                            to.display(),
+                            "failed to update favorites after moving directories: {:?}",
                             err,
                         );
                     }
@@ -1608,9 +1608,7 @@ impl App {
             } else {
                 self.config.favorites = favorites;
                 log::warn!(
-                    "failed to update favorites after moving {} to {}: no config handler",
-                    from.display(),
-                    to.display(),
+                    "failed to update favorites after moving directories: no config handler",
                 );
             }
         }
@@ -2743,18 +2741,17 @@ impl Application for App {
 
                     // If a favorite for a path has been renamed or moved, update it.
                     if let Operation::Rename { ref from, ref to } = op {
-                        if self.update_favorites(from, to) {
+                        if self.update_favorites(&[(from.clone(), to.clone())]) {
                             commands.push(self.update_config());
                         }
                     } else if let Operation::Move { ref paths, ref to } = op {
-                        let mut updated = false;
-                        for from in paths {
-                            if let Some(name) = from.file_name() {
-                                let to = to.join(name);
-                                updated |= self.update_favorites(from, &to);
-                            }
-                        }
-                        if updated {
+                        let path_changes: Vec<_> = paths
+                            .iter()
+                            .filter_map(|from| {
+                                from.file_name().map(|name| (from.clone(), to.join(name)))
+                            })
+                            .collect();
+                        if self.update_favorites(&path_changes) {
                             commands.push(self.update_config());
                         }
                     }
