@@ -3874,7 +3874,11 @@ impl Tab {
                         widget::button::custom(row)
                             .padding(space_xxxs)
                             .class(theme::Button::Link)
-                            .on_press(Message::Location(location.clone())),
+                            .on_press(if ancestor == path {
+                                Message::EditLocation(Some(self.location.clone().into()))
+                            } else {
+                                Message::Location(location.clone())
+                            }),
                     );
 
                     if self.location_context_menu_index.is_some() {
