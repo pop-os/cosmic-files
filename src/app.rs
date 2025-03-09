@@ -50,8 +50,7 @@ use slotmap::Key as SlotMapKey;
 use std::{
     any::TypeId,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
-    env,
-    fmt, fs, io,
+    env, fmt, fs, io,
     num::NonZeroU16,
     path::{Path, PathBuf},
     process,
@@ -1567,6 +1566,55 @@ impl App {
         ])
         .into()
     }
+
+    // Update favorites based on renaming or moving dirs.
+    fn update_favorites(&mut self, path_changes: &[(PathBuf, PathBuf)]) -> bool {
+        let mut favorites_changed = false;
+        let favorites = self
+            .config
+            .favorites
+            .iter()
+            .cloned()
+            .map(|favorite| {
+                if let Favorite::Path(ref path) = favorite {
+                    for (from, to) in path_changes {
+                        if path.starts_with(from) {
+                            if let Ok(relative) = path.strip_prefix(from) {
+                                favorites_changed = true;
+                                return Favorite::from_path(to.join(relative));
+                            }
+                        }
+                    }
+                }
+                favorite
+            })
+            .collect();
+
+        if favorites_changed {
+            if let Some(config_handler) = &self.config_handler {
+                match self.config.set_favorites(config_handler, favorites) {
+                    Ok(updated) => {
+                        if updated {
+                            return true;
+                        }
+                    }
+                    Err(err) => {
+                        log::warn!(
+                            "failed to update favorites after moving directories: {:?}",
+                            err,
+                        );
+                    }
+                };
+            } else {
+                self.config.favorites = favorites;
+                log::warn!(
+                    "failed to update favorites after moving directories: no config handler",
+                );
+            }
+        }
+
+        return false;
+    }
 }
 
 /// Implement [`Application`] to integrate with COSMIC.
@@ -2673,8 +2721,8 @@ impl Application for App {
             }
             Message::PendingComplete(id, op_sel) => {
                 let mut commands = Vec::with_capacity(4);
-                // Show toast for some operations
                 if let Some((op, _)) = self.pending_operations.remove(&id) {
+                    // Show toast for some operations
                     if let Some(description) = op.toast() {
                         if let Operation::Delete { ref paths } = op {
                             let paths: Arc<[PathBuf]> = Arc::from(paths.as_slice());
@@ -2690,6 +2738,24 @@ impl Application for App {
                             );
                         }
                     }
+
+                    // If a favorite for a path has been renamed or moved, update it.
+                    if let Operation::Rename { ref from, ref to } = op {
+                        if self.update_favorites(&[(from.clone(), to.clone())]) {
+                            commands.push(self.update_config());
+                        }
+                    } else if let Operation::Move { ref paths, ref to } = op {
+                        let path_changes: Vec<_> = paths
+                            .iter()
+                            .filter_map(|from| {
+                                from.file_name().map(|name| (from.clone(), to.join(name)))
+                            })
+                            .collect();
+                        if self.update_favorites(&path_changes) {
+                            commands.push(self.update_config());
+                        }
+                    }
+
                     self.complete_operations.insert(id, op);
                 }
                 // Close progress notification if all relavent operations are finished
