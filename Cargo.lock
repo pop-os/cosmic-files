@@ -7546,8 +7546,7 @@ dependencies = [
 [[package]]
 name = "xdg-mime"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58d325d0ca93fb1984a56eb926f019acfc67bd2ec559b0dbf09cafcc92e81ec9"
+source = "git+https://github.com/ellieplayswow/xdg-mime-rs?branch=feature/get-same-as#4f8d07ceedabbe58368a8e7f5547232490860790"
 dependencies = [
  "dirs-next",
  "glob",

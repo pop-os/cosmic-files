@@ -14,6 +14,7 @@ use cosmic::iced::{
 };
 #[cfg(feature = "wayland")]
 use cosmic::iced_winit::commands::overlap_notify::overlap_notify;
+use cosmic::widget::{Button, ListColumn};
 use cosmic::{
     app::{self, context_drawer, message, Core, Task},
     cosmic_config, cosmic_theme, executor,
@@ -40,6 +41,7 @@ use cosmic::{
     },
     Application, ApplicationExt, Element,
 };
+use mime_guess::Mime;
 use notify_debouncer_full::{
     new_debouncer,
     notify::{self, RecommendedWatcher, Watcher},
@@ -57,12 +59,12 @@ use std::{
     time::{self, Instant},
 };
 use cosmic::iced::mouse::Event::CursorMoved;
-use cosmic::widget::{Button, ListColumn};
 use tokio::sync::mpsc;
 use trash::TrashItem;
 #[cfg(feature = "wayland")]
 use wayland_client::{protocol::wl_output::WlOutput, Proxy};
 
+use crate::mime_app::MimeApp;
 use crate::operation::{OperationError, OperationErrorType};
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
@@ -76,7 +78,6 @@ use crate::{
     spawn_detached::spawn_detached,
     tab::{self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION},
 };
-use crate::mime_app::MimeApp;
 
 #[derive(Clone, Debug)]
 pub enum Mode {
@@ -1595,6 +1596,36 @@ impl App {
         .into()
     }
 
+    fn get_programs_for_mime(&self, mime_type: &Mime) -> Vec<&MimeApp> {
+        let mut results = Vec::new();
+
+        let mut dedupe = HashSet::new();
+
+        // start with exact matches
+        for mime_app in self.mime_app_cache.get(mime_type) {
+            let app_id = &mime_app.id;
+            if !dedupe.contains(app_id) {
+                results.push(mime_app);
+                dedupe.insert(app_id);
+            }
+        }
+
+        // grab matches based off of subclass / parent mime type
+        if let Some(parent_types) = mime_icon::parent_mime_types(mime_type) {
+            for parent_type in parent_types {
+                for mime_app in self.mime_app_cache.get(&parent_type) {
+                    let app_id = &mime_app.id;
+                    if !dedupe.contains(app_id) {
+                        results.push(mime_app);
+                        dedupe.insert(app_id);
+                    }
+                }
+            }
+        }
+
+        results
+    }
+
     // Update favorites based on renaming or moving dirs.
     fn update_favorites(&mut self, path_changes: &[(PathBuf, PathBuf)]) -> bool {
         let mut favorites_changed = false;
@@ -2215,8 +2246,9 @@ impl Application for App {
                             selected,
                             ..
                         } => {
-                            let direct_apps = self.mime_app_cache.get(&mime);
-                            if let Some(app) = direct_apps.get(selected) {
+                            let all_apps = self.get_programs_for_mime(&mime);
+
+                            if let Some(app) = all_apps.get(selected) {
                                 if let Some(mut command) = app.command(Some(path.clone().into())) {
                                     match spawn_detached(&mut command) {
                                         Ok(()) => {
@@ -2244,46 +2276,6 @@ impl Application for App {
                                     );
                                 }
                             }
-
-                            let mut sub_class_index = selected - direct_apps.len();
-                            if let Some(sub_classes) = mime_icon::parent_mime_types(&mime) {
-                                for sub_class in sub_classes {
-                                    let sub_class_apps = self.mime_app_cache.get(&sub_class);
-                                    if let Some(app) = sub_class_apps.get(sub_class_index) {
-                                        if let Some(mut command) = app.command(Some(path.clone().into())) {
-                                            match spawn_detached(&mut command) {
-                                                Ok(()) => {
-                                                    let _ = recently_used_xbel::update_recently_used(
-                                                        &path,
-                                                        App::APP_ID.to_string(),
-                                                        "cosmic-files".to_string(),
-                                                        None,
-                                                    );
-                                                }
-                                                Err(err) => {
-                                                    log::warn!(
-                                                "failed to open {:?} with {:?}: {}",
-                                                path,
-                                                app.id,
-                                                err
-                                            )
-                                                }
-                                            }
-                                        } else {
-                                            log::warn!(
-                                        "failed to open {:?} with {:?}: failed to get command",
-                                        path,
-                                        app.id
-                                    );
-                                        }
-                                    }
-                                    else {
-                                        sub_class_index -= sub_class_apps.len();
-                                    }
-
-                                }
-                            }
-
                         }
                         DialogPage::RenameItem {
                             from, parent, name, ..
@@ -4298,8 +4290,7 @@ impl Application for App {
                 };
 
                 let mut column = widget::list_column();
-                let mut open_index = 0;
-                for (i, app) in self.mime_app_cache.get(mime).iter().enumerate() {
+                for (i, app) in self.get_programs_for_mime(&mime).iter().enumerate() {
                     column = column.add(
                         widget::button::custom(
                             widget::row::with_children(vec![
@@ -4330,47 +4321,7 @@ impl Application for App {
                         .class(theme::Button::MenuItem)
                         .on_press(Message::OpenWithSelection(i)),
                     );
-                    open_index += 1;
                 }
-
-                if let Some(sub_classes) = mime_icon::parent_mime_types(&mime) {
-                    for sub_class in sub_classes {
-                        for (i, app) in self.mime_app_cache.get(&sub_class).iter().enumerate() {
-                            column = column.add(
-                                widget::button::custom(
-                                    widget::row::with_children(vec![
-                                        widget::icon(app.icon.clone()).size(32).into(),
-                                        if app.is_default {
-                                            widget::text::body(fl!(
-                                        "default-app",
-                                        name = Some(app.name.as_str())
-                                    ))
-                                                .into()
-                                        } else {
-                                            widget::text::body(app.name.to_string()).into()
-                                        },
-                                        widget::horizontal_space().into(),
-                                        if *selected == open_index {
-                                            widget::icon::from_name("checkbox-checked-symbolic")
-                                                .size(16)
-                                                .into()
-                                        } else {
-                                            widget::Space::with_width(Length::Fixed(16.0)).into()
-                                        },
-                                    ])
-                                        .spacing(space_s)
-                                        .height(Length::Fixed(32.0))
-                                        .align_y(Alignment::Center),
-                                )
-                                    .width(Length::Fill)
-                                    .class(theme::Button::MenuItem)
-                                    .on_press(Message::OpenWithSelection(open_index)),
-                            );
-                            open_index += 1;
-                        }
-                    }
-                }
-
 
                 let mut dialog = widget::dialog()
                     .title(fl!("open-with-title", name = name))
