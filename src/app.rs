@@ -4290,7 +4290,10 @@ impl Application for App {
                 };
 
                 let mut column = widget::list_column();
-                for (i, app) in self.get_programs_for_mime(&mime).iter().enumerate() {
+                let available_programs = self.get_programs_for_mime(&mime);
+                let item_height = 32.0;
+
+                for (i, app) in available_programs.iter().enumerate() {
                     column = column.add(
                         widget::button::custom(
                             widget::row::with_children(vec![
@@ -4314,7 +4317,7 @@ impl Application for App {
                                 },
                             ])
                             .spacing(space_s)
-                            .height(Length::Fixed(32.0))
+                            .height(Length::Fixed(item_height))
                             .align_y(Alignment::Center),
                         )
                         .width(Length::Fill)
@@ -4331,7 +4334,21 @@ impl Application for App {
                     .secondary_action(
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
                     )
-                    .control(column);
+                    .control(
+                        widget::scrollable(column).height(if let Some(size) = self.size {
+                            let max_size = size.height - 256.0;
+                            let scrollable_height = available_programs.len() as f32
+                                * (item_height + (2.0 * space_xxs as f32));
+
+                            if scrollable_height > max_size {
+                                Length::Fill
+                            } else {
+                                Length::Shrink
+                            }
+                        } else {
+                            Length::Fill
+                        }),
+                    );
 
                 if let Some(app) = store_opt {
                     dialog = dialog.tertiary_action(
