@@ -15,7 +15,6 @@ use cosmic::iced::{
 };
 #[cfg(feature = "wayland")]
 use cosmic::iced_winit::commands::overlap_notify::overlap_notify;
-use cosmic::widget::{Button, ListColumn};
 use cosmic::{
     app::{self, context_drawer, message, Core, Task},
     cosmic_config, cosmic_theme, executor,
