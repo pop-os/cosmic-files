@@ -4337,8 +4337,9 @@ impl Application for App {
                     .control(
                         widget::scrollable(column).height(if let Some(size) = self.size {
                             let max_size = size.height - 256.0;
+                            // (32 (item_height) + 5.0 (custom button padding)) + (space_xxs (list item spacing) * 2)
                             let scrollable_height = available_programs.len() as f32
-                                * (item_height + (2.0 * space_xxs as f32));
+                                * (item_height + 5.0 + (2.0 * space_xxs as f32));
 
                             if scrollable_height > max_size {
                                 Length::Fill
