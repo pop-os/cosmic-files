@@ -4292,13 +4292,15 @@ impl Application for App {
                 let mut column = widget::list_column();
                 let available_programs = self.get_programs_for_mime(&mime);
                 let item_height = 32.0;
+                let mut displayed_default = false;
 
                 for (i, app) in available_programs.iter().enumerate() {
                     column = column.add(
                         widget::button::custom(
                             widget::row::with_children(vec![
                                 widget::icon(app.icon.clone()).size(32).into(),
-                                if app.is_default {
+                                if app.is_default && !displayed_default {
+                                    displayed_default = true;
                                     widget::text::body(fl!(
                                         "default-app",
                                         name = Some(app.name.as_str())
