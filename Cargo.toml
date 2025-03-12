@@ -85,7 +85,7 @@ optional = true
 git = "https://github.com/pop-os/libcosmic.git"
 default-features = false
 #TODO: a11y feature crashes
-features = ["multi-window", "tokio", "winit", "surface-message"]
+features = ["autosize","multi-window", "tokio", "winit", "surface-message"]
 
 [features]
 default = [

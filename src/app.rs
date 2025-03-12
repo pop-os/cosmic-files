@@ -311,6 +311,7 @@ pub enum Message {
     Delete(Option<Entity>),
     DesktopConfig(DesktopConfig),
     DesktopViewOptions,
+    DesktopDialogs(bool),
     DialogCancel,
     DialogComplete,
     DragId(window::Id),
@@ -406,6 +407,7 @@ pub enum Message {
     UndoTrashStart(Vec<TrashItem>),
     WindowClose,
     WindowCloseRequested(window::Id),
+    WindowMaximize(window::Id, bool),
     WindowNew,
     WindowUnfocus,
     ZoomDefault(Option<Entity>),
@@ -530,6 +532,63 @@ pub enum DialogPage {
     },
 }
 
+pub struct DialogPages {
+    pages: VecDeque<DialogPage>,
+}
+
+impl DialogPages {
+    pub fn new() -> Self {
+        Self {
+            pages: VecDeque::new(),
+        }
+    }
+
+    pub fn front(&self) -> Option<&DialogPage> {
+        self.pages.front()
+    }
+
+    pub fn front_mut(&mut self) -> Option<&mut DialogPage> {
+        self.pages.front_mut()
+    }
+
+    pub fn push_back(&mut self, page: DialogPage) -> Task<Message> {
+        let task = if self.pages.is_empty() {
+            Task::done(cosmic::Action::App(Message::DesktopDialogs(true)))
+        } else {
+            Task::none()
+        };
+        self.pages.push_back(page);
+        task
+    }
+
+    pub fn push_front(&mut self, page: DialogPage) -> Task<Message> {
+        let task = if self.pages.is_empty() {
+            Task::done(cosmic::Action::App(Message::DesktopDialogs(true)))
+        } else {
+            Task::none()
+        };
+        self.pages.push_front(page);
+        task
+    }
+
+    #[must_use]
+    pub fn pop_front(&mut self) -> Option<(DialogPage, Task<Message>)> {
+        let page = self.pages.pop_front()?;
+        let task = if self.pages.is_empty() {
+            Task::done(cosmic::Action::App(Message::DesktopDialogs(false)))
+        } else {
+            Task::none()
+        };
+        Some((page, task))
+    }
+
+    pub fn update_front(&mut self, page: DialogPage) {
+        if !self.pages.is_empty() {
+            self.pages[0] = page;
+        }
+    }
+}
+
 pub struct FavoriteIndex(usize);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -545,6 +604,7 @@ pub struct MounterData(MounterKey, MounterItem);
 pub enum WindowKind {
     Desktop(Entity),
     DesktopViewOptions,
+    Dialogs(widget::Id),
     Preview(Option<Entity>, PreviewKind),
     FileDialog(Option<Vec<PathBuf>>),
 }
@@ -571,7 +631,7 @@ impl PartialEq for WatcherWrapper {
     }
 }
 
-/// The [`App`] stores application-specific state.
+// The [`App`] stores application-specific state.
 pub struct App {
     core: Core,
     nav_bar_context_id: segmented_button::Entity,
@@ -585,7 +645,7 @@ pub struct App {
     app_themes: Vec<String>,
     compio_tx: mpsc::Sender<Pin<Box<dyn Future<Output = ()> + Send>>>,
     context_page: ContextPage,
-    dialog_pages: VecDeque<DialogPage>,
+    dialog_pages: DialogPages,
     dialog_text_input: widget::Id,
     key_binds: HashMap<KeyBind, Action>,
     margin: HashMap<window::Id, (f32, f32, f32, f32)>,
@@ -739,30 +799,31 @@ impl App {
             let len = commands.len();
 
             for (i, mut command) in commands.into_iter().enumerate() {
-                if let Err(err) = spawn_detached(&mut command) {
-                    // More than one command: The app doesn't support lists of paths so each command
-                    // is associated with one instance
-                    //
-                    // One command: Attempted to launch one app with multiple paths
-                    let path = if len > 1 {
-                        format!("{:?}", paths.get(i))
-                    } else {
-                        format!("{paths:?}")
-                    };
-                    log::warn!("failed to open {:?} with {:?}: {}", path, app.id, err);
+                match spawn_detached(&mut command) {
+                    Ok(()) => {
+                        for path in paths {
+                            let _ = recently_used_xbel::update_recently_used(
+                                &path.into(),
+                                App::APP_ID.to_string(),
+                                "cosmic-files".to_string(),
+                                None,
+                            );
+                        }
+                    }
+                    Err(err) => {
+                        // More than one command: The app doesn't support lists of paths so each command
+                        // is associated with one instance
+                        //
+                        // One command: Attempted to launch one app with multiple paths
+                        let path = if len > 1 {
+                            format!("{:?}", paths.get(i))
+                        } else {
+                            format!("{paths:?}")
+                        };
+                        log::warn!("failed to open {:?} with {:?}: {}", path, app.id, err);
+                    }
                 }
             }
-
-            for path in paths {
-                let _ = recently_used_xbel::update_recently_used(
-                    &path.into(),
-                    App::APP_ID.to_string(),
-                    "cosmic-files".to_string(),
-                    None,
-                );
-            }
-
-            return true;
         }
 
         // No app matched for mimes and paths
@@ -2032,7 +2093,7 @@ impl Application for App {
             app_themes,
             compio_tx,
             context_page: ContextPage::Preview(None, PreviewKind::Selected),
-            dialog_pages: VecDeque::new(),
+            dialog_pages: DialogPages::new(),
             dialog_text_input: widget::Id::unique(),
             key_binds,
             margin: HashMap::new(),
@@ -2324,8 +2385,8 @@ impl Application for App {
         let entity = self.tab_model.active();
 
         // Close dialog if open
-        if self.dialog_pages.pop_front().is_some() {
-            return Task::none();
+        if let Some((_page, task)) = self.dialog_pages.pop_front() {
+            return task;
         }
 
         // Close gallery mode if open
@@ -2463,14 +2524,16 @@ impl Application for App {
                         let to = destination.0.to_path_buf();
                         let name = destination.1.to_str().unwrap_or_default().to_string();
                         let archive_type = ArchiveType::default();
-                        self.dialog_pages.push_back(DialogPage::Compress {
-                            paths,
-                            to,
-                            name,
-                            archive_type,
-                            password: None,
-                        });
-                        return widget::text_input::focus(self.dialog_text_input.clone());
+                        return Task::batch([
+                            self.dialog_pages.push_back(DialogPage::Compress {
+                                paths,
+                                to,
+                                name,
+                                archive_type,
+                                password: None,
+                            }),
+                            widget::text_input::focus(self.dialog_text_input.clone()),
+                        ]);
                     }
                 }
             }
@@ -2575,11 +2638,52 @@ impl Application for App {
                 self.windows.insert(id, WindowKind::DesktopViewOptions);
                 return command.map(|_id| cosmic::action::none());
             }
+            Message::DesktopDialogs(show) => {
+                if matches!(self.mode, Mode::Desktop) {
+                    if show {
+                        //TODO: would it be better to make this a layer surface?
+                        let mut settings = window::Settings {
+                            decorations: false,
+                            level: window::Level::AlwaysOnTop,
+                            max_size: Some(Size::new(1280.0, 640.0)),
+                            min_size: Some(Size::new(320.0, 180.0)),
+                            position: window::Position::Centered,
+                            resizable: false,
+                            size: Size::new(640.0, 320.0),
+                            transparent: true,
+                            ..Default::default()
+                        };
+
+                        #[cfg(target_os = "linux")]
+                        {
+                            // Use the dialog ID to make it float
+                            settings.platform_specific.application_id =
+                                "com.system76.CosmicFilesDialog".to_string();
+                        }
+
+                        let (id, command) = window::open(settings);
+                        self.windows
+                            .insert(id, WindowKind::Dialogs(widget::Id::unique()));
+                        return command.map(|_id| cosmic::Action::None);
+                    } else {
+                        let mut tasks = Vec::new();
+                        for (id, kind) in self.windows.iter() {
+                            if matches!(kind, WindowKind::Dialogs(_)) {
+                                tasks.push(window::close(*id));
+                            }
+                        }
+                        return Task::batch(tasks);
+                    }
+                }
+            }
             Message::DialogCancel => {
-                self.dialog_pages.pop_front();
+                if let Some((_page, task)) = self.dialog_pages.pop_front() {
+                    return task;
+                }
             }
             Message::DialogComplete => {
-                if let Some(dialog_page) = self.dialog_pages.pop_front() {
+                if let Some((dialog_page, task)) = self.dialog_pages.pop_front() {
+                    let mut tasks = vec![task];
                     match dialog_page {
                         DialogPage::Compress {
                             paths,
@@ -2631,13 +2735,13 @@ impl Application for App {
                             auth,
                             auth_tx,
                         } => {
-                            return Task::perform(
+                            tasks.push(Task::perform(
                                 async move {
                                     auth_tx.send(auth).await.unwrap();
                                     cosmic::action::none()
                                 },
                                 |x| x,
-                            );
+                            ));
                         }
                         DialogPage::NetworkError {
                             mounter_key: _,
@@ -2645,10 +2749,8 @@ impl Application for App {
                             error: _,
                         } => {
                             //TODO: re-use mounter_key?
-                            return Task::batch([
-                                self.update(Message::NetworkDriveInput(uri)),
-                                self.update(Message::NetworkDriveSubmit),
-                            ]);
+                            tasks.push(self.update(Message::NetworkDriveInput(uri)));
+                            tasks.push(self.update(Message::NetworkDriveSubmit));
                         }
                         DialogPage::NewItem { parent, name, dir } => {
                             let path = parent.join(name);
@@ -2723,15 +2825,14 @@ impl Application for App {
                             }
                         }
                     }
+                    return Task::batch(tasks);
                 }
             }
             Message::DialogPush(dialog_page) => {
-                self.dialog_pages.push_back(dialog_page);
+                return self.dialog_pages.push_back(dialog_page);
             }
             Message::DialogUpdate(dialog_page) => {
-                if !self.dialog_pages.is_empty() {
-                    self.dialog_pages[0] = dialog_page;
-                }
+                self.dialog_pages.update_front(dialog_page);
             }
             Message::DialogUpdateComplete(dialog_page) => {
                 return Task::batch([
@@ -2944,7 +3045,7 @@ impl Application for App {
                 }
                 Err(error) => {
                     log::warn!("failed to connect to {:?}: {}", item, error);
-                    self.dialog_pages.push_back(DialogPage::MountError {
+                    return self.dialog_pages.push_back(DialogPage::MountError {
                         mounter_key,
                         item,
                         error,
@@ -2952,13 +3053,15 @@ impl Application for App {
                 }
             },
             Message::NetworkAuth(mounter_key, uri, auth, auth_tx) => {
-                self.dialog_pages.push_back(DialogPage::NetworkAuth {
-                    mounter_key,
-                    uri,
-                    auth,
-                    auth_tx,
-                });
-                return widget::text_input::focus(self.dialog_text_input.clone());
+                return Task::batch([
+                    self.dialog_pages.push_back(DialogPage::NetworkAuth {
+                        mounter_key,
+                        uri,
+                        auth,
+                        auth_tx,
+                    }),
+                    widget::text_input::focus(self.dialog_text_input.clone()),
+                ]);
             }
             Message::NetworkDriveInput(input) => {
                 self.network_drive_input = input;
@@ -2993,7 +3096,7 @@ impl Application for App {
                     }
                     Err(error) => {
                         log::warn!("failed to connect to {:?}: {}", uri, error);
-                        self.dialog_pages.push_back(DialogPage::NetworkError {
+                        return self.dialog_pages.push_back(DialogPage::NetworkError {
                             mounter_key,
                             uri,
                             error,
@@ -3005,12 +3108,14 @@ impl Application for App {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
                     if let Some(path) = &tab.location.path_opt() {
-                        self.dialog_pages.push_back(DialogPage::NewItem {
-                            parent: path.to_path_buf(),
-                            name: String::new(),
-                            dir,
-                        });
-                        return widget::text_input::focus(self.dialog_text_input.clone());
+                        return Task::batch([
+                            self.dialog_pages.push_back(DialogPage::NewItem {
+                                parent: path.to_path_buf(),
+                                name: String::new(),
+                                dir,
+                            }),
+                            widget::text_input::focus(self.dialog_text_input.clone()),
+                        ]);
                     }
                 }
             }
@@ -3171,11 +3276,14 @@ impl Application for App {
                 ))
             }
             Message::OpenWithBrowse => match self.dialog_pages.pop_front() {
-                Some(DialogPage::OpenWith {
-                    mime,
-                    store_opt: Some(app),
-                    ..
-                }) => {
+                Some((
+                    DialogPage::OpenWith {
+                        mime,
+                        store_opt: Some(app),
+                        ..
+                    },
+                    task,
+                )) => {
                     let url = format!("mime:///{mime}");
                     // TODO: Support multiple URLs
                     if let Some(mut command) =
@@ -3191,9 +3299,11 @@ impl Application for App {
                             app.id
                         );
                     }
+                    return task;
                 }
-                Some(dialog_page) => {
-                    self.dialog_pages.push_front(dialog_page);
+                Some((dialog_page, task)) => {
+                    log::warn!("tried to open with browse from the wrong dialog");
+                    return Task::batch([task, self.dialog_pages.push_front(dialog_page)]);
                 }
                 None => {}
             },
@@ -3346,16 +3456,17 @@ impl Application for App {
                 self.progress_operations.clear();
             }
             Message::PendingError(id, err) => {
+                let mut tasks = Vec::new();
                 if let Some((op, controller)) = self.pending_operations.remove(&id) {
                     // Only show dialog if not cancelled
                     if !controller.is_cancelled() {
-                        self.dialog_pages.push_back(match err.kind {
+                        tasks.push(self.dialog_pages.push_back(match err.kind {
                             OperationErrorType::Generic(_) => DialogPage::FailedOperation(id),
                             OperationErrorType::PasswordRequired => DialogPage::ExtractPassword {
                                 id,
                                 password: String::from(""),
                             },
-                        });
+                        }));
                     }
                     // Remove from progress
                     self.progress_operations.remove(&id);
@@ -3371,7 +3482,8 @@ impl Application for App {
                     self.progress_operations.clear();
                 }
                 // Manually rescan any trash tabs after any operation is completed
-                return self.rescan_trash();
+                tasks.push(self.rescan_trash());
+                return Task::batch(tasks);
             }
             Message::PendingPause(id, pause) => {
                 if let Some((_, controller)) = self.pending_operations.get(&id) {
@@ -3473,6 +3585,7 @@ impl Application for App {
                         }
                         if !selected.is_empty() {
                             //TODO: batch rename
+                            let mut tasks = Vec::new();
                             for path in selected {
                                 let parent = match path.parent() {
                                     Some(some) => some.to_path_buf(),
@@ -3483,20 +3596,21 @@ impl Application for App {
                                     None => continue,
                                 };
                                 let dir = path.is_dir();
-                                self.dialog_pages.push_back(DialogPage::RenameItem {
+                                tasks.push(self.dialog_pages.push_back(DialogPage::RenameItem {
                                     from: path,
                                     parent,
                                     name,
                                     dir,
-                                });
+                                }));
                             }
-                            return widget::text_input::focus(self.dialog_text_input.clone());
+                            tasks.push(widget::text_input::focus(self.dialog_text_input.clone()));
+                            return Task::batch(tasks);
                         }
                     }
                 }
             }
             Message::ReplaceResult(replace_result) => {
-                if let Some(dialog_page) = self.dialog_pages.pop_front() {
+                if let Some((dialog_page, task)) = self.dialog_pages.pop_front() {
                     match dialog_page {
                         DialogPage::Replace { tx, .. } => {
                             return Task::perform(
@@ -3509,7 +3623,7 @@ impl Application for App {
                         }
                         other => {
                             log::warn!("tried to send replace result to the wrong dialog");
-                            self.dialog_pages.push_front(other);
+                            return Task::batch([task, self.dialog_pages.push_front(other)]);
                         }
                     }
                 }
@@ -3715,7 +3829,7 @@ impl Application for App {
                             commands.push(self.update(Message::PasteContents(to, from)));
                         }
                         tab::Command::EmptyTrash => {
-                            self.dialog_pages.push_back(DialogPage::EmptyTrash);
+                            return self.dialog_pages.push_back(DialogPage::EmptyTrash);
                         }
                         #[cfg(feature = "desktop")]
                         tab::Command::ExecEntryAction(entry, action) => {
@@ -3949,6 +4063,9 @@ impl Application for App {
             Message::WindowCloseRequested(id) => {
                 self.remove_window(&id);
             }
+            Message::WindowMaximize(id, maximized) => {
+                return window::maximize(id, maximized);
+            }
             Message::WindowNew => match env::current_exe() {
                 Ok(exe) => match process::Command::new(&exe).spawn() {
                     Ok(_child) => {}
@@ -4153,7 +4270,7 @@ impl Application for App {
                         .and_then(|x| x.path_opt())
                         .map(ToOwned::to_owned)
                     {
-                        self.open_file(&[path]);
+                        return self.open_file(&[path]).into();
                     }
                 }
                 NavMenuAction::OpenWith(entity) => {
@@ -4282,7 +4399,7 @@ impl Application for App {
                 }
 
                 NavMenuAction::EmptyTrash => {
-                    self.dialog_pages.push_front(DialogPage::EmptyTrash);
+                    return self.dialog_pages.push_front(DialogPage::EmptyTrash);
                 }
             },
             Message::Recents => {
@@ -5477,9 +5594,11 @@ impl Application for App {
                 };
 
                 let mut popover = widget::popover(tab_view);
+                /*
                 if let Some(dialog) = self.dialog() {
                     popover = popover.popup(dialog);
                 }
+                */
                 tab_column = tab_column.push(popover);
 
                 // The toaster is added on top of an empty element to ensure that it does not override context menus
@@ -5507,6 +5626,10 @@ impl Application for App {
                 };
             }
             Some(WindowKind::DesktopViewOptions) => self.desktop_view_options(),
+            Some(WindowKind::Dialogs(id)) => match self.dialog() {
+                Some(element) => return widget::autosize::autosize(element, id.clone()).into(),
+                None => widget::horizontal_space().into(),
+            },
             Some(WindowKind::Preview(entity_opt, kind)) => self
                 .preview(entity_opt, kind, false)
                 .map(|x| Message::TabMessage(*entity_opt, x)),
