@@ -3577,7 +3577,7 @@ impl Tab {
             row = row.push(widget::Space::with_width(Length::Fixed(space_m.into())));
             // This mouse area provides window drag while the header bar is hidden
             let mouse_area = mouse_area::MouseArea::new(row)
-                .on_drag(|_| Message::WindowDrag)
+                .on_press(|_| Message::WindowDrag)
                 .on_double_click(|_| Message::WindowToggleMaximize);
             column = column.push(mouse_area);
         }
