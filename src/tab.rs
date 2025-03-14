@@ -2478,6 +2478,21 @@ impl Tab {
                     if let Some(ref mut items) = self.items_opt {
                         for (i, item) in items.iter_mut().enumerate() {
                             if Some(i) == click_i_opt {
+                                // Single click to open.
+                                if !mod_ctrl && self.config.single_click {
+                                    if let Some(location) = &item.location_opt {
+                                        if item.metadata.is_dir() {
+                                            cd = Some(location.clone());
+                                        } else if let Some(path) = location.path_opt() {
+                                            commands.push(Command::OpenFile(path.to_path_buf()));
+                                        } else {
+                                            log::warn!("no path for item {:?}", item);
+                                        }
+                                    } else {
+                                        log::warn!("no location for item {:?}", item);
+                                    }
+                                }
+
                                 // Filter out selection if it does not match dialog kind
                                 if let Mode::Dialog(dialog) = &self.mode {
                                     let item_is_dir = item.metadata.is_dir();

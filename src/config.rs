@@ -209,6 +209,8 @@ pub struct TabConfig {
     /// 24 hour clock; this is neither serialized nor deserialized because we use the user's global
     /// preference rather than save it
     pub military_time: bool,
+    /// Single click to open
+    pub single_click: bool,
 }
 
 impl Default for TabConfig {
@@ -219,6 +221,7 @@ impl Default for TabConfig {
             show_hidden: false,
             icon_sizes: IconSizes::default(),
             military_time: military_time_enabled(),
+            single_click: false,
         }
     }
 }
