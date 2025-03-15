@@ -1,7 +1,6 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
-use cosmic::iced::mouse::Event::CursorMoved;
 #[cfg(feature = "wayland")]
 use cosmic::iced::{
     event::wayland::{Event as WaylandEvent, OutputEvent, OverlapNotifyEvent},
@@ -16,7 +15,8 @@ use cosmic::iced::{
 #[cfg(feature = "wayland")]
 use cosmic::iced_winit::commands::overlap_notify::overlap_notify;
 use cosmic::{
-    app::{self, context_drawer, message, Core, Task},
+    action,
+    app::{self, context_drawer, Core, Task},
     cosmic_config, cosmic_theme, executor,
     iced::{
         self,
@@ -41,6 +41,7 @@ use cosmic::{
     },
     Application, ApplicationExt, Element,
 };
+use cosmic::{iced::mouse::Event::CursorMoved, surface};
 use mime_guess::Mime;
 use notify_debouncer_full::{
     new_debouncer,
@@ -265,10 +266,10 @@ pub enum NavMenuAction {
 }
 
 impl MenuAction for NavMenuAction {
-    type Message = cosmic::app::Message<Message>;
+    type Message = cosmic::Action<Message>;
 
     fn message(&self) -> Self::Message {
-        cosmic::app::Message::App(Message::NavMenuAction(*self))
+        cosmic::Action::App(Message::NavMenuAction(*self))
     }
 }
 
@@ -382,8 +383,9 @@ pub enum Message {
     Recents,
     #[cfg(feature = "wayland")]
     OutputEvent(OutputEvent, WlOutput),
-    Cosmic(app::cosmic::Message),
+    Cosmic(app::Action),
     None,
+    Surface(surface::Action),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -904,7 +906,7 @@ impl App {
             async move {
                 let location2 = location.clone();
                 match tokio::task::spawn_blocking(move || location2.scan(icon_sizes)).await {
-                    Ok((parent_item_opt, items)) => message::app(Message::TabRescan(
+                    Ok((parent_item_opt, items)) => cosmic::action::app(Message::TabRescan(
                         entity,
                         location,
                         parent_item_opt,
@@ -913,7 +915,7 @@ impl App {
                     )),
                     Err(err) => {
                         log::warn!("failed to rescan: {}", err);
-                        message::none()
+                        cosmic::action::none()
                     }
                 }
             },
@@ -1017,16 +1019,15 @@ impl App {
         // Tabs are collected first to placate the borrowck
         let tabs: Vec<_> = self.tab_model.iter().collect();
         // Update main conf and each tab with the new config
-        let commands: Vec<_> = std::iter::once(cosmic::app::command::set_theme(
-            self.config.app_theme.theme(),
-        ))
-        .chain(tabs.into_iter().map(|entity| {
-            self.update(Message::TabMessage(
-                Some(entity),
-                tab::Message::Config(self.config.tab),
-            ))
-        }))
-        .collect();
+        let commands: Vec<_> =
+            std::iter::once(cosmic::command::set_theme(self.config.app_theme.theme()))
+                .chain(tabs.into_iter().map(|entity| {
+                    self.update(Message::TabMessage(
+                        Some(entity),
+                        tab::Message::Config(self.config.tab),
+                    ))
+                }))
+                .collect();
         Task::batch(commands)
     }
 
@@ -1179,7 +1180,7 @@ impl App {
                         })
                         .await
                         .unwrap();
-                        message::app(Message::MaybeExit)
+                        cosmic::action::app(Message::MaybeExit)
                     },
                     |x| x,
                 );
@@ -1801,7 +1802,7 @@ impl Application for App {
         (app, Task::batch(commands))
     }
 
-    fn nav_bar(&self) -> Option<Element<message::Message<Self::Message>>> {
+    fn nav_bar(&self) -> Option<Element<cosmic::Action<Self::Message>>> {
         if !self.core().nav_bar_active() {
             return None;
         }
@@ -1809,18 +1810,18 @@ impl Application for App {
         let nav_model = self.nav_model()?;
 
         let mut nav = cosmic::widget::nav_bar(nav_model, |entity| {
-            cosmic::app::Message::Cosmic(cosmic::app::cosmic::Message::NavBar(entity))
+            cosmic::Action::Cosmic(cosmic::app::Action::NavBar(entity))
         })
         .drag_id(self.nav_drag_id)
-        .on_dnd_enter(|entity, _| cosmic::app::Message::App(Message::DndEnterNav(entity)))
-        .on_dnd_leave(|_| cosmic::app::Message::App(Message::DndExitNav))
+        .on_dnd_enter(|entity, _| cosmic::Action::App(Message::DndEnterNav(entity)))
+        .on_dnd_leave(|_| cosmic::Action::App(Message::DndExitNav))
         .on_dnd_drop(|entity, data, action| {
-            cosmic::app::Message::App(Message::DndDropNav(entity, data, action))
+            cosmic::Action::App(Message::DndDropNav(entity, data, action))
         })
-        .on_context(|entity| cosmic::app::Message::App(Message::NavBarContext(entity)))
-        .on_close(|entity| cosmic::app::Message::App(Message::NavBarClose(entity)))
+        .on_context(|entity| cosmic::Action::App(Message::NavBarContext(entity)))
+        .on_close(|entity| cosmic::Action::App(Message::NavBarClose(entity)))
         .on_middle_press(|entity| {
-            cosmic::app::Message::App(Message::NavMenuAction(NavMenuAction::OpenInNewTab(entity)))
+            cosmic::Action::App(Message::NavMenuAction(NavMenuAction::OpenInNewTab(entity)))
         })
         .context_menu(self.nav_context_menu(self.nav_bar_context_id))
         .close_icon(
@@ -1843,7 +1844,7 @@ impl Application for App {
     fn nav_context_menu(
         &self,
         entity: widget::nav_bar::Id,
-    ) -> Option<Vec<widget::menu::Tree<cosmic::app::Message<Self::Message>>>> {
+    ) -> Option<Vec<widget::menu::Tree<cosmic::Action<Self::Message>>>> {
         let favorite_index_opt = self.nav_model.data::<FavoriteIndex>(entity);
         let location_opt = self.nav_model.data::<Location>(entity);
 
@@ -1945,7 +1946,9 @@ impl Application for App {
 
         if let Some(data) = self.nav_model.data::<MounterData>(entity) {
             if let Some(mounter) = MOUNTERS.get(&data.0) {
-                return mounter.mount(data.1.clone()).map(|_| message::none());
+                return mounter
+                    .mount(data.1.clone())
+                    .map(|_| cosmic::action::none());
             }
         }
         Task::none()
@@ -1991,7 +1994,7 @@ impl Application for App {
         // of closing everything on one press
         if self.core.window.show_context {
             self.set_show_context(false);
-            return cosmic::task::message(app::Message::App(Message::SetShowDetails(false)));
+            return cosmic::task::message(cosmic::action::app(Message::SetShowDetails(false)));
         }
         if self.search_get().is_some() {
             // Close search if open
@@ -2183,7 +2186,7 @@ impl Application for App {
 
                 let (id, command) = window::open(settings);
                 self.windows.insert(id, WindowKind::DesktopViewOptions);
-                return command.map(|_id| message::none());
+                return command.map(|_id| cosmic::action::none());
             }
             Message::DialogCancel => {
                 self.dialog_pages.pop_front();
@@ -2232,7 +2235,7 @@ impl Application for App {
                             error: _,
                         } => {
                             if let Some(mounter) = MOUNTERS.get(&mounter_key) {
-                                return mounter.mount(item).map(|_| message::none());
+                                return mounter.mount(item).map(|_| cosmic::action::none());
                             }
                         }
                         DialogPage::NetworkAuth {
@@ -2244,7 +2247,7 @@ impl Application for App {
                             return Task::perform(
                                 async move {
                                     auth_tx.send(auth).await.unwrap();
-                                    message::none()
+                                    cosmic::action::none()
                                 },
                                 |x| x,
                             );
@@ -2513,7 +2516,7 @@ impl Application for App {
                         Some((*mounter_key, self.network_drive_input.clone()));
                     return mounter
                         .network_drive(self.network_drive_input.clone())
-                        .map(|_| message::none());
+                        .map(|_| cosmic::action::none());
                 }
                 log::warn!(
                     "no mounter found for connecting to {:?}",
@@ -2778,10 +2781,11 @@ impl Application for App {
                         let to = path.clone();
                         return clipboard::read_data::<ClipboardPaste>().map(move |contents_opt| {
                             match contents_opt {
-                                Some(contents) => {
-                                    message::app(Message::PasteContents(to.clone(), contents))
-                                }
-                                None => message::none(),
+                                Some(contents) => cosmic::action::app(Message::PasteContents(
+                                    to.clone(),
+                                    contents,
+                                )),
+                                None => cosmic::action::none(),
                             }
                         });
                     }
@@ -2833,7 +2837,7 @@ impl Application for App {
                                                 Message::UndoTrash(tid, paths.clone())
                                             }),
                                     )
-                                    .map(cosmic::app::Message::App),
+                                    .map(cosmic::Action::App),
                             );
                         }
                     }
@@ -2958,7 +2962,7 @@ impl Application for App {
                                     PreviewKind::Location(Location::Path(path)),
                                 ),
                             );
-                            commands.push(command.map(|_id| message::none()));
+                            commands.push(command.map(|_id| cosmic::action::none()));
                         }
                         return Task::batch(commands);
                     }
@@ -2979,7 +2983,6 @@ impl Application for App {
 
                 return Task::batch([self.rescan_trash(), self.update_desktop()]);
             }
-
             Message::Rename(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
@@ -3023,7 +3026,7 @@ impl Application for App {
                             return Task::perform(
                                 async move {
                                     let _ = tx.send(replace_result).await;
-                                    message::none()
+                                    cosmic::action::none()
                                 },
                                 |x| x,
                             );
@@ -3239,11 +3242,9 @@ impl Application for App {
                             App::exec_entry_action(entry, action);
                         }
                         tab::Command::Iced(iced_command) => {
-                            commands.push(
-                                iced_command.0.map(move |x| {
-                                    message::app(Message::TabMessage(Some(entity), x))
-                                }),
-                            );
+                            commands.push(iced_command.0.map(move |x| {
+                                cosmic::action::app(Message::TabMessage(Some(entity), x))
+                            }));
                         }
                         tab::Command::OpenFile(path) => self.open_file(&path),
                         tab::Command::OpenInNewTab(path) => {
@@ -3333,7 +3334,7 @@ impl Application for App {
                 self.context_page = context_page;
                 // Preview status is preserved across restarts
                 if matches!(self.context_page, ContextPage::Preview(_, _)) {
-                    return cosmic::task::message(app::Message::App(Message::SetShowDetails(
+                    return cosmic::task::message(cosmic::action::app(Message::SetShowDetails(
                         self.core.window.show_context,
                     )));
                 }
@@ -3378,7 +3379,10 @@ impl Application for App {
                 if let Some(window_id) = self.window_id_opt.take() {
                     return Task::batch([
                         window::close(window_id),
-                        Task::perform(async move { message::app(Message::MaybeExit) }, |x| x),
+                        Task::perform(
+                            async move { cosmic::action::app(Message::MaybeExit) },
+                            |x| x,
+                        ),
                     ]);
                 }
             }
@@ -3466,7 +3470,7 @@ impl Application for App {
                     self.nav_dnd_hover = Some((location.clone(), Instant::now()));
                     let location = location.clone();
                     return Task::perform(tokio::time::sleep(HOVER_DURATION), move |_| {
-                        cosmic::app::Message::App(Message::DndHoverLocTimeout(location.clone()))
+                        cosmic::Action::App(Message::DndHoverLocTimeout(location.clone()))
                     });
                 }
             }
@@ -3528,7 +3532,7 @@ impl Application for App {
             Message::DndEnterTab(entity) => {
                 self.tab_dnd_hover = Some((entity, Instant::now()));
                 return Task::perform(tokio::time::sleep(HOVER_DURATION), move |_| {
-                    cosmic::app::Message::App(Message::DndHoverTabTimeout(entity))
+                    cosmic::Action::App(Message::DndHoverTabTimeout(entity))
                 });
             }
             Message::DndExitTab => {
@@ -3571,16 +3575,15 @@ impl Application for App {
                     return self.update(Message::TabActivate(entity));
                 }
             }
-
             Message::NavBarClose(entity) => {
                 if let Some(data) = self.nav_model.data::<MounterData>(entity) {
                     if let Some(mounter) = MOUNTERS.get(&data.0) {
-                        return mounter.unmount(data.1.clone()).map(|_| message::none());
+                        return mounter
+                            .unmount(data.1.clone())
+                            .map(|_| cosmic::action::none());
                     }
                 }
             }
-
-            // Tracks which nav bar item to show a context menu for.
             Message::NavBarContext(entity) => {
                 // Close location editing if enabled
                 let tab_entity = self.tab_model.active();
@@ -3590,8 +3593,6 @@ impl Application for App {
 
                 self.nav_bar_context_id = entity;
             }
-
-            // Applies selected nav bar context menu operation.
             Message::NavMenuAction(action) => match action {
                 NavMenuAction::Open(entity) => {
                     if let Some(path) = self
@@ -3817,7 +3818,7 @@ impl Application for App {
             }
             Message::Cosmic(cosmic) => {
                 // Forward cosmic messages
-                return Task::perform(async move { cosmic }, message::cosmic);
+                return Task::perform(async move { cosmic }, cosmic::action::cosmic);
             }
             Message::None => {}
             #[cfg(all(feature = "desktop", feature = "wayland"))]
@@ -3853,6 +3854,11 @@ impl Application for App {
                     };
                 }
             }
+            Message::Surface(a) => {
+                return cosmic::task::message(cosmic::Action::Cosmic(
+                    cosmic::app::Action::Surface(a),
+                ));
+            }
         }
 
         Task::none()
@@ -3881,7 +3887,7 @@ impl Application for App {
                 } else {
                     text_input = text_input
                         .on_input(Message::NetworkDriveInput)
-                        .on_submit(Message::NetworkDriveSubmit);
+                        .on_submit(|_| Message::NetworkDriveSubmit);
                     widget::button::standard(fl!("connect")).on_press(Message::NetworkDriveSubmit)
                 };
                 context_drawer::context_drawer(
@@ -3937,9 +3943,8 @@ impl Application for App {
             }
         }
 
-        let dialog_page = match self.dialog_pages.front() {
-            Some(some) => some,
-            None => return None,
+        let Some(dialog_page) = self.dialog_pages.front() else {
+            return None;
         };
 
         let cosmic_theme::Spacing {
@@ -4008,9 +4013,16 @@ impl Application for App {
                                             password: password.clone(),
                                         })
                                     })
-                                    .on_submit_maybe(complete_maybe.clone())
+                                    .on_submit_maybe(
+                                        complete_maybe.clone().map(|maybe| move |_| maybe.clone()),
+                                    )
                                     .into(),
-                                widget::dropdown(archive_types, selected, move |index| {
+                                Element::from(widget::dropdown(
+                                    archive_types,
+                                    selected,
+                                    move |index| index,
+                                ))
+                                .map(|index| {
                                     Message::DialogUpdate(DialogPage::Compress {
                                         paths: paths.clone(),
                                         to: to.clone(),
@@ -4043,7 +4055,9 @@ impl Application for App {
                                     password: Some(password_unwrapped),
                                 })
                             })
-                            .on_submit_maybe(complete_maybe)
+                            .on_submit_maybe(
+                                complete_maybe.clone().map(|maybe| move |_| maybe.clone()),
+                            )
                             .into(),
                     ]));
                 }
@@ -4128,7 +4142,7 @@ impl Application for App {
                                 auth_tx: auth_tx.clone(),
                             })
                         })
-                        .on_submit(Message::DialogComplete);
+                        .on_submit(|_| Message::DialogComplete);
                     if !id_assigned {
                         input = input.id(self.dialog_text_input.clone());
                         id_assigned = true;
@@ -4150,7 +4164,7 @@ impl Application for App {
                                 auth_tx: auth_tx.clone(),
                             })
                         })
-                        .on_submit(Message::DialogComplete);
+                        .on_submit(|_| Message::DialogComplete);
                     if !id_assigned {
                         input = input.id(self.dialog_text_input.clone());
                         id_assigned = true;
@@ -4173,7 +4187,7 @@ impl Application for App {
                                 auth_tx: auth_tx.clone(),
                             })
                         })
-                        .on_submit(Message::DialogComplete);
+                        .on_submit(|_| Message::DialogComplete);
                     if !id_assigned {
                         input = input.id(self.dialog_text_input.clone());
                     }
@@ -4309,7 +4323,9 @@ impl Application for App {
                                         dir: *dir,
                                     })
                                 })
-                                .on_submit_maybe(complete_maybe)
+                                .on_submit_maybe(
+                                    complete_maybe.clone().map(|maybe| move |_| maybe.clone()),
+                                )
                                 .into(),
                         ])
                         .spacing(space_xxs),
@@ -4469,7 +4485,9 @@ impl Application for App {
                                         dir: *dir,
                                     })
                                 })
-                                .on_submit_maybe(complete_maybe)
+                                .on_submit_maybe(
+                                    complete_maybe.clone().map(|maybe| move |_| maybe.clone()),
+                                )
                                 .into(),
                         ])
                         .spacing(space_xxs),
@@ -4569,7 +4587,6 @@ impl Application for App {
                     widget::button::standard(fl!("keep")).on_press(Message::DialogCancel),
                 ),
         };
-
         Some(dialog.into())
     }
 
@@ -4849,9 +4866,9 @@ impl Application for App {
             None => {
                 //TODO: distinct views per monitor in desktop mode
                 return self.view_main().map(|message| match message {
-                    app::Message::App(app) => app,
-                    app::Message::Cosmic(cosmic) => Message::Cosmic(cosmic),
-                    app::Message::None => Message::None,
+                    cosmic::Action::App(app) => app,
+                    cosmic::Action::Cosmic(cosmic) => Message::Cosmic(cosmic),
+                    cosmic::Action::None => Message::None,
                 });
             }
         };

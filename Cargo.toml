@@ -67,7 +67,15 @@ default-features = false
 features = ["multi-window", "tokio", "winit"]
 
 [features]
-default = ["bzip2", "dbus-config", "desktop", "gvfs", "liblzma", "notify", "wgpu"]
+default = [
+    "bzip2",
+    "dbus-config",
+    "desktop",
+    "gvfs",
+    "liblzma",
+    "notify",
+    "wgpu",
+]
 dbus-config = ["libcosmic/dbus-config"]
 desktop = ["libcosmic/desktop", "dep:cosmic-mime-apps", "dep:xdg"]
 gvfs = ["dep:gio", "dep:glib"]
@@ -106,6 +114,9 @@ xdg-mime = { git = "https://github.com/ellieplayswow/xdg-mime-rs", branch = "fea
 # libcosmic = { path = "../libcosmic" }
 # cosmic-config = { path = "../libcosmic/cosmic-config" }
 # cosmic-theme = { path = "../libcosmic/cosmic-theme" }
+# cosmic-config = { git = "https://github.com/pop-os/libcosmic//", branch = "drop-menu-tree-changes" }
+# libcosmic = { git = "https://github.com/pop-os/libcosmic//", branch = "drop-menu-tree-changes" }
+# cosmic-theme = { git = "https://github.com/pop-os/libcosmic//", branch = "drop-menu-tree-changes" }
 
 # [patch.'https://github.com/pop-os/smithay-clipboard']
 # smithay-clipboard = { path = "../smithay-clipboard" }
