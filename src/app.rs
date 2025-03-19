@@ -438,7 +438,7 @@ pub enum DialogPage {
     ExtractTo {
         paths: Vec<PathBuf>,
         to: PathBuf,
-        password: Option<String>
+        password: Option<String>,
     },
     EmptyTrash,
     FailedOperation(u64),
@@ -2222,13 +2222,17 @@ impl Application for App {
                         DialogPage::EmptyTrash => {
                             self.operation(Operation::EmptyTrash);
                         }
-                        DialogPage::ExtractTo { paths, to, password } => {
+                        DialogPage::ExtractTo {
+                            paths,
+                            to,
+                            password,
+                        } => {
                             self.operation(Operation::Extract {
                                 paths,
                                 to,
                                 password: None,
                             });
-                        },
+                        }
                         DialogPage::FailedOperation(id) => {
                             log::warn!("TODO: retry operation {}", id);
                         }
@@ -2377,17 +2381,16 @@ impl Application for App {
                 }
             }
             Message::ExtractTo(entity_opt) => {
-            
                 let paths = self.selected_paths(entity_opt);
                 if let Some(destination) = paths
                     .first()
                     .and_then(|first| first.parent())
                     .map(|parent| parent.to_path_buf())
                 {
-                    self.dialog_pages.push_back(DialogPage::ExtractTo { 
-                            paths,
-                            to: destination,
-                            password: None,
+                    self.dialog_pages.push_back(DialogPage::ExtractTo {
+                        paths,
+                        to: destination,
+                        password: None,
                     });
                 };
             }
@@ -4103,24 +4106,30 @@ impl Application for App {
                 .secondary_action(
                     widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
                 ),
-            DialogPage::ExtractTo { paths, to, password } => {
-                widget::dialog()
-                    .title(fl!("extract-to"))
-                    .body(fl!("extract-to-prompt"))
-                    .control(widget::text_input("Enter the path to extract to", to.to_string_lossy()).on_input(
-                        move |to| {
-                            Message::DialogUpdate(DialogPage::ExtractTo { paths: paths.clone(), to: PathBuf::from(to), password: password.clone() })
-                        },
-                    ))
-                    .primary_action(
-                        widget::button::suggested(fl!("extract-here"))
-                            .on_press(Message::DialogComplete),
-                    )
-                    .secondary_action(
-                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
-                    )
-
-            } 
+            DialogPage::ExtractTo {
+                paths,
+                to,
+                password,
+            } => widget::dialog()
+                .title(fl!("extract-to"))
+                .body(fl!("extract-to-prompt"))
+                .control(
+                    widget::text_input("Enter the path to extract to", to.to_string_lossy())
+                        .on_input(move |to| {
+                            Message::DialogUpdate(DialogPage::ExtractTo {
+                                paths: paths.clone(),
+                                to: PathBuf::from(to),
+                                password: password.clone(),
+                            })
+                        }),
+                )
+                .primary_action(
+                    widget::button::suggested(fl!("extract-here"))
+                        .on_press(Message::DialogComplete),
+                )
+                .secondary_action(
+                    widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                ),
             DialogPage::FailedOperation(id) => {
                 //TODO: try next dialog page (making sure index is used by Dialog messages)?
                 let (operation, _, err) = self.failed_operations.get(id)?;
