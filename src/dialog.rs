@@ -549,7 +549,7 @@ impl App {
             .padding(0)
             .on_press_maybe(if self.flags.kind.save() {
                 Some(Message::Save(false))
-            } else if has_selected {
+            } else if has_selected || self.flags.kind.is_dir() {
                 Some(Message::Open)
             } else {
                 None
