@@ -46,7 +46,10 @@ pub fn key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
     bind!([Ctrl], Key::Character("+".into()), ZoomIn);
     bind!([Ctrl], Key::Character("0".into()), ZoomDefault);
     bind!([Ctrl], Key::Character("-".into()), ZoomOut);
-
+    // Switch view
+    bind!([Ctrl], Key::Character("1".into()), TabViewList);
+    bind!([Ctrl], Key::Character("2".into()), TabViewGrid);
+    
     // App-only keys
     if matches!(mode, tab::Mode::App) {
         bind!([Ctrl], Key::Character("d".into()), AddToSidebar);
