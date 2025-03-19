@@ -13,7 +13,7 @@ use cosmic::{
     theme,
     widget::{
         self,
-        menu::{Action as MenuAction, KeyBind},
+        menu::{key_bind::Modifier, Action as MenuAction, KeyBind},
         segmented_button,
     },
     Application, ApplicationExt, Element,
@@ -139,6 +139,71 @@ impl AsRef<str> for DialogFilter {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct DialogLabelSpan {
+    pub text: String,
+    pub underline: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct DialogLabel {
+    pub spans: Vec<DialogLabelSpan>,
+    pub key_bind_opt: Option<KeyBind>,
+}
+
+impl<T: AsRef<str>> From<T> for DialogLabel {
+    fn from(text: T) -> Self {
+        let mut spans = Vec::<DialogLabelSpan>::new();
+        let mut key_bind_opt = None;
+        let mut next_underline = false;
+        for c in text.as_ref().chars() {
+            let underline = next_underline;
+            next_underline = false;
+
+            if c == '_' {
+                if !underline {
+                    next_underline = true;
+                    continue;
+                }
+            }
+
+            if underline && key_bind_opt.is_none() {
+                key_bind_opt = Some(KeyBind {
+                    modifiers: vec![Modifier::Alt],
+                    key: Key::Character(c.to_lowercase().to_string().into()),
+                });
+            }
+
+            if let Some(span) = spans.last_mut() {
+                if underline == span.underline {
+                    span.text.push(c);
+                    continue;
+                }
+            }
+
+            spans.push(DialogLabelSpan {
+                text: String::from(c),
+                underline,
+            });
+        }
+
+        dbg!(Self {
+            spans,
+            key_bind_opt
+        })
+    }
+}
+
+impl<'a, M: Clone + 'static> From<&'a DialogLabel> for Element<'a, M> {
+    fn from(label: &'a DialogLabel) -> Self {
+        let mut iced_spans = Vec::with_capacity(label.spans.len());
+        for span in label.spans.iter() {
+            iced_spans.push(cosmic::iced::widget::span(&span.text).underline(span.underline));
+        }
+        cosmic::iced::widget::rich_text(iced_spans).into()
+    }
+}
+
 pub struct Dialog<M> {
     cosmic: Cosmic<App>,
     mapper: fn(DialogMessage) -> M,
@@ -218,8 +283,8 @@ impl<M: Send + 'static> Dialog<M> {
             .map(move |message| cosmic::action::app(mapper(message)))
     }
 
-    pub fn set_accept_label(&mut self, accept_label: impl Into<String>) {
-        self.cosmic.app.accept_label = accept_label.into();
+    pub fn set_accept_label(&mut self, accept_label: impl AsRef<str>) {
+        self.cosmic.app.accept_label = DialogLabel::from(accept_label);
     }
 
     pub fn choices(&self) -> &[DialogChoice] {
@@ -388,7 +453,7 @@ struct App {
     core: Core,
     flags: Flags,
     title: String,
-    accept_label: String,
+    accept_label: DialogLabel,
     choices: Vec<DialogChoice>,
     context_page: ContextPage,
     dialog_pages: VecDeque<DialogPage>,
@@ -409,8 +474,11 @@ struct App {
 impl App {
     fn button_view(&self) -> Element<Message> {
         let cosmic_theme::Spacing {
+            space_xxxs,
             space_xxs,
             space_xs,
+            space_s,
+            space_l,
             ..
         } = theme::active().cosmic().spacing;
 
@@ -458,11 +526,37 @@ impl App {
         }
         row = row.push(widget::horizontal_space());
         row = row.push(widget::button::standard(fl!("cancel")).on_press(Message::Cancel));
-        row = row.push(if self.flags.kind.save() {
-            widget::button::suggested(&self.accept_label).on_press(Message::Save(false))
-        } else {
-            widget::button::suggested(&self.accept_label).on_press(Message::Open)
-        });
+
+        let mut has_selected = false;
+        if let Some(items) = self.tab.items_opt() {
+            for item in items.iter() {
+                if item.selected {
+                    has_selected = true;
+                    break;
+                }
+            }
+        }
+        row = row.push(
+            //TODO: easier way to create buttons with rich text
+            widget::button::custom(
+                widget::row::with_children(vec![Element::from(&self.accept_label)])
+                    .padding([0, space_s])
+                    .width(Length::Shrink)
+                    .height(space_l)
+                    .spacing(space_xxxs)
+                    .align_y(Alignment::Center)
+            )
+            .padding(0)
+            .on_press_maybe(if self.flags.kind.save() {
+                Some(Message::Save(false))
+            } else if has_selected {
+                Some(Message::Open)
+            } else {
+                None
+            })
+            .class(widget::button::ButtonClass::Suggested)
+            /*TODO: a11y feature: .label(&self.accept_label.text)*/
+        );
 
         col = col.push(row);
 
@@ -786,7 +880,7 @@ impl Application for App {
             core,
             flags,
             title,
-            accept_label,
+            accept_label: DialogLabel::from(accept_label),
             choices: Vec::new(),
             context_page: ContextPage::Preview(None, PreviewKind::Selected),
             dialog_pages: VecDeque::new(),
@@ -1172,6 +1266,15 @@ impl Application for App {
                 for (key_bind, action) in self.key_binds.iter() {
                     if key_bind.matches(modifiers, &key) {
                         return self.update(Message::from(action.message()));
+                    }
+                }
+                if let Some(key_bind) = &self.accept_label.key_bind_opt {
+                    if key_bind.matches(modifiers, &key) {
+                        return self.update(if self.flags.kind.save() {
+                            Message::Save(false)
+                        } else {
+                            Message::Open
+                        });
                     }
                 }
             }
