@@ -49,7 +49,7 @@ pub fn key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
     // Switch view
     bind!([Ctrl], Key::Character("1".into()), TabViewList);
     bind!([Ctrl], Key::Character("2".into()), TabViewGrid);
-    
+
     // App-only keys
     if matches!(mode, tab::Mode::App) {
         bind!([Ctrl], Key::Character("d".into()), AddToSidebar);
