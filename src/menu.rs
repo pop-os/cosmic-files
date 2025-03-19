@@ -200,6 +200,7 @@ pub fn context_menu<'a>(
                 selected_types.retain(|t| !supported_archive_types.contains(t));
                 if selected_types.is_empty() {
                     children.push(menu_item(fl!("extract-here"), Action::ExtractHere).into());
+                    children.push(menu_item(fl!("extract-to"), Action::ExtractTo).into());
                 }
                 children.push(menu_item(fl!("compress"), Action::Compress).into());
                 children.push(divider::horizontal::light().into());
