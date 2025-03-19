@@ -1560,15 +1560,18 @@ impl Item {
             if !mime_apps.is_empty() {
                 settings.push(
                     widget::settings::item::builder(fl!("open-with")).control(
-                        widget::dropdown(
-                            mime_apps,
-                            mime_apps.iter().position(|x| x.is_default),
-                            |index| {
-                                let mime_app = &mime_apps[index];
-                                Message::SetOpenWith(self.mime.clone(), mime_app.id.clone())
-                            },
+                        Element::from(
+                            widget::dropdown(
+                                mime_apps,
+                                mime_apps.iter().position(|x| x.is_default),
+                                move |index| index,
+                            )
+                            .icons(mime_app_cache.icons(&self.mime)),
                         )
-                        .icons(mime_app_cache.icons(&self.mime)),
+                        .map(|index| {
+                            let mime_app = &mime_apps[index];
+                            Message::SetOpenWith(self.mime.clone(), mime_app.id.clone())
+                        }),
                     ),
                 );
             }
@@ -3771,7 +3774,7 @@ impl Tab {
                                 location.with_path(PathBuf::from(input)).into(),
                             ))
                         })
-                        .on_submit(Message::EditLocationSubmit)
+                        .on_submit(|_| Message::EditLocationSubmit)
                         .line_height(1.0);
                     let mut popover =
                         widget::popover(text_input).position(widget::popover::Position::Bottom);
