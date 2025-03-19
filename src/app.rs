@@ -1566,6 +1566,8 @@ impl App {
     }
 
     fn settings(&self) -> Element<Message> {
+        let tab_config = self.config.tab;
+
         // TODO: Should dialog be updated here too?
         widget::settings::view_column(vec![
             widget::settings::section()
@@ -1603,6 +1605,20 @@ impl App {
                     Some(self.config.type_to_search),
                     Message::SetTypeToSearch,
                 ))
+                .into(),
+            widget::settings::section()
+                .title(fl!("other"))
+                .add({
+                    widget::settings::item::builder(fl!("single-click")).toggler(
+                        tab_config.single_click,
+                        move |single_click| {
+                            Message::TabConfig(TabConfig {
+                                single_click,
+                                ..tab_config
+                            })
+                        },
+                    )
+                })
                 .into(),
         ])
         .into()
