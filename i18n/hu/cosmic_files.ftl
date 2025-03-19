@@ -1,6 +1,6 @@
 cosmic-files = COSMIC Fájlok
 empty-folder = Üres mappa
-empty-folder-hidden = Üres mappa (Rejtett elemek vannak benne)
+empty-folder-hidden = Üres mappa (Rejtett elemekkel)
 no-results = Nincs találat
 filesystem = Fájlrendszer
 home = Saját mappa
@@ -31,7 +31,7 @@ size = Méret
 details = Részletek
 dismiss = Üzenet elvetése
 operations-running = {$running} művelet fut ({$percent}%)...
-operations-running-finished = {$running} művelet fut ({$percent}%), {$finished} befejezve...
+operations-running-finished = {$running} művelet fut ({$percent}%), {$finished} befejeződött...
 pause = Szünet
 resume = Folytatás
 
@@ -42,6 +42,8 @@ create-archive = Tömörített fájl létrehozása
 
 ## Extract Dialog
 extract-password-required = Jelszó szükséges
+extract-to = Kibontás ide...
+extract-to-prompt = Adja meg a helyet, ahová ki szeretné bontani a tömörített fájlt.
 
 ## Empty Trash Dialog
 empty-trash = Kuka ürítése
@@ -76,7 +78,7 @@ save = Mentés
 save-file = Fájl mentése
 
 ## Open With Dialog
-open-with-title = Hogyan szeretnéd megnyitni "{$name}"-t?
+open-with-title = Hogyan szeretné megnyitni ezt: "{$name}"?
 browse-store = {$store} böngészése
 
 ## Rename Dialog
@@ -86,8 +88,8 @@ rename-folder = Mappa átnevezése
 ## Replace Dialog
 replace = Csere
 replace-title = "{$filename}" már létezik.
-replace-warning = Szeretné lecserélni a meglévő fájlt? A cseréje felülírja annak tartalmát.
-replace-warning-operation = Ki szeretnéd cserélni? A csere felülírja annak tartalmát.
+replace-warning = Le szeretné cserélni a meglévő fájlt? A cseréje felülírja annak tartalmát.
+replace-warning-operation = Ki szeretné cserélni? A csere felülírja annak tartalmát.
 original-file = Eredeti fájl
 replace-with = Csere erre
 apply-to-all = Alkalmazás mindegyikre
@@ -121,6 +123,16 @@ read-write = Olvasás és írás
 ### Mode 7
 read-write-execute = Olvasás, írás és végrehajtás
 
+## Favorite Path Error Dialog
+favorite-path-error = Hiba a könyvtár megnyitásakor
+favorite-path-error-description =
+    Nem sikerült megnyitni: "{$path}".
+    Lehet, hogy nem létezik, vagy nincs megfelelő jogosultságod a megnyitásához.
+    
+    Szeretné eltávolítani az oldalsávról?
+remove = Eltávolítás
+keep = Megtartás
+
 # Context Pages
 
 ## About
@@ -153,7 +165,7 @@ username = Felhasználónév
 
 ## Operations
 cancelled = Megszakítva
-edit-history = Szerkesztési előzmények
+edit-history = Fájlműveleti előzmények
 history = Előzmények
 no-history = Nem találhatók elemek az előzményekben.
 pending = Függőben
@@ -237,6 +249,7 @@ calculating = Számolás...
 
 ## Settings
 settings = Beállítások
+single-click = Egykattintásos megnyitás
 
 ### Appearance
 appearance = Megjelenés
@@ -244,6 +257,11 @@ theme = Téma
 match-desktop = Rendszertéma
 dark = Sötét
 light = Világos
+
+### Type to Search
+type-to-search = Gépeléssel keresés
+type-to-search-recursive = A jelenlegi mappában és almappákban keres
+type-to-search-enter-path = Elérési út megadása
 
 # Context menu
 add-to-sidebar = Hozzáadás az oldalsávhoz
@@ -277,11 +295,11 @@ close-tab = Lap bezárása
 quit = Kilépés
 
 ## Edit
-edit = Szerkesztés
+edit = Fájlműveletek
 cut = Kivágás
 copy = Másolás
 paste = Beillesztés
-select-all = Mind kijelölése
+select-all = Összes kijelölése
 
 ## View
 zoom-in = Nagyítás
