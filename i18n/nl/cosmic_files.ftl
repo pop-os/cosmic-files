@@ -32,7 +32,7 @@ details = Details
 dismiss = Bericht negeren
 operations-running = {$running} bewerkingen worden uitgevoerd ({$percent}%)...
 operations-running-finished = {$running} bewerkingen worden uitgevoerd ({$percent}%), {$finished} voltooid...
-pause = Pauze
+pause = Pauzeren
 resume = Hervatten
 
 # Dialogs
@@ -42,6 +42,8 @@ create-archive = Maak een archiefbestand
 
 ## Extract Dialog
 extract-password-required = Wachtwoord vereist
+extract-to = Uitpakken naar...
+extract-to-prompt = Voer een locatie in om dit archief naar uit te pakken.
 
 ## Empty Trash Dialog
 empty-trash = Prullenbak legen?
@@ -247,6 +249,7 @@ calculating = Wordt berekend...
 
 ## Settings
 settings = Instellingen
+single-click = Een keer klikken om te openen
 
 ### Appearance
 appearance = Weergave
