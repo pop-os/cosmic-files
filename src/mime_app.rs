@@ -6,21 +6,61 @@ use cosmic::desktop;
 use cosmic::widget;
 pub use mime_guess::Mime;
 use std::{
-    cmp::Ordering, collections::HashMap, env, ffi::OsString, fs, io, path::PathBuf, process,
+    cmp::Ordering,
+    collections::HashMap,
+    env,
+    ffi::OsString,
+    fs, io,
+    path::{Path, PathBuf},
+    process,
     time::Instant,
 };
 
-pub fn exec_to_command(exec: &str, path_opt: Option<OsString>) -> Option<process::Command> {
+pub fn exec_to_command(
+    exec: &str,
+    mut path_opt: Option<Vec<OsString>>,
+) -> Vec<process::Command> {
     let args_vec: Vec<String> = shlex::split(exec)?;
     let mut args = args_vec.iter();
     let mut command = process::Command::new(args.next()?);
     for arg in args {
         if arg.starts_with('%') {
             match arg.as_str() {
-                "%f" | "%F" | "%u" | "%U" => {
-                    if let Some(path) = &path_opt {
+                // TODO:
+                // * Passing multiple paths to %f should open an instance per path
+                // * %f and %F need to handle non-file URLs (see spec; UNC paths would fail?)
+                "%f" => {
+                    if let Some(path) = path_opt.take().unwrap_or_default().first() {
+                        if from_file_or_dir(path).is_none() {
+                            log::warn!(
+                                "Desktop file expects a file path instead of a URL: {path:?}"
+                            );
+                        }
                         command.arg(path);
                     }
+                }
+                "%F" => {
+                    for invalid in path_opt
+                        .as_deref()
+                        .unwrap_or_default()
+                        .iter()
+                        .filter(|path| from_file_or_dir(path).is_none())
+                    {
+                        log::warn!(
+                            "Desktop file expects a file path instead of a URL: {invalid:?}"
+                        );
+                    }
+                    command.args(path_opt.take().unwrap_or_default());
+                }
+                "%u" => {
+                    // Exec keys should only have one %f or %u so using the first/only path and
+                    // consuming the Vec is okay
+                    if let Some(path) = path_opt.take().unwrap_or_default().first() {
+                        command.arg(path);
+                    }
+                }
+                "%U" => {
+                    command.args(path_opt.take().unwrap_or_default());
                 }
                 _ => {
                     log::warn!("unsupported Exec code {:?} in {:?}", arg, exec);
@@ -32,6 +72,12 @@ pub fn exec_to_command(exec: &str, path_opt: Option<OsString>) -> Option<process
         }
     }
     Some(command)
+}
+
+fn from_file_or_dir(path: impl AsRef<Path>) -> Option<url::Url> {
+    url::Url::from_file_path(&path)
+        .ok()
+        .or_else(|| url::Url::from_directory_path(&path).ok())
 }
 
 #[derive(Clone, Debug)]
@@ -46,7 +92,7 @@ pub struct MimeApp {
 
 impl MimeApp {
     //TODO: move to libcosmic, support multiple files
-    pub fn command(&self, path_opt: Option<OsString>) -> Option<process::Command> {
+    pub fn command(&self, path_opt: Option<Vec<OsString>>) -> Option<process::Command> {
         exec_to_command(self.exec.as_deref()?, path_opt)
     }
 }

@@ -3295,7 +3295,8 @@ impl Application for App {
                                 cosmic::action::app(Message::TabMessage(Some(entity), x))
                             }));
                         }
-                        tab::Command::OpenFile(path) => self.open_file(&path),
+                        tab::Command::OpenFile(path) => self.open_file(&path, None),
+                        tab::Command::OpenFiles(app, paths) => self.open_files(&app, Some(paths)),
                         tab::Command::OpenInNewTab(path) => {
                             commands.push(self.open_tab(Location::Path(path.clone()), false, None));
                         }
@@ -4417,7 +4418,7 @@ impl Application for App {
                 };
 
                 let mut column = widget::list_column();
-                let available_programs = self.get_programs_for_mime(&mime);
+                let available_programs = self.get_programs_for_mime(mime);
                 let item_height = 32.0;
                 let mut displayed_default = false;
 
