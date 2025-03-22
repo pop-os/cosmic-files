@@ -1160,7 +1160,6 @@ pub enum Message {
     DoubleClick(Option<usize>),
     ClickRelease(Option<usize>),
     CursorMoved(Point),
-    MouseAreaResized(Size, Rectangle),
     DragEnd(Option<usize>),
     Config(TabConfig),
     ContextAction(Action),
@@ -1824,10 +1823,10 @@ pub struct Tab {
     search_context: Option<SearchContext>,
     global_cursor_position: Option<Point>,
     current_drag_rect: Option<Rectangle>,
-    viewport_rect: Option<Rectangle>,
     virtual_cursor_offset: Option<Point>,
     last_scroll_position: Option<Point>,
     last_scroll_offset: Option<Point>,
+    scroll_bounds_opt: Option<Rectangle>,
 }
 
 fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, String> {
@@ -1914,10 +1913,10 @@ impl Tab {
             search_context: None,
             global_cursor_position: None,
             current_drag_rect: None,
-            viewport_rect: None,
             virtual_cursor_offset: None,
             last_scroll_position: None,
             last_scroll_offset: None,
+            scroll_bounds_opt: None,
         }
     }
 
@@ -2217,6 +2216,7 @@ impl Tab {
         self.items_opt = None;
         //TODO: remember scroll by location?
         self.scroll_opt = None;
+        self.scroll_bounds_opt = None;
         self.select_focus = None;
         self.search_context = None;
         if let Some(history_i) = history_i_opt {
@@ -2281,21 +2281,23 @@ impl Tab {
 
                 // we're currently dragging
                 if self.current_drag_rect.is_some() {
-                    if let Some(viewport) = self.viewport_rect {
-                        if !viewport.contains(pos) {
-                            if pos.y < viewport.y || pos.y > (viewport.y + viewport.height) {
-                                // if our mouse is above the scrollable viewport, we want to scroll up
+                    if let Some(scroll_bounds) = self.scroll_bounds_opt {
+                        if !scroll_bounds.contains(pos) {
+                            if pos.y < scroll_bounds.y
+                                || pos.y > (scroll_bounds.y + scroll_bounds.height)
+                            {
+                                // if our mouse is above the scroll bounds, we want to scroll up
                                 let drag_start_point = Point {
-                                    x: viewport.x,
-                                    y: viewport.y,
+                                    x: scroll_bounds.x,
+                                    y: scroll_bounds.y,
                                 };
                                 // diff_y should be NEGATIVE here when close to y=0 (above the MouseArea)
-                                // and positive when below the viewport
+                                // and positive when below the scroll bounds
                                 let diff_y = pos.y - drag_start_point.y;
                                 let scroll_y: f32 = if diff_y > 0.0 {
                                     DRAG_SCROLL_DISTANCE
                                 } else if diff_y < 0.0 {
-                                    DRAG_SCROLL_DISTANCE * -1.0
+                                    -DRAG_SCROLL_DISTANCE
                                 } else {
                                     0.0
                                 };
@@ -2332,20 +2334,6 @@ impl Tab {
                             commands.push(Command::AutoScroll(None));
                         }
                     }
-                }
-            }
-            Message::MouseAreaResized(_size, viewport) => {
-                // if we have a scroll position, we want to subtract it from the viewport
-                // so that we don't desync when swapping
-                if let Some(scroll_pos) = self.scroll_opt {
-                    self.viewport_rect = Some(Rectangle {
-                        x: viewport.x - scroll_pos.x,
-                        y: viewport.y - scroll_pos.y,
-                        width: viewport.width,
-                        height: viewport.height,
-                    });
-                } else {
-                    self.viewport_rect = Some(viewport);
                 }
             }
             Message::DragEnd(_) => {
@@ -3005,6 +2993,7 @@ impl Tab {
             }
 
             Message::Scroll(viewport) => {
+                self.scroll_bounds_opt = Some(viewport.bounds());
                 self.scroll_opt = Some(viewport.absolute_offset());
             }
             Message::ScrollTab(scroll_speed) => {
@@ -4314,8 +4303,6 @@ impl Tab {
                 .on_drag_end(|_| Message::DragEnd(None))
                 .show_drag_rect(true)
                 .on_release(|_| Message::ClickRelease(None))
-                .on_resize(Message::MouseAreaResized)
-                .cursor_offset(self.virtual_cursor_offset)
                 .into(),
             true,
         )
@@ -4649,8 +4636,6 @@ impl Tab {
             .on_drag_end(|_| Message::DragEnd(None))
             .show_drag_rect(true)
             .on_release(|_| Message::ClickRelease(None))
-            .on_resize(Message::MouseAreaResized)
-            .cursor_offset(self.virtual_cursor_offset)
             .into(),
             true,
         )
