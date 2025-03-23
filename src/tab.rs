@@ -2592,11 +2592,15 @@ impl Tab {
                 }
             }
             Message::Drag(rect_opt) => {
-                self.current_drag_rect = rect_opt;
+                if self.mode.multiple() {
+                    self.current_drag_rect = rect_opt;
+                }
                 if let Some(rect) = rect_opt {
                     self.context_menu = None;
                     self.location_context_menu_index = None;
-                    self.select_rect(rect, mod_ctrl, mod_shift);
+                    if self.mode.multiple() {
+                        self.select_rect(rect, mod_ctrl, mod_shift);
+                    }
                     if self.select_focus.take().is_some() {
                         // Unfocus currently focused button
                         commands.push(Command::Iced(
@@ -4301,7 +4305,7 @@ impl Tab {
                 .on_press(|_| Message::Click(None))
                 .on_drag(Message::Drag)
                 .on_drag_end(|_| Message::DragEnd(None))
-                .show_drag_rect(true)
+                .show_drag_rect(self.mode.multiple())
                 .on_release(|_| Message::ClickRelease(None))
                 .into(),
             true,
@@ -4634,7 +4638,7 @@ impl Tab {
             .on_press(|_| Message::Click(None))
             .on_drag(Message::Drag)
             .on_drag_end(|_| Message::DragEnd(None))
-            .show_drag_rect(true)
+            .show_drag_rect(self.mode.multiple())
             .on_release(|_| Message::ClickRelease(None))
             .into(),
             true,
