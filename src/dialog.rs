@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{
-    app::{self, context_drawer, cosmic::Cosmic, Core, Task},
+    app::{context_drawer, cosmic::Cosmic, Core, Task},
     cosmic_config, cosmic_theme, executor,
     iced::{
-        event,
+        self, event,
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers},
-        stream, window, Alignment, Event, Length, Size, Subscription,
+        mouse, stream, window, Alignment, Event, Length, Point, Size, Subscription,
     },
     theme,
     widget::{
@@ -375,6 +375,7 @@ enum Message {
     Cancel,
     Choice(usize, usize),
     Config(Config),
+    CursorMoved(Point),
     DialogCancel,
     DialogComplete,
     DialogUpdate(DialogPage),
@@ -389,6 +390,7 @@ enum Message {
     Open,
     Preview,
     Save(bool),
+    ScrollTab(i16),
     SearchActivate,
     SearchClear,
     SearchInput(String),
@@ -409,6 +411,7 @@ impl From<AppMessage> for Message {
             AppMessage::None => Message::None,
             AppMessage::Preview(_entity_opt) => Message::Preview,
             AppMessage::SearchActivate => Message::SearchActivate,
+            AppMessage::ScrollTab(scroll_speed) => Message::ScrollTab(scroll_speed),
             AppMessage::TabMessage(_entity_opt, tab_message) => Message::TabMessage(tab_message),
             AppMessage::TabView(_entity_opt, view) => Message::TabView(view),
             AppMessage::ToggleFoldersFirst => Message::ToggleFoldersFirst,
@@ -469,6 +472,7 @@ struct App {
     tab: Tab,
     key_binds: HashMap<KeyBind, Action>,
     watcher_opt: Option<(Debouncer<RecommendedWatcher, FileIdMap>, HashSet<PathBuf>)>,
+    auto_scroll_speed: Option<i16>,
 }
 
 impl App {
@@ -896,6 +900,7 @@ impl Application for App {
             tab,
             key_binds,
             watcher_opt: None,
+            auto_scroll_speed: None,
         };
 
         let commands = Task::batch([
@@ -1214,6 +1219,9 @@ impl Application for App {
                     return self.update_config();
                 }
             }
+            Message::CursorMoved(pos) => {
+                return self.update(Message::TabMessage(tab::Message::CursorMoved(pos)));
+            }
             Message::DialogCancel => {
                 self.dialog_pages.pop_front();
             }
@@ -1480,6 +1488,11 @@ impl Application for App {
                     }
                 }
             }
+            Message::ScrollTab(scroll_speed) => {
+                return self.update(Message::TabMessage(tab::Message::ScrollTab(
+                    (scroll_speed as f32) / 10.0,
+                )));
+            }
             Message::SearchActivate => {
                 return if self.search_get().is_none() {
                     self.search_set(Some(String::new()))
@@ -1544,6 +1557,15 @@ impl Application for App {
                         }
                         tab::Command::WindowToggleMaximize => {
                             commands.push(window::toggle_maximize(self.flags.window_id));
+                        }
+                        tab::Command::AutoScroll(scroll_speed) => {
+                            // converting an f32 to an i16 here by multiplying by 10 and casting to i16
+                            // further resolution isn't necessary
+                            if let Some(scroll_speed_float) = scroll_speed {
+                                self.auto_scroll_speed = Some((scroll_speed_float * 10.0) as i16);
+                            } else {
+                                self.auto_scroll_speed = None;
+                            }
                         }
                         unsupported => {
                             log::warn!("{unsupported:?} not supported in dialog mode");
@@ -1728,6 +1750,9 @@ impl Application for App {
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
                     Some(Message::Modifiers(modifiers))
                 }
+                Event::Mouse(mouse::Event::CursorMoved { position: pos }) => {
+                    Some(Message::CursorMoved(pos))
+                }
                 _ => None,
             }),
             Config::subscription().map(|update| {
@@ -1824,6 +1849,14 @@ impl Application for App {
                 )
                 .map(Message::TabMessage),
         ];
+
+        if let Some(scroll_speed) = self.auto_scroll_speed {
+            subscriptions.push(
+                iced::time::every(time::Duration::from_millis(10))
+                    .with(scroll_speed)
+                    .map(|(scroll_speed, _)| Message::ScrollTab(scroll_speed)),
+            );
+        }
 
         for (key, mounter) in MOUNTERS.iter() {
             subscriptions.push(
