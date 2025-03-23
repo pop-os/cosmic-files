@@ -2395,16 +2395,18 @@ impl Application for App {
                     .and_then(|first| first.parent())
                     .map(|parent| parent.to_path_buf())
                 {
-                    let (dialog, command) = Dialog::new(
+                    let (mut dialog, dialog_task) = Dialog::new(
                         DialogKind::OpenFolder,
                         Some(destination),
                         Message::FileDialogMessage,
                         Message::ExtractToResult,
                     );
+                    let set_title_task = dialog.set_title(fl!("extract-to-title"));
+                    dialog.set_accept_label(fl!("extract-here"));
                     self.windows
                         .insert(dialog.window_id(), WindowKind::FileDialog(Some(paths)));
                     self.file_dialog_opt = Some(dialog);
-                    return command;
+                    return Task::batch([set_title_task, dialog_task]);
                 };
             }
             Message::ExtractToResult(result) => {
