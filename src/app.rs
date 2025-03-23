@@ -2914,6 +2914,12 @@ impl Application for App {
                                     )
                                     .map(cosmic::Action::App),
                             );
+                        } else {
+                            commands.push(
+                                self.toasts
+                                    .push(widget::toaster::Toast::new(description))
+                                    .map(cosmic::Action::App),
+                            );
                         }
                     }
 
