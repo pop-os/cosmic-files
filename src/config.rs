@@ -99,6 +99,7 @@ impl Favorite {
 pub enum TypeToSearch {
     Recursive,
     EnterPath,
+    CurrentDirectory,
 }
 
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
