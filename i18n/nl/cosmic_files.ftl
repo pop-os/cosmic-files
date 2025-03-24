@@ -43,7 +43,6 @@ create-archive = Maak een archiefbestand
 ## Extract Dialog
 extract-password-required = Wachtwoord vereist
 extract-to = Uitpakken naar...
-extract-to-prompt = Voer een locatie in om dit archief naar uit te pakken.
 
 ## Empty Trash Dialog
 empty-trash = Prullenbak legen?

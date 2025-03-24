@@ -43,7 +43,6 @@ create-archive = Tömörített fájl létrehozása
 ## Extract Dialog
 extract-password-required = Jelszó szükséges
 extract-to = Kibontás ide...
-extract-to-prompt = Adja meg a helyet, ahová ki szeretné bontani a tömörített fájlt.
 
 ## Empty Trash Dialog
 empty-trash = Kuka ürítése

@@ -43,7 +43,7 @@ create-archive = Create archive
 ## Extract Dialog
 extract-password-required = Password required
 extract-to = Extract To...
-extract-to-prompt = Input a location to extract the archive to.
+extract-to-title = Extract to folder
 
 ## Empty Trash Dialog
 empty-trash = Empty trash
