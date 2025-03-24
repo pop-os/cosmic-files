@@ -15,7 +15,6 @@ use cosmic::iced::{
 #[cfg(feature = "wayland")]
 use cosmic::iced_winit::commands::overlap_notify::overlap_notify;
 use cosmic::{
-    action,
     app::{self, context_drawer, Core, Task},
     cosmic_config, cosmic_theme, executor,
     iced::{
@@ -64,11 +63,10 @@ use trash::TrashItem;
 #[cfg(feature = "wayland")]
 use wayland_client::{protocol::wl_output::WlOutput, Proxy};
 
-use crate::mime_app::MimeApp;
-use crate::operation::{OperationError, OperationErrorType};
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{AppTheme, Config, DesktopConfig, Favorite, IconSizes, TabConfig, TypeToSearch},
+    dialog::{DialogKind, DialogMessage},
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
@@ -78,6 +76,11 @@ use crate::{
     spawn_detached::spawn_detached,
     tab::{self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION},
 };
+use crate::{
+    dialog::Dialog,
+    operation::{OperationError, OperationErrorType},
+};
+use crate::{dialog::DialogResult, mime_app::MimeApp};
 
 #[derive(Clone, Debug)]
 pub enum Mode {
@@ -292,11 +295,13 @@ pub enum Message {
     DesktopViewOptions,
     DialogCancel,
     DialogComplete,
+    FileDialogMessage(DialogMessage),
     DialogPush(DialogPage),
     DialogUpdate(DialogPage),
     DialogUpdateComplete(DialogPage),
     ExtractHere(Option<Entity>),
     ExtractTo(Option<Entity>),
+    ExtractToResult(DialogResult),
     #[cfg(all(feature = "desktop", feature = "wayland"))]
     Focused(window::Id),
     Key(Modifiers, Key, Option<SmolStr>),
@@ -435,11 +440,6 @@ pub enum DialogPage {
         archive_type: ArchiveType,
         password: Option<String>,
     },
-    ExtractTo {
-        paths: Vec<PathBuf>,
-        to: PathBuf,
-        password: Option<String>,
-    },
     EmptyTrash,
     FailedOperation(u64),
     ExtractPassword {
@@ -504,6 +504,7 @@ pub enum WindowKind {
     Desktop(Entity),
     DesktopViewOptions,
     Preview(Option<Entity>, PreviewKind),
+    FileDialog(Option<Vec<PathBuf>>),
 }
 
 pub struct WatcherWrapper {
@@ -571,6 +572,7 @@ pub struct App {
     nav_drag_id: DragId,
     tab_drag_id: DragId,
     auto_scroll_speed: Option<i16>,
+    file_dialog_opt: Option<Dialog<Message>>,
 }
 
 impl App {
@@ -1801,6 +1803,7 @@ impl Application for App {
             nav_drag_id: DragId::new(),
             tab_drag_id: DragId::new(),
             auto_scroll_speed: None,
+            file_dialog_opt: None,
         };
 
         let mut commands = vec![app.update_config()];
@@ -2244,17 +2247,6 @@ impl Application for App {
                         DialogPage::EmptyTrash => {
                             self.operation(Operation::EmptyTrash);
                         }
-                        DialogPage::ExtractTo {
-                            paths,
-                            to,
-                            password,
-                        } => {
-                            self.operation(Operation::Extract {
-                                paths,
-                                to,
-                                password: None,
-                            });
-                        }
                         DialogPage::FailedOperation(id) => {
                             log::warn!("TODO: retry operation {}", id);
                         }
@@ -2409,12 +2401,48 @@ impl Application for App {
                     .and_then(|first| first.parent())
                     .map(|parent| parent.to_path_buf())
                 {
-                    self.dialog_pages.push_back(DialogPage::ExtractTo {
-                        paths,
-                        to: destination,
-                        password: None,
-                    });
+                    let (mut dialog, dialog_task) = Dialog::new(
+                        DialogKind::OpenFolder,
+                        Some(destination),
+                        Message::FileDialogMessage,
+                        Message::ExtractToResult,
+                    );
+                    let set_title_task = dialog.set_title(fl!("extract-to-title"));
+                    dialog.set_accept_label(fl!("extract-here"));
+                    self.windows
+                        .insert(dialog.window_id(), WindowKind::FileDialog(Some(paths)));
+                    self.file_dialog_opt = Some(dialog);
+                    return Task::batch([set_title_task, dialog_task]);
                 };
+            }
+            Message::ExtractToResult(result) => {
+                match result {
+                    DialogResult::Cancel => {}
+                    DialogResult::Open(selected_paths) => {
+                        let mut archive_paths = None;
+                        if let Some(file_dialog) = &self.file_dialog_opt {
+                            let window = self.windows.remove(&file_dialog.window_id());
+                            if let Some(WindowKind::FileDialog(paths)) = window {
+                                archive_paths = paths;
+                            }
+                        }
+                        if let Some(archive_paths) = archive_paths {
+                            if !selected_paths.is_empty() {
+                                self.operation(Operation::Extract {
+                                    paths: archive_paths,
+                                    to: selected_paths[0].clone(),
+                                    password: None,
+                                });
+                            }
+                        }
+                    }
+                }
+                self.file_dialog_opt = None;
+            }
+            Message::FileDialogMessage(dialog_message) => {
+                if let Some(dialog) = &mut self.file_dialog_opt {
+                    return dialog.update(dialog_message);
+                }
             }
             Message::Key(modifiers, key, text) => {
                 let entity = self.tab_model.active();
@@ -2897,6 +2925,12 @@ impl Application for App {
                                     )
                                     .map(cosmic::Action::App),
                             );
+                        } else {
+                            commands.push(
+                                self.toasts
+                                    .push(widget::toaster::Toast::new(description))
+                                    .map(cosmic::Action::App),
+                            );
                         }
                     }
 
@@ -2945,7 +2979,7 @@ impl Application for App {
                         self.dialog_pages.push_back(match err.kind {
                             OperationErrorType::Generic(_) => DialogPage::FailedOperation(id),
                             OperationErrorType::PasswordRequired => DialogPage::ExtractPassword {
-                                id: id,
+                                id,
                                 password: String::from(""),
                             },
                         });
@@ -4131,30 +4165,6 @@ impl Application for App {
                 .secondary_action(
                     widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
                 ),
-            DialogPage::ExtractTo {
-                paths,
-                to,
-                password,
-            } => widget::dialog()
-                .title(fl!("extract-to"))
-                .body(fl!("extract-to-prompt"))
-                .control(
-                    widget::text_input("Enter the path to extract to", to.to_string_lossy())
-                        .on_input(move |to| {
-                            Message::DialogUpdate(DialogPage::ExtractTo {
-                                paths: paths.clone(),
-                                to: PathBuf::from(to),
-                                password: password.clone(),
-                            })
-                        }),
-                )
-                .primary_action(
-                    widget::button::suggested(fl!("extract-here"))
-                        .on_press(Message::DialogComplete),
-                )
-                .secondary_action(
-                    widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
-                ),
             DialogPage::FailedOperation(id) => {
                 //TODO: try next dialog page (making sure index is used by Dialog messages)?
                 let (operation, _, err) = self.failed_operations.get(id)?;
@@ -4945,6 +4955,10 @@ impl Application for App {
             Some(WindowKind::Preview(entity_opt, kind)) => self
                 .preview(entity_opt, kind, false)
                 .map(|x| Message::TabMessage(*entity_opt, x)),
+            Some(WindowKind::FileDialog(..)) => match &self.file_dialog_opt {
+                Some(dialog) => return dialog.view(id),
+                None => widget::text("Unknown window ID").into(),
+            },
             None => {
                 //TODO: distinct views per monitor in desktop mode
                 return self.view_main().map(|message| match message {

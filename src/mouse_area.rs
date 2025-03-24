@@ -49,7 +49,6 @@ pub struct MouseArea<'a, Message> {
     on_enter: Option<Box<dyn OnEnterExit<'a, Message>>>,
     on_exit: Option<Box<dyn OnEnterExit<'a, Message>>>,
     show_drag_rect: bool,
-    cursor_offset: Option<Point>,
 }
 
 impl<'a, Message> MouseArea<'a, Message> {
@@ -185,11 +184,6 @@ impl<'a, Message> MouseArea<'a, Message> {
         self
     }
 
-    pub fn cursor_offset(mut self, offset: Option<Point>) -> Self {
-        self.cursor_offset = offset;
-        self
-    }
-
     /// Sets the widget's unique identifier.
     #[must_use]
     pub fn with_id(mut self, id: Id) -> Self {
@@ -221,8 +215,6 @@ impl<'a, Message, F> OnEnterExit<'a, Message> for F where F: Fn() -> Message + '
 struct State {
     last_position: Option<Point>,
     last_virtual_position: Option<Point>,
-    last_in_bounds_position: Option<Point>,
-    last_cursor_offset: Option<Point>,
     drag_initiated: Option<Point>,
     modifiers: Modifiers,
     prev_click: Option<(mouse::Click, Instant)>,
@@ -300,7 +292,6 @@ impl<'a, Message> MouseArea<'a, Message> {
             on_exit: None,
             on_scroll: None,
             show_drag_rect: false,
-            cursor_offset: None,
         }
     }
 }
@@ -431,6 +422,7 @@ where
                 let mut bg_color = cosmic.accent_color();
                 //TODO: get correct alpha
                 bg_color.alpha = 0.2;
+                renderer.start_layer(*viewport);
                 renderer.fill_quad(
                     Quad {
                         bounds,
@@ -443,6 +435,7 @@ where
                     },
                     Color::from(bg_color),
                 );
+                renderer.end_layer();
             }
         }
     }
@@ -515,65 +508,7 @@ fn update<Message: Clone>(
         }
     }
 
-    // check if offset differs to calculate virtual position
-    let mut need_to_recalculate = false;
-    match (state.last_cursor_offset, widget.cursor_offset) {
-        // check if offset has changed between updates
-        (Some(last_cursor_offset), Some(cursor_offset)) => {
-            if last_cursor_offset != cursor_offset {
-                state.last_cursor_offset = Some(cursor_offset);
-                need_to_recalculate = true;
-            }
-        }
-
-        // we've started moving out of bounds
-        (None, Some(cursor_offset)) => {
-            state.last_cursor_offset = Some(cursor_offset);
-            need_to_recalculate = true;
-        }
-
-        // we've moved inbounds
-        (Some(_), None) => {
-            state.last_cursor_offset = None;
-        }
-        _ => {}
-    }
-
-    if need_to_recalculate {
-        // if we have a cursor_offset, we need to calculate our "virtual" position
-        // (where we think the ABSOLUTE cursor is) - we'll take the last in bounds position and
-        // clamp it to the layout bounds
-        if let Some(offset) = widget.cursor_offset {
-            if let Some(in_bounds_pos) = state.last_in_bounds_position {
-                let mut new_virtual_pos = Point {
-                    x: in_bounds_pos.x + offset.x,
-                    y: in_bounds_pos.y + offset.y,
-                };
-
-                // clamp to the viewport
-                new_virtual_pos.x = if new_virtual_pos.x > (layout_bounds.width + layout_bounds.x) {
-                    layout_bounds.width + layout_bounds.x
-                } else if new_virtual_pos.x < 0.0 {
-                    0.0
-                } else {
-                    new_virtual_pos.x
-                };
-
-                new_virtual_pos.y = if new_virtual_pos.y > (layout_bounds.height + layout_bounds.y)
-                {
-                    layout_bounds.height + layout_bounds.y
-                } else if new_virtual_pos.y < 0.0 {
-                    0.0
-                } else {
-                    new_virtual_pos.y
-                };
-
-                state.last_virtual_position = Some(new_virtual_pos);
-            }
-        }
-    }
-
-    if let Event::Mouse(mouse::Event::CursorMoved { .. }) = event {
+    if let Event::Mouse(mouse::Event::CursorMoved { position }) = event {
         let position_in = cursor.position_in(layout_bounds);
         match (position_in, state.last_position) {
             (None, Some(_)) => {
@@ -590,10 +525,10 @@ fn update<Message: Clone>(
         }
         state.last_position = position_in;
 
-        // set the last in bounds position to be the ABSOLUTE version of position_in
-        if position_in.is_some() {
-            state.last_in_bounds_position = cursor.position_over(layout_bounds);
-        }
+        state.last_virtual_position = Some(Point::new(
+            viewport.x - layout_bounds.x + position.x,
+            viewport.y - layout_bounds.y + position.y,
+        ));
     }
 
     if state.drag_initiated.is_none() && !cursor.is_over(layout_bounds) {
