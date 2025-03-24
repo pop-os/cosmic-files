@@ -19,6 +19,7 @@ mounted-drives = Podpięte dyski
 trash-folder-icon = Ikona kosza
 icon-size-and-spacing = Rozmiar i rozstaw ikon
 icon-size = Rozmiar ikon
+grid-spacing = Rozstaw siatki
 
 # List view
 name = Nazwa
@@ -38,6 +39,11 @@ resume = Wznów
 
 ## Compress Dialog
 create-archive = Utwórz archiwum
+
+## Extract Dialog
+extract-password-required = Wymagane hasło
+extract-to = Wypakuj do…
+extract-to-prompt = Wprowadź miejsce gdzie wypakowywać.
 
 ## Empty Trash Dialog
 empty-trash = Opróżnij kosz
@@ -96,12 +102,36 @@ set-executable-and-launch-description = Czy chcesz ustawić plik „{$name}” j
 set-and-launch = Ustaw i uruchom
 
 ## Metadata Dialog
+open-with = Otwórz za pomocą
 owner = Właściciel
 group = Grupa
 other = Inni
-read = Odczyt
-write = Zapis
-execute = Wykonywanie
+### Mode 0
+none = Brak
+### Mode 1 (unusual)
+execute-only = Tylko wykonywanie
+### Mode 2 (unusual)
+write-only = Tylko zapis
+### Mode 3 (unusual)
+write-execute = Zapis i wykonywanie
+### Mode 4
+read-only = Tylko odczyt
+### Mode 5
+read-execute = Odczyt i wykonywanie
+### Mode 6
+read-write = Odczyt i zapis
+### Mode 7
+read-write-execute = Odczyt, zapis i wykonywanie
+
+## Favorite Path Error Dialog
+favorite-path-error = Błąd podczas otwierania katalogu
+favorite-path-error-description =
+    Nie można otworzyćUnable to open "{$path}".
+    Może on nie istnieć lub możesz nie mieć uprawnień do otwierania go.
+
+    Czy chcesz usunąć go z bocznego panelu?
+remove = Usuń
+keep = Zachowaj
 
 # Context Pages
 
@@ -166,6 +196,15 @@ copied = Skopiowano {$items} {$items ->
         [few] elementy
         *[other] elementów
     } z „{$from}” do „{$to}”
+deleting = Usuwanie {$items} {$items ->
+        [one] elementu
+        *[other] elementów
+    } z {trash} ({$progress})...
+deleted = Usunięto {$items} {$items ->
+        [one] element
+        [few] elementy
+        *[other] elementów
+    } z {trash}
 emptying-trash = Opróżnianie {trash} ({$progress})…
 emptied-trash = Opróżniono {trash}
 extracting = Wypakowywanie {$items} {$items ->
@@ -215,6 +254,7 @@ calculating = Obliczanie…
 
 ## Settings
 settings = Ustawienia
+single-click = Jedno kliknięcie by otwierać
 
 ### Appearance
 appearance = Wygląd
@@ -223,9 +263,15 @@ match-desktop = Dopasuj do Pulpitu
 dark = Ciemny
 light = Jasny
 
+### Type to Search
+type-to-search = Naciśnij by wyszukać…
+type-to-search-recursive = Wyszukuj w obecnym katalogu i jego subkatalogach
+type-to-search-enter-path = Wprowadź ścieżkę pliku lub katalogu
+
 # Context menu
 add-to-sidebar = Dodaj do bocznego panelu
 compress = Spakuj
+delete-permanently = Usuń definitywnie
 extract-here = Wypakuj
 new-file = Nowy plik
 new-folder = Nowy katalog

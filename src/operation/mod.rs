@@ -1,4 +1,14 @@
+use crate::{
+    app::{ArchiveType, DialogPage, Message},
+    config::IconSizes,
+    fl,
+    mime_icon::mime_for_path,
+    spawn_detached::spawn_detached,
+    tab,
+};
 use cosmic::iced::futures::{channel::mpsc::Sender, executor, SinkExt};
+use std::collections::VecDeque;
+use std::fmt::Formatter;
 use std::{
     borrow::Cow,
     fs,
@@ -8,15 +18,8 @@ use std::{
 };
 use tokio::sync::{mpsc, Mutex as TokioMutex};
 use walkdir::WalkDir;
-
-use crate::{
-    app::{ArchiveType, DialogPage, Message},
-    config::IconSizes,
-    err_str, fl,
-    mime_icon::mime_for_path,
-    spawn_detached::spawn_detached,
-    tab,
-};
+use zip::result::ZipError;
+use zip::AesMode::Aes256;
 
 pub use self::controller::{Controller, ControllerState};
 pub mod controller;
@@ -91,6 +94,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
     archive: &mut zip::ZipArchive<R>,
     directory: P,
     controller: Controller,
+    password: Option<String>,
 ) -> zip::result::ZipResult<()> {
     use std::{ffi::OsString, fs};
     use zip::result::ZipError;
@@ -115,6 +119,8 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
     let mut files_by_unix_mode = Vec::new();
     let mut buffer = vec![0; 4 * 1024 * 1024];
     let total_files = archive.len();
+    let mut pending_directory_creates = VecDeque::new();
+
     for i in 0..total_files {
         controller
             .check()
@@ -122,7 +128,11 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
 
         controller.set_progress((i as f32) / total_files as f32);
 
-        let mut file = archive.by_index(i)?;
+        let mut file = match &password {
+            None => archive.by_index(i),
+            Some(pwd) => archive.by_index_decrypt(i, pwd.as_bytes()),
+        }
+        .map_err(|e| e)?;
         let filepath = file
             .enclosed_name()
             .ok_or(ZipError::InvalidArchive("Invalid file path"))?;
@@ -130,7 +140,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
         let outpath = directory.as_ref().join(filepath);
 
         if file.is_dir() {
-            make_writable_dir_all(&outpath)?;
+            pending_directory_creates.push_back(outpath.clone());
             continue;
         }
         let symlink_target = if file.is_symlink() && (cfg!(unix) || cfg!(windows)) {
@@ -141,10 +151,16 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
             None
         };
         drop(file);
-        if let Some(p) = outpath.parent() {
-            make_writable_dir_all(p)?;
-        }
         if let Some(target) = symlink_target {
+            // create all pending dirs
+            while let Some(pending_dir) = pending_directory_creates.pop_front() {
+                make_writable_dir_all(pending_dir)?;
+            }
+
+            if let Some(p) = outpath.parent() {
+                make_writable_dir_all(p)?;
+            }
+
             #[cfg(unix)]
             {
                 use std::os::unix::ffi::OsStringExt;
@@ -175,7 +191,21 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
             }
             continue;
         }
-        let mut file = archive.by_index(i)?;
+        let mut file = match &password {
+            None => archive.by_index(i),
+            Some(pwd) => archive.by_index_decrypt(i, pwd.as_bytes()),
+        }
+        .map_err(|e| e)?;
+
+        // create all pending dirs
+        while let Some(pending_dir) = pending_directory_creates.pop_front() {
+            make_writable_dir_all(pending_dir)?;
+        }
+
+        if let Some(p) = outpath.parent() {
+            make_writable_dir_all(p)?;
+        }
+
         let total = file.size();
         let mut outfile = fs::File::create(&outpath)?;
         let mut current = 0;
@@ -236,9 +266,9 @@ async fn copy_or_move(
     moving: bool,
     msg_tx: &Arc<TokioMutex<Sender<Message>>>,
     controller: Controller,
-) -> Result<OperationSelection, String> {
+) -> Result<OperationSelection, OperationError> {
     let msg_tx = msg_tx.clone();
-    tokio::task::spawn_blocking(move || -> Result<OperationSelection, String> {
+    tokio::task::spawn_blocking(move || -> Result<OperationSelection, OperationError> {
         log::info!(
             "{} {:?} to {:?}",
             if moving { "Move" } else { "Copy" },
@@ -293,13 +323,15 @@ async fn copy_or_move(
             });
         }
 
-        context.recursive_copy_or_move(from_to_pairs, moving)?;
+        context
+            .recursive_copy_or_move(from_to_pairs, moving)
+            .map_err(OperationError::from_str)?;
 
         Ok(context.op_sel)
     })
     .await
-    .map_err(err_str)?
-    .map_err(err_str)
+    .map_err(OperationError::from_str)?
+    //.map_err(OperationError::from_str)
 }
 
 fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
@@ -417,6 +449,7 @@ pub enum Operation {
         paths: Vec<PathBuf>,
         to: PathBuf,
         archive_type: ArchiveType,
+        password: Option<String>,
     },
     /// Copy items
     Copy {
@@ -427,12 +460,17 @@ pub enum Operation {
     Delete {
         paths: Vec<PathBuf>,
     },
+    /// Delete a path from the trash
+    DeleteTrash {
+        items: Vec<trash::TrashItem>,
+    },
     /// Empty the trash
     EmptyTrash,
     /// Uncompress files
     Extract {
         paths: Vec<PathBuf>,
         to: PathBuf,
+        password: Option<String>,
     },
     /// Move items
     Move {
@@ -457,6 +495,33 @@ pub enum Operation {
     SetExecutableAndLaunch {
         path: PathBuf,
     },
+}
+
+#[derive(Clone, Debug)]
+pub enum OperationErrorType {
+    Generic(String),
+    PasswordRequired,
+}
+#[derive(Clone, Debug)]
+pub struct OperationError {
+    pub kind: OperationErrorType,
+}
+
+impl OperationError {
+    pub fn from_str<T: ToString>(err: T) -> Self {
+        OperationError {
+            kind: OperationErrorType::Generic(err.to_string()),
+        }
+    }
+}
+
+impl std::fmt::Display for OperationError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match &self.kind {
+            OperationErrorType::Generic(s) => s.fmt(f),
+            OperationErrorType::PasswordRequired => f.write_str("Password required"),
+        }
+    }
 }
 
 impl Operation {
@@ -489,8 +554,15 @@ impl Operation {
                 to = fl!("trash"),
                 progress = progress()
             ),
+            Self::DeleteTrash { items } => {
+                fl!("deleting", items = items.len(), progress = progress())
+            }
             Self::EmptyTrash => fl!("emptying-trash", progress = progress()),
-            Self::Extract { paths, to } => fl!(
+            Self::Extract {
+                paths,
+                to,
+                password: _,
+            } => fl!(
                 "extracting",
                 items = paths.len(),
                 from = paths_parent_name(paths),
@@ -544,8 +616,13 @@ impl Operation {
                 from = paths_parent_name(paths),
                 to = fl!("trash")
             ),
+            Self::DeleteTrash { items } => fl!("deleted", items = items.len()),
             Self::EmptyTrash => fl!("emptied-trash"),
-            Self::Extract { paths, to } => fl!(
+            Self::Extract {
+                paths,
+                to,
+                password: _,
+            } => fl!(
                 "extracted",
                 items = paths.len(),
                 from = paths_parent_name(paths),
@@ -581,6 +658,7 @@ impl Operation {
             Self::Compress { .. }
             | Self::Copy { .. }
             | Self::Delete { .. }
+            | Self::DeleteTrash { .. }
             | Self::EmptyTrash
             | Self::Extract { .. }
             | Self::Move { .. }
@@ -607,7 +685,7 @@ impl Operation {
         self,
         msg_tx: &Arc<TokioMutex<Sender<Message>>>,
         controller: Controller,
-    ) -> Result<OperationSelection, String> {
+    ) -> Result<OperationSelection, OperationError> {
         let controller_clone = controller.clone();
 
         //TODO: IF ERROR, RETURN AN Operation THAT CAN UNDO THE CURRENT STATE
@@ -616,138 +694,194 @@ impl Operation {
                 paths,
                 to,
                 archive_type,
+                password,
             } => {
-                tokio::task::spawn_blocking(move || -> Result<OperationSelection, String> {
-                    let Some(relative_root) = to.parent() else {
-                        return Err(format!("path {:?} has no parent directory", to));
-                    };
+                tokio::task::spawn_blocking(
+                    move || -> Result<OperationSelection, OperationError> {
+                        let Some(relative_root) = to.parent() else {
+                            return Err(OperationError::from_str(format!(
+                                "path {:?} has no parent directory",
+                                to
+                            )));
+                        };
 
-                    let op_sel = OperationSelection {
-                        ignored: paths.clone(),
-                        selected: vec![to.clone()],
-                    };
+                        let op_sel = OperationSelection {
+                            ignored: paths.clone(),
+                            selected: vec![to.clone()],
+                        };
 
-                    let mut paths = paths;
-                    for path in paths.clone().iter() {
-                        if path.is_dir() {
-                            let new_paths_it = WalkDir::new(path).into_iter();
-                            for entry in new_paths_it.skip(1) {
-                                let entry = entry.map_err(err_str)?;
-                                paths.push(entry.into_path());
-                            }
-                        }
-                    }
-
-                    match archive_type {
-                        ArchiveType::Tgz => {
-                            let mut archive = fs::File::create(&to)
-                                .map(io::BufWriter::new)
-                                .map(|w| {
-                                    flate2::write::GzEncoder::new(w, flate2::Compression::default())
-                                })
-                                .map(tar::Builder::new)
-                                .map_err(err_str)?;
-
-                            let total_paths = paths.len();
-                            for (i, path) in paths.iter().enumerate() {
-                                controller.check()?;
-
-                                controller.set_progress((i as f32) / total_paths as f32);
-
-                                if let Some(relative_path) =
-                                    path.strip_prefix(relative_root).map_err(err_str)?.to_str()
-                                {
-                                    archive
-                                        .append_path_with_name(path, relative_path)
-                                        .map_err(err_str)?;
+                        let mut paths = paths;
+                        for path in paths.clone().iter() {
+                            if path.is_dir() {
+                                let new_paths_it = WalkDir::new(path).into_iter();
+                                for entry in new_paths_it.skip(1) {
+                                    let entry = entry.map_err(OperationError::from_str)?;
+                                    paths.push(entry.into_path());
                                 }
                             }
-
-                            archive.finish().map_err(err_str)?;
                         }
-                        ArchiveType::Zip => {
-                            let mut archive = fs::File::create(&to)
-                                .map(io::BufWriter::new)
-                                .map(zip::ZipWriter::new)
-                                .map_err(err_str)?;
 
-                            let total_paths = paths.len();
-                            let mut buffer = vec![0; 4 * 1024 * 1024];
-                            for (i, path) in paths.iter().enumerate() {
-                                controller.check()?;
+                        match archive_type {
+                            ArchiveType::Tgz => {
+                                let mut archive = fs::File::create(&to)
+                                    .map(io::BufWriter::new)
+                                    .map(|w| {
+                                        flate2::write::GzEncoder::new(
+                                            w,
+                                            flate2::Compression::default(),
+                                        )
+                                    })
+                                    .map(tar::Builder::new)
+                                    .map_err(OperationError::from_str)?;
 
-                                controller.set_progress((i as f32) / total_paths as f32);
+                                let total_paths = paths.len();
+                                for (i, path) in paths.iter().enumerate() {
+                                    controller.check().map_err(OperationError::from_str)?;
 
-                                let mut zip_options = zip::write::SimpleFileOptions::default();
-                                if let Some(relative_path) =
-                                    path.strip_prefix(relative_root).map_err(err_str)?.to_str()
-                                {
-                                    if path.is_file() {
-                                        let mut file = fs::File::open(path).map_err(err_str)?;
-                                        let metadata = file.metadata().map_err(err_str)?;
-                                        let total = metadata.len();
-                                        if total >= 4 * 1024 * 1024 * 1024 {
-                                            // The large file option must be enabled for files above 4 GiB
-                                            zip_options = zip_options.large_file(true);
-                                        }
-                                        #[cfg(unix)]
-                                        {
-                                            use std::os::unix::fs::MetadataExt;
-                                            let mode = metadata.mode();
-                                            zip_options = zip_options.unix_permissions(mode);
-                                        }
+                                    controller.set_progress((i as f32) / total_paths as f32);
+
+                                    if let Some(relative_path) = path
+                                        .strip_prefix(relative_root)
+                                        .map_err(OperationError::from_str)?
+                                        .to_str()
+                                    {
                                         archive
-                                            .start_file(relative_path, zip_options)
-                                            .map_err(err_str)?;
-                                        let mut current = 0;
-                                        loop {
-                                            controller.check()?;
-
-                                            let count = file.read(&mut buffer).map_err(err_str)?;
-                                            if count == 0 {
-                                                break;
-                                            }
-                                            archive.write_all(&buffer[..count]).map_err(err_str)?;
-                                            current += count;
-
-                                            let file_progress = current as f32 / total as f32;
-                                            let total_progress =
-                                                (i as f32 + file_progress) / total_paths as f32;
-                                            controller.set_progress(total_progress);
-                                        }
-                                    } else {
-                                        archive
-                                            .add_directory(relative_path, zip_options)
-                                            .map_err(err_str)?;
+                                            .append_path_with_name(path, relative_path)
+                                            .map_err(OperationError::from_str)?;
                                     }
                                 }
+
+                                archive.finish().map_err(OperationError::from_str)?;
                             }
+                            ArchiveType::Zip => {
+                                let mut archive = fs::File::create(&to)
+                                    .map(io::BufWriter::new)
+                                    .map(zip::ZipWriter::new)
+                                    .map_err(OperationError::from_str)?;
 
-                            archive.finish().map_err(err_str)?;
+                                let total_paths = paths.len();
+                                let mut buffer = vec![0; 4 * 1024 * 1024];
+                                for (i, path) in paths.iter().enumerate() {
+                                    controller.check().map_err(OperationError::from_str)?;
+
+                                    controller.set_progress((i as f32) / total_paths as f32);
+
+                                    let mut zip_options = zip::write::SimpleFileOptions::default();
+                                    if password.is_some() {
+                                        zip_options = zip_options.with_aes_encryption(
+                                            Aes256,
+                                            password.as_deref().unwrap(),
+                                        );
+                                    }
+                                    if let Some(relative_path) = path
+                                        .strip_prefix(relative_root)
+                                        .map_err(OperationError::from_str)?
+                                        .to_str()
+                                    {
+                                        if path.is_file() {
+                                            let mut file = fs::File::open(path)
+                                                .map_err(OperationError::from_str)?;
+                                            let metadata = file
+                                                .metadata()
+                                                .map_err(OperationError::from_str)?;
+                                            let total = metadata.len();
+                                            if total >= 4 * 1024 * 1024 * 1024 {
+                                                // The large file option must be enabled for files above 4 GiB
+                                                zip_options = zip_options.large_file(true);
+                                            }
+                                            #[cfg(unix)]
+                                            {
+                                                use std::os::unix::fs::MetadataExt;
+                                                let mode = metadata.mode();
+                                                zip_options = zip_options.unix_permissions(mode);
+                                            }
+                                            archive
+                                                .start_file(relative_path, zip_options)
+                                                .map_err(OperationError::from_str)?;
+                                            let mut current = 0;
+                                            loop {
+                                                controller
+                                                    .check()
+                                                    .map_err(OperationError::from_str)?;
+
+                                                let count = file
+                                                    .read(&mut buffer)
+                                                    .map_err(OperationError::from_str)?;
+                                                if count == 0 {
+                                                    break;
+                                                }
+                                                archive
+                                                    .write_all(&buffer[..count])
+                                                    .map_err(OperationError::from_str)?;
+                                                current += count;
+
+                                                let file_progress = current as f32 / total as f32;
+                                                let total_progress =
+                                                    (i as f32 + file_progress) / total_paths as f32;
+                                                controller.set_progress(total_progress);
+                                            }
+                                        } else {
+                                            archive
+                                                .add_directory(relative_path, zip_options)
+                                                .map_err(OperationError::from_str)?;
+                                        }
+                                    }
+                                }
+
+                                archive.finish().map_err(OperationError::from_str)?;
+                            }
                         }
-                    }
 
-                    Ok(op_sel)
-                })
+                        Ok(op_sel)
+                    },
+                )
                 .await
-                .map_err(err_str)?
-                .map_err(err_str)?
+                .map_err(OperationError::from_str)?
+                //.map_err(|e| e)?
             }
-            Self::Copy { paths, to } => copy_or_move(paths, to, false, msg_tx, controller).await?,
+            Self::Copy { paths, to } => copy_or_move(paths, to, false, msg_tx, controller).await,
             Self::Delete { paths } => {
                 let total = paths.len();
                 for (i, path) in paths.into_iter().enumerate() {
-                    controller.check()?;
+                    controller.check().map_err(OperationError::from_str)?;
 
                     controller.set_progress((i as f32) / (total as f32));
 
                     let _items_opt = tokio::task::spawn_blocking(|| trash::delete(path))
                         .await
-                        .map_err(err_str)?
-                        .map_err(err_str)?;
+                        .map_err(OperationError::from_str)?
+                        .map_err(OperationError::from_str)?;
                     //TODO: items_opt allows for easy restore
                 }
-                OperationSelection::default()
+                Ok(OperationSelection::default())
+            }
+            Self::DeleteTrash { items } => {
+                #[cfg(any(
+                    target_os = "windows",
+                    all(
+                        unix,
+                        not(target_os = "macos"),
+                        not(target_os = "ios"),
+                        not(target_os = "android")
+                    )
+                ))]
+                {
+                    tokio::task::spawn_blocking(move || -> Result<(), OperationError> {
+                        let count = items.len();
+                        for (i, item) in items.into_iter().enumerate() {
+                            controller.check().map_err(OperationError::from_str)?;
+
+                            controller.set_progress(i as f32 / count as f32);
+
+                            trash::os_limited::purge_all([item])
+                                .map_err(OperationError::from_str)?;
+                        }
+                        Ok(())
+                    })
+                    .await
+                    .map_err(OperationError::from_str)??;
+                }
+                Ok(OperationSelection::default())
             }
             Self::EmptyTrash => {
                 #[cfg(any(
@@ -760,135 +894,159 @@ impl Operation {
                     )
                 ))]
                 {
-                    tokio::task::spawn_blocking(move || -> Result<(), String> {
-                        let items = trash::os_limited::list().map_err(err_str)?;
+                    tokio::task::spawn_blocking(move || -> Result<(), OperationError> {
+                        let items = trash::os_limited::list().map_err(OperationError::from_str)?;
                         let count = items.len();
                         for (i, item) in items.into_iter().enumerate() {
-                            controller.check()?;
+                            controller.check().map_err(OperationError::from_str)?;
 
                             controller.set_progress(i as f32 / count as f32);
 
-                            trash::os_limited::purge_all([item]).map_err(err_str)?;
+                            trash::os_limited::purge_all([item])
+                                .map_err(OperationError::from_str)?;
                         }
                         Ok(())
                     })
                     .await
-                    .map_err(err_str)??;
+                    .map_err(OperationError::from_str)??;
                 }
-                OperationSelection::default()
+                Ok(OperationSelection::default())
             }
-            Self::Extract { paths, to } => {
-                tokio::task::spawn_blocking(move || -> Result<OperationSelection, String> {
-                    let total_paths = paths.len();
-                    let mut op_sel = OperationSelection::default();
-                    for (i, path) in paths.iter().enumerate() {
-                        controller.check()?;
+            Self::Extract {
+                paths,
+                to,
+                password,
+            } => {
+                tokio::task::spawn_blocking(
+                    move || -> Result<OperationSelection, OperationError> {
+                        let total_paths = paths.len();
+                        let mut op_sel = OperationSelection::default();
+                        for (i, path) in paths.iter().enumerate() {
+                            controller.check().map_err(OperationError::from_str)?;
 
-                        controller.set_progress((i as f32) / total_paths as f32);
+                            controller.set_progress((i as f32) / total_paths as f32);
 
-                        if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
-                            let dir_name = get_directory_name(file_name);
-                            let mut new_dir = to.join(dir_name);
+                            if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
+                                let dir_name = get_directory_name(file_name);
+                                let mut new_dir = to.join(dir_name);
 
-                            if new_dir.exists() {
-                                if let Some(new_dir_parent) = new_dir.parent() {
-                                    new_dir = copy_unique_path(&new_dir, new_dir_parent);
+                                if new_dir.exists() {
+                                    if let Some(new_dir_parent) = new_dir.parent() {
+                                        new_dir = copy_unique_path(&new_dir, new_dir_parent);
+                                    }
                                 }
-                            }
 
-                            op_sel.ignored.push(path.clone());
-                            op_sel.selected.push(new_dir.clone());
+                                op_sel.ignored.push(path.clone());
+                                op_sel.selected.push(new_dir.clone());
 
-                            let controller = controller.clone();
-                            let mime = mime_for_path(path);
-                            match mime.essence_str() {
-                                "application/gzip" | "application/x-compressed-tar" => {
-                                    OpReader::new(path, controller)
+                                let controller = controller.clone();
+                                let mime = mime_for_path(path);
+                                let password = password.clone();
+                                match mime.essence_str() {
+                                    "application/gzip" | "application/x-compressed-tar" => {
+                                        OpReader::new(path, controller)
+                                            .map(io::BufReader::new)
+                                            .map(flate2::read::GzDecoder::new)
+                                            .map(tar::Archive::new)
+                                            .and_then(|mut archive| archive.unpack(&new_dir))
+                                            .map_err(OperationError::from_str)?
+                                    }
+                                    "application/x-tar" => OpReader::new(path, controller)
                                         .map(io::BufReader::new)
-                                        .map(flate2::read::GzDecoder::new)
                                         .map(tar::Archive::new)
                                         .and_then(|mut archive| archive.unpack(&new_dir))
-                                        .map_err(err_str)?
-                                }
-                                "application/x-tar" => OpReader::new(path, controller)
-                                    .map(io::BufReader::new)
-                                    .map(tar::Archive::new)
-                                    .and_then(|mut archive| archive.unpack(&new_dir))
-                                    .map_err(err_str)?,
-                                "application/zip" => fs::File::open(path)
-                                    .map(io::BufReader::new)
-                                    .map(zip::ZipArchive::new)
-                                    .map_err(err_str)?
-                                    .and_then(move |mut archive| {
-                                        zip_extract(&mut archive, &new_dir, controller)
-                                    })
-                                    .map_err(err_str)?,
-                                #[cfg(feature = "bzip2")]
-                                "application/x-bzip" | "application/x-bzip-compressed-tar" => {
-                                    OpReader::new(path, controller)
+                                        .map_err(OperationError::from_str)?,
+                                    "application/zip" => fs::File::open(path)
                                         .map(io::BufReader::new)
-                                        .map(bzip2::read::BzDecoder::new)
-                                        .map(tar::Archive::new)
-                                        .and_then(|mut archive| archive.unpack(&new_dir))
-                                        .map_err(err_str)?
+                                        .map(zip::ZipArchive::new)
+                                        .map_err(OperationError::from_str)?
+                                        .and_then(move |mut archive| {
+                                            zip_extract(
+                                                &mut archive,
+                                                &new_dir,
+                                                controller,
+                                                password,
+                                            )
+                                        })
+                                        .map_err(|e| match e {
+                                            ZipError::UnsupportedArchive(
+                                                ZipError::PASSWORD_REQUIRED,
+                                            )
+                                            | ZipError::InvalidPassword => OperationError {
+                                                kind: OperationErrorType::PasswordRequired,
+                                            },
+                                            _ => OperationError::from_str(e),
+                                        })?,
+                                    #[cfg(feature = "bzip2")]
+                                    "application/x-bzip" | "application/x-bzip-compressed-tar" => {
+                                        OpReader::new(path, controller)
+                                            .map(io::BufReader::new)
+                                            .map(bzip2::read::BzDecoder::new)
+                                            .map(tar::Archive::new)
+                                            .and_then(|mut archive| archive.unpack(&new_dir))
+                                            .map_err(OperationError::from_str)?
+                                    }
+                                    #[cfg(feature = "liblzma")]
+                                    "application/x-xz" | "application/x-xz-compressed-tar" => {
+                                        OpReader::new(path, controller)
+                                            .map(io::BufReader::new)
+                                            .map(liblzma::read::XzDecoder::new)
+                                            .map(tar::Archive::new)
+                                            .and_then(|mut archive| archive.unpack(&new_dir))
+                                            .map_err(OperationError::from_str)?
+                                    }
+                                    _ => Err(OperationError::from_str(format!(
+                                        "unsupported mime type {:?}",
+                                        mime
+                                    )))?,
                                 }
-                                #[cfg(feature = "liblzma")]
-                                "application/x-xz" | "application/x-xz-compressed-tar" => {
-                                    OpReader::new(path, controller)
-                                        .map(io::BufReader::new)
-                                        .map(liblzma::read::XzDecoder::new)
-                                        .map(tar::Archive::new)
-                                        .and_then(|mut archive| archive.unpack(&new_dir))
-                                        .map_err(err_str)?
-                                }
-                                _ => Err(format!("unsupported mime type {:?}", mime))?,
                             }
                         }
-                    }
 
-                    Ok(op_sel)
-                })
+                        Ok(op_sel)
+                    },
+                )
                 .await
-                .map_err(err_str)?
-                .map_err(err_str)?
+                .map_err(OperationError::from_str)?
+                //.map_err(OperationError::from_str)?
             }
-            Self::Move { paths, to } => copy_or_move(paths, to, true, msg_tx, controller).await?,
-            Self::NewFolder { path } => {
-                tokio::task::spawn_blocking(move || -> Result<OperationSelection, String> {
-                    controller.check()?;
-                    fs::create_dir(&path).map_err(err_str)?;
+            Self::Move { paths, to } => copy_or_move(paths, to, true, msg_tx, controller).await,
+            Self::NewFolder { path } => tokio::task::spawn_blocking(
+                move || -> Result<OperationSelection, OperationError> {
+                    controller.check().map_err(OperationError::from_str)?;
+                    fs::create_dir(&path).map_err(OperationError::from_str)?;
                     Ok(OperationSelection {
                         ignored: Vec::new(),
                         selected: vec![path],
                     })
-                })
-                .await
-                .map_err(err_str)??
-            }
-            Self::NewFile { path } => {
-                tokio::task::spawn_blocking(move || -> Result<OperationSelection, String> {
-                    controller.check()?;
-                    fs::File::create(&path).map_err(err_str)?;
+                },
+            )
+            .await
+            .map_err(OperationError::from_str)?,
+            Self::NewFile { path } => tokio::task::spawn_blocking(
+                move || -> Result<OperationSelection, OperationError> {
+                    controller.check().map_err(OperationError::from_str)?;
+                    fs::File::create(&path).map_err(OperationError::from_str)?;
                     Ok(OperationSelection {
                         ignored: Vec::new(),
                         selected: vec![path],
                     })
-                })
-                .await
-                .map_err(err_str)??
-            }
-            Self::Rename { from, to } => {
-                tokio::task::spawn_blocking(move || -> Result<OperationSelection, String> {
-                    controller.check()?;
-                    fs::rename(&from, &to).map_err(err_str)?;
+                },
+            )
+            .await
+            .map_err(OperationError::from_str)?,
+            Self::Rename { from, to } => tokio::task::spawn_blocking(
+                move || -> Result<OperationSelection, OperationError> {
+                    controller.check().map_err(OperationError::from_str)?;
+                    fs::rename(&from, &to).map_err(OperationError::from_str)?;
                     Ok(OperationSelection {
                         ignored: vec![from],
                         selected: vec![to],
                     })
-                })
-                .await
-                .map_err(err_str)??
-            }
+                },
+            )
+            .await
+            .map_err(OperationError::from_str)?,
             #[cfg(target_os = "macos")]
             Self::Restore { .. } => {
                 // TODO: add support for macos
@@ -899,7 +1057,7 @@ impl Operation {
                 let total = items.len();
                 let mut paths = Vec::with_capacity(total);
                 for (i, item) in items.into_iter().enumerate() {
-                    controller.check()?;
+                    controller.check().map_err(OperationError::from_str)?;
 
                     controller.set_progress((i as f32) / (total as f32));
 
@@ -907,47 +1065,49 @@ impl Operation {
 
                     tokio::task::spawn_blocking(|| trash::os_limited::restore_all([item]))
                         .await
-                        .map_err(err_str)?
-                        .map_err(err_str)?;
+                        .map_err(OperationError::from_str)?
+                        .map_err(OperationError::from_str)?;
                 }
-                OperationSelection {
+                Ok(OperationSelection {
                     ignored: Vec::new(),
                     selected: paths,
-                }
+                })
             }
             Self::SetExecutableAndLaunch { path } => {
-                tokio::task::spawn_blocking(move || -> Result<(), String> {
+                tokio::task::spawn_blocking(move || -> Result<(), OperationError> {
                     //TODO: what to do on non-Unix systems?
                     #[cfg(unix)]
                     {
                         use std::os::unix::fs::PermissionsExt;
 
-                        controller.check()?;
+                        controller.check().map_err(OperationError::from_str)?;
 
-                        let mut perms = fs::metadata(&path).map_err(err_str)?.permissions();
+                        let mut perms = fs::metadata(&path)
+                            .map_err(OperationError::from_str)?
+                            .permissions();
                         let current_mode = perms.mode();
                         let new_mode = current_mode | 0o111;
                         perms.set_mode(new_mode);
-                        fs::set_permissions(&path, perms).map_err(err_str)?;
+                        fs::set_permissions(&path, perms).map_err(OperationError::from_str)?;
                     }
 
-                    controller.check()?;
+                    controller.check().map_err(OperationError::from_str)?;
 
                     let mut command = std::process::Command::new(path);
-                    spawn_detached(&mut command).map_err(err_str)?;
+                    spawn_detached(&mut command).map_err(OperationError::from_str)?;
 
                     Ok(())
                 })
                 .await
-                .map_err(err_str)?
-                .map_err(err_str)?;
-                OperationSelection::default()
+                .map_err(OperationError::from_str)?
+                .map_err(|e| e)?;
+                Ok(OperationSelection::default())
             }
         };
 
         controller_clone.set_progress(100.0);
 
-        Ok(paths)
+        paths
     }
 }
 
@@ -964,7 +1124,7 @@ mod tests {
     use test_log::test;
     use tokio::sync;
 
-    use super::{Controller, Operation, OperationSelection, ReplaceResult};
+    use super::{Controller, Operation, OperationError, OperationSelection, ReplaceResult};
     use crate::{
         app::{
             test_utils::{
@@ -983,7 +1143,7 @@ mod tests {
     pub async fn operation_copy(
         paths: Vec<PathBuf>,
         to: PathBuf,
-    ) -> Result<OperationSelection, String> {
+    ) -> Result<OperationSelection, OperationError> {
         let id = fastrand::u64(0..u64::MAX);
         let (tx, mut rx) = mpsc::channel(BUF_SIZE);
         let paths_clone = paths.clone();

@@ -19,6 +19,7 @@ mounted-drives = Mounted drives
 trash-folder-icon = Trash folder icon
 icon-size-and-spacing = Icon size and spacing
 icon-size = Icon size
+grid-spacing = Grid spacing
 
 # List view
 name = Name
@@ -38,6 +39,11 @@ resume = Resume
 
 ## Compress Dialog
 create-archive = Create archive
+
+## Extract Dialog
+extract-password-required = Password required
+extract-to = Extract To...
+extract-to-title = Extract to folder
 
 ## Empty Trash Dialog
 empty-trash = Empty trash
@@ -100,9 +106,32 @@ open-with = Open with
 owner = Owner
 group = Group
 other = Other
-read = Read
-write = Write
-execute = Execute
+### Mode 0
+none = None
+### Mode 1 (unusual)
+execute-only = Execute-only
+### Mode 2 (unusual)
+write-only = Write-only
+### Mode 3 (unusual)
+write-execute = Write and execute
+### Mode 4
+read-only = Read-only
+### Mode 5
+read-execute = Read and execute
+### Mode 6
+read-write = Read and write
+### Mode 7
+read-write-execute = Read, write, and execute
+
+## Favorite Path Error Dialog
+favorite-path-error = Error opening directory
+favorite-path-error-description =
+    Unable to open "{$path}".
+    It may not exist or you don't have permission to open it.
+    
+    Would you like to remove it from the sidebar?
+remove = Remove
+keep = Keep
 
 # Context Pages
 
@@ -164,6 +193,14 @@ copied = Copied {$items} {$items ->
         [one] item
         *[other] items
     } from "{$from}" to "{$to}"
+deleting = Deleting {$items} {$items ->
+        [one] item
+        *[other] items
+    } from {trash} ({$progress})...
+deleted = Deleted {$items} {$items ->
+        [one] item
+        *[other] items
+    } from {trash}
 emptying-trash = Emptying {trash} ({$progress})...
 emptied-trash = Emptied {trash}
 extracting = Extracting {$items} {$items ->
@@ -212,6 +249,7 @@ calculating = Calculating...
 
 ## Settings
 settings = Settings
+single-click = Single click to open
 
 ### Appearance
 appearance = Appearance
@@ -220,9 +258,15 @@ match-desktop = Match desktop
 dark = Dark
 light = Light
 
+### Type to Search
+type-to-search = Type to Search
+type-to-search-recursive = Searches the current folder and all sub-folders
+type-to-search-enter-path = Enters the path to the directory or file
+
 # Context menu
 add-to-sidebar = Add to sidebar
 compress = Compress
+delete-permanently = Delete permanently
 extract-here = Extract
 new-file = New file...
 new-folder = New folder...

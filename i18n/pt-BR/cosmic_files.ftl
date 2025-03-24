@@ -19,6 +19,7 @@ mounted-drives = Dispositivos montados
 trash-folder-icon = Ícone da lixeira
 icon-size-and-spacing = Tamanho e espaçamento do ícone
 icon-size = Tamanho do ícone
+grid-spacing = Espaçamento entre ícones
 
 # List view
 name = Nome
@@ -39,8 +40,11 @@ resume = Continuar
 ## Compress Dialog
 create-archive = Compactar arquivos
 
+## Extract Dialog
+extract-password-required = Senha necessária
+
 ## Empty Trash Dialog
-empty-trash = Esvaziar lixeira
+empty-trash = Esvaziar a lixeira
 empty-trash-warning = Tem certeza de que deseja apagar permanentemente todos os itens da lixeira?
 
 ## Mount Error Dialog
@@ -96,12 +100,36 @@ set-executable-and-launch-description = Deseja marcar "{$name}" como executável
 set-and-launch = Marcar e iniciar
 
 ## Metadata Dialog
+open-with = Abrir com
 owner = Proprietário
 group = Grupo
 other = Outros
-read = Leitura
-write = Escrita
-execute = Execução
+### Mode 0
+none = None
+### Mode 1 (unusual)
+execute-only = Execute-only
+### Mode 2 (unusual)
+write-only = Write-only
+### Mode 3 (unusual)
+write-execute = Write and execute
+### Mode 4
+read-only = Read-only
+### Mode 5
+read-execute = Read and execute
+### Mode 6
+read-write = Read and write
+### Mode 7
+read-write-execute = Read, write, and execute
+
+## Favorite Path Error Dialog
+favorite-path-error = Error opening directory
+favorite-path-error-description =
+    Não foi possível abri "{$path}".
+    O item pode não existir ou você não tem permissão para abri-lo.
+    
+    Deseja removê-lo da barra lateral?
+remove = Remover
+keep = Manter
 
 # Context Pages
 
@@ -147,7 +175,7 @@ complete = Concluído
 compressing = Compactando {$items} {$items ->
         [one] item
         *[other] itens
-    } de {$from} para {$to}
+    } de {$from} para {$to} ({$progress})...
 compressed = Compactado {$items} {$items ->
         [one] item
         *[other] itens
@@ -158,11 +186,19 @@ created = Criado {$name} em {$parent}
 copying = Copiando {$items} {$items ->
         [one] item
         *[other] itens
-    } de {$from} para {$to}
+    } de {$from} para {$to} ({$progress})...
 copied = Copiado {$items} {$items ->
         [one] item
         *[other] itens
     } de {$from} para {$to}
+deleting = Apagando {$items} {$items ->
+        [one] item
+        *[other] itens
+    } da {trash} ({$progress})...
+deleted = Apagado {$items} {$items ->
+        [one] item
+        *[other] itens
+    } da {trash}
 emptying-trash = Esvaziando a lixeira
 emptied-trash = Lixeira vazia
 extracting = Extraindo {$items} {$items ->
@@ -178,7 +214,7 @@ set-executable-and-launched = Marcado "{$name}" como executável e iniciado
 moving = Movendo {$items} {$items ->
         [one] item
         *[other] itens
-    } de {$from} para {$to}
+    } de {$from} para {$to} ({$progress})...
 moved = Movido {$items} {$items ->
         [one] item
         *[other] itens
@@ -219,9 +255,15 @@ match-desktop = Acompanhar o ambiente de trabalho
 dark = Escuro
 light = Claro
 
+### Type to Search
+type-to-search = Pesquisar digitando
+type-to-search-recursive = Pesquisa na pasta atual e em todas as subpastas
+type-to-search-enter-path = Insere o caminho do diretório ou arquivo
+
 # Context menu
 add-to-sidebar = Adicionar à barra lateral
 compress = Compactar
+delete-permanently = Excluir permanentemente
 extract-here = Extrair
 new-file = Novo arquivo...
 new-folder = Nova pasta...
@@ -265,7 +307,7 @@ grid-view = Exibição em grade
 list-view = Exibição em lista
 show-hidden-files = Mostrar arquivos ocultos
 list-directories-first = Listar pastas primeiro
-gallery-preview = Galeria
+gallery-preview = Pré-visualizar
 menu-settings = Configurações...
 menu-about = Sobre o Arquivos do COSMIC...
 

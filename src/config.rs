@@ -3,7 +3,7 @@
 use std::{any::TypeId, num::NonZeroU16, path::PathBuf};
 
 use cosmic::{
-    cosmic_config::{self, cosmic_config_derive::CosmicConfigEntry, CosmicConfigEntry},
+    cosmic_config::{self, cosmic_config_derive::CosmicConfigEntry, ConfigGet, CosmicConfigEntry},
     iced::Subscription,
     theme, Application,
 };
@@ -19,6 +19,12 @@ pub const ICON_SIZE_LIST_CONDENSED: u16 = 48;
 pub const ICON_SIZE_GRID: u16 = 64;
 // TODO: 5 is an arbitrary number. Maybe there's a better icon size max
 pub const ICON_SCALE_MAX: u16 = 5;
+
+macro_rules! percent {
+    ($perc:expr, $pixel:ident) => {
+        (($perc.get() as f32 * $pixel as f32) / 100.).clamp(1., ($pixel * ICON_SCALE_MAX) as _)
+    };
+}
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum AppTheme {
@@ -89,6 +95,12 @@ impl Favorite {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum TypeToSearch {
+    Recursive,
+    EnterPath,
+}
+
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(default)]
 pub struct Config {
@@ -97,6 +109,7 @@ pub struct Config {
     pub favorites: Vec<Favorite>,
     pub show_details: bool,
     pub tab: TabConfig,
+    pub type_to_search: TypeToSearch,
 }
 
 impl Config {
@@ -144,6 +157,7 @@ impl Default for Config {
             ],
             show_details: false,
             tab: TabConfig::default(),
+            type_to_search: TypeToSearch::Recursive,
         }
     }
 }
@@ -151,6 +165,8 @@ impl Default for Config {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
 #[serde(default)]
 pub struct DesktopConfig {
+    pub grid_spacing: NonZeroU16,
+    pub icon_size: NonZeroU16,
     pub show_content: bool,
     pub show_mounted_drives: bool,
     pub show_trash: bool,
@@ -159,10 +175,18 @@ pub struct DesktopConfig {
 impl Default for DesktopConfig {
     fn default() -> Self {
         Self {
+            grid_spacing: 100.try_into().unwrap(),
+            icon_size: 100.try_into().unwrap(),
             show_content: true,
             show_mounted_drives: false,
             show_trash: false,
         }
+    }
+}
+
+impl DesktopConfig {
+    pub fn grid_spacing_for(&self, space: u16) -> u16 {
+        percent!(self.grid_spacing, space) as _
     }
 }
 
@@ -181,6 +205,12 @@ pub struct TabConfig {
     pub show_hidden: bool,
     /// Icon zoom
     pub icon_sizes: IconSizes,
+    #[serde(skip, default = "military_time_enabled")]
+    /// 24 hour clock; this is neither serialized nor deserialized because we use the user's global
+    /// preference rather than save it
+    pub military_time: bool,
+    /// Single click to open
+    pub single_click: bool,
 }
 
 impl Default for TabConfig {
@@ -190,14 +220,25 @@ impl Default for TabConfig {
             folders_first: true,
             show_hidden: false,
             icon_sizes: IconSizes::default(),
+            military_time: military_time_enabled(),
+            single_click: false,
         }
     }
 }
 
-macro_rules! percent {
-    ($perc:expr, $pixel:ident) => {
-        (($perc.get() as f32 * $pixel as f32) / 100.).clamp(1., ($pixel * ICON_SCALE_MAX) as _)
-    };
+/// Return whether the user enabled military time via the Time applet.
+fn military_time_enabled() -> bool {
+    // Borrowed from COSMIC Greeter
+    match cosmic_config::Config::new("com.system76.CosmicAppletTime", 1) {
+        Ok(config_handler) => config_handler.get("military_time").unwrap_or_default(),
+        Err(err) => {
+            log::error!(
+                "failed to create CosmicAppletTime config handler: {:?}",
+                err
+            );
+            false
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]

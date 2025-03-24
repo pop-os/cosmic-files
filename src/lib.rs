@@ -97,6 +97,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         } else if &arg == "--trash" {
             Location::Trash
+        } else if &arg == "--recents" {
+            Location::Recents
+        } else if &arg == "--network" {
+            Location::Network("network:///".to_string(), fl!("networks"))
         } else {
             //TODO: support more URLs
             let path = match url::Url::parse(&arg) {
@@ -136,6 +140,11 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     settings = settings.theme(config.app_theme.theme());
     settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
     settings = settings.exit_on_close(false);
+
+    #[cfg(feature = "jemalloc")]
+    {
+        settings = settings.default_mmap_threshold(None);
+    }
 
     let flags = Flags {
         config_handler,

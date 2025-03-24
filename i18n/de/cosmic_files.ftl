@@ -19,6 +19,7 @@ mounted-drives = Eingehängte Laufwerke
 trash-folder-icon = Ordnersymbol des Papierkorbs
 icon-size-and-spacing = Symbolgröße und -abstand
 icon-size = Symbolgröße
+grid-spacing = Rasterabstand
 
 # Listenansicht
 name = Name
@@ -38,6 +39,9 @@ resume = Fortsetzen
 
 ## Komprimieren-Dialog
 create-archive = Archiv erstellen
+
+## Entpacken-Dialog
+extract-password-required = Passwort erforderlich
 
 ## Dialog zum Leeren des Papierkorbs
 empty-trash = Papierkorb leeren?
@@ -96,12 +100,26 @@ set-executable-and-launch-description = Möchtest du „{$name}“ als ausführb
 set-and-launch = Festlegen und starten
 
 ## Metadaten-Dialog
+open-with = Öffnen mit
 owner = Eigentümer
 group = Gruppe
 other = Andere
-read = Lesen
-write = Schreiben
-execute = Ausführen
+### Modus 0
+none = Keine
+### Modus 1 (ungewöhnlich)
+execute-only = Nur ausführen
+### Modus 2 (ungewöhnlich)
+write-only = Nur schreiben
+### Modus 3 (ungewöhnlich)
+write-execute = Schreiben und ausführen
+### Modus 4
+read-only = Nur lesen
+### Modus 5
+read-execute = Lesen und ausführen
+### Modus 6
+read-write = Lesen und schreiben
+### Modus 7
+read-write-execute = Lesen, schreiben und ausführen
 
 # Kontextseiten
 

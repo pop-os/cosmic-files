@@ -12,6 +12,6 @@ Icon=com.system76.CosmicFiles
 Categories=COSMIC;Utility;FileManager;
 Keywords=Folder;Manager;
 Keywords[pl]=Katalogi;Pliki;Menedżer;
-Keywords[pt-BR]=Pastas;Gerenciador;
+Keywords[pt-BR]=Pastas;Gerenciador;Arquivos;
 Keywords[hu]=mappa;fájl;kezelő
 MimeType=inode/directory;

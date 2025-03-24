@@ -2,6 +2,7 @@
 
 use std::time::Instant;
 
+use crate::tab::DOUBLE_CLICK_DURATION;
 use cosmic::{
     iced_core::{
         border::Border,
@@ -23,8 +24,6 @@ use cosmic::{
     widget::Id,
     Element, Renderer, Theme,
 };
-
-use crate::tab::DOUBLE_CLICK_DURATION;
 
 /// Emit messages on mouse events.
 #[allow(missing_debug_implementations)]
@@ -199,8 +198,8 @@ impl<'a, Message, F> OnMouseButton<'a, Message> for F where F: Fn(Option<Point>)
 pub trait OnDrag<'a, Message>: Fn(Option<Rectangle>) -> Message + 'a {}
 impl<'a, Message, F> OnDrag<'a, Message> for F where F: Fn(Option<Rectangle>) -> Message + 'a {}
 
-pub trait OnResize<'a, Message>: Fn(Size) -> Message + 'a {}
-impl<'a, Message, F> OnResize<'a, Message> for F where F: Fn(Size) -> Message + 'a {}
+pub trait OnResize<'a, Message>: Fn(Size, Rectangle) -> Message + 'a {}
+impl<'a, Message, F> OnResize<'a, Message> for F where F: Fn(Size, Rectangle) -> Message + 'a {}
 
 pub trait OnScroll<'a, Message>: Fn(mouse::ScrollDelta, Modifiers) -> Option<Message> + 'a {}
 impl<'a, Message, F> OnScroll<'a, Message> for F where
@@ -215,6 +214,7 @@ impl<'a, Message, F> OnEnterExit<'a, Message> for F where F: Fn() -> Message + '
 #[derive(Default)]
 struct State {
     last_position: Option<Point>,
+    last_virtual_position: Option<Point>,
     drag_initiated: Option<Point>,
     modifiers: Modifiers,
     prev_click: Option<(mouse::Click, Instant)>,
@@ -224,7 +224,7 @@ struct State {
 impl State {
     fn drag_rect(&self, cursor: mouse::Cursor) -> Option<Rectangle> {
         if let Some(drag_source) = self.drag_initiated {
-            if let Some(position) = cursor.position() {
+            if let Some(position) = cursor.position().or(self.last_virtual_position) {
                 if position.distance(drag_source) > 1.0 {
                     let min_x = drag_source.x.min(position.x);
                     let max_x = drag_source.x.max(position.x);
@@ -374,6 +374,7 @@ where
             cursor,
             shell,
             tree.state.downcast_mut::<State>(),
+            viewport,
         )
     }
 
@@ -421,6 +422,7 @@ where
                 let mut bg_color = cosmic.accent_color();
                 //TODO: get correct alpha
                 bg_color.alpha = 0.2;
+                renderer.start_layer(*viewport);
                 renderer.fill_quad(
                     Quad {
                         bounds,
@@ -433,6 +435,7 @@ where
                     },
                     Color::from(bg_color),
                 );
+                renderer.end_layer();
             }
         }
     }
@@ -493,6 +496,7 @@ fn update<Message: Clone>(
     cursor: mouse::Cursor,
     shell: &mut Shell<'_, Message>,
     state: &mut State,
+    viewport: &Rectangle,
 ) -> event::Status {
     let layout_bounds = layout.bounds();
 
@@ -500,11 +504,11 @@ fn update<Message: Clone>(
         let size = layout_bounds.size();
         if state.size != Some(size) {
             state.size = Some(size);
-            shell.publish(message(size));
+            shell.publish(message(size, *viewport));
         }
     }
 
-    if let Event::Mouse(mouse::Event::CursorMoved { .. }) = event {
+    if let Event::Mouse(mouse::Event::CursorMoved { position }) = event {
         let position_in = cursor.position_in(layout_bounds);
         match (position_in, state.last_position) {
             (None, Some(_)) => {
@@ -520,6 +524,11 @@ fn update<Message: Clone>(
             _ => {}
         }
         state.last_position = position_in;
+
+        state.last_virtual_position = Some(Point::new(
+            viewport.x - layout_bounds.x + position.x,
+            viewport.y - layout_bounds.y + position.y,
+        ));
     }
 
     if state.drag_initiated.is_none() && !cursor.is_over(layout_bounds) {

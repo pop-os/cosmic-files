@@ -12,13 +12,14 @@ undo = Ongedaan maken
 today = Vandaag
 
 # Desktop view options
-desktop-view-options = Opties voor bureaubladweergave
+desktop-view-options = Opties voor bureaubladweergave...
 show-on-desktop = Op bureaublad weergeven
 desktop-folder-content = Bestanden in Bureaublad
 mounted-drives = Gekoppelde schijven
 trash-folder-icon = Prullenbakicoon
 icon-size-and-spacing = Grootte en ruimte tussen iconen
 icon-size = Icoon grootte
+grid-spacing = Rastergrootte
 
 # List view
 name = Naam
@@ -31,13 +32,17 @@ details = Details
 dismiss = Bericht negeren
 operations-running = {$running} bewerkingen worden uitgevoerd ({$percent}%)...
 operations-running-finished = {$running} bewerkingen worden uitgevoerd ({$percent}%), {$finished} voltooid...
-pause = Pauze
+pause = Pauzeren
 resume = Hervatten
 
 # Dialogs
 
 ## Compress Dialog
 create-archive = Maak een archiefbestand
+
+## Extract Dialog
+extract-password-required = Wachtwoord vereist
+extract-to = Uitpakken naar...
 
 ## Empty Trash Dialog
 empty-trash = Prullenbak legen?
@@ -96,12 +101,36 @@ set-executable-and-launch-description = Wilt u '{$name}' uitvoerbaar maken en da
 set-and-launch = Maak uitvoerbaar en open
 
 ## Metadata Dialog
+open-with = Openen met
 owner = Eigenaar
 group = Groep
 other = Anderen
-read = Lezen
-write = Schrijven
-execute = Uitvoeren
+### Mode 0
+none = Geen
+### Mode 1 (unusual)
+execute-only = Alleen uitvoerbaar
+### Mode 2 (unusual)
+write-only = Alleen schrijfbaar
+### Mode 3 (unusual)
+write-execute = Schrijf- en uitvoerbaar
+### Mode 4
+read-only = Alleen leesbaar
+### Mode 5
+read-execute = Lees- en uitvoerbaar
+### Mode 6
+read-write = Lees- en schrijfbaar
+### Mode 7
+read-write-execute = Lees-, schrijf- en uitvoerbaar
+
+## Favorite Path Error Dialog
+favorite-path-error = Fout bij het openen van de map
+favorite-path-error-description =
+    Kon de map '{$path}' niet openen.
+    De map bestaat mogelijk niet of u mist de juiste rechten.
+
+    Wilt u het uit de zijbalk verwijderen?
+remove = Verwijderen
+keep = Behouden
 
 # Context Pages
 
@@ -159,6 +188,18 @@ copying = {$items} {$items ->
         [one] bestand wordt
         *[other] bestanden worden
     } van '{$from}' naar '{$to}' gekopieerd ({$progress})...
+copied = {$items} {$items ->
+        [one] bestand
+        *[other] bestanden
+    } gekopieerd van '$from}' naar '{$to}'
+deleting = {$items} {$items ->
+        [one] bestand wordt
+        *[other] bestanden worden
+    } verwijderd uit {trash} ({$progress})...
+deleted = {$items} {$items ->
+        [one] bestand
+        *[other] bestanden
+    } verwijderd uit {trash}
 emptying-trash = {trash} wordt geleegd ({$progress})...
 emptied-trash = {trash} geleegd
 extracting = {$items} {$items -> 
@@ -207,17 +248,24 @@ calculating = Wordt berekend...
 
 ## Settings
 settings = Instellingen
+single-click = Een keer klikken om te openen
 
 ### Appearance
-appearance = Uiterlijk
+appearance = Weergave
 theme = Thema
 match-desktop = Systeemstandaard
 dark = Donker
 light = Licht
 
+### Type to Search
+type-to-search = Typ om te zoeken
+type-to-search-recursive = In deze map en alle onderliggende mappen zoeken
+type-to-search-enter-path = Naar de bestandslocatie of -naam zoeken
+
 # Context menu
 add-to-sidebar = Aan de zijbalk toevoegen
 compress = Comprimeren
+delete-permanently = Permanent verwijderen
 extract-here = Uitpakken
 new-file = Nieuw bestand...
 new-folder = Nieuwe map...

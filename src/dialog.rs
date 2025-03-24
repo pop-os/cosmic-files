@@ -2,18 +2,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{
-    app::{self, context_drawer, cosmic::Cosmic, message, Core, Task},
+    app::{context_drawer, cosmic::Cosmic, Core, Task},
     cosmic_config, cosmic_theme, executor,
     iced::{
-        event,
+        self, event,
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers},
-        stream, window, Alignment, Event, Length, Size, Subscription,
+        mouse, stream, window, Alignment, Event, Length, Point, Size, Subscription,
     },
     theme,
     widget::{
         self,
-        menu::{Action as MenuAction, KeyBind},
+        menu::{key_bind::Modifier, Action as MenuAction, KeyBind},
         segmented_button,
     },
     Application, ApplicationExt, Element,
@@ -46,7 +46,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub struct DialogMessage(app::Message<Message>);
+pub struct DialogMessage(cosmic::Action<Message>);
 
 #[derive(Clone, Debug)]
 pub enum DialogResult {
@@ -139,6 +139,71 @@ impl AsRef<str> for DialogFilter {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct DialogLabelSpan {
+    pub text: String,
+    pub underline: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct DialogLabel {
+    pub spans: Vec<DialogLabelSpan>,
+    pub key_bind_opt: Option<KeyBind>,
+}
+
+impl<T: AsRef<str>> From<T> for DialogLabel {
+    fn from(text: T) -> Self {
+        let mut spans = Vec::<DialogLabelSpan>::new();
+        let mut key_bind_opt = None;
+        let mut next_underline = false;
+        for c in text.as_ref().chars() {
+            let underline = next_underline;
+            next_underline = false;
+
+            if c == '_' {
+                if !underline {
+                    next_underline = true;
+                    continue;
+                }
+            }
+
+            if underline && key_bind_opt.is_none() {
+                key_bind_opt = Some(KeyBind {
+                    modifiers: vec![Modifier::Alt],
+                    key: Key::Character(c.to_lowercase().to_string().into()),
+                });
+            }
+
+            if let Some(span) = spans.last_mut() {
+                if underline == span.underline {
+                    span.text.push(c);
+                    continue;
+                }
+            }
+
+            spans.push(DialogLabelSpan {
+                text: String::from(c),
+                underline,
+            });
+        }
+
+        dbg!(Self {
+            spans,
+            key_bind_opt
+        })
+    }
+}
+
+impl<'a, M: Clone + 'static> From<&'a DialogLabel> for Element<'a, M> {
+    fn from(label: &'a DialogLabel) -> Self {
+        let mut iced_spans = Vec::with_capacity(label.spans.len());
+        for span in label.spans.iter() {
+            iced_spans.push(cosmic::iced::widget::span(&span.text).underline(span.underline));
+        }
+        cosmic::iced::widget::rich_text(iced_spans).into()
+    }
+}
+
 pub struct Dialog<M> {
     cosmic: Cosmic<App>,
     mapper: fn(DialogMessage) -> M,
@@ -200,10 +265,10 @@ impl<M: Send + 'static> Dialog<M> {
                 on_result: Box::new(on_result),
             },
             Task::batch([
-                window_command.map(|_id| message::none()),
+                window_command.map(|_id| cosmic::action::none()),
                 cosmic_command
                     .map(DialogMessage)
-                    .map(move |message| app::Message::App(mapper(message))),
+                    .map(move |message| cosmic::action::app(mapper(message))),
             ]),
         )
     }
@@ -215,11 +280,11 @@ impl<M: Send + 'static> Dialog<M> {
             .app
             .update_title()
             .map(DialogMessage)
-            .map(move |message| app::Message::App(mapper(message)))
+            .map(move |message| cosmic::action::app(mapper(message)))
     }
 
-    pub fn set_accept_label(&mut self, accept_label: impl Into<String>) {
-        self.cosmic.app.accept_label = accept_label.into();
+    pub fn set_accept_label(&mut self, accept_label: impl AsRef<str>) {
+        self.cosmic.app.accept_label = DialogLabel::from(accept_label);
     }
 
     pub fn choices(&self) -> &[DialogChoice] {
@@ -246,7 +311,7 @@ impl<M: Send + 'static> Dialog<M> {
             .app
             .rescan_tab()
             .map(DialogMessage)
-            .map(move |message| app::Message::App(mapper(message)))
+            .map(move |message| cosmic::action::app(mapper(message)))
     }
 
     pub fn subscription(&self) -> Subscription<M> {
@@ -263,12 +328,12 @@ impl<M: Send + 'static> Dialog<M> {
             .cosmic
             .update(message.0)
             .map(DialogMessage)
-            .map(move |message| app::Message::App(mapper(message)));
+            .map(move |message| cosmic::action::app(mapper(message)));
         if let Some(result) = self.cosmic.app.result_opt.take() {
             let on_result_message = (self.on_result)(result);
             Task::batch([
                 command,
-                Task::perform(async move { app::Message::App(on_result_message) }, |x| x),
+                Task::perform(async move { cosmic::action::app(on_result_message) }, |x| x),
             ])
         } else {
             command
@@ -310,6 +375,7 @@ enum Message {
     Cancel,
     Choice(usize, usize),
     Config(Config),
+    CursorMoved(Point),
     DialogCancel,
     DialogComplete,
     DialogUpdate(DialogPage),
@@ -324,9 +390,11 @@ enum Message {
     Open,
     Preview,
     Save(bool),
+    ScrollTab(i16),
     SearchActivate,
     SearchClear,
     SearchInput(String),
+    Surface(cosmic::surface::Action),
     #[allow(clippy::enum_variant_names)]
     TabMessage(tab::Message),
     TabRescan(Location, Option<tab::Item>, Vec<tab::Item>),
@@ -343,6 +411,7 @@ impl From<AppMessage> for Message {
             AppMessage::None => Message::None,
             AppMessage::Preview(_entity_opt) => Message::Preview,
             AppMessage::SearchActivate => Message::SearchActivate,
+            AppMessage::ScrollTab(scroll_speed) => Message::ScrollTab(scroll_speed),
             AppMessage::TabMessage(_entity_opt, tab_message) => Message::TabMessage(tab_message),
             AppMessage::TabView(_entity_opt, view) => Message::TabView(view),
             AppMessage::ToggleFoldersFirst => Message::ToggleFoldersFirst,
@@ -387,7 +456,7 @@ struct App {
     core: Core,
     flags: Flags,
     title: String,
-    accept_label: String,
+    accept_label: DialogLabel,
     choices: Vec<DialogChoice>,
     context_page: ContextPage,
     dialog_pages: VecDeque<DialogPage>,
@@ -403,13 +472,17 @@ struct App {
     tab: Tab,
     key_binds: HashMap<KeyBind, Action>,
     watcher_opt: Option<(Debouncer<RecommendedWatcher, FileIdMap>, HashSet<PathBuf>)>,
+    auto_scroll_speed: Option<i16>,
 }
 
 impl App {
     fn button_view(&self) -> Element<Message> {
         let cosmic_theme::Spacing {
+            space_xxxs,
             space_xxs,
             space_xs,
+            space_s,
+            space_l,
             ..
         } = theme::active().cosmic().spacing;
 
@@ -419,7 +492,7 @@ impl App {
                 widget::text_input("", filename)
                     .id(self.filename_id.clone())
                     .on_input(Message::Filename)
-                    .on_submit(Message::Save(false)),
+                    .on_submit(|_| Message::Save(false)),
             );
         }
 
@@ -457,11 +530,37 @@ impl App {
         }
         row = row.push(widget::horizontal_space());
         row = row.push(widget::button::standard(fl!("cancel")).on_press(Message::Cancel));
-        row = row.push(if self.flags.kind.save() {
-            widget::button::suggested(&self.accept_label).on_press(Message::Save(false))
-        } else {
-            widget::button::suggested(&self.accept_label).on_press(Message::Open)
-        });
+
+        let mut has_selected = false;
+        if let Some(items) = self.tab.items_opt() {
+            for item in items.iter() {
+                if item.selected {
+                    has_selected = true;
+                    break;
+                }
+            }
+        }
+        row = row.push(
+            //TODO: easier way to create buttons with rich text
+            widget::button::custom(
+                widget::row::with_children(vec![Element::from(&self.accept_label)])
+                    .padding([0, space_s])
+                    .width(Length::Shrink)
+                    .height(space_l)
+                    .spacing(space_xxxs)
+                    .align_y(Alignment::Center)
+            )
+            .padding(0)
+            .on_press_maybe(if self.flags.kind.save() {
+                Some(Message::Save(false))
+            } else if has_selected || self.flags.kind.is_dir() {
+                Some(Message::Open)
+            } else {
+                None
+            })
+            .class(widget::button::ButtonClass::Suggested)
+            /*TODO: a11y feature: .label(&self.accept_label.text)*/
+        );
 
         col = col.push(row);
 
@@ -472,16 +571,21 @@ impl App {
     }
 
     fn preview<'a>(&'a self, kind: &'a PreviewKind) -> Element<'a, tab::Message> {
+        let military_time = self.tab.config.military_time;
         let mut children = Vec::with_capacity(1);
         match kind {
             PreviewKind::Custom(PreviewItem(item)) => {
-                children.push(item.preview_view(None, IconSizes::default()));
+                children.push(item.preview_view(None, IconSizes::default(), military_time));
             }
             PreviewKind::Location(location) => {
                 if let Some(items) = self.tab.items_opt() {
                     for item in items.iter() {
                         if item.location_opt.as_ref() == Some(location) {
-                            children.push(item.preview_view(None, self.tab.config.icon_sizes));
+                            children.push(item.preview_view(
+                                None,
+                                self.tab.config.icon_sizes,
+                                military_time,
+                            ));
                             // Only show one property view to avoid issues like hangs when generating
                             // preview images on thousands of files
                             break;
@@ -493,7 +597,11 @@ impl App {
                 if let Some(items) = self.tab.items_opt() {
                     for item in items.iter() {
                         if item.selected {
-                            children.push(item.preview_view(None, self.tab.config.icon_sizes));
+                            children.push(item.preview_view(
+                                None,
+                                self.tab.config.icon_sizes,
+                                military_time,
+                            ));
                             // Only show one property view to avoid issues like hangs when generating
                             // preview images on thousands of files
                             break;
@@ -501,7 +609,11 @@ impl App {
                     }
                     if children.is_empty() {
                         if let Some(item) = &self.tab.parent_item_opt {
-                            children.push(item.preview_view(None, self.tab.config.icon_sizes));
+                            children.push(item.preview_view(
+                                None,
+                                self.tab.config.icon_sizes,
+                                military_time,
+                            ));
                         }
                     }
                 }
@@ -518,11 +630,11 @@ impl App {
                 let location2 = location.clone();
                 match tokio::task::spawn_blocking(move || location2.scan(icon_sizes)).await {
                     Ok((parent_item_opt, items)) => {
-                        message::app(Message::TabRescan(location, parent_item_opt, items))
+                        cosmic::action::app(Message::TabRescan(location, parent_item_opt, items))
                     }
                     Err(err) => {
                         log::warn!("failed to rescan: {}", err);
-                        message::none()
+                        cosmic::action::none()
                     }
                 }
             },
@@ -772,7 +884,7 @@ impl Application for App {
             core,
             flags,
             title,
-            accept_label,
+            accept_label: DialogLabel::from(accept_label),
             choices: Vec::new(),
             context_page: ContextPage::Preview(None, PreviewKind::Selected),
             dialog_pages: VecDeque::new(),
@@ -788,6 +900,7 @@ impl Application for App {
             tab,
             key_binds,
             watcher_opt: None,
+            auto_scroll_speed: None,
         };
 
         let commands = Task::batch([
@@ -908,7 +1021,9 @@ impl Application for App {
                                         name,
                                     })
                                 })
-                                .on_submit_maybe(complete_maybe)
+                                .on_submit_maybe(
+                                    complete_maybe.clone().map(|maybe| move |_| maybe.clone()),
+                                )
                                 .into(),
                         ])
                         .spacing(space_xxs),
@@ -984,7 +1099,7 @@ impl Application for App {
         elements
     }
 
-    fn nav_bar(&self) -> Option<Element<message::Message<Self::Message>>> {
+    fn nav_bar(&self) -> Option<Element<cosmic::Action<Self::Message>>> {
         if !self.core().nav_bar_active() {
             return None;
         }
@@ -992,9 +1107,9 @@ impl Application for App {
         let nav_model = self.nav_model()?;
 
         let mut nav = cosmic::widget::nav_bar(nav_model, |entity| {
-            cosmic::app::Message::Cosmic(cosmic::app::cosmic::Message::NavBar(entity))
+            cosmic::action::cosmic(cosmic::app::Action::NavBar(entity))
         })
-        //TODO .on_close(|entity| cosmic::app::Message::App(Message::NavBarClose(entity)))
+        //TODO .on_close(|entity| cosmic::cosmic::action::app(Message::NavBarClose(entity)))
         .close_icon(
             widget::icon::from_name("media-eject-symbolic")
                 .size(16)
@@ -1030,7 +1145,9 @@ impl Application for App {
 
         if let Some(data) = self.nav_model.data::<MounterData>(entity) {
             if let Some(mounter) = MOUNTERS.get(&data.0) {
-                return mounter.mount(data.1.clone()).map(|_| message::none());
+                return mounter
+                    .mount(data.1.clone())
+                    .map(|_| cosmic::action::none());
             }
         }
         Task::none()
@@ -1102,6 +1219,9 @@ impl Application for App {
                     return self.update_config();
                 }
             }
+            Message::CursorMoved(pos) => {
+                return self.update(Message::TabMessage(tab::Message::CursorMoved(pos)));
+            }
             Message::DialogCancel => {
                 self.dialog_pages.pop_front();
             }
@@ -1154,6 +1274,15 @@ impl Application for App {
                 for (key_bind, action) in self.key_binds.iter() {
                     if key_bind.matches(modifiers, &key) {
                         return self.update(Message::from(action.message()));
+                    }
+                }
+                if let Some(key_bind) = &self.accept_label.key_bind_opt {
+                    if key_bind.matches(modifiers, &key) {
+                        return self.update(if self.flags.kind.save() {
+                            Message::Save(false)
+                        } else {
+                            Message::Open
+                        });
                     }
                 }
             }
@@ -1359,6 +1488,11 @@ impl Application for App {
                     }
                 }
             }
+            Message::ScrollTab(scroll_speed) => {
+                return self.update(Message::TabMessage(tab::Message::ScrollTab(
+                    (scroll_speed as f32) / 10.0,
+                )));
+            }
             Message::SearchActivate => {
                 return if self.search_get().is_none() {
                     self.search_set(Some(String::new()))
@@ -1403,11 +1537,9 @@ impl Application for App {
                             commands.push(Task::batch([self.update_watcher(), self.rescan_tab()]));
                         }
                         tab::Command::Iced(iced_command) => {
-                            commands.push(
-                                iced_command.0.map(|tab_message| {
-                                    message::app(Message::TabMessage(tab_message))
-                                }),
-                            );
+                            commands.push(iced_command.0.map(|tab_message| {
+                                cosmic::action::app(Message::TabMessage(tab_message))
+                            }));
                         }
                         tab::Command::OpenFile(_item_path) => {
                             if self.flags.kind.save() {
@@ -1425,6 +1557,15 @@ impl Application for App {
                         }
                         tab::Command::WindowToggleMaximize => {
                             commands.push(window::toggle_maximize(self.flags.window_id));
+                        }
+                        tab::Command::AutoScroll(scroll_speed) => {
+                            // converting an f32 to an i16 here by multiplying by 10 and casting to i16
+                            // further resolution isn't necessary
+                            if let Some(scroll_speed_float) = scroll_speed {
+                                self.auto_scroll_speed = Some((scroll_speed_float * 10.0) as i16);
+                            } else {
+                                self.auto_scroll_speed = None;
+                            }
                         }
                         unsupported => {
                             log::warn!("{unsupported:?} not supported in dialog mode");
@@ -1562,6 +1703,11 @@ impl Application for App {
                     tab::View::Grid => zoom_out(&mut self.tab.config.icon_sizes.grid, 50, 500),
                 }
             }
+            Message::Surface(a) => {
+                return cosmic::task::message(cosmic::Action::Cosmic(
+                    cosmic::app::Action::Surface(a),
+                ));
+            }
         }
 
         Task::none()
@@ -1603,6 +1749,9 @@ impl Application for App {
                 },
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
                     Some(Message::Modifiers(modifiers))
+                }
+                Event::Mouse(mouse::Event::CursorMoved { position: pos }) => {
+                    Some(Message::CursorMoved(pos))
                 }
                 _ => None,
             }),
@@ -1700,6 +1849,14 @@ impl Application for App {
                 )
                 .map(Message::TabMessage),
         ];
+
+        if let Some(scroll_speed) = self.auto_scroll_speed {
+            subscriptions.push(
+                iced::time::every(time::Duration::from_millis(10))
+                    .with(scroll_speed)
+                    .map(|(scroll_speed, _)| Message::ScrollTab(scroll_speed)),
+            );
+        }
 
         for (key, mounter) in MOUNTERS.iter() {
             subscriptions.push(

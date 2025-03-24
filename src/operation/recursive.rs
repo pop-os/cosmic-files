@@ -1,9 +1,11 @@
 use std::{
+    cell::Cell,
     error::Error,
     fs,
     io::{Read, Write},
     ops::ControlFlow,
     path::PathBuf,
+    rc::Rc,
 };
 use walkdir::WalkDir;
 
@@ -88,7 +90,12 @@ impl Context {
                     //TODO: ensure to is inside of to_parent?
                     to_parent.join(relative)
                 };
-                let op = Op { kind, from, to };
+                let op = Op {
+                    kind,
+                    from,
+                    to,
+                    skipped: Rc::new(Cell::new(false)),
+                };
                 if moving {
                     if let Some(cleanup_op) = op.move_cleanup_op() {
                         cleanup_ops.push(cleanup_op);
@@ -166,6 +173,7 @@ impl Context {
                 if apply_to_all {
                     self.replace_result_opt = Some(replace_result);
                 }
+                op.skipped.set(true);
                 Ok(ControlFlow::Break(true))
             }
             ReplaceResult::Cancel => Ok(ControlFlow::Break(false)),
@@ -196,6 +204,7 @@ pub struct Op {
     pub kind: OpKind,
     pub from: PathBuf,
     pub to: PathBuf,
+    pub skipped: Rc<Cell<bool>>,
 }
 
 impl Op {
@@ -210,10 +219,14 @@ impl Op {
             from: self.from.clone(),
             //TODO: it is strange to have `to` here
             to: self.to.clone(),
+            skipped: self.skipped.clone(),
         })
     }
 
     fn run(&mut self, ctx: &mut Context, mut progress: Progress) -> Result<bool, Box<dyn Error>> {
+        if self.skipped.get() {
+            return Ok(true);
+        }
         match self.kind {
             OpKind::Copy => {
                 let mut from_file = fs::OpenOptions::new().read(true).open(&self.from)?;
@@ -273,8 +286,9 @@ impl Op {
                                 kind: OpKind::Copy,
                                 from: self.from.clone(),
                                 to: self.to.clone(),
+                                skipped: self.skipped.clone(),
                             };
-                            copy_op.run(ctx, progress)?;
+                            return copy_op.run(ctx, progress);
                         } else {
                             return Err(err.into());
                         }

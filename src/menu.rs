@@ -151,7 +151,7 @@ pub fn context_menu<'a>(
                 children.push(menu_item(fl!("cut"), Action::Cut).into());
                 children.push(menu_item(fl!("copy"), Action::Copy).into());
                 // Should this simply bypass trash and remove the shortcut?
-                children.push(menu_item(fl!("move-to-trash"), Action::MoveToTrash).into());
+                children.push(menu_item(fl!("move-to-trash"), Action::Delete).into());
             } else if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
                     children.push(menu_item(fl!("open"), Action::Open).into());
@@ -200,6 +200,7 @@ pub fn context_menu<'a>(
                 selected_types.retain(|t| !supported_archive_types.contains(t));
                 if selected_types.is_empty() {
                     children.push(menu_item(fl!("extract-here"), Action::ExtractHere).into());
+                    children.push(menu_item(fl!("extract-to"), Action::ExtractTo).into());
                 }
                 children.push(menu_item(fl!("compress"), Action::Compress).into());
                 children.push(divider::horizontal::light().into());
@@ -211,7 +212,7 @@ pub fn context_menu<'a>(
                     children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
                 }
                 children.push(divider::horizontal::light().into());
-                children.push(menu_item(fl!("move-to-trash"), Action::MoveToTrash).into());
+                children.push(menu_item(fl!("move-to-trash"), Action::Delete).into());
             } else {
                 //TODO: need better designs for menu with no selection
                 //TODO: have things like properties but they apply to the folder?
@@ -311,6 +312,8 @@ pub fn context_menu<'a>(
                 children.push(divider::horizontal::light().into());
                 children
                     .push(menu_item(fl!("restore-from-trash"), Action::RestoreFromTrash).into());
+                children.push(divider::horizontal::light().into());
+                children.push(menu_item(fl!("delete-permanently"), Action::Delete).into());
             } else {
                 // TODO: Nested menu
                 children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
@@ -537,7 +540,15 @@ pub fn menu_bar<'a>(
                     menu::Item::Divider,
                     menu_button_optional(fl!("add-to-sidebar"), Action::AddToSidebar, selected > 0),
                     menu::Item::Divider,
-                    menu_button_optional(fl!("move-to-trash"), Action::MoveToTrash, selected > 0),
+                    menu_button_optional(
+                        if in_trash {
+                            fl!("delete-permanently")
+                        } else {
+                            fl!("move-to-trash")
+                        },
+                        Action::Delete,
+                        selected > 0,
+                    ),
                     menu::Item::Divider,
                     menu::Item::Button(fl!("close-tab"), None, Action::TabClose),
                     menu::Item::Button(fl!("quit"), None, Action::WindowClose),
