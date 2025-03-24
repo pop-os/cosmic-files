@@ -2944,7 +2944,9 @@ impl Tab {
                 }
             }
             Message::RightClick(click_i_opt) => {
-                self.update(Message::Click(click_i_opt), modifiers);
+                if mod_ctrl || mod_shift {
+                    self.update(Message::Click(click_i_opt), modifiers);
+                }
                 if let Some(ref mut items) = self.items_opt {
                     if !click_i_opt.map_or(false, |click_i| {
                         items.get(click_i).map_or(false, |x| x.selected)
@@ -2959,8 +2961,9 @@ impl Tab {
                 self.last_right_click = click_i_opt;
             }
             Message::MiddleClick(click_i) => {
-                self.update(Message::Click(Some(click_i)), modifiers);
-                if !mod_ctrl && !mod_shift {
+                if mod_ctrl || mod_shift {
+                    self.update(Message::Click(Some(click_i)), modifiers);
+                } else {
                     if let Some(ref mut items) = self.items_opt {
                         for (i, item) in items.iter_mut().enumerate() {
                             item.selected = i == click_i;
