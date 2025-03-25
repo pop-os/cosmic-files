@@ -315,7 +315,7 @@ pub enum Message {
     Key(Modifiers, Key, Option<SmolStr>),
     LaunchUrl(String),
     MaybeExit,
-    Modifiers(Modifiers),
+    ModifiersChanged(Modifiers),
     MounterItems(MounterKey, MounterItems),
     MountResult(MounterKey, MounterItem, Result<bool, String>),
     NavBarClose(Entity),
@@ -2627,7 +2627,7 @@ impl Application for App {
                     log::warn!("failed to open {:?}: {}", url, err);
                 }
             },
-            Message::Modifiers(modifiers) => {
+            Message::ModifiersChanged(modifiers) => {
                 self.modifiers = modifiers;
             }
             Message::MounterItems(mounter_key, mounter_items) => {
@@ -5187,7 +5187,7 @@ impl Application for App {
                     event::Status::Captured => None,
                 },
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
-                    Some(Message::Modifiers(modifiers))
+                    Some(Message::ModifiersChanged(modifiers))
                 }
                 Event::Window(WindowEvent::Unfocused) => Some(Message::WindowUnfocus),
                 #[cfg(all(feature = "desktop", feature = "wayland"))]
