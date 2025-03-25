@@ -31,7 +31,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     cosmic_files::main()
 }
 
-
 fn print_help(version: &str, git_rev: &str) {
     println!(
         r#"cosmic-files {version} (git commit {git_rev})
