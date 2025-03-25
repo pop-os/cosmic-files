@@ -5,20 +5,23 @@ use tikv_jemallocator::Jemalloc;
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
-use lexopt::{Arg, Parser};
+use clap_lex::RawArgs;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut parser = Parser::from_env();
+use std::error::Error;
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let raw_args = RawArgs::from_args();
+    let mut cursor = raw_args.cursor();
 
     // Parse the arguments
-    while let Some(arg) = parser.next()? {
-        match arg {
-            Arg::Short('h') | Arg::Long("help") => {
+    while let Some(arg) = raw_args.next_os(&mut cursor) {
+        match arg.to_str() {
+            Some("--help") | Some("-h") => {
                 print_help(env!("CARGO_PKG_VERSION"), env!("VERGEN_GIT_SHA"));
                 return Ok(());
             }
-            Arg::Short('v') | Arg::Long("version") => {
-                println!(
+            Some("--version") | Some("-v") => {
+		println!(
                     "cosmic-files {} (git commit {})",
                     env!("CARGO_PKG_VERSION"),
                     env!("VERGEN_GIT_SHA")
