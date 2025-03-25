@@ -48,7 +48,7 @@ flate2 = "1.0"
 liblzma = { version = "0.3", optional = true } #TODO: replace with pure Rust crate
 tar = "0.4.43"
 # CLI arguments
-lexopt = "0.3.0"
+clap_lex = "0.7"
 # Internationalization
 i18n-embed = { version = "0.15", features = [
     "fluent-system",
