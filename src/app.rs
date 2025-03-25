@@ -2629,6 +2629,11 @@ impl Application for App {
             },
             Message::ModifiersChanged(modifiers) => {
                 self.modifiers = modifiers;
+                let entity = self.tab_model.active();
+                return self.update(Message::TabMessage(
+                    Some(entity),
+                    tab::Message::ModifiersChanged(modifiers),
+                ));
             }
             Message::MounterItems(mounter_key, mounter_items) => {
                 // Check for unmounted folders

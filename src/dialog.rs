@@ -1292,6 +1292,9 @@ impl Application for App {
             }
             Message::ModifiersChanged(modifiers) => {
                 self.modifiers = modifiers;
+                return self.update(Message::TabMessage(tab::Message::ModifiersChanged(
+                    modifiers,
+                )));
             }
             Message::MounterItems(mounter_key, mounter_items) => {
                 // Check for unmounted folders
