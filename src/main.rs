@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 print_help(env!("CARGO_PKG_VERSION"), env!("VERGEN_GIT_SHA"));
                 return Ok(());
             }
-            Some("--version") | Some("-v") => {
+            Some("--version") | Some("-V") => {
 		println!(
                     "cosmic-files {} (git commit {})",
                     env!("CARGO_PKG_VERSION"),
