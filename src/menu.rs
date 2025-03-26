@@ -499,6 +499,7 @@ pub fn menu_bar<'a>(
     core: &Core,
     tab_opt: Option<&Tab>,
     config: &Config,
+    modifiers: &Modifiers,
     key_binds: &HashMap<KeyBind, Action>,
 ) -> Element<'a, Message> {
     let sort_options = tab_opt.map(|tab| tab.sort_options());
@@ -529,6 +530,12 @@ pub fn menu_bar<'a>(
                 }
             }
         }
+    };
+
+    let (delete_item, delete_item_action) = if in_trash || modifiers.shift() {
+        (fl!("delete-permanently"), Action::Delete)
+    } else {
+        (fl!("move-to-trash"), Action::Delete)
     };
 
     responsive_menu_bar()
@@ -569,14 +576,11 @@ pub fn menu_bar<'a>(
                         ),
                         menu::Item::Divider,
                         menu_button_optional(
-                            if in_trash {
-                                fl!("delete-permanently")
-                            } else {
-                                fl!("move-to-trash")
-                            },
-                            Action::Delete,
-                            selected > 0,
+                            fl!("restore-from-trash"),
+                            Action::RestoreFromTrash,
+                            selected > 0 && in_trash,
                         ),
+                        menu_button_optional(delete_item, delete_item_action, selected > 0),
                         menu::Item::Divider,
                         menu::Item::Button(fl!("close-tab"), None, Action::TabClose),
                         menu::Item::Button(fl!("quit"), None, Action::WindowClose),

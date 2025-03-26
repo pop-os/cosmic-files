@@ -5001,6 +5001,7 @@ impl Application for App {
             &self.core,
             self.tab_model.active_data::<Tab>(),
             &self.config,
+            &self.modifiers,
             &self.key_binds,
         )]
     }
