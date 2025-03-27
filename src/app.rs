@@ -66,21 +66,21 @@ use wayland_client::{protocol::wl_output::WlOutput, Proxy};
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{AppTheme, Config, DesktopConfig, Favorite, IconSizes, TabConfig, TypeToSearch},
-    dialog::{DialogKind, DialogMessage},
+    dialog::{Dialog, DialogKind, DialogMessage, DialogResult},
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
-    menu, mime_app, mime_icon,
+    menu,
+    mime_app::{self, MimeApp, MimeAppCache},
+    mime_icon,
     mounter::{MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage, MOUNTERS},
-    operation::{Controller, Operation, OperationSelection, ReplaceResult},
+    operation::{
+        Controller, Operation, OperationError, OperationErrorType, OperationSelection,
+        ReplaceResult,
+    },
     spawn_detached::spawn_detached,
     tab::{self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION},
 };
-use crate::{
-    dialog::Dialog,
-    operation::{OperationError, OperationErrorType},
-};
-use crate::{dialog::DialogResult, mime_app::MimeApp};
 
 #[derive(Clone, Debug)]
 pub enum Mode {
@@ -471,7 +471,7 @@ pub enum DialogPage {
         path: PathBuf,
         mime: mime_guess::Mime,
         selected: usize,
-        store_opt: Option<mime_app::MimeApp>,
+        store_opt: Option<MimeApp>,
     },
     RenameItem {
         from: PathBuf,
@@ -544,7 +544,7 @@ pub struct App {
     dialog_text_input: widget::Id,
     key_binds: HashMap<KeyBind, Action>,
     margin: HashMap<window::Id, (f32, f32, f32, f32)>,
-    mime_app_cache: mime_app::MimeAppCache,
+    mime_app_cache: MimeAppCache,
     modifiers: Modifiers,
     mounter_items: HashMap<MounterKey, MounterItems>,
     network_drive_connecting: Option<(MounterKey, String)>,
@@ -576,22 +576,95 @@ pub struct App {
 }
 
 impl App {
-    fn open_file(&mut self, path: &PathBuf) {
-        let mime = mime_icon::mime_for_path(path);
+    fn open_file(&mut self, paths: &[impl AsRef<Path>]) {
+        // Associate all paths to its MIME type
+        // This allows handling paths as groups if possible, such as launching a single video
+        // player that is passed every path.
+        let mut groups: HashMap<Mime, Vec<PathBuf>> = HashMap::new();
+        for (mime, path) in paths
+            .iter()
+            .map(|path| (mime_icon::mime_for_path(path), path.as_ref().to_owned()))
+        {
+            groups.entry(mime).or_default().push(path);
+        }
 
-        if mime == "application/x-desktop" {
-            // Try opening desktop application
-            match freedesktop_entry_parser::parse_entry(path) {
-                Ok(entry) => match entry.section("Desktop Entry").attr("Exec") {
-                    Some(exec) => match mime_app::exec_to_command(exec, None) {
-                        Some(mut command) => match spawn_detached(&mut command) {
-                            Ok(()) => {
-                                return;
+        'outer: for (mime, paths) in groups {
+            log::debug!("Attempting to launch app\n\tfor: {mime}\n\twith: {paths:?}");
+
+            // First launch apps that can be launched directly
+            if mime == "application/x-desktop" {
+                // Try opening desktop application
+                App::launch_desktop_entries(&paths);
+                continue;
+            } else if mime == "application/x-executable" || mime == "application/vnd.appimage" {
+                // Try opening executable
+                for path in paths {
+                    let mut command = std::process::Command::new(&path);
+                    match spawn_detached(&mut command) {
+                        Ok(()) => {}
+                        Err(err) => match err.kind() {
+                            io::ErrorKind::PermissionDenied => {
+                                // If permission is denied, try marking as executable, then running
+                                self.dialog_pages
+                                    .push_back(DialogPage::SetExecutableAndLaunch {
+                                        path: path.to_path_buf(),
+                                    });
                             }
-                            Err(err) => {
+                            _ => {
                                 log::warn!("failed to execute {:?}: {}", path, err);
                             }
                         },
+                    }
+                }
+
+                continue;
+            }
+
+            // Try mime apps, which should be faster than xdg-open
+            if self.launch_from_mime_cache(&mime, &paths) {
+                continue;
+            }
+
+            // loop through subclasses if available
+            if let Some(mime_sub_classes) = mime_icon::parent_mime_types(&mime) {
+                for sub_class in mime_sub_classes {
+                    if self.launch_from_mime_cache(&sub_class, &paths) {
+                        continue 'outer;
+                    }
+                }
+            }
+
+            // Fall back to using open crate
+            for path in paths {
+                match open::that_detached(&path) {
+                    Ok(()) => {
+                        let _ = recently_used_xbel::update_recently_used(
+                            &path,
+                            App::APP_ID.to_string(),
+                            "cosmic-files".to_string(),
+                            None,
+                        );
+                    }
+                    Err(err) => {
+                        log::warn!("failed to open {:?}: {}", path, err);
+                    }
+                }
+            }
+        }
+    }
+
+    fn launch_desktop_entries(paths: &[impl AsRef<Path>]) {
+        for path in paths.iter().map(AsRef::as_ref) {
+            match freedesktop_entry_parser::parse_entry(path) {
+                Ok(entry) => match entry.section("Desktop Entry").attr("Exec") {
+                    Some(exec) => match mime_app::exec_to_command(exec, &[] as &[&str; 0]) {
+                        Some(commands) => {
+                            for mut command in commands {
+                                if let Err(err) = spawn_detached(&mut command) {
+                                    log::warn!("failed to execute {:?}: {}", path, err);
+                                }
+                            }
+                        }
                         None => {
                             log::warn!("failed to parse {:?}: invalid Desktop Entry/Exec", path);
                         }
@@ -604,87 +677,48 @@ impl App {
                     log::warn!("failed to parse {:?}: {}", path, err);
                 }
             }
-        } else if mime == "application/x-executable" || mime == "application/vnd.appimage" {
-            // Try opening executable
-            let mut command = std::process::Command::new(path);
-            match spawn_detached(&mut command) {
-                Ok(()) => {}
-                Err(err) => match err.kind() {
-                    io::ErrorKind::PermissionDenied => {
-                        // If permission is denied, try marking as executable, then running
-                        self.dialog_pages
-                            .push_back(DialogPage::SetExecutableAndLaunch {
-                                path: path.to_path_buf(),
-                            });
-                    }
-                    _ => {
-                        log::warn!("failed to execute {:?}: {}", path, err);
-                    }
-                },
-            }
-            return;
         }
+    }
 
-        // Try mime apps, which should be faster than xdg-open
-        for app in self.mime_app_cache.get(&mime) {
-            let Some(mut command) = app.command(Some(path.clone().into())) else {
+    fn launch_from_mime_cache<P>(&self, mime: &Mime, paths: &[P]) -> bool
+    where
+        P: std::fmt::Debug + AsRef<Path> + AsRef<std::ffi::OsStr>,
+    {
+        for app in self.mime_app_cache.get(mime) {
+            let Some(commands) = app.command(paths) else {
                 continue;
             };
-            match spawn_detached(&mut command) {
-                Ok(()) => {
-                    let _ = recently_used_xbel::update_recently_used(
-                        path,
-                        App::APP_ID.to_string(),
-                        "cosmic-files".to_string(),
-                        None,
-                    );
-                    return;
-                }
-                Err(err) => {
+            let len = commands.len();
+
+            for (i, mut command) in commands.into_iter().enumerate() {
+                if let Err(err) = spawn_detached(&mut command) {
+                    // More than one command: The app doesn't support lists of paths so each command
+                    // is associated with one instance
+                    //
+                    // One command: Attempted to launch one app with multiple paths
+                    let path = if len > 1 {
+                        format!("{:?}", paths.get(i))
+                    } else {
+                        format!("{paths:?}")
+                    };
                     log::warn!("failed to open {:?} with {:?}: {}", path, app.id, err);
                 }
             }
-        }
 
-        // loop through subclasses if available
-        if let Some(mime_sub_classes) = mime_icon::parent_mime_types(&mime) {
-            for sub_class in mime_sub_classes {
-                for app in self.mime_app_cache.get(&sub_class) {
-                    let Some(mut command) = app.command(Some(path.clone().into())) else {
-                        continue;
-                    };
-                    match spawn_detached(&mut command) {
-                        Ok(()) => {
-                            let _ = recently_used_xbel::update_recently_used(
-                                path,
-                                App::APP_ID.to_string(),
-                                "cosmic-files".to_string(),
-                                None,
-                            );
-                            return;
-                        }
-                        Err(err) => {
-                            log::warn!("failed to open {:?} with {:?}: {}", path, app.id, err);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Fall back to using open crate
-        match open::that_detached(path) {
-            Ok(()) => {
+            for path in paths {
                 let _ = recently_used_xbel::update_recently_used(
-                    path,
+                    &path.into(),
                     App::APP_ID.to_string(),
                     "cosmic-files".to_string(),
                     None,
                 );
             }
-            Err(err) => {
-                log::warn!("failed to open {:?}: {}", path, err);
-            }
+
+            return true;
         }
+
+        // No app matched for mimes and paths
+        false
     }
 
     #[cfg(feature = "desktop")]
@@ -1769,7 +1803,7 @@ impl Application for App {
             dialog_text_input: widget::Id::unique(),
             key_binds,
             margin: HashMap::new(),
-            mime_app_cache: mime_app::MimeAppCache::new(),
+            mime_app_cache: MimeAppCache::new(),
             modifiers: Modifiers::empty(),
             mounter_items: HashMap::new(),
             network_drive_connecting: None,
@@ -2307,7 +2341,9 @@ impl Application for App {
                             let all_apps = self.get_programs_for_mime(&mime);
 
                             if let Some(app) = all_apps.get(selected) {
-                                if let Some(mut command) = app.command(Some(path.clone().into())) {
+                                if let Some(mut command) =
+                                    app.command(&[&path]).and_then(|v| v.into_iter().next())
+                                {
                                     match spawn_detached(&mut command) {
                                         Ok(()) => {
                                             let _ = recently_used_xbel::update_recently_used(
@@ -2739,18 +2775,18 @@ impl Application for App {
                         }
                     }
                     for path in paths {
-                        if let Some(mut command) = terminal.command(None) {
+                        if let Some(mut command) = terminal
+                            .command::<&str>(&[])
+                            .and_then(|v| v.into_iter().next())
+                        {
                             command.current_dir(&path);
-                            match spawn_detached(&mut command) {
-                                Ok(()) => {}
-                                Err(err) => {
-                                    log::warn!(
-                                        "failed to open {:?} with terminal {:?}: {}",
-                                        path,
-                                        terminal.id,
-                                        err
-                                    )
-                                }
+                            if let Err(err) = spawn_detached(&mut command) {
+                                log::warn!(
+                                    "failed to open {:?} with terminal {:?}: {}",
+                                    path,
+                                    terminal.id,
+                                    err
+                                )
                             }
                         } else {
                             log::warn!("failed to get command for {:?}", terminal.id);
@@ -2800,12 +2836,12 @@ impl Application for App {
                     ..
                 }) => {
                     let url = format!("mime:///{mime}");
-                    if let Some(mut command) = app.command(Some(url.clone().into())) {
-                        match spawn_detached(&mut command) {
-                            Ok(()) => {}
-                            Err(err) => {
-                                log::warn!("failed to open {:?} with {:?}: {}", url, app.id, err)
-                            }
+                    // TODO: Support multiple URLs
+                    if let Some(mut command) =
+                        app.command(&[&url]).and_then(|v| v.into_iter().next())
+                    {
+                        if let Err(err) = spawn_detached(&mut command) {
+                            log::warn!("failed to open {:?} with {:?}: {}", url, app.id, err)
                         }
                     } else {
                         log::warn!(
@@ -3329,7 +3365,7 @@ impl Application for App {
                                 cosmic::action::app(Message::TabMessage(Some(entity), x))
                             }));
                         }
-                        tab::Command::OpenFile(path) => self.open_file(&path),
+                        tab::Command::OpenFile(paths) => self.open_file(&paths),
                         tab::Command::OpenInNewTab(path) => {
                             commands.push(self.open_tab(Location::Path(path.clone()), false, None));
                         }
@@ -3682,9 +3718,9 @@ impl Application for App {
                         .nav_model
                         .data::<Location>(entity)
                         .and_then(|x| x.path_opt())
-                        .map(|x| x.to_path_buf())
+                        .map(ToOwned::to_owned)
                     {
-                        self.open_file(&path);
+                        self.open_file(&[path]);
                     }
                 }
                 NavMenuAction::OpenWith(entity) => {
@@ -4427,7 +4463,7 @@ impl Application for App {
                 };
 
                 let mut column = widget::list_column();
-                let available_programs = self.get_programs_for_mime(&mime);
+                let available_programs = self.get_programs_for_mime(mime);
                 let item_height = 32.0;
                 let mut displayed_default = false;
 

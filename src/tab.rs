@@ -1143,7 +1143,7 @@ pub enum Command {
     #[cfg(feature = "desktop")]
     ExecEntryAction(cosmic::desktop::DesktopEntryData, usize),
     Iced(TaskWrapper),
-    OpenFile(PathBuf),
+    OpenFile(Vec<PathBuf>),
     OpenInNewTab(PathBuf),
     OpenInNewWindow(PathBuf),
     OpenTrash,
@@ -2361,7 +2361,7 @@ impl Tab {
                         if clicked_item.metadata.is_dir() {
                             cd = Some(location.clone());
                         } else if let Some(path) = location.path_opt() {
-                            commands.push(Command::OpenFile(path.to_path_buf()));
+                            commands.push(Command::OpenFile(vec![path.to_path_buf()]));
                         } else {
                             log::warn!("no path for item {:?}", clicked_item);
                         }
@@ -2467,6 +2467,7 @@ impl Tab {
                                 .any(|(e_i, e)| Some(e_i) == click_i_opt.as_ref() && e.selected)
                         });
                     if let Some(ref mut items) = self.items_opt {
+                        let mut paths_to_open = vec![];
                         for (i, item) in items.iter_mut().enumerate() {
                             if Some(i) == click_i_opt {
                                 // Single click to open.
@@ -2475,7 +2476,7 @@ impl Tab {
                                         if item.metadata.is_dir() {
                                             cd = Some(location.clone());
                                         } else if let Some(path) = location.path_opt() {
-                                            commands.push(Command::OpenFile(path.to_path_buf()));
+                                            paths_to_open.push(path.to_path_buf());
                                         } else {
                                             log::warn!("no path for item {:?}", item);
                                         }
@@ -2507,6 +2508,9 @@ impl Tab {
                                 self.clicked = click_i_opt;
                                 item.selected = false;
                             }
+                        }
+                        if !paths_to_open.is_empty() {
+                            commands.push(Command::OpenFile(paths_to_open));
                         }
                     }
                 }
@@ -2897,7 +2901,7 @@ impl Tab {
                         if path.is_dir() {
                             cd = Some(location);
                         } else {
-                            commands.push(Command::OpenFile(path.clone()));
+                            commands.push(Command::OpenFile(vec![path.clone()]));
                         }
                     }
                     _ => {
@@ -2920,11 +2924,12 @@ impl Tab {
                         if path.is_dir() {
                             cd = Some(Location::Path(path));
                         } else {
-                            commands.push(Command::OpenFile(path));
+                            commands.push(Command::OpenFile(vec![path]));
                         }
                     }
                     None => {
                         if let Some(ref mut items) = self.items_opt {
+                            let mut open_files = Vec::new();
                             for item in items.iter() {
                                 if item.selected {
                                     if let Some(location) = &item.location_opt {
@@ -2932,13 +2937,15 @@ impl Tab {
                                             //TODO: allow opening multiple tabs?
                                             cd = Some(location.clone());
                                         } else if let Some(path) = location.path_opt() {
-                                            commands.push(Command::OpenFile(path.to_path_buf()));
+                                            open_files.push(path.to_path_buf());
                                         }
                                     } else {
                                         //TODO: open properties?
                                     }
                                 }
                             }
+
+                            commands.push(Command::OpenFile(open_files));
                         }
                     }
                 }
@@ -2978,7 +2985,7 @@ impl Tab {
                                 //cd = Some(Location::Path(path.clone()));
                                 commands.push(Command::OpenInNewTab(path.clone()))
                             } else {
-                                commands.push(Command::OpenFile(path.clone()));
+                                commands.push(Command::OpenFile(vec![path.clone()]));
                             }
                         } else {
                             log::warn!("no path for item {:?}", clicked_item);
@@ -3310,7 +3317,7 @@ impl Tab {
             if matches!(self.mode, Mode::Desktop) {
                 match location {
                     Location::Path(path) => {
-                        commands.push(Command::OpenFile(path));
+                        commands.push(Command::OpenFile(vec![path]));
                     }
                     Location::Trash => {
                         commands.push(Command::OpenTrash);
