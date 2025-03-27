@@ -43,6 +43,7 @@ create-archive = Utwórz archiwum
 ## Extract Dialog
 extract-password-required = Wymagane hasło
 extract-to = Wypakuj do…
+extract-to-title = Wypakuj do katalogu
 extract-to-prompt = Wprowadź miejsce gdzie wypakowywać.
 
 ## Empty Trash Dialog
