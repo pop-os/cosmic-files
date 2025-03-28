@@ -67,6 +67,15 @@ save-file = Enregistrer fichier
 open-with-title = Comment souhaitez-vous ouvrir "{$name}" ?
 browse-store = Parcourir {$store}
 
+## Permanently delete Dialog
+selected-items = les {$items} éléments sélectionnés
+permanently-delete-question = Supprimer définitivement ?
+delete = Supprimer
+permanently-delete-warning = Supprimer définitivement {$target}, {$nb_items ->
+        [one] il ne pourras pas être restauré.
+        *[other] ils ne pourront pas être restaurés.
+}
+
 ## Rename Dialog
 rename-file = Renommer le fichier
 rename-folder = Renommer le dossier
@@ -171,6 +180,14 @@ moved = {$items} {$items ->
         [one] élément déplacé
         *[other] éléments déplacés
     } depuis {$from} vers {$to}
+permanently-deleting = Suppression définitive de "{$items}" "{$items ->
+        [one] item
+        *[other] items
+    }"
+permanently-deleted = Supprimés définitivement "{$items}" "{$items ->
+        [one] item
+        *[other] items
+    }"
 renaming = Renommage de {$from} en {$to}
 renamed = {$from} renommé en {$to}
 restoring = Restauration de {$items} {$items ->
@@ -203,11 +220,13 @@ light = Clair
 # Context menu
 add-to-sidebar = Ajouter à la barre latérale
 compress = Compresser
+delete-permanently = Supprimer définitivement
 extract-here = Extraire
 new-file = Nouveau fichier
 new-folder = Nouveau dossier
 open-in-terminal = Ouvrir dans le terminal
 move-to-trash = Déplacer vers la corbeille
+permanently-delete = Supprimer définitivement...
 restore-from-trash = Restaurer depuis la corbeille
 remove-from-sidebar = Supprimer de la barre latérale
 sort-by-name = Trier par nom
