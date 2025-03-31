@@ -1,6 +1,7 @@
 use crate::fl;
 
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Mutex};
+use tokio::sync::Notify;
 
 #[derive(Clone, Copy, Debug)]
 pub enum ControllerState {
@@ -13,7 +14,7 @@ pub enum ControllerState {
 struct ControllerInner {
     state: Mutex<ControllerState>,
     progress: Mutex<f32>,
-    condvar: Condvar,
+    notify: Notify,
 }
 
 #[derive(Debug)]
@@ -29,23 +30,22 @@ impl Default for Controller {
             inner: Arc::new(ControllerInner {
                 state: Mutex::new(ControllerState::Running),
                 progress: Mutex::new(0.0),
-                condvar: Condvar::new(),
+                notify: Notify::new(),
             }),
         }
     }
 }
 
 impl Controller {
-    pub fn check(&self) -> Result<(), String> {
-        let mut state = self.inner.state.lock().unwrap();
+    pub async fn check(&self) -> Result<(), String> {
         loop {
-            match *state {
+            match self.state() {
                 ControllerState::Cancelled => return Err(fl!("cancelled")),
-                ControllerState::Paused => {
-                    state = self.inner.condvar.wait(state).unwrap();
-                }
+                ControllerState::Paused => (),
                 ControllerState::Running => return Ok(()),
             }
+
+            self.inner.notify.notified().await;
         }
     }
 
@@ -63,7 +63,7 @@ impl Controller {
 
     pub fn set_state(&self, state: ControllerState) {
         *self.inner.state.lock().unwrap() = state;
-        self.inner.condvar.notify_all();
+        self.inner.notify.notify_waiters();
     }
 
     pub fn is_cancelled(&self) -> bool {
@@ -83,8 +83,9 @@ impl Controller {
     }
 
     pub fn unpause(&self) {
-        //TODO: ensure this does not override Cancel?
-        self.set_state(ControllerState::Running);
+        if !self.is_cancelled() {
+            self.set_state(ControllerState::Running);
+        }
     }
 }
 

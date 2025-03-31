@@ -1829,10 +1829,11 @@ pub struct Tab {
     scroll_bounds_opt: Option<Rectangle>,
 }
 
-fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, String> {
+async fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, String> {
     let mut total = 0;
     for entry_res in WalkDir::new(path) {
-        controller.check()?;
+        controller.check().await?;
+
         //TODO: report more errors?
         if let Ok(entry) = entry_res {
             if let Ok(metadata) = entry.metadata() {
@@ -1841,6 +1842,9 @@ fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, String
                 }
             }
         }
+
+        // Yield in case this process takes a while.
+        tokio::task::yield_now().await;
     }
     Ok(total)
 }
@@ -4918,36 +4922,31 @@ impl Tab {
                                 ("dir_size", path.clone()),
                                 stream::channel(1, |mut output| async move {
                                     let message = {
-                                        let path = path.clone();
-                                        tokio::task::spawn_blocking(move || {
-                                            let start = Instant::now();
-                                            match calculate_dir_size(&path, controller) {
-                                                Ok(size) => {
-                                                    log::debug!(
-                                                        "calculated directory size of {:?} in {:?}",
-                                                        path,
-                                                        start.elapsed()
-                                                    );
-                                                    Message::DirectorySize(
-                                                        path.clone(),
-                                                        DirSize::Directory(size),
-                                                    )
-                                                }
-                                                Err(err) => {
-                                                    log::warn!(
+                                        let start = Instant::now();
+                                        match calculate_dir_size(&path, controller).await {
+                                            Ok(size) => {
+                                                log::debug!(
+                                                    "calculated directory size of {:?} in {:?}",
+                                                    path,
+                                                    start.elapsed()
+                                                );
+                                                Message::DirectorySize(
+                                                    path.clone(),
+                                                    DirSize::Directory(size),
+                                                )
+                                            }
+                                            Err(err) => {
+                                                log::warn!(
                                                 "failed to calculate directory size of {:?}: {}",
                                                 path,
                                                 err
                                             );
-                                                    Message::DirectorySize(
-                                                        path.clone(),
-                                                        DirSize::Error(err),
-                                                    )
-                                                }
+                                                Message::DirectorySize(
+                                                    path.clone(),
+                                                    DirSize::Error(err),
+                                                )
                                             }
-                                        })
-                                        .await
-                                        .unwrap()
+                                        }
                                     };
 
                                     match output.send(message).await {
