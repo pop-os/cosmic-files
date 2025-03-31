@@ -15,10 +15,11 @@ today = Aujourd'hui
 desktop-view-options = Options d'affichage du bureau...
 show-on-desktop = Afficher sur le bureau
 desktop-folder-content = Contenu du dossier du bureau
-mount-drives = Lecteurs montés
+mounted-drives = Lecteurs montés
 trash-folder-icon = Icône du dossier Corbeille
 icon-size-and-spacing = Taille et espacement des icônes
 icon-size = Taille des icônes
+grid-spacing = Espacement de la grille
 
 # List view
 name = Nom
@@ -26,10 +27,23 @@ modified = Modifié
 trashed-on = Mis à la corbeille
 size = Taille
 
+# Progress footer
+details = Détails
+dismiss = Ignorer le message
+operations-running = {$running} opération en cours ({$percent}%)...
+operations-running-finished = {$running} opération en cours ({$percent}%), {$finished} Terminé...
+pause = Pause
+resume = Reprendre
+
 # Dialogs
 
 ## Compress Dialog
 create-archive = Créer une archive
+
+## Extract Dialog
+extract-password-required = Mot de passe requis
+extract-to = Extraire vers...
+extract-to-title = Extraire vers le dossier
 
 ## Empty Trash Dialog
 empty-trash = Vider la corbeille
