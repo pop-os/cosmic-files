@@ -203,7 +203,7 @@ light = Clair
 # Context menu
 add-to-sidebar = Ajouter à la barre latérale
 compress = Compresser
-delete-permanently = Supprimer Définitivement
+delete-permanently = Supprimer définitivement
 extract-here = Extraire
 new-file = Nouveau fichier
 new-folder = Nouveau dossier
