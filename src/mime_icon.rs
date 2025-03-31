@@ -75,7 +75,7 @@ pub fn mime_icon(mime: Mime, size: u16) -> icon::Handle {
 }
 
 pub fn parent_mime_types(mime: &Mime) -> Option<Vec<Mime>> {
-    let mut mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
+    let mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
 
     mime_icon_cache.shared_mime_info.get_parents_aliased(mime)
 }

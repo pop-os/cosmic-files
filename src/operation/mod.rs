@@ -135,7 +135,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
         .map_err(|e| e)?;
         let filepath = file
             .enclosed_name()
-            .ok_or(ZipError::InvalidArchive("Invalid file path"))?;
+            .ok_or(ZipError::InvalidArchive("Invalid file path".into()))?;
 
         let outpath = directory.as_ref().join(filepath);
 
@@ -986,11 +986,11 @@ impl Operation {
                                             .and_then(|mut archive| archive.unpack(&new_dir))
                                             .map_err(OperationError::from_str)?
                                     }
-                                    #[cfg(feature = "liblzma")]
+                                    #[cfg(feature = "xz2")]
                                     "application/x-xz" | "application/x-xz-compressed-tar" => {
                                         OpReader::new(path, controller)
                                             .map(io::BufReader::new)
-                                            .map(liblzma::read::XzDecoder::new)
+                                            .map(xz2::read::XzDecoder::new)
                                             .map(tar::Archive::new)
                                             .and_then(|mut archive| archive.unpack(&new_dir))
                                             .map_err(OperationError::from_str)?
