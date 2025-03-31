@@ -187,10 +187,10 @@ impl<T: AsRef<str>> From<T> for DialogLabel {
             });
         }
 
-        dbg!(Self {
+        Self {
             spans,
-            key_bind_opt
-        })
+            key_bind_opt,
+        }
     }
 }
 
