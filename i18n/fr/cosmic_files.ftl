@@ -164,10 +164,14 @@ try-again = Essayer à nouveau
 username = Nom d'utilisateur
 
 ## Operations
+cancelled = Annulé
 edit-history = Modifier l'historique
 history = Historique
 no-history = Aucun élément dans l'historique.
 pending = En attente
+progress = {$percent}%
+progress-cancelled = {$percent}%, Annulation
+progress-paused = {$percent}%, En pause
 failed = Échoué
 complete = Terminé
 compressing = Compression de {$items} {$items ->
@@ -189,6 +193,14 @@ copied = {$items} {$items ->
         [one] élément copié
         *[other] éléments copiés
     } depuis {$from} vers {$to}
+deleting = Suppression de {$items} {$items ->
+        [one] élément
+        *[other] éléments
+    } depuis {trash} ({$progress})...
+deleted = Supression de {$items} {$items ->
+        [one] élément
+        *[other] éléments
+    } depuis {trash}
 emptying-trash = {trash} en cours de nettoyage
 emptied-trash = {trash} vidée
 extracting = Extraction de {$items} {$items ->
@@ -245,6 +257,11 @@ theme = Thème
 match-desktop = Assortir au bureau
 dark = Sombre
 light = Clair
+
+### Type to Search
+type-to-search = Tapez pour rechercher
+type-to-search-recursive = Recherche dans le dossier actuel et tous les sous-dossiers
+type-to-search-enter-path = Entrez le chemin du dossier ou du fichier
 
 # Context menu
 add-to-sidebar = Ajouter à la barre latérale
