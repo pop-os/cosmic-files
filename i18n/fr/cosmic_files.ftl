@@ -15,10 +15,11 @@ today = Aujourd'hui
 desktop-view-options = Options d'affichage du bureau...
 show-on-desktop = Afficher sur le bureau
 desktop-folder-content = Contenu du dossier du bureau
-mount-drives = Lecteurs montés
+mounted-drives = Lecteurs montés
 trash-folder-icon = Icône du dossier Corbeille
 icon-size-and-spacing = Taille et espacement des icônes
 icon-size = Taille des icônes
+grid-spacing = Espacement de la grille
 
 # List view
 name = Nom
@@ -26,10 +27,23 @@ modified = Modifié
 trashed-on = Mis à la corbeille
 size = Taille
 
+# Progress footer
+details = Détails
+dismiss = Ignorer le message
+operations-running = {$running} opération en cours ({$percent}%)...
+operations-running-finished = {$running} opération en cours ({$percent}%), {$finished} Terminé...
+pause = Pause
+resume = Reprendre
+
 # Dialogs
 
 ## Compress Dialog
 create-archive = Créer une archive
+
+## Extract Dialog
+extract-password-required = Mot de passe requis
+extract-to = Extraire vers...
+extract-to-title = Extraire vers le dossier
 
 ## Empty Trash Dialog
 empty-trash = Vider la corbeille
@@ -88,12 +102,36 @@ set-executable-and-launch-description = Voulez-vous définir "{$name}" comme ex�
 set-and-launch = Définir et lancer
 
 ## Metadata Dialog
+open-with = Ouvrir avec
 owner = Propriétaire
 group = Groupe
 other = Autre
-read = Lecture
-write = Écriture
-execute = Exécution
+### Mode 0
+none = Aucun
+### Mode 1 (unusual)
+execute-only = Exécution seulement
+### Mode 2 (unusual)
+write-only = Écriture seulement
+### Mode 3 (unusual)
+write-execute = Écriture et exécution
+### Mode 4
+read-only = Lecture seulement
+### Mode 5
+read-execute = Lecture et exécution
+### Mode 6
+read-write = Lecture et écriture
+### Mode 7
+read-write-execute = Lecture, Écriture et Exécution
+
+## Favorite Path Error Dialog
+favorite-path-error = Error opening directory
+favorite-path-error-description =
+    Impossible d'ouvrir "{$path}".
+    Il se peut qu'il n'existe pas ou que vous n'ayez pas la permission de l'ouvrir.
+    
+    Voulez-vous le retirer de la barre latérale ?
+remove = Retirer
+keep = Garder
 
 # Context Pages
 
@@ -126,10 +164,14 @@ try-again = Essayer à nouveau
 username = Nom d'utilisateur
 
 ## Operations
+cancelled = Annulé
 edit-history = Modifier l'historique
 history = Historique
 no-history = Aucun élément dans l'historique.
 pending = En attente
+progress = {$percent}%
+progress-cancelled = {$percent}%, Annulation
+progress-paused = {$percent}%, En pause
 failed = Échoué
 complete = Terminé
 compressing = Compression de {$items} {$items ->
@@ -151,6 +193,14 @@ copied = {$items} {$items ->
         [one] élément copié
         *[other] éléments copiés
     } depuis {$from} vers {$to}
+deleting = Suppression de {$items} {$items ->
+        [one] élément
+        *[other] éléments
+    } depuis {trash} ({$progress})...
+deleted = Supression de {$items} {$items ->
+        [one] élément
+        *[other] éléments
+    } depuis {trash}
 emptying-trash = {trash} en cours de nettoyage
 emptied-trash = {trash} vidée
 extracting = Extraction de {$items} {$items ->
@@ -189,9 +239,17 @@ default-app = {$name} (défaut)
 
 ## Show details
 show-details = Afficher les détails
+type = Type: {$mime}
+items = Éléments: {$items}
+item-size = Taille: {$size}
+item-created = Créé: {$created}
+item-modified = Modifié: {$modified}
+item-accessed = Consulté: {$accessed}
+calculating = Calcul en cours...
 
 ## Settings
 settings = Paramètres
+single-click = Ouvrir en un clic
 
 ### Appearance
 appearance = Apparence
@@ -199,6 +257,11 @@ theme = Thème
 match-desktop = Assortir au bureau
 dark = Sombre
 light = Clair
+
+### Type to Search
+type-to-search = Tapez pour rechercher
+type-to-search-recursive = Recherche dans le dossier actuel et tous les sous-dossiers
+type-to-search-enter-path = Entrez le chemin du dossier ou du fichier
 
 # Context menu
 add-to-sidebar = Ajouter à la barre latérale
@@ -248,6 +311,7 @@ grid-view = Vue en grille
 list-view = Vue en liste
 show-hidden-files = Afficher les fichiers cachés
 list-directories-first = Lister les répertoires en premier
+gallery-preview = Aperçu de la galerie
 menu-settings = Paramètres...
 menu-about = À propos de Fichiers COSMIC...
 
