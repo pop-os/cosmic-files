@@ -102,12 +102,36 @@ set-executable-and-launch-description = Voulez-vous définir "{$name}" comme ex�
 set-and-launch = Définir et lancer
 
 ## Metadata Dialog
+open-with = Ouvrir avec
 owner = Propriétaire
 group = Groupe
 other = Autre
-read = Lecture
-write = Écriture
-execute = Exécution
+### Mode 0
+none = Aucun
+### Mode 1 (unusual)
+execute-only = Exécution seulement
+### Mode 2 (unusual)
+write-only = Écriture seulement
+### Mode 3 (unusual)
+write-execute = Écriture et exécution
+### Mode 4
+read-only = Lecture seulement
+### Mode 5
+read-execute = Lecture et exécution
+### Mode 6
+read-write = Lecture et écriture
+### Mode 7
+read-write-execute = Lecture, Écriture et Exécution
+
+## Favorite Path Error Dialog
+favorite-path-error = Error opening directory
+favorite-path-error-description =
+    Impossible d'ouvrir "{$path}".
+    Il se peut qu'il n'existe pas ou que vous n'ayez pas la permission de l'ouvrir.
+    
+    Voulez-vous le retirer de la barre latérale ?
+remove = Retirer
+keep = Garder
 
 # Context Pages
 
@@ -203,9 +227,17 @@ default-app = {$name} (défaut)
 
 ## Show details
 show-details = Afficher les détails
+type = Type: {$mime}
+items = Éléments: {$items}
+item-size = Taille: {$size}
+item-created = Créé: {$created}
+item-modified = Modifié: {$modified}
+item-accessed = Consulté: {$accessed}
+calculating = Calcul en cours...
 
 ## Settings
 settings = Paramètres
+single-click = Ouvrir en un clic
 
 ### Appearance
 appearance = Apparence
@@ -262,6 +294,7 @@ grid-view = Vue en grille
 list-view = Vue en liste
 show-hidden-files = Afficher les fichiers cachés
 list-directories-first = Lister les répertoires en premier
+gallery-preview = Aperçu de la galerie
 menu-settings = Paramètres...
 menu-about = À propos de Fichiers COSMIC...
 
