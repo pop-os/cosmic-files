@@ -2547,7 +2547,7 @@ impl Application for App {
                                     }
                                 }
                                 if !still_mounted {
-                                    unmounted.push(Location::Path(old_path));
+                                    unmounted.push(old_path);
                                 }
                             }
                         }
@@ -2562,7 +2562,12 @@ impl Application for App {
                     for entity in entities {
                         let title_opt = match self.tab_model.data_mut::<Tab>(entity) {
                             Some(tab) => {
-                                if unmounted.contains(&tab.location) {
+                                if unmounted.iter().any(|unmounted| {
+                                    tab.location
+                                        .path_opt()
+                                        .map(|location| location.starts_with(unmounted))
+                                        .unwrap_or(false)
+                                }) {
                                     tab.change_location(&home_location, None);
                                     Some(tab.title())
                                 } else {
