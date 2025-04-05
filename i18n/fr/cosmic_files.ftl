@@ -81,6 +81,15 @@ save-file = Enregistrer fichier
 open-with-title = Comment souhaitez-vous ouvrir "{$name}" ?
 browse-store = Parcourir {$store}
 
+## Permanently delete Dialog
+selected-items = les {$items} éléments sélectionnés
+permanently-delete-question = Supprimer définitivement ?
+delete = Supprimer
+permanently-delete-warning = Supprimer définitivement {$target}, {$nb_items ->
+        [one] il ne pourras pas être restauré.
+        *[other] ils ne pourront pas être restaurés.
+}
+
 ## Rename Dialog
 rename-file = Renommer le fichier
 rename-folder = Renommer le dossier
@@ -221,6 +230,14 @@ moved = {$items} {$items ->
         [one] élément déplacé
         *[other] éléments déplacés
     } depuis {$from} vers {$to}
+permanently-deleting = Suppression définitive de "{$items}" "{$items ->
+        [one] item
+        *[other] items
+    }"
+permanently-deleted = Supprimés définitivement "{$items}" "{$items ->
+        [one] item
+        *[other] items
+    }"
 renaming = Renommage de {$from} en {$to}
 renamed = {$from} renommé en {$to}
 restoring = Restauration de {$items} {$items ->
