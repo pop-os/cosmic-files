@@ -25,9 +25,12 @@ impl OpReader {
 
 impl io::Read for OpReader {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.controller
-            .check()
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+        futures::executor::block_on(async {
+            self.controller
+                .check()
+                .await
+                .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+        })?;
 
         let count = self.file.read(buf)?;
         self.current += count as u64;

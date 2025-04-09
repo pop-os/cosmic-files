@@ -6,7 +6,7 @@ use crate::{
     spawn_detached::spawn_detached,
     tab,
 };
-use cosmic::iced::futures::{channel::mpsc::Sender, executor, SinkExt};
+use cosmic::iced::futures::{channel::mpsc::Sender, SinkExt};
 use std::collections::VecDeque;
 use std::fmt::Formatter;
 use std::{
@@ -30,8 +30,8 @@ pub mod reader;
 use self::recursive::Context;
 pub mod recursive;
 
-fn handle_replace(
-    msg_tx: &Arc<TokioMutex<Sender<Message>>>,
+async fn handle_replace(
+    msg_tx: Arc<TokioMutex<Sender<Message>>>,
     file_from: PathBuf,
     file_to: PathBuf,
     multiple: bool,
@@ -52,21 +52,19 @@ fn handle_replace(
         }
     };
 
-    executor::block_on(async {
-        let (tx, mut rx) = mpsc::channel(1);
-        let _ = msg_tx
-            .lock()
-            .await
-            .send(Message::DialogPush(DialogPage::Replace {
-                from: item_from,
-                to: item_to,
-                multiple,
-                apply_to_all: false,
-                tx,
-            }))
-            .await;
-        rx.recv().await.unwrap_or(ReplaceResult::Cancel)
-    })
+    let (tx, mut rx) = mpsc::channel(1);
+    let _ = msg_tx
+        .lock()
+        .await
+        .send(Message::DialogPush(DialogPage::Replace {
+            from: item_from,
+            to: item_to,
+            multiple,
+            apply_to_all: false,
+            tx,
+        }))
+        .await;
+    rx.recv().await.unwrap_or(ReplaceResult::Cancel)
 }
 
 fn get_directory_name(file_name: &str) -> &str {
@@ -122,9 +120,12 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
     let mut pending_directory_creates = VecDeque::new();
 
     for i in 0..total_files {
-        controller
-            .check()
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+        futures::executor::block_on(async {
+            controller
+                .check()
+                .await
+                .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+        })?;
 
         controller.set_progress((i as f32) / total_files as f32);
 
@@ -210,9 +211,12 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
         let mut outfile = fs::File::create(&outpath)?;
         let mut current = 0;
         loop {
-            controller
-                .check()
-                .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+            futures::executor::block_on(async {
+                controller
+                    .check()
+                    .await
+                    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+            })?;
 
             let count = file.read(&mut buffer)?;
             if count == 0 {
@@ -268,7 +272,8 @@ async fn copy_or_move(
     controller: Controller,
 ) -> Result<OperationSelection, OperationError> {
     let msg_tx = msg_tx.clone();
-    tokio::task::spawn_blocking(move || -> Result<OperationSelection, OperationError> {
+
+    compio::runtime::spawn(async move {
         log::info!(
             "{} {:?} to {:?}",
             if moving { "Move" } else { "Copy" },
@@ -319,19 +324,21 @@ async fn copy_or_move(
         {
             let msg_tx = msg_tx.clone();
             context = context.on_replace(move |op| {
-                handle_replace(&msg_tx, op.from.clone(), op.to.clone(), true)
+                let msg_tx = msg_tx.clone();
+                Box::pin(handle_replace(msg_tx, op.from.clone(), op.to.clone(), true))
             });
         }
 
         context
             .recursive_copy_or_move(from_to_pairs, moving)
+            .await
             .map_err(OperationError::from_str)?;
 
-        Ok(context.op_sel)
+        Result::<OperationSelection, OperationError>::Ok(context.op_sel)
     })
     .await
-    .map_err(OperationError::from_str)?
-    //.map_err(OperationError::from_str)
+    .map_err(wrap_compio_spawn_error)?
+    .map_err(OperationError::from_str)
 }
 
 fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
@@ -689,14 +696,14 @@ impl Operation {
         let controller_clone = controller.clone();
 
         //TODO: IF ERROR, RETURN AN Operation THAT CAN UNDO THE CURRENT STATE
-        let paths = match self {
+        let paths: Result<OperationSelection, OperationError> = match self {
             Self::Compress {
                 paths,
                 to,
                 archive_type,
                 password,
             } => {
-                tokio::task::spawn_blocking(
+                compio::runtime::spawn_blocking(
                     move || -> Result<OperationSelection, OperationError> {
                         let Some(relative_root) = to.parent() else {
                             return Err(OperationError::from_str(format!(
@@ -736,7 +743,9 @@ impl Operation {
 
                                 let total_paths = paths.len();
                                 for (i, path) in paths.iter().enumerate() {
-                                    controller.check().map_err(OperationError::from_str)?;
+                                    futures::executor::block_on(async {
+                                        controller.check().await.map_err(OperationError::from_str)
+                                    })?;
 
                                     controller.set_progress((i as f32) / total_paths as f32);
 
@@ -762,7 +771,9 @@ impl Operation {
                                 let total_paths = paths.len();
                                 let mut buffer = vec![0; 4 * 1024 * 1024];
                                 for (i, path) in paths.iter().enumerate() {
-                                    controller.check().map_err(OperationError::from_str)?;
+                                    futures::executor::block_on(async {
+                                        controller.check().await.map_err(OperationError::from_str)
+                                    })?;
 
                                     controller.set_progress((i as f32) / total_paths as f32);
 
@@ -800,9 +811,12 @@ impl Operation {
                                                 .map_err(OperationError::from_str)?;
                                             let mut current = 0;
                                             loop {
-                                                controller
-                                                    .check()
-                                                    .map_err(OperationError::from_str)?;
+                                                futures::executor::block_on(async {
+                                                    controller
+                                                        .check()
+                                                        .await
+                                                        .map_err(OperationError::from_str)
+                                                })?;
 
                                                 let count = file
                                                     .read(&mut buffer)
@@ -836,20 +850,22 @@ impl Operation {
                     },
                 )
                 .await
-                .map_err(OperationError::from_str)?
-                //.map_err(|e| e)?
+                .map_err(wrap_compio_spawn_error)?
+                .map_err(OperationError::from_str)
             }
             Self::Copy { paths, to } => copy_or_move(paths, to, false, msg_tx, controller).await,
             Self::Delete { paths } => {
                 let total = paths.len();
                 for (i, path) in paths.into_iter().enumerate() {
-                    controller.check().map_err(OperationError::from_str)?;
+                    futures::executor::block_on(async {
+                        controller.check().await.map_err(OperationError::from_str)
+                    })?;
 
                     controller.set_progress((i as f32) / (total as f32));
 
-                    let _items_opt = tokio::task::spawn_blocking(|| trash::delete(path))
+                    let _items_opt = compio::runtime::spawn_blocking(|| trash::delete(path))
                         .await
-                        .map_err(OperationError::from_str)?
+                        .map_err(wrap_compio_spawn_error)?
                         .map_err(OperationError::from_str)?;
                     //TODO: items_opt allows for easy restore
                 }
@@ -866,10 +882,12 @@ impl Operation {
                     )
                 ))]
                 {
-                    tokio::task::spawn_blocking(move || -> Result<(), OperationError> {
+                    compio::runtime::spawn_blocking(move || -> Result<(), OperationError> {
                         let count = items.len();
                         for (i, item) in items.into_iter().enumerate() {
-                            controller.check().map_err(OperationError::from_str)?;
+                            futures::executor::block_on(async {
+                                controller.check().await.map_err(OperationError::from_str)
+                            })?;
 
                             controller.set_progress(i as f32 / count as f32);
 
@@ -879,7 +897,8 @@ impl Operation {
                         Ok(())
                     })
                     .await
-                    .map_err(OperationError::from_str)??;
+                    .map_err(wrap_compio_spawn_error)?
+                    .map_err(OperationError::from_str)?;
                 }
                 Ok(OperationSelection::default())
             }
@@ -894,11 +913,13 @@ impl Operation {
                     )
                 ))]
                 {
-                    tokio::task::spawn_blocking(move || -> Result<(), OperationError> {
+                    compio::runtime::spawn_blocking(move || -> Result<(), OperationError> {
                         let items = trash::os_limited::list().map_err(OperationError::from_str)?;
                         let count = items.len();
                         for (i, item) in items.into_iter().enumerate() {
-                            controller.check().map_err(OperationError::from_str)?;
+                            futures::executor::block_on(async {
+                                controller.check().await.map_err(OperationError::from_str)
+                            })?;
 
                             controller.set_progress(i as f32 / count as f32);
 
@@ -908,7 +929,8 @@ impl Operation {
                         Ok(())
                     })
                     .await
-                    .map_err(OperationError::from_str)??;
+                    .map_err(wrap_compio_spawn_error)?
+                    .map_err(OperationError::from_str)?;
                 }
                 Ok(OperationSelection::default())
             }
@@ -916,137 +938,135 @@ impl Operation {
                 paths,
                 to,
                 password,
-            } => {
-                tokio::task::spawn_blocking(
-                    move || -> Result<OperationSelection, OperationError> {
-                        let total_paths = paths.len();
-                        let mut op_sel = OperationSelection::default();
-                        for (i, path) in paths.iter().enumerate() {
-                            controller.check().map_err(OperationError::from_str)?;
+            } => compio::runtime::spawn_blocking(
+                move || -> Result<OperationSelection, OperationError> {
+                    let total_paths = paths.len();
+                    let mut op_sel = OperationSelection::default();
+                    for (i, path) in paths.iter().enumerate() {
+                        futures::executor::block_on(async {
+                            controller.check().await.map_err(OperationError::from_str)
+                        })?;
 
-                            controller.set_progress((i as f32) / total_paths as f32);
+                        controller.set_progress((i as f32) / total_paths as f32);
 
-                            if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
-                                let dir_name = get_directory_name(file_name);
-                                let mut new_dir = to.join(dir_name);
+                        if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
+                            let dir_name = get_directory_name(file_name);
+                            let mut new_dir = to.join(dir_name);
 
-                                if new_dir.exists() {
-                                    if let Some(new_dir_parent) = new_dir.parent() {
-                                        new_dir = copy_unique_path(&new_dir, new_dir_parent);
-                                    }
-                                }
-
-                                op_sel.ignored.push(path.clone());
-                                op_sel.selected.push(new_dir.clone());
-
-                                let controller = controller.clone();
-                                let mime = mime_for_path(path);
-                                let password = password.clone();
-                                match mime.essence_str() {
-                                    "application/gzip" | "application/x-compressed-tar" => {
-                                        OpReader::new(path, controller)
-                                            .map(io::BufReader::new)
-                                            .map(flate2::read::GzDecoder::new)
-                                            .map(tar::Archive::new)
-                                            .and_then(|mut archive| archive.unpack(&new_dir))
-                                            .map_err(OperationError::from_str)?
-                                    }
-                                    "application/x-tar" => OpReader::new(path, controller)
-                                        .map(io::BufReader::new)
-                                        .map(tar::Archive::new)
-                                        .and_then(|mut archive| archive.unpack(&new_dir))
-                                        .map_err(OperationError::from_str)?,
-                                    "application/zip" => fs::File::open(path)
-                                        .map(io::BufReader::new)
-                                        .map(zip::ZipArchive::new)
-                                        .map_err(OperationError::from_str)?
-                                        .and_then(move |mut archive| {
-                                            zip_extract(
-                                                &mut archive,
-                                                &new_dir,
-                                                controller,
-                                                password,
-                                            )
-                                        })
-                                        .map_err(|e| match e {
-                                            ZipError::UnsupportedArchive(
-                                                ZipError::PASSWORD_REQUIRED,
-                                            )
-                                            | ZipError::InvalidPassword => OperationError {
-                                                kind: OperationErrorType::PasswordRequired,
-                                            },
-                                            _ => OperationError::from_str(e),
-                                        })?,
-                                    #[cfg(feature = "bzip2")]
-                                    "application/x-bzip" | "application/x-bzip-compressed-tar" => {
-                                        OpReader::new(path, controller)
-                                            .map(io::BufReader::new)
-                                            .map(bzip2::read::BzDecoder::new)
-                                            .map(tar::Archive::new)
-                                            .and_then(|mut archive| archive.unpack(&new_dir))
-                                            .map_err(OperationError::from_str)?
-                                    }
-                                    #[cfg(feature = "xz2")]
-                                    "application/x-xz" | "application/x-xz-compressed-tar" => {
-                                        OpReader::new(path, controller)
-                                            .map(io::BufReader::new)
-                                            .map(xz2::read::XzDecoder::new)
-                                            .map(tar::Archive::new)
-                                            .and_then(|mut archive| archive.unpack(&new_dir))
-                                            .map_err(OperationError::from_str)?
-                                    }
-                                    _ => Err(OperationError::from_str(format!(
-                                        "unsupported mime type {:?}",
-                                        mime
-                                    )))?,
+                            if new_dir.exists() {
+                                if let Some(new_dir_parent) = new_dir.parent() {
+                                    new_dir = copy_unique_path(&new_dir, new_dir_parent);
                                 }
                             }
-                        }
 
-                        Ok(op_sel)
-                    },
-                )
-                .await
-                .map_err(OperationError::from_str)?
-                //.map_err(OperationError::from_str)?
-            }
+                            op_sel.ignored.push(path.clone());
+                            op_sel.selected.push(new_dir.clone());
+
+                            let controller = controller.clone();
+                            let mime = mime_for_path(path);
+                            let password = password.clone();
+                            match mime.essence_str() {
+                                "application/gzip" | "application/x-compressed-tar" => {
+                                    OpReader::new(path, controller)
+                                        .map(io::BufReader::new)
+                                        .map(flate2::read::GzDecoder::new)
+                                        .map(tar::Archive::new)
+                                        .and_then(|mut archive| archive.unpack(&new_dir))
+                                        .map_err(OperationError::from_str)?
+                                }
+                                "application/x-tar" => OpReader::new(path, controller)
+                                    .map(io::BufReader::new)
+                                    .map(tar::Archive::new)
+                                    .and_then(|mut archive| archive.unpack(&new_dir))
+                                    .map_err(OperationError::from_str)?,
+                                "application/zip" => fs::File::open(path)
+                                    .map(io::BufReader::new)
+                                    .map(zip::ZipArchive::new)
+                                    .map_err(OperationError::from_str)?
+                                    .and_then(move |mut archive| {
+                                        zip_extract(&mut archive, &new_dir, controller, password)
+                                    })
+                                    .map_err(|e| match e {
+                                        ZipError::UnsupportedArchive(
+                                            ZipError::PASSWORD_REQUIRED,
+                                        )
+                                        | ZipError::InvalidPassword => OperationError {
+                                            kind: OperationErrorType::PasswordRequired,
+                                        },
+                                        _ => OperationError::from_str(e),
+                                    })?,
+                                #[cfg(feature = "bzip2")]
+                                "application/x-bzip" | "application/x-bzip-compressed-tar" => {
+                                    OpReader::new(path, controller)
+                                        .map(io::BufReader::new)
+                                        .map(bzip2::read::BzDecoder::new)
+                                        .map(tar::Archive::new)
+                                        .and_then(|mut archive| archive.unpack(&new_dir))
+                                        .map_err(OperationError::from_str)?
+                                }
+                                #[cfg(feature = "xz2")]
+                                "application/x-xz" | "application/x-xz-compressed-tar" => {
+                                    OpReader::new(path, controller)
+                                        .map(io::BufReader::new)
+                                        .map(xz2::read::XzDecoder::new)
+                                        .map(tar::Archive::new)
+                                        .and_then(|mut archive| archive.unpack(&new_dir))
+                                        .map_err(OperationError::from_str)?
+                                }
+                                _ => Err(OperationError::from_str(format!(
+                                    "unsupported mime type {:?}",
+                                    mime
+                                )))?,
+                            }
+                        }
+                    }
+
+                    Ok(op_sel)
+                },
+            )
+            .await
+            .map_err(wrap_compio_spawn_error)?
+            .map_err(OperationError::from_str),
             Self::Move { paths, to } => copy_or_move(paths, to, true, msg_tx, controller).await,
-            Self::NewFolder { path } => tokio::task::spawn_blocking(
-                move || -> Result<OperationSelection, OperationError> {
-                    controller.check().map_err(OperationError::from_str)?;
-                    fs::create_dir(&path).map_err(OperationError::from_str)?;
-                    Ok(OperationSelection {
-                        ignored: Vec::new(),
-                        selected: vec![path],
-                    })
-                },
-            )
+            Self::NewFolder { path } => compio::runtime::spawn(async move {
+                controller.check().await.map_err(OperationError::from_str)?;
+                compio::fs::create_dir(&path)
+                    .await
+                    .map_err(OperationError::from_str)?;
+                Result::<_, OperationError>::Ok(OperationSelection {
+                    ignored: Vec::new(),
+                    selected: vec![path],
+                })
+            })
             .await
-            .map_err(OperationError::from_str)?,
-            Self::NewFile { path } => tokio::task::spawn_blocking(
-                move || -> Result<OperationSelection, OperationError> {
-                    controller.check().map_err(OperationError::from_str)?;
-                    fs::File::create(&path).map_err(OperationError::from_str)?;
-                    Ok(OperationSelection {
-                        ignored: Vec::new(),
-                        selected: vec![path],
-                    })
-                },
-            )
+            .map_err(wrap_compio_spawn_error)?
+            .map_err(OperationError::from_str),
+            Self::NewFile { path } => compio::runtime::spawn(async move {
+                controller.check().await.map_err(OperationError::from_str)?;
+                compio::fs::File::create(&path)
+                    .await
+                    .map_err(OperationError::from_str)?;
+                Result::<_, OperationError>::Ok(OperationSelection {
+                    ignored: Vec::new(),
+                    selected: vec![path],
+                })
+            })
             .await
-            .map_err(OperationError::from_str)?,
-            Self::Rename { from, to } => tokio::task::spawn_blocking(
-                move || -> Result<OperationSelection, OperationError> {
-                    controller.check().map_err(OperationError::from_str)?;
-                    fs::rename(&from, &to).map_err(OperationError::from_str)?;
-                    Ok(OperationSelection {
-                        ignored: vec![from],
-                        selected: vec![to],
-                    })
-                },
-            )
+            .map_err(wrap_compio_spawn_error)?
+            .map_err(OperationError::from_str),
+            Self::Rename { from, to } => compio::runtime::spawn(async move {
+                controller.check().await.map_err(OperationError::from_str)?;
+                compio::fs::rename(&from, &to)
+                    .await
+                    .map_err(OperationError::from_str)?;
+                Result::<_, OperationError>::Ok(OperationSelection {
+                    ignored: vec![from],
+                    selected: vec![to],
+                })
+            })
             .await
-            .map_err(OperationError::from_str)?,
+            .map_err(wrap_compio_spawn_error)?
+            .map_err(OperationError::from_str),
             #[cfg(target_os = "macos")]
             Self::Restore { .. } => {
                 // TODO: add support for macos
@@ -1057,15 +1077,15 @@ impl Operation {
                 let total = items.len();
                 let mut paths = Vec::with_capacity(total);
                 for (i, item) in items.into_iter().enumerate() {
-                    controller.check().map_err(OperationError::from_str)?;
+                    controller.check().await.map_err(OperationError::from_str)?;
 
                     controller.set_progress((i as f32) / (total as f32));
 
                     paths.push(item.original_path());
 
-                    tokio::task::spawn_blocking(|| trash::os_limited::restore_all([item]))
+                    compio::runtime::spawn_blocking(|| trash::os_limited::restore_all([item]))
                         .await
-                        .map_err(OperationError::from_str)?
+                        .map_err(wrap_compio_spawn_error)?
                         .map_err(OperationError::from_str)?;
                 }
                 Ok(OperationSelection {
@@ -1074,13 +1094,13 @@ impl Operation {
                 })
             }
             Self::SetExecutableAndLaunch { path } => {
-                tokio::task::spawn_blocking(move || -> Result<(), OperationError> {
+                controller.check().await.map_err(OperationError::from_str)?;
+
+                compio::runtime::spawn_blocking(move || -> Result<(), OperationError> {
                     //TODO: what to do on non-Unix systems?
                     #[cfg(unix)]
                     {
                         use std::os::unix::fs::PermissionsExt;
-
-                        controller.check().map_err(OperationError::from_str)?;
 
                         let mut perms = fs::metadata(&path)
                             .map_err(OperationError::from_str)?
@@ -1091,16 +1111,14 @@ impl Operation {
                         fs::set_permissions(&path, perms).map_err(OperationError::from_str)?;
                     }
 
-                    controller.check().map_err(OperationError::from_str)?;
-
                     let mut command = std::process::Command::new(path);
                     spawn_detached(&mut command).map_err(OperationError::from_str)?;
 
                     Ok(())
                 })
                 .await
-                .map_err(OperationError::from_str)?
-                .map_err(|e| e)?;
+                .map_err(wrap_compio_spawn_error)?
+                .map_err(OperationError::from_str)?;
                 Ok(OperationSelection::default())
             }
         };
@@ -1109,6 +1127,16 @@ impl Operation {
 
         paths
     }
+}
+
+#[track_caller]
+fn wrap_compio_spawn_error(_unwind: Box<dyn std::any::Any + Send>) -> OperationError {
+    log::error!(
+        "compio runtime spawn failed: {}",
+        std::backtrace::Backtrace::capture()
+    );
+
+    OperationError::from_str("compio runtime spawn failed")
 }
 
 #[cfg(test)]
@@ -1136,42 +1164,44 @@ mod tests {
         fl,
     };
 
-    // Tests hang with lower values
-    const BUF_SIZE: usize = 8;
-
     /// Simple wrapper around `[Operation::Copy]`
     pub async fn operation_copy(
         paths: Vec<PathBuf>,
         to: PathBuf,
     ) -> Result<OperationSelection, OperationError> {
         let id = fastrand::u64(0..u64::MAX);
-        let (tx, mut rx) = mpsc::channel(BUF_SIZE);
+        let (tx, mut rx) = mpsc::channel(1);
         let paths_clone = paths.clone();
         let to_clone = to.clone();
-        let handle_copy = tokio::spawn(async move {
+
+        // Wrap this into its own future so that it may be polled concurerntly with the message handler.
+        let handle_copy = async move {
             Operation::Copy {
                 paths: paths_clone,
                 to: to_clone,
             }
             .perform(&sync::Mutex::new(tx).into(), Controller::default())
             .await
-        });
+        };
 
-        while let Some(msg) = rx.next().await {
-            match msg {
-                Message::DialogPush(DialogPage::Replace { tx, .. }) => {
-                    debug!("[{id}] Replace request");
-                    tx.send(ReplaceResult::Cancel).await.expect("Sending a response to a replace request should succeed")
+        // Concurrently handling messages will prevent the mpsc channel from blocking when full.
+        let handle_messages = async move {
+            while let Some(msg) = rx.next().await {
+                match msg {
+                    Message::DialogPush(DialogPage::Replace { tx, .. }) => {
+                        debug!("[{id}] Replace request");
+                        tx.send(ReplaceResult::Cancel).await.expect("Sending a response to a replace request should succeed")
 
+                    }
+                    _ => unreachable!("Only [ `Message::PendingProgress`, `Message::DialogPush(DialogPage::Replace)` ] are sent from operation"),
                 }
-                _ => unreachable!("Only [ `Message::PendingProgress`, `Message::DialogPush(DialogPage::Replace)` ] are sent from operation"),
             }
-        }
+        };
 
-        handle_copy.await.unwrap()
+        futures::future::join(handle_messages, handle_copy).await.1
     }
 
-    #[test(tokio::test)]
+    #[test(compio::test)]
     async fn copy_file_to_same_location() -> io::Result<()> {
         let fs = simple_fs(NUM_FILES, 0, 1, 0, NAME_LEN)?;
         let path = fs.path();
@@ -1205,7 +1235,7 @@ mod tests {
         Ok(())
     }
 
-    #[test(tokio::test)]
+    #[test(compio::test)]
     async fn copy_file_with_extension_to_same_loc() -> io::Result<()> {
         let fs = empty_fs()?;
         let path = fs.path();
@@ -1225,7 +1255,7 @@ mod tests {
         Ok(())
     }
 
-    #[test(tokio::test)]
+    #[test(compio::test)]
     async fn copy_dir_to_same_location() -> io::Result<()> {
         let fs = simple_fs(NUM_FILES, 0, NUM_DIRS, NUM_NESTED, NAME_LEN)?;
         let path = fs.path();
@@ -1250,7 +1280,7 @@ mod tests {
         Ok(())
     }
 
-    #[test(tokio::test)]
+    #[test(compio::test)]
     async fn copying_file_multiple_times_to_same_location() -> io::Result<()> {
         let fs = empty_fs()?;
         let path = fs.path();
@@ -1275,7 +1305,7 @@ mod tests {
         Ok(())
     }
 
-    #[test(tokio::test)]
+    #[test(compio::test)]
     async fn copy_to_diff_dir_doesnt_dupe_files() -> io::Result<()> {
         let fs = simple_fs(NUM_FILES, NUM_HIDDEN, NUM_DIRS, NUM_NESTED, NAME_LEN)?;
         let path = fs.path();
@@ -1303,9 +1333,11 @@ mod tests {
         );
         operation_copy(vec![first_file.clone()], second_dir.clone())
             .await
-            .expect(
-                "Copy operation should have been cancelled because we're copying to different directories without replacement",
-            );
+            .expect(concat!(
+                "Copy operation should have been cancelled ",
+                "because we're copying to different directories ",
+                "without replacement"
+            ));
         assert!(
             first_dir.join(base_name).exists(),
             "First file should still exist"
@@ -1318,7 +1350,7 @@ mod tests {
         Ok(())
     }
 
-    #[test(tokio::test)]
+    #[test(compio::test)]
     async fn copy_file_with_diff_name_to_diff_dir() -> io::Result<()> {
         let fs = empty_fs()?;
         let path = fs.path();
