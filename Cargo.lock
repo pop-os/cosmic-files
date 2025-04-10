@@ -2913,9 +2913,9 @@ checksum = "d231dfb89cfffdbc30e7fc41579ed6066ad03abda9e567ccafae602b97ec5024"
 
 [[package]]
 name = "hermit-abi"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbf6a919d6cf397374f7dfeeea91d974c7c0a7221d0d0f4f20d859d329e53fcc"
+checksum = "fbd780fe5cc30f81464441920d82ac8740e2e46b29a6fad543ddd075229ce37e"
 
 [[package]]
 name = "hex"
@@ -3820,8 +3820,7 @@ checksum = "03087c2bad5e1034e8cace5926dec053fb3790248370865f5117a7d0213354c8"
 [[package]]
 name = "libc"
 version = "0.2.171"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c19937216e9d3aa9956d9bb8dfc0b0c8beb6058fc4f7a4dc4d850edf86a237d6"
+source = "git+https://gitlab.redox-os.org/redox-os/liblibc.git?branch=redox-socket-0.2#8732b89424c4d6bd786d423c433d3fff7aaf9fba"
 
 [[package]]
 name = "libcosmic"
@@ -5095,12 +5094,11 @@ dependencies = [
 [[package]]
 name = "polling"
 version = "3.7.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a604568c3202727d1507653cb121dbd627a58684eb09a820fd746bee38b4442f"
+source = "git+https://github.com/jackpot51/polling.git?branch=master#320a5ef6d369f4a6493f9779b0cff33dfc6e85ef"
 dependencies = [
  "cfg-if",
  "concurrent-queue",
- "hermit-abi 0.4.0",
+ "hermit-abi 0.5.0",
  "pin-project-lite",
  "rustix 0.38.44",
  "tracing",
