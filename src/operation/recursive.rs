@@ -1,3 +1,4 @@
+use compio::buf::{IntoInner, IoBuf};
 use compio::io::{AsyncReadAt, AsyncWriteAt};
 use compio::BufResult;
 use std::future::Future;
@@ -295,7 +296,9 @@ impl Op {
                         }
                     };
 
-                    let BufResult(result, buf_out) = to_file.write_at(buf_out, pos).await;
+                    let BufResult(result, buf_out_slice) =
+                        to_file.write_at(buf_out.slice(..count), pos).await;
+                    let buf_out = buf_out_slice.into_inner();
 
                     if let Err(why) = result {
                         ctx.buf = buf_out;
