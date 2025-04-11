@@ -222,6 +222,7 @@ properties = Egenskaper
 
 ## Inställningar
 settings = Inställningar
+single-click = Ett enkel klick för att öppna
 
 ### Utseende
 appearance = Utseende
@@ -229,6 +230,11 @@ theme = Tema
 match-desktop = Matcha skrivbordet
 dark = Mörkt
 light = Ljust
+
+### Skriv för att söka
+type-to-search = Skriv för att söka
+type-to-search-recursive = Söker i den aktuella mappen och alla undermappar
+type-to-search-enter-path = Anger sökvägen till katalogen eller filen
 
 # Kontext meny
 add-to-sidebar = Lägg till i sidofält
