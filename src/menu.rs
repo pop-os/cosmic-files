@@ -189,9 +189,9 @@ pub fn context_menu<'a>(
                     "application/x-bzip",
                     #[cfg(feature = "bzip2")]
                     "application/x-bzip-compressed-tar",
-                    #[cfg(feature = "liblzma")]
+                    #[cfg(feature = "xz2")]
                     "application/x-xz",
-                    #[cfg(feature = "liblzma")]
+                    #[cfg(feature = "xz2")]
                     "application/x-xz-compressed-tar",
                 ]
                 .iter()

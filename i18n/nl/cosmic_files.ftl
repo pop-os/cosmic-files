@@ -14,11 +14,11 @@ today = Vandaag
 # Desktop view options
 desktop-view-options = Opties voor bureaubladweergave...
 show-on-desktop = Op bureaublad weergeven
-desktop-folder-content = Bestanden in Bureaublad
+desktop-folder-content = Bestanden in de map Bureaublad
 mounted-drives = Gekoppelde schijven
 trash-folder-icon = Prullenbakicoon
 icon-size-and-spacing = Grootte en ruimte tussen iconen
-icon-size = Icoon grootte
+icon-size = Icoongrootte
 grid-spacing = Rastergrootte
 
 # List view
@@ -221,7 +221,7 @@ moved = {$items} {$items ->
         *[other] bestanden
     } verplaatst van '{$form}' naar '{$to}'
 renaming = '{$from}' als '{$to}' hernoemen
-renamed = '{$form}' als '{$to}' hernoemd
+renamed = '{$from}' als '{$to}' hernoemd
 restoring = {$items} {$items ->
         [one] bestand wordt
         *[other] bestanden worden

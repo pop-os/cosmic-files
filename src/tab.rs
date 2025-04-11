@@ -1143,7 +1143,7 @@ pub enum Command {
     #[cfg(feature = "desktop")]
     ExecEntryAction(cosmic::desktop::DesktopEntryData, usize),
     Iced(TaskWrapper),
-    OpenFile(PathBuf),
+    OpenFile(Vec<PathBuf>),
     OpenInNewTab(PathBuf),
     OpenInNewWindow(PathBuf),
     OpenTrash,
@@ -1829,10 +1829,11 @@ pub struct Tab {
     scroll_bounds_opt: Option<Rectangle>,
 }
 
-fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, String> {
+async fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, String> {
     let mut total = 0;
     for entry_res in WalkDir::new(path) {
-        controller.check()?;
+        controller.check().await?;
+
         //TODO: report more errors?
         if let Ok(entry) = entry_res {
             if let Ok(metadata) = entry.metadata() {
@@ -1841,6 +1842,9 @@ fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, String
                 }
             }
         }
+
+        // Yield in case this process takes a while.
+        tokio::task::yield_now().await;
     }
     Ok(total)
 }
@@ -2361,7 +2365,7 @@ impl Tab {
                         if clicked_item.metadata.is_dir() {
                             cd = Some(location.clone());
                         } else if let Some(path) = location.path_opt() {
-                            commands.push(Command::OpenFile(path.to_path_buf()));
+                            commands.push(Command::OpenFile(vec![path.to_path_buf()]));
                         } else {
                             log::warn!("no path for item {:?}", clicked_item);
                         }
@@ -2467,6 +2471,7 @@ impl Tab {
                                 .any(|(e_i, e)| Some(e_i) == click_i_opt.as_ref() && e.selected)
                         });
                     if let Some(ref mut items) = self.items_opt {
+                        let mut paths_to_open = vec![];
                         for (i, item) in items.iter_mut().enumerate() {
                             if Some(i) == click_i_opt {
                                 // Single click to open.
@@ -2475,7 +2480,7 @@ impl Tab {
                                         if item.metadata.is_dir() {
                                             cd = Some(location.clone());
                                         } else if let Some(path) = location.path_opt() {
-                                            commands.push(Command::OpenFile(path.to_path_buf()));
+                                            paths_to_open.push(path.to_path_buf());
                                         } else {
                                             log::warn!("no path for item {:?}", item);
                                         }
@@ -2507,6 +2512,9 @@ impl Tab {
                                 self.clicked = click_i_opt;
                                 item.selected = false;
                             }
+                        }
+                        if !paths_to_open.is_empty() {
+                            commands.push(Command::OpenFile(paths_to_open));
                         }
                     }
                 }
@@ -2897,7 +2905,7 @@ impl Tab {
                         if path.is_dir() {
                             cd = Some(location);
                         } else {
-                            commands.push(Command::OpenFile(path.clone()));
+                            commands.push(Command::OpenFile(vec![path.clone()]));
                         }
                     }
                     _ => {
@@ -2920,11 +2928,12 @@ impl Tab {
                         if path.is_dir() {
                             cd = Some(Location::Path(path));
                         } else {
-                            commands.push(Command::OpenFile(path));
+                            commands.push(Command::OpenFile(vec![path]));
                         }
                     }
                     None => {
                         if let Some(ref mut items) = self.items_opt {
+                            let mut open_files = Vec::new();
                             for item in items.iter() {
                                 if item.selected {
                                     if let Some(location) = &item.location_opt {
@@ -2932,19 +2941,23 @@ impl Tab {
                                             //TODO: allow opening multiple tabs?
                                             cd = Some(location.clone());
                                         } else if let Some(path) = location.path_opt() {
-                                            commands.push(Command::OpenFile(path.to_path_buf()));
+                                            open_files.push(path.to_path_buf());
                                         }
                                     } else {
                                         //TODO: open properties?
                                     }
                                 }
                             }
+
+                            commands.push(Command::OpenFile(open_files));
                         }
                     }
                 }
             }
             Message::RightClick(click_i_opt) => {
-                self.update(Message::Click(click_i_opt), modifiers);
+                if mod_ctrl || mod_shift {
+                    self.update(Message::Click(click_i_opt), modifiers);
+                }
                 if let Some(ref mut items) = self.items_opt {
                     if !click_i_opt.map_or(false, |click_i| {
                         items.get(click_i).map_or(false, |x| x.selected)
@@ -2959,8 +2972,9 @@ impl Tab {
                 self.last_right_click = click_i_opt;
             }
             Message::MiddleClick(click_i) => {
-                self.update(Message::Click(Some(click_i)), modifiers);
-                if !mod_ctrl && !mod_shift {
+                if mod_ctrl || mod_shift {
+                    self.update(Message::Click(Some(click_i)), modifiers);
+                } else {
                     if let Some(ref mut items) = self.items_opt {
                         for (i, item) in items.iter_mut().enumerate() {
                             item.selected = i == click_i;
@@ -2975,7 +2989,7 @@ impl Tab {
                                 //cd = Some(Location::Path(path.clone()));
                                 commands.push(Command::OpenInNewTab(path.clone()))
                             } else {
-                                commands.push(Command::OpenFile(path.clone()));
+                                commands.push(Command::OpenFile(vec![path.clone()]));
                             }
                         } else {
                             log::warn!("no path for item {:?}", clicked_item);
@@ -3307,7 +3321,7 @@ impl Tab {
             if matches!(self.mode, Mode::Desktop) {
                 match location {
                     Location::Path(path) => {
-                        commands.push(Command::OpenFile(path));
+                        commands.push(Command::OpenFile(vec![path]));
                     }
                     Location::Trash => {
                         commands.push(Command::OpenTrash);
@@ -4908,36 +4922,31 @@ impl Tab {
                                 ("dir_size", path.clone()),
                                 stream::channel(1, |mut output| async move {
                                     let message = {
-                                        let path = path.clone();
-                                        tokio::task::spawn_blocking(move || {
-                                            let start = Instant::now();
-                                            match calculate_dir_size(&path, controller) {
-                                                Ok(size) => {
-                                                    log::debug!(
-                                                        "calculated directory size of {:?} in {:?}",
-                                                        path,
-                                                        start.elapsed()
-                                                    );
-                                                    Message::DirectorySize(
-                                                        path.clone(),
-                                                        DirSize::Directory(size),
-                                                    )
-                                                }
-                                                Err(err) => {
-                                                    log::warn!(
+                                        let start = Instant::now();
+                                        match calculate_dir_size(&path, controller).await {
+                                            Ok(size) => {
+                                                log::debug!(
+                                                    "calculated directory size of {:?} in {:?}",
+                                                    path,
+                                                    start.elapsed()
+                                                );
+                                                Message::DirectorySize(
+                                                    path.clone(),
+                                                    DirSize::Directory(size),
+                                                )
+                                            }
+                                            Err(err) => {
+                                                log::warn!(
                                                 "failed to calculate directory size of {:?}: {}",
                                                 path,
                                                 err
                                             );
-                                                    Message::DirectorySize(
-                                                        path.clone(),
-                                                        DirSize::Error(err),
-                                                    )
-                                                }
+                                                Message::DirectorySize(
+                                                    path.clone(),
+                                                    DirSize::Error(err),
+                                                )
                                             }
-                                        })
-                                        .await
-                                        .unwrap()
+                                        }
                                     };
 
                                     match output.send(message).await {
