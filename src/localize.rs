@@ -6,6 +6,7 @@ use i18n_embed::{
     fluent::{fluent_language_loader, FluentLanguageLoader},
     DefaultLocalizer, LanguageLoader, Localizer,
 };
+use icu::locid::Locale;
 use icu_collator::{Collator, CollatorOptions, Numeric};
 use icu_provider::DataLocale;
 use once_cell::sync::Lazy;
@@ -40,18 +41,29 @@ pub static LANGUAGE_SORTER: Lazy<Collator> = Lazy::new(|| {
         .expect("Creating a collator from the system's current language, the fallback language, or American English should succeed")
 });
 
-pub static LANGUAGE_CHRONO: Lazy<chrono::Locale> = Lazy::new(|| {
-    std::env::var("LC_TIME")
-        .or_else(|_| std::env::var("LANG"))
-        .ok()
-        .and_then(|locale_full| {
-            // Split LANG because it may be set to a locale such as en_US.UTF8
-            locale_full
-                .split('.')
-                .next()
-                .and_then(|locale| chrono::Locale::from_str(locale).ok())
-        })
-        .unwrap_or(chrono::Locale::en_US)
+pub static LOCALE: Lazy<Locale> = Lazy::new(|| {
+    fn get_local() -> Result<Locale, Box<dyn std::error::Error>> {
+        let locale = std::env::var("LC_TIME").or_else(|_| std::env::var("LANG"))?;
+
+        let locale = locale
+            .split('.')
+            .next()
+            .ok_or(format!("Can't split the locale {locale}"))?;
+
+        let locale = Locale::from_str(locale).map_err(|e| format!("{e:?}"))?;
+
+        Ok(locale)
+    }
+
+    match get_local() {
+        Ok(locale) => locale,
+
+        Err(e) => {
+            log::error!("can't get locale {e}");
+
+            Locale::default()
+        }
+    }
 });
 
 #[macro_export]

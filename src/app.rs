@@ -68,7 +68,10 @@ use wayland_client::{protocol::wl_output::WlOutput, Proxy};
 
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
-    config::{AppTheme, Config, DesktopConfig, Favorite, IconSizes, TabConfig, TypeToSearch},
+    config::{
+        AppTheme, Config, DesktopConfig, Favorite, IconSizes, TabConfig, TimeConfig, TypeToSearch,
+        TIME_CONFIG_ID,
+    },
     dialog::{Dialog, DialogKind, DialogMessage, DialogResult},
     fl, home_dir,
     key_bind::key_binds,
@@ -371,6 +374,7 @@ pub enum Message {
         Option<Vec<PathBuf>>,
     ),
     TabView(Option<Entity>, tab::View),
+    TimeConfigChange(TimeConfig),
     ToggleContextPage(ContextPage),
     ToggleFoldersFirst,
     Undo(usize),
@@ -3499,6 +3503,10 @@ impl Application for App {
                 config.view = view;
                 return self.update(Message::TabConfig(config));
             }
+            Message::TimeConfigChange(time_config) => {
+                self.config.tab.military_time = time_config.military_time;
+                return self.update_config();
+            }
             Message::ToggleContextPage(context_page) => {
                 //TODO: ensure context menus are closed
                 if self.context_page == context_page
@@ -5063,6 +5071,7 @@ impl Application for App {
         struct ThemeSubscription;
         struct WatcherSubscription;
         struct TrashWatcherSubscription;
+        struct TimeSubscription;
 
         let mut subscriptions = vec![
             event::listen_with(|event, status, window_id| match event {
@@ -5126,6 +5135,21 @@ impl Application for App {
                     );
                 }
                 Message::SystemThemeModeChange(update.config)
+            }),
+            cosmic_config::config_subscription::<_, TimeConfig>(
+                TypeId::of::<TimeSubscription>(),
+                TIME_CONFIG_ID.into(),
+                1,
+            )
+            .map(|update| {
+                if !update.errors.is_empty() {
+                    log::info!(
+                        "errors loading time config {:?}: {:?}",
+                        update.keys,
+                        update.errors
+                    );
+                }
+                Message::TimeConfigChange(update.config)
             }),
             Subscription::run_with_id(
                 TypeId::of::<WatcherSubscription>(),
