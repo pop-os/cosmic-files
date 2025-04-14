@@ -37,8 +37,12 @@ use cosmic::{
     Element,
 };
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Datelike, Timelike, Utc};
 use i18n_embed::LanguageLoader;
+use icu::datetime::{
+    options::{components, preferences},
+    DateTimeFormatter, DateTimeFormatterOptions,
+};
 use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -64,7 +68,7 @@ use crate::{
     config::{DesktopConfig, IconSizes, TabConfig, ICON_SCALE_MAX, ICON_SIZE_GRID},
     dialog::DialogKind,
     fl,
-    localize::{LANGUAGE_CHRONO, LANGUAGE_SORTER},
+    localize::{LANGUAGE_SORTER, LOCALE},
     menu, mime_app,
     mime_icon::{mime_for_path, mime_icon},
     mounter::MOUNTERS,
@@ -85,11 +89,6 @@ const THUMBNAIL_SIZE: u32 = (ICON_SIZE_GRID as u32) * (ICON_SCALE_MAX as u32);
 
 const DRAG_SCROLL_DISTANCE: f32 = 15.0;
 
-//TODO: adjust for locales?
-const DATE_TIME_FORMAT: &str = "%b %-d, %-Y, %-I:%M %p";
-const DATE_TIME_FORMAT_MILITARY: &str = "%b %-d, %-Y, %-H:%M %p";
-const TIME_FORMAT: &str = "%-I:%M %p";
-const TIME_FORMAT_MILITARY: &str = "%-H:%M %p";
 static SPECIAL_DIRS: Lazy<HashMap<PathBuf, &'static str>> = Lazy::new(|| {
     let mut special_dirs = HashMap::new();
     if let Some(dir) = dirs::document_dir() {
@@ -382,13 +381,50 @@ fn format_permissions(metadata: &Metadata, owner: PermissionOwner) -> String {
     }
 }
 
-struct FormatTime {
-    pub time: SystemTime,
-    pub military_time: bool,
+fn date_time_formatter(military_time: bool) -> DateTimeFormatter {
+    let mut bag = components::Bag::empty();
+    bag.day = Some(components::Day::NumericDayOfMonth);
+    bag.month = Some(components::Month::Short);
+    bag.year = Some(components::Year::Numeric);
+    bag = bag.merge(time_bag(military_time));
+    let options = DateTimeFormatterOptions::Components(bag);
+
+    DateTimeFormatter::try_new_experimental(&LOCALE.as_ref().into(), options)
+        .expect("failed to create DateTimeFormatter")
 }
 
-impl FormatTime {
-    fn from_secs(secs: i64, military_time: bool) -> Option<Self> {
+fn time_formatter(military_time: bool) -> DateTimeFormatter {
+    let options = DateTimeFormatterOptions::Components(time_bag(military_time));
+
+    DateTimeFormatter::try_new_experimental(&LOCALE.as_ref().into(), options)
+        .expect("failed to create DateTimeFormatter")
+}
+
+fn time_bag(military_time: bool) -> components::Bag {
+    let mut bag = components::Bag::empty();
+    bag.hour = Some(components::Numeric::Numeric);
+    bag.minute = Some(components::Numeric::Numeric);
+    let hour_cyle = if military_time {
+        preferences::HourCycle::H23
+    } else {
+        preferences::HourCycle::H12
+    };
+    bag.preferences = Some(preferences::Bag::from_hour_cycle(hour_cyle));
+    bag
+}
+
+struct FormatTime<'a> {
+    pub time: SystemTime,
+    pub date_time_formatter: &'a DateTimeFormatter,
+    pub time_formatter: &'a DateTimeFormatter,
+}
+
+impl<'a> FormatTime<'a> {
+    fn from_secs(
+        secs: i64,
+        date_time_formatter: &'a DateTimeFormatter,
+        time_formatter: &'a DateTimeFormatter,
+    ) -> Option<Self> {
         // This looks convoluted because we need to ensure the units match up
         let secs: u64 = secs.try_into().ok()?;
         let now = SystemTime::now();
@@ -400,48 +436,57 @@ impl FormatTime {
             .map(Duration::from_secs)?;
         now.checked_sub(filetime_diff).map(|time| Self {
             time,
-            military_time,
+            date_time_formatter,
+            time_formatter,
         })
     }
 }
 
-impl Display for FormatTime {
+impl Display for FormatTime<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let date_time = chrono::DateTime::<chrono::Local>::from(self.time);
+        let datetime = chrono::DateTime::<chrono::Local>::from(self.time);
         let now = chrono::Local::now();
-        if date_time.date_naive() == now.date_naive() {
+        let icu_datetime = icu::calendar::DateTime::try_new_iso_datetime(
+            datetime.year(),
+            datetime.month() as u8,
+            datetime.day() as u8,
+            datetime.hour() as u8,
+            datetime.minute() as u8,
+            datetime.second() as u8,
+        )
+        .expect("failed to construct DateTime")
+        .to_any();
+
+        if datetime.date_naive() == now.date_naive() {
             write!(
                 f,
                 "{}, {}",
                 fl!("today"),
-                date_time.format_localized(
-                    if self.military_time {
-                        TIME_FORMAT_MILITARY
-                    } else {
-                        TIME_FORMAT
-                    },
-                    *LANGUAGE_CHRONO
-                )
+                self.time_formatter
+                    .format(&icu_datetime)
+                    .map_err(|_| fmt::Error)?
             )
         } else {
-            date_time
-                .format_localized(
-                    if self.military_time {
-                        DATE_TIME_FORMAT_MILITARY
-                    } else {
-                        DATE_TIME_FORMAT
-                    },
-                    *LANGUAGE_CHRONO,
-                )
-                .fmt(f)
+            write!(
+                f,
+                "{}",
+                self.date_time_formatter
+                    .format(&icu_datetime)
+                    .map_err(|_| fmt::Error)?
+            )
         }
     }
 }
 
-const fn format_time(time: SystemTime, military_time: bool) -> FormatTime {
+const fn format_time<'a>(
+    time: SystemTime,
+    date_time_formatter: &'a DateTimeFormatter,
+    time_formatter: &'a DateTimeFormatter,
+) -> FormatTime<'a> {
     FormatTime {
         time,
-        military_time,
+        date_time_formatter,
+        time_formatter,
     }
 }
 
@@ -1143,7 +1188,7 @@ pub enum Command {
     #[cfg(feature = "desktop")]
     ExecEntryAction(cosmic::desktop::DesktopEntryData, usize),
     Iced(TaskWrapper),
-    OpenFile(PathBuf),
+    OpenFile(Vec<PathBuf>),
     OpenInNewTab(PathBuf),
     OpenInNewWindow(PathBuf),
     OpenTrash,
@@ -1593,24 +1638,30 @@ impl Item {
                     )));
                 }
 
+                let date_time_formatter = date_time_formatter(military_time);
+                let time_formatter = time_formatter(military_time);
+
                 if let Ok(time) = metadata.created() {
                     details = details.push(widget::text::body(fl!(
                         "item-created",
-                        created = format_time(time, military_time).to_string()
+                        created =
+                            format_time(time, &date_time_formatter, &time_formatter).to_string()
                     )));
                 }
 
                 if let Ok(time) = metadata.modified() {
                     details = details.push(widget::text::body(fl!(
                         "item-modified",
-                        modified = format_time(time, military_time).to_string()
+                        modified =
+                            format_time(time, &date_time_formatter, &time_formatter).to_string()
                     )));
                 }
 
                 if let Ok(time) = metadata.accessed() {
                     details = details.push(widget::text::body(fl!(
                         "item-accessed",
-                        accessed = format_time(time, military_time).to_string()
+                        accessed =
+                            format_time(time, &date_time_formatter, &time_formatter).to_string()
                     )));
                 }
 
@@ -1703,9 +1754,12 @@ impl Item {
                     )));
                 }
                 if let Ok(time) = metadata.modified() {
+                    let date_time_formatter = date_time_formatter(military_time);
+                    let time_formatter = time_formatter(military_time);
+
                     column = column.push(widget::text::body(format!(
                         "Last modified: {}",
-                        format_time(time, military_time)
+                        format_time(time, &date_time_formatter, &time_formatter)
                     )));
                 }
             }
@@ -1827,12 +1881,15 @@ pub struct Tab {
     last_scroll_position: Option<Point>,
     last_scroll_offset: Option<Point>,
     scroll_bounds_opt: Option<Rectangle>,
+    date_time_formatter: DateTimeFormatter,
+    time_formatter: DateTimeFormatter,
 }
 
-fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, String> {
+async fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, String> {
     let mut total = 0;
     for entry_res in WalkDir::new(path) {
-        controller.check()?;
+        controller.check().await?;
+
         //TODO: report more errors?
         if let Ok(entry) = entry_res {
             if let Ok(metadata) = entry.metadata() {
@@ -1841,6 +1898,9 @@ fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, String
                 }
             }
         }
+
+        // Yield in case this process takes a while.
+        tokio::task::yield_now().await;
     }
     Ok(total)
 }
@@ -1917,6 +1977,8 @@ impl Tab {
             last_scroll_position: None,
             last_scroll_offset: None,
             scroll_bounds_opt: None,
+            date_time_formatter: date_time_formatter(config.military_time),
+            time_formatter: time_formatter(config.military_time),
         }
     }
 
@@ -2361,7 +2423,7 @@ impl Tab {
                         if clicked_item.metadata.is_dir() {
                             cd = Some(location.clone());
                         } else if let Some(path) = location.path_opt() {
-                            commands.push(Command::OpenFile(path.to_path_buf()));
+                            commands.push(Command::OpenFile(vec![path.to_path_buf()]));
                         } else {
                             log::warn!("no path for item {:?}", clicked_item);
                         }
@@ -2467,6 +2529,7 @@ impl Tab {
                                 .any(|(e_i, e)| Some(e_i) == click_i_opt.as_ref() && e.selected)
                         });
                     if let Some(ref mut items) = self.items_opt {
+                        let mut paths_to_open = vec![];
                         for (i, item) in items.iter_mut().enumerate() {
                             if Some(i) == click_i_opt {
                                 // Single click to open.
@@ -2475,7 +2538,7 @@ impl Tab {
                                         if item.metadata.is_dir() {
                                             cd = Some(location.clone());
                                         } else if let Some(path) = location.path_opt() {
-                                            commands.push(Command::OpenFile(path.to_path_buf()));
+                                            paths_to_open.push(path.to_path_buf());
                                         } else {
                                             log::warn!("no path for item {:?}", item);
                                         }
@@ -2508,6 +2571,9 @@ impl Tab {
                                 item.selected = false;
                             }
                         }
+                        if !paths_to_open.is_empty() {
+                            commands.push(Command::OpenFile(paths_to_open));
+                        }
                     }
                 }
             }
@@ -2515,9 +2581,14 @@ impl Tab {
                 // View is preserved for existing tabs
                 let view = self.config.view;
                 let show_hidden = self.config.show_hidden;
+                let military_time_changed = self.config.military_time != config.military_time;
                 self.config = config;
                 self.config.view = view;
                 self.config.show_hidden = show_hidden;
+                if military_time_changed {
+                    self.date_time_formatter = date_time_formatter(self.config.military_time);
+                    self.time_formatter = time_formatter(self.config.military_time);
+                }
             }
             Message::ContextAction(action) => {
                 // Close context menu
@@ -2897,7 +2968,7 @@ impl Tab {
                         if path.is_dir() {
                             cd = Some(location);
                         } else {
-                            commands.push(Command::OpenFile(path.clone()));
+                            commands.push(Command::OpenFile(vec![path.clone()]));
                         }
                     }
                     _ => {
@@ -2920,11 +2991,12 @@ impl Tab {
                         if path.is_dir() {
                             cd = Some(Location::Path(path));
                         } else {
-                            commands.push(Command::OpenFile(path));
+                            commands.push(Command::OpenFile(vec![path]));
                         }
                     }
                     None => {
                         if let Some(ref mut items) = self.items_opt {
+                            let mut open_files = Vec::new();
                             for item in items.iter() {
                                 if item.selected {
                                     if let Some(location) = &item.location_opt {
@@ -2932,13 +3004,15 @@ impl Tab {
                                             //TODO: allow opening multiple tabs?
                                             cd = Some(location.clone());
                                         } else if let Some(path) = location.path_opt() {
-                                            commands.push(Command::OpenFile(path.to_path_buf()));
+                                            open_files.push(path.to_path_buf());
                                         }
                                     } else {
                                         //TODO: open properties?
                                     }
                                 }
                             }
+
+                            commands.push(Command::OpenFile(open_files));
                         }
                     }
                 }
@@ -2978,7 +3052,7 @@ impl Tab {
                                 //cd = Some(Location::Path(path.clone()));
                                 commands.push(Command::OpenInNewTab(path.clone()))
                             } else {
-                                commands.push(Command::OpenFile(path.clone()));
+                                commands.push(Command::OpenFile(vec![path.clone()]));
                             }
                         } else {
                             log::warn!("no path for item {:?}", clicked_item);
@@ -3310,7 +3384,7 @@ impl Tab {
             if matches!(self.mode, Mode::Desktop) {
                 match location {
                     Location::Path(path) => {
-                        commands.push(Command::OpenFile(path));
+                        commands.push(Command::OpenFile(vec![path]));
                     }
                     Location::Trash => {
                         commands.push(Command::OpenTrash);
@@ -4375,17 +4449,18 @@ impl Tab {
                     y += 1;
                 }
 
-                let military_time = self.config.military_time;
                 let modified_text = match &item.metadata {
                     ItemMetadata::Path { metadata, .. } => match metadata.modified() {
-                        Ok(time) => format_time(time, military_time).to_string(),
+                        Ok(time) => self.format_time(time).to_string(),
                         Err(_) => String::new(),
                     },
-                    ItemMetadata::Trash { entry, .. } => {
-                        FormatTime::from_secs(entry.time_deleted, military_time)
-                            .map(|t| t.to_string())
-                            .unwrap_or_default()
-                    }
+                    ItemMetadata::Trash { entry, .. } => FormatTime::from_secs(
+                        entry.time_deleted,
+                        &self.date_time_formatter,
+                        &self.time_formatter,
+                    )
+                    .map(|t| t.to_string())
+                    .unwrap_or_default(),
                     _ => String::new(),
                 };
 
@@ -4911,36 +4986,31 @@ impl Tab {
                                 ("dir_size", path.clone()),
                                 stream::channel(1, |mut output| async move {
                                     let message = {
-                                        let path = path.clone();
-                                        tokio::task::spawn_blocking(move || {
-                                            let start = Instant::now();
-                                            match calculate_dir_size(&path, controller) {
-                                                Ok(size) => {
-                                                    log::debug!(
-                                                        "calculated directory size of {:?} in {:?}",
-                                                        path,
-                                                        start.elapsed()
-                                                    );
-                                                    Message::DirectorySize(
-                                                        path.clone(),
-                                                        DirSize::Directory(size),
-                                                    )
-                                                }
-                                                Err(err) => {
-                                                    log::warn!(
+                                        let start = Instant::now();
+                                        match calculate_dir_size(&path, controller).await {
+                                            Ok(size) => {
+                                                log::debug!(
+                                                    "calculated directory size of {:?} in {:?}",
+                                                    path,
+                                                    start.elapsed()
+                                                );
+                                                Message::DirectorySize(
+                                                    path.clone(),
+                                                    DirSize::Directory(size),
+                                                )
+                                            }
+                                            Err(err) => {
+                                                log::warn!(
                                                 "failed to calculate directory size of {:?}: {}",
                                                 path,
                                                 err
                                             );
-                                                    Message::DirectorySize(
-                                                        path.clone(),
-                                                        DirSize::Error(err),
-                                                    )
-                                                }
+                                                Message::DirectorySize(
+                                                    path.clone(),
+                                                    DirSize::Error(err),
+                                                )
                                             }
-                                        })
-                                        .await
-                                        .unwrap()
+                                        }
                                     };
 
                                     match output.send(message).await {
@@ -5095,6 +5165,10 @@ impl Tab {
         }
 
         Subscription::batch(subscriptions)
+    }
+
+    fn format_time<'a>(&'a self, time: SystemTime) -> FormatTime<'a> {
+        format_time(time, &self.date_time_formatter, &self.time_formatter)
     }
 }
 

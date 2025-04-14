@@ -6,32 +6,165 @@ use cosmic::desktop;
 use cosmic::widget;
 pub use mime_guess::Mime;
 use std::{
-    cmp::Ordering, collections::HashMap, env, ffi::OsString, fs, io, path::PathBuf, process,
+    cmp::Ordering,
+    collections::HashMap,
+    env,
+    ffi::OsStr,
+    fs, io,
+    path::{Path, PathBuf},
+    process,
     time::Instant,
 };
 
-pub fn exec_to_command(exec: &str, path_opt: Option<OsString>) -> Option<process::Command> {
-    let args_vec: Vec<String> = shlex::split(exec)?;
-    let mut args = args_vec.iter();
-    let mut command = process::Command::new(args.next()?);
-    for arg in args {
-        if arg.starts_with('%') {
-            match arg.as_str() {
-                "%f" | "%F" | "%u" | "%U" => {
-                    if let Some(path) = &path_opt {
-                        command.arg(path);
-                    }
+// Supported exec key field codes
+const EXEC_HANDLERS: [&str; 4] = ["%f", "%F", "%u", "%U"];
+// Deprecated field codes. The spec advises to ignore these handlers.
+const DEPRECATED_HANDLERS: [&str; 6] = ["%d", "%D", "%n", "%N", "%v", "%m"];
+
+pub fn exec_to_command(
+    exec: &str,
+    path_opt: &[impl AsRef<OsStr>],
+) -> Option<Vec<process::Command>> {
+    let args_vec = shlex::split(exec)?;
+    let program = args_vec.first()?;
+    // Skip program to make indexing easier
+    let args_vec = &args_vec[1..];
+
+    // Base Command instance(s)
+    // 1. We may need to launch multiple of the same process.
+    // 2. Each of those processes will need to be passed args from exec.
+    // 3. Each of those args may appear in any order.
+    // 4. Arg order should be preserved.
+    //
+    // So, we'll go through exec in two passes. The first pass handles paths (%f etc) and args up
+    // to the field code followed by the second which passes extra, non-% args to each processes.
+    //
+    // While it'd be marginally faster to process everything in one pass, that's problematic:
+    // 1. path_opt may need to be cloned because it may be moved on each iteration (borrowck
+    //    doesn't know we'll only use it once)
+    // 2. We have to keep track of which modifier (%f etc) we've used/seen already
+    // 3. We have to keep track of which processes received non-modifier args which gets messy fast
+    // 4. `exec` is likely small so looping over it twice is not a big deal
+    let field_code_pos = args_vec
+        .iter()
+        .position(|arg| EXEC_HANDLERS.contains(&arg.as_str()));
+    let args_handler = field_code_pos.and_then(|i| args_vec.get(i));
+    // msrv
+    // .inspect(|handler| log::trace!("Found paths handler: {handler} for exec: {exec}"));
+    // Number of args before the field code.
+    // This won't be an off by one err below because take is not zero indexed.
+    let field_code_pos = field_code_pos.unwrap_or_default();
+    let mut processes = match args_handler.map(|s| s.as_str()) {
+        Some("%f") => {
+            let mut processes = Vec::with_capacity(path_opt.len());
+
+            for path in path_opt.iter().map(AsRef::as_ref) {
+                // TODO: %f and %F need to handle non-file URLs (see spec)
+                if from_file_or_dir(path).is_none() {
+                    log::warn!("Desktop file expects a file path instead of a URL: {path:?}");
                 }
-                _ => {
-                    log::warn!("unsupported Exec code {:?} in {:?}", arg, exec);
+
+                // Passing multiple paths to %f should open an instance per path
+                let mut process = process::Command::new(program);
+                process.args(
+                    args_vec
+                        .iter()
+                        .map(AsRef::as_ref)
+                        .take(field_code_pos)
+                        .chain(std::iter::once(path)),
+                );
+                processes.push(process);
+            }
+
+            processes
+        }
+        Some("%F") => {
+            // TODO: %f and %F need to handle non-file URLs (see spec)
+            for invalid in path_opt
+                .iter()
+                .map(AsRef::as_ref)
+                .filter(|path| from_file_or_dir(path).is_none())
+            {
+                log::warn!("Desktop file expects a file path instead of a URL: {invalid:?}");
+            }
+
+            // Launch one instance with all args
+            let mut process = process::Command::new(program);
+            process.args(
+                args_vec
+                    .iter()
+                    .map(OsStr::new)
+                    .take(field_code_pos)
+                    .chain(path_opt.iter().map(AsRef::as_ref)),
+            );
+
+            vec![process]
+        }
+        Some("%u") => path_opt
+            .iter()
+            .map(|path| {
+                let mut process = process::Command::new(program);
+                process.args(
+                    args_vec
+                        .iter()
+                        .map(OsStr::new)
+                        .take(field_code_pos)
+                        .chain(std::iter::once(path.as_ref())),
+                );
+                process
+            })
+            .collect(),
+        Some("%U") => {
+            let mut process = process::Command::new(program);
+            process.args(
+                args_vec
+                    .iter()
+                    .map(OsStr::new)
+                    .take(field_code_pos)
+                    .chain(path_opt.iter().map(AsRef::as_ref)),
+            );
+            vec![process]
+        }
+        Some(invalid) => unreachable!("All valid variants were checked; got: {invalid}"),
+        None => vec![process::Command::new(program)],
+    };
+
+    // Pass 2: Add remaining arguments that are not % to each process
+    for arg in args_vec.iter().skip(field_code_pos) {
+        match arg.as_str() {
+            // Consume path field codes or fail on codes we don't handle yet
+            field_code if arg.starts_with('%') => {
+                if !EXEC_HANDLERS.contains(&field_code)
+                    && !DEPRECATED_HANDLERS.contains(&field_code)
+                {
+                    log::warn!("unsupported Exec code {:?} in {:?}", field_code, exec);
                     return None;
                 }
             }
-        } else {
-            command.arg(arg);
+            arg => {
+                for process in &mut processes {
+                    process.arg(arg);
+                }
+            }
         }
     }
-    Some(command)
+
+    #[cfg(debug_assertions)]
+    for command in &processes {
+        log::debug!(
+            "Parsed program {} with args: {:?}",
+            command.get_program().to_string_lossy(),
+            command.get_args()
+        );
+    }
+
+    Some(processes)
+}
+
+fn from_file_or_dir(path: impl AsRef<Path>) -> Option<url::Url> {
+    url::Url::from_file_path(&path)
+        .ok()
+        .or_else(|| url::Url::from_directory_path(&path).ok())
 }
 
 #[derive(Clone, Debug)]
@@ -46,7 +179,7 @@ pub struct MimeApp {
 
 impl MimeApp {
     //TODO: move to libcosmic, support multiple files
-    pub fn command(&self, path_opt: Option<OsString>) -> Option<process::Command> {
+    pub fn command<O: AsRef<OsStr>>(&self, path_opt: &[O]) -> Option<Vec<process::Command>> {
         exec_to_command(self.exec.as_deref()?, path_opt)
     }
 }

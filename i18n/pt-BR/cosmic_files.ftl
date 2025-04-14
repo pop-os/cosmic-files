@@ -1,4 +1,4 @@
-cosmic-files = Arquivos do COSMIC
+cosmic-files = Arquivos
 empty-folder = Pasta vazia
 empty-folder-hidden = Pasta vazia (contém itens ocultos)
 no-results = Nenhum item encontrado
@@ -42,6 +42,8 @@ create-archive = Compactar arquivos
 
 ## Extract Dialog
 extract-password-required = Senha necessária
+extract-to = Extrair para...
+extract-to-title = Extrair para pasta
 
 ## Empty Trash Dialog
 empty-trash = Esvaziar a lixeira
@@ -105,26 +107,26 @@ owner = Proprietário
 group = Grupo
 other = Outros
 ### Mode 0
-none = None
+none = Nenhum
 ### Mode 1 (unusual)
-execute-only = Execute-only
+execute-only = Somente execução
 ### Mode 2 (unusual)
-write-only = Write-only
+write-only = Somente escrita
 ### Mode 3 (unusual)
-write-execute = Write and execute
+write-execute = Escrita e execução
 ### Mode 4
-read-only = Read-only
+read-only = Somente leitura
 ### Mode 5
-read-execute = Read and execute
+read-execute = Leitura e execução
 ### Mode 6
-read-write = Read and write
+read-write = Leitura e escrita
 ### Mode 7
-read-write-execute = Read, write, and execute
+read-write-execute = Leitura, escrita e execução
 
 ## Favorite Path Error Dialog
-favorite-path-error = Error opening directory
+favorite-path-error = Erro ao abrir diretório
 favorite-path-error-description =
-    Não foi possível abri "{$path}".
+    Não foi possível abrir "{$path}".
     O item pode não existir ou você não tem permissão para abri-lo.
     
     Deseja removê-lo da barra lateral?
@@ -247,6 +249,7 @@ calculating = Calculando...
 
 ## Settings
 settings = Configurações
+single-click = Clique simples para abrir
 
 ### Appearance
 appearance = Aparência
@@ -309,7 +312,7 @@ show-hidden-files = Mostrar arquivos ocultos
 list-directories-first = Listar pastas primeiro
 gallery-preview = Pré-visualizar
 menu-settings = Configurações...
-menu-about = Sobre o Arquivos do COSMIC...
+menu-about = Sobre o Arquivos...
 
 ## Sort
 sort = Ordenar

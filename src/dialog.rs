@@ -36,7 +36,7 @@ use std::{
 
 use crate::{
     app::{Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind},
-    config::{Config, Favorite, IconSizes, TabConfig},
+    config::{Config, Favorite, IconSizes, TabConfig, TimeConfig, TIME_CONFIG_ID},
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
@@ -187,10 +187,10 @@ impl<T: AsRef<str>> From<T> for DialogLabel {
             });
         }
 
-        dbg!(Self {
+        Self {
             spans,
-            key_bind_opt
-        })
+            key_bind_opt,
+        }
     }
 }
 
@@ -399,6 +399,7 @@ enum Message {
     TabMessage(tab::Message),
     TabRescan(Location, Option<tab::Item>, Vec<tab::Item>),
     TabView(tab::View),
+    TimeConfigChange(TimeConfig),
     ToggleFoldersFirst,
     ZoomDefault,
     ZoomIn,
@@ -686,7 +687,10 @@ impl App {
 
     fn update_config(&mut self) -> Task<Message> {
         self.update_nav_model();
-        Task::none()
+
+        self.update(Message::TabMessage(tab::Message::Config(
+            self.flags.config.tab,
+        )))
     }
 
     fn activate_nav_model_location(&mut self, location: &Location) {
@@ -1658,6 +1662,10 @@ impl Application for App {
             Message::TabView(view) => {
                 self.tab.config.view = view;
             }
+            Message::TimeConfigChange(time_config) => {
+                self.flags.config.tab.military_time = time_config.military_time;
+                return self.update_config();
+            }
             Message::ToggleFoldersFirst => {
                 self.tab.config.folders_first = !self.tab.config.folders_first;
             }
@@ -1741,6 +1749,7 @@ impl Application for App {
 
     fn subscription(&self) -> Subscription<Message> {
         struct WatcherSubscription;
+        struct TimeSubscription;
         let mut subscriptions = vec![
             event::listen_with(|event, status, _window_id| match event {
                 Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => match status {
@@ -1764,6 +1773,21 @@ impl Application for App {
                     );
                 }
                 Message::Config(update.config)
+            }),
+            cosmic_config::config_subscription::<_, TimeConfig>(
+                TypeId::of::<TimeSubscription>(),
+                TIME_CONFIG_ID.into(),
+                1,
+            )
+            .map(|update| {
+                if !update.errors.is_empty() {
+                    log::info!(
+                        "errors loading time config {:?}: {:?}",
+                        update.keys,
+                        update.errors
+                    );
+                }
+                Message::TimeConfigChange(update.config)
             }),
             Subscription::run_with_id(
                 TypeId::of::<WatcherSubscription>(),

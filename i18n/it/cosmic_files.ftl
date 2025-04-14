@@ -1,36 +1,37 @@
 cosmic-files = COSMIC Files
 empty-folder = Cartella vuota
-empty-folder-hidden = Cartella vuota (contiene elementi nascosti)
-no-results = Nessun risultato
+empty-folder-hidden = Cartella vuota (con elementi nascosti)
+no-results = Nessun risultato trovato
 filesystem = Filesystem
 home = Home
-networks = Rete
-notification-in-progress = Operazioni sui file in corso ...
+networks = Reti
+notification-in-progress = Operazioni sui files in corso.
 trash = Cestino
 recents = Recenti
 undo = Annulla
 today = Oggi
 
 # Desktop view options
-desktop-view-options = Opzioni di visualizzazione del desktop...
-show-on-desktop = Mostra sul desktop
-desktop-folder-content = Contenuto della cartella Desktop
-mounted-drives = Unità montate
-trash-folder-icon = Icona del cestino
-icon-size-and-spacing = Dimensione e spaziatura delle icone
-icon-size = Dimensione delle icone
+desktop-view-options = Impostazioni visualizzazione Desktop...
+show-on-desktop = Mostra nel Desktop
+desktop-folder-content = Contenuto cartella del Desktop
+mounted-drives = Dispositivi montati
+trash-folder-icon = Icona del Cestino
+icon-size-and-spacing = Dimensioni e spaziatura icona
+icon-size = Dimensione icona
+grid-spacing = Spaziatura griglia
 
 # List view
 name = Nome
 modified = Modificato
-trashed-on = Spostato nel cestino
-size = Dimensioni
+trashed-on = Cestinato
+size = Dimensione
 
 # Progress footer
 details = Dettagli
 dismiss = Nascondi messaggio
-operations-running = {$running} operazioni in corso ({$percent}%)...
-operations-running-finished = {$running} operazioni in corso ({$percent}%), {$finished} completate...
+operations-running = {$running} operazioni in corso: ({$percent}%)...
+operations-running-finished = {$running} operazioni in corso: ({$percent}%), {$finished} completate...
 pause = Pausa
 resume = Riprendi
 
@@ -39,23 +40,28 @@ resume = Riprendi
 ## Compress Dialog
 create-archive = Crea archivio
 
+## Extract Dialog
+extract-password-required = Password richiesta
+extract-to = Estrai in...
+extract-to-title = Estrai nella cartella
+
 ## Empty Trash Dialog
 empty-trash = Svuota cestino
-empty-trash-warning = Sei sicuro di voler cancellare definitivamente tutti gli elementi contenuti nel cestino?
+empty-trash-warning = Sei sicuro di voler eliminare permanentemente tutti gli elementi nel cestino?
 
 ## Mount Error Dialog
-mount-error = Impossibile accedere all'unità
+mount-error = Impossibile accedere al dispositivo
 
 ## New File/Folder Dialog
-create-new-file = Crea file
-create-new-folder = Crea cartella
+create-new-file = Crea un nuovo file
+create-new-folder = Crea una nuova cartella
 file-name = Nome file
 folder-name = Nome cartella
-file-already-exists = È già presente un file con quel nome.
-folder-already-exists = È già presente una cartella con quel nome.
-name-hidden = I nomi che iniziano con "." saranno nascosti.
-name-invalid = Il nome "{$filename}" non è valido.
-name-no-slashes = Il nome non può contenere slashe.
+file-already-exists = Esiste già un file con questo nome.
+folder-already-exists = Esiste già una cartella con questo nome.
+name-hidden = I nomi che iniziano con "." verranno nascosti.
+name-invalid = Il nome non può essere "{$filename}".
+name-no-slashes = I nomi non possono contenere gli slash.
 
 ## Open/Save Dialog
 cancel = Annulla
@@ -65,15 +71,15 @@ open-file = Apri file
 open-folder = Apri cartella
 open-in-new-tab = Apri in una nuova scheda
 open-in-new-window = Apri in una nuova finestra
-open-item-location = Apri posizione oggetto
-open-multiple-files = Apri file multipli
+open-item-location = Apri percorso file
+open-multiple-files = Apri files multipli
 open-multiple-folders = Apri cartelle multiple
 save = Salva
 save-file = Salva file
 
 ## Open With Dialog
-open-with-title = Come vuoi aprire "{$name}"?
-browse-store = Sfoglia {$store}
+open-with-title = Come vuoi aprire il file "{$name}"?
+browse-store = Cerca in {$store}
 
 ## Rename Dialog
 rename-file = Rinomina file
@@ -81,42 +87,66 @@ rename-folder = Rinomina cartella
 
 ## Replace Dialog
 replace = Sostituisci
-replace-title = {$filename} è già presente in questa posizione.
-replace-warning = Vuoi sostituirlo con quello che stai salvando? In questo modo il contenuto verrà sovrascritto.
-replace-warning-operation = Vuoi sostituirlo? In questo modo il contenuto verrà sovrascritto.
-reporiginal-file = File originale
+replace-title = "{$filename}" esiste già in questo percorso.
+replace-warning = Vuoi sostituirlo con quello che stai per salvare? La sostituzione sovrascriverà il contenuto.
+replace-warning-operation = Vuoi sostituirlo? La sostituzione sovrascriverà il contenuto.
+original-file = File originale
 replace-with = Sostituisci con
-apply-to-all = Applica a tutto
-keep-both = Tieni entrambi
+apply-to-all = Applica a tutti
+keep-both = Mantieni entrambi
 skip = Salta
 
 ## Set as Executable and Launch Dialog
-set-executable-and-launch = Imposta come eseguibile e avvia
-set-executable-and-launch-description = Vuoi impostare "{$name}" come eseguibile e avviarlo?
-set-and-launch = Imposta e avvia
+set-executable-and-launch = Imposta come "eseguibile" e apri
+set-executable-and-launch-description = Vuoi impostare "{$name}" come "eseguibile" e aprirlo?
+set-and-launch = Imposta e apri
 
 ## Metadata Dialog
+open-with = Apri con
 owner = Proprietario
 group = Gruppo
-other = Altri
-read = Lettura
-write = Scrittura
-execute = Esecuzione
+other = Altro
+### Mode 0
+none = Nessuno
+### Mode 1 (unusual)
+execute-only = Sola esecuzione
+### Mode 2 (unusual)
+write-only = Sola scrittura
+### Mode 3 (unusual)
+write-execute = Scrittura e esecuzione
+### Mode 4
+read-only = Sola lettura
+### Mode 5
+read-execute = Lettura e esecuzione
+### Mode 6
+read-write = Lettura e scrittura
+### Mode 7
+read-write-execute = Lettura, scrittura e esecuzione
+
+## Favorite Path Error Dialog
+favorite-path-error = Errore nell'apertura della cartella
+favorite-path-error-description =
+    Impossibile aprire "{$path}".
+    Potrebbe non esistere o potresti non avere i permessi di accesso.
+    
+    Vuoi rimuoverla dalla barra laterale?
+remove = Rimuovi
+keep = Mantieni
 
 # Context Pages
 
 ## About
-git-description = Commit git {$hash} del {$date}
+git-description = Git commit {$hash} in data {$date}
 
 ## Add Network Drive
-add-network-drive = Aggiungi drive di rete
+add-network-drive = Aggiungi dispositivo di rete
 connect = Connetti
-connect-anonymously = Connetti in maniera anonima
-connecting = Connessione...
+connect-anonymously = Connetti in modo anonimo
+connecting = Connessione in corso...
 domain = Dominio
-enter-server-address = Inserisci l'indirizzo del server
+enter-server-address = Inserisci indirizzo di rete
 network-drive-description =
-    L'indirizzo del server include il protocollo.
+    Gli indirizzi dei server includono il prefisso del protocollo e l'indirizzo.
     Esempio: ssh://192.168.0.1, ftp://[2001:db8::1]
 ### Make sure to keep the comma which separates the columns
 network-drive-schemes =
@@ -127,113 +157,131 @@ network-drive-schemes =
     Server Message Block,smb://
     SSH File Transfer Protocol,sftp:// or ssh://
     WebDav,dav:// or davs://
-network-drive-error = Impossibile accedere al drive di rete
+network-drive-error = Impossibile accedere al dispositivo di rete
 password = Password
 remember-password = Ricorda password
 try-again = Riprova
-username = Nome utente
+username = Username
 
 ## Operations
+cancelled = Annullato
 edit-history = Modifica cronologia
 history = Cronologia
-no-history = Nessun elemento nella cronologia
-pending = In sospeso
-failed = Non riuscito
+no-history = Nessun elemento nella cronologia.
+pending = In coda
+progress = {$percent}%
+progress-cancelled = {$percent}%, annullato
+progress-paused = {$percent}%, in pausa
+failed = Fallito
 complete = Completato
-compressing = Comprimendo {$items} {$items ->
+compressing = Compressione in corso di {$items} {$items ->
         [one] elemento
         *[other] elementi
-    } da {$from} a {$to}
-compressed = Compressi {$items} {$items ->
+    } da "{$from}" a "{$to}" ({$progress})...
+compressed = Compressione completata di {$items} {$items ->
         [one] elemento
         *[other] elementi
-    } da {$from} a {$to}
+    } da "{$from}" a "{$to}"
 copy_noun = Copia
-creating = Creazione di {$name} in {$parent}
-created = {$name} creato in {$parent}
-copying = Copiando {$items} {$items ->
+creating = Creazione "{$name}" in "{$parent}"
+created = Creato "{$name}" in "{$parent}"
+copying = Copia in corso di {$items} {$items ->
         [one] elemento
         *[other] elementi
-    } da {$from} a {$to}
-copied = Copiato {$items} {$items ->
+    } da "{$from}" a "{$to}" ({$progress})...
+copied = Copia completata di {$items} {$items ->
         [one] elemento
         *[other] elementi
-    } da {$from} a {$to}
-emptying-trash = Svuotamento {trash}
+    } da "{$from}" a "{$to}"
+deleting = Eliminazione in corso di {$items} {$items ->
+        [one] elemento
+        *[other] elementi
+    } dal {trash}: ({$progress})...
+deleted = Eliminazione completata di {$items} {$items ->
+        [one] elemento
+        *[other] elementi
+    } dal {trash}
+emptying-trash = Svuotamento del {trash}: ({$progress})...
 emptied-trash = {trash} svuotato
-extracting = Estraendo {$items} {$items ->
+extracting = Estrazione in corso di {$items} {$items ->
         [one] elemento
         *[other] elementi
-    } da {$from} a {$to}
-extracted = Estratto {$items} {$items ->
+    } da "{$from}" a "{$to}": ({$progress})...
+extracted = Estrazione completata di {$items} {$items ->
         [one] elemento
         *[other] elementi
-    } da {$from} a {$to}
-setting-executable-and-launching = Impostando come esguibile e lanciando "{$name}"
-set-executable-and-launched = Imposta come eseguibile e lancia "{$name}"
-moving = Spostando {$items} {$items ->
+    } da "{$from}" a "{$to}"
+setting-executable-and-launching = Impostazione in corso di "{$name}" come "eseguibile" e avvio
+set-executable-and-launched = Impostato "{$name}" come "eseguibile" e avviato
+moving = Spostamento in corso di {$items} {$items ->
         [one] elemento
         *[other] elementi
-    } da {$from} a {$to}
-moved = Spostato {$items} {$items ->
+    } da "{$from}" a "{$to}": ({$progress})...
+moved = Spostamento completato di {$items} {$items ->
         [one] elemento
         *[other] elementi
-    } da {$from} a {$to}
-renaming = Rinomina {$from} in {$to}
-renamed = Rinominato {$from} in {$to}
-restoring = Ripristinando {$items} {$items ->
+    } da "{$from}" a "{$to}"
+renaming = Rinominazione di "{$from}" in "{$to}"
+renamed = Rinominato "{$from}" in "{$to}"
+restoring = Ripristino in corso di {$items} {$items ->
         [one] elemento
         *[other] elementi
-    } da {trash}
-restored = Ripristinato {$items} {$items ->
+    } dal {trash}: ({$progress})...
+restored = Ripristino completato di {$items} {$items ->
         [one] elemento
         *[other] elementi
-    } da {trash}
+    } dal {trash}
 unknown-folder = cartella sconosciuta
 
 ## Open with
-menu-open-with = Apri con
+menu-open-with = Apri con...
 default-app = {$name} (default)
 
 ## Show details
 show-details = Mostra dettagli
 type = Tipo: {$mime}
-items = Elementi: {$items}
+items = Files: {$items}
 item-size = Dimensione: {$size}
 item-created = Creato: {$created}
-item-modified = Modificato: {$modified}
-item-accessed = Ultimo accesso: {$accessed}
-calculating = Calcolando...
-
+item-modified = Modificato in data: {$modified}
+item-accessed = Accesso eseguito in data: {$accessed}
+calculating = Calcolo in corso...
 
 ## Settings
 settings = Impostazioni
+single-click = Click singolo per aprire
 
 ### Appearance
 appearance = Aspetto
 theme = Tema
-match-desktop = Abbina con scrivania
+match-desktop = Sistema
 dark = Scuro
 light = Chiaro
 
+### Type to Search
+type-to-search = Digita per cercare
+type-to-search-recursive = Cerca nella cartella attuale e nelle sue sotto-cartelle
+type-to-search-enter-path = Inserisci il percorso della cartella o del file
+
 # Context menu
-add-to-sidebar = Aggiungi a sidebar
+add-to-sidebar = Aggiungi alla barra laterale
 compress = Comprimi
+delete-permanently = Elimina permanentemente
 extract-here = Estrai
-new-file = Nuovo file
-new-folder = Nuova cartella
-open-in-terminal = Apri in terminale
+new-file = Nuovo file...
+new-folder = Nuova cartella...
+open-in-terminal = Apri nel terminale
 move-to-trash = Sposta nel cestino
 restore-from-trash = Ripristina dal cestino
-remove-from-sidebar = Rimuovi da sidebar
+remove-from-sidebar = Rimuovi dalla barra laterale
 sort-by-name = Ordina per nome
-sort-by-modified = Ordina per ultima modifica
+sort-by-modified = Ordina per data di modifica
 sort-by-size = Ordina per dimensione
-sort-by-trashed = Ordina per cancellazione
+sort-by-trashed = Ordina per data di eliminazione
 
 ## Desktop
-change-wallpaper = Cambia sfondo...
-desktop-appearance = Aspetto del desktop...
+change-wallpaper = Modifica sfondo...
+desktop-appearance = Aspetto del Desktop...
 display-settings = Impostazioni del display...
 
 # Menu
@@ -242,27 +290,27 @@ display-settings = Impostazioni del display...
 file = File
 new-tab = Nuova scheda
 new-window = Nuova finestra
-rename = Rinomina
+rename = Rinomina...
 close-tab = Chiudi scheda
-quit = Esci
+quit = Chiudi
 
 ## Edit
 edit = Modifica
 cut = Taglia
 copy = Copia
 paste = Incolla
-select-all = Seleziona tutti
+select-all = Seleziona tutto
 
 ## View
-zoom-in = Zoom in
-default-size = Default
-zoom-out = Zoom out
-view = Vista
-grid-view = Griglia
-list-view = Lista
-show-hidden-files = Mostra file nascosti
-list-directories-first = Mostra le cartelle prima dei file
-gallery-preview = Anteprima galleria
+zoom-in = Aumenta zoom
+default-size = Dimensione predefinita
+zoom-out = Diminuisci zoom
+view = Visualizzazione
+grid-view = Visualizzazione a griglia
+list-view = Visualizzazione a elenco
+show-hidden-files = Mostra files nascosti
+list-directories-first = Mostra prima le cartelle
+gallery-preview = Anteprima immagine
 menu-settings = Impostazioni...
 menu-about = Informazioni su COSMIC Files...
 
@@ -270,7 +318,7 @@ menu-about = Informazioni su COSMIC Files...
 sort = Ordina
 sort-a-z = A-Z
 sort-z-a = Z-A
-sort-newest-first = Più recenti per primi
-sort-oldest-first = Più vecchi per primi
+sort-newest-first = Prima i più recenti
+sort-oldest-first = Prima i più vecchi
 sort-smallest-to-largest = Dal più piccolo al più grande
 sort-largest-to-smallest = Dal più grande al più piccolo

@@ -51,12 +51,15 @@ use slotmap::Key as SlotMapKey;
 use std::{
     any::TypeId,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
-    env, fmt, fs, io,
+    env, fmt, fs,
+    future::Future,
+    io,
     num::NonZeroU16,
     path::{Path, PathBuf},
+    pin::Pin,
     process,
     sync::{Arc, Mutex},
-    time::{self, Instant},
+    time::{self, Duration, Instant},
 };
 use tokio::sync::mpsc;
 use trash::TrashItem;
@@ -65,22 +68,25 @@ use wayland_client::{protocol::wl_output::WlOutput, Proxy};
 
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
-    config::{AppTheme, Config, DesktopConfig, Favorite, IconSizes, TabConfig, TypeToSearch},
-    dialog::{DialogKind, DialogMessage},
+    config::{
+        AppTheme, Config, DesktopConfig, Favorite, IconSizes, TabConfig, TimeConfig, TypeToSearch,
+        TIME_CONFIG_ID,
+    },
+    dialog::{Dialog, DialogKind, DialogMessage, DialogResult},
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
-    menu, mime_app, mime_icon,
+    menu,
+    mime_app::{self, MimeApp, MimeAppCache},
+    mime_icon,
     mounter::{MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage, MOUNTERS},
-    operation::{Controller, Operation, OperationSelection, ReplaceResult},
+    operation::{
+        Controller, Operation, OperationError, OperationErrorType, OperationSelection,
+        ReplaceResult,
+    },
     spawn_detached::spawn_detached,
     tab::{self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION},
 };
-use crate::{
-    dialog::Dialog,
-    operation::{OperationError, OperationErrorType},
-};
-use crate::{dialog::DialogResult, mime_app::MimeApp};
 
 #[derive(Clone, Debug)]
 pub enum Mode {
@@ -368,6 +374,7 @@ pub enum Message {
         Option<Vec<PathBuf>>,
     ),
     TabView(Option<Entity>, tab::View),
+    TimeConfigChange(TimeConfig),
     ToggleContextPage(ContextPage),
     ToggleFoldersFirst,
     Undo(usize),
@@ -471,7 +478,7 @@ pub enum DialogPage {
         path: PathBuf,
         mime: mime_guess::Mime,
         selected: usize,
-        store_opt: Option<mime_app::MimeApp>,
+        store_opt: Option<MimeApp>,
     },
     RenameItem {
         from: PathBuf,
@@ -539,12 +546,13 @@ pub struct App {
     config: Config,
     mode: Mode,
     app_themes: Vec<String>,
+    compio_tx: mpsc::Sender<Pin<Box<dyn Future<Output = ()> + Send>>>,
     context_page: ContextPage,
     dialog_pages: VecDeque<DialogPage>,
     dialog_text_input: widget::Id,
     key_binds: HashMap<KeyBind, Action>,
     margin: HashMap<window::Id, (f32, f32, f32, f32)>,
-    mime_app_cache: mime_app::MimeAppCache,
+    mime_app_cache: MimeAppCache,
     modifiers: Modifiers,
     mounter_items: HashMap<MounterKey, MounterItems>,
     network_drive_connecting: Option<(MounterKey, String)>,
@@ -576,22 +584,95 @@ pub struct App {
 }
 
 impl App {
-    fn open_file(&mut self, path: &PathBuf) {
-        let mime = mime_icon::mime_for_path(path);
+    fn open_file(&mut self, paths: &[impl AsRef<Path>]) {
+        // Associate all paths to its MIME type
+        // This allows handling paths as groups if possible, such as launching a single video
+        // player that is passed every path.
+        let mut groups: HashMap<Mime, Vec<PathBuf>> = HashMap::new();
+        for (mime, path) in paths
+            .iter()
+            .map(|path| (mime_icon::mime_for_path(path), path.as_ref().to_owned()))
+        {
+            groups.entry(mime).or_default().push(path);
+        }
 
-        if mime == "application/x-desktop" {
-            // Try opening desktop application
-            match freedesktop_entry_parser::parse_entry(path) {
-                Ok(entry) => match entry.section("Desktop Entry").attr("Exec") {
-                    Some(exec) => match mime_app::exec_to_command(exec, None) {
-                        Some(mut command) => match spawn_detached(&mut command) {
-                            Ok(()) => {
-                                return;
+        'outer: for (mime, paths) in groups {
+            log::debug!("Attempting to launch app\n\tfor: {mime}\n\twith: {paths:?}");
+
+            // First launch apps that can be launched directly
+            if mime == "application/x-desktop" {
+                // Try opening desktop application
+                App::launch_desktop_entries(&paths);
+                continue;
+            } else if mime == "application/x-executable" || mime == "application/vnd.appimage" {
+                // Try opening executable
+                for path in paths {
+                    let mut command = std::process::Command::new(&path);
+                    match spawn_detached(&mut command) {
+                        Ok(()) => {}
+                        Err(err) => match err.kind() {
+                            io::ErrorKind::PermissionDenied => {
+                                // If permission is denied, try marking as executable, then running
+                                self.dialog_pages
+                                    .push_back(DialogPage::SetExecutableAndLaunch {
+                                        path: path.to_path_buf(),
+                                    });
                             }
-                            Err(err) => {
+                            _ => {
                                 log::warn!("failed to execute {:?}: {}", path, err);
                             }
                         },
+                    }
+                }
+
+                continue;
+            }
+
+            // Try mime apps, which should be faster than xdg-open
+            if self.launch_from_mime_cache(&mime, &paths) {
+                continue;
+            }
+
+            // loop through subclasses if available
+            if let Some(mime_sub_classes) = mime_icon::parent_mime_types(&mime) {
+                for sub_class in mime_sub_classes {
+                    if self.launch_from_mime_cache(&sub_class, &paths) {
+                        continue 'outer;
+                    }
+                }
+            }
+
+            // Fall back to using open crate
+            for path in paths {
+                match open::that_detached(&path) {
+                    Ok(()) => {
+                        let _ = recently_used_xbel::update_recently_used(
+                            &path,
+                            App::APP_ID.to_string(),
+                            "cosmic-files".to_string(),
+                            None,
+                        );
+                    }
+                    Err(err) => {
+                        log::warn!("failed to open {:?}: {}", path, err);
+                    }
+                }
+            }
+        }
+    }
+
+    fn launch_desktop_entries(paths: &[impl AsRef<Path>]) {
+        for path in paths.iter().map(AsRef::as_ref) {
+            match freedesktop_entry_parser::parse_entry(path) {
+                Ok(entry) => match entry.section("Desktop Entry").attr("Exec") {
+                    Some(exec) => match mime_app::exec_to_command(exec, &[] as &[&str; 0]) {
+                        Some(commands) => {
+                            for mut command in commands {
+                                if let Err(err) = spawn_detached(&mut command) {
+                                    log::warn!("failed to execute {:?}: {}", path, err);
+                                }
+                            }
+                        }
                         None => {
                             log::warn!("failed to parse {:?}: invalid Desktop Entry/Exec", path);
                         }
@@ -604,87 +685,48 @@ impl App {
                     log::warn!("failed to parse {:?}: {}", path, err);
                 }
             }
-        } else if mime == "application/x-executable" || mime == "application/vnd.appimage" {
-            // Try opening executable
-            let mut command = std::process::Command::new(path);
-            match spawn_detached(&mut command) {
-                Ok(()) => {}
-                Err(err) => match err.kind() {
-                    io::ErrorKind::PermissionDenied => {
-                        // If permission is denied, try marking as executable, then running
-                        self.dialog_pages
-                            .push_back(DialogPage::SetExecutableAndLaunch {
-                                path: path.to_path_buf(),
-                            });
-                    }
-                    _ => {
-                        log::warn!("failed to execute {:?}: {}", path, err);
-                    }
-                },
-            }
-            return;
         }
+    }
 
-        // Try mime apps, which should be faster than xdg-open
-        for app in self.mime_app_cache.get(&mime) {
-            let Some(mut command) = app.command(Some(path.clone().into())) else {
+    fn launch_from_mime_cache<P>(&self, mime: &Mime, paths: &[P]) -> bool
+    where
+        P: std::fmt::Debug + AsRef<Path> + AsRef<std::ffi::OsStr>,
+    {
+        for app in self.mime_app_cache.get(mime) {
+            let Some(commands) = app.command(paths) else {
                 continue;
             };
-            match spawn_detached(&mut command) {
-                Ok(()) => {
-                    let _ = recently_used_xbel::update_recently_used(
-                        path,
-                        App::APP_ID.to_string(),
-                        "cosmic-files".to_string(),
-                        None,
-                    );
-                    return;
-                }
-                Err(err) => {
+            let len = commands.len();
+
+            for (i, mut command) in commands.into_iter().enumerate() {
+                if let Err(err) = spawn_detached(&mut command) {
+                    // More than one command: The app doesn't support lists of paths so each command
+                    // is associated with one instance
+                    //
+                    // One command: Attempted to launch one app with multiple paths
+                    let path = if len > 1 {
+                        format!("{:?}", paths.get(i))
+                    } else {
+                        format!("{paths:?}")
+                    };
                     log::warn!("failed to open {:?} with {:?}: {}", path, app.id, err);
                 }
             }
-        }
 
-        // loop through subclasses if available
-        if let Some(mime_sub_classes) = mime_icon::parent_mime_types(&mime) {
-            for sub_class in mime_sub_classes {
-                for app in self.mime_app_cache.get(&sub_class) {
-                    let Some(mut command) = app.command(Some(path.clone().into())) else {
-                        continue;
-                    };
-                    match spawn_detached(&mut command) {
-                        Ok(()) => {
-                            let _ = recently_used_xbel::update_recently_used(
-                                path,
-                                App::APP_ID.to_string(),
-                                "cosmic-files".to_string(),
-                                None,
-                            );
-                            return;
-                        }
-                        Err(err) => {
-                            log::warn!("failed to open {:?} with {:?}: {}", path, app.id, err);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Fall back to using open crate
-        match open::that_detached(path) {
-            Ok(()) => {
+            for path in paths {
                 let _ = recently_used_xbel::update_recently_used(
-                    path,
+                    &path.into(),
                     App::APP_ID.to_string(),
                     "cosmic-files".to_string(),
                     None,
                 );
             }
-            Err(err) => {
-                log::warn!("failed to open {:?}: {}", path, err);
-            }
+
+            return true;
         }
+
+        // No app matched for mimes and paths
+        false
     }
 
     #[cfg(feature = "desktop")]
@@ -803,6 +845,7 @@ impl App {
         self.margin = overlaps;
     }
 
+    #[must_use]
     fn open_tab_entity(
         &mut self,
         location: Location,
@@ -849,14 +892,46 @@ impl App {
         self.open_tab_entity(location, activate, selection_paths).1
     }
 
-    fn operation(&mut self, operation: Operation) {
+    #[must_use]
+    fn operation(&mut self, operation: Operation) -> Task<Message> {
         let id = self.pending_operation_id;
+        let controller = Controller::default();
+        let compio_tx = self.compio_tx.clone();
+
         self.pending_operation_id += 1;
         if operation.show_progress_notification() {
             self.progress_operations.insert(id);
         }
         self.pending_operations
-            .insert(id, (operation, Controller::default()));
+            .insert(id, (operation.clone(), controller.clone()));
+
+        // Use a task to send operations to the compio runtime thread.
+        cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+            4,
+            move |msg_tx| async move {
+                let (tx, rx) = tokio::sync::oneshot::channel();
+
+                let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
+
+                let msg_tx_clone = msg_tx.clone();
+
+                _ = compio_tx
+                    .send(Box::pin(async move {
+                        let msg = match operation.perform(&msg_tx_clone, controller).await {
+                            Ok(result_paths) => Message::PendingComplete(id, result_paths),
+                            Err(err) => Message::PendingError(id, err),
+                        };
+
+                        _ = tx.send(msg);
+                    }))
+                    .await;
+
+                if let Ok(msg) = rx.await {
+                    let _ = msg_tx.lock().await.send(msg).await;
+                }
+            },
+        ))
+        .map(cosmic::Action::App)
     }
 
     fn remove_window(&mut self, id: &window::Id) {
@@ -866,6 +941,7 @@ impl App {
         }
     }
 
+    #[must_use]
     fn rescan_operation_selection(&mut self, op_sel: OperationSelection) -> Task<Message> {
         log::info!("rescan_operation_selection {:?}", op_sel);
         let entity = self.tab_model.active();
@@ -1755,6 +1831,22 @@ impl Application for App {
 
         let window_id_opt = core.main_window_id();
 
+        // Create a dedicated thread for the compio runtime to handle operations on.
+        // Supports io_uring on Linux, IOPC on Windows, and polling everywhere else.
+        let (compio_tx, mut compio_rx) = mpsc::channel(1);
+        let tokio_handle = tokio::runtime::Handle::current();
+        std::thread::spawn(move || {
+            let _tokio = tokio_handle.enter();
+            compio::runtime::RuntimeBuilder::new()
+                .build()
+                .unwrap()
+                .block_on(async move {
+                    while let Some(task) = compio_rx.recv().await {
+                        _ = compio::runtime::spawn(task).detach();
+                    }
+                })
+        });
+
         let mut app = App {
             core,
             nav_bar_context_id: segmented_button::Entity::null(),
@@ -1764,12 +1856,13 @@ impl Application for App {
             config: flags.config,
             mode: flags.mode,
             app_themes,
+            compio_tx,
             context_page: ContextPage::Preview(None, PreviewKind::Selected),
             dialog_pages: VecDeque::new(),
             dialog_text_input: widget::Id::unique(),
             key_binds,
             margin: HashMap::new(),
-            mime_app_cache: mime_app::MimeAppCache::new(),
+            mime_app_cache: MimeAppCache::new(),
             modifiers: Modifiers::empty(),
             mounter_items: HashMap::new(),
             network_drive_connecting: None,
@@ -2175,14 +2268,15 @@ impl Application for App {
                                     }
                                 }
                                 if !trash_items.is_empty() {
-                                    self.operation(Operation::DeleteTrash { items: trash_items });
+                                    return self
+                                        .operation(Operation::DeleteTrash { items: trash_items });
                                 }
                             }
                         }
                         _ => {
                             let paths = dbg!(self.selected_paths(entity_opt));
                             if !paths.is_empty() {
-                                self.operation(Operation::Delete { paths });
+                                return self.operation(Operation::Delete { paths });
                             }
                         }
                     }
@@ -2231,15 +2325,15 @@ impl Application for App {
                             let extension = archive_type.extension();
                             let name = format!("{}{}", name, extension);
                             let to = to.join(name);
-                            self.operation(Operation::Compress {
+                            return self.operation(Operation::Compress {
                                 paths,
                                 to,
                                 archive_type,
                                 password,
-                            })
+                            });
                         }
                         DialogPage::EmptyTrash => {
-                            self.operation(Operation::EmptyTrash);
+                            return self.operation(Operation::EmptyTrash);
                         }
                         DialogPage::FailedOperation(id) => {
                             log::warn!("TODO: retry operation {}", id);
@@ -2254,7 +2348,7 @@ impl Application for App {
                                 },
                                 _ => unreachable!(),
                             };
-                            self.operation(new_op);
+                            return self.operation(new_op);
                         }
                         DialogPage::MountError {
                             mounter_key,
@@ -2292,7 +2386,7 @@ impl Application for App {
                         }
                         DialogPage::NewItem { parent, name, dir } => {
                             let path = parent.join(name);
-                            self.operation(if dir {
+                            return self.operation(if dir {
                                 Operation::NewFolder { path }
                             } else {
                                 Operation::NewFile { path }
@@ -2307,7 +2401,9 @@ impl Application for App {
                             let all_apps = self.get_programs_for_mime(&mime);
 
                             if let Some(app) = all_apps.get(selected) {
-                                if let Some(mut command) = app.command(Some(path.clone().into())) {
+                                if let Some(mut command) =
+                                    app.command(&[&path]).and_then(|v| v.into_iter().next())
+                                {
                                     match spawn_detached(&mut command) {
                                         Ok(()) => {
                                             let _ = recently_used_xbel::update_recently_used(
@@ -2339,13 +2435,13 @@ impl Application for App {
                             from, parent, name, ..
                         } => {
                             let to = parent.join(name);
-                            self.operation(Operation::Rename { from, to });
+                            return self.operation(Operation::Rename { from, to });
                         }
                         DialogPage::Replace { .. } => {
                             log::warn!("replace dialog should be completed with replace result");
                         }
                         DialogPage::SetExecutableAndLaunch { path } => {
-                            self.operation(Operation::SetExecutableAndLaunch { path });
+                            return self.operation(Operation::SetExecutableAndLaunch { path });
                         }
                         DialogPage::FavoritePathError { entity, .. } => {
                             if let Some(FavoriteIndex(favorite_i)) =
@@ -2381,7 +2477,7 @@ impl Application for App {
                     .and_then(|first| first.parent())
                     .map(|parent| parent.to_path_buf())
                 {
-                    self.operation(Operation::Extract {
+                    return self.operation(Operation::Extract {
                         paths,
                         to: destination,
                         password: None,
@@ -2422,7 +2518,8 @@ impl Application for App {
                         }
                         if let Some(archive_paths) = archive_paths {
                             if !selected_paths.is_empty() {
-                                self.operation(Operation::Extract {
+                                self.file_dialog_opt = None;
+                                return self.operation(Operation::Extract {
                                     paths: archive_paths,
                                     to: selected_paths[0].clone(),
                                     password: None,
@@ -2511,7 +2608,7 @@ impl Application for App {
                                     }
                                 }
                                 if !still_mounted {
-                                    unmounted.push(Location::Path(old_path));
+                                    unmounted.push(old_path);
                                 }
                             }
                         }
@@ -2526,7 +2623,12 @@ impl Application for App {
                     for entity in entities {
                         let title_opt = match self.tab_model.data_mut::<Tab>(entity) {
                             Some(tab) => {
-                                if unmounted.contains(&tab.location) {
+                                if unmounted.iter().any(|unmounted| {
+                                    tab.location
+                                        .path_opt()
+                                        .map(|location| location.starts_with(unmounted))
+                                        .unwrap_or(false)
+                                }) {
                                     tab.change_location(&home_location, None);
                                     Some(tab.title())
                                 } else {
@@ -2739,18 +2841,18 @@ impl Application for App {
                         }
                     }
                     for path in paths {
-                        if let Some(mut command) = terminal.command(None) {
+                        if let Some(mut command) = terminal
+                            .command::<&str>(&[])
+                            .and_then(|v| v.into_iter().next())
+                        {
                             command.current_dir(&path);
-                            match spawn_detached(&mut command) {
-                                Ok(()) => {}
-                                Err(err) => {
-                                    log::warn!(
-                                        "failed to open {:?} with terminal {:?}: {}",
-                                        path,
-                                        terminal.id,
-                                        err
-                                    )
-                                }
+                            if let Err(err) = spawn_detached(&mut command) {
+                                log::warn!(
+                                    "failed to open {:?} with terminal {:?}: {}",
+                                    path,
+                                    terminal.id,
+                                    err
+                                )
                             }
                         } else {
                             log::warn!("failed to get command for {:?}", terminal.id);
@@ -2800,12 +2902,12 @@ impl Application for App {
                     ..
                 }) => {
                     let url = format!("mime:///{mime}");
-                    if let Some(mut command) = app.command(Some(url.clone().into())) {
-                        match spawn_detached(&mut command) {
-                            Ok(()) => {}
-                            Err(err) => {
-                                log::warn!("failed to open {:?} with {:?}: {}", url, app.id, err)
-                            }
+                    // TODO: Support multiple URLs
+                    if let Some(mut command) =
+                        app.command(&[&url]).and_then(|v| v.into_iter().next())
+                    {
+                        if let Err(err) = spawn_detached(&mut command) {
+                            log::warn!("failed to open {:?} with {:?}: {}", url, app.id, err)
                         }
                     } else {
                         log::warn!(
@@ -2871,20 +2973,16 @@ impl Application for App {
             Message::PasteContents(to, mut contents) => {
                 contents.paths.retain(|p| p != &to);
                 if !contents.paths.is_empty() {
-                    match contents.kind {
-                        ClipboardKind::Copy => {
-                            self.operation(Operation::Copy {
-                                paths: contents.paths,
-                                to,
-                            });
-                        }
-                        ClipboardKind::Cut => {
-                            self.operation(Operation::Move {
-                                paths: contents.paths,
-                                to,
-                            });
-                        }
-                    }
+                    return match contents.kind {
+                        ClipboardKind::Copy => self.operation(Operation::Copy {
+                            paths: contents.paths,
+                            to,
+                        }),
+                        ClipboardKind::Cut => self.operation(Operation::Move {
+                            paths: contents.paths,
+                            to,
+                        }),
+                    };
                 }
             }
             Message::PendingCancel(id) => {
@@ -3141,7 +3239,7 @@ impl Application for App {
                     }
                 }
                 if !trash_items.is_empty() {
-                    self.operation(Operation::Restore { items: trash_items });
+                    return self.operation(Operation::Restore { items: trash_items });
                 }
             }
             Message::ScrollTab(scroll_speed) => {
@@ -3312,7 +3410,7 @@ impl Application for App {
                             ]));
                         }
                         tab::Command::Delete(paths) => {
-                            self.operation(Operation::Delete { paths });
+                            commands.push(self.operation(Operation::Delete { paths }))
                         }
                         tab::Command::DropFiles(to, from) => {
                             commands.push(self.update(Message::PasteContents(to, from)));
@@ -3329,7 +3427,7 @@ impl Application for App {
                                 cosmic::action::app(Message::TabMessage(Some(entity), x))
                             }));
                         }
-                        tab::Command::OpenFile(path) => self.open_file(&path),
+                        tab::Command::OpenFile(paths) => self.open_file(&paths),
                         tab::Command::OpenInNewTab(path) => {
                             commands.push(self.open_tab(Location::Path(path.clone()), false, None));
                         }
@@ -3405,6 +3503,10 @@ impl Application for App {
                 config.view = view;
                 return self.update(Message::TabConfig(config));
             }
+            Message::TimeConfigChange(time_config) => {
+                self.config.tab.military_time = time_config.military_time;
+                return self.update_config();
+            }
             Message::ToggleContextPage(context_page) => {
                 //TODO: ensure context menus are closed
                 if self.context_page == context_page
@@ -3456,7 +3558,7 @@ impl Application for App {
                 });
             }
             Message::UndoTrashStart(items) => {
-                self.operation(Operation::Restore { items });
+                return self.operation(Operation::Restore { items });
             }
             Message::WindowClose => {
                 if let Some(window_id) = self.window_id_opt.take() {
@@ -3576,8 +3678,7 @@ impl Application for App {
                             },
                         )),
                         Location::Trash if matches!(action, DndAction::Move) => {
-                            self.operation(Operation::Delete { paths: data.paths });
-                            Task::none()
+                            self.operation(Operation::Delete { paths: data.paths })
                         }
                         _ => {
                             log::warn!("Copy to trash is not supported.");
@@ -3637,8 +3738,7 @@ impl Application for App {
                             },
                         )),
                         Location::Trash if matches!(action, DndAction::Move) => {
-                            self.operation(Operation::Delete { paths: data.paths });
-                            Task::none()
+                            self.operation(Operation::Delete { paths: data.paths })
                         }
                         _ => {
                             log::warn!("Copy to trash is not supported.");
@@ -3682,9 +3782,9 @@ impl Application for App {
                         .nav_model
                         .data::<Location>(entity)
                         .and_then(|x| x.path_opt())
-                        .map(|x| x.to_path_buf())
+                        .map(ToOwned::to_owned)
                     {
-                        self.open_file(&path);
+                        self.open_file(&[path]);
                     }
                 }
                 NavMenuAction::OpenWith(entity) => {
@@ -4427,7 +4527,7 @@ impl Application for App {
                 };
 
                 let mut column = widget::list_column();
-                let available_programs = self.get_programs_for_mime(&mime);
+                let available_programs = self.get_programs_for_mime(mime);
                 let item_height = 32.0;
                 let mut displayed_default = false;
 
@@ -4971,6 +5071,7 @@ impl Application for App {
         struct ThemeSubscription;
         struct WatcherSubscription;
         struct TrashWatcherSubscription;
+        struct TimeSubscription;
 
         let mut subscriptions = vec![
             event::listen_with(|event, status, window_id| match event {
@@ -5034,6 +5135,21 @@ impl Application for App {
                     );
                 }
                 Message::SystemThemeModeChange(update.config)
+            }),
+            cosmic_config::config_subscription::<_, TimeConfig>(
+                TypeId::of::<TimeSubscription>(),
+                TIME_CONFIG_ID.into(),
+                1,
+            )
+            .map(|update| {
+                if !update.errors.is_empty() {
+                    log::info!(
+                        "errors loading time config {:?}: {:?}",
+                        update.keys,
+                        update.errors
+                    );
+                }
+                Message::TimeConfigChange(update.config)
             }),
             Subscription::run_with_id(
                 TypeId::of::<WatcherSubscription>(),
@@ -5209,8 +5325,17 @@ impl Application for App {
             //TODO: inhibit suspend/shutdown?
 
             if self.window_id_opt.is_some() {
-                // Refresh progress when window is open and operations are in progress
-                subscriptions.push(window::frames().map(|_| Message::None));
+                // Force refresh the UI every 100ms while an operation is active.
+                if self
+                    .pending_operations
+                    .values()
+                    .any(|(_, controller)| !controller.is_paused())
+                {
+                    subscriptions.push(
+                        cosmic::iced::time::every(Duration::from_millis(100))
+                            .map(|_| Message::None),
+                    )
+                }
             } else {
                 // Handle notification when window is closed and operations are in progress
                 #[cfg(feature = "notify")]
@@ -5250,37 +5375,6 @@ impl Application for App {
                     ));
                 }
             }
-        }
-
-        for (id, (pending_operation, controller)) in self.pending_operations.iter() {
-            //TODO: use recipe?
-            let id = *id;
-            let pending_operation = pending_operation.clone();
-            let controller = controller.clone();
-            subscriptions.push(Subscription::run_with_id(
-                id,
-                stream::channel(16, move |msg_tx| async move {
-                    let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
-                    match pending_operation.perform(&msg_tx, controller).await {
-                        Ok(result_paths) => {
-                            let _ = msg_tx
-                                .lock()
-                                .await
-                                .send(Message::PendingComplete(id, result_paths))
-                                .await;
-                        }
-                        Err(err) => {
-                            let _ = msg_tx
-                                .lock()
-                                .await
-                                .send(Message::PendingError(id, err))
-                                .await;
-                        }
-                    }
-
-                    std::future::pending().await
-                }),
-            ));
         }
 
         let mut selected_preview = None;
