@@ -1,11 +1,11 @@
 cosmic-files = COSMIC Fájlok
 empty-folder = Üres mappa
-empty-folder-hidden = Üres mappa (Rejtett elemekkel)
+empty-folder-hidden = Üres mappa (Rejtett elemeket tartalmaz)
 no-results = Nincs találat
 filesystem = Fájlrendszer
 home = Saját mappa
 networks = Hálózatok
-notification-in-progress = Fájlműveletek folyamatban vannak.
+notification-in-progress = A fájlműveletek még folyamatban vannak.
 trash = Kuka
 recents = Legutóbbiak
 undo = Visszavonás
@@ -16,7 +16,7 @@ desktop-view-options = Asztali nézet beállításai...
 show-on-desktop = Megjelenítés az asztalon
 desktop-folder-content = Asztal mappa tartalma
 mounted-drives = Csatolt meghajtók
-trash-folder-icon = A Kuka ikonja
+trash-folder-icon = Kuka ikonja
 icon-size-and-spacing = Ikonméret és távolság
 icon-size = Ikonméret
 grid-spacing = Rácsköz
@@ -43,6 +43,7 @@ create-archive = Tömörített fájl létrehozása
 ## Extract Dialog
 extract-password-required = Jelszó szükséges
 extract-to = Kibontás ide...
+extract-to-title = Kibontás mappába
 
 ## Empty Trash Dialog
 empty-trash = Kuka ürítése
@@ -96,7 +97,7 @@ keep-both = Mindkettő megtartása
 skip = Kihagyás
 
 ## Set as Executable and Launch Dialog
-set-executable-and-launch = Végrehajthatóvá tétele, majd indítása
+set-executable-and-launch = Végrehajthatóvá tétel és indítás
 set-executable-and-launch-description = Szeretné végrehajthatóvá tenni a(z) "{$name}" fájlt és elindítani?
 set-and-launch = Alkalmazás és indítás
 
@@ -126,7 +127,7 @@ read-write-execute = Olvasás, írás és végrehajtás
 favorite-path-error = Hiba a könyvtár megnyitásakor
 favorite-path-error-description =
     Nem sikerült megnyitni: "{$path}".
-    Lehet, hogy nem létezik, vagy nincs megfelelő jogosultságod a megnyitásához.
+    Lehet, hogy nem létezik, vagy nincs megfelelő jogosultsága a megnyitásához.
     
     Szeretné eltávolítani az oldalsávról?
 remove = Eltávolítás
@@ -195,21 +196,21 @@ copied = {$items} {$items ->
 deleting = {$items} {$items ->
         [one] elem
         *[other] elem
-    } törlése a Kukából ({$progress})...
+    } törlése a kukából ({$progress})...
 deleted = {$items} {$items ->
         [one] elem
         *[other] elem
-    } törölve a Kukából
+    } törölve a kukából
 emptying-trash = {trash} kiürítése ({$progress})...
 emptied-trash = {trash} kiürítve
 extracting = {$items} {$items ->
         [one] elem
         *[other] elem
-    } kicsomagolása innen: "{$from}" ide: "{$to}" ({$progress})...
+    } kibontása innen: "{$from}" ide: "{$to}" ({$progress})...
 extracted = {$items} {$items ->
         [one] elem
         *[other] elem
-    } kicsomagolva innen: "{$from}" ide: "{$to}"
+    } kibontva innen: "{$from}" ide: "{$to}"
 setting-executable-and-launching = "{$name}" végrehajthatóvá tétele és futtatása
 set-executable-and-launched = "{$name}" végrehajthatóvá lett téve és futtatva
 moving = {$items} {$items ->
@@ -225,11 +226,11 @@ renamed = Átnevezve "{$from}"-ról "{$to}"-ra
 restoring = {$items} {$items ->
         [one] elem
         *[other] elem
-    } visszaállítása a {trash}ból ({$progress})...
+    } visszaállítása a kukából ({$progress})...
 restored = {$items} {$items ->
         [one] elem
         *[other] elem
-    } visszaállítva a {trash}ból
+    } visszaállítva a kukából
 unknown-folder = ismeretlen mappa
 
 ## Open with
@@ -266,7 +267,7 @@ type-to-search-enter-path = Elérési út megadása
 add-to-sidebar = Hozzáadás az oldalsávhoz
 compress = Tömörítés
 delete-permanently = Végleges törlés
-extract-here = Kicsomagolás
+extract-here = Kibontás
 new-file = Új fájl...
 new-folder = Új mappa...
 open-in-terminal = Megnyitás a terminálban
@@ -294,7 +295,7 @@ close-tab = Lap bezárása
 quit = Kilépés
 
 ## Edit
-edit = Fájlműveletek
+edit = Szerkesztés
 cut = Kivágás
 copy = Másolás
 paste = Beillesztés
