@@ -487,3 +487,235 @@ impl Default for MimeAppCache {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::exec_to_command;
+
+    #[test]
+    fn one_path_f_field_code() {
+        let exec = "/usr/bin/foo %f";
+        let paths = ["file1"];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+
+        assert_eq!("/usr/bin/foo", command.get_program().to_str().unwrap());
+        assert_eq!(
+            "file1",
+            command.get_args().next().unwrap().to_str().unwrap()
+        );
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn one_path_F_field_code() {
+        let exec = "/usr/bin/bar %F";
+        let paths = ["cat"];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+
+        assert_eq!("/usr/bin/bar", command.get_program().to_str().unwrap());
+        assert_eq!("cat", command.get_args().next().unwrap().to_str().unwrap());
+    }
+
+    #[test]
+    fn one_path_u_field_code() {
+        let exec = "/usr/bin/foobar %u";
+        let paths = ["/home/josh/krumpli"];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+
+        assert_eq!("/usr/bin/foobar", command.get_program().to_str().unwrap());
+        assert_eq!(
+            *paths.first().unwrap(),
+            command.get_args().next().unwrap().to_str().unwrap()
+        );
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn one_path_U_field_code() {
+        let exec = "/usr/bin/rmrfbye %U";
+        let paths = ["/"];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+
+        assert_eq!("/usr/bin/rmrfbye", command.get_program().to_str().unwrap());
+        assert_eq!("/", command.get_args().next().unwrap().to_str().unwrap());
+    }
+
+    #[test]
+    fn mult_path_f_field_code() {
+        let exec = "/usr/games/ppsspp %f";
+        let paths = [
+            "/usr/share/games/psp/miku.iso",
+            "/usr/share/games/psp/eternia.iso",
+        ];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(paths.len(), commands.len());
+        for (command, path) in commands.into_iter().zip(paths.iter()) {
+            assert_eq!("/usr/games/ppsspp", command.get_program().to_str().unwrap());
+
+            assert_eq!(1, command.get_args().len());
+            let command_path = command.get_args().next().unwrap();
+            assert_eq!(*path, command_path.to_str().unwrap());
+        }
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn mult_path_F_field_code() {
+        let exec = "/usr/games/gzdoom %F";
+        let paths = [
+            "/usr/share/games/doom2/hr.wad",
+            "/usr/share/games/doom2/hrmus.wad",
+        ];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+
+        assert_eq!("/usr/games/gzdoom", command.get_program().to_str().unwrap());
+        assert!(paths
+            .iter()
+            .zip(command.get_args())
+            .all(|(&expected, actual)| expected == actual.to_string_lossy()));
+    }
+
+    #[test]
+    fn mult_path_u_field_code() {
+        let exec = "/usr/bin/cosmic_browser %u";
+        let paths = [
+            "file:///home/josh/Books/osstep.pdf",
+            "https://redox-os.org/",
+            "https://system76.com/",
+        ];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(paths.len(), commands.len());
+        for (command, path) in commands.into_iter().zip(paths.iter()) {
+            assert_eq!(
+                "/usr/bin/cosmic_browser",
+                command.get_program().to_str().unwrap()
+            );
+
+            assert_eq!(1, command.get_args().len());
+            let command_path = command.get_args().next().unwrap();
+            assert_eq!(*path, command_path.to_str().unwrap());
+        }
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn mult_path_U_field_code() {
+        let exec = "/usr/bin/mpv %U";
+        let paths = [
+            "frieren01.mkv",
+            "rtmp://example.org/this/video/doesnt/exist.avi",
+        ];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+        assert_eq!(paths.len(), command.get_args().count());
+
+        assert_eq!("/usr/bin/mpv", command.get_program().to_str().unwrap());
+        assert!(paths
+            .iter()
+            .zip(command.get_args())
+            .all(|(&expected, actual)| expected == actual.to_string_lossy()));
+    }
+
+    #[test]
+    fn flatpak_style_exec() {
+        // Tests args before field codes
+        let exec = "/usr/bin/flatpak run --branch=stable --command=ferris --file-forwarding org.joshfake.ferris @@u %U";
+        let args = [
+            "run",
+            "--branch=stable",
+            "--command=ferris",
+            "--file-forwarding",
+            "org.joshfake.ferris",
+            "@@u",
+        ];
+        let paths = ["file1.rs", "file2.rs"];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+        assert_eq!(args.len() + paths.len(), command.get_args().count());
+
+        assert_eq!("/usr/bin/flatpak", command.get_program().to_str().unwrap());
+        assert!(args
+            .iter()
+            .chain(paths.iter())
+            .zip(command.get_args())
+            .all(|(&expected, actual)| expected == actual.to_string_lossy()));
+    }
+
+    #[test]
+    fn multiple_field_codes() {
+        // Tests that only one field code is used rather than passing paths to each field code
+        let exec = "/usr/games/roguelike %U %f";
+        let paths = [
+            "file:///usr/share/games/roguelike/mods/mod1",
+            "file:///usr/share/games/roguelike/mods/mod2",
+        ];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+
+        assert_eq!(
+            "/usr/games/roguelike",
+            command.get_program().to_str().unwrap()
+        );
+        assert!(paths
+            .iter()
+            .zip(command.get_args())
+            .all(|(&expected, actual)| expected == actual.to_string_lossy()));
+    }
+
+    #[test]
+    fn sandwiched_field_code() {
+        // Tests that arguments before and after the field code works
+        // (Borrowed from KDE because someone had this exact line in an issue)
+        let exec = "/usr/bin/flatpak run --branch=stable --arch=x86_64 --command=okular --file-forwarding org.kde.okular @@u %U @@";
+        let args_leading = [
+            "run",
+            "--branch=stable",
+            "--arch=x86_64",
+            "--command=okular",
+            "--file-forwarding",
+            "org.kde.okular",
+            "@@u",
+        ];
+        let paths = ["rust_game_dev.pdf", "superhero_ferris.epub"];
+        let args_trailing = ["@@"];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+        assert_eq!(
+            args_leading.len() + paths.len() + args_trailing.len(),
+            command.get_args().len()
+        );
+
+        assert_eq!("/usr/bin/flatpak", command.get_program().to_str().unwrap());
+        assert!(args_leading
+            .iter()
+            .chain(paths.iter())
+            .chain(args_trailing.iter())
+            .zip(command.get_args())
+            .all(|(&expected, actual)| expected == actual.to_string_lossy()));
+    }
+}
