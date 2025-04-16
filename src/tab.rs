@@ -1537,7 +1537,7 @@ impl Item {
                 widget::image(handle.clone()).into()
             }
             ItemThumbnail::Svg(handle) => widget::svg(handle.clone()).into(),
-            ItemThumbnail::Text(content) => widget::text_editor(content)
+            ItemThumbnail::Text(content) => widget::text_editor(&content)
                 .class(cosmic::theme::iced::TextEditor::Custom(Box::new(
                     text_editor_class,
                 )))
@@ -2721,10 +2721,10 @@ impl Tab {
                         items.iter().find(|item| item.selected).and_then(|item| {
                             let location = item.location_opt.as_ref()?;
                             let path = location.path_opt()?;
-                            cosmic::desktop::load_desktop_file(Some(language), path)
+                            cosmic::desktop::load_desktop_file(&[language.into()], path.into())
                         })
                     },
-                    |path| cosmic::desktop::load_desktop_file(Some(language), path),
+                    |path| cosmic::desktop::load_desktop_file(&[language.into()], path),
                 ) {
                     Some(entry) => commands.push(Command::ExecEntryAction(entry, action)),
                     None => log::warn!("Invalid desktop entry path passed to ExecEntryAction"),
@@ -3633,7 +3633,7 @@ impl Tab {
                         ItemThumbnail::Text(text) => {
                             element_opt = Some(
                                 widget::container(
-                                    widget::text_editor(text).padding(space_xxs).class(
+                                    widget::text_editor(&text).padding(space_xxs).class(
                                         cosmic::theme::iced::TextEditor::Custom(Box::new(
                                             text_editor_class,
                                         )),

@@ -200,10 +200,10 @@ impl From<&desktop::DesktopEntryData> for MimeApp {
             name: app.name.clone(),
             exec: app.exec.clone(),
             icon: match &app.icon {
-                desktop::IconSource::Name(name) => {
+                desktop::fde::IconSource::Name(name) => {
                     widget::icon::from_name(name.as_str()).size(32).handle()
                 }
-                desktop::IconSource::Path(path) => widget::icon::from_path(path.clone()),
+                desktop::fde::IconSource::Path(path) => widget::icon::from_path(path.clone()),
             },
             is_default: false,
         }
@@ -251,24 +251,24 @@ impl MimeAppCache {
         self.terminals.clear();
 
         //TODO: get proper locale?
-        let locale = None;
+        let locale = &[];
 
         // Load desktop applications by supported mime types
         //TODO: hashmap for all apps by id?
-        let all_apps = desktop::load_applications(locale, false);
-        for app in all_apps.iter() {
+        let mut all_apps = desktop::load_applications(locale, false);
+        for app in &mut all_apps {
             for mime in app.mime_types.iter() {
                 let apps = self
                     .cache
                     .entry(mime.clone())
                     .or_insert_with(|| Vec::with_capacity(1));
                 if !apps.iter().any(|x| x.id == app.id) {
-                    apps.push(MimeApp::from(app));
+                    apps.push(MimeApp::from(&app));
                 }
             }
             for category in app.categories.iter() {
                 if category == "TerminalEmulator" {
-                    self.terminals.push(MimeApp::from(app));
+                    self.terminals.push(MimeApp::from(&app));
                     break;
                 }
             }
@@ -335,9 +335,9 @@ impl MimeAppCache {
                                 .or_insert_with(|| Vec::with_capacity(1));
                             if !apps.iter().any(|x| filename_eq(&x.path, filename)) {
                                 if let Some(app) =
-                                    all_apps.iter().find(|x| filename_eq(&x.path, filename))
+                                    all_apps.find(|x| filename_eq(&x.path, filename))
                                 {
-                                    apps.push(MimeApp::from(app));
+                                    apps.push(MimeApp::from(&app));
                                 } else {
                                     log::debug!("failed to add association for {:?}: application {:?} not found", mime, filename);
                                 }

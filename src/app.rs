@@ -4892,6 +4892,7 @@ impl Application for App {
 
     fn header_start(&self) -> Vec<Element<Self::Message>> {
         vec![menu::menu_bar(
+            &self.core,
             self.tab_model.active_data::<Tab>(),
             &self.config,
             &self.key_binds,
