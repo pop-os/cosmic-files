@@ -111,8 +111,6 @@ test-log = "0.2"
 tokio = { version = "1", features = ["rt", "macros"] }
 
 [patch.crates-io]
-# https://github.com/rust-lang/libc/pull/4388
-libc = { git = "https://gitlab.redox-os.org/redox-os/liblibc.git", branch = "redox-socket-0.2" }
 # https://github.com/smol-rs/polling/pull/235
 polling = { git = "https://github.com/jackpot51/polling.git", branch = "master" }
 
