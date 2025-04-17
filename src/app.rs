@@ -1683,6 +1683,12 @@ impl App {
                     Some(self.config.type_to_search),
                     Message::SetTypeToSearch,
                 ))
+                .add(widget::radio(
+                    widget::text::body(fl!("type-to-search-enter-path")),
+                    TypeToSearch::CurrentDirectory,
+                    Some(self.config.type_to_search),
+                    Message::SetTypeToSearch,
+                ))
                 .into(),
             widget::settings::section()
                 .title(fl!("other"))
@@ -2571,6 +2577,9 @@ impl Application for App {
                                         );
                                     }
                                 }
+                            }
+                            TypeToSearch::CurrentDirectory => {
+                                if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {}
                             }
                         }
                     }
