@@ -334,8 +334,7 @@ impl MimeAppCache {
                                 .entry(mime.clone())
                                 .or_insert_with(|| Vec::with_capacity(1));
                             if !apps.iter().any(|x| filename_eq(&x.path, filename)) {
-                                if let Some(app) =
-                                    all_apps.find(|x| filename_eq(&x.path, filename))
+                                if let Some(app) = all_apps.find(|x| filename_eq(&x.path, filename))
                                 {
                                     apps.push(MimeApp::from(&app));
                                 } else {
