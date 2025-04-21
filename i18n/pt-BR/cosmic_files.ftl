@@ -12,9 +12,9 @@ undo = Desfazer
 today = Hoje
 
 # Desktop view options
-desktop-view-options = Opções de visualização do desktop...
-show-on-desktop = Mostrar no desktop
-desktop-folder-content = Conteúdo da pasta do desktop
+desktop-view-options = Opções de visualização da área de trabalho...
+show-on-desktop = Mostrar na área de trabalho
+desktop-folder-content = Conteúdo da pasta da área de trabalho
 mounted-drives = Dispositivos montados
 trash-folder-icon = Ícone da lixeira
 icon-size-and-spacing = Tamanho e espaçamento do ícone
@@ -87,7 +87,7 @@ rename-folder = Renomear pasta
 
 ## Replace Dialog
 replace = Substituir
-replace-title = {$filename} já existe neste local.
+replace-title = "{$filename}" já existe neste local.
 replace-warning = Deseja substituir o arquivo com o que você está salvando? Substituí-lo irá sobrescrever seu conteúdo.
 replace-warning-operation = Deseja substituir o arquivo? Substituí-lo irá sobrescrever seu conteúdo.
 original-file = Arquivo original
@@ -281,7 +281,7 @@ sort-by-trashed = Ordernar por data de exclusão
 
 ## Desktop
 change-wallpaper = Alterar papel de parede...
-desktop-appearance = Aparência do desktop...
+desktop-appearance = Aparência da área de trabalho...
 display-settings = Configurações da tela...
 
 # Menu
