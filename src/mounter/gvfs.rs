@@ -428,16 +428,29 @@ impl Gvfs {
                                     continue;
                                 }
 
-                                log::info!("unmount {}", name);
-                                MountExt::eject_with_operation(
-                                    &mount,
-                                    gio::MountUnmountFlags::NONE,
-                                    gio::MountOperation::NONE,
-                                    gio::Cancellable::NONE,
-                                    move |result| {
-                                        log::info!("unmount {}: result {:?}", name, result);
-                                    },
-                                );
+                                if MountExt::can_eject(&mount) {
+                                    log::info!("eject {}", name);
+                                    MountExt::eject_with_operation(
+                                        &mount,
+                                        gio::MountUnmountFlags::NONE,
+                                        gio::MountOperation::NONE,
+                                        gio::Cancellable::NONE,
+                                        move |result| {
+                                            log::info!("eject {}: result {:?}", name, result);
+                                        },
+                                    );
+                                } else {
+                                    log::info!("unmount {}", name);
+                                    MountExt::unmount_with_operation(
+                                        &mount,
+                                        gio::MountUnmountFlags::NONE,
+                                        gio::MountOperation::NONE,
+                                        gio::Cancellable::NONE,
+                                        move |result| {
+                                            log::info!("unmount {}: result {:?}", name, result);
+                                        },
+                                    );
+                                }
                             }
                         }
                     }
