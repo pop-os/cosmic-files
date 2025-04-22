@@ -1070,7 +1070,7 @@ impl Operation {
             #[cfg(target_os = "macos")]
             Self::Restore { .. } => {
                 // TODO: add support for macos
-                return Err("Restoring from trash is not supported on macos".to_string());
+                return OperationError::from_str("Restoring from trash is not supported on macos");
             }
             #[cfg(not(target_os = "macos"))]
             Self::Restore { items } => {
