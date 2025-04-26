@@ -1520,7 +1520,7 @@ impl Item {
         // This loads the image only if thumbnailing worked
         let icon = widget::icon::icon(self.icon_handle_grid.clone())
             .content_fit(ContentFit::Contain)
-            .size(sizes.grid())
+            .size(IconSizes::default().grid())
             .into();
         match self
             .thumbnail_opt
