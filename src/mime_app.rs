@@ -418,12 +418,35 @@ impl MimeAppCache {
         self.icons.get(key).unwrap_or(&EMPTY)
     }
 
+    fn get_default_terminal(&self) -> Option<String> {
+        let output = process::Command::new("xdg-mime")
+            .args(&["query", "default", "x-scheme-handler/terminal"])
+            .output()
+            .ok()?;
+
+        if !output.status.success() {
+            return None;
+        }
+
+        String::from_utf8(output.stdout)
+            .ok()
+            .map(|string| string.trim().replace(".desktop", ""))
+    }
+
     pub fn terminal(&self) -> Option<&MimeApp> {
         //TODO: consider rules in https://github.com/Vladimir-csp/xdg-terminal-exec
+        // The current approach works but might not adhere to the spec (yet)
 
         // Look for and return preferred terminals
         //TODO: fallback order beyond cosmic-term?
-        for id in &["com.system76.CosmicTerm"] {
+
+        let mut preference_order = vec!["com.system76.CosmicTerm".to_string()];
+
+        if let Some(id) = self.get_default_terminal() {
+            preference_order.insert(0, id);
+        }
+
+        for id in &preference_order {
             for terminal in self.terminals.iter() {
                 if &terminal.id == id {
                     return Some(terminal);
