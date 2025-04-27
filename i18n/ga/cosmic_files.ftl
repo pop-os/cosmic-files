@@ -42,6 +42,8 @@ create-archive = Cruthaigh cartlann
 
 ## Extract Dialog
 extract-password-required = Pasfhocal riachtanach
+extract-to = Asbhaint Go...
+extract-to-title = Asbhaint go fillteán
 
 ## Empty Trash Dialog
 empty-trash = Folmhaigh an bruscar
@@ -121,6 +123,16 @@ read-write = Léamh agus scríobh
 ### Mode 7
 read-write-execute = Léamh, scríobh, agus inrite
 
+## Favorite Path Error Dialog
+favorite-path-error = Earráid ag oscailt an eolaire
+favorite-path-error-description =
+    Ní féidir oscailt "{$path}".
+    B’fhéidir nach bhfuil sé ann nó nach bhfuil cead agat é a oscailt.
+    
+    Ar mhaith leat é a bhaint den bharra taoibh?
+remove = Bain
+keep = Coinnigh
+
 # Context Pages
 
 ## About
@@ -132,7 +144,7 @@ connect = Ceangail
 connect-anonymously = Ceangail gan ainm
 connecting = Ag ceangal...
 domain = Fearann
-enter-server-address = Enter server address
+enter-server-address = Cuir isteach seoladh an fhreastalaí
 network-drive-description =
     Áirítear le seoltaí freastalaí réimír prótacail agus seoladh.
     Samplaí: ssh://192.168.0.1, ftp://[2001:db8::1]
@@ -140,10 +152,10 @@ network-drive-description =
 network-drive-schemes =
     Prótacail atá ar fáil, Réimír
     AppleTalk,afp://
-    File Transfer Protocol,ftp:// nó ftps://
-    Network File System,nfs://
-    Server Message Block,smb://
-    SSH File Transfer Protocol,sftp:// nó ssh://
+    Prótacal Aistrithe Comhad,ftp:// nó ftps://
+    Córas Comhad Líonra,nfs://
+    Bloc Teachtaireachtaí Freastalaí,smb://
+    Prótacal Aistrithe Comhad SSH,sftp:// nó ssh://
     WebDav,dav:// nó davs://
 network-drive-error = Ní féidir teacht ar an tiomántán líonra
 password = Pasfhocal
@@ -181,6 +193,14 @@ copied = Cóipeáladh {$items} {$items ->
         [one] mhír
         *[other] míreanna
     } ó "{$from}" go "{$to}"
+deleting = Ag scriosadh {$items} {$items ->
+        [one] mhír
+        *[other] míreanna
+    } ó {trash} ({$progress})...
+deleted = Scriosta {$items} {$items ->
+        [one] mhír
+        *[other] míreanna
+    } ó {trash}
 emptying-trash = Á fholmhú {trash} ({$progress})...
 emptied-trash = Folmhíodh {trash}
 extracting = Á bhaint {$items} {$items ->
@@ -229,6 +249,7 @@ calculating = Á ríomh...
 
 ## Settings
 settings = Socruithe
+single-click = Cliceáil amháin le hoscailt
 
 ### Appearance
 appearance = Cuma
@@ -237,9 +258,15 @@ match-desktop = Comhoiriúnaigh an deasc
 dark = Dorcha
 light = Geal
 
+### Type to Search
+type-to-search = Clóscríobh le Cuardach
+type-to-search-recursive = Cuardaíonn sé an fillteán reatha agus na fo-fhillteáin go léir
+type-to-search-enter-path = Iontrálann sé seo an cosán chuig an eolaire nó an comhad
+
 # Context menu
 add-to-sidebar = Cuir leis an mbarra taoibh
 compress = Comhbhrúigh
+delete-permanently = Scrios go buan
 extract-here = Bain anseo
 new-file = Comhad nua...
 new-folder = Fillteán nua...
