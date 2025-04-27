@@ -1572,6 +1572,51 @@ impl Item {
         row
     }
 
+    pub fn preview_view_multiple<'a>(items: &[Item]) -> Element<'a, Message> {
+        let cosmic_theme::Spacing { space_m, .. } = theme::active().cosmic().spacing;
+        let mut column = widget::column().spacing(space_m);
+
+        let items_selected: Vec<&Item> = items.iter().filter(|v| v.selected).collect();
+        let (dirs_selected, files_selected) =
+            items_selected
+                .iter()
+                .fold((0u32, 0u32), |(dirs, files), &v| match &v.metadata {
+                    ItemMetadata::Path { metadata, .. } => {
+                        if metadata.is_dir() {
+                            (dirs + 1, files)
+                        } else {
+                            (dirs, files + 1)
+                        }
+                    }
+                    _ => (dirs, files),
+                });
+
+        let dirs_text = if dirs_selected == 1 {
+            "folder"
+        } else {
+            "folders"
+        };
+        let files_text = if files_selected == 1 { "file" } else { "files" };
+        let text: String;
+
+        if dirs_selected >= 1 && files_selected >= 1 {
+            text = format!(
+                "{} {}, {} {} selected",
+                dirs_selected, dirs_text, files_selected, files_text
+            );
+        } else if dirs_selected >= 1 && files_selected == 0 {
+            text = format!("{} {} selected", dirs_selected, dirs_text);
+        } else if dirs_selected == 0 && files_selected >= 1 {
+            text = format!("{} {} selected", files_selected, files_text);
+        } else {
+            log::error!("folder or a file should have been selected.");
+            text = String::new(); // do not crash if we somehow reach here.
+        }
+
+        column = column.push(widget::text::heading(text));
+        column.into()
+    }
+
     pub fn preview_view<'a>(
         &'a self,
         mime_app_cache_opt: Option<&'a mime_app::MimeAppCache>,
