@@ -68,7 +68,7 @@ recently-used-xbel = "1.1.0"
 zip = "2.2.2"
 unix_permissions_ext = "0.1.2"
 uzers = "0.12.1"
-io-uring = { version = "0.7.4", features = ["bindgen"] }
+io-uring = "0.7.4"
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
@@ -78,6 +78,7 @@ features = ["multi-window", "tokio", "winit", "surface-message"]
 
 [features]
 default = [
+    "bindgen",
     "bzip2",
     "dbus-config",
     "desktop",
@@ -86,6 +87,7 @@ default = [
     "wgpu",
     "xz2",
 ]
+bindgen = ["io-uring/bindgen"]
 dbus-config = ["libcosmic/dbus-config"]
 desktop = ["libcosmic/desktop", "dep:cosmic-mime-apps", "dep:xdg"]
 gvfs = ["dep:gio", "dep:glib"]
