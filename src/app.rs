@@ -401,6 +401,7 @@ pub enum Message {
     Cosmic(app::Action),
     None,
     Surface(surface::Action),
+    CutPaths(Vec<PathBuf>),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1098,6 +1099,13 @@ impl App {
             }
         }
         paths
+    }
+
+    fn set_cut(&mut self, entity_opt: Option<Entity>) {
+        let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+        if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+            tab.cut_selected();
+        }
     }
 
     fn update_config(&mut self) -> Task<Message> {
@@ -2218,6 +2226,11 @@ impl Application for App {
                 }
             }
             Message::Copy(entity_opt) => {
+                if let Some(entity) = entity_opt {
+                    if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                        tab.refresh_cut(&[]);
+                    }
+                }
                 let paths = self.selected_paths(entity_opt);
                 let contents = ClipboardCopy::new(ClipboardKind::Copy, &paths);
                 return clipboard::write_data(contents);
@@ -2230,6 +2243,7 @@ impl Application for App {
                 ));
             }
             Message::Cut(entity_opt) => {
+                self.set_cut(entity_opt);
                 let paths = self.selected_paths(entity_opt);
                 let contents = ClipboardCopy::new(ClipboardKind::Cut, &paths);
                 return clipboard::write_data(contents);
@@ -3491,6 +3505,15 @@ impl Application for App {
                         if let Some(selection_paths) = selection_paths {
                             tab.select_paths(selection_paths);
                         }
+                        return clipboard::read_data::<ClipboardPaste>().map(|p| {
+                            cosmic::action::app(Message::CutPaths(match p {
+                                Some(s) => match s.kind {
+                                    ClipboardKind::Copy => Vec::new(),
+                                    ClipboardKind::Cut => s.paths,
+                                },
+                                None => Vec::new(),
+                            }))
+                        });
                     }
                 }
             }
@@ -3502,6 +3525,11 @@ impl Application for App {
                 let mut config = self.config.tab;
                 config.view = view;
                 return self.update(Message::TabConfig(config));
+            }
+            Message::CutPaths(paths) => {
+                if let Some(tab) = self.tab_model.active_data_mut::<Tab>() {
+                    tab.refresh_cut(&paths);
+                }
             }
             Message::TimeConfigChange(time_config) => {
                 self.config.tab.military_time = time_config.military_time;
