@@ -125,6 +125,7 @@ fn button_appearance(
     theme: &theme::Theme,
     selected: bool,
     highlighted: bool,
+    cut: bool,
     focused: bool,
     accent: bool,
     condensed_radius: bool,
@@ -136,7 +137,11 @@ fn button_appearance(
         if accent {
             appearance.background = Some(Color::from(cosmic.accent_color()).into());
             appearance.icon_color = Some(Color::from(cosmic.on_accent_color()));
-            appearance.text_color = Some(Color::from(cosmic.on_accent_color()));
+            if cut {
+                appearance.text_color = Some(Color::from(cosmic.accent.on_disabled));
+            } else {
+                appearance.text_color = Some(Color::from(cosmic.on_accent_color()));
+            }
         } else {
             appearance.background = Some(Color::from(cosmic.bg_component_color()).into());
         }
@@ -145,13 +150,24 @@ fn button_appearance(
             appearance.background = Some(Color::from(cosmic.bg_component_color()).into());
             appearance.icon_color = Some(Color::from(cosmic.on_bg_component_color()));
             appearance.text_color = Some(Color::from(cosmic.on_bg_component_color()));
+            if cut {
+                appearance.text_color = Some(Color::from(cosmic.background.component.on_disabled));
+            } else {
+                appearance.text_color = Some(Color::from(cosmic.on_bg_component_color()));
+            }
         } else {
             appearance.background = Some(Color::from(cosmic.bg_component_color()).into());
         }
     } else if desktop {
         appearance.background = Some(Color::from(cosmic.bg_color()).into());
         appearance.icon_color = Some(Color::from(cosmic.on_bg_color()));
-        appearance.text_color = Some(Color::from(cosmic.on_bg_color()));
+        if cut {
+            appearance.text_color = Some(Color::from(cosmic.background.component.disabled));
+        } else {
+            appearance.text_color = Some(Color::from(cosmic.on_bg_color()));
+        }
+    } else if cut {
+        appearance.text_color = Some(Color::from(cosmic.background.component.on_disabled));
     }
     if focused && accent {
         appearance.outline_width = 1.0;
@@ -170,6 +186,7 @@ fn button_appearance(
 fn button_style(
     selected: bool,
     highlighted: bool,
+    cut: bool,
     accent: bool,
     condensed_radius: bool,
     desktop: bool,
@@ -181,6 +198,7 @@ fn button_style(
                 theme,
                 selected,
                 highlighted,
+                cut,
                 focused,
                 accent,
                 condensed_radius,
@@ -192,6 +210,7 @@ fn button_style(
                 theme,
                 selected,
                 highlighted,
+                cut,
                 false,
                 accent,
                 condensed_radius,
@@ -203,6 +222,7 @@ fn button_style(
                 theme,
                 selected,
                 highlighted,
+                cut,
                 focused,
                 accent,
                 condensed_radius,
@@ -214,6 +234,7 @@ fn button_style(
                 theme,
                 selected,
                 highlighted,
+                cut,
                 focused,
                 accent,
                 condensed_radius,
@@ -614,6 +635,7 @@ pub fn item_from_entry(
         highlighted: false,
         overlaps_drag_rect: false,
         dir_size,
+        cut: false,
     }
 }
 
@@ -839,6 +861,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                     highlighted: false,
                     overlaps_drag_rect: false,
                     dir_size: DirSize::NotDirectory,
+                    cut: false,
                 });
             }
         }
@@ -1018,6 +1041,7 @@ pub fn scan_desktop(
             highlighted: false,
             overlaps_drag_rect: false,
             dir_size: DirSize::NotDirectory,
+            cut: false,
         })
     }
 
@@ -1497,6 +1521,7 @@ pub struct Item {
     pub rect_opt: Cell<Option<Rectangle>>,
     pub selected: bool,
     pub highlighted: bool,
+    pub cut: bool,
     pub overlaps_drag_rect: bool,
     pub dir_size: DirSize,
 }
@@ -2026,6 +2051,30 @@ impl Tab {
             }
         }
         self.items_opt = Some(items);
+    }
+
+    pub fn cut_selected(&mut self) {
+        if let Some(ref mut items) = self.items_opt {
+            for item in items.iter_mut() {
+                item.cut = item.selected;
+            }
+        }
+    }
+
+    pub fn refresh_cut(&mut self, locations: &[PathBuf]) {
+        if let Some(ref mut items) = self.items_opt {
+            for item in items.iter_mut() {
+                item.cut = false;
+                if let Some(location) = &item.location_opt {
+                    if locations
+                        .iter()
+                        .any(|s| location.path_opt().is_some_and(|b| b == s))
+                    {
+                        item.cut = true;
+                    }
+                }
+            }
+        }
     }
 
     pub fn selected_locations(&self) -> Vec<Location> {
@@ -4183,6 +4232,7 @@ impl Tab {
                     .class(button_style(
                         item.selected,
                         item.highlighted,
+                        item.cut,
                         false,
                         false,
                         false,
@@ -4195,6 +4245,7 @@ impl Tab {
                             .class(button_style(
                                 item.selected,
                                 item.highlighted,
+                                item.cut,
                                 true,
                                 true,
                                 matches!(self.mode, Mode::Desktop),
@@ -4339,6 +4390,7 @@ impl Tab {
                                 .class(button_style(
                                     item.selected,
                                     item.highlighted,
+                                    item.cut,
                                     false,
                                     false,
                                     false,
@@ -4352,6 +4404,7 @@ impl Tab {
                                 .class(button_style(
                                     item.selected,
                                     item.highlighted,
+                                    item.cut,
                                     true,
                                     true,
                                     false,
@@ -4572,6 +4625,7 @@ impl Tab {
                             .class(button_style(
                                 item.selected,
                                 item.highlighted,
+                                item.cut,
                                 true,
                                 true,
                                 false,
