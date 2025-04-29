@@ -80,6 +80,8 @@ save-file = Save file
 ## Open With Dialog
 open-with-title = How do you want to open "{$name}"?
 browse-store = Browse {$store}
+other-apps = Other applications
+related-apps = Related applications
 
 ## Rename Dialog
 rename-file = Rename file

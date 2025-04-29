@@ -505,6 +505,13 @@ pub enum DialogPage {
 
 pub struct FavoriteIndex(usize);
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MimeAppMatch {
+    Exact,
+    Related,
+    Other,
+}
+
 pub struct MounterData(MounterKey, MounterItem);
 
 #[derive(Clone, Debug)]
@@ -1710,7 +1717,7 @@ impl App {
         .into()
     }
 
-    fn get_programs_for_mime(&self, mime_type: &Mime) -> Vec<&MimeApp> {
+    fn get_apps_for_mime(&self, mime_type: &Mime) -> Vec<(&MimeApp, MimeAppMatch)> {
         let mut results = Vec::new();
 
         let mut dedupe = HashSet::new();
@@ -1719,7 +1726,7 @@ impl App {
         for mime_app in self.mime_app_cache.get(mime_type) {
             let app_id = &mime_app.id;
             if !dedupe.contains(app_id) {
-                results.push(mime_app);
+                results.push((mime_app, MimeAppMatch::Exact));
                 dedupe.insert(app_id);
             }
         }
@@ -1730,10 +1737,19 @@ impl App {
                 for mime_app in self.mime_app_cache.get(&parent_type) {
                     let app_id = &mime_app.id;
                     if !dedupe.contains(app_id) {
-                        results.push(mime_app);
+                        results.push((mime_app, MimeAppMatch::Related));
                         dedupe.insert(app_id);
                     }
                 }
+            }
+        }
+
+        // Add other apps
+        for mime_app in self.mime_app_cache.apps() {
+            let app_id = &mime_app.id;
+            if !dedupe.contains(app_id) {
+                results.push((mime_app, MimeAppMatch::Other));
+                dedupe.insert(app_id);
             }
         }
 
@@ -2412,9 +2428,9 @@ impl Application for App {
                             selected,
                             ..
                         } => {
-                            let all_apps = self.get_programs_for_mime(&mime);
+                            let available_apps = self.get_apps_for_mime(&mime);
 
-                            if let Some(app) = all_apps.get(selected) {
+                            if let Some((app, _)) = available_apps.get(selected) {
                                 if let Some(mut command) =
                                     app.command(&[&path]).and_then(|v| v.into_iter().next())
                                 {
@@ -4555,11 +4571,23 @@ impl Application for App {
                 };
 
                 let mut column = widget::list_column();
-                let available_programs = self.get_programs_for_mime(mime);
+                let available_apps = self.get_apps_for_mime(mime);
                 let item_height = 32.0;
                 let mut displayed_default = false;
-
-                for (i, app) in available_programs.iter().enumerate() {
+                let mut last_kind = MimeAppMatch::Exact;
+                for (i, (app, kind)) in available_apps.iter().enumerate() {
+                    if *kind != last_kind {
+                        match kind {
+                            MimeAppMatch::Related => {
+                                column = column.add(widget::text::heading(fl!("related-apps")));
+                            }
+                            MimeAppMatch::Other => {
+                                column = column.add(widget::text::heading(fl!("other-apps")));
+                            }
+                            _ => {}
+                        }
+                        last_kind = *kind;
+                    }
                     column = column.add(
                         widget::button::custom(
                             widget::row::with_children(vec![
@@ -4603,13 +4631,13 @@ impl Application for App {
                     )
                     .control(
                         widget::scrollable(column).height(if let Some(size) = self.size {
-                            let max_size = size.height - 256.0;
+                            let max_size = (size.height - 256.0).min(480.0);
                             // (32 (item_height) + 5.0 (custom button padding)) + (space_xxs (list item spacing) * 2)
-                            let scrollable_height = available_programs.len() as f32
+                            let scrollable_height = available_apps.len() as f32
                                 * (item_height + 5.0 + (2.0 * space_xxs as f32));
 
                             if scrollable_height > max_size {
-                                Length::Fill
+                                Length::Fixed(max_size)
                             } else {
                                 Length::Shrink
                             }

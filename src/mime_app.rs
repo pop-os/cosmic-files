@@ -220,6 +220,7 @@ fn filename_eq(path_opt: &Option<PathBuf>, filename: &str) -> bool {
 }
 
 pub struct MimeAppCache {
+    apps: Vec<MimeApp>,
     cache: HashMap<Mime, Vec<MimeApp>>,
     icons: HashMap<Mime, Vec<widget::icon::Handle>>,
     terminals: Vec<MimeApp>,
@@ -228,6 +229,7 @@ pub struct MimeAppCache {
 impl MimeAppCache {
     pub fn new() -> Self {
         let mut mime_app_cache = Self {
+            apps: Vec::new(),
             cache: HashMap::new(),
             icons: HashMap::new(),
             terminals: Vec::new(),
@@ -246,6 +248,7 @@ impl MimeAppCache {
 
         let start = Instant::now();
 
+        self.apps.clear();
         self.cache.clear();
         self.icons.clear();
         self.terminals.clear();
@@ -257,6 +260,10 @@ impl MimeAppCache {
         //TODO: hashmap for all apps by id?
         let mut all_apps = desktop::load_applications(locale, false);
         for app in &mut all_apps {
+            //TODO: just collect apps that can be executed with a file argument?
+            if !app.mime_types.is_empty() {
+                self.apps.push(MimeApp::from(&app));
+            }
             for mime in app.mime_types.iter() {
                 let apps = self
                     .cache
@@ -387,6 +394,12 @@ impl MimeAppCache {
         }
 
         // Sort apps by name
+        self.apps
+            .sort_by(|a, b| match (a.is_default, b.is_default) {
+                (true, false) => Ordering::Less,
+                (false, true) => Ordering::Greater,
+                _ => LANGUAGE_SORTER.compare(&a.name, &b.name),
+            });
         for apps in self.cache.values_mut() {
             apps.sort_by(|a, b| match (a.is_default, b.is_default) {
                 (true, false) => Ordering::Less,
@@ -406,6 +419,10 @@ impl MimeAppCache {
 
         let elapsed = start.elapsed();
         log::info!("loaded mime app cache in {:?}", elapsed);
+    }
+
+    pub fn apps(&self) -> &[MimeApp] {
+        &self.apps
     }
 
     pub fn get(&self, key: &Mime) -> &[MimeApp] {
