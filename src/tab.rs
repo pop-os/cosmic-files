@@ -524,6 +524,65 @@ fn hidden_attribute(metadata: &Metadata) -> bool {
     metadata.file_attributes() & FILE_ATTRIBUTE_HIDDEN == FILE_ATTRIBUTE_HIDDEN
 }
 
+#[cfg(target_os = "linux")]
+fn remote_fs(metadata: &Metadata) -> bool {
+    //TODO: method to reload remote filesystems dynamically
+    //TODO: fix for https://github.com/eminence/procfs/issues/262
+    static DEVICES: Lazy<HashMap<u64, bool>> = Lazy::new(|| {
+        let mut devices = HashMap::new();
+        match procfs::process::Process::myself() {
+            Ok(process) => match process.mountinfo() {
+                Ok(mount_infos) => {
+                    for mount_info in mount_infos.iter() {
+                        let mut parts = mount_info.majmin.split(':');
+                        let Some(major_str) = parts.next() else {
+                            continue;
+                        };
+                        let Some(minor_str) = parts.next() else {
+                            continue;
+                        };
+                        let Ok(major) = major_str.parse::<libc::c_uint>() else {
+                            continue;
+                        };
+                        let Ok(minor) = minor_str.parse::<libc::c_uint>() else {
+                            continue;
+                        };
+                        let dev = libc::makedev(major, minor);
+                        //TODO: make sure this list is exhaustive
+                        let remote = [
+                            "cifs",
+                            //TODO: check with GVFS?
+                            "fuse.gvfsd-fuse",
+                            "fuse.rclone",
+                            "fuse.sshfs",
+                            "nfs",
+                            "nfs4",
+                            "smb",
+                            "smb2",
+                        ]
+                        .contains(&mount_info.fs_type.as_str());
+                        devices.insert(dev, remote);
+                    }
+                }
+                Err(err) => {
+                    log::warn!("failed to get mount info: {err}");
+                }
+            },
+            Err(err) => {
+                log::warn!("failed to get process info: {err}");
+            }
+        }
+        devices
+    });
+    DEVICES.get(&metadata.dev()).map_or(false, |x| *x)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn remote_fs(_metadata: &Metadata) -> bool {
+    //TODO: support BSD, macOS, Windows?
+    false
+}
+
 pub fn parse_desktop_file(path: &Path) -> (Option<String>, Option<String>) {
     let entry = match freedesktop_entry_parser::parse_entry(path) {
         Ok(ok) => ok,
@@ -554,6 +613,8 @@ pub fn item_from_entry(
 
     let hidden = name.starts_with(".") || hidden_attribute(&metadata);
 
+    let remote = remote_fs(&metadata);
+
     let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) =
         if metadata.is_dir() {
             (
@@ -564,7 +625,7 @@ pub fn item_from_entry(
                 folder_icon(&path, sizes.list_condensed()),
             )
         } else {
-            let mime = mime_for_path(&path);
+            let mime = mime_for_path(&path, Some(&metadata), remote);
             //TODO: clean this up, implement for trash
             let icon_name_opt = if mime == "application/x-desktop" {
                 let (desktop_name_opt, icon_name_opt) = parse_desktop_file(&path);
@@ -598,36 +659,39 @@ pub fn item_from_entry(
             }
         };
 
-    let children = if metadata.is_dir() {
+    let mut children_opt = None;
+    let mut dir_size = DirSize::NotDirectory;
+    if metadata.is_dir() && !remote {
+        dir_size = DirSize::Calculating(Controller::default());
         //TODO: calculate children in the background (and make it cancellable?)
         match fs::read_dir(&path) {
-            Ok(entries) => entries.count(),
+            Ok(entries) => {
+                children_opt = Some(entries.count());
+            }
             Err(err) => {
                 log::warn!("failed to read directory {:?}: {}", path, err);
-                0
             }
         }
-    } else {
-        0
-    };
-
-    let dir_size = if metadata.is_dir() {
-        DirSize::Calculating(Controller::default())
-    } else {
-        DirSize::NotDirectory
-    };
+    }
 
     Item {
         name,
         display_name,
-        metadata: ItemMetadata::Path { metadata, children },
+        metadata: ItemMetadata::Path {
+            metadata,
+            children_opt,
+        },
         hidden,
         location_opt: Some(Location::Path(path)),
         mime,
         icon_handle_grid,
         icon_handle_list,
         icon_handle_list_condensed,
-        thumbnail_opt: None,
+        thumbnail_opt: if remote {
+            Some(ItemThumbnail::NotImage)
+        } else {
+            None
+        },
         button_id: widget::Id::unique(),
         pos_opt: Cell::new(None),
         rect_opt: Cell::new(None),
@@ -832,8 +896,8 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                             folder_icon(&original_path, sizes.list_condensed()),
                         ),
                         trash::TrashItemSize::Bytes(_) => {
-                            //TODO: do not use original path
-                            let mime = mime_for_path(&original_path);
+                            // This passes remote = true so it does not read from the original path
+                            let mime = mime_for_path(&original_path, None, true);
                             (
                                 mime.clone(),
                                 mime_icon(mime.clone(), sizes.grid()),
@@ -1316,7 +1380,7 @@ pub enum DirSize {
 pub enum ItemMetadata {
     Path {
         metadata: Metadata,
-        children: usize,
+        children_opt: Option<usize>,
     },
     Trash {
         metadata: trash::TrashItemMetadata,
@@ -1646,16 +1710,23 @@ impl Item {
             }
         }
         match &self.metadata {
-            ItemMetadata::Path { metadata, children } => {
+            ItemMetadata::Path {
+                metadata,
+                children_opt,
+            } => {
                 if metadata.is_dir() {
-                    details = details.push(widget::text::body(fl!("items", items = children)));
+                    if let Some(children) = children_opt {
+                        details = details.push(widget::text::body(fl!("items", items = children)));
+                    }
                     let size = match &self.dir_size {
                         DirSize::Calculating(_) => fl!("calculating"),
                         DirSize::Directory(size) => format_size(*size),
                         DirSize::NotDirectory => String::new(),
                         DirSize::Error(err) => err.clone(),
                     };
-                    details = details.push(widget::text::body(fl!("item-size", size = size)));
+                    if !size.is_empty() {
+                        details = details.push(widget::text::body(fl!("item-size", size = size)));
+                    }
                 } else {
                     details = details.push(widget::text::body(fl!(
                         "item-size",
@@ -1769,9 +1840,14 @@ impl Item {
         //TODO: translate!
         //TODO: correct display of folder size?
         match &self.metadata {
-            ItemMetadata::Path { metadata, children } => {
+            ItemMetadata::Path {
+                metadata,
+                children_opt,
+            } => {
                 if metadata.is_dir() {
-                    column = column.push(widget::text::body(format!("Items: {}", children)));
+                    if let Some(children) = children_opt {
+                        column = column.push(widget::text::body(format!("Items: {}", children)));
+                    }
                 } else {
                     column = column.push(widget::text::body(format!(
                         "Size: {}",
@@ -3501,9 +3577,12 @@ impl Tab {
                 items.sort_by(|a, b| {
                     // entries take precedence over size
                     let get_size = |x: &Item| match &x.metadata {
-                        ItemMetadata::Path { metadata, children } => {
+                        ItemMetadata::Path {
+                            metadata,
+                            children_opt,
+                        } => {
                             if metadata.is_dir() {
-                                (true, *children as u64)
+                                (true, children_opt.unwrap_or_default() as u64)
                             } else {
                                 (false, metadata.len())
                             }
@@ -4518,13 +4597,20 @@ impl Tab {
                 };
 
                 let size_text = match &item.metadata {
-                    ItemMetadata::Path { metadata, children } => {
+                    ItemMetadata::Path {
+                        metadata,
+                        children_opt,
+                    } => {
                         if metadata.is_dir() {
                             //TODO: translate
-                            if *children == 1 {
-                                format!("{} item", children)
+                            if let Some(children) = children_opt {
+                                if *children == 1 {
+                                    format!("{} item", children)
+                                } else {
+                                    format!("{} items", children)
+                                }
                             } else {
-                                format!("{} items", children)
+                                String::new()
                             }
                         } else {
                             format_size(metadata.len())
