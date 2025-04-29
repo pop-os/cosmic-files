@@ -597,10 +597,12 @@ impl App {
         // This allows handling paths as groups if possible, such as launching a single video
         // player that is passed every path.
         let mut groups: HashMap<Mime, Vec<PathBuf>> = HashMap::new();
-        for (mime, path) in paths
-            .iter()
-            .map(|path| (mime_icon::mime_for_path(path), path.as_ref().to_owned()))
-        {
+        for (mime, path) in paths.iter().map(|path| {
+            (
+                mime_icon::mime_for_path(path, None, false),
+                path.as_ref().to_owned(),
+            )
+        }) {
             groups.entry(mime).or_default().push(path);
         }
 

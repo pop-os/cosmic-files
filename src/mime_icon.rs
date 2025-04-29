@@ -3,7 +3,7 @@
 use cosmic::widget::icon;
 use mime_guess::Mime;
 use once_cell::sync::Lazy;
-use std::{collections::HashMap, path::Path, sync::Mutex};
+use std::{collections::HashMap, fs, path::Path, sync::Mutex};
 
 pub const FALLBACK_MIME_ICON: &str = "text-x-generic";
 
@@ -50,14 +50,26 @@ impl MimeIconCache {
 }
 static MIME_ICON_CACHE: Lazy<Mutex<MimeIconCache>> = Lazy::new(|| Mutex::new(MimeIconCache::new()));
 
-pub fn mime_for_path<P: AsRef<Path>>(path: P) -> Mime {
+pub fn mime_for_path<P: AsRef<Path>>(
+    path: P,
+    metadata_opt: Option<&fs::Metadata>,
+    remote: bool,
+) -> Mime {
+    let path = path.as_ref();
     let mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
     // Try the shared mime info cache first
-    let guess = mime_icon_cache
-        .shared_mime_info
-        .guess_mime_type()
-        .path(&path)
-        .guess();
+    let mut gb = mime_icon_cache.shared_mime_info.guess_mime_type();
+    if remote {
+        if let Some(file_name) = path.file_name().and_then(|x| x.to_str()) {
+            gb.file_name(file_name);
+        }
+    } else {
+        gb.path(&path);
+    }
+    if let Some(metadata) = metadata_opt {
+        gb.metadata(metadata.clone());
+    }
+    let guess = gb.guess();
     if guess.uncertain() {
         // If uncertain, try mime_guess. This could happen on platforms without shared-mime-info
         mime_guess::from_path(&path).first_or_octet_stream()

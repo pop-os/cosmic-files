@@ -963,7 +963,7 @@ impl Operation {
                             op_sel.selected.push(new_dir.clone());
 
                             let controller = controller.clone();
-                            let mime = mime_for_path(path);
+                            let mime = mime_for_path(path, None, false);
                             let password = password.clone();
                             match mime.essence_str() {
                                 "application/gzip" | "application/x-compressed-tar" => {

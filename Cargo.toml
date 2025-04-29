@@ -105,6 +105,9 @@ debug = true
 [target.'cfg(unix)'.dependencies]
 fork = "0.2"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+procfs = "0.17"
+
 [dev-dependencies]
 # cap-std = "3"
 # cap-tempfile = "3"
