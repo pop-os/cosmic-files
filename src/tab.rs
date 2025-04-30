@@ -4924,7 +4924,7 @@ impl Tab {
             .on_resize(|_, _| Message::ScrollToFocus)
             .on_back_press(move |_point_opt| Message::GoPrevious)
             .on_forward_press(move |_point_opt| Message::GoNext)
-            .on_scroll(respond_to_scroll_direction);
+            .on_scroll(|delta| respond_to_scroll_direction(delta, self.modifiers));
 
         if self.context_menu.is_some() {
             mouse_area = mouse_area.on_right_press(move |_point_opt| Message::ContextMenu(None));
