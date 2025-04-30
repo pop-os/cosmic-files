@@ -1321,6 +1321,7 @@ pub enum Message {
     ItemUp,
     Location(Location),
     LocationUp,
+    ModifiersChanged(Modifiers),
     Open(Option<PathBuf>),
     RightClick(Option<usize>),
     MiddleClick(usize),
@@ -1974,6 +1975,7 @@ pub struct Tab {
     select_range: Option<(usize, usize)>,
     clicked: Option<usize>,
     selected_clicked: bool,
+    modifiers: Modifiers,
     last_right_click: Option<usize>,
     search_context: Option<SearchContext>,
     global_cursor_position: Option<Point>,
@@ -2070,6 +2072,7 @@ impl Tab {
             clicked: None,
             dnd_hovered: None,
             selected_clicked: false,
+            modifiers: Modifiers::default(),
             last_right_click: None,
             search_context: None,
             global_cursor_position: None,
@@ -3109,6 +3112,9 @@ impl Tab {
                         cd = Some(Location::Path(parent.to_owned()));
                     }
                 }
+            }
+            Message::ModifiersChanged(modifiers) => {
+                self.modifiers = modifiers;
             }
             Message::Open(path_opt) => {
                 match path_opt {
@@ -4935,10 +4941,12 @@ impl Tab {
         let mut popover = widget::popover(mouse_area);
 
         if let Some(point) = self.context_menu {
+            let context_menu = menu::context_menu(self, key_binds, &self.modifiers);
             popover = popover
-                .popup(menu::context_menu(self, key_binds))
+                .popup(context_menu)
                 .position(widget::popover::Position::Point(point));
         }
+
         let mut tab_column = widget::column::with_capacity(3);
         if let Some(location_view) = location_view_opt {
             tab_column = tab_column.push(location_view);

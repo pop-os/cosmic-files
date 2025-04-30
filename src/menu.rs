@@ -2,7 +2,7 @@
 
 use cosmic::{
     app::Core,
-    iced::{Alignment, Background, Border, Length},
+    iced::{keyboard::Modifiers, Alignment, Background, Border, Length},
     theme,
     widget::{
         self, button, column, container, divider, horizontal_space,
@@ -55,6 +55,7 @@ fn menu_button_optional(
 pub fn context_menu<'a>(
     tab: &Tab,
     key_binds: &HashMap<KeyBind, Action>,
+    modifiers: &Modifiers,
 ) -> Element<'a, tab::Message> {
     let find_key = |action: &Action| -> String {
         for (key_bind, key_action) in key_binds.iter() {
@@ -216,7 +217,13 @@ pub fn context_menu<'a>(
                     children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
                 }
                 children.push(divider::horizontal::light().into());
-                children.push(menu_item(fl!("move-to-trash"), Action::Delete).into());
+                if modifiers.shift() && !modifiers.control() {
+                    children.push(
+                        menu_item(fl!("delete-permanently"), Action::PermanentlyDelete).into(),
+                    );
+                } else {
+                    children.push(menu_item(fl!("move-to-trash"), Action::Delete).into());
+                }
             } else {
                 //TODO: need better designs for menu with no selection
                 //TODO: have things like properties but they apply to the folder?
@@ -492,6 +499,7 @@ pub fn menu_bar<'a>(
     core: &Core,
     tab_opt: Option<&Tab>,
     config: &Config,
+    modifiers: &Modifiers,
     key_binds: &HashMap<KeyBind, Action>,
 ) -> Element<'a, Message> {
     let sort_options = tab_opt.map(|tab| tab.sort_options());
@@ -522,6 +530,12 @@ pub fn menu_bar<'a>(
                 }
             }
         }
+    };
+
+    let (delete_item, delete_item_action) = if in_trash || modifiers.shift() {
+        (fl!("delete-permanently"), Action::Delete)
+    } else {
+        (fl!("move-to-trash"), Action::Delete)
     };
 
     responsive_menu_bar()
@@ -562,14 +576,11 @@ pub fn menu_bar<'a>(
                         ),
                         menu::Item::Divider,
                         menu_button_optional(
-                            if in_trash {
-                                fl!("delete-permanently")
-                            } else {
-                                fl!("move-to-trash")
-                            },
-                            Action::Delete,
-                            selected > 0,
+                            fl!("restore-from-trash"),
+                            Action::RestoreFromTrash,
+                            selected > 0 && in_trash,
                         ),
+                        menu_button_optional(delete_item, delete_item_action, selected > 0),
                         menu::Item::Divider,
                         menu::Item::Button(fl!("close-tab"), None, Action::TabClose),
                         menu::Item::Button(fl!("quit"), None, Action::WindowClose),

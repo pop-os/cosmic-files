@@ -382,7 +382,7 @@ enum Message {
     Filename(String),
     Filter(usize),
     Key(Modifiers, Key),
-    Modifiers(Modifiers),
+    ModifiersChanged(Modifiers),
     MounterItems(MounterKey, MounterItems),
     NewFolder,
     NotifyEvents(Vec<DebouncedEvent>),
@@ -1290,8 +1290,11 @@ impl Application for App {
                     }
                 }
             }
-            Message::Modifiers(modifiers) => {
+            Message::ModifiersChanged(modifiers) => {
                 self.modifiers = modifiers;
+                return self.update(Message::TabMessage(tab::Message::ModifiersChanged(
+                    modifiers,
+                )));
             }
             Message::MounterItems(mounter_key, mounter_items) => {
                 // Check for unmounted folders
@@ -1757,7 +1760,7 @@ impl Application for App {
                     event::Status::Captured => None,
                 },
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
-                    Some(Message::Modifiers(modifiers))
+                    Some(Message::ModifiersChanged(modifiers))
                 }
                 Event::Mouse(mouse::Event::CursorMoved { position: pos }) => {
                     Some(Message::CursorMoved(pos))

@@ -496,6 +496,10 @@ pub enum Operation {
     NewFolder {
         path: PathBuf,
     },
+    /// Permanently delete items, skipping the trash
+    PermanentlyDelete {
+        paths: Vec<PathBuf>,
+    },
     Rename {
         from: PathBuf,
         to: PathBuf,
@@ -599,6 +603,7 @@ impl Operation {
                 name = file_name(path),
                 parent = parent_name(path)
             ),
+            Self::PermanentlyDelete { paths } => fl!("permanently-deleting", items = paths.len()),
             Self::Rename { from, to } => {
                 fl!("renaming", from = file_name(from), to = file_name(to))
             }
@@ -657,6 +662,7 @@ impl Operation {
                 name = file_name(path),
                 parent = parent_name(path)
             ),
+            Self::PermanentlyDelete { paths } => fl!("permanently-deleted", items = paths.len()),
             Self::Rename { from, to } => fl!("renamed", from = file_name(from), to = file_name(to)),
             Self::Restore { items } => fl!("restored", items = items.len()),
             Self::SetExecutableAndLaunch { path } => {
@@ -675,6 +681,7 @@ impl Operation {
             | Self::EmptyTrash
             | Self::Extract { .. }
             | Self::Move { .. }
+            | Self::PermanentlyDelete { .. }
             | Self::Restore { .. } => true,
             Self::NewFile { .. }
             | Self::NewFolder { .. }
@@ -1075,6 +1082,32 @@ impl Operation {
             .await
             .map_err(wrap_compio_spawn_error)?
             .map_err(OperationError::from_str),
+            Self::PermanentlyDelete { paths } => {
+                let total = paths.len();
+                for (idx, path) in paths.into_iter().enumerate() {
+                    controller.check().await.map_err(OperationError::from_str)?;
+
+                    controller.set_progress((idx as f32) / (total as f32));
+
+                    tokio::task::spawn_blocking(|| {
+                        if path.is_symlink() || path.is_file() {
+                            fs::remove_file(path)
+                        } else if path.is_dir() {
+                            fs::remove_dir_all(path)
+                        } else {
+                            Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "File to delete is not symlink, file or directory",
+                            ))
+                        }
+                    })
+                    .await
+                    .map_err(OperationError::from_str)?
+                    .map_err(OperationError::from_str)?;
+                }
+
+                Ok(OperationSelection::default())
+            }
             Self::Rename { from, to } => compio::runtime::spawn(async move {
                 controller.check().await.map_err(OperationError::from_str)?;
                 compio::fs::rename(&from, &to)
