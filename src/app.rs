@@ -33,7 +33,7 @@ use cosmic::{
     widget::{
         self,
         dnd_destination::DragId,
-        horizontal_space, icon,
+        horizontal_space,
         menu::{action::MenuAction, key_bind::KeyBind},
         segmented_button::{self, Entity},
         vertical_space,
@@ -4685,7 +4685,7 @@ impl Application for App {
             DialogPage::PermanentlyDelete { paths } => {
                 let target = if paths.len() == 1 {
                     format!(
-                        "« {} »",
+                        "\"{}\"",
                         paths[0]
                             .file_name()
                             .map(std::ffi::OsStr::to_string_lossy)
@@ -4697,7 +4697,6 @@ impl Application for App {
 
                 widget::dialog()
                     .title(fl!("permanently-delete-question"))
-                    .icon(icon::from_name("dialog-warning").size(32))
                     .primary_action(
                         widget::button::destructive(fl!("delete"))
                             .on_press(Message::DialogComplete),
