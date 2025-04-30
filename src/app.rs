@@ -1605,22 +1605,16 @@ impl App {
         let military_time = self.config.tab.military_time;
         match kind {
             PreviewKind::Custom(PreviewItem(item)) => {
-                children.push(item.preview_view(
-                    Some(&self.mime_app_cache),
-                    IconSizes::default(),
-                    military_time,
-                ));
+                children.push(item.preview_view(Some(&self.mime_app_cache), military_time));
             }
             PreviewKind::Location(location) => {
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
                     if let Some(items) = tab.items_opt() {
                         for item in items.iter() {
                             if item.location_opt.as_ref() == Some(location) {
-                                children.push(item.preview_view(
-                                    Some(&self.mime_app_cache),
-                                    tab.config.icon_sizes,
-                                    military_time,
-                                ));
+                                children.push(
+                                    item.preview_view(Some(&self.mime_app_cache), military_time),
+                                );
                                 // Only show one property view to avoid issues like hangs when generating
                                 // preview images on thousands of files
                                 break;
@@ -1634,11 +1628,9 @@ impl App {
                     if let Some(items) = tab.items_opt() {
                         for item in items.iter() {
                             if item.selected {
-                                children.push(item.preview_view(
-                                    Some(&self.mime_app_cache),
-                                    tab.config.icon_sizes,
-                                    military_time,
-                                ));
+                                children.push(
+                                    item.preview_view(Some(&self.mime_app_cache), military_time),
+                                );
                                 // Only show one property view to avoid issues like hangs when generating
                                 // preview images on thousands of files
                                 break;
@@ -1646,11 +1638,9 @@ impl App {
                         }
                         if children.is_empty() {
                             if let Some(item) = &tab.parent_item_opt {
-                                children.push(item.preview_view(
-                                    Some(&self.mime_app_cache),
-                                    tab.config.icon_sizes,
-                                    military_time,
-                                ));
+                                children.push(
+                                    item.preview_view(Some(&self.mime_app_cache), military_time),
+                                );
                             }
                         }
                     }
@@ -4799,11 +4789,11 @@ impl Application for App {
                     .title(fl!("replace-title", filename = to.name.as_str()))
                     .body(fl!("replace-warning-operation"))
                     .control(
-                        to.replace_view(fl!("original-file"), IconSizes::default(), military_time)
+                        to.replace_view(fl!("original-file"), military_time)
                             .map(|x| Message::TabMessage(None, x)),
                     )
                     .control(
-                        from.replace_view(fl!("replace-with"), IconSizes::default(), military_time)
+                        from.replace_view(fl!("replace-with"), military_time)
                             .map(|x| Message::TabMessage(None, x)),
                     )
                     .primary_action(widget::button::suggested(fl!("replace")).on_press(

@@ -36,7 +36,7 @@ use std::{
 
 use crate::{
     app::{Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind},
-    config::{Config, Favorite, IconSizes, TabConfig, TimeConfig, TIME_CONFIG_ID},
+    config::{Config, Favorite, TabConfig, TimeConfig, TIME_CONFIG_ID},
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
@@ -576,17 +576,13 @@ impl App {
         let mut children = Vec::with_capacity(1);
         match kind {
             PreviewKind::Custom(PreviewItem(item)) => {
-                children.push(item.preview_view(None, IconSizes::default(), military_time));
+                children.push(item.preview_view(None, military_time));
             }
             PreviewKind::Location(location) => {
                 if let Some(items) = self.tab.items_opt() {
                     for item in items.iter() {
                         if item.location_opt.as_ref() == Some(location) {
-                            children.push(item.preview_view(
-                                None,
-                                self.tab.config.icon_sizes,
-                                military_time,
-                            ));
+                            children.push(item.preview_view(None, military_time));
                             // Only show one property view to avoid issues like hangs when generating
                             // preview images on thousands of files
                             break;
@@ -598,11 +594,7 @@ impl App {
                 if let Some(items) = self.tab.items_opt() {
                     for item in items.iter() {
                         if item.selected {
-                            children.push(item.preview_view(
-                                None,
-                                self.tab.config.icon_sizes,
-                                military_time,
-                            ));
+                            children.push(item.preview_view(None, military_time));
                             // Only show one property view to avoid issues like hangs when generating
                             // preview images on thousands of files
                             break;
@@ -610,11 +602,7 @@ impl App {
                     }
                     if children.is_empty() {
                         if let Some(item) = &self.tab.parent_item_opt {
-                            children.push(item.preview_view(
-                                None,
-                                self.tab.config.icon_sizes,
-                                military_time,
-                            ));
+                            children.push(item.preview_view(None, military_time));
                         }
                     }
                 }

@@ -1605,7 +1605,7 @@ impl Item {
         self.mime.type_() == mime::IMAGE || self.mime.type_() == mime::TEXT
     }
 
-    fn preview(&self, sizes: IconSizes) -> Element<'_, Message> {
+    fn preview(&self) -> Element<'_, Message> {
         let spacing = cosmic::theme::active().cosmic().spacing;
         // This loads the image only if thumbnailing worked
         let icon = widget::icon::icon(self.icon_handle_grid.clone())
@@ -1665,7 +1665,6 @@ impl Item {
     pub fn preview_view<'a>(
         &'a self,
         mime_app_cache_opt: Option<&'a mime_app::MimeAppCache>,
-        sizes: IconSizes,
         military_time: bool,
     ) -> Element<'a, Message> {
         let cosmic_theme::Spacing {
@@ -1677,7 +1676,7 @@ impl Item {
         let mut column = widget::column().spacing(space_m);
 
         column = column.push(
-            widget::container(self.preview(sizes))
+            widget::container(self.preview())
                 .center_x(Length::Fill)
                 .max_height(THUMBNAIL_SIZE as f32),
         );
@@ -1824,16 +1823,11 @@ impl Item {
         column.into()
     }
 
-    pub fn replace_view(
-        &self,
-        heading: String,
-        sizes: IconSizes,
-        military_time: bool,
-    ) -> Element<'_, Message> {
+    pub fn replace_view(&self, heading: String, military_time: bool) -> Element<'_, Message> {
         let cosmic_theme::Spacing { space_xxxs, .. } = theme::active().cosmic().spacing;
 
         let mut row = widget::row().spacing(space_xxxs);
-        row = row.push(self.preview(sizes));
+        row = row.push(self.preview());
 
         let mut column = widget::column().spacing(space_xxxs);
         column = column.push(widget::text::heading(heading));
