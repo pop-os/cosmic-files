@@ -285,7 +285,7 @@ async fn copy_or_move(
         );
 
         // Handle duplicate file names by renaming paths
-        let from_to_pairs: Vec<(PathBuf, PathBuf)> = paths
+        let mut from_to_pairs: Vec<(PathBuf, PathBuf)> = paths
             .into_iter()
             .zip(std::iter::repeat(to.as_path()))
             .filter_map(|(from, to)| {
@@ -305,6 +305,24 @@ async fn copy_or_move(
                 }
             })
             .collect();
+
+        // Attempt quick and simple renames
+        //TODO: allow rename to be used for directories in recursive context?
+        if matches!(method, Method::Move { .. }) {
+            from_to_pairs.retain(|(from, to)| {
+                //TODO: use compio::fs::rename?
+                match fs::rename(from, to) {
+                    Ok(()) => {
+                        log::info!("renamed {from:?} to {to:?}");
+                        false
+                    },
+                    Err(err) => {
+                        log::info!("failed to rename {from:?} to {to:?}, fallback to recursive move: {err}");
+                        true
+                    }
+                }
+            });
+        }
 
         let mut context = Context::new(controller.clone());
 
