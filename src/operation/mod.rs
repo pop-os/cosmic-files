@@ -27,7 +27,7 @@ pub mod controller;
 use self::reader::OpReader;
 pub mod reader;
 
-use self::recursive::Context;
+use self::recursive::{Context, Method};
 pub mod recursive;
 
 async fn handle_replace(
@@ -267,7 +267,7 @@ pub enum ReplaceResult {
 async fn copy_or_move(
     paths: Vec<PathBuf>,
     to: PathBuf,
-    moving: bool,
+    method: Method,
     msg_tx: &Arc<TokioMutex<Sender<Message>>>,
     controller: Controller,
 ) -> Result<OperationSelection, OperationError> {
@@ -276,7 +276,10 @@ async fn copy_or_move(
     compio::runtime::spawn(async move {
         log::info!(
             "{} {:?} to {:?}",
-            if moving { "Move" } else { "Copy" },
+            match method {
+                Method::Copy => "Copy",
+                Method::Move { .. } => "Move",
+            },
             paths,
             to
         );
@@ -286,7 +289,9 @@ async fn copy_or_move(
             .into_iter()
             .zip(std::iter::repeat(to.as_path()))
             .filter_map(|(from, to)| {
-                if matches!(from.parent(), Some(parent) if parent == to) && !moving {
+                if matches!(from.parent(), Some(parent) if parent == to)
+                    && matches!(method, Method::Copy)
+                {
                     // `from`'s parent is equal to `to` which means we're copying to the same
                     // directory (duplicating files)
                     let to = copy_unique_path(&from, to);
@@ -330,7 +335,7 @@ async fn copy_or_move(
         }
 
         context
-            .recursive_copy_or_move(from_to_pairs, moving)
+            .recursive_copy_or_move(from_to_pairs, method)
             .await
             .map_err(OperationError::from_str)?;
 
@@ -483,6 +488,7 @@ pub enum Operation {
     Move {
         paths: Vec<PathBuf>,
         to: PathBuf,
+        cross_device_copy: bool,
     },
     NewFile {
         path: PathBuf,
@@ -576,7 +582,7 @@ impl Operation {
                 to = file_name(to),
                 progress = progress()
             ),
-            Self::Move { paths, to } => fl!(
+            Self::Move { paths, to, .. } => fl!(
                 "moving",
                 items = paths.len(),
                 from = paths_parent_name(paths),
@@ -635,7 +641,7 @@ impl Operation {
                 from = paths_parent_name(paths),
                 to = file_name(to)
             ),
-            Self::Move { paths, to } => fl!(
+            Self::Move { paths, to, .. } => fl!(
                 "moved",
                 items = paths.len(),
                 from = paths_parent_name(paths),
@@ -853,7 +859,9 @@ impl Operation {
                 .map_err(wrap_compio_spawn_error)?
                 .map_err(OperationError::from_str)
             }
-            Self::Copy { paths, to } => copy_or_move(paths, to, false, msg_tx, controller).await,
+            Self::Copy { paths, to } => {
+                copy_or_move(paths, to, Method::Copy, msg_tx, controller).await
+            }
             Self::Delete { paths } => {
                 let total = paths.len();
                 for (i, path) in paths.into_iter().enumerate() {
@@ -1027,7 +1035,20 @@ impl Operation {
             .await
             .map_err(wrap_compio_spawn_error)?
             .map_err(OperationError::from_str),
-            Self::Move { paths, to } => copy_or_move(paths, to, true, msg_tx, controller).await,
+            Self::Move {
+                paths,
+                to,
+                cross_device_copy,
+            } => {
+                copy_or_move(
+                    paths,
+                    to,
+                    Method::Move { cross_device_copy },
+                    msg_tx,
+                    controller,
+                )
+                .await
+            }
             Self::NewFolder { path } => compio::runtime::spawn(async move {
                 controller.check().await.map_err(OperationError::from_str)?;
                 compio::fs::create_dir(&path)

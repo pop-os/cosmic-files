@@ -2263,7 +2263,7 @@ impl Application for App {
             Message::Cut(entity_opt) => {
                 self.set_cut(entity_opt);
                 let paths = self.selected_paths(entity_opt);
-                let contents = ClipboardCopy::new(ClipboardKind::Cut, &paths);
+                let contents = ClipboardCopy::new(ClipboardKind::Cut { is_dnd: false }, &paths);
                 return clipboard::write_data(contents);
             }
             Message::CloseToast(id) => {
@@ -3010,9 +3010,10 @@ impl Application for App {
                             paths: contents.paths,
                             to,
                         }),
-                        ClipboardKind::Cut => self.operation(Operation::Move {
+                        ClipboardKind::Cut { is_dnd } => self.operation(Operation::Move {
                             paths: contents.paths,
                             to,
+                            cross_device_copy: is_dnd,
                         }),
                     };
                 }
@@ -3060,7 +3061,10 @@ impl Application for App {
                         if self.update_favorites(&[(from.clone(), to.clone())]) {
                             commands.push(self.update_config());
                         }
-                    } else if let Operation::Move { ref paths, ref to } = op {
+                    } else if let Operation::Move {
+                        ref paths, ref to, ..
+                    } = op
+                    {
                         let path_changes: Vec<_> = paths
                             .iter()
                             .filter_map(|from| {
@@ -3527,7 +3531,7 @@ impl Application for App {
                             cosmic::action::app(Message::CutPaths(match p {
                                 Some(s) => match s.kind {
                                     ClipboardKind::Copy => Vec::new(),
-                                    ClipboardKind::Cut => s.paths,
+                                    ClipboardKind::Cut { .. } => s.paths,
                                 },
                                 None => Vec::new(),
                             }))
@@ -3712,7 +3716,7 @@ impl Application for App {
                 self.nav_dnd_hover = None;
                 if let Some((location, data)) = self.nav_model.data::<Location>(entity).zip(data) {
                     let kind = match action {
-                        DndAction::Move => ClipboardKind::Cut,
+                        DndAction::Move => ClipboardKind::Cut { is_dnd: true },
                         _ => ClipboardKind::Copy,
                     };
                     let ret = match location {
@@ -3772,7 +3776,7 @@ impl Application for App {
                 self.nav_dnd_hover = None;
                 if let Some((tab, data)) = self.tab_model.data::<Tab>(entity).zip(data) {
                     let kind = match action {
-                        DndAction::Move => ClipboardKind::Cut,
+                        DndAction::Move => ClipboardKind::Cut { is_dnd: true },
                         _ => ClipboardKind::Copy,
                     };
                     let ret = match &tab.location {

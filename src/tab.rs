@@ -3425,7 +3425,7 @@ impl Tab {
                         }
                         commands.push(Command::DropFiles(to, from))
                     }
-                    Location::Trash if matches!(from.kind, ClipboardKind::Cut) => {
+                    Location::Trash if matches!(from.kind, ClipboardKind::Cut { .. }) => {
                         commands.push(Command::Delete(from.paths))
                     }
                     _ => {
@@ -3676,7 +3676,7 @@ impl Tab {
                     if action == DndAction::Copy {
                         Message::Drop(Some((location1.clone(), data)))
                     } else if action == DndAction::Move {
-                        data.kind = ClipboardKind::Cut;
+                        data.kind = ClipboardKind::Cut { is_dnd: true };
                         Message::Drop(Some((location1.clone(), data)))
                     } else {
                         log::warn!("unsupported action: {:?}", action);
@@ -5009,7 +5009,7 @@ impl Tab {
                 if action == DndAction::Copy {
                     Message::Drop(Some((tab_location.clone(), data)))
                 } else if action == DndAction::Move {
-                    data.kind = ClipboardKind::Cut;
+                    data.kind = ClipboardKind::Cut { is_dnd: true };
                     Message::Drop(Some((tab_location.clone(), data)))
                 } else {
                     log::warn!("unsupported action: {:?}", action);
