@@ -19,6 +19,7 @@ mounted-drives = 已挂载驱动器
 trash-folder-icon = 回收站图标
 icon-size-and-spacing = 图标大小与间距
 icon-size = 图标大小
+grid-spacing = 网格间距
 
 # List view
 name = 名称
@@ -38,6 +39,11 @@ resume = 恢复
 
 ## Compress Dialog
 create-archive = 创建压缩包
+
+## Extract Dialog
+extract-password-required = 需要密码
+extract-to = 提取到...
+extract-to-title = 提取到文件夹
 
 ## Empty Trash Dialog
 empty-trash = 清空回收站
@@ -74,6 +80,17 @@ save-file = 保存文件
 ## Open With Dialog
 open-with-title = 您想要如何打开 “{$name}”？
 browse-store = 浏览 {$store}
+other-apps = 其他应用程序
+related-apps = 相关应用程序
+
+## Permanently delete Dialog
+selected-items = 选中的 {$items} 个项目
+permanently-delete-question = 永久删除
+delete = 删除
+permanently-delete-warning = 确定要永久删除 {$target} ? {$nb_items ->
+        [one] 它
+        *[other] 它们
+    } 之后将无法恢复。
 
 ## Rename Dialog
 rename-file = 重命名文件
@@ -96,12 +113,36 @@ set-executable-and-launch-description = 您想要将 “{$name}” 设置为可�
 set-and-launch = 设置并启动
 
 ## Metadata Dialog
+open-with = 打开方式
 owner = 所有者
 group = 用户组
 other = 其他用户
-read = 读取
-write = 写入
-execute = 执行
+### Mode 0
+none = 无
+### Mode 1 (unusual)
+execute-only = 只执行
+### Mode 2 (unusual)
+write-only = 只写入
+### Mode 3 (unusual)
+write-execute = 写入和执行
+### Mode 4
+read-only = 只读
+### Mode 5
+read-execute = 读取和执行
+### Mode 6
+read-write = 读取和写入
+### Mode 7
+read-write-execute = 读取、写入和执行
+
+## Favorite Path Error Dialog
+favorite-path-error = 打开目录时出错
+favorite-path-error-description =
+    无法打开 "{$path}" 。
+    可能不存在或您没有权限打开它。
+    
+    您想要从侧边栏中移除它吗？
+remove = 移除
+keep = 保留
 
 # Context Pages
 
@@ -144,25 +185,71 @@ progress-cancelled = {$percent}%, 已取消
 progress-paused = {$percent}%, 已暂停
 failed = 失败
 complete = 完成
-compressing = 正在将 {$items} 个项目从 “{$from}” 压缩到 “{$to}” （{$progress}）...
-compressed = 已将 {$items} 个项目从 “{$from}” 压缩到 “{$to}” （{$progress}）
+compressing = 正在压缩 {$items} {$items ->
+        [one] 项目
+        *[other] 项目
+    } 从 "{$from}" 到 "{$to}" ({$progress})...
+compressed = 已压缩 {$items} {$items ->
+        [one] 项目
+        *[other] 项目
+    } 从 "{$from}" 到 "{$to}"
 copy_noun = 复制
-creating = 正在 “{$name}” 中创建 “{$parent}”
-created = 已在 “{$name}” 中创建 “{$parent}”
-copying = 正在将 {$items} 个项目从 “{$from}” 复制到 “{$to}” （{$progress}）...
-copied = 已将 {$items} 个项目从 “{$from}” 复制到 “{$to}”
-emptying-trash = 正在清空 {trash} （{$progress}）...
+creating = 正在创建 "{$name}" 在 "{$parent}"
+created = 已创建 "{$name}" 在 "{$parent}"
+copying = 正在复制 {$items} {$items ->
+        [one] 项目
+        *[other] 项目
+    } 从 "{$from}" 到 "{$to}" ({$progress})...
+copied = 已复制 {$items} {$items ->
+        [one] 项目
+        *[other] 项目
+    } 从 "{$from}" 到 "{$to}"
+deleting = 正在删除 {$items} {$items ->
+        [one] 项目
+        *[other] 项目
+    } 从 {trash} ({$progress})...
+deleted = 已删除 {$items} {$items ->
+        [one] 项目
+        *[other] 项目
+    } 从 {trash}
+emptying-trash = 正在清空 {trash} ({$progress})...
 emptied-trash = 已清空 {trash}
-extracting = 正在将 {$items} 个项目从 “{$from}” 提取到 “{$to}” （{$progress}）...
-extracted = 已将 {$items} 个项目从 “{$from}” 提取到 “{$to}”
-setting-executable-and-launching = 正在将 “{$name}” 设置为可执行文件并启动
-set-executable-and-launched = 已将 “{$name}” 设置为可执行文件并启动
-moving = 正在将 {$items} 个项目从 “{$from}” 移动到 “{$to}” （{$progress}）...
-moved = 已将 {$items} 个项目从 “{$from}” 移动到 “{$to}”
-renaming = 正在将 “{$from}” 重命名为 “{$to}”
-renamed = 已将 “{$from}” 重命名为 “{$to}”
-restoring = 正在从 {trash} 还原 {$items} 个项目 （{$progress}）...
-restored = 已从 {trash} 还原 {$items} 个项目
+extracting = 正在提取 {$items} {$items ->
+        [one] 项目
+        *[other] 项目
+    } 从 "{$from}" 到 "{$to}" ({$progress})...
+extracted = 已提取 {$items} {$items ->
+        [one] 项目
+        *[other] 项目
+    } 从 "{$from}" 到 "{$to}"
+setting-executable-and-launching = 设置 "{$name}" 为可执行文件并启动
+set-executable-and-launched = 设置 "{$name}" 为可执行文件并启动
+moving = 正在移动 {$items} {$items ->
+        [one] 项目
+        *[other] 项目
+    } 从 "{$from}" 到 "{$to}" ({$progress})...
+moved = 已移动 {$items} {$items ->
+        [one] 项目
+        *[other] 项目
+    } 从 "{$from}" 到 "{$to}"
+permanently-deleting = 正在永久删除 "{$items}" "{$items ->
+        [one] 项目
+        *[other] 项目
+    }"
+permanently-deleted = 已永久删除 "{$items}" "{$items ->
+        [one] 项目
+        *[other] 项目
+    }"
+renaming = 正在重命名 "{$from}" 到 "{$to}"
+renamed = 已重命名 "{$from}" 到 "{$to}"
+restoring = 正在还原 {$items} {$items ->
+        [one] 项目
+        *[other] 项目
+    } 从 {trash} ({$progress})...
+restored = 已还原 {$items} {$items ->
+        [one] 项目
+        *[other] 项目
+    } 从 {trash}
 unknown-folder = 未知文件夹
 
 ## Open with
@@ -181,17 +268,24 @@ calculating = 计算中...
 
 ## Settings
 settings = 设置
+single-click = 单击打开
 
 ### Appearance
 appearance = 外观
 theme = 主题
 match-desktop = 与桌面保持一致
 dark = 深色模式
-light = 亮色模式
+light = 浅色模式
+
+### Type to Search
+type-to-search = 搜索
+type-to-search-recursive = 搜索当前文件夹及其所有子文件夹
+type-to-search-enter-path = 输入目录或文件的路径
 
 # Context menu
 add-to-sidebar = 加入侧边栏
 compress = 压缩
+delete-permanently = 永久删除
 extract-here = 解压到此处
 new-file = 新建文件...
 new-folder = 新建文件夹...
