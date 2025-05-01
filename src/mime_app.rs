@@ -258,7 +258,7 @@ impl MimeAppCache {
 
         // Load desktop applications by supported mime types
         //TODO: hashmap for all apps by id?
-        let mut all_apps = desktop::load_applications(locale, false);
+        let mut all_apps = desktop::load_applications(locale, false, None);
         for app in &mut all_apps {
             //TODO: just collect apps that can be executed with a file argument?
             if !app.mime_types.is_empty() {

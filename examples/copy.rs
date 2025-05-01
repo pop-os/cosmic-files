@@ -1,6 +1,6 @@
+use cosmic_files::operation::recursive::Method;
 use cosmic_files::operation::{recursive::Context, Controller, ReplaceResult};
 use std::{error::Error, io, path::PathBuf};
-use cosmic_files::operation::recursive::Method;
 
 #[compio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -37,7 +37,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     context
         .recursive_copy_or_move(
             vec![(PathBuf::from("test/b"), PathBuf::from("test/c"))],
-            Method::Move { cross_device_copy: false },
+            Method::Move {
+                cross_device_copy: false,
+            },
         )
         .await?;
 
