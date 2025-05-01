@@ -275,7 +275,7 @@ appearance = 外观
 theme = 主题
 match-desktop = 与桌面保持一致
 dark = 深色模式
-light = 浅色模式
+light = 亮色模式
 
 ### Type to Search
 type-to-search = 搜索
