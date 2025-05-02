@@ -68,7 +68,6 @@ recently-used-xbel = "1.1.0"
 zip = "2.2.2"
 unix_permissions_ext = "0.1.2"
 uzers = "0.12.1"
-io-uring = { version = "0.7.4", features = ["bindgen"], optional = true }
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
@@ -82,7 +81,6 @@ default = [
     "dbus-config",
     "desktop",
     "gvfs",
-    "io-uring",
     "notify",
     "wgpu",
     "xz2",
@@ -118,9 +116,6 @@ tokio = { version = "1", features = ["rt", "macros"] }
 [patch.crates-io]
 # https://github.com/smol-rs/polling/pull/235
 polling = { git = "https://github.com/jackpot51/polling.git", branch = "master" }
-# Fixes building on ppc64le, s390x
-# https://github.com/tokio-rs/io-uring/issues/321#issuecomment-2831832546
-io-uring = { git = "https://github.com/tokio-rs/io-uring.git", rev = "2c9010a3316519e02444f41e536623099af58a84" }
 
 # [patch.'https://github.com/pop-os/cosmic-text']
 # cosmic-text = { path = "../cosmic-text" }
