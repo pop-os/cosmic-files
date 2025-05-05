@@ -5,7 +5,7 @@ no-results = Geen resultaten gevonden
 filesystem = Bestandssysteem
 home = Gebruikersmap (/home)
 networks = Netwerk
-notification-in-progress = Er worden bestandsbewerkingen uitgevoerd.
+notification-in-progress = Sommige bestanden worden nog bewerkt.
 trash = Prullenbak
 recents = Recente bestanden
 undo = Ongedaan maken
@@ -30,8 +30,8 @@ size = Grootte
 # Progress footer
 details = Details
 dismiss = Bericht negeren
-operations-running = {$running} bewerkingen worden uitgevoerd ({$percent}%)...
-operations-running-finished = {$running} bewerkingen worden uitgevoerd ({$percent}%), {$finished} voltooid...
+operations-running = {$running} bewerkingen uitvoeren ({$percent}%)...
+operations-running-finished = {$running} bewerkingen uitvoeren ({$percent}%), {$finished} voltooid...
 pause = Pauzeren
 resume = Hervatten
 
@@ -105,9 +105,9 @@ keep-both = Beide behouden
 skip = Overslaan
 
 ## Set as Executable and Launch Dialog
-set-executable-and-launch = Als uitvoerbaar instellen en starten
-set-executable-and-launch-description = Wilt u '{$name}' als uitvoerbaar instellen en dan starten?
-set-and-launch = Instellen en starten
+set-executable-and-launch = Uitvoerbaar maken en dan starten
+set-executable-and-launch-description = Wilt u '{$name}' uitvoerbaar maken en dan starten?
+set-and-launch = Uitvoerbaar & Start
 
 ## Metadata Dialog
 open-with = Openen met
@@ -137,7 +137,7 @@ favorite-path-error-description =
     Kon de map '{$path}' niet openen.
     De map bestaat mogelijk niet of u heeft geen toestemming om die te openen.
 
-    Wilt u de map uit de favorieten verwijderen
+    Wilt u de map uit de favorieten verwijderen?
 remove = Verwijderen
 keep = Behouden
 
@@ -182,10 +182,10 @@ progress-cancelled = {$percent}%, geannuleerd
 progress-paused = {$percent}%, gepauzeerd
 failed = Mislukt
 complete = Voltooid
-compressing = { $items}  {$items -> 
-        [one] bestand wordt
-        *[other] bestanden worden
-    } van '{$from}' naar '{$to}' gecomprimeerd ({$progress})...
+compressing = {$items}  {$items -> 
+        [one] bestand
+        *[other] bestanden
+    } van '{$from}' naar '{$to}' comprimeren ({$progress})...
 compressed = { $items}  {$items -> 
         [one] bestand
         *[other] bestanden
@@ -194,45 +194,45 @@ copy_noun = Kopie
 creating = '{$name}' in '{$parent}' aanmaken
 created = '{$name}' in '{$parent}' aangemaakt
 copying = {$items} {$items ->
-        [one] bestand wordt
-        *[other] bestanden worden
-    } van '{$from}' naar '{$to}' gekopieerd ({$progress})...
+        [one] bestand
+        *[other] bestanden
+    } van '{$from}' naar '{$to}' kopiëren ({$progress})...
 copied = {$items} {$items ->
         [one] bestand
         *[other] bestanden
     } gekopieerd van '$from}' naar '{$to}'
 deleting = {$items} {$items ->
-        [one] bestand wordt
-        *[other] bestanden worden
-    } verwijderd uit {trash} ({$progress})...
+        [one] bestand
+        *[other] bestanden
+    } uit {trash} verwijderen ({$progress})...
 deleted = {$items} {$items ->
         [one] bestand
         *[other] bestanden
-    } verwijderd uit {trash}
-emptying-trash = {trash} wordt geleegd ({$progress})...
-emptied-trash = {trash} geleegd
+    } verwijderd uit {trash} 
+emptying-trash = {trash} recyclen ({$progress})...
+emptied-trash = {trash} gerecycled
 extracting = {$items} {$items -> 
-        [one] bestand wordt
-        *[other] bestanden worden
-    } van '{$from}' naar '{$to}' uitgepakt ({$progress})...
+        [one] bestand
+        *[other] bestanden
+    } van '{$from}' naar '{$to}' uitpakken ({$progress})...
 extracted = {$items} {$items ->
         [one] bestand
         *[other] bestanden
     } uitgepakt van '{$from}' naar '{$to}'
-setting-executable-and-launching = '{$name}' wordt uitvoerbaar gemaakt en geopend
-set-executable-and-launched = '{$name}' uitvoerbaar maken en openen
+setting-executable-and-launching = {$name}' uitvoerbaar maken en starten
+set-executable-and-launched = '{$name}' uitvoerbaar gemaakt en gestart
 moving = {$items} {$items ->
-        [one] bestand wordt
-        *[other] bestanden worden
-    } van '{$from}' naar '{$to}' verplaatst ({$progress})...
+        [one] bestand
+        *[other] bestanden
+    } van '{$from}' naar '{$to}' verplaatsen ({$progress})...
 moved = {$items} {$items ->
         [one] bestand
         *[other] bestanden
     } verplaatst van '{$from}' naar '{$to}'
 permanently-deleting = {$items} {$items ->
-        [one] bestand wordt
-        *[other] bestanden worden 
-    } premanent verwijderd
+        [one] bestand
+        *[other] bestanden
+    } premanent verwijderen
 permanently-deleted = {$items} {$items ->
         [one] bestand
         *[other] bestanden
@@ -240,9 +240,9 @@ permanently-deleted = {$items} {$items ->
 renaming = '{$from}' als '{$to}' hernoemen
 renamed = '{$from}' als '{$to}' hernoemd
 restoring = {$items} {$items ->
-        [one] bestand wordt
-        *[other] bestanden worden
-    } uit {trash} teruggezet ({$progress})...
+        [one] bestand
+        *[other] bestanden
+    } uit {trash} terugzetten ({$progress})...
 restored = {$items} {$items ->
         [one] bestand
         *[other] bestanden
@@ -280,7 +280,7 @@ type-to-search-recursive = In deze map en alle onderliggende mappen zoeken
 type-to-search-enter-path = Naar de bestandslocatie of -naam zoeken
 
 # Context menu
-add-to-sidebar = Aan de zijbalk toevoegen
+add-to-sidebar = Favoriet aan zijbalk toevoegen
 compress = Comprimeren
 delete-permanently = Permanent verwijderen
 extract-here = Uitpakken
@@ -289,7 +289,7 @@ new-folder = Nieuwe map...
 open-in-terminal = Openen in terminal
 move-to-trash = Naar prullenbak verplaatsen
 restore-from-trash = Uit prullenbak terugzetten
-remove-from-sidebar = Uit de zijbalk verwijderen
+remove-from-sidebar = Favoriet uit zijbalk verwijderen
 sort-by-name = Sorteren op naam
 sort-by-modified = Sorteren op laatst bewerkt
 sort-by-size = Sorteren op grootte
