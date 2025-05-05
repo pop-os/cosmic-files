@@ -87,10 +87,7 @@ related-apps = Related applications
 selected-items = the {$items} selected items
 permanently-delete-question = Permanently delete
 delete = Delete
-permanently-delete-warning = Do you want to permanently delete {$target}? {$nb_items ->
-        [one] It
-        *[other] They
-    } cannot be restored afterwards.
+permanently-delete-warning = Do you want to permanently delete {$target}? This cannot be undone.
 
 ## Rename Dialog
 rename-file = Rename file
