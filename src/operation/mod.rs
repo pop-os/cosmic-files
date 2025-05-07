@@ -1029,7 +1029,10 @@ impl Operation {
                                         _ => OperationError::from_str(e),
                                     })?,
                                 #[cfg(feature = "bzip2")]
-                                "application/x-bzip" | "application/x-bzip-compressed-tar" => {
+                                "application/x-bzip"
+                                | "application/x-bzip-compressed-tar"
+                                | "application/x-bzip2"
+                                | "application/x-bzip2-compressed-tar" => {
                                     OpReader::new(path, controller)
                                         .map(io::BufReader::new)
                                         .map(bzip2::read::BzDecoder::new)

@@ -194,6 +194,10 @@ pub fn context_menu<'a>(
                     "application/x-bzip",
                     #[cfg(feature = "bzip2")]
                     "application/x-bzip-compressed-tar",
+                    #[cfg(feature = "bzip2")]
+                    "application/x-bzip2",
+                    #[cfg(feature = "bzip2")]
+                    "application/x-bzip2-compressed-tar",
                     #[cfg(feature = "xz2")]
                     "application/x-xz",
                     #[cfg(feature = "xz2")]
