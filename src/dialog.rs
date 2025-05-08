@@ -13,11 +13,12 @@ use cosmic::{
         keyboard::{Event as KeyEvent, Key, Modifiers},
         stream, window,
     },
+    iced_core::widget::operation,
     theme,
     widget::{
         self,
-        menu::{Action as MenuAction, KeyBind, key_bind::Modifier},
-        segmented_button,
+        menu::{key_bind::Modifier, Action as MenuAction, KeyBind},
+        segmented_button, Operation,
     },
 };
 use notify_debouncer_full::{
@@ -1269,6 +1270,14 @@ impl Application for App {
                 return widget::button::focus(widget::Id::unique());
             }
             return Task::none();
+        }
+
+        // Close the dialog if the focused widget is the dialog's main text input instead of
+        // unfocussing the widget.
+        if let operation::Outcome::Some(focused) = operation::focusable::find_focused().finish() {
+            if self.dialog_text_input == focused {
+                return self.update(Message::Cancel);
+            }
         }
 
         self.update(Message::Cancel)
