@@ -4696,7 +4696,6 @@ impl Application for App {
                     )
                     .control(widget::text(fl!(
                         "permanently-delete-warning",
-                        nb_items = paths.len(),
                         target = target
                     )))
             }
