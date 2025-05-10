@@ -81,8 +81,8 @@ keep-both = Behåll båda
 skip = Hoppa över
 
 ## Ställ in som körbar och starta dialogruta
-set-executable-and-launch = Ställ in som körbar och starta
-set-executable-and-launch-description = Vill du ställa in "{$name}" som körbar och starta den?
+set-executable-and-launch = Gör körbar och starta
+set-executable-and-launch-description = Vill du göra "{$name}" körbar och starta den?
 set-and-launch = Ställ in och starta
 
 ## Metadata dialogruta
@@ -122,19 +122,19 @@ connect = Anslut
 connect-anonymously = Anslut anonymt
 connecting = Ansluter...
 domain = Domän
-enter-server-address = Ange server address
+enter-server-address = Ange serveradress
 try-again = Försök igen
 username = Användarnamn
 network-drive-description =
-    Serveradresser inkluderar ett protokollprefix och en adress.
+    Serveradresser består av ett protokollprefix och en adress.
  Exempel: ssh://192.168.0.1, ftp://[2001:db8::1]
 ### Se till att behålla kommatecken som skiljer kolumnerna åt
 network-drive-schemes =
     Tillgängliga protokoll, Prefix
     AppleTalk,afp://
-    Filöverföringsprotokoll,ftp:// eller ftps://
-    Nätverksfilsystem,nfs://
-    Servermeddelandeblock,smb://
+    File Transfer Protocol,ftp:// eller ftps://
+    Network File System (NFS),nfs://
+    Server Message Block (SMB),smb://
    SSH-filöverföringsprotokoll,sftp:// eller ssh://
     WebDav,dav:// eller davs://
 network-drive-error = Kan inte komma åt nätverksenheten
@@ -181,8 +181,8 @@ extracted = Packade upp {$items} {$items ->
         [one] objekt
         *[other] flera objekt
     } från "{$from}" till "{$to}"
-setting-executable-and-launching = Ställer in "{$name}" som exekverbar och startar
-set-executable-and-launched = Ställ in "{$name}" som exekverbar och startar
+setting-executable-and-launching = Gör "{$name}" körbar och startar
+set-executable-and-launched = Gör "{$name}" körbar och startar
 moving = Flyttar {$items} {$items ->
         [one] objekt
         *[other] flera objekt
@@ -222,7 +222,7 @@ properties = Egenskaper
 
 ## Inställningar
 settings = Inställningar
-single-click = Ett enkel klick för att öppna
+single-click = Ett enkelklick för att öppna
 
 ### Utseende
 appearance = Utseende
@@ -247,7 +247,7 @@ move-to-trash = Flytta till papperskorg
 restore-from-trash = Återställ från papperskorgen
 remove-from-sidebar = Ta bort från sidofält
 sort-by-name = Sortera efter namn
-sort-by-modified = Sortera efter modifierad
+sort-by-modified = Sortera efter senast ändrad
 sort-by-size = Sortera efter storlek
 sort-by-trashed = Sortera efter borttagningstid
 
