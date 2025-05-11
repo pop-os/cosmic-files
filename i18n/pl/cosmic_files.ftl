@@ -81,6 +81,14 @@ save-file = Zapisz plik
 ## Open With Dialog
 open-with-title = Czym chcesz otworzyć „{$name}”?
 browse-store = Przeglądaj {$store}
+other-apps = Inne aplikacje
+related-apps = Pokrewne aplikacje
+
+## Permanently delete Dialog
+selected-items =  {$items} zaznaczonych elementów
+permanently-delete-question = Usuń definitywnie
+delete = Usuń
+permanently-delete-warning = Jesteś pewien, że chcesz definitywnie usunąć {$target}? Nie można tego cofnąć.
 
 # Rename Dialog
 rename-file = Zmień nazwę pliku
@@ -226,6 +234,15 @@ moved = Przeniesiono {$items} {$items ->
         [few] elementy
         *[other] elementów
     } z „{$from}” do „{$to}”
+permanently-deleting = Definitywne usuwanie "{$items}" "{$items ->
+        [one] elementu
+        *[other] elementów
+    }"
+permanently-deleted = Definitywnie usunięto "{$items}" "{$items ->
+        [one] element
+        [few] elementy
+        *[other] elementów
+    }"
 renaming = Zmieniana nazwa {$from} na {$to}
 renamed = Zmieniono nazwę {$from} na {$to}
 restoring = Przywracanie {$items} {$items ->
