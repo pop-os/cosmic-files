@@ -532,7 +532,7 @@ pub enum FsKind {
 }
 
 #[cfg(target_os = "linux")]
-fn fs_kind(metadata: &Metadata) -> FsKind {
+pub fn fs_kind(metadata: &Metadata) -> FsKind {
     //TODO: method to reload remote filesystems dynamically
     //TODO: fix for https://github.com/eminence/procfs/issues/262
     static DEVICES: Lazy<HashMap<u64, FsKind>> = Lazy::new(|| {
@@ -579,7 +579,7 @@ fn fs_kind(metadata: &Metadata) -> FsKind {
 }
 
 #[cfg(not(target_os = "linux"))]
-fn fs_kind(_metadata: &Metadata) -> FsKind {
+pub fn fs_kind(_metadata: &Metadata) -> FsKind {
     //TODO: support BSD, macOS, Windows?
     FsKind::Local
 }

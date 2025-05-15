@@ -910,6 +910,44 @@ impl App {
         self.open_tab_entity(location, activate, selection_paths).1
     }
 
+    // This wrapper ensures that local folders use trash and remote folders permanently delete with a dialog
+    #[must_use]
+    fn delete(&mut self, paths: Vec<PathBuf>) -> Task<Message> {
+        let mut dialog_paths = Vec::new();
+        let mut trash_paths = Vec::new();
+
+        for path in paths {
+            //TODO: is there a smarter way to check this? (like checking for trash folders)
+            let can_trash = match path.metadata() {
+                Ok(metadata) => match tab::fs_kind(&metadata) {
+                    tab::FsKind::Local => true,
+                    _ => false,
+                },
+                Err(err) => {
+                    log::warn!("failed to get metadata for {:?}: {}", path, err);
+                    false
+                }
+            };
+            if can_trash {
+                trash_paths.push(path);
+            } else {
+                dialog_paths.push(path);
+            }
+        }
+
+        if !dialog_paths.is_empty() {
+            self.dialog_pages.push_back(DialogPage::PermanentlyDelete {
+                paths: dialog_paths,
+            });
+        }
+
+        if !trash_paths.is_empty() {
+            self.operation(Operation::Delete { paths: trash_paths })
+        } else {
+            Task::none()
+        }
+    }
+
     #[must_use]
     fn operation(&mut self, operation: Operation) -> Task<Message> {
         let id = self.pending_operation_id;
@@ -2304,9 +2342,9 @@ impl Application for App {
                             }
                         }
                         _ => {
-                            let paths = dbg!(self.selected_paths(entity_opt));
+                            let paths = self.selected_paths(entity_opt);
                             if !paths.is_empty() {
-                                return self.operation(Operation::Delete { paths });
+                                return self.delete(paths);
                             }
                         }
                     }
@@ -3458,9 +3496,7 @@ impl Application for App {
                                 self.update_tab(entity, tab_path, selection_paths),
                             ]));
                         }
-                        tab::Command::Delete(paths) => {
-                            commands.push(self.operation(Operation::Delete { paths }))
-                        }
+                        tab::Command::Delete(paths) => commands.push(self.delete(paths)),
                         tab::Command::DropFiles(to, from) => {
                             commands.push(self.update(Message::PasteContents(to, from)));
                         }
@@ -3741,7 +3777,7 @@ impl Application for App {
                             },
                         )),
                         Location::Trash if matches!(action, DndAction::Move) => {
-                            self.operation(Operation::Delete { paths: data.paths })
+                            self.delete(data.paths)
                         }
                         _ => {
                             log::warn!("Copy to trash is not supported.");
@@ -3801,7 +3837,7 @@ impl Application for App {
                             },
                         )),
                         Location::Trash if matches!(action, DndAction::Move) => {
-                            self.operation(Operation::Delete { paths: data.paths })
+                            self.delete(data.paths)
                         }
                         _ => {
                             log::warn!("Copy to trash is not supported.");
