@@ -524,11 +524,18 @@ fn hidden_attribute(metadata: &Metadata) -> bool {
     metadata.file_attributes() & FILE_ATTRIBUTE_HIDDEN == FILE_ATTRIBUTE_HIDDEN
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum FsKind {
+    Local,
+    Remote,
+    Gvfs,
+}
+
 #[cfg(target_os = "linux")]
-fn remote_fs(metadata: &Metadata) -> bool {
+fn fs_kind(metadata: &Metadata) -> FsKind {
     //TODO: method to reload remote filesystems dynamically
     //TODO: fix for https://github.com/eminence/procfs/issues/262
-    static DEVICES: Lazy<HashMap<u64, bool>> = Lazy::new(|| {
+    static DEVICES: Lazy<HashMap<u64, FsKind>> = Lazy::new(|| {
         let mut devices = HashMap::new();
         match procfs::process::Process::myself() {
             Ok(process) => match process.mountinfo() {
@@ -549,19 +556,13 @@ fn remote_fs(metadata: &Metadata) -> bool {
                         };
                         let dev = libc::makedev(major, minor);
                         //TODO: make sure this list is exhaustive
-                        let remote = [
-                            "cifs",
-                            //TODO: check with GVFS?
-                            "fuse.gvfsd-fuse",
-                            "fuse.rclone",
-                            "fuse.sshfs",
-                            "nfs",
-                            "nfs4",
-                            "smb",
-                            "smb2",
-                        ]
-                        .contains(&mount_info.fs_type.as_str());
-                        devices.insert(dev, remote);
+                        let kind = match mount_info.fs_type.as_str() {
+                            "cifs" | "fuse.rclone" | "fuse.sshfs" | "nfs" | "nfs4" | "smb"
+                            | "smb2" => FsKind::Remote,
+                            "fuse.gvfsd-fuse" => FsKind::Gvfs,
+                            _ => FsKind::Local,
+                        };
+                        devices.insert(dev, kind);
                     }
                 }
                 Err(err) => {
@@ -574,13 +575,13 @@ fn remote_fs(metadata: &Metadata) -> bool {
         }
         devices
     });
-    DEVICES.get(&metadata.dev()).map_or(false, |x| *x)
+    DEVICES.get(&metadata.dev()).map_or(FsKind::Local, |x| *x)
 }
 
 #[cfg(not(target_os = "linux"))]
-fn remote_fs(_metadata: &Metadata) -> bool {
+fn fs_kind(_metadata: &Metadata) -> FsKind {
     //TODO: support BSD, macOS, Windows?
-    false
+    FsKind::Local
 }
 
 pub fn parse_desktop_file(path: &Path) -> (Option<String>, Option<String>) {
@@ -613,7 +614,47 @@ pub fn item_from_entry(
 
     let hidden = name.starts_with(".") || hidden_attribute(&metadata);
 
-    let remote = remote_fs(&metadata);
+    let remote = match fs_kind(&metadata) {
+        FsKind::Local => false,
+        FsKind::Remote => true,
+        #[cfg(feature = "gvfs")]
+        FsKind::Gvfs => {
+            let file = gio::File::for_path(&path);
+            match gio::prelude::FileExt::query_info(
+                &file,
+                gio::FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME,
+                gio::FileQueryInfoFlags::NONE,
+                gio::Cancellable::NONE,
+            ) {
+                Ok(info) => {
+                    display_name = Item::display_name(&info.display_name());
+                }
+                Err(err) => {
+                    log::warn!("failed to get GIO info for {:?}: {}", path, err);
+                }
+            }
+
+            match gio::prelude::FileExt::query_filesystem_info(
+                &file,
+                gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE,
+                gio::Cancellable::NONE,
+            ) {
+                Ok(info) => info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE),
+                Err(err) => {
+                    log::warn!("failed to get GIO filesystem info for {:?}: {}", path, err);
+                    true
+                }
+            }
+        }
+        #[cfg(not(feature = "gvfs"))]
+        FsKind::Gvfs => {
+            log::info!(
+                "gvfs feature not enabled, info may be inaccurate for {:?}",
+                path
+            );
+            true
+        }
+    };
 
     let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) =
         if metadata.is_dir() {
@@ -1198,6 +1239,20 @@ impl Location {
         }
     }
 
+    pub fn ancestors(&self) -> Vec<(Location, String)> {
+        let mut ancestors = Vec::new();
+        if let Some(path) = self.path_opt() {
+            for ancestor in path.ancestors() {
+                let (name, found_home) = folder_name(ancestor);
+                ancestors.push((self.with_path(ancestor.to_path_buf()), name));
+                if found_home {
+                    break;
+                }
+            }
+        }
+        ancestors
+    }
+
     pub fn path_opt(&self) -> Option<&PathBuf> {
         match self {
             Self::Desktop(path, ..) => Some(path),
@@ -1246,6 +1301,31 @@ impl Location {
             None => None,
         };
         (parent_item_opt, items)
+    }
+
+    pub fn title(&self) -> String {
+        match self {
+            Self::Desktop(path, _, _) => {
+                let (name, _) = folder_name(path);
+                name
+            }
+            Self::Path(path) => {
+                let (name, _) = folder_name(path);
+                name
+            }
+            Self::Search(path, term, ..) => {
+                //TODO: translate
+                let (name, _) = folder_name(path);
+                format!("Search \"{}\": {}", term, name)
+            }
+            Self::Trash => {
+                fl!("trash")
+            }
+            Self::Recents => {
+                fl!("recents")
+            }
+            Self::Network(_uri, display_name) => display_name.clone(),
+        }
     }
 }
 
@@ -1946,6 +2026,8 @@ impl fmt::Debug for SearchContextWrapper {
 pub struct Tab {
     //TODO: make more items private
     pub location: Location,
+    pub location_ancestors: Vec<(Location, String)>,
+    pub location_title: String,
     pub location_context_menu_point: Option<Point>,
     pub location_context_menu_index: Option<usize>,
     pub context_menu: Option<Point>,
@@ -2011,7 +2093,11 @@ fn folder_name<P: AsRef<Path>>(path: P) -> (String, bool) {
                 found_home = true;
                 fl!("home")
             } else {
-                name.to_string_lossy().to_string()
+                // This is not optimized but it helps ensure the same display names
+                match item_from_path(path, IconSizes::default()) {
+                    Ok(item) => item.display_name,
+                    Err(_err) => name.to_string_lossy().to_string(),
+                }
             }
         }
         None => {
@@ -2040,9 +2126,14 @@ fn parse_hidden_file(path: &PathBuf) -> Vec<String> {
 
 impl Tab {
     pub fn new(location: Location, config: TabConfig) -> Self {
+        let location = location.normalize();
+        let location_ancestors = location.ancestors();
+        let location_title = location.title();
         let history = vec![location.clone()];
         Self {
-            location: location.normalize(),
+            location,
+            location_ancestors,
+            location_title,
             context_menu: None,
             location_context_menu_point: None,
             location_context_menu_index: None,
@@ -2081,28 +2172,8 @@ impl Tab {
     }
 
     pub fn title(&self) -> String {
-        match &self.location {
-            Location::Desktop(path, _, _) => {
-                let (name, _) = folder_name(path);
-                name
-            }
-            Location::Path(path) => {
-                let (name, _) = folder_name(path);
-                name
-            }
-            Location::Search(path, term, ..) => {
-                //TODO: translate
-                let (name, _) = folder_name(path);
-                format!("Search \"{}\": {}", term, name)
-            }
-            Location::Trash => {
-                fl!("trash")
-            }
-            Location::Recents => {
-                fl!("recents")
-            }
-            Location::Network(_uri, display_name) => display_name.clone(),
-        }
+        //TODO: is it possible to return a &str?
+        self.location_title.clone()
     }
 
     pub fn items_opt(&self) -> Option<&Vec<Item>> {
@@ -2395,6 +2466,8 @@ impl Tab {
 
     pub fn change_location(&mut self, location: &Location, history_i_opt: Option<usize>) {
         self.location = location.normalize();
+        self.location_ancestors = self.location.ancestors();
+        self.location_title = self.location.title();
         self.context_menu = None;
         self.edit_location = None;
         self.items_opt = None;
