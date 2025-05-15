@@ -1198,7 +1198,7 @@ impl Operation {
             }
         };
 
-        controller_clone.set_progress(100.0);
+        controller_clone.set_progress(1.0);
 
         paths
     }
