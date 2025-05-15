@@ -290,7 +290,10 @@ impl Op {
 
                 progress.total_bytes = Some(metadata.len());
                 (ctx.on_progress)(self, &progress);
-                to_file.set_permissions(metadata.permissions()).await?;
+                if let Err(err) = to_file.set_permissions(metadata.permissions()).await {
+                    // This error is not propogated upwards as some filesystems do not support setting permissions
+                    log::warn!("failed to set permissions for {:?}: {}", self.to, err);
+                }
 
                 // Prevent spamming the progress callbacks.
                 let mut last_progress_update = Instant::now();
