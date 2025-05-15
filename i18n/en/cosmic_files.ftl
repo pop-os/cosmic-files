@@ -30,8 +30,14 @@ size = Size
 # Progress footer
 details = Details
 dismiss = Dismiss message
-operations-running = {$running} operations running ({$percent}%)...
-operations-running-finished = {$running} operations running ({$percent}%), {$finished} finished...
+operations-running = {$running} {$running -> 
+    [one] operation
+    *[other] operations 
+  } running ({$percent}%)...
+operations-running-finished = {$running} {$running -> 
+    [one] operation
+    *[other] operations
+  } running ({$percent}%), {$finished} finished...
 pause = Pause
 resume = Resume
 
