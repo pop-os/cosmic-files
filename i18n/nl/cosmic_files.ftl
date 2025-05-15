@@ -30,15 +30,21 @@ size = Grootte
 # Progress footer
 details = Details
 dismiss = Bericht negeren
-operations-running = {$running} bewerkingen uitvoeren ({$percent}%)...
-operations-running-finished = {$running} bewerkingen uitvoeren ({$percent}%), {$finished} voltooid...
+operations-running = {$running} {$running -> 
+    [one] bewerking
+    *[other] bewerkingen 
+  } uitvoeren ({$percent}%)...
+operations-running-finished = {$running} {$running -> 
+    [one] bewerking
+    *[other] bewerkingen 
+  } uitvoeren ({$percent}%), {$finished} voltooid...
 pause = Pauzeren
 resume = Hervatten
 
 # Dialogs
 
 ## Compress Dialog
-create-archive = Maak een archiefbestand
+create-archive = Archiefbestand maken
 
 ## Extract Dialog
 extract-password-required = Wachtwoord vereist
