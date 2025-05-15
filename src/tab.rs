@@ -1403,6 +1403,7 @@ pub enum Message {
     LocationUp,
     ModifiersChanged(Modifiers),
     Open(Option<PathBuf>),
+    Reload,
     RightClick(Option<usize>),
     MiddleClick(usize),
     Scroll(Viewport),
@@ -2483,12 +2484,12 @@ impl Tab {
             // Truncate history to remove next entries
             self.history.truncate(self.history_i + 1);
 
-            // Compact consecutive search locations
+            // Compact consecutive matching paths
             {
                 let mut remove = false;
                 if let Some(last_location) = self.history.last() {
-                    if let Location::Search(last_path, ..) = last_location {
-                        if let Location::Search(path, ..) = location {
+                    if let Some(last_path) = last_location.path_opt() {
+                        if let Some(path) = location.path_opt() {
                             remove = last_path == path;
                         }
                     }
@@ -3214,6 +3215,22 @@ impl Tab {
                         }
                     }
                 }
+            }
+            Message::Reload => {
+                let mut selected_paths = Vec::new();
+                //TODO: support keeping selected locations without paths
+                for location in self.selected_locations() {
+                    if let Some(path) = location.path_opt() {
+                        selected_paths.push(path.to_path_buf());
+                    }
+                }
+                let location = self.location.clone();
+                self.change_location(&location, None);
+                commands.push(Command::ChangeLocation(
+                    self.title(),
+                    location,
+                    Some(selected_paths),
+                ));
             }
             Message::RightClick(click_i_opt) => {
                 if mod_ctrl || mod_shift {

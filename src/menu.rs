@@ -573,6 +573,8 @@ pub fn menu_bar<'a>(
                         menu::Item::Divider,
                         menu_button_optional(fl!("rename"), Action::Rename, selected > 0),
                         menu::Item::Divider,
+                        menu::Item::Button(fl!("reload-folder"), None, Action::Reload),
+                        menu::Item::Divider,
                         menu_button_optional(
                             fl!("add-to-sidebar"),
                             Action::AddToSidebar,

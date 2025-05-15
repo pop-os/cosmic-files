@@ -312,6 +312,7 @@ display-settings = Display settings...
 file = File
 new-tab = New tab
 new-window = New window
+reload-folder = Reload folder
 rename = Rename...
 close-tab = Close tab
 quit = Quit
