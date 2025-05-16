@@ -227,6 +227,8 @@ extracted = Extracted {$items} {$items ->
     } from "{$from}" to "{$to}"
 setting-executable-and-launching = Setting "{$name}" as executable and launching
 set-executable-and-launched = Set "{$name}" as executable and launched
+setting-permissions = Setting permissions for "{$name}" to {$mode}
+set-permissions = Set permissions for "{$name}" to {$mode}
 moving = Moving {$items} {$items ->
         [one] item
         *[other] items

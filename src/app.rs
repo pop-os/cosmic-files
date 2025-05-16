@@ -3546,6 +3546,9 @@ impl Application for App {
                             //TODO: this will block for a few ms, run in background?
                             self.mime_app_cache.set_default(mime, id);
                         }
+                        tab::Command::SetPermissions(path, mode) => {
+                            commands.push(self.operation(Operation::SetPermissions { path, mode }));
+                        }
                         tab::Command::WindowDrag => {
                             if let Some(window_id) = &self.window_id_opt {
                                 commands.push(window::drag(*window_id));

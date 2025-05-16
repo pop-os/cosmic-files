@@ -76,7 +76,6 @@ use crate::{
     operation::Controller,
     thumbnailer::thumbnailer,
 };
-use unix_permissions_ext::UNIXPermissionsExt;
 use uzers::{get_group_by_gid, get_user_by_uid};
 
 pub const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
@@ -88,6 +87,27 @@ const MAX_SEARCH_RESULTS: usize = 200;
 const THUMBNAIL_SIZE: u32 = (ICON_SIZE_GRID as u32) * (ICON_SCALE_MAX as u32);
 
 const DRAG_SCROLL_DISTANCE: f32 = 15.0;
+
+static MODE_NAMES: Lazy<Vec<String>> = Lazy::new(|| {
+    vec![
+        // Mode 0
+        fl!("none"),
+        // Mode 1
+        fl!("execute-only"),
+        // Mode 2
+        fl!("write-only"),
+        // Mode 3
+        fl!("write-execute"),
+        // Mode 4
+        fl!("read-only"),
+        // Mode 5
+        fl!("read-execute"),
+        // Mode 6
+        fl!("read-write"),
+        // Mode 7
+        fl!("read-write-execute"),
+    ]
+});
 
 static SPECIAL_DIRS: Lazy<HashMap<PathBuf, &'static str>> = Lazy::new(|| {
     let mut special_dirs = HashMap::new();
@@ -348,58 +368,18 @@ fn format_size(size: u64) -> String {
         format!("{} B", size)
     }
 }
-enum PermissionOwner {
-    Owner,
-    Group,
-    Other,
+
+const MODE_SHIFT_USER: u32 = 6;
+const MODE_SHIFT_GROUP: u32 = 3;
+const MODE_SHIFT_OTHER: u32 = 0;
+
+fn get_mode_part(mode: u32, shift: u32) -> u32 {
+    (mode >> shift) & 0o7
 }
 
-fn format_permissions_owner(metadata: &Metadata, owner: PermissionOwner) -> String {
-    match owner {
-        PermissionOwner::Owner => get_user_by_uid(metadata.uid())
-            .and_then(|user| user.name().to_str().map(ToOwned::to_owned))
-            .unwrap_or_default(),
-        PermissionOwner::Group => get_group_by_gid(metadata.gid())
-            .and_then(|group| group.name().to_str().map(ToOwned::to_owned))
-            .unwrap_or_default(),
-        PermissionOwner::Other => String::from(""),
-    }
-}
-
-fn format_permissions(metadata: &Metadata, owner: PermissionOwner) -> String {
-    let mut mode = 0;
-    if match owner {
-        PermissionOwner::Owner => metadata.permissions().readable_by_owner(),
-        PermissionOwner::Group => metadata.permissions().readable_by_group(),
-        PermissionOwner::Other => metadata.permissions().readable_by_other(),
-    } {
-        mode |= 4;
-    }
-    if match owner {
-        PermissionOwner::Owner => metadata.permissions().writable_by_owner(),
-        PermissionOwner::Group => metadata.permissions().writable_by_group(),
-        PermissionOwner::Other => metadata.permissions().writable_by_other(),
-    } {
-        mode |= 2;
-    }
-    if match owner {
-        PermissionOwner::Owner => metadata.permissions().executable_by_owner(),
-        PermissionOwner::Group => metadata.permissions().executable_by_group(),
-        PermissionOwner::Other => metadata.permissions().executable_by_other(),
-    } {
-        mode |= 1;
-    }
-    match mode {
-        0 => fl!("none"),
-        1 => fl!("execute-only"),
-        2 => fl!("write-only"),
-        3 => fl!("write-execute"),
-        4 => fl!("read-only"),
-        5 => fl!("read-execute"),
-        6 => fl!("read-write"),
-        7 => fl!("read-write-execute"),
-        _ => unreachable!(),
-    }
+fn set_mode_part(mode: u32, shift: u32, bits: u32) -> u32 {
+    assert!(bits <= 0o7);
+    (mode & !(0o7 << shift)) | (bits << shift)
 }
 
 fn date_time_formatter(military_time: bool) -> DateTimeFormatter {
@@ -1362,6 +1342,7 @@ pub enum Command {
     OpenTrash,
     Preview(PreviewKind),
     SetOpenWith(Mime, String),
+    SetPermissions(PathBuf, u32),
     WindowDrag,
     WindowToggleMaximize,
 }
@@ -1415,6 +1396,7 @@ pub enum Message {
     SelectFirst,
     SelectLast,
     SetOpenWith(Mime, String),
+    SetPermissions(PathBuf, u32),
     SetSort(HeadingOptions, bool),
     TabComplete(PathBuf, Vec<(String, PathBuf)>),
     Thumbnail(PathBuf, ItemThumbnail),
@@ -1842,34 +1824,74 @@ impl Item {
                     )));
                 }
 
-                #[cfg(not(target_os = "windows"))]
-                {
+                #[cfg(unix)]
+                if let Some(path) = self.path_opt() {
+                    use std::os::unix::fs::MetadataExt;
+
+                    let mode = metadata.mode();
+
+                    let user_name = get_user_by_uid(metadata.uid())
+                        .and_then(|user| user.name().to_str().map(ToOwned::to_owned))
+                        .unwrap_or_default();
+                    let user_path = path.clone();
                     settings.push(
-                        widget::settings::item::builder(format_permissions_owner(
-                            metadata,
-                            PermissionOwner::Owner,
-                        ))
-                        .description(fl!("owner"))
-                        .control(widget::text::body(format_permissions(
-                            metadata,
-                            PermissionOwner::Owner,
-                        ))),
+                        widget::settings::item::builder(user_name)
+                            .description(fl!("owner"))
+                            .control(widget::dropdown(
+                                &MODE_NAMES,
+                                Some(get_mode_part(mode, MODE_SHIFT_USER).try_into().unwrap()),
+                                move |selected| {
+                                    Message::SetPermissions(
+                                        user_path.clone(),
+                                        set_mode_part(
+                                            mode,
+                                            MODE_SHIFT_USER,
+                                            selected.try_into().unwrap(),
+                                        ),
+                                    )
+                                },
+                            )),
                     );
 
+                    let group_name = get_group_by_gid(metadata.gid())
+                        .and_then(|group| group.name().to_str().map(ToOwned::to_owned))
+                        .unwrap_or_default();
+                    let group_path = path.clone();
                     settings.push(
-                        widget::settings::item::builder(format_permissions_owner(
-                            metadata,
-                            PermissionOwner::Group,
-                        ))
-                        .description(fl!("group"))
-                        .control(widget::text::body(format_permissions(
-                            metadata,
-                            PermissionOwner::Group,
-                        ))),
+                        widget::settings::item::builder(group_name)
+                            .description(fl!("group"))
+                            .control(widget::dropdown(
+                                &MODE_NAMES,
+                                Some(get_mode_part(mode, MODE_SHIFT_GROUP).try_into().unwrap()),
+                                move |selected| {
+                                    Message::SetPermissions(
+                                        group_path.clone(),
+                                        set_mode_part(
+                                            mode,
+                                            MODE_SHIFT_GROUP,
+                                            selected.try_into().unwrap(),
+                                        ),
+                                    )
+                                },
+                            )),
                     );
 
+                    let other_path = path.clone();
                     settings.push(widget::settings::item::builder(fl!("other")).control(
-                        widget::text::body(format_permissions(metadata, PermissionOwner::Other)),
+                        widget::dropdown(
+                            &MODE_NAMES,
+                            Some(get_mode_part(mode, MODE_SHIFT_OTHER).try_into().unwrap()),
+                            move |selected| {
+                                Message::SetPermissions(
+                                    other_path.clone(),
+                                    set_mode_part(
+                                        mode,
+                                        MODE_SHIFT_OTHER,
+                                        selected.try_into().unwrap(),
+                                    ),
+                                )
+                            },
+                        ),
                     ));
                 }
             }
@@ -3427,6 +3449,9 @@ impl Tab {
             }
             Message::SetOpenWith(mime, id) => {
                 commands.push(Command::SetOpenWith(mime, id));
+            }
+            Message::SetPermissions(path, mode) => {
+                commands.push(Command::SetPermissions(path, mode));
             }
             Message::SetSort(heading_option, dir) => {
                 if !matches!(self.location, Location::Search(..)) {
@@ -5962,5 +5987,49 @@ mod tests {
         Tab::new(Location::Path(path.into()), TabConfig::default());
 
         Ok(())
+    }
+
+    #[test]
+    fn mode_calculations() {
+        use super::{
+            get_mode_part, set_mode_part, MODE_SHIFT_GROUP, MODE_SHIFT_OTHER, MODE_SHIFT_USER,
+        };
+        for user in 0..=7 {
+            for group in 0..=7 {
+                for other in 0..=7 {
+                    let mode = (user << MODE_SHIFT_USER)
+                        | (group << MODE_SHIFT_GROUP)
+                        | (other << MODE_SHIFT_OTHER);
+                    assert_eq!(
+                        format!("{:03o}", mode),
+                        format!("{:o}{:o}{:o}", user, group, other),
+                    );
+                    assert_eq!(get_mode_part(mode, MODE_SHIFT_USER), user);
+                    assert_eq!(get_mode_part(mode, MODE_SHIFT_GROUP), group);
+                    assert_eq!(get_mode_part(mode, MODE_SHIFT_OTHER), other);
+
+                    let mode_no_user = (group << MODE_SHIFT_GROUP) | (other << MODE_SHIFT_OTHER);
+                    assert_eq!(
+                        format!("{:03o}", mode_no_user),
+                        format!("0{:o}{:o}", group, other)
+                    );
+                    assert_eq!(set_mode_part(mode_no_user, MODE_SHIFT_USER, user), mode);
+
+                    let mode_no_group = (user << MODE_SHIFT_USER) | (other << MODE_SHIFT_OTHER);
+                    assert_eq!(
+                        format!("{:03o}", mode_no_group),
+                        format!("{:o}0{:o}", user, other)
+                    );
+                    assert_eq!(set_mode_part(mode_no_group, MODE_SHIFT_GROUP, group), mode);
+
+                    let mode_no_other = (user << MODE_SHIFT_USER) | (group << MODE_SHIFT_GROUP);
+                    assert_eq!(
+                        format!("{:03o}", mode_no_other),
+                        format!("{:o}{:o}0", user, group)
+                    );
+                    assert_eq!(set_mode_part(mode_no_other, MODE_SHIFT_OTHER, other), mode);
+                }
+            }
+        }
     }
 }

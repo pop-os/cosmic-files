@@ -64,7 +64,6 @@ rust-embed = "8"
 slotmap = "1.0.7"
 recently-used-xbel = "1.1.0"
 zip = "2.2.2"
-unix_permissions_ext = "0.1.2"
 uzers = "0.12.1"
 
 # Completion-based IO runtime to enable io_uring / IOCP file IO support.

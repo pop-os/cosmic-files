@@ -530,6 +530,11 @@ pub enum Operation {
     SetExecutableAndLaunch {
         path: PathBuf,
     },
+    /// Set permissions
+    SetPermissions {
+        path: PathBuf,
+        mode: u32,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -629,6 +634,13 @@ impl Operation {
             Self::SetExecutableAndLaunch { path } => {
                 fl!("setting-executable-and-launching", name = file_name(path))
             }
+            Self::SetPermissions { path, mode } => {
+                fl!(
+                    "setting-permissions",
+                    name = file_name(path),
+                    mode = format!("{:#03o}", mode)
+                )
+            }
         }
     }
 
@@ -686,6 +698,13 @@ impl Operation {
             Self::SetExecutableAndLaunch { path } => {
                 fl!("set-executable-and-launched", name = file_name(path))
             }
+            Self::SetPermissions { path, mode } => {
+                fl!(
+                    "set-permissions",
+                    name = file_name(path),
+                    mode = format!("{:#03o}", mode)
+                )
+            }
         }
     }
 
@@ -704,7 +723,8 @@ impl Operation {
             Self::NewFile { .. }
             | Self::NewFolder { .. }
             | Self::Rename { .. }
-            | Self::SetExecutableAndLaunch { .. } => false,
+            | Self::SetExecutableAndLaunch { .. }
+            | Self::SetPermissions { .. } => false,
         }
     }
 
@@ -1188,6 +1208,25 @@ impl Operation {
 
                     let mut command = std::process::Command::new(path);
                     spawn_detached(&mut command).map_err(OperationError::from_str)?;
+
+                    Ok(())
+                })
+                .await
+                .map_err(wrap_compio_spawn_error)?
+                .map_err(OperationError::from_str)?;
+                Ok(OperationSelection::default())
+            }
+            Self::SetPermissions { path, mode } => {
+                controller.check().await.map_err(OperationError::from_str)?;
+
+                compio::runtime::spawn_blocking(move || -> Result<(), OperationError> {
+                    //TODO: what to do on non-Unix systems?
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        let perms = fs::Permissions::from_mode(mode);
+                        fs::set_permissions(&path, perms).map_err(OperationError::from_str)?;
+                    }
 
                     Ok(())
                 })
