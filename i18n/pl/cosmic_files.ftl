@@ -33,7 +33,7 @@ dismiss = Odrzuć wiadomość
 operations-running = {$running} bieżące {$running ->
     [one] działanie
     *[other] działania
-  } ({$percent}%)...
+  } ({$percent}%)…
 operations-running-finished = {$running} bieżące {$running ->
     [one] działanie
     *[other] działąnia
