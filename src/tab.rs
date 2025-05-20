@@ -3804,7 +3804,8 @@ impl Tab {
             .on_enter(move |_, _, _| Message::DndEnter(location2.clone()))
             .on_leave(move || Message::DndLeave(location3.clone())),
         );
-        if is_dnd_hovered {
+        // Desktop will not show DnD indicator
+        if is_dnd_hovered && !matches!(self.mode, Mode::Desktop) {
             container = container.style(|t| {
                 let mut a = widget::container::Style::default();
                 let t = t.cosmic();
@@ -5106,7 +5107,10 @@ impl Tab {
             .height(Length::Fill)
             .width(Length::Fill);
 
-        if self.dnd_hovered.as_ref().map(|(l, _)| l) == Some(&tab_location) {
+        // Desktop will not show DnD indicator
+        if self.dnd_hovered.as_ref().map(|(l, _)| l) == Some(&tab_location)
+            && !matches!(self.mode, Mode::Desktop)
+        {
             tab_view = tab_view.style(|t| {
                 let mut a = widget::container::Style::default();
                 let c = t.cosmic();
