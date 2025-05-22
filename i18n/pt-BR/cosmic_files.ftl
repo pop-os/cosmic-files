@@ -278,9 +278,9 @@ single-click = Clique simples para abrir
 ### Appearance
 appearance = Aparência
 theme = Tema
-match-desktop = Seguir tema do sistema
-dark = Escuro
-light = Claro
+match-desktop = Estilo do sistema
+dark = Estilo escuro
+light = Estilo claro
 
 ### Type to Search
 type-to-search = Pesquisar digitando
