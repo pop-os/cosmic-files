@@ -30,8 +30,14 @@ size = Méret
 # Progress footer
 details = Részletek
 dismiss = Üzenet elvetése
-operations-running = {$running} művelet fut ({$percent}%)...
-operations-running-finished = {$running} művelet fut ({$percent}%), {$finished} befejeződött...
+operations-running = {$running} {$running -> 
+    [one] művelet
+    *[other] művelet 
+  } fut ({$percent}%)...
+operations-running-finished = {$running} {$running -> 
+    [one] művelet
+    *[other] művelet
+  } fut ({$percent}%), {$finished} befejeződött...
 pause = Szünet
 resume = Folytatás
 
@@ -60,8 +66,8 @@ folder-name = Mappanév
 file-already-exists = Már létezik ilyen nevű fájl.
 folder-already-exists = Már létezik ilyen nevű mappa.
 name-hidden = A ponttal kezdődő nevek rejtve lesznek.
-name-invalid = A név nem lehet "{$filename}".
-name-no-slashes = A név nem tartalmazhat perjelet.
+name-invalid = A név nem lehet „{$filename}”.
+name-no-slashes = A név nem tartalmazhat „/” jelet.
 
 ## Open/Save Dialog
 cancel = Mégse
@@ -78,8 +84,16 @@ save = Mentés
 save-file = Fájl mentése
 
 ## Open With Dialog
-open-with-title = Hogyan szeretné megnyitni ezt: "{$name}"?
+open-with-title = Hogyan szeretné megnyitni ezt: „{$name}”?
 browse-store = {$store} böngészése
+other-apps = Egyéb alkalmazások
+related-apps = Hasonló alkalmazások
+
+## Permanently delete Dialog
+selected-items = a(z) {$items} elemet
+permanently-delete-question = Végleges törlés
+delete = Törlés
+permanently-delete-warning = Biztos benne, hogy véglegesen törölni szeretné {$target}? A művelet nem visszavonható.
 
 ## Rename Dialog
 rename-file = Fájl átnevezése
@@ -87,7 +101,7 @@ rename-folder = Mappa átnevezése
 
 ## Replace Dialog
 replace = Csere
-replace-title = "{$filename}" már létezik.
+replace-title = „{$filename}” már létezik.
 replace-warning = Le szeretné cserélni a meglévő fájlt? A cseréje felülírja annak tartalmát.
 replace-warning-operation = Ki szeretné cserélni? A csere felülírja annak tartalmát.
 original-file = Eredeti fájl
@@ -98,7 +112,7 @@ skip = Kihagyás
 
 ## Set as Executable and Launch Dialog
 set-executable-and-launch = Végrehajthatóvá tétel és indítás
-set-executable-and-launch-description = Szeretné végrehajthatóvá tenni a(z) "{$name}" fájlt és elindítani?
+set-executable-and-launch-description = Szeretné végrehajthatóvá tenni a(z) „{$name}” fájlt és elindítani?
 set-and-launch = Alkalmazás és indítás
 
 ## Metadata Dialog
@@ -126,7 +140,7 @@ read-write-execute = Olvasás, írás és végrehajtás
 ## Favorite Path Error Dialog
 favorite-path-error = Hiba a könyvtár megnyitásakor
 favorite-path-error-description =
-    Nem sikerült megnyitni: "{$path}".
+    Nem sikerült megnyitni: „{$path}”.
     Lehet, hogy nem létezik, vagy nincs megfelelő jogosultsága a megnyitásához.
     
     Szeretné eltávolítani az oldalsávról?
@@ -177,22 +191,22 @@ complete = Befejeződött
 compressing = {$items} {$items ->
         [one] elem
         *[other] elem
-    } tömörítése innen: "{$from}" ide: "{$to}" ({$progress})...
+    } tömörítése innen: „{$from}” ide: „{$to}” ({$progress})...
 compressed = {$items} {$items ->
         [one] elem
         *[other] elem
-    } tömörítve innen: "{$from}" ide: "{$to}"
+    } tömörítve innen: „{$from}” ide: „{$to}”
 copy_noun = Másolás
-creating = "{$name}" létrehozása itt: "{$parent}"
-created = "{$name}" létrehozva itt: "{$parent}"
+creating = „{$name}” létrehozása itt: „{$parent}”
+created = „{$name}” létrehozva itt: „{$parent}”
 copying = {$items} {$items ->
         [one] elem
         *[other] elem
-    } másolása innen: "{$from}" ide: "{$to}" ({$progress})...
+    } másolása innen: „{$from}” ide: „{$to}” ({$progress})...
 copied = {$items} {$items ->
         [one] elem
         *[other] elem
-    } másolva innen: "{$from}" ide: "{$to}"
+    } másolva innen: „{$from}” ide: „{$to}”
 deleting = {$items} {$items ->
         [one] elem
         *[other] elem
@@ -206,23 +220,33 @@ emptied-trash = {trash} kiürítve
 extracting = {$items} {$items ->
         [one] elem
         *[other] elem
-    } kibontása innen: "{$from}" ide: "{$to}" ({$progress})...
+    } kibontása innen: „{$from}” ide: „{$to}” ({$progress})...
 extracted = {$items} {$items ->
         [one] elem
         *[other] elem
-    } kibontva innen: "{$from}" ide: "{$to}"
-setting-executable-and-launching = "{$name}" végrehajthatóvá tétele és futtatása
-set-executable-and-launched = "{$name}" végrehajthatóvá lett téve és futtatva
+    } kibontva innen: „{$from}” ide: „{$to}”
+setting-executable-and-launching = „{$name}” végrehajthatóvá tétele és futtatása
+set-executable-and-launched = ”{$name}” végrehajthatóvá lett téve és futtatva
+setting-permissions = „{$name}” jogosultságainak beállítása: {$mode}
+set-permissions = „{$name}” jogosultságai beállítva: {$mode}
 moving = {$items} {$items ->
         [one] elem
         *[other] elem
-    } áthelyezése innen: "{$from}" ide: "{$to}" ({$progress})...
+    } áthelyezése innen: „{$from}” ide: „{$to}” ({$progress})...
 moved = {$items} {$items ->
         [one] elem
         *[other] elem
-    } áthelyezve innen: "{$from}" ide: "{$to}"
-renaming = Átnevezés "{$from}"-ról "{$to}"-ra
-renamed = Átnevezve "{$from}"-ról "{$to}"-ra
+    } áthelyezve innen: „{$from}” ide: „{$to}”
+permanently-deleting = {$items} {$items ->
+        [one] elem
+        *[other] elem
+    } végleges törlése
+permanently-deleted = {$items} {$items ->
+        [one] elem
+        *[other] elem
+    } véglegesen törölve
+renaming = Átnevezés „{$from}”-ról „{$to}”-ra
+renamed = Átnevezve „{$from}”-ról „{$to}”-ra
 restoring = {$items} {$items ->
         [one] elem
         *[other] elem
@@ -290,6 +314,7 @@ display-settings = Képernyő beállításai...
 file = Fájl
 new-tab = Új lap
 new-window = Új ablak
+reload-folder = Mappa újratöltése
 rename = Átnevezés...
 close-tab = Lap bezárása
 quit = Kilépés
