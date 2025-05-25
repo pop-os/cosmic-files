@@ -587,12 +587,10 @@ pub fn parse_desktop_file(path: &Path) -> (Option<String>, Option<String>) {
 }
 
 #[cfg(feature = "gvfs")]
-pub fn item_from_gvfs_info(
-    path: PathBuf,
-    file_info: gio::FileInfo,
-    sizes: IconSizes,
-) -> Item {
-    let file_name = file_info.name().into_os_string().into_string().unwrap_or_default();
+pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconSizes) -> Item {
+    let file_name = file_info
+        .attribute_as_string(gio::FILE_ATTRIBUTE_STANDARD_NAME)
+        .unwrap_or_default();
     let mtime = file_info.attribute_uint64(gio::FILE_ATTRIBUTE_TIME_MODIFIED);
     let mut display_name = Item::display_name(&file_info.display_name());
     let remote = file_info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE);
@@ -606,52 +604,51 @@ pub fn item_from_gvfs_info(
         false => Some(file_info.size() as u64),
     };
 
-    let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) =
-        if is_dir {
+    let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) = if is_dir {
+        (
+            //TODO: make this a static
+            "inode/directory".parse().unwrap(),
+            folder_icon(&path, sizes.grid()),
+            folder_icon(&path, sizes.list()),
+            folder_icon(&path, sizes.list_condensed()),
+        )
+    } else {
+        // ALWAYS assume we're remote for mime guessing here, since gvfs reading can be expensive
+        // @todo - expose this as a config option?
+        let mime = mime_for_path(&path, None, true);
+
+        //TODO: clean this up, implement for trash
+        let icon_name_opt = if mime == "application/x-desktop" {
+            let (desktop_name_opt, icon_name_opt) = parse_desktop_file(&path);
+            if let Some(desktop_name) = desktop_name_opt {
+                display_name = Item::display_name(&desktop_name);
+            }
+            icon_name_opt
+        } else {
+            None
+        };
+        if let Some(icon_name) = icon_name_opt {
             (
-                //TODO: make this a static
-                "inode/directory".parse().unwrap(),
-                folder_icon(&path, sizes.grid()),
-                folder_icon(&path, sizes.list()),
-                folder_icon(&path, sizes.list_condensed()),
+                mime.clone(),
+                widget::icon::from_name(&*icon_name)
+                    .size(sizes.grid())
+                    .handle(),
+                widget::icon::from_name(&*icon_name)
+                    .size(sizes.list())
+                    .handle(),
+                widget::icon::from_name(&*icon_name)
+                    .size(sizes.list_condensed())
+                    .handle(),
             )
         } else {
-            // ALWAYS assume we're remote for mime guessing here, since gvfs reading can be expensive
-            // @todo - expose this as a config option?
-            let mime = mime_for_path(&path, None, true);
-
-            //TODO: clean this up, implement for trash
-            let icon_name_opt = if mime == "application/x-desktop" {
-                let (desktop_name_opt, icon_name_opt) = parse_desktop_file(&path);
-                if let Some(desktop_name) = desktop_name_opt {
-                    display_name = Item::display_name(&desktop_name);
-                }
-                icon_name_opt
-            } else {
-                None
-            };
-            if let Some(icon_name) = icon_name_opt {
-                (
-                    mime.clone(),
-                    widget::icon::from_name(&*icon_name)
-                        .size(sizes.grid())
-                        .handle(),
-                    widget::icon::from_name(&*icon_name)
-                        .size(sizes.list())
-                        .handle(),
-                    widget::icon::from_name(&*icon_name)
-                        .size(sizes.list_condensed())
-                        .handle(),
-                )
-            } else {
-                (
-                    mime.clone(),
-                    mime_icon(mime.clone(), sizes.grid()),
-                    mime_icon(mime.clone(), sizes.list()),
-                    mime_icon(mime, sizes.list_condensed()),
-                )
-            }
-        };
+            (
+                mime.clone(),
+                mime_icon(mime.clone(), sizes.grid()),
+                mime_icon(mime.clone(), sizes.list()),
+                mime_icon(mime, sizes.list_condensed()),
+            )
+        }
+    };
 
     let mut children_opt = None;
     let mut dir_size = DirSize::NotDirectory;
@@ -669,14 +666,14 @@ pub fn item_from_gvfs_info(
     }
 
     Item {
-        name: file_name.clone(), // @todo
+        name: file_name.clone().to_string(),
         display_name,
         metadata: ItemMetadata::GvfsPath {
             mtime,
             size_opt,
-            children_opt
+            children_opt,
         },
-        hidden: file_name.starts_with("."), // @todo
+        hidden: file_name.starts_with("."),
         location_opt: Some(Location::Path(path)),
         mime,
         icon_handle_grid,
@@ -887,18 +884,14 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                     &file,
                     attr_string.as_str(),
                     gio::FileQueryInfoFlags::NONE,
-                    gio::Cancellable::NONE
+                    gio::Cancellable::NONE,
                 ) {
                     Ok(res) => {
                         remote_scannable = true;
                         for file in res {
                             if let Ok(file) = file {
                                 let full_path = Path::new(tab_path).join(file.name());
-                                items.push(item_from_gvfs_info(
-                                    full_path,
-                                    file,
-                                    sizes
-                                ));
+                                items.push(item_from_gvfs_info(full_path, file, sizes));
                             }
                         }
                     }
@@ -928,10 +921,10 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                         Ok(ok) => ok,
                         Err(name_os) => {
                             log::warn!(
-                            "failed to parse entry at {:?}: {:?} is not valid UTF-8",
-                            path,
-                            name_os,
-                        );
+                                "failed to parse entry at {:?}: {:?} is not valid UTF-8",
+                                path,
+                                name_os,
+                            );
                             continue;
                         }
                     };
@@ -1626,7 +1619,7 @@ pub enum ItemMetadata {
         mtime: u64,
         size_opt: Option<u64>,
         children_opt: Option<usize>,
-    }
+    },
 }
 
 impl ItemMetadata {
@@ -1640,7 +1633,7 @@ impl ItemMetadata {
             Self::SimpleDir { .. } => true,
             Self::SimpleFile { .. } => false,
             #[cfg(feature = "gvfs")]
-            Self::GvfsPath { mtime: _, children_opt, size_opt: _ } => children_opt.is_some()
+            Self::GvfsPath { children_opt, .. } => children_opt.is_some(),
         }
     }
 
@@ -1648,7 +1641,9 @@ impl ItemMetadata {
         match self {
             Self::Path { metadata, .. } => metadata.modified().ok(),
             #[cfg(feature = "gvfs")]
-            Self::GvfsPath { mtime, .. } => Some(SystemTime::UNIX_EPOCH + Duration::from_secs(*mtime)),
+            Self::GvfsPath { mtime, .. } => {
+                Some(SystemTime::UNIX_EPOCH + Duration::from_secs(*mtime))
+            }
             _ => None,
         }
     }
@@ -1657,15 +1652,15 @@ impl ItemMetadata {
         match self {
             Self::Path { metadata, .. } => match metadata.is_dir() {
                 true => None,
-                false => Some(metadata.len())
+                false => Some(metadata.len()),
             },
             Self::Trash { metadata, .. } => match metadata.size {
                 TrashItemSize::Bytes(size) => Some(size),
-                TrashItemSize::Entries(_) => None
+                TrashItemSize::Entries(_) => None,
             },
             #[cfg(feature = "gvfs")]
-            Self::GvfsPath { mtime: _, children_opt: _, size_opt } => *size_opt,
-            _ => None
+            Self::GvfsPath { size_opt, .. } => *size_opt,
+            _ => None,
         }
     }
 }
@@ -1963,63 +1958,82 @@ impl Item {
                 );
             }
         }
+
+        let mut file_metadata = None;
+        let mut dir_children_count = None;
+
         match &self.metadata {
             ItemMetadata::Path {
                 metadata,
                 children_opt,
             } => {
-                if metadata.is_dir() {
-                    if let Some(children) = children_opt {
-                        details = details.push(widget::text::body(fl!("items", items = children)));
-                    }
-                    let size = match &self.dir_size {
-                        DirSize::Calculating(_) => fl!("calculating"),
-                        DirSize::Directory(size) => format_size(*size),
-                        DirSize::NotDirectory => String::new(),
-                        DirSize::Error(err) => err.clone(),
-                    };
-                    if !size.is_empty() {
-                        details = details.push(widget::text::body(fl!("item-size", size = size)));
-                    }
-                } else {
-                    details = details.push(widget::text::body(fl!(
-                        "item-size",
-                        size = format_size(metadata.len())
-                    )));
+                file_metadata = Some(metadata.clone());
+                dir_children_count = *children_opt;
+            }
+            #[cfg(feature = "gvfs")]
+            ItemMetadata::GvfsPath { children_opt, .. } => {
+                // grab the fs::metadata object for gvfs paths since this is run on-demand
+                if let Some(path) = &self.path_opt() {
+                    file_metadata = fs::metadata(*path).ok();
                 }
 
-                let date_time_formatter = date_time_formatter(military_time);
-                let time_formatter = time_formatter(military_time);
+                dir_children_count = *children_opt;
+            }
+            _ => {
+                //TODO: other metadata types
+            }
+        }
 
-                if let Ok(time) = metadata.created() {
-                    details = details.push(widget::text::body(fl!(
-                        "item-created",
-                        created =
-                            format_time(time, &date_time_formatter, &time_formatter).to_string()
-                    )));
+        if let Some(metadata) = file_metadata {
+            if metadata.is_dir() {
+                if let Some(children) = dir_children_count {
+                    details = details.push(widget::text::body(fl!("items", items = children)));
                 }
-
-                if let Ok(time) = metadata.modified() {
-                    details = details.push(widget::text::body(fl!(
-                        "item-modified",
-                        modified =
-                            format_time(time, &date_time_formatter, &time_formatter).to_string()
-                    )));
+                let size = match &self.dir_size {
+                    DirSize::Calculating(_) => fl!("calculating"),
+                    DirSize::Directory(size) => format_size(*size),
+                    DirSize::NotDirectory => String::new(),
+                    DirSize::Error(err) => err.clone(),
+                };
+                if !size.is_empty() {
+                    details = details.push(widget::text::body(fl!("item-size", size = size)));
                 }
+            } else {
+                details = details.push(widget::text::body(fl!(
+                    "item-size",
+                    size = format_size(metadata.len())
+                )));
+            }
 
-                if let Ok(time) = metadata.accessed() {
-                    details = details.push(widget::text::body(fl!(
-                        "item-accessed",
-                        accessed =
-                            format_time(time, &date_time_formatter, &time_formatter).to_string()
-                    )));
-                }
+            let date_time_formatter = date_time_formatter(military_time);
+            let time_formatter = time_formatter(military_time);
 
-                #[cfg(unix)]
-                if let Some(path) = self.path_opt() {
-                    use std::os::unix::fs::MetadataExt;
+            if let Ok(time) = metadata.created() {
+                details = details.push(widget::text::body(fl!(
+                    "item-created",
+                    created = format_time(time, &date_time_formatter, &time_formatter).to_string()
+                )));
+            }
 
-                    let mode = metadata.mode();
+            if let Ok(time) = metadata.modified() {
+                details = details.push(widget::text::body(fl!(
+                    "item-modified",
+                    modified = format_time(time, &date_time_formatter, &time_formatter).to_string()
+                )));
+            }
+
+            if let Ok(time) = metadata.accessed() {
+                details = details.push(widget::text::body(fl!(
+                    "item-accessed",
+                    accessed = format_time(time, &date_time_formatter, &time_formatter).to_string()
+                )));
+            }
+
+            #[cfg(unix)]
+            if let Some(path) = self.path_opt() {
+                use std::os::unix::fs::MetadataExt;
+
+                let mode = metadata.mode();
 
                     let user_name = get_user_by_uid(metadata.uid())
                         .and_then(|user| user.name().to_str().map(ToOwned::to_owned))
@@ -2086,10 +2100,7 @@ impl Item {
                     ));
                 }
             }
-            _ => {
-                //TODO: other metadata types
-            }
-        }
+
         if let ItemThumbnail::Image(_, Some((width, height))) = self
             .thumbnail_opt
             .as_ref()
@@ -3898,12 +3909,14 @@ impl Tab {
                         ItemMetadata::SimpleDir { entries } => (true, *entries),
                         ItemMetadata::SimpleFile { size } => (false, *size),
                         #[cfg(feature = "gvfs")]
-                        ItemMetadata::GvfsPath { mtime: _, size_opt, children_opt } => {
-                            match children_opt {
-                                Some(child_count) => (true, *child_count as u64),
-                                None => (false, size_opt.unwrap_or_default())
-                            }
-                        }
+                        ItemMetadata::GvfsPath {
+                            size_opt,
+                            children_opt,
+                            ..
+                        } => match children_opt {
+                            Some(child_count) => (true, *child_count as u64),
+                            None => (false, size_opt.unwrap_or_default()),
+                        },
                     };
                     let (a_is_entry, a_size) = get_size(a.1);
                     let (b_is_entry, b_size) = get_size(b.1);
@@ -4954,19 +4967,20 @@ impl Tab {
                     }
                     ItemMetadata::SimpleFile { size } => format_size(*size),
                     #[cfg(feature = "gvfs")]
-                    ItemMetadata::GvfsPath { mtime: _, size_opt, children_opt } => {
-                        match children_opt {
-                            Some(child_count) => {
-                                if *child_count == 1 {
-                                    format!("{} item", child_count)
-                                }
-                                else {
-                                    format!("{} items", child_count)
-                                }
+                    ItemMetadata::GvfsPath {
+                        size_opt,
+                        children_opt,
+                        ..
+                    } => match children_opt {
+                        Some(child_count) => {
+                            if *child_count == 1 {
+                                format!("{} item", child_count)
+                            } else {
+                                format!("{} items", child_count)
                             }
-                            None => format_size(size_opt.unwrap_or_default())
                         }
-                    }
+                        None => format_size(size_opt.unwrap_or_default()),
+                    },
                 };
 
                 let row = if condensed {
@@ -5412,8 +5426,7 @@ impl Tab {
 
                 let metadata = item.metadata.clone();
                 match metadata {
-                    ItemMetadata::Path { .. }
-                        | ItemMetadata::GvfsPath { .. } => {
+                    ItemMetadata::Path { .. } | ItemMetadata::GvfsPath { .. } => {
                         let mime = item.mime.clone();
 
                         subscriptions.push(Subscription::run_with_id(
@@ -5423,19 +5436,31 @@ impl Tab {
                                     let path = path.clone();
                                     tokio::task::spawn_blocking(move || {
                                         let start = Instant::now();
-                                        let thumbnail =
-                                            ItemThumbnail::new(&path, metadata, mime, THUMBNAIL_SIZE);
-                                        log::debug!("thumbnailed {:?} in {:?}", path, start.elapsed());
+                                        let thumbnail = ItemThumbnail::new(
+                                            &path,
+                                            metadata,
+                                            mime,
+                                            THUMBNAIL_SIZE,
+                                        );
+                                        log::debug!(
+                                            "thumbnailed {:?} in {:?}",
+                                            path,
+                                            start.elapsed()
+                                        );
                                         Message::Thumbnail(path.clone(), thumbnail)
                                     })
-                                        .await
-                                        .unwrap()
+                                    .await
+                                    .unwrap()
                                 };
 
                                 match output.send(message).await {
                                     Ok(()) => {}
                                     Err(err) => {
-                                        log::warn!("failed to send thumbnail for {:?}: {}", &path, err);
+                                        log::warn!(
+                                            "failed to send thumbnail for {:?}: {}",
+                                            &path,
+                                            err
+                                        );
                                     }
                                 }
 
