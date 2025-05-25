@@ -505,7 +505,7 @@ fn hidden_attribute(metadata: &Metadata) -> bool {
     metadata.file_attributes() & FILE_ATTRIBUTE_HIDDEN == FILE_ATTRIBUTE_HIDDEN
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum FsKind {
     Local,
     Remote,
@@ -583,6 +583,118 @@ pub fn parse_desktop_file(path: &Path) -> (Option<String>, Option<String>) {
             .attr("Icon")
             .map(|x| x.to_string()),
     )
+}
+
+#[cfg(feature = "gvfs")]
+pub fn item_from_gvfs_info(
+    path: PathBuf,
+    file_info: gio::FileInfo,
+    sizes: IconSizes,
+) -> Item {
+    let file_name = file_info.name().into_os_string().into_string().unwrap_or_default();
+    let mtime = file_info.attribute_uint64(gio::FILE_ATTRIBUTE_TIME_MODIFIED);
+    let mut display_name = Item::display_name(&file_info.display_name());
+    let remote = file_info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE);
+    let is_dir = match file_info.file_type() {
+        gio::FileType::Directory => true,
+        _ => false,
+    };
+
+    let size_opt = match is_dir {
+        true => None,
+        false => Some(file_info.size() as u64),
+    };
+
+    let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) =
+        if is_dir {
+            (
+                //TODO: make this a static
+                "inode/directory".parse().unwrap(),
+                folder_icon(&path, sizes.grid()),
+                folder_icon(&path, sizes.list()),
+                folder_icon(&path, sizes.list_condensed()),
+            )
+        } else {
+            // ALWAYS assume we're remote for mime guessing here, since gvfs reading can be expensive
+            // @todo - expose this as a config option?
+            let mime = mime_for_path(&path, None, true);
+
+            //TODO: clean this up, implement for trash
+            let icon_name_opt = if mime == "application/x-desktop" {
+                let (desktop_name_opt, icon_name_opt) = parse_desktop_file(&path);
+                if let Some(desktop_name) = desktop_name_opt {
+                    display_name = Item::display_name(&desktop_name);
+                }
+                icon_name_opt
+            } else {
+                None
+            };
+            if let Some(icon_name) = icon_name_opt {
+                (
+                    mime.clone(),
+                    widget::icon::from_name(&*icon_name)
+                        .size(sizes.grid())
+                        .handle(),
+                    widget::icon::from_name(&*icon_name)
+                        .size(sizes.list())
+                        .handle(),
+                    widget::icon::from_name(&*icon_name)
+                        .size(sizes.list_condensed())
+                        .handle(),
+                )
+            } else {
+                (
+                    mime.clone(),
+                    mime_icon(mime.clone(), sizes.grid()),
+                    mime_icon(mime.clone(), sizes.list()),
+                    mime_icon(mime, sizes.list_condensed()),
+                )
+            }
+        };
+
+    let mut children_opt = None;
+    let mut dir_size = DirSize::NotDirectory;
+    if is_dir && !remote {
+        dir_size = DirSize::Calculating(Controller::default());
+        //TODO: calculate children in the background (and make it cancellable?)
+        match fs::read_dir(&path) {
+            Ok(entries) => {
+                children_opt = Some(entries.count());
+            }
+            Err(err) => {
+                log::warn!("failed to read directory {:?}: {}", path, err);
+            }
+        }
+    }
+
+    Item {
+        name: file_name.clone(), // @todo
+        display_name,
+        metadata: ItemMetadata::GvfsPath {
+            mtime,
+            size_opt,
+            children_opt
+        },
+        hidden: file_name.starts_with("."), // @todo
+        location_opt: Some(Location::Path(path)),
+        mime,
+        icon_handle_grid,
+        icon_handle_list,
+        icon_handle_list_condensed,
+        thumbnail_opt: if remote {
+            Some(ItemThumbnail::NotImage)
+        } else {
+            None
+        },
+        button_id: widget::Id::unique(),
+        pos_opt: Cell::new(None),
+        rect_opt: Cell::new(None),
+        selected: false,
+        highlighted: false,
+        overlaps_drag_rect: false,
+        dir_size,
+        cut: false,
+    }
 }
 
 pub fn item_from_entry(
@@ -747,48 +859,100 @@ pub fn item_from_path<P: Into<PathBuf>>(path: P, sizes: IconSizes) -> Result<Ite
 pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
     let mut items = Vec::new();
     let mut hidden_files = Vec::new();
-    match fs::read_dir(tab_path) {
-        Ok(entries) => {
-            for entry_res in entries {
-                let entry = match entry_res {
-                    Ok(ok) => ok,
-                    Err(err) => {
-                        log::warn!("failed to read entry in {:?}: {}", tab_path, err);
-                        continue;
+    let mut remote_scannable = false;
+
+    #[cfg(feature = "gvfs")]
+    {
+        if let Ok(path_meta) = fs::metadata(tab_path) {
+            if fs_kind(&path_meta) == FsKind::Gvfs {
+                let file = gio::File::for_path(&tab_path);
+
+                // gio crate expects a comma delimited string
+                let mut attr_string = String::new();
+                for attr in vec![
+                    gio::FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME,
+                    gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE,
+                    gio::FILE_ATTRIBUTE_TIME_MODIFIED,
+                    gio::FILE_ATTRIBUTE_STANDARD_SIZE,
+                    gio::FILE_ATTRIBUTE_STANDARD_TYPE,
+                    gio::FILE_ATTRIBUTE_STANDARD_NAME,
+                ] {
+                    attr_string.push_str(attr);
+                    attr_string.push(',');
+                }
+                attr_string.pop();
+
+                match gio::prelude::FileExt::enumerate_children(
+                    &file,
+                    attr_string.as_str(),
+                    gio::FileQueryInfoFlags::NONE,
+                    gio::Cancellable::NONE
+                ) {
+                    Ok(res) => {
+                        remote_scannable = true;
+                        for file in res {
+                            if let Ok(file) = file {
+                                let full_path = Path::new(tab_path).join(file.name());
+                                items.push(item_from_gvfs_info(
+                                    full_path,
+                                    file,
+                                    sizes
+                                ));
+                            }
+                        }
                     }
-                };
+                    Err(err) => {
+                        log::warn!("could not enumerate {:?} via gio: {}", tab_path, err);
+                    }
+                }
+            }
+        }
+    }
 
-                let path = entry.path();
+    if !remote_scannable {
+        match fs::read_dir(tab_path) {
+            Ok(entries) => {
+                for entry_res in entries {
+                    let entry = match entry_res {
+                        Ok(ok) => ok,
+                        Err(err) => {
+                            log::warn!("failed to read entry in {:?}: {}", tab_path, err);
+                            continue;
+                        }
+                    };
 
-                let name = match entry.file_name().into_string() {
-                    Ok(ok) => ok,
-                    Err(name_os) => {
-                        log::warn!(
+                    let path = entry.path();
+
+                    let name = match entry.file_name().into_string() {
+                        Ok(ok) => ok,
+                        Err(name_os) => {
+                            log::warn!(
                             "failed to parse entry at {:?}: {:?} is not valid UTF-8",
                             path,
                             name_os,
                         );
-                        continue;
-                    }
-                };
+                            continue;
+                        }
+                    };
 
-                if name == ".hidden" && path.is_file() {
-                    hidden_files = parse_hidden_file(&path);
+                    if name == ".hidden" && path.is_file() {
+                        hidden_files = parse_hidden_file(&path);
+                    }
+
+                    let metadata = match fs::metadata(&path) {
+                        Ok(ok) => ok,
+                        Err(err) => {
+                            log::warn!("failed to read metadata for entry at {:?}: {}", path, err);
+                            continue;
+                        }
+                    };
+
+                    items.push(item_from_entry(path, name, metadata, sizes));
                 }
-
-                let metadata = match fs::metadata(&path) {
-                    Ok(ok) => ok,
-                    Err(err) => {
-                        log::warn!("failed to read metadata for entry at {:?}: {}", path, err);
-                        continue;
-                    }
-                };
-
-                items.push(item_from_entry(path, name, metadata, sizes));
             }
-        }
-        Err(err) => {
-            log::warn!("failed to read directory {:?}: {}", tab_path, err);
+            Err(err) => {
+                log::warn!("failed to read directory {:?}: {}", tab_path, err);
+            }
         }
     }
     items.sort_by(|a, b| match (a.metadata.is_dir(), b.metadata.is_dir()) {
@@ -1456,6 +1620,12 @@ pub enum ItemMetadata {
     SimpleFile {
         size: u64,
     },
+    #[cfg(feature = "gvfs")]
+    GvfsPath {
+        mtime: u64,
+        size_opt: Option<u64>,
+        children_opt: Option<usize>,
+    }
 }
 
 impl ItemMetadata {
@@ -1468,12 +1638,16 @@ impl ItemMetadata {
             },
             Self::SimpleDir { .. } => true,
             Self::SimpleFile { .. } => false,
+            #[cfg(feature = "gvfs")]
+            Self::GvfsPath { mtime: _, children_opt, size_opt: _ } => children_opt.is_some()
         }
     }
 
     pub fn modified(&self) -> Option<SystemTime> {
         match self {
             Self::Path { metadata, .. } => metadata.modified().ok(),
+            #[cfg(feature = "gvfs")]
+            Self::GvfsPath { mtime, .. } => Some(SystemTime::UNIX_EPOCH + Duration::from_secs(*mtime)),
             _ => None,
         }
     }
@@ -3706,6 +3880,13 @@ impl Tab {
                         },
                         ItemMetadata::SimpleDir { entries } => (true, *entries),
                         ItemMetadata::SimpleFile { size } => (false, *size),
+                        #[cfg(feature = "gvfs")]
+                        ItemMetadata::GvfsPath { mtime: _, size_opt, children_opt } => {
+                            match children_opt {
+                                Some(child_count) => (true, *child_count as u64),
+                                None => (false, size_opt.unwrap_or_default())
+                            }
+                        }
                     };
                     let (a_is_entry, a_size) = get_size(a.1);
                     let (b_is_entry, b_size) = get_size(b.1);
@@ -4707,6 +4888,11 @@ impl Tab {
                     )
                     .map(|t| t.to_string())
                     .unwrap_or_default(),
+                    #[cfg(feature = "gvfs")]
+                    ItemMetadata::GvfsPath { .. } => match item.metadata.modified() {
+                        Some(mtime) => self.format_time(mtime).to_string(),
+                        None => String::new(),
+                    },
                     _ => String::new(),
                 };
 
@@ -4750,6 +4936,20 @@ impl Tab {
                         }
                     }
                     ItemMetadata::SimpleFile { size } => format_size(*size),
+                    #[cfg(feature = "gvfs")]
+                    ItemMetadata::GvfsPath { mtime: _, size_opt, children_opt } => {
+                        match children_opt {
+                            Some(child_count) => {
+                                if *child_count == 1 {
+                                    format!("{} item", child_count)
+                                }
+                                else {
+                                    format!("{} items", child_count)
+                                }
+                            }
+                            None => format_size(size_opt.unwrap_or_default())
+                        }
+                    }
                 };
 
                 let row = if condensed {
