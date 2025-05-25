@@ -3,7 +3,7 @@ empty-folder = Lege map
 empty-folder-hidden = Lege map (met verborgen bestanden)
 no-results = Geen resultaten gevonden
 filesystem = Bestandssysteem
-home = Gebruikersmap (/home)
+home = Home
 networks = Netwerk
 notification-in-progress = Sommige bestanden worden nog bewerkt.
 trash = Prullenbak
@@ -112,8 +112,8 @@ skip = Overslaan
 
 ## Set as Executable and Launch Dialog
 set-executable-and-launch = Uitvoerbaar maken en dan starten
-set-executable-and-launch-description = Wilt u '{$name}' uitvoerbaar maken en dan starten?
-set-and-launch = Uitvoerbaar & Start
+set-executable-and-launch-description = Wilt u "{$name}" uitvoerbaar maken en dan starten?
+set-and-launch = Uitvoerbaar maken en starten
 
 ## Metadata Dialog
 open-with = Openen met
