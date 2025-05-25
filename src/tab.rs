@@ -61,6 +61,7 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 use tokio::sync::mpsc;
+use trash::{TrashItemMetadata, TrashItemSize};
 use walkdir::WalkDir;
 
 use crate::{
@@ -1651,6 +1652,22 @@ impl ItemMetadata {
             _ => None,
         }
     }
+
+    pub fn file_size(&self) -> Option<u64> {
+        match self {
+            Self::Path { metadata, .. } => match metadata.is_dir() {
+                true => None,
+                false => Some(metadata.len())
+            },
+            Self::Trash { metadata, .. } => match metadata.size {
+                TrashItemSize::Bytes(size) => Some(size),
+                TrashItemSize::Entries(_) => None
+            },
+            #[cfg(feature = "gvfs")]
+            Self::GvfsPath { mtime: _, children_opt: _, size_opt } => *size_opt,
+            _ => None
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -1676,8 +1693,8 @@ impl Clone for ItemThumbnail {
 }
 
 impl ItemThumbnail {
-    pub fn new(path: &Path, metadata: fs::Metadata, mime: mime::Mime, thumbnail_size: u32) -> Self {
-        let size = metadata.len();
+    pub fn new(path: &Path, metadata: ItemMetadata, mime: mime::Mime, thumbnail_size: u32) -> Self {
+        let size = metadata.file_size().unwrap_or_default();
         let check_size = |thumbnailer: &str, max_size| {
             if size <= max_size {
                 true
@@ -5392,37 +5409,42 @@ impl Tab {
                 let Some(path) = item.path_opt().map(|path| path.to_path_buf()) else {
                     continue;
                 };
-                let ItemMetadata::Path { metadata, .. } = item.metadata.clone() else {
-                    continue;
-                };
-                let mime = item.mime.clone();
 
-                subscriptions.push(Subscription::run_with_id(
-                    ("thumbnail", path.clone()),
-                    stream::channel(1, |mut output| async move {
-                        let message = {
-                            let path = path.clone();
-                            tokio::task::spawn_blocking(move || {
-                                let start = Instant::now();
-                                let thumbnail =
-                                    ItemThumbnail::new(&path, metadata, mime, THUMBNAIL_SIZE);
-                                log::debug!("thumbnailed {:?} in {:?}", path, start.elapsed());
-                                Message::Thumbnail(path.clone(), thumbnail)
-                            })
-                            .await
-                            .unwrap()
-                        };
+                let metadata = item.metadata.clone();
+                match metadata {
+                    ItemMetadata::Path { .. }
+                        | ItemMetadata::GvfsPath { .. } => {
+                        let mime = item.mime.clone();
 
-                        match output.send(message).await {
-                            Ok(()) => {}
-                            Err(err) => {
-                                log::warn!("failed to send thumbnail for {:?}: {}", &path, err);
-                            }
-                        }
+                        subscriptions.push(Subscription::run_with_id(
+                            ("thumbnail", path.clone()),
+                            stream::channel(1, |mut output| async move {
+                                let message = {
+                                    let path = path.clone();
+                                    tokio::task::spawn_blocking(move || {
+                                        let start = Instant::now();
+                                        let thumbnail =
+                                            ItemThumbnail::new(&path, metadata, mime, THUMBNAIL_SIZE);
+                                        log::debug!("thumbnailed {:?} in {:?}", path, start.elapsed());
+                                        Message::Thumbnail(path.clone(), thumbnail)
+                                    })
+                                        .await
+                                        .unwrap()
+                                };
 
-                        std::future::pending().await
-                    }),
-                ));
+                                match output.send(message).await {
+                                    Ok(()) => {}
+                                    Err(err) => {
+                                        log::warn!("failed to send thumbnail for {:?}: {}", &path, err);
+                                    }
+                                }
+
+                                std::future::pending().await
+                            }),
+                        ));
+                    }
+                    _ => {}
+                }
 
                 if subscriptions.len() >= jobs {
                     break;
