@@ -1032,16 +1032,17 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
 }
 
 pub fn scan_network(uri: &str, sizes: IconSizes) -> Vec<Item> {
+    let mut all_items = Vec::new();
     for (_key, mounter) in MOUNTERS.iter() {
         match mounter.network_scan(uri, sizes) {
-            Some(Ok(items)) => return items,
+            Some(Ok(items)) => all_items.extend(items),
             Some(Err(err)) => {
                 log::warn!("failed to scan {:?}: {}", uri, err);
             }
             None => {}
         }
     }
-    Vec::new()
+    all_items
 }
 
 //TODO: organize desktop items based on display
