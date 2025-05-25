@@ -112,7 +112,7 @@ skip = Overslaan
 
 ## Set as Executable and Launch Dialog
 set-executable-and-launch = Uitvoerbaar maken en dan starten
-set-executable-and-launch-description = Wilt u "{$name}" uitvoerbaar maken en dan starten?
+set-executable-and-launch-description = Wilt u '{$name}' uitvoerbaar maken en dan starten?
 set-and-launch = Uitvoerbaar maken en starten
 
 ## Metadata Dialog
