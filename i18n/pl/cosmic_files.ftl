@@ -225,6 +225,10 @@ extracted = Wypakowano {$items} {$items ->
         [few] elementy
         *[other] elementów
     } z „{$from}” do „{$to}”
+setting-executable-and-launching = Ustawianie "{$name}" jako wykonywalny i uruchamianie
+set-executable-and-launched = Ustaw "{$name}" jako wykonywalny i uruchom
+setting-permissions = Ustawianie uprawnień dla "{$name}" na {$mode}
+set-permissions = Ustaw uprawnienia dla "{$name}" na {$mode}
 moving = Przenoszenie {$items} {$items ->
         [one] elementu
         *[other] elementów
