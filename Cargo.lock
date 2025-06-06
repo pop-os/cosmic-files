@@ -1564,7 +1564,6 @@ dependencies = [
 name = "cosmic-files-applet"
 version = "0.1.0"
 dependencies = [
- "cosmic-files",
  "log",
  "zbus 4.4.0",
 ]

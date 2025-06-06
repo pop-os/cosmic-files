@@ -7,5 +7,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .serve_at("/org/freedesktop/FileManager1", file_manager::FileManager)?
         .build();
 
-    cosmic_files::desktop()
+    loop {
+        
+    }
+
+    Ok(())
 }
