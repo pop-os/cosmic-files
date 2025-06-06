@@ -6,8 +6,3 @@ edition = "2021"
 [dependencies]
 log = "0.4"
 zbus = "4"
-
-[dependencies.cosmic-files]
-path = ".."
-default-features = false
-features = ["desktop", "gvfs", "wayland", "wgpu"]
