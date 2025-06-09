@@ -3,7 +3,7 @@ empty-folder = Lege map
 empty-folder-hidden = Lege map (met verborgen bestanden)
 no-results = Geen resultaten gevonden
 filesystem = Bestandssysteem
-home = Gebruikersmap (/home)
+home = Home
 networks = Netwerk
 notification-in-progress = Sommige bestanden worden nog bewerkt.
 trash = Prullenbak
@@ -113,7 +113,7 @@ skip = Overslaan
 ## Set as Executable and Launch Dialog
 set-executable-and-launch = Uitvoerbaar maken en dan starten
 set-executable-and-launch-description = Wilt u '{$name}' uitvoerbaar maken en dan starten?
-set-and-launch = Uitvoerbaar & Start
+set-and-launch = Uitvoerbaar maken en starten
 
 ## Metadata Dialog
 open-with = Openen met
@@ -225,8 +225,10 @@ extracted = {$items} {$items ->
         [one] bestand
         *[other] bestanden
     } uitgepakt van '{$from}' naar '{$to}'
-setting-executable-and-launching = {$name}' uitvoerbaar maken en starten
+setting-executable-and-launching = '{$name}' uitvoerbaar maken en starten
 set-executable-and-launched = '{$name}' uitvoerbaar gemaakt en gestart
+setting-permissions = Rechten voor '{$name}' wijzigen in '{$mode}'
+set-permissions = Rechten voor '{$name}' gewijzigd in '{$mode}' 
 moving = {$items} {$items ->
         [one] bestand
         *[other] bestanden
@@ -312,6 +314,7 @@ display-settings = Beeldschermbeheer...
 file = Bestand
 new-tab = Nieuw tabblad
 new-window = Nieuw venster
+reload-folder = Opnieuw laden
 rename = Hernoemen...
 close-tab = Tabblad sluiten
 quit = Sluiten
