@@ -30,8 +30,14 @@ size = Rozmiar
 # Progress footer
 details = Detale
 dismiss = Odrzuć wiadomość
-operations-running = {$running} bieżące działania ({$percent}%)…
-operations-running-finished = {$running} bieżące działania ({$percent}%), {$finished} ukończone…
+operations-running = {$running} bieżące {$running ->
+    [one] działanie
+    *[other] działania
+  } ({$percent}%)…
+operations-running-finished = {$running} bieżące {$running ->
+    [one] działanie
+    *[other] działąnia
+  } ({$percent}%), {$finished} ukończone…
 pause = Wstrzymaj
 resume = Wznów
 
@@ -225,7 +231,7 @@ extracted = Wypakowano {$items} {$items ->
         [few] elementy
         *[other] elementów
     } z „{$from}” do „{$to}”
-setting-executable-and-launching = Ustawianie "{$name}" jako wykonywalny i uruchamianie
+setting-executable-and-launching = Ustawianie "{$name}" jako wykonywalnego i uruchamianie
 set-executable-and-launched = Ustaw "{$name}" jako wykonywalny i uruchom
 setting-permissions = Ustawianie uprawnień dla "{$name}" na {$mode}
 set-permissions = Ustaw uprawnienia dla "{$name}" na {$mode}
@@ -317,6 +323,7 @@ display-settings = Ustawienia wyświetlacza…
 file = Plik
 new-tab = Nowa karta
 new-window = Nowe okno
+reload-folder = Odśwież katalog
 rename = Zmień nazwę…
 close-tab = Zamknij kartę
 quit = Zamknij
