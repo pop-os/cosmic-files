@@ -47,6 +47,7 @@ use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::{
+    borrow::Cow,
     cell::Cell,
     cmp::Ordering,
     collections::HashMap,
@@ -1762,7 +1763,7 @@ impl Item {
                                 mime_apps.iter().position(|x| x.is_default),
                                 move |index| index,
                             )
-                            .icons(mime_app_cache.icons(&self.mime)),
+                            .icons(Cow::Borrowed(mime_app_cache.icons(&self.mime))),
                         )
                         .map(|index| {
                             let mime_app = &mime_apps[index];
@@ -1838,7 +1839,7 @@ impl Item {
                         widget::settings::item::builder(user_name)
                             .description(fl!("owner"))
                             .control(widget::dropdown(
-                                &MODE_NAMES,
+                                Cow::Borrowed(MODE_NAMES.as_slice()),
                                 Some(get_mode_part(mode, MODE_SHIFT_USER).try_into().unwrap()),
                                 move |selected| {
                                     Message::SetPermissions(
@@ -1861,7 +1862,7 @@ impl Item {
                         widget::settings::item::builder(group_name)
                             .description(fl!("group"))
                             .control(widget::dropdown(
-                                &MODE_NAMES,
+                                Cow::Borrowed(MODE_NAMES.as_slice()),
                                 Some(get_mode_part(mode, MODE_SHIFT_GROUP).try_into().unwrap()),
                                 move |selected| {
                                     Message::SetPermissions(
@@ -1879,7 +1880,7 @@ impl Item {
                     let other_path = path.clone();
                     settings.push(widget::settings::item::builder(fl!("other")).control(
                         widget::dropdown(
-                            &MODE_NAMES,
+                            Cow::Borrowed(MODE_NAMES.as_slice()),
                             Some(get_mode_part(mode, MODE_SHIFT_OTHER).try_into().unwrap()),
                             move |selected| {
                                 Message::SetPermissions(
