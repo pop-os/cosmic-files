@@ -405,12 +405,12 @@ fn time_bag(military_time: bool) -> components::Bag {
     let mut bag = components::Bag::empty();
     bag.hour = Some(components::Numeric::Numeric);
     bag.minute = Some(components::Numeric::Numeric);
-    let hour_cyle = if military_time {
+    let hour_cycle = if military_time {
         preferences::HourCycle::H23
     } else {
         preferences::HourCycle::H12
     };
-    bag.preferences = Some(preferences::Bag::from_hour_cycle(hour_cyle));
+    bag.preferences = Some(preferences::Bag::from_hour_cycle(hour_cycle));
     bag
 }
 
