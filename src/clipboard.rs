@@ -50,7 +50,7 @@ impl ClipboardCopy {
                     if !text_plain.is_empty() {
                         text_plain.push_str(cr_nl);
                     }
-                    //TOOD: what if the path contains CR or NL?
+                    //TODO: what if the path contains CR or NL?
                     text_plain.push_str(path_str);
                 }
                 None => {

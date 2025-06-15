@@ -3122,7 +3122,7 @@ impl Application for App {
 
                     self.complete_operations.insert(id, op);
                 }
-                // Close progress notification if all relavent operations are finished
+                // Close progress notification if all relevant operations are finished
                 if !self
                     .pending_operations
                     .iter()
@@ -3158,7 +3158,7 @@ impl Application for App {
                     self.failed_operations
                         .insert(id, (op, controller, err.to_string()));
                 }
-                // Close progress notification if all relavent operations are finished
+                // Close progress notification if all relevant operations are finished
                 if !self
                     .pending_operations
                     .iter()
