@@ -1401,7 +1401,6 @@ pub enum Message {
     SetSort(HeadingOptions, bool),
     TabComplete(PathBuf, Vec<(String, PathBuf)>),
     Thumbnail(PathBuf, ItemThumbnail),
-    ToggleShowHidden,
     View(View),
     ToggleSort(HeadingOptions),
     Drop(Option<(Location, ClipboardPaste)>),
@@ -2799,14 +2798,23 @@ impl Tab {
             Message::Config(config) => {
                 // View is preserved for existing tabs
                 let view = self.config.view;
-                let show_hidden = self.config.show_hidden;
                 let military_time_changed = self.config.military_time != config.military_time;
+                let show_hidden_changed = self.config.show_hidden != config.show_hidden;
                 self.config = config;
                 self.config.view = view;
-                self.config.show_hidden = show_hidden;
                 if military_time_changed {
                     self.date_time_formatter = date_time_formatter(self.config.military_time);
                     self.time_formatter = time_formatter(self.config.military_time);
+                }
+                if show_hidden_changed {
+                    if let Location::Search(path, term, ..) = &self.location {
+                        cd = Some(Location::Search(
+                            path.clone(),
+                            term.clone(),
+                            self.config.show_hidden,
+                            Instant::now(),
+                        ));
+                    }
                 }
             }
             Message::ContextAction(action) => {
@@ -3497,17 +3505,6 @@ impl Tab {
                             break;
                         }
                     }
-                }
-            }
-            Message::ToggleShowHidden => {
-                self.config.show_hidden = !self.config.show_hidden;
-                if let Location::Search(path, term, ..) = &self.location {
-                    cd = Some(Location::Search(
-                        path.clone(),
-                        term.clone(),
-                        self.config.show_hidden,
-                        Instant::now(),
-                    ));
                 }
             }
             Message::View(view) => {
