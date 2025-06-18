@@ -4875,7 +4875,7 @@ impl Tab {
         let row_height = icon_size + 2 * space_xxs;
 
         let mut children: Vec<Element<_>> = Vec::new();
-        let mut y = 0;
+        let mut y: f32 = 0.0;
 
         let rule_padding = theme::active().cosmic().corner_radii.radius_xs[0] as u16;
 
@@ -4893,7 +4893,7 @@ impl Tab {
                 }
                 item.pos_opt.set(Some((count, 0)));
                 item.rect_opt.set(Some(Rectangle::new(
-                    Point::new(space_m as f32, y as f32),
+                    Point::new(space_m as f32, y),
                     Size::new(size.width - (2 * space_m) as f32, row_height as f32),
                 )));
 
@@ -4903,7 +4903,7 @@ impl Tab {
                             .padding([0, rule_padding])
                             .into(),
                     );
-                    y += 1;
+                    y += 1.0;
                 }
 
                 let modified_text = match &item.metadata {
@@ -5164,7 +5164,7 @@ impl Tab {
                 }
 
                 count += 1;
-                y += row_height;
+                y += row_height as f32;
                 children.push(button_row);
             }
 
