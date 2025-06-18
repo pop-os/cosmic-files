@@ -97,6 +97,7 @@ default = [
 ]
 dbus-config = ["libcosmic/dbus-config"]
 desktop = ["libcosmic/desktop", "dep:cosmic-mime-apps", "dep:xdg"]
+desktop-applet = []
 gvfs = ["dep:gio", "dep:glib"]
 io-uring = ["compio/io-uring", "dep:io-uring"]
 io-uring-bindgen = ["io-uring?/bindgen"]
