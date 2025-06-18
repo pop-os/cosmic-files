@@ -291,7 +291,7 @@ impl Op {
                 progress.total_bytes = Some(metadata.len());
                 (ctx.on_progress)(self, &progress);
                 if let Err(err) = to_file.set_permissions(metadata.permissions()).await {
-                    // This error is not propogated upwards as some filesystems do not support setting permissions
+                    // This error is not propagated upwards as some filesystems do not support setting permissions
                     log::warn!("failed to set permissions for {:?}: {}", self.to, err);
                 }
 
