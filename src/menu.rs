@@ -387,13 +387,15 @@ pub fn dialog_menu(
 
     MenuBar::new(vec![
         menu::Tree::with_children(
-            widget::button::icon(widget::icon::from_name(match tab.config.view {
-                tab::View::Grid => "view-grid-symbolic",
-                tab::View::List => "view-list-symbolic",
-            }))
-            // This prevents the button from being shown as insensitive
-            .on_press(Message::None)
-            .padding(8),
+            Element::from(
+                widget::button::icon(widget::icon::from_name(match tab.config.view {
+                    tab::View::Grid => "view-grid-symbolic",
+                    tab::View::List => "view-list-symbolic",
+                }))
+                // This prevents the button from being shown as insensitive
+                .on_press(Message::None)
+                .padding(8),
+            ),
             menu::items(
                 key_binds,
                 vec![
@@ -413,14 +415,16 @@ pub fn dialog_menu(
             ),
         ),
         menu::Tree::with_children(
-            widget::button::icon(widget::icon::from_name(if sort_direction {
-                "view-sort-ascending-symbolic"
-            } else {
-                "view-sort-descending-symbolic"
-            }))
-            // This prevents the button from being shown as insensitive
-            .on_press(Message::None)
-            .padding(8),
+            Element::from(
+                widget::button::icon(widget::icon::from_name(if sort_direction {
+                    "view-sort-ascending-symbolic"
+                } else {
+                    "view-sort-descending-symbolic"
+                }))
+                // This prevents the button from being shown as insensitive
+                .on_press(Message::None)
+                .padding(8),
+            ),
             menu::items(
                 key_binds,
                 vec![
@@ -459,10 +463,12 @@ pub fn dialog_menu(
             ),
         ),
         menu::Tree::with_children(
-            widget::button::icon(widget::icon::from_name("view-more-symbolic"))
-                // This prevents the button from being shown as insensitive
-                .on_press(Message::None)
-                .padding(8),
+            Element::from(
+                widget::button::icon(widget::icon::from_name("view-more-symbolic"))
+                    // This prevents the button from being shown as insensitive
+                    .on_press(Message::None)
+                    .padding(8),
+            ),
             menu::items(
                 key_binds,
                 vec![
