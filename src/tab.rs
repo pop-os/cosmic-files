@@ -2035,71 +2035,67 @@ impl Item {
 
                 let mode = metadata.mode();
 
-                    let user_name = get_user_by_uid(metadata.uid())
-                        .and_then(|user| user.name().to_str().map(ToOwned::to_owned))
-                        .unwrap_or_default();
-                    let user_path = path.clone();
-                    settings.push(
-                        widget::settings::item::builder(user_name)
-                            .description(fl!("owner"))
-                            .control(widget::dropdown(
-                                Cow::Borrowed(MODE_NAMES.as_slice()),
-                                Some(get_mode_part(mode, MODE_SHIFT_USER).try_into().unwrap()),
-                                move |selected| {
-                                    Message::SetPermissions(
-                                        user_path.clone(),
-                                        set_mode_part(
-                                            mode,
-                                            MODE_SHIFT_USER,
-                                            selected.try_into().unwrap(),
-                                        ),
-                                    )
-                                },
-                            )),
-                    );
-
-                    let group_name = get_group_by_gid(metadata.gid())
-                        .and_then(|group| group.name().to_str().map(ToOwned::to_owned))
-                        .unwrap_or_default();
-                    let group_path = path.clone();
-                    settings.push(
-                        widget::settings::item::builder(group_name)
-                            .description(fl!("group"))
-                            .control(widget::dropdown(
-                                Cow::Borrowed(MODE_NAMES.as_slice()),
-                                Some(get_mode_part(mode, MODE_SHIFT_GROUP).try_into().unwrap()),
-                                move |selected| {
-                                    Message::SetPermissions(
-                                        group_path.clone(),
-                                        set_mode_part(
-                                            mode,
-                                            MODE_SHIFT_GROUP,
-                                            selected.try_into().unwrap(),
-                                        ),
-                                    )
-                                },
-                            )),
-                    );
-
-                    let other_path = path.clone();
-                    settings.push(widget::settings::item::builder(fl!("other")).control(
-                        widget::dropdown(
+                let user_name = get_user_by_uid(metadata.uid())
+                    .and_then(|user| user.name().to_str().map(ToOwned::to_owned))
+                    .unwrap_or_default();
+                let user_path = path.clone();
+                settings.push(
+                    widget::settings::item::builder(user_name)
+                        .description(fl!("owner"))
+                        .control(widget::dropdown(
                             Cow::Borrowed(MODE_NAMES.as_slice()),
-                            Some(get_mode_part(mode, MODE_SHIFT_OTHER).try_into().unwrap()),
+                            Some(get_mode_part(mode, MODE_SHIFT_USER).try_into().unwrap()),
                             move |selected| {
                                 Message::SetPermissions(
-                                    other_path.clone(),
+                                    user_path.clone(),
                                     set_mode_part(
                                         mode,
-                                        MODE_SHIFT_OTHER,
+                                        MODE_SHIFT_USER,
                                         selected.try_into().unwrap(),
                                     ),
                                 )
                             },
-                        ),
-                    ));
-                }
+                        )),
+                );
+
+                let group_name = get_group_by_gid(metadata.gid())
+                    .and_then(|group| group.name().to_str().map(ToOwned::to_owned))
+                    .unwrap_or_default();
+                let group_path = path.clone();
+                settings.push(
+                    widget::settings::item::builder(group_name)
+                        .description(fl!("group"))
+                        .control(widget::dropdown(
+                            Cow::Borrowed(MODE_NAMES.as_slice()),
+                            Some(get_mode_part(mode, MODE_SHIFT_GROUP).try_into().unwrap()),
+                            move |selected| {
+                                Message::SetPermissions(
+                                    group_path.clone(),
+                                    set_mode_part(
+                                        mode,
+                                        MODE_SHIFT_GROUP,
+                                        selected.try_into().unwrap(),
+                                    ),
+                                )
+                            },
+                        )),
+                );
+
+                let other_path = path.clone();
+                settings.push(widget::settings::item::builder(fl!("other")).control(
+                    widget::dropdown(
+                        Cow::Borrowed(MODE_NAMES.as_slice()),
+                        Some(get_mode_part(mode, MODE_SHIFT_OTHER).try_into().unwrap()),
+                        move |selected| {
+                            Message::SetPermissions(
+                                other_path.clone(),
+                                set_mode_part(mode, MODE_SHIFT_OTHER, selected.try_into().unwrap()),
+                            )
+                        },
+                    ),
+                ));
             }
+        }
 
         if let ItemThumbnail::Image(_, Some((width, height))) = self
             .thumbnail_opt
