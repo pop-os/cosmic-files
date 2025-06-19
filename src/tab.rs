@@ -5421,50 +5421,41 @@ impl Tab {
                 };
 
                 let metadata = item.metadata.clone();
-                match metadata {
-                    ItemMetadata::Path { .. } | ItemMetadata::GvfsPath { .. } => {
-                        let mime = item.mime.clone();
+                let can_thumbnail = match metadata {
+                    ItemMetadata::Path { .. } => true,
+                    #[cfg(feature = "gvfs")]
+                    ItemMetadata::GvfsPath { .. } => true,
+                    _ => false,
+                };
+                if can_thumbnail {
+                    let mime = item.mime.clone();
 
-                        subscriptions.push(Subscription::run_with_id(
-                            ("thumbnail", path.clone()),
-                            stream::channel(1, |mut output| async move {
-                                let message = {
-                                    let path = path.clone();
-                                    tokio::task::spawn_blocking(move || {
-                                        let start = Instant::now();
-                                        let thumbnail = ItemThumbnail::new(
-                                            &path,
-                                            metadata,
-                                            mime,
-                                            THUMBNAIL_SIZE,
-                                        );
-                                        log::debug!(
-                                            "thumbnailed {:?} in {:?}",
-                                            path,
-                                            start.elapsed()
-                                        );
-                                        Message::Thumbnail(path.clone(), thumbnail)
-                                    })
-                                    .await
-                                    .unwrap()
-                                };
+                    subscriptions.push(Subscription::run_with_id(
+                        ("thumbnail", path.clone()),
+                        stream::channel(1, |mut output| async move {
+                            let message = {
+                                let path = path.clone();
+                                tokio::task::spawn_blocking(move || {
+                                    let start = Instant::now();
+                                    let thumbnail =
+                                        ItemThumbnail::new(&path, metadata, mime, THUMBNAIL_SIZE);
+                                    log::debug!("thumbnailed {:?} in {:?}", path, start.elapsed());
+                                    Message::Thumbnail(path.clone(), thumbnail)
+                                })
+                                .await
+                                .unwrap()
+                            };
 
-                                match output.send(message).await {
-                                    Ok(()) => {}
-                                    Err(err) => {
-                                        log::warn!(
-                                            "failed to send thumbnail for {:?}: {}",
-                                            &path,
-                                            err
-                                        );
-                                    }
+                            match output.send(message).await {
+                                Ok(()) => {}
+                                Err(err) => {
+                                    log::warn!("failed to send thumbnail for {:?}: {}", &path, err);
                                 }
+                            }
 
-                                std::future::pending().await
-                            }),
-                        ));
-                    }
-                    _ => {}
+                            std::future::pending().await
+                        }),
+                    ));
                 }
 
                 if subscriptions.len() >= jobs {
