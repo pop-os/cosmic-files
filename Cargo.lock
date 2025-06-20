@@ -1529,7 +1529,6 @@ dependencies = [
  "trash",
  "url",
  "uzers",
- "vergen",
  "walkdir",
  "wayland-client",
  "xdg",
@@ -4311,6 +4310,7 @@ dependencies = [
  "image",
  "lazy_static",
  "libc",
+ "license",
  "mime 0.3.17",
  "palette",
  "raw-window-handle",
@@ -4363,6 +4363,17 @@ dependencies = [
  "bitflags 2.9.1",
  "libc",
  "redox_syscall 0.5.13",
+]
+
+[[package]]
+name = "license"
+version = "3.6.0+3.26.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b517725daf998729e5ef4c4881cdde19cd5bbdde09741ba1b0f1ba0ce018961"
+dependencies = [
+ "reword",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -4982,15 +4993,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.104",
-]
-
-[[package]]
-name = "num_threads"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c7398b9c8b70908f6371f47ed36737907c87c52af34c268fed0bf0ceb92ead9"
-dependencies = [
- "libc",
 ]
 
 [[package]]
@@ -6195,6 +6197,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "reword"
+version = "7.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2de73ec80cfacafa51b73b0db31d6c3a4718fc6b0d479ef445609704020c1b0"
+dependencies = [
+ "unicode-segmentation",
+]
+
+[[package]]
 name = "rfd"
 version = "0.15.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7108,9 +7119,7 @@ checksum = "8a7619e19bc266e0f9c5e6686659d394bc57973859340060a69221e57dbc0c40"
 dependencies = [
  "deranged",
  "itoa",
- "libc",
  "num-conv",
- "num_threads",
  "powerfmt",
  "serde",
  "time-core",
@@ -7615,18 +7624,6 @@ name = "valuable"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
-
-[[package]]
-name = "vergen"
-version = "8.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2990d9ea5967266ea0ccf413a4aa5c42a93dbcfda9cb49a97de6931726b12566"
-dependencies = [
- "anyhow",
- "cfg-if",
- "rustversion",
- "time",
-]
 
 [[package]]
 name = "version-compare"

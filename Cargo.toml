@@ -6,9 +6,6 @@ edition = "2021"
 license = "GPL-3.0-only"
 rust-version = "1.85.0"
 
-[build-dependencies]
-vergen = { version = "8", features = ["git", "gitcl"] }
-
 [dependencies]
 chrono = { version = "0.4", features = ["unstable-locales"] }
 icu = { version = "1.5.0", features = [
@@ -96,7 +93,12 @@ default = [
     "xz2",
 ]
 dbus-config = ["libcosmic/dbus-config"]
-desktop = ["libcosmic/desktop", "dep:cosmic-mime-apps", "dep:xdg"]
+desktop = [
+    "libcosmic/desktop",
+    "libcosmic/about",
+    "dep:cosmic-mime-apps",
+    "dep:xdg",
+]
 desktop-applet = []
 gvfs = ["dep:gio", "dep:glib"]
 io-uring = ["compio/io-uring", "dep:io-uring"]
