@@ -30,8 +30,15 @@ size = Размер
 # Progress footer
 details = Подробности
 dismiss = Отмяна на съобщението
-operations-running = {$running} операции се изпълняват ({$percent}%)...
+operations-running = {$running} {$running -> 
+    [one] операция се изпълнява
+    *[other] операции се изпълняват
+  } ({$percent}%)...
 operations-running-finished = {$running} операции се изпълняват ({$percent}%), {$finished} завършени...
+operations-running-finished = {$running} {$running -> 
+    [one] операция се изпълнява
+    *[other] операции се изпълняват
+  } ({$percent}%), {$finished} завършиха...
 pause = Пауза
 resume = Продължаване
 
@@ -221,6 +228,8 @@ extracted = Извлечено е {$items} {$items ->
     } от „{$from}“ в „{$to}“
 setting-executable-and-launching = Задаване на „{$name}“ като изпълним и стартиране
 set-executable-and-launched = „{$name}“ е зададен като изпълним и е стартиран
+setting-permissions = Задаване на правата за {$name}" на {$mode}
+set-permissions = Правата за "{$name}" бяха зададени на {$mode}
 moving = Преместване на {$items} {$items ->
         [one] елемент
         *[other] елемента
@@ -229,14 +238,14 @@ moved = Преместено е {$items} {$items ->
         [one] елемент
         *[other] елемента
     } от „{$from}“ в „{$to}“
-permanently-deleting = Изтриване завинаги на „{$items}“ „{$items ->
+permanently-deleting = Изтриване завинаги на {$items} {$items ->
         [one] елемент
         *[other] елемента
-    }“
-permanently-deleted = Завинаги е изтрито „{$items}“ „{$items ->
+    }
+permanently-deleted = Изтрито е завинаги {$items} {$items ->
         [one] елемент
         *[other] елемента
-    }“
+    }
 renaming = Преименуване на „{$from}“ на „{$to}“
 renamed = „{$from}“ е преименувано на „{$to}“
 restoring = Възстановяване на {$items} {$items ->
@@ -306,6 +315,7 @@ display-settings = Настройки на екрана...
 file = Файл
 new-tab = Нов подпрозорец
 new-window = Нов прозорец
+reload-folder = Презареждане на папката
 rename = Преименуване...
 close-tab = Затваряне на подпрозореца
 quit = Спиране на програмата
