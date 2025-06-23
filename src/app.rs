@@ -360,7 +360,7 @@ pub enum Message {
     SearchInput(String),
     SetShowDetails(bool),
     SetTypeToSearch(TypeToSearch),
-    SystemThemeModeChange(cosmic_theme::ThemeMode),
+    SystemThemeModeChange,
     Size(Size),
     TabActivate(Entity),
     TabNext,
@@ -3356,7 +3356,7 @@ impl Application for App {
                 config_set!(type_to_search, type_to_search);
                 return self.update_config();
             }
-            Message::SystemThemeModeChange(_theme_mode) => {
+            Message::SystemThemeModeChange => {
                 return self.update_config();
             }
             Message::TabActivate(entity) => {
@@ -5214,6 +5214,14 @@ impl Application for App {
             .into()
     }
 
+    fn system_theme_update(
+        &mut self,
+        _keys: &[&'static str],
+        new_theme: &cosmic::cosmic_theme::Theme,
+    ) -> Task<Self::Message> {
+        self.update(Message::SystemThemeModeChange)
+    }
+
     fn subscription(&self) -> Subscription<Self::Message> {
         struct ThemeSubscription;
         struct WatcherSubscription;
@@ -5267,21 +5275,6 @@ impl Application for App {
                     );
                 }
                 Message::Config(update.config)
-            }),
-            cosmic_config::config_subscription::<_, cosmic_theme::ThemeMode>(
-                TypeId::of::<ThemeSubscription>(),
-                cosmic_theme::THEME_MODE_ID.into(),
-                cosmic_theme::ThemeMode::version(),
-            )
-            .map(|update| {
-                if !update.errors.is_empty() {
-                    log::info!(
-                        "errors loading theme mode {:?}: {:?}",
-                        update.keys,
-                        update.errors
-                    );
-                }
-                Message::SystemThemeModeChange(update.config)
             }),
             cosmic_config::config_subscription::<_, TimeConfig>(
                 TypeId::of::<TimeSubscription>(),

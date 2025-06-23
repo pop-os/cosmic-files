@@ -86,7 +86,6 @@ features = ["multi-window", "tokio", "winit", "surface-message"]
 [features]
 default = [
     "bzip2",
-    "dbus-config",
     "desktop",
     "gvfs",
     "io-uring",
