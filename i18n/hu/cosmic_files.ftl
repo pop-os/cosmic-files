@@ -53,7 +53,7 @@ extract-to-title = Kibontás mappába
 
 ## Empty Trash Dialog
 empty-trash = Kuka ürítése
-empty-trash-warning = Biztosan véglegesen törölni szeretné a kukában lévő összes elemet?
+empty-trash-warning = Biztosan véglegesen törölni szeretnéd a kukában lévő összes elemet?
 
 ## Mount Error Dialog
 mount-error = A meghajtó nem elérhető
@@ -84,16 +84,16 @@ save = Mentés
 save-file = Fájl mentése
 
 ## Open With Dialog
-open-with-title = Hogyan szeretné megnyitni ezt: „{$name}”?
+open-with-title = Hogyan szeretnéd megnyitni ezt: „{$name}”?
 browse-store = {$store} böngészése
 other-apps = Egyéb alkalmazások
 related-apps = Hasonló alkalmazások
 
 ## Permanently delete Dialog
-selected-items = a(z) {$items} elemet
+selected-items = a(z) {$items} kijelölt elemet
 permanently-delete-question = Végleges törlés
 delete = Törlés
-permanently-delete-warning = Biztos benne, hogy véglegesen törölni szeretné {$target}? A művelet nem visszavonható.
+permanently-delete-warning = Biztosan véglegesen törölni szeretnéd {$target}? A művelet nem visszavonható.
 
 ## Rename Dialog
 rename-file = Fájl átnevezése
@@ -102,8 +102,8 @@ rename-folder = Mappa átnevezése
 ## Replace Dialog
 replace = Csere
 replace-title = „{$filename}” már létezik.
-replace-warning = Le szeretné cserélni a meglévő fájlt? A cseréje felülírja annak tartalmát.
-replace-warning-operation = Ki szeretné cserélni? A csere felülírja annak tartalmát.
+replace-warning = Szeretnéd lecserélni a meglévő fájlt a menteni kívánt fájllal? A cseréje felülírja annak tartalmát.
+replace-warning-operation = Szeretnéd lecserélni? A csere felülírja annak tartalmát.
 original-file = Eredeti fájl
 replace-with = Csere erre
 apply-to-all = Alkalmazás mindegyikre
@@ -112,7 +112,7 @@ skip = Kihagyás
 
 ## Set as Executable and Launch Dialog
 set-executable-and-launch = Végrehajthatóvá tétel és indítás
-set-executable-and-launch-description = Szeretné végrehajthatóvá tenni a(z) „{$name}” fájlt és elindítani?
+set-executable-and-launch-description = Szeretnéd végrehajthatóvá tenni a(z) „{$name}” fájlt és elindítani?
 set-and-launch = Alkalmazás és indítás
 
 ## Metadata Dialog
@@ -141,9 +141,9 @@ read-write-execute = Olvasás, írás és végrehajtás
 favorite-path-error = Hiba a könyvtár megnyitásakor
 favorite-path-error-description =
     Nem sikerült megnyitni: „{$path}”.
-    Lehet, hogy nem létezik, vagy nincs megfelelő jogosultsága a megnyitásához.
+    Lehet, hogy nem létezik, vagy nincs megfelelő jogosultságod a megnyitásához.
     
-    Szeretné eltávolítani az oldalsávról?
+    Szeretnéd eltávolítani az oldalsávról?
 remove = Eltávolítás
 keep = Megtartás
 
