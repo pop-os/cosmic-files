@@ -211,21 +211,21 @@ pub struct DialogSettings {
 }
 
 impl DialogSettings {
-    pub fn new() -> DialogSettings {
+    pub fn new() -> Self {
         Default::default()
     }
 
-    pub fn app_id(mut self, app_id: String) -> DialogSettings {
+    pub fn app_id(mut self, app_id: String) -> Self {
         self.app_id = app_id;
         self
     }
 
-    pub fn kind(mut self, kind: DialogKind) -> DialogSettings {
+    pub fn kind(mut self, kind: DialogKind) -> Self {
         self.kind = kind;
         self
     }
 
-    pub fn path(mut self, path: PathBuf) -> DialogSettings {
+    pub fn path(mut self, path: PathBuf) -> Self {
         self.path_opt = Some(path);
         self
     }
