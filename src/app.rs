@@ -66,6 +66,7 @@ use trash::TrashItem;
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use wayland_client::{protocol::wl_output::WlOutput, Proxy};
 
+use crate::dialog::DialogSettings;
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{
@@ -2562,8 +2563,9 @@ impl Application for App {
                     .map(|parent| parent.to_path_buf())
                 {
                     let (mut dialog, dialog_task) = Dialog::new(
-                        DialogKind::OpenFolder,
-                        Some(destination),
+                        DialogSettings::new()
+                            .kind(DialogKind::OpenFolder)
+                            .path(destination),
                         Message::FileDialogMessage,
                         Message::ExtractToResult,
                     );
