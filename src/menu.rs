@@ -2,7 +2,10 @@
 
 use cosmic::{
     app::Core,
-    iced::{keyboard::Modifiers, Alignment, Background, Border, Length},
+    iced::{
+        advanced::widget::text::Style as TextStyle, keyboard::Modifiers, Alignment, Background,
+        Border, Length,
+    },
     theme,
     widget::{
         self, button, column, container, divider, horizontal_space,
@@ -65,11 +68,22 @@ pub fn context_menu<'a>(
         }
         String::new()
     };
+    fn key_style(theme: &cosmic::Theme) -> TextStyle {
+        let mut color = theme.cosmic().background.component.on;
+        color.alpha *= 0.75;
+        TextStyle {
+            color: Some(color.into()),
+        }
+    }
 
     let menu_item = |label, action| {
         let key = find_key(&action);
-        menu_button!(text::body(label), horizontal_space(), text::body(key))
-            .on_press(tab::Message::ContextAction(action))
+        menu_button!(
+            text::body(label),
+            horizontal_space(),
+            text::body(key).class(theme::Text::Custom(key_style))
+        )
+        .on_press(tab::Message::ContextAction(action))
     };
 
     let (sort_name, sort_direction, _) = tab.sort_options();
@@ -500,7 +514,7 @@ pub fn dialog_menu(
         ),
     ])
     .item_height(ItemHeight::Dynamic(40))
-    .item_width(ItemWidth::Uniform(240))
+    .item_width(ItemWidth::Uniform(360))
     .spacing(theme::active().cosmic().spacing.space_xxxs.into())
     .into()
 }
