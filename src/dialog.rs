@@ -204,6 +204,19 @@ impl<'a, M: Clone + 'static> From<&'a DialogLabel> for Element<'a, M> {
     }
 }
 
+
+pub struct DialogSettings {
+    pub app_id: String,
+}
+
+impl Default for DialogSettings {
+    fn default() -> Self {
+        Self {
+            app_id: App::APP_ID.to_string(),
+        }
+    }
+}
+
 pub struct Dialog<M> {
     cosmic: Cosmic<App>,
     mapper: fn(DialogMessage) -> M,
@@ -211,9 +224,20 @@ pub struct Dialog<M> {
 }
 
 impl<M: Send + 'static> Dialog<M> {
+    #[deprecated(note = "Use `create` instead")]
     pub fn new(
         kind: DialogKind,
         path_opt: Option<PathBuf>,
+        mapper: fn(DialogMessage) -> M,
+        on_result: impl Fn(DialogResult) -> M + 'static,
+    ) -> (Self, Task<M>) {
+        Self::create(kind, path_opt, Default::default(), mapper, on_result)
+    }
+
+    pub fn create(
+        kind: DialogKind,
+        path_opt: Option<PathBuf>,
+        dialog_settings: DialogSettings,
         mapper: fn(DialogMessage) -> M,
         on_result: impl Fn(DialogResult) -> M + 'static,
     ) -> (Self, Task<M>) {
@@ -234,7 +258,7 @@ impl<M: Send + 'static> Dialog<M> {
 
         #[cfg(target_os = "linux")]
         {
-            settings.platform_specific.application_id = App::APP_ID.to_string();
+            settings.platform_specific.application_id = dialog_settings.app_id;
         }
 
         let (window_id, window_command) = window::open(settings.clone());
