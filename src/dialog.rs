@@ -204,6 +204,43 @@ impl<'a, M: Clone + 'static> From<&'a DialogLabel> for Element<'a, M> {
     }
 }
 
+pub struct DialogSettings {
+    app_id: String,
+    kind: DialogKind,
+    path_opt: Option<PathBuf>,
+}
+
+impl DialogSettings {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn app_id(mut self, app_id: String) -> Self {
+        self.app_id = app_id;
+        self
+    }
+
+    pub fn kind(mut self, kind: DialogKind) -> Self {
+        self.kind = kind;
+        self
+    }
+
+    pub fn path(mut self, path: PathBuf) -> Self {
+        self.path_opt = Some(path);
+        self
+    }
+}
+
+impl Default for DialogSettings {
+    fn default() -> Self {
+        Self {
+            app_id: App::APP_ID.to_string(),
+            kind: DialogKind::OpenFile,
+            path_opt: None,
+        }
+    }
+}
+
 pub struct Dialog<M> {
     cosmic: Cosmic<App>,
     mapper: fn(DialogMessage) -> M,
@@ -212,8 +249,7 @@ pub struct Dialog<M> {
 
 impl<M: Send + 'static> Dialog<M> {
     pub fn new(
-        kind: DialogKind,
-        path_opt: Option<PathBuf>,
+        dialog_settings: DialogSettings,
         mapper: fn(DialogMessage) -> M,
         on_result: impl Fn(DialogResult) -> M + 'static,
     ) -> (Self, Task<M>) {
@@ -234,7 +270,7 @@ impl<M: Send + 'static> Dialog<M> {
 
         #[cfg(target_os = "linux")]
         {
-            settings.platform_specific.application_id = App::APP_ID.to_string();
+            settings.platform_specific.application_id = dialog_settings.app_id;
         }
 
         let (window_id, window_command) = window::open(settings.clone());
@@ -242,16 +278,16 @@ impl<M: Send + 'static> Dialog<M> {
         let mut core = Core::default();
         core.set_main_window_id(Some(window_id));
         let flags = Flags {
-            kind,
-            path_opt: path_opt
-                .as_ref()
-                .and_then(|path| match fs::canonicalize(path) {
+            kind: dialog_settings.kind,
+            path_opt: dialog_settings.path_opt.as_ref().and_then(|path| {
+                match fs::canonicalize(path) {
                     Ok(ok) => Some(ok),
                     Err(err) => {
                         log::warn!("failed to canonicalize {:?}: {}", path, err);
                         None
                     }
-                }),
+                }
+            }),
             window_id,
             config_handler,
             config,
