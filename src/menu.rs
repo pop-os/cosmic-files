@@ -108,11 +108,13 @@ pub fn context_menu<'a>(
     let mut selected_trash_only = false;
     let mut selected_desktop_entry = None;
     let mut selected_types: Vec<Mime> = vec![];
+    let mut selected_mount_point = 0;
     if let Some(items) = tab.items_opt() {
         for item in items.iter() {
             if item.selected {
                 selected += 1;
                 if item.metadata.is_dir() {
+                    selected_mount_point += item.is_mount_point as i32;
                     selected_dir += 1;
                 }
                 match &item.location_opt {
@@ -194,8 +196,10 @@ pub fn context_menu<'a>(
                         .push(menu_item(fl!("open-in-new-window"), Action::OpenInNewWindow).into());
                 }
                 children.push(divider::horizontal::light().into());
-                children.push(menu_item(fl!("rename"), Action::Rename).into());
-                children.push(menu_item(fl!("cut"), Action::Cut).into());
+                if selected_mount_point == 0 {
+                    children.push(menu_item(fl!("rename"), Action::Rename).into());
+                    children.push(menu_item(fl!("cut"), Action::Cut).into());
+                }
                 children.push(menu_item(fl!("copy"), Action::Copy).into());
 
                 children.push(divider::horizontal::light().into());
@@ -235,12 +239,16 @@ pub fn context_menu<'a>(
                     children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
                 }
                 children.push(divider::horizontal::light().into());
-                if modifiers.shift() && !modifiers.control() {
-                    children.push(
-                        menu_item(fl!("delete-permanently"), Action::PermanentlyDelete).into(),
-                    );
-                } else {
-                    children.push(menu_item(fl!("move-to-trash"), Action::Delete).into());
+                if selected_mount_point == 0 {
+                    if modifiers.shift() && !modifiers.control() {
+                        children.push(
+                            menu_item(fl!("delete-permanently"), Action::PermanentlyDelete).into(),
+                        );
+                    } else {
+                        children.push(menu_item(fl!("move-to-trash"), Action::Delete).into());
+                    }
+                } else if selected == 1 {
+                    children.push(menu_item(fl!("eject"), Action::Eject).into());
                 }
             } else {
                 //TODO: need better designs for menu with no selection

@@ -291,6 +291,7 @@ type-to-search-enter-path = Enters the path to the directory or file
 add-to-sidebar = Add to sidebar
 compress = Compress
 delete-permanently = Delete permanently
+eject = Eject
 extract-here = Extract
 new-file = New file...
 new-folder = New folder...

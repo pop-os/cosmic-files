@@ -109,6 +109,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
 
         items.push(tab::Item {
             name,
+            is_mount_point: false,
             display_name,
             metadata,
             hidden: false,
