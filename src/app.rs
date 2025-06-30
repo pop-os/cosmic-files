@@ -117,6 +117,7 @@ pub enum Action {
     Delete,
     EditHistory,
     EditLocation,
+    Eject,
     EmptyTrash,
     #[cfg(feature = "desktop")]
     ExecEntryAction(usize),
@@ -184,6 +185,7 @@ impl Action {
             Action::EditLocation => {
                 Message::TabMessage(entity_opt, tab::Message::EditLocationEnable)
             }
+            Action::Eject => Message::Eject,
             Action::EmptyTrash => Message::TabMessage(None, tab::Message::EmptyTrash),
             Action::ExtractHere => Message::ExtractHere(entity_opt),
             Action::ExtractTo => Message::ExtractTo(entity_opt),
@@ -304,6 +306,7 @@ pub enum Message {
     DesktopViewOptions,
     DialogCancel,
     DialogComplete,
+    Eject,
     FileDialogMessage(DialogMessage),
     DialogPush(DialogPage),
     DialogUpdate(DialogPage),
@@ -1044,17 +1047,36 @@ impl App {
     ) -> Task<Message> {
         log::info!("rescan_tab {entity:?} {location:?} {selection_paths:?}");
         let icon_sizes = self.config.tab.icon_sizes;
+        let mounter_items = self.mounter_items.clone();
+
         Task::perform(
             async move {
                 let location2 = location.clone();
                 match tokio::task::spawn_blocking(move || location2.scan(icon_sizes)).await {
-                    Ok((parent_item_opt, items)) => cosmic::action::app(Message::TabRescan(
-                        entity,
-                        location,
-                        parent_item_opt,
-                        items,
-                        selection_paths,
-                    )),
+                    Ok((parent_item_opt, mut items)) => {
+                        #[cfg(feature = "gvfs")]
+                        {
+                            let mounter_paths: Vec<_> = mounter_items
+                                .iter()
+                                .flat_map(|item| item.1.iter())
+                                .filter_map(|item| item.path())
+                                .collect();
+                            if !mounter_paths.is_empty() {
+                                for item in &mut items {
+                                    item.is_mount_point =
+                                        item.path_opt().is_some_and(|p| mounter_paths.contains(p));
+                                }
+                            }
+                        }
+
+                        cosmic::action::app(Message::TabRescan(
+                            entity,
+                            location,
+                            parent_item_opt,
+                            items,
+                            selection_paths,
+                        ))
+                    }
                     Err(err) => {
                         log::warn!("failed to rescan: {}", err);
                         cosmic::action::none()
@@ -4135,6 +4157,28 @@ impl Application for App {
             Message::Size(size) => {
                 self.size = Some(size);
                 self.handle_overlap();
+            }
+            Message::Eject => {
+                #[cfg(feature = "gvfs")]
+                {
+                    let paths = self.selected_paths(None);
+                    if let Some(p) = paths.first() {
+                        {
+                            for (k, mounter_items) in &self.mounter_items {
+                                if let Some(mounter) = MOUNTERS.get(&k) {
+                                    if let Some(item) = mounter_items
+                                        .iter()
+                                        .find(|item| item.path().is_some_and(|path| path == *p))
+                                    {
+                                        return mounter
+                                            .unmount(item.clone())
+                                            .map(|_| cosmic::action::none());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             Message::Focused(id) => {

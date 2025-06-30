@@ -668,6 +668,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
     Item {
         name: file_name.clone().to_string(),
         display_name,
+        is_mount_point: false,
         metadata: ItemMetadata::GvfsPath {
             mtime,
             size_opt,
@@ -809,6 +810,7 @@ pub fn item_from_entry(
     Item {
         name,
         display_name,
+        is_mount_point: false,
         metadata: ItemMetadata::Path {
             metadata,
             children_opt,
@@ -1090,6 +1092,7 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                 items.push(Item {
                     name,
                     display_name,
+                    is_mount_point: false,
                     metadata: ItemMetadata::Trash { metadata, entry },
                     hidden: false,
                     location_opt: None,
@@ -1270,6 +1273,7 @@ pub fn scan_desktop(
         items.push(Item {
             name,
             display_name,
+            is_mount_point: false,
             metadata,
             hidden: false,
             location_opt: Some(Location::Trash),
@@ -1821,6 +1825,7 @@ impl ItemThumbnail {
 #[derive(Clone, Debug)]
 pub struct Item {
     pub name: String,
+    pub is_mount_point: bool,
     pub display_name: String,
     pub metadata: ItemMetadata,
     pub hidden: bool,

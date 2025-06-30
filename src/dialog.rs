@@ -650,11 +650,26 @@ impl App {
     fn rescan_tab(&self) -> Task<Message> {
         let location = self.tab.location.clone();
         let icon_sizes = self.tab.config.icon_sizes;
+        let mounter_items = self.mounter_items.clone();
         Task::perform(
             async move {
                 let location2 = location.clone();
                 match tokio::task::spawn_blocking(move || location2.scan(icon_sizes)).await {
-                    Ok((parent_item_opt, items)) => {
+                    Ok((parent_item_opt, mut items)) => {
+                        #[cfg(feature = "gvfs")]
+                        {
+                            let mounter_paths: Vec<_> = mounter_items
+                                .iter()
+                                .flat_map(|item| item.1.iter())
+                                .filter_map(|item| item.path())
+                                .collect();
+                            if !mounter_paths.is_empty() {
+                                for item in &mut items {
+                                    item.is_mount_point =
+                                        item.path_opt().is_some_and(|p| mounter_paths.contains(p));
+                                }
+                            }
+                        }
                         cosmic::action::app(Message::TabRescan(location, parent_item_opt, items))
                     }
                     Err(err) => {
