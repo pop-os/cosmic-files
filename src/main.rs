@@ -5,43 +5,6 @@ use tikv_jemallocator::Jemalloc;
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
-use clap_lex::RawArgs;
-use std::error::Error;
-
-fn main() -> Result<(), Box<dyn Error>> {
-    let raw_args = RawArgs::from_args();
-    let mut cursor = raw_args.cursor();
-
-    // Parse the arguments
-    while let Some(arg) = raw_args.next_os(&mut cursor) {
-        match arg.to_str() {
-            Some("--help") | Some("-h") => {
-                print_help();
-                return Ok(());
-            }
-            Some("--version") | Some("-V") => {
-                println!(
-                    "cosmic-files {} (git commit {})",
-                    env!("CARGO_PKG_VERSION"),
-                    env!("VERGEN_GIT_SHA")
-                );
-                return Ok(());
-            }
-            _ => {}
-        }
-    }
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     cosmic_files::main()
-}
-
-fn print_help() {
-    println!(
-        r#"COSMIC Files
-Designed for the COSMIC™ desktop environment, cosmic-files is a libcosmic-based file manager.
-	    
-Project home page: https://github.com/pop-os/cosmic-files
-	    
-Options:
-  -h, --help       Show this message
-  -v, --version    Show the version of cosmic-files"#
-    );
 }
