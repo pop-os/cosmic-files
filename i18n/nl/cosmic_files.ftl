@@ -1,11 +1,11 @@
-cosmic-files = COSMIC-bestandsbeheerder
+cosmic-files = COSMIC Bestanden
 empty-folder = Lege map
 empty-folder-hidden = Lege map (met verborgen bestanden)
 no-results = Geen resultaten gevonden
 filesystem = Bestandssysteem
-home = Gebruikersmap
-networks = Netwerken
-notification-in-progress = Bestanden worden momenteel bewerkt.
+home = Home
+networks = Netwerk
+notification-in-progress = Sommige bestanden worden nog bewerkt.
 trash = Prullenbak
 recents = Recente bestanden
 undo = Ongedaan maken
@@ -30,26 +30,33 @@ size = Grootte
 # Progress footer
 details = Details
 dismiss = Bericht negeren
-operations-running = {$running} bewerkingen worden uitgevoerd ({$percent}%)...
-operations-running-finished = {$running} bewerkingen worden uitgevoerd ({$percent}%), {$finished} voltooid...
+operations-running = {$running} {$running -> 
+    [one] bewerking
+    *[other] bewerkingen 
+  } uitvoeren ({$percent}%)...
+operations-running-finished = {$running} {$running -> 
+    [one] bewerking
+    *[other] bewerkingen 
+  } uitvoeren ({$percent}%), {$finished} voltooid...
 pause = Pauzeren
 resume = Hervatten
 
 # Dialogs
 
 ## Compress Dialog
-create-archive = Maak een archiefbestand
+create-archive = Archiefbestand maken
 
 ## Extract Dialog
 extract-password-required = Wachtwoord vereist
 extract-to = Uitpakken naar...
+extract-to-title = Uitpakken naar map
 
 ## Empty Trash Dialog
 empty-trash = Prullenbak legen?
 empty-trash-warning = Weet u zeker dat u alles in de prullenbak permanent wilt verwijderen?
 
 ## Mount Error Dialog
-mount-error = Toegang tot schijf niet mogelijk
+mount-error = Geen toegang tot schijf
 
 ## New File/Folder Dialog
 create-new-file = Nieuw bestand aanmaken
@@ -60,7 +67,7 @@ file-already-exists = Er bestaat al een bestand met deze naam.
 folder-already-exists = Er bestaat al een map met deze naam.
 name-hidden = Namen die met '.' beginnen worden verborgen.
 name-invalid = De naam '{$filename}' is niet geldig.
-name-no-slashes = De naam mag geen schuine strepen bevatten.
+name-no-slashes = De naam mag geen slash '/' bevatten.
 
 ## Open/Save Dialog
 cancel = Annuleren
@@ -79,6 +86,14 @@ save-file = Bestand opslaan
 ## Open With Dialog
 open-with-title = Hoe wilt u '{$name}' openen?
 browse-store = Verken {$store}
+other-apps = Andere toepassingen
+related-apps = Gerelateerde toepassingen
+
+## Permanently delete Dialog
+selected-items = de {$items} geselecteerde items
+permanently-delete-question = Permanent verwijderen?
+delete = Verwijderen
+permanently-delete-warning = Weet u zeker dat u {$target} permanent wilt verwijderen? Dit kan niet ongedaan worden gemaakt.
 
 ## Rename Dialog
 rename-file = Bestand hernoemen
@@ -86,9 +101,9 @@ rename-folder = Map hernoemen
 
 ## Replace Dialog
 replace = Vervangen
-replace-title = '{$filename}' bestaat al op deze locatie.
+replace-title = '{$filename}' bestaat al in deze map.
 replace-warning = Wilt u het bestand vervangen door de nieuwe versie? Dit zal de bestaande inhoud overschrijven.
-replace-warning-operation = Wilt u het bestand vervangen? Bestaande inhoud wordt overschreven!
+replace-warning-operation = Wilt u het bestand vervangen? De bestaande inhoud wordt overschreven!
 original-file = Oorspronkelijk bestand
 replace-with = Vervangen door
 apply-to-all = Op alles toepassen
@@ -96,9 +111,9 @@ keep-both = Beide behouden
 skip = Overslaan
 
 ## Set as Executable and Launch Dialog
-set-executable-and-launch = Bestand uitvoerbaar maken en dan openen
-set-executable-and-launch-description = Wilt u '{$name}' uitvoerbaar maken en dan openen?
-set-and-launch = Maak uitvoerbaar en open
+set-executable-and-launch = Uitvoerbaar maken en dan starten
+set-executable-and-launch-description = Wilt u '{$name}' uitvoerbaar maken en dan starten?
+set-and-launch = Uitvoerbaar maken en starten
 
 ## Metadata Dialog
 open-with = Openen met
@@ -106,29 +121,29 @@ owner = Eigenaar
 group = Groep
 other = Anderen
 ### Mode 0
-none = Geen
+none = Geen rechten
 ### Mode 1 (unusual)
-execute-only = Alleen uitvoerbaar
+execute-only = Alleen uitvoeren
 ### Mode 2 (unusual)
-write-only = Alleen schrijfbaar
+write-only = Alleen schrijven
 ### Mode 3 (unusual)
-write-execute = Schrijf- en uitvoerbaar
+write-execute = Schijven en uitvoeren
 ### Mode 4
-read-only = Alleen leesbaar
+read-only = Alleen lezen
 ### Mode 5
-read-execute = Lees- en uitvoerbaar
+read-execute = Lezen en uitvoeren
 ### Mode 6
-read-write = Lees- en schrijfbaar
+read-write = Lezen en schrijven
 ### Mode 7
-read-write-execute = Lees-, schrijf- en uitvoerbaar
+read-write-execute = Lezen, schrijven en uitvoeren
 
 ## Favorite Path Error Dialog
 favorite-path-error = Fout bij het openen van de map
 favorite-path-error-description =
     Kon de map '{$path}' niet openen.
-    De map bestaat mogelijk niet of u mist de juiste rechten.
+    De map bestaat mogelijk niet of u heeft geen toestemming om die te openen.
 
-    Wilt u het uit de zijbalk verwijderen?
+    Wilt u de map uit de favorieten verwijderen?
 remove = Verwijderen
 keep = Behouden
 
@@ -173,10 +188,10 @@ progress-cancelled = {$percent}%, geannuleerd
 progress-paused = {$percent}%, gepauzeerd
 failed = Mislukt
 complete = Voltooid
-compressing = { $items}  {$items -> 
-        [one] bestand wordt
-        *[other] bestanden worden
-    } van '{$from}' naar '{$to}' gecomprimeerd ({$progress})...
+compressing = {$items}  {$items -> 
+        [one] bestand
+        *[other] bestanden
+    } van '{$from}' naar '{$to}' comprimeren ({$progress})...
 compressed = { $items}  {$items -> 
         [one] bestand
         *[other] bestanden
@@ -185,47 +200,57 @@ copy_noun = Kopie
 creating = '{$name}' in '{$parent}' aanmaken
 created = '{$name}' in '{$parent}' aangemaakt
 copying = {$items} {$items ->
-        [one] bestand wordt
-        *[other] bestanden worden
-    } van '{$from}' naar '{$to}' gekopieerd ({$progress})...
+        [one] bestand
+        *[other] bestanden
+    } van '{$from}' naar '{$to}' kopiëren ({$progress})...
 copied = {$items} {$items ->
         [one] bestand
         *[other] bestanden
     } gekopieerd van '$from}' naar '{$to}'
 deleting = {$items} {$items ->
-        [one] bestand wordt
-        *[other] bestanden worden
-    } verwijderd uit {trash} ({$progress})...
+        [one] bestand
+        *[other] bestanden
+    } uit {trash} verwijderen ({$progress})...
 deleted = {$items} {$items ->
         [one] bestand
         *[other] bestanden
-    } verwijderd uit {trash}
-emptying-trash = {trash} wordt geleegd ({$progress})...
-emptied-trash = {trash} geleegd
+    } verwijderd uit {trash} 
+emptying-trash = {trash} recyclen ({$progress})...
+emptied-trash = {trash} gerecycled
 extracting = {$items} {$items -> 
-        [one] bestand wordt
-        *[other] bestanden worden
-    } van '{$from}' naar '{$to}' uitgepakt ({$progress})...
+        [one] bestand
+        *[other] bestanden
+    } van '{$from}' naar '{$to}' uitpakken ({$progress})...
 extracted = {$items} {$items ->
         [one] bestand
         *[other] bestanden
     } uitgepakt van '{$from}' naar '{$to}'
-setting-executable-and-launching = '{$name}' wordt uitvoerbaar gemaakt en geopend
-set-executable-and-launched = '{$name}' uitvoerbaar maken en openen
+setting-executable-and-launching = '{$name}' uitvoerbaar maken en starten
+set-executable-and-launched = '{$name}' uitvoerbaar gemaakt en gestart
+setting-permissions = Rechten voor '{$name}' wijzigen in '{$mode}'
+set-permissions = Rechten voor '{$name}' gewijzigd in '{$mode}' 
 moving = {$items} {$items ->
-        [one] bestand wordt
-        *[other] bestanden worden
-    } van '{$from}' naar '{$to}' verplaatst ({$progress})...
+        [one] bestand
+        *[other] bestanden
+    } van '{$from}' naar '{$to}' verplaatsen ({$progress})...
 moved = {$items} {$items ->
         [one] bestand
         *[other] bestanden
-    } verplaatst van '{$form}' naar '{$to}'
+    } verplaatst van '{$from}' naar '{$to}'
+permanently-deleting = {$items} {$items ->
+        [one] bestand
+        *[other] bestanden
+    } premanent verwijderen
+permanently-deleted = {$items} {$items ->
+        [one] bestand
+        *[other] bestanden
+    } permanent verwijderd
 renaming = '{$from}' als '{$to}' hernoemen
 renamed = '{$from}' als '{$to}' hernoemd
 restoring = {$items} {$items ->
-        [one] bestand wordt
-        *[other] bestanden worden
-    } uit {trash} teruggezet ({$progress})...
+        [one] bestand
+        *[other] bestanden
+    } uit {trash} terugzetten ({$progress})...
 restored = {$items} {$items ->
         [one] bestand
         *[other] bestanden
@@ -263,7 +288,7 @@ type-to-search-recursive = In deze map en alle onderliggende mappen zoeken
 type-to-search-enter-path = Naar de bestandslocatie of -naam zoeken
 
 # Context menu
-add-to-sidebar = Aan de zijbalk toevoegen
+add-to-sidebar = Favoriet aan zijbalk toevoegen
 compress = Comprimeren
 delete-permanently = Permanent verwijderen
 extract-here = Uitpakken
@@ -272,7 +297,7 @@ new-folder = Nieuwe map...
 open-in-terminal = Openen in terminal
 move-to-trash = Naar prullenbak verplaatsen
 restore-from-trash = Uit prullenbak terugzetten
-remove-from-sidebar = Uit de zijbalk verwijderen
+remove-from-sidebar = Favoriet uit zijbalk verwijderen
 sort-by-name = Sorteren op naam
 sort-by-modified = Sorteren op laatst bewerkt
 sort-by-size = Sorteren op grootte
@@ -289,6 +314,7 @@ display-settings = Beeldschermbeheer...
 file = Bestand
 new-tab = Nieuw tabblad
 new-window = Nieuw venster
+reload-folder = Opnieuw laden
 rename = Hernoemen...
 close-tab = Tabblad sluiten
 quit = Sluiten
@@ -311,7 +337,7 @@ show-hidden-files = Verborgen bestanden tonen
 list-directories-first = Mappen bovenaan weergeven
 gallery-preview = Galerijweergave
 menu-settings = Instellingen...
-menu-about = Over COSMIC-bestandsbeheerder...
+menu-about = Over COSMIC Bestanden...
 
 ## Sort
 sort = Sorteren

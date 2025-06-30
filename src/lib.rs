@@ -63,7 +63,7 @@ pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
     settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
     settings = settings.exit_on_close(false);
     settings = settings.transparent(true);
-    #[cfg(feature = "wayland")]
+    #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     {
         settings = settings.no_main_window(true);
     }

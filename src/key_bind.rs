@@ -29,6 +29,7 @@ pub fn key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
     bind!([], Key::Named(Named::ArrowLeft), ItemLeft);
     bind!([], Key::Named(Named::ArrowRight), ItemRight);
     bind!([], Key::Named(Named::ArrowUp), ItemUp);
+    bind!([], Key::Named(Named::F5), Reload);
     bind!([], Key::Named(Named::Home), SelectFirst);
     bind!([], Key::Named(Named::End), SelectLast);
     bind!([Shift], Key::Named(Named::ArrowDown), ItemDown);
@@ -68,6 +69,7 @@ pub fn key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
         bind!([Ctrl], Key::Character("c".into()), Copy);
         bind!([Ctrl], Key::Character("x".into()), Cut);
         bind!([], Key::Named(Named::Delete), Delete);
+        bind!([Shift], Key::Named(Named::Delete), PermanentlyDelete);
         bind!([Shift], Key::Named(Named::Enter), OpenInNewWindow);
         bind!([Ctrl], Key::Character("v".into()), Paste);
         bind!([], Key::Named(Named::F2), Rename);

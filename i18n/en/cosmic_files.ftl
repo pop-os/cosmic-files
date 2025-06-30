@@ -30,8 +30,14 @@ size = Size
 # Progress footer
 details = Details
 dismiss = Dismiss message
-operations-running = {$running} operations running ({$percent}%)...
-operations-running-finished = {$running} operations running ({$percent}%), {$finished} finished...
+operations-running = {$running} {$running -> 
+    [one] operation
+    *[other] operations 
+  } running ({$percent}%)...
+operations-running-finished = {$running} {$running -> 
+    [one] operation
+    *[other] operations
+  } running ({$percent}%), {$finished} finished...
 pause = Pause
 resume = Resume
 
@@ -80,6 +86,14 @@ save-file = Save file
 ## Open With Dialog
 open-with-title = How do you want to open "{$name}"?
 browse-store = Browse {$store}
+other-apps = Other applications
+related-apps = Related applications
+
+## Permanently delete Dialog
+selected-items = the {$items} selected items
+permanently-delete-question = Permanently delete
+delete = Delete
+permanently-delete-warning = Are you sure you want to permanently delete {$target}? This cannot be undone.
 
 ## Rename Dialog
 rename-file = Rename file
@@ -213,6 +227,8 @@ extracted = Extracted {$items} {$items ->
     } from "{$from}" to "{$to}"
 setting-executable-and-launching = Setting "{$name}" as executable and launching
 set-executable-and-launched = Set "{$name}" as executable and launched
+setting-permissions = Setting permissions for "{$name}" to {$mode}
+set-permissions = Set permissions for "{$name}" to {$mode}
 moving = Moving {$items} {$items ->
         [one] item
         *[other] items
@@ -221,6 +237,14 @@ moved = Moved {$items} {$items ->
         [one] item
         *[other] items
     } from "{$from}" to "{$to}"
+permanently-deleting = Permanently deleting {$items} {$items ->
+        [one] item
+        *[other] items
+    }
+permanently-deleted = Permanently deleted {$items} {$items ->
+        [one] item
+        *[other] items
+    }
 renaming = Renaming "{$from}" to "{$to}"
 renamed = Renamed "{$from}" to "{$to}"
 restoring = Restoring {$items} {$items ->
@@ -290,6 +314,7 @@ display-settings = Display settings...
 file = File
 new-tab = New tab
 new-window = New window
+reload-folder = Reload folder
 rename = Rename...
 close-tab = Close tab
 quit = Quit

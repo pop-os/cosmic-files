@@ -1,7 +1,7 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
-#[cfg(feature = "wayland")]
+#[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use cosmic::iced::{
     event::wayland::{Event as WaylandEvent, OutputEvent, OverlapNotifyEvent},
     platform_specific::runtime::wayland::layer_surface::{
@@ -12,7 +12,7 @@ use cosmic::iced::{
     },
     Limits,
 };
-#[cfg(feature = "wayland")]
+#[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use cosmic::iced_winit::commands::overlap_notify::overlap_notify;
 use cosmic::{
     app::{self, context_drawer, Core, Task},
@@ -63,9 +63,10 @@ use std::{
 };
 use tokio::sync::mpsc;
 use trash::TrashItem;
-#[cfg(feature = "wayland")]
+#[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use wayland_client::{protocol::wl_output::WlOutput, Proxy};
 
+use crate::dialog::DialogSettings;
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{
@@ -138,7 +139,9 @@ pub enum Action {
     OpenTerminal,
     OpenWith,
     Paste,
+    PermanentlyDelete,
     Preview,
+    Reload,
     Rename,
     RestoreFromTrash,
     SearchActivate,
@@ -205,7 +208,9 @@ impl Action {
             Action::OpenTerminal => Message::OpenTerminal(entity_opt),
             Action::OpenWith => Message::OpenWithDialog(entity_opt),
             Action::Paste => Message::Paste(entity_opt),
+            Action::PermanentlyDelete => Message::PermanentlyDelete(entity_opt),
             Action::Preview => Message::Preview(entity_opt),
+            Action::Reload => Message::TabMessage(entity_opt, tab::Message::Reload),
             Action::Rename => Message::Rename(entity_opt),
             Action::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
             Action::SearchActivate => Message::SearchActivate,
@@ -223,9 +228,7 @@ impl Action {
             Action::TabViewGrid => Message::TabView(entity_opt, tab::View::Grid),
             Action::TabViewList => Message::TabView(entity_opt, tab::View::List),
             Action::ToggleFoldersFirst => Message::ToggleFoldersFirst,
-            Action::ToggleShowHidden => {
-                Message::TabMessage(entity_opt, tab::Message::ToggleShowHidden)
-            }
+            Action::ToggleShowHidden => Message::ToggleShowHidden,
             Action::ToggleSort(sort) => {
                 Message::TabMessage(entity_opt, tab::Message::ToggleSort(*sort))
             }
@@ -308,12 +311,12 @@ pub enum Message {
     ExtractHere(Option<Entity>),
     ExtractTo(Option<Entity>),
     ExtractToResult(DialogResult),
-    #[cfg(all(feature = "desktop", feature = "wayland"))]
+    #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     Focused(window::Id),
     Key(Modifiers, Key, Option<SmolStr>),
     LaunchUrl(String),
     MaybeExit,
-    Modifiers(Modifiers),
+    ModifiersChanged(Modifiers),
     MounterItems(MounterKey, MounterItems),
     MountResult(MounterKey, MounterItem, Result<bool, String>),
     NavBarClose(Entity),
@@ -335,7 +338,7 @@ pub enum Message {
     OpenWithBrowse,
     OpenWithDialog(Option<Entity>),
     OpenWithSelection(usize),
-    #[cfg(all(feature = "desktop", feature = "wayland"))]
+    #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     Overlap(OverlapNotifyEvent, window::Id),
     Paste(Option<Entity>),
     PasteContents(PathBuf, ClipboardPaste),
@@ -346,6 +349,7 @@ pub enum Message {
     PendingError(u64, OperationError),
     PendingPause(u64, bool),
     PendingPauseAll(bool),
+    PermanentlyDelete(Option<Entity>),
     Preview(Option<Entity>),
     RescanTrash,
     Rename(Option<Entity>),
@@ -357,7 +361,7 @@ pub enum Message {
     SearchInput(String),
     SetShowDetails(bool),
     SetTypeToSearch(TypeToSearch),
-    SystemThemeModeChange(cosmic_theme::ThemeMode),
+    SystemThemeModeChange,
     Size(Size),
     TabActivate(Entity),
     TabNext,
@@ -377,6 +381,7 @@ pub enum Message {
     TimeConfigChange(TimeConfig),
     ToggleContextPage(ContextPage),
     ToggleFoldersFirst,
+    ToggleShowHidden,
     Undo(usize),
     UndoTrash(widget::ToastId, Arc<[PathBuf]>),
     UndoTrashStart(Vec<TrashItem>),
@@ -396,11 +401,12 @@ pub enum Message {
     DndDropTab(Entity, Option<ClipboardPaste>, DndAction),
     DndDropNav(Entity, Option<ClipboardPaste>, DndAction),
     Recents,
-    #[cfg(feature = "wayland")]
+    #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     OutputEvent(OutputEvent, WlOutput),
     Cosmic(app::Action),
     None,
     Surface(surface::Action),
+    CutPaths(Vec<PathBuf>),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -480,6 +486,9 @@ pub enum DialogPage {
         selected: usize,
         store_opt: Option<MimeApp>,
     },
+    PermanentlyDelete {
+        paths: Vec<PathBuf>,
+    },
     RenameItem {
         from: PathBuf,
         parent: PathBuf,
@@ -503,6 +512,13 @@ pub enum DialogPage {
 }
 
 pub struct FavoriteIndex(usize);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MimeAppMatch {
+    Exact,
+    Related,
+    Other,
+}
 
 pub struct MounterData(MounterKey, MounterItem);
 
@@ -567,9 +583,9 @@ pub struct App {
     failed_operations: BTreeMap<u64, (Operation, Controller, String)>,
     search_id: widget::Id,
     size: Option<Size>,
-    #[cfg(feature = "wayland")]
+    #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     surface_ids: HashMap<WlOutput, WindowId>,
-    #[cfg(feature = "wayland")]
+    #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     surface_names: HashMap<WindowId, String>,
     toasts: widget::toaster::Toasts<Message>,
     watcher_opt: Option<(Debouncer<RecommendedWatcher, FileIdMap>, HashSet<PathBuf>)>,
@@ -589,10 +605,12 @@ impl App {
         // This allows handling paths as groups if possible, such as launching a single video
         // player that is passed every path.
         let mut groups: HashMap<Mime, Vec<PathBuf>> = HashMap::new();
-        for (mime, path) in paths
-            .iter()
-            .map(|path| (mime_icon::mime_for_path(path), path.as_ref().to_owned()))
-        {
+        for (mime, path) in paths.iter().map(|path| {
+            (
+                mime_icon::mime_for_path(path, None, false),
+                path.as_ref().to_owned(),
+            )
+        }) {
             groups.entry(mime).or_default().push(path);
         }
 
@@ -892,6 +910,44 @@ impl App {
         self.open_tab_entity(location, activate, selection_paths).1
     }
 
+    // This wrapper ensures that local folders use trash and remote folders permanently delete with a dialog
+    #[must_use]
+    fn delete(&mut self, paths: Vec<PathBuf>) -> Task<Message> {
+        let mut dialog_paths = Vec::new();
+        let mut trash_paths = Vec::new();
+
+        for path in paths {
+            //TODO: is there a smarter way to check this? (like checking for trash folders)
+            let can_trash = match path.metadata() {
+                Ok(metadata) => match tab::fs_kind(&metadata) {
+                    tab::FsKind::Local => true,
+                    _ => false,
+                },
+                Err(err) => {
+                    log::warn!("failed to get metadata for {:?}: {}", path, err);
+                    false
+                }
+            };
+            if can_trash {
+                trash_paths.push(path);
+            } else {
+                dialog_paths.push(path);
+            }
+        }
+
+        if !dialog_paths.is_empty() {
+            self.dialog_pages.push_back(DialogPage::PermanentlyDelete {
+                paths: dialog_paths,
+            });
+        }
+
+        if !trash_paths.is_empty() {
+            self.operation(Operation::Delete { paths: trash_paths })
+        } else {
+            Task::none()
+        }
+    }
+
     #[must_use]
     fn operation(&mut self, operation: Operation) -> Task<Message> {
         let id = self.pending_operation_id;
@@ -1098,6 +1154,13 @@ impl App {
             }
         }
         paths
+    }
+
+    fn set_cut(&mut self, entity_opt: Option<Entity>) {
+        let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+        if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+            tab.cut_selected();
+        }
     }
 
     fn update_config(&mut self) -> Task<Message> {
@@ -1582,22 +1645,16 @@ impl App {
         let military_time = self.config.tab.military_time;
         match kind {
             PreviewKind::Custom(PreviewItem(item)) => {
-                children.push(item.preview_view(
-                    Some(&self.mime_app_cache),
-                    IconSizes::default(),
-                    military_time,
-                ));
+                children.push(item.preview_view(Some(&self.mime_app_cache), military_time));
             }
             PreviewKind::Location(location) => {
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
                     if let Some(items) = tab.items_opt() {
                         for item in items.iter() {
                             if item.location_opt.as_ref() == Some(location) {
-                                children.push(item.preview_view(
-                                    Some(&self.mime_app_cache),
-                                    tab.config.icon_sizes,
-                                    military_time,
-                                ));
+                                children.push(
+                                    item.preview_view(Some(&self.mime_app_cache), military_time),
+                                );
                                 // Only show one property view to avoid issues like hangs when generating
                                 // preview images on thousands of files
                                 break;
@@ -1611,11 +1668,9 @@ impl App {
                     if let Some(items) = tab.items_opt() {
                         for item in items.iter() {
                             if item.selected {
-                                children.push(item.preview_view(
-                                    Some(&self.mime_app_cache),
-                                    tab.config.icon_sizes,
-                                    military_time,
-                                ));
+                                children.push(
+                                    item.preview_view(Some(&self.mime_app_cache), military_time),
+                                );
                                 // Only show one property view to avoid issues like hangs when generating
                                 // preview images on thousands of files
                                 break;
@@ -1623,11 +1678,9 @@ impl App {
                         }
                         if children.is_empty() {
                             if let Some(item) = &tab.parent_item_opt {
-                                children.push(item.preview_view(
-                                    Some(&self.mime_app_cache),
-                                    tab.config.icon_sizes,
-                                    military_time,
-                                ));
+                                children.push(
+                                    item.preview_view(Some(&self.mime_app_cache), military_time),
+                                );
                             }
                         }
                     }
@@ -1702,7 +1755,7 @@ impl App {
         .into()
     }
 
-    fn get_programs_for_mime(&self, mime_type: &Mime) -> Vec<&MimeApp> {
+    fn get_apps_for_mime(&self, mime_type: &Mime) -> Vec<(&MimeApp, MimeAppMatch)> {
         let mut results = Vec::new();
 
         let mut dedupe = HashSet::new();
@@ -1711,7 +1764,7 @@ impl App {
         for mime_app in self.mime_app_cache.get(mime_type) {
             let app_id = &mime_app.id;
             if !dedupe.contains(app_id) {
-                results.push(mime_app);
+                results.push((mime_app, MimeAppMatch::Exact));
                 dedupe.insert(app_id);
             }
         }
@@ -1722,10 +1775,19 @@ impl App {
                 for mime_app in self.mime_app_cache.get(&parent_type) {
                     let app_id = &mime_app.id;
                     if !dedupe.contains(app_id) {
-                        results.push(mime_app);
+                        results.push((mime_app, MimeAppMatch::Related));
                         dedupe.insert(app_id);
                     }
                 }
+            }
+        }
+
+        // Add other apps
+        for mime_app in self.mime_app_cache.apps() {
+            let app_id = &mime_app.id;
+            if !dedupe.contains(app_id) {
+                results.push((mime_app, MimeAppMatch::Other));
+                dedupe.insert(app_id);
             }
         }
 
@@ -1877,9 +1939,9 @@ impl Application for App {
             failed_operations: BTreeMap::new(),
             search_id: widget::Id::unique(),
             size: None,
-            #[cfg(feature = "wayland")]
+            #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             surface_ids: HashMap::new(),
-            #[cfg(feature = "wayland")]
+            #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             surface_names: HashMap::new(),
             toasts: widget::toaster::Toasts::new(Message::CloseToast),
             watcher_opt: None,
@@ -2218,6 +2280,11 @@ impl Application for App {
                 }
             }
             Message::Copy(entity_opt) => {
+                if let Some(entity) = entity_opt {
+                    if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                        tab.refresh_cut(&[]);
+                    }
+                }
                 let paths = self.selected_paths(entity_opt);
                 let contents = ClipboardCopy::new(ClipboardKind::Copy, &paths);
                 return clipboard::write_data(contents);
@@ -2230,8 +2297,9 @@ impl Application for App {
                 ));
             }
             Message::Cut(entity_opt) => {
+                self.set_cut(entity_opt);
                 let paths = self.selected_paths(entity_opt);
-                let contents = ClipboardCopy::new(ClipboardKind::Cut, &paths);
+                let contents = ClipboardCopy::new(ClipboardKind::Cut { is_dnd: false }, &paths);
                 return clipboard::write_data(contents);
             }
             Message::CloseToast(id) => {
@@ -2274,9 +2342,9 @@ impl Application for App {
                             }
                         }
                         _ => {
-                            let paths = dbg!(self.selected_paths(entity_opt));
+                            let paths = self.selected_paths(entity_opt);
                             if !paths.is_empty() {
-                                return self.operation(Operation::Delete { paths });
+                                return self.delete(paths);
                             }
                         }
                     }
@@ -2398,9 +2466,9 @@ impl Application for App {
                             selected,
                             ..
                         } => {
-                            let all_apps = self.get_programs_for_mime(&mime);
+                            let available_apps = self.get_apps_for_mime(&mime);
 
-                            if let Some(app) = all_apps.get(selected) {
+                            if let Some((app, _)) = available_apps.get(selected) {
                                 if let Some(mut command) =
                                     app.command(&[&path]).and_then(|v| v.into_iter().next())
                                 {
@@ -2430,6 +2498,9 @@ impl Application for App {
                                     );
                                 }
                             }
+                        }
+                        DialogPage::PermanentlyDelete { paths } => {
+                            return self.operation(Operation::PermanentlyDelete { paths });
                         }
                         DialogPage::RenameItem {
                             from, parent, name, ..
@@ -2492,8 +2563,9 @@ impl Application for App {
                     .map(|parent| parent.to_path_buf())
                 {
                     let (mut dialog, dialog_task) = Dialog::new(
-                        DialogKind::OpenFolder,
-                        Some(destination),
+                        DialogSettings::new()
+                            .kind(DialogKind::OpenFolder)
+                            .path(destination),
                         Message::FileDialogMessage,
                         Message::ExtractToResult,
                     );
@@ -2588,8 +2660,13 @@ impl Application for App {
                     log::warn!("failed to open {:?}: {}", url, err);
                 }
             },
-            Message::Modifiers(modifiers) => {
+            Message::ModifiersChanged(modifiers) => {
                 self.modifiers = modifiers;
+                let entity = self.tab_model.active();
+                return self.update(Message::TabMessage(
+                    Some(entity),
+                    tab::Message::ModifiersChanged(modifiers),
+                ));
             }
             Message::MounterItems(mounter_key, mounter_items) => {
                 // Check for unmounted folders
@@ -2978,9 +3055,10 @@ impl Application for App {
                             paths: contents.paths,
                             to,
                         }),
-                        ClipboardKind::Cut => self.operation(Operation::Move {
+                        ClipboardKind::Cut { is_dnd } => self.operation(Operation::Move {
                             paths: contents.paths,
                             to,
+                            cross_device_copy: is_dnd,
                         }),
                     };
                 }
@@ -3028,7 +3106,10 @@ impl Application for App {
                         if self.update_favorites(&[(from.clone(), to.clone())]) {
                             commands.push(self.update_config());
                         }
-                    } else if let Operation::Move { ref paths, ref to } = op {
+                    } else if let Operation::Move {
+                        ref paths, ref to, ..
+                    } = op
+                    {
                         let path_changes: Vec<_> = paths
                             .iter()
                             .filter_map(|from| {
@@ -3042,7 +3123,7 @@ impl Application for App {
 
                     self.complete_operations.insert(id, op);
                 }
-                // Close progress notification if all relavent operations are finished
+                // Close progress notification if all relevant operations are finished
                 if !self
                     .pending_operations
                     .iter()
@@ -3078,7 +3159,7 @@ impl Application for App {
                     self.failed_operations
                         .insert(id, (op, controller, err.to_string()));
                 }
-                // Close progress notification if all relavent operations are finished
+                // Close progress notification if all relevant operations are finished
                 if !self
                     .pending_operations
                     .iter()
@@ -3105,6 +3186,13 @@ impl Application for App {
                     } else {
                         controller.unpause();
                     }
+                }
+            }
+            Message::PermanentlyDelete(entity_opt) => {
+                let paths = self.selected_paths(entity_opt);
+                if !paths.is_empty() {
+                    self.dialog_pages
+                        .push_back(DialogPage::PermanentlyDelete { paths });
                 }
             }
             Message::Preview(entity_opt) => {
@@ -3270,7 +3358,7 @@ impl Application for App {
                 config_set!(type_to_search, type_to_search);
                 return self.update_config();
             }
-            Message::SystemThemeModeChange(_theme_mode) => {
+            Message::SystemThemeModeChange => {
                 return self.update_config();
             }
             Message::TabActivate(entity) => {
@@ -3357,6 +3445,11 @@ impl Application for App {
                 config.folders_first = !config.folders_first;
                 return self.update(Message::TabConfig(config));
             }
+            Message::ToggleShowHidden => {
+                let mut config = self.config.tab;
+                config.show_hidden = !config.show_hidden;
+                return self.update(Message::TabConfig(config));
+            }
             Message::TabMessage(entity_opt, tab_message) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
 
@@ -3409,9 +3502,7 @@ impl Application for App {
                                 self.update_tab(entity, tab_path, selection_paths),
                             ]));
                         }
-                        tab::Command::Delete(paths) => {
-                            commands.push(self.operation(Operation::Delete { paths }))
-                        }
+                        tab::Command::Delete(paths) => commands.push(self.delete(paths)),
                         tab::Command::DropFiles(to, from) => {
                             commands.push(self.update(Message::PasteContents(to, from)));
                         }
@@ -3461,6 +3552,9 @@ impl Application for App {
                             //TODO: this will block for a few ms, run in background?
                             self.mime_app_cache.set_default(mime, id);
                         }
+                        tab::Command::SetPermissions(path, mode) => {
+                            commands.push(self.operation(Operation::SetPermissions { path, mode }));
+                        }
                         tab::Command::WindowDrag => {
                             if let Some(window_id) = &self.window_id_opt {
                                 commands.push(window::drag(*window_id));
@@ -3491,6 +3585,15 @@ impl Application for App {
                         if let Some(selection_paths) = selection_paths {
                             tab.select_paths(selection_paths);
                         }
+                        return clipboard::read_data::<ClipboardPaste>().map(|p| {
+                            cosmic::action::app(Message::CutPaths(match p {
+                                Some(s) => match s.kind {
+                                    ClipboardKind::Copy => Vec::new(),
+                                    ClipboardKind::Cut { .. } => s.paths,
+                                },
+                                None => Vec::new(),
+                            }))
+                        });
                     }
                 }
             }
@@ -3502,6 +3605,11 @@ impl Application for App {
                 let mut config = self.config.tab;
                 config.view = view;
                 return self.update(Message::TabConfig(config));
+            }
+            Message::CutPaths(paths) => {
+                if let Some(tab) = self.tab_model.active_data_mut::<Tab>() {
+                    tab.refresh_cut(&paths);
+                }
             }
             Message::TimeConfigChange(time_config) => {
                 self.config.tab.military_time = time_config.military_time;
@@ -3666,7 +3774,7 @@ impl Application for App {
                 self.nav_dnd_hover = None;
                 if let Some((location, data)) = self.nav_model.data::<Location>(entity).zip(data) {
                     let kind = match action {
-                        DndAction::Move => ClipboardKind::Cut,
+                        DndAction::Move => ClipboardKind::Cut { is_dnd: true },
                         _ => ClipboardKind::Copy,
                     };
                     let ret = match location {
@@ -3678,7 +3786,7 @@ impl Application for App {
                             },
                         )),
                         Location::Trash if matches!(action, DndAction::Move) => {
-                            self.operation(Operation::Delete { paths: data.paths })
+                            self.delete(data.paths)
                         }
                         _ => {
                             log::warn!("Copy to trash is not supported.");
@@ -3726,7 +3834,7 @@ impl Application for App {
                 self.nav_dnd_hover = None;
                 if let Some((tab, data)) = self.tab_model.data::<Tab>(entity).zip(data) {
                     let kind = match action {
-                        DndAction::Move => ClipboardKind::Cut,
+                        DndAction::Move => ClipboardKind::Cut { is_dnd: true },
                         _ => ClipboardKind::Copy,
                     };
                     let ret = match &tab.location {
@@ -3738,7 +3846,7 @@ impl Application for App {
                             },
                         )),
                         Location::Trash if matches!(action, DndAction::Move) => {
-                            self.operation(Operation::Delete { paths: data.paths })
+                            self.delete(data.paths)
                         }
                         _ => {
                             log::warn!("Copy to trash is not supported.");
@@ -3916,7 +4024,7 @@ impl Application for App {
             Message::Recents => {
                 return self.open_tab(Location::Recents, false, None);
             }
-            #[cfg(feature = "wayland")]
+            #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             Message::OutputEvent(output_event, output) => {
                 match output_event {
                     OutputEvent::Created(output_info_opt) => {
@@ -3977,7 +4085,7 @@ impl Application for App {
                                 exclusive_zone: 0,
                                 size_limits: Limits::NONE.min_width(1.0).min_height(1.0),
                             }),
-                            #[cfg(feature = "wayland")]
+                            #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
                             overlap_notify(surface_id, true),
                         ]);
                     }
@@ -4004,7 +4112,7 @@ impl Application for App {
                 return Task::perform(async move { cosmic }, cosmic::action::cosmic);
             }
             Message::None => {}
-            #[cfg(all(feature = "desktop", feature = "wayland"))]
+            #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             Message::Overlap(overlap_notify_event, w_id) => match overlap_notify_event {
                 OverlapNotifyEvent::OverlapLayerAdd {
                     identifier,
@@ -4028,7 +4136,7 @@ impl Application for App {
                 self.size = Some(size);
                 self.handle_overlap();
             }
-            #[cfg(all(feature = "desktop", feature = "wayland"))]
+            #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             Message::Focused(id) => {
                 if let Some(w) = self.windows.get(&id) {
                     match w {
@@ -4527,11 +4635,23 @@ impl Application for App {
                 };
 
                 let mut column = widget::list_column();
-                let available_programs = self.get_programs_for_mime(mime);
+                let available_apps = self.get_apps_for_mime(mime);
                 let item_height = 32.0;
                 let mut displayed_default = false;
-
-                for (i, app) in available_programs.iter().enumerate() {
+                let mut last_kind = MimeAppMatch::Exact;
+                for (i, (app, kind)) in available_apps.iter().enumerate() {
+                    if *kind != last_kind {
+                        match kind {
+                            MimeAppMatch::Related => {
+                                column = column.add(widget::text::heading(fl!("related-apps")));
+                            }
+                            MimeAppMatch::Other => {
+                                column = column.add(widget::text::heading(fl!("other-apps")));
+                            }
+                            _ => {}
+                        }
+                        last_kind = *kind;
+                    }
                     column = column.add(
                         widget::button::custom(
                             widget::row::with_children(vec![
@@ -4575,13 +4695,13 @@ impl Application for App {
                     )
                     .control(
                         widget::scrollable(column).height(if let Some(size) = self.size {
-                            let max_size = size.height - 256.0;
+                            let max_size = (size.height - 256.0).min(480.0);
                             // (32 (item_height) + 5.0 (custom button padding)) + (space_xxs (list item spacing) * 2)
-                            let scrollable_height = available_programs.len() as f32
+                            let scrollable_height = available_apps.len() as f32
                                 * (item_height + 5.0 + (2.0 * space_xxs as f32));
 
                             if scrollable_height > max_size {
-                                Length::Fill
+                                Length::Fixed(max_size)
                             } else {
                                 Length::Shrink
                             }
@@ -4598,6 +4718,33 @@ impl Application for App {
                 }
 
                 dialog
+            }
+            DialogPage::PermanentlyDelete { paths } => {
+                let target = if paths.len() == 1 {
+                    format!(
+                        "\"{}\"",
+                        paths[0]
+                            .file_name()
+                            .map(std::ffi::OsStr::to_string_lossy)
+                            .unwrap_or_else(|| paths[0].to_string_lossy())
+                    )
+                } else {
+                    fl!("selected-items", items = paths.len())
+                };
+
+                widget::dialog()
+                    .title(fl!("permanently-delete-question"))
+                    .primary_action(
+                        widget::button::destructive(fl!("delete"))
+                            .on_press(Message::DialogComplete),
+                    )
+                    .secondary_action(
+                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                    )
+                    .control(widget::text(fl!(
+                        "permanently-delete-warning",
+                        target = target
+                    )))
             }
             DialogPage::RenameItem {
                 from,
@@ -4688,11 +4835,11 @@ impl Application for App {
                     .title(fl!("replace-title", filename = to.name.as_str()))
                     .body(fl!("replace-warning-operation"))
                     .control(
-                        to.replace_view(fl!("original-file"), IconSizes::default(), military_time)
+                        to.replace_view(fl!("original-file"), military_time)
                             .map(|x| Message::TabMessage(None, x)),
                     )
                     .control(
-                        from.replace_view(fl!("replace-with"), IconSizes::default(), military_time)
+                        from.replace_view(fl!("replace-with"), military_time)
                             .map(|x| Message::TabMessage(None, x)),
                     )
                     .primary_action(widget::button::suggested(fl!("replace")).on_press(
@@ -4892,8 +5039,10 @@ impl Application for App {
 
     fn header_start(&self) -> Vec<Element<Self::Message>> {
         vec![menu::menu_bar(
+            &self.core,
             self.tab_model.active_data::<Tab>(),
             &self.config,
+            &self.modifiers,
             &self.key_binds,
         )]
     }
@@ -5067,6 +5216,14 @@ impl Application for App {
             .into()
     }
 
+    fn system_theme_update(
+        &mut self,
+        _keys: &[&'static str],
+        new_theme: &cosmic::cosmic_theme::Theme,
+    ) -> Task<Self::Message> {
+        self.update(Message::SystemThemeModeChange)
+    }
+
     fn subscription(&self) -> Subscription<Self::Message> {
         struct ThemeSubscription;
         struct WatcherSubscription;
@@ -5085,17 +5242,17 @@ impl Application for App {
                     event::Status::Captured => None,
                 },
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
-                    Some(Message::Modifiers(modifiers))
+                    Some(Message::ModifiersChanged(modifiers))
                 }
                 Event::Window(WindowEvent::Unfocused) => Some(Message::WindowUnfocus),
-                #[cfg(all(feature = "desktop", feature = "wayland"))]
+                #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
                 Event::Window(WindowEvent::Focused) => Some(Message::Focused(window_id)),
                 Event::Window(WindowEvent::CloseRequested) => Some(Message::WindowClose),
                 Event::Window(WindowEvent::Opened { position: _, size }) => {
                     Some(Message::Size(size))
                 }
                 Event::Window(WindowEvent::Resized(s)) => Some(Message::Size(s)),
-                #[cfg(feature = "wayland")]
+                #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
                 Event::PlatformSpecific(event::PlatformSpecific::Wayland(wayland_event)) => {
                     match wayland_event {
                         WaylandEvent::Output(output_event, output) => {
@@ -5120,21 +5277,6 @@ impl Application for App {
                     );
                 }
                 Message::Config(update.config)
-            }),
-            cosmic_config::config_subscription::<_, cosmic_theme::ThemeMode>(
-                TypeId::of::<ThemeSubscription>(),
-                cosmic_theme::THEME_MODE_ID.into(),
-                cosmic_theme::ThemeMode::version(),
-            )
-            .map(|update| {
-                if !update.errors.is_empty() {
-                    log::info!(
-                        "errors loading theme mode {:?}: {:?}",
-                        update.keys,
-                        update.errors
-                    );
-                }
-                Message::SystemThemeModeChange(update.config)
             }),
             cosmic_config::config_subscription::<_, TimeConfig>(
                 TypeId::of::<TimeSubscription>(),

@@ -2,7 +2,7 @@ cosmic-files = Arquivos
 empty-folder = Pasta vazia
 empty-folder-hidden = Pasta vazia (contém itens ocultos)
 no-results = Nenhum item encontrado
-filesystem = Sistema de arquivos
+filesystem = Sistema de Arquivos
 home = Pasta pessoal
 networks = Redes
 notification-in-progress = Há operações de arquivo em andamento.
@@ -12,9 +12,9 @@ undo = Desfazer
 today = Hoje
 
 # Desktop view options
-desktop-view-options = Opções de visualização do desktop...
-show-on-desktop = Mostrar no desktop
-desktop-folder-content = Conteúdo da pasta do desktop
+desktop-view-options = Opções de visualização da área de trabalho...
+show-on-desktop = Mostrar na área de trabalho
+desktop-folder-content = Conteúdo da pasta da área de trabalho
 mounted-drives = Dispositivos montados
 trash-folder-icon = Ícone da lixeira
 icon-size-and-spacing = Tamanho e espaçamento do ícone
@@ -30,8 +30,14 @@ size = Tamanho
 # Progress footer
 details = Detalhes
 dismiss = Dispensar mensagem
-operations-running = {$running} operações em andamento ({$percent}%)...
-operations-running-finished = {$running} operações em andamento ({$percent}%), {$finished} finalizadas...
+operations-running = {$running} {$running -> 
+    [one] operação
+    *[other] operações
+  } em andamento ({$percent}%)...
+operations-running-finished = {$running} {$running -> 
+    [one] operação
+    *[other] operações
+  } em andamento ({$percent}%), {$finished} concluídas...
 pause = Pausar
 resume = Continuar
 
@@ -65,7 +71,7 @@ name-no-slashes = O nome não pode conter barras.
 
 ## Open/Save Dialog
 cancel = Cancelar
-create = Criar
+create = Confirmar
 open = Abrir
 open-file = Abrir arquivo
 open-folder = Abrir pasta
@@ -80,6 +86,14 @@ save-file = Salvar arquivo
 ## Open With Dialog
 open-with-title = Como deseja abrir "{$name}"?
 browse-store = Procurar em {$store}
+other-apps = Outros aplicativos
+related-apps = Aplicativos relacionados
+
+## Permanently delete Dialog
+selected-items = os {$items} itens selecionados
+permanently-delete-question = Excluir permanentemente
+delete = Excluir
+permanently-delete-warning = Deseja realmente excluir permanentemente {$target}? Esta operação não poderá ser desfeita.
 
 ## Rename Dialog
 rename-file = Renomear arquivo
@@ -87,7 +101,7 @@ rename-folder = Renomear pasta
 
 ## Replace Dialog
 replace = Substituir
-replace-title = {$filename} já existe neste local.
+replace-title = "{$filename}" já existe neste local.
 replace-warning = Deseja substituir o arquivo com o que você está salvando? Substituí-lo irá sobrescrever seu conteúdo.
 replace-warning-operation = Deseja substituir o arquivo? Substituí-lo irá sobrescrever seu conteúdo.
 original-file = Arquivo original
@@ -178,7 +192,7 @@ compressing = Compactando {$items} {$items ->
         [one] item
         *[other] itens
     } de {$from} para {$to} ({$progress})...
-compressed = Compactado {$items} {$items ->
+compressed = Compactado(s) {$items} {$items ->
         [one] item
         *[other] itens
     } de {$from} para {$to}
@@ -189,15 +203,15 @@ copying = Copiando {$items} {$items ->
         [one] item
         *[other] itens
     } de {$from} para {$to} ({$progress})...
-copied = Copiado {$items} {$items ->
+copied = Copiado(s) {$items} {$items ->
         [one] item
         *[other] itens
     } de {$from} para {$to}
-deleting = Apagando {$items} {$items ->
+deleting = Excluindo {$items} {$items ->
         [one] item
         *[other] itens
     } da {trash} ({$progress})...
-deleted = Apagado {$items} {$items ->
+deleted = Excluído(s) {$items} {$items ->
         [one] item
         *[other] itens
     } da {trash}
@@ -207,27 +221,37 @@ extracting = Extraindo {$items} {$items ->
         [one] item
         *[other] itens
     } de {$from} para {$to}
-extracted = Extraído {$items} {$items ->
+extracted = Extraído(s) {$items} {$items ->
         [one] item
         *[other] itens
     } de {$from} para {$to}
 setting-executable-and-launching = Marcando "{$name}" como executável e iniciando
 set-executable-and-launched = Marcado "{$name}" como executável e iniciado
+setting-permissions = Definindo permissões de "{$name}" para {$mode}
+set-permissions = Definir permissões de "{$name}" para {$mode}
 moving = Movendo {$items} {$items ->
         [one] item
         *[other] itens
     } de {$from} para {$to} ({$progress})...
-moved = Movido {$items} {$items ->
+moved = Movido(s) {$items} {$items ->
         [one] item
         *[other] itens
-    } de {$from} para {$to}
+    } de "{$from}" para "{$to}"
+permanently-deleting = Excluindo permanentemente "{$items}" "{$items ->
+        [one] item
+        *[other] itens
+    }"
+permanently-deleted = Excluído(s) permanentemente "{$items}" "{$items ->
+        [one] item
+        *[other] itens
+    }"
 renaming = Renomeando {$from} para {$to}
 renamed = Renomeado {$from} para {$to}
 restoring = Restaurando {$items} {$items ->
         [one] item
         *[other] itens
     } da lixeira
-restored = Restaurado {$items} {$items ->
+restored = Restaurado(s) {$items} {$items ->
         [one] item
         *[other] itens
     } da lixeira
@@ -254,9 +278,9 @@ single-click = Clique simples para abrir
 ### Appearance
 appearance = Aparência
 theme = Tema
-match-desktop = Acompanhar o ambiente de trabalho
-dark = Escuro
-light = Claro
+match-desktop = Estilo do sistema
+dark = Estilo escuro
+light = Estilo claro
 
 ### Type to Search
 type-to-search = Pesquisar digitando
@@ -281,7 +305,7 @@ sort-by-trashed = Ordernar por data de exclusão
 
 ## Desktop
 change-wallpaper = Alterar papel de parede...
-desktop-appearance = Aparência do desktop...
+desktop-appearance = Aparência da área de trabalho...
 display-settings = Configurações da tela...
 
 # Menu
@@ -290,6 +314,7 @@ display-settings = Configurações da tela...
 file = Arquivo
 new-tab = Nova aba
 new-window = Nova janela
+reload-folder = Recarregar pasta
 rename = Renomear...
 close-tab = Fechar aba
 quit = Sair

@@ -30,8 +30,14 @@ size = Rozmiar
 # Progress footer
 details = Detale
 dismiss = Odrzuć wiadomość
-operations-running = {$running} bieżące działania ({$percent}%)…
-operations-running-finished = {$running} bieżące działania ({$percent}%), {$finished} ukończone…
+operations-running = {$running} bieżące {$running ->
+    [one] działanie
+    *[other] działania
+  } ({$percent}%)…
+operations-running-finished = {$running} bieżące {$running ->
+    [one] działanie
+    *[other] działąnia
+  } ({$percent}%), {$finished} ukończone…
 pause = Wstrzymaj
 resume = Wznów
 
@@ -81,6 +87,14 @@ save-file = Zapisz plik
 ## Open With Dialog
 open-with-title = Czym chcesz otworzyć „{$name}”?
 browse-store = Przeglądaj {$store}
+other-apps = Inne aplikacje
+related-apps = Pokrewne aplikacje
+
+## Permanently delete Dialog
+selected-items =  {$items} zaznaczonych elementów
+permanently-delete-question = Usuń definitywnie
+delete = Usuń
+permanently-delete-warning = Jesteś pewien, że chcesz definitywnie usunąć {$target}? Nie można tego cofnąć.
 
 # Rename Dialog
 rename-file = Zmień nazwę pliku
@@ -217,6 +231,10 @@ extracted = Wypakowano {$items} {$items ->
         [few] elementy
         *[other] elementów
     } z „{$from}” do „{$to}”
+setting-executable-and-launching = Ustawianie "{$name}" jako wykonywalnego i uruchamianie
+set-executable-and-launched = Ustaw "{$name}" jako wykonywalny i uruchom
+setting-permissions = Ustawianie uprawnień dla "{$name}" na {$mode}
+set-permissions = Ustaw uprawnienia dla "{$name}" na {$mode}
 moving = Przenoszenie {$items} {$items ->
         [one] elementu
         *[other] elementów
@@ -226,6 +244,15 @@ moved = Przeniesiono {$items} {$items ->
         [few] elementy
         *[other] elementów
     } z „{$from}” do „{$to}”
+permanently-deleting = Definitywne usuwanie "{$items}" "{$items ->
+        [one] elementu
+        *[other] elementów
+    }"
+permanently-deleted = Definitywnie usunięto "{$items}" "{$items ->
+        [one] element
+        [few] elementy
+        *[other] elementów
+    }"
 renaming = Zmieniana nazwa {$from} na {$to}
 renamed = Zmieniono nazwę {$from} na {$to}
 restoring = Przywracanie {$items} {$items ->
@@ -296,6 +323,7 @@ display-settings = Ustawienia wyświetlacza…
 file = Plik
 new-tab = Nowa karta
 new-window = Nowe okno
+reload-folder = Odśwież katalog
 rename = Zmień nazwę…
 close-tab = Zamknij kartę
 quit = Zamknij

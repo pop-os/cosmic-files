@@ -200,10 +200,10 @@ impl From<&desktop::DesktopEntryData> for MimeApp {
             name: app.name.clone(),
             exec: app.exec.clone(),
             icon: match &app.icon {
-                desktop::IconSource::Name(name) => {
+                desktop::fde::IconSource::Name(name) => {
                     widget::icon::from_name(name.as_str()).size(32).handle()
                 }
-                desktop::IconSource::Path(path) => widget::icon::from_path(path.clone()),
+                desktop::fde::IconSource::Path(path) => widget::icon::from_path(path.clone()),
             },
             is_default: false,
         }
@@ -220,6 +220,7 @@ fn filename_eq(path_opt: &Option<PathBuf>, filename: &str) -> bool {
 }
 
 pub struct MimeAppCache {
+    apps: Vec<MimeApp>,
     cache: HashMap<Mime, Vec<MimeApp>>,
     icons: HashMap<Mime, Vec<widget::icon::Handle>>,
     terminals: Vec<MimeApp>,
@@ -228,6 +229,7 @@ pub struct MimeAppCache {
 impl MimeAppCache {
     pub fn new() -> Self {
         let mut mime_app_cache = Self {
+            apps: Vec::new(),
             cache: HashMap::new(),
             icons: HashMap::new(),
             terminals: Vec::new(),
@@ -246,29 +248,34 @@ impl MimeAppCache {
 
         let start = Instant::now();
 
+        self.apps.clear();
         self.cache.clear();
         self.icons.clear();
         self.terminals.clear();
 
         //TODO: get proper locale?
-        let locale = None;
+        let locale = &[];
 
         // Load desktop applications by supported mime types
         //TODO: hashmap for all apps by id?
-        let all_apps = desktop::load_applications(locale, false);
-        for app in all_apps.iter() {
+        let mut all_apps = desktop::load_applications(locale, false, None);
+        for app in &mut all_apps {
+            //TODO: just collect apps that can be executed with a file argument?
+            if !app.mime_types.is_empty() {
+                self.apps.push(MimeApp::from(&app));
+            }
             for mime in app.mime_types.iter() {
                 let apps = self
                     .cache
                     .entry(mime.clone())
                     .or_insert_with(|| Vec::with_capacity(1));
                 if !apps.iter().any(|x| x.id == app.id) {
-                    apps.push(MimeApp::from(app));
+                    apps.push(MimeApp::from(&app));
                 }
             }
             for category in app.categories.iter() {
                 if category == "TerminalEmulator" {
-                    self.terminals.push(MimeApp::from(app));
+                    self.terminals.push(MimeApp::from(&app));
                     break;
                 }
             }
@@ -334,10 +341,9 @@ impl MimeAppCache {
                                 .entry(mime.clone())
                                 .or_insert_with(|| Vec::with_capacity(1));
                             if !apps.iter().any(|x| filename_eq(&x.path, filename)) {
-                                if let Some(app) =
-                                    all_apps.iter().find(|x| filename_eq(&x.path, filename))
+                                if let Some(app) = all_apps.find(|x| filename_eq(&x.path, filename))
                                 {
-                                    apps.push(MimeApp::from(app));
+                                    apps.push(MimeApp::from(&app));
                                 } else {
                                     log::debug!("failed to add association for {:?}: application {:?} not found", mime, filename);
                                 }
@@ -388,6 +394,12 @@ impl MimeAppCache {
         }
 
         // Sort apps by name
+        self.apps
+            .sort_by(|a, b| match (a.is_default, b.is_default) {
+                (true, false) => Ordering::Less,
+                (false, true) => Ordering::Greater,
+                _ => LANGUAGE_SORTER.compare(&a.name, &b.name),
+            });
         for apps in self.cache.values_mut() {
             apps.sort_by(|a, b| match (a.is_default, b.is_default) {
                 (true, false) => Ordering::Less,
@@ -409,6 +421,10 @@ impl MimeAppCache {
         log::info!("loaded mime app cache in {:?}", elapsed);
     }
 
+    pub fn apps(&self) -> &[MimeApp] {
+        &self.apps
+    }
+
     pub fn get(&self, key: &Mime) -> &[MimeApp] {
         static EMPTY: Vec<MimeApp> = Vec::new();
         self.cache.get(key).unwrap_or(&EMPTY)
@@ -419,12 +435,35 @@ impl MimeAppCache {
         self.icons.get(key).unwrap_or(&EMPTY)
     }
 
+    fn get_default_terminal(&self) -> Option<String> {
+        let output = process::Command::new("xdg-mime")
+            .args(&["query", "default", "x-scheme-handler/terminal"])
+            .output()
+            .ok()?;
+
+        if !output.status.success() {
+            return None;
+        }
+
+        String::from_utf8(output.stdout)
+            .ok()
+            .map(|string| string.trim().replace(".desktop", ""))
+    }
+
     pub fn terminal(&self) -> Option<&MimeApp> {
         //TODO: consider rules in https://github.com/Vladimir-csp/xdg-terminal-exec
+        // The current approach works but might not adhere to the spec (yet)
 
         // Look for and return preferred terminals
         //TODO: fallback order beyond cosmic-term?
-        for id in &["com.system76.CosmicTerm"] {
+
+        let mut preference_order = vec!["com.system76.CosmicTerm".to_string()];
+
+        if let Some(id) = self.get_default_terminal() {
+            preference_order.insert(0, id);
+        }
+
+        for id in &preference_order {
             for terminal in self.terminals.iter() {
                 if &terminal.id == id {
                     return Some(terminal);
@@ -485,5 +524,237 @@ impl MimeAppCache {
 impl Default for MimeAppCache {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::exec_to_command;
+
+    #[test]
+    fn one_path_f_field_code() {
+        let exec = "/usr/bin/foo %f";
+        let paths = ["file1"];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+
+        assert_eq!("/usr/bin/foo", command.get_program().to_str().unwrap());
+        assert_eq!(
+            "file1",
+            command.get_args().next().unwrap().to_str().unwrap()
+        );
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn one_path_F_field_code() {
+        let exec = "/usr/bin/bar %F";
+        let paths = ["cat"];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+
+        assert_eq!("/usr/bin/bar", command.get_program().to_str().unwrap());
+        assert_eq!("cat", command.get_args().next().unwrap().to_str().unwrap());
+    }
+
+    #[test]
+    fn one_path_u_field_code() {
+        let exec = "/usr/bin/foobar %u";
+        let paths = ["/home/josh/krumpli"];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+
+        assert_eq!("/usr/bin/foobar", command.get_program().to_str().unwrap());
+        assert_eq!(
+            *paths.first().unwrap(),
+            command.get_args().next().unwrap().to_str().unwrap()
+        );
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn one_path_U_field_code() {
+        let exec = "/usr/bin/rmrfbye %U";
+        let paths = ["/"];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+
+        assert_eq!("/usr/bin/rmrfbye", command.get_program().to_str().unwrap());
+        assert_eq!("/", command.get_args().next().unwrap().to_str().unwrap());
+    }
+
+    #[test]
+    fn mult_path_f_field_code() {
+        let exec = "/usr/games/ppsspp %f";
+        let paths = [
+            "/usr/share/games/psp/miku.iso",
+            "/usr/share/games/psp/eternia.iso",
+        ];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(paths.len(), commands.len());
+        for (command, path) in commands.into_iter().zip(paths.iter()) {
+            assert_eq!("/usr/games/ppsspp", command.get_program().to_str().unwrap());
+
+            assert_eq!(1, command.get_args().len());
+            let command_path = command.get_args().next().unwrap();
+            assert_eq!(*path, command_path.to_str().unwrap());
+        }
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn mult_path_F_field_code() {
+        let exec = "/usr/games/gzdoom %F";
+        let paths = [
+            "/usr/share/games/doom2/hr.wad",
+            "/usr/share/games/doom2/hrmus.wad",
+        ];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+
+        assert_eq!("/usr/games/gzdoom", command.get_program().to_str().unwrap());
+        assert!(paths
+            .iter()
+            .zip(command.get_args())
+            .all(|(&expected, actual)| expected == actual.to_string_lossy()));
+    }
+
+    #[test]
+    fn mult_path_u_field_code() {
+        let exec = "/usr/bin/cosmic_browser %u";
+        let paths = [
+            "file:///home/josh/Books/osstep.pdf",
+            "https://redox-os.org/",
+            "https://system76.com/",
+        ];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(paths.len(), commands.len());
+        for (command, path) in commands.into_iter().zip(paths.iter()) {
+            assert_eq!(
+                "/usr/bin/cosmic_browser",
+                command.get_program().to_str().unwrap()
+            );
+
+            assert_eq!(1, command.get_args().len());
+            let command_path = command.get_args().next().unwrap();
+            assert_eq!(*path, command_path.to_str().unwrap());
+        }
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn mult_path_U_field_code() {
+        let exec = "/usr/bin/mpv %U";
+        let paths = [
+            "frieren01.mkv",
+            "rtmp://example.org/this/video/doesnt/exist.avi",
+        ];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+        assert_eq!(paths.len(), command.get_args().count());
+
+        assert_eq!("/usr/bin/mpv", command.get_program().to_str().unwrap());
+        assert!(paths
+            .iter()
+            .zip(command.get_args())
+            .all(|(&expected, actual)| expected == actual.to_string_lossy()));
+    }
+
+    #[test]
+    fn flatpak_style_exec() {
+        // Tests args before field codes
+        let exec = "/usr/bin/flatpak run --branch=stable --command=ferris --file-forwarding org.joshfake.ferris @@u %U";
+        let args = [
+            "run",
+            "--branch=stable",
+            "--command=ferris",
+            "--file-forwarding",
+            "org.joshfake.ferris",
+            "@@u",
+        ];
+        let paths = ["file1.rs", "file2.rs"];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+        assert_eq!(args.len() + paths.len(), command.get_args().count());
+
+        assert_eq!("/usr/bin/flatpak", command.get_program().to_str().unwrap());
+        assert!(args
+            .iter()
+            .chain(paths.iter())
+            .zip(command.get_args())
+            .all(|(&expected, actual)| expected == actual.to_string_lossy()));
+    }
+
+    #[test]
+    fn multiple_field_codes() {
+        // Tests that only one field code is used rather than passing paths to each field code
+        let exec = "/usr/games/roguelike %U %f";
+        let paths = [
+            "file:///usr/share/games/roguelike/mods/mod1",
+            "file:///usr/share/games/roguelike/mods/mod2",
+        ];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+
+        assert_eq!(
+            "/usr/games/roguelike",
+            command.get_program().to_str().unwrap()
+        );
+        assert!(paths
+            .iter()
+            .zip(command.get_args())
+            .all(|(&expected, actual)| expected == actual.to_string_lossy()));
+    }
+
+    #[test]
+    fn sandwiched_field_code() {
+        // Tests that arguments before and after the field code works
+        // (Borrowed from KDE because someone had this exact line in an issue)
+        let exec = "/usr/bin/flatpak run --branch=stable --arch=x86_64 --command=okular --file-forwarding org.kde.okular @@u %U @@";
+        let args_leading = [
+            "run",
+            "--branch=stable",
+            "--arch=x86_64",
+            "--command=okular",
+            "--file-forwarding",
+            "org.kde.okular",
+            "@@u",
+        ];
+        let paths = ["rust_game_dev.pdf", "superhero_ferris.epub"];
+        let args_trailing = ["@@"];
+        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+        assert_eq!(
+            args_leading.len() + paths.len() + args_trailing.len(),
+            command.get_args().len()
+        );
+
+        assert_eq!("/usr/bin/flatpak", command.get_program().to_str().unwrap());
+        assert!(args_leading
+            .iter()
+            .chain(paths.iter())
+            .chain(args_trailing.iter())
+            .zip(command.get_args())
+            .all(|(&expected, actual)| expected == actual.to_string_lossy()));
     }
 }

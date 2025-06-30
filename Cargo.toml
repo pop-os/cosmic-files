@@ -16,8 +16,6 @@ icu = { version = "1.5.0", features = [
     "compiled_data",
     "icu_datetime_experimental",
 ] }
-# Completion-based IO runtime to enable io_uring / IOCP file IO support.
-compio = { version = "0.14.0", features = ["io", "macros", "runtime"] }
 cosmic-mime-apps = { git = "https://github.com/pop-os/cosmic-mime-apps.git", optional = true }
 dirs = "6.0.0"
 env_logger = "0.11"
@@ -67,28 +65,42 @@ rust-embed = "8"
 slotmap = "1.0.7"
 recently-used-xbel = "1.1.0"
 zip = "2.2.2"
-unix_permissions_ext = "0.1.2"
 uzers = "0.12.1"
+
+# Completion-based IO runtime to enable io_uring / IOCP file IO support.
+[dependencies.compio]
+version = "0.14.0"
+default-features = false
+features = ["io", "macros", "polling", "runtime"]
+
+[dependencies.io-uring]
+version = "0.7.6"
+default-features = false
+optional = true
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
 default-features = false
 #TODO: a11y feature crashes
-features = ["multi-window", "tokio", "winit"]
+features = ["multi-window", "tokio", "winit", "surface-message"]
 
 [features]
 default = [
     "bzip2",
-    "dbus-config",
     "desktop",
     "gvfs",
+    "io-uring",
     "notify",
     "wgpu",
+    "wayland",
     "xz2",
 ]
 dbus-config = ["libcosmic/dbus-config"]
 desktop = ["libcosmic/desktop", "dep:cosmic-mime-apps", "dep:xdg"]
+desktop-applet = []
 gvfs = ["dep:gio", "dep:glib"]
+io-uring = ["compio/io-uring", "dep:io-uring"]
+io-uring-bindgen = ["io-uring?/bindgen"]
 jemalloc = ["dep:tikv-jemallocator"]
 notify = ["dep:notify-rust"]
 wayland = ["libcosmic/wayland", "dep:wayland-client"]
@@ -104,18 +116,15 @@ debug = true
 [target.'cfg(unix)'.dependencies]
 fork = "0.2"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+procfs = "0.17"
+
 [dev-dependencies]
 # cap-std = "3"
 # cap-tempfile = "3"
 fastrand = "2"
 test-log = "0.2"
 tokio = { version = "1", features = ["rt", "macros"] }
-
-[patch.crates-io]
-# https://github.com/rust-lang/libc/pull/4388
-libc = { git = "https://gitlab.redox-os.org/redox-os/liblibc.git", branch = "redox-socket-0.2" }
-# https://github.com/smol-rs/polling/pull/235
-polling = { git = "https://github.com/jackpot51/polling.git", branch = "master" }
 
 # [patch.'https://github.com/pop-os/cosmic-text']
 # cosmic-text = { path = "../cosmic-text" }

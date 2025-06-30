@@ -65,16 +65,6 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
         .map_err(err_str)?
     {
         let info = info_res.map_err(err_str)?;
-        println!("{:?}", info.display_name());
-        for attribute in info.list_attributes(None) {
-            println!(
-                "  {:?}: {:?}: {:?}",
-                attribute,
-                info.attribute_type(&attribute),
-                info.attribute_as_string(&attribute)
-            );
-        }
-
         let name = info.name().to_string_lossy().to_string();
         let display_name = info.display_name().to_string();
 
@@ -136,6 +126,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
             overlaps_drag_rect: false,
             //TODO: scan directory size on gvfs mounts?
             dir_size: DirSize::NotDirectory,
+            cut: false,
         });
     }
     Ok(items)
@@ -428,16 +419,29 @@ impl Gvfs {
                                     continue;
                                 }
 
-                                log::info!("unmount {}", name);
-                                MountExt::eject_with_operation(
-                                    &mount,
-                                    gio::MountUnmountFlags::NONE,
-                                    gio::MountOperation::NONE,
-                                    gio::Cancellable::NONE,
-                                    move |result| {
-                                        log::info!("unmount {}: result {:?}", name, result);
-                                    },
-                                );
+                                if MountExt::can_eject(&mount) {
+                                    log::info!("eject {}", name);
+                                    MountExt::eject_with_operation(
+                                        &mount,
+                                        gio::MountUnmountFlags::NONE,
+                                        gio::MountOperation::NONE,
+                                        gio::Cancellable::NONE,
+                                        move |result| {
+                                            log::info!("eject {}: result {:?}", name, result);
+                                        },
+                                    );
+                                } else {
+                                    log::info!("unmount {}", name);
+                                    MountExt::unmount_with_operation(
+                                        &mount,
+                                        gio::MountUnmountFlags::NONE,
+                                        gio::MountOperation::NONE,
+                                        gio::Cancellable::NONE,
+                                        move |result| {
+                                            log::info!("unmount {}: result {:?}", name, result);
+                                        },
+                                    );
+                                }
                             }
                         }
                     }

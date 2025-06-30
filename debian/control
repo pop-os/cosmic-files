@@ -6,6 +6,7 @@ Build-Depends:
     debhelper-compat (=13),
     git,
     just (>= 1.13.0),
+    libclang-dev,
     libglib2.0-dev,
     libxkbcommon-dev,
     pkg-config,

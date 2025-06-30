@@ -9,6 +9,11 @@ use walkdir::WalkDir;
 
 use super::{copy_unique_path, Controller, OperationSelection, ReplaceResult};
 
+pub enum Method {
+    Copy,
+    Move { cross_device_copy: bool },
+}
+
 pub struct Context {
     buf: Vec<u8>,
     controller: Controller,
@@ -46,7 +51,7 @@ impl Context {
     pub async fn recursive_copy_or_move(
         &mut self,
         from_to_pairs: Vec<(PathBuf, PathBuf)>,
-        moving: bool,
+        method: Method,
     ) -> Result<bool, String> {
         let mut ops = Vec::new();
         let mut cleanup_ops = Vec::new();
@@ -69,10 +74,9 @@ impl Context {
                 let kind = if file_type.is_dir() {
                     OpKind::Mkdir
                 } else if file_type.is_file() {
-                    if moving {
-                        OpKind::Move
-                    } else {
-                        OpKind::Copy
+                    match method {
+                        Method::Copy => OpKind::Copy,
+                        Method::Move { cross_device_copy } => OpKind::Move { cross_device_copy },
                     }
                 } else if file_type.is_symlink() {
                     let target = fs::read_link(&from)
@@ -99,9 +103,13 @@ impl Context {
                     kind,
                     from,
                     to,
-                    skipped: Rc::new(Cell::new(false)),
+                    skipped: Rc::new(Skip {
+                        normal: Cell::new(false),
+                        cleanup: Cell::new(false),
+                    }),
+                    is_cleanup: false,
                 };
-                if moving {
+                if matches!(method, Method::Move { .. }) {
                     if let Some(cleanup_op) = op.move_cleanup_op() {
                         cleanup_ops.push(cleanup_op);
                     }
@@ -180,7 +188,7 @@ impl Context {
                 if apply_to_all {
                     self.replace_result_opt = Some(replace_result);
                 }
-                op.skipped.set(true);
+                op.skipped.normal.set(true);
                 Ok(ControlFlow::Break(true))
             }
             ReplaceResult::Cancel => Ok(ControlFlow::Break(false)),
@@ -199,7 +207,7 @@ pub struct Progress {
 #[derive(Debug)]
 pub enum OpKind {
     Copy,
-    Move,
+    Move { cross_device_copy: bool },
     Mkdir,
     Remove,
     Rmdir,
@@ -207,17 +215,26 @@ pub enum OpKind {
 }
 
 #[derive(Debug)]
+pub struct Skip {
+    /// Normal operation should be skipped
+    pub normal: Cell<bool>,
+    /// Cleanup operation should be skipped
+    pub cleanup: Cell<bool>,
+}
+
+#[derive(Debug)]
 pub struct Op {
     pub kind: OpKind,
     pub from: PathBuf,
     pub to: PathBuf,
-    pub skipped: Rc<Cell<bool>>,
+    pub skipped: Rc<Skip>,
+    pub is_cleanup: bool,
 }
 
 impl Op {
     fn move_cleanup_op(&self) -> Option<Self> {
         let kind = match self.kind {
-            OpKind::Copy | OpKind::Move | OpKind::Symlink { .. } => OpKind::Remove,
+            OpKind::Copy | OpKind::Move { .. } | OpKind::Symlink { .. } => OpKind::Remove,
             OpKind::Mkdir => OpKind::Rmdir,
             OpKind::Remove | OpKind::Rmdir => return None,
         };
@@ -227,6 +244,7 @@ impl Op {
             //TODO: it is strange to have `to` here
             to: self.to.clone(),
             skipped: self.skipped.clone(),
+            is_cleanup: true,
         })
     }
 
@@ -235,7 +253,7 @@ impl Op {
         ctx: &mut Context,
         mut progress: Progress,
     ) -> Result<bool, Box<dyn Error>> {
-        if self.skipped.get() {
+        if self.skipped.normal.get() || (self.is_cleanup && self.skipped.cleanup.get()) {
             return Ok(true);
         }
         match self.kind {
@@ -272,7 +290,10 @@ impl Op {
 
                 progress.total_bytes = Some(metadata.len());
                 (ctx.on_progress)(self, &progress);
-                to_file.set_permissions(metadata.permissions()).await?;
+                if let Err(err) = to_file.set_permissions(metadata.permissions()).await {
+                    // This error is not propagated upwards as some filesystems do not support setting permissions
+                    log::warn!("failed to set permissions for {:?}: {}", self.to, err);
+                }
 
                 // Prevent spamming the progress callbacks.
                 let mut last_progress_update = Instant::now();
@@ -326,7 +347,7 @@ impl Op {
 
                 to_file.sync_all().await?;
             }
-            OpKind::Move => {
+            OpKind::Move { cross_device_copy } => {
                 // Remove `to` if overwriting and it is an existing file
                 if self.to.is_file() {
                     match ctx.replace(self).await? {
@@ -349,12 +370,17 @@ impl Op {
                         const EXDEV: i32 = libc::EXDEV as _;
 
                         if err.raw_os_error() == Some(EXDEV) {
+                            if cross_device_copy {
+                                // Do not clean up if cross_device_copy is set
+                                self.skipped.cleanup.set(true);
+                            }
                             // Try standard copy if hard link fails with cross device error
                             let mut copy_op = Op {
                                 kind: OpKind::Copy,
                                 from: self.from.clone(),
                                 to: self.to.clone(),
                                 skipped: self.skipped.clone(),
+                                is_cleanup: self.is_cleanup,
                             };
                             return Box::pin(copy_op.run(ctx, progress)).await;
                         } else {
