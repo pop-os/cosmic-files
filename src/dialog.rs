@@ -916,7 +916,7 @@ impl Application for App {
             folders_first: false,
             ..Default::default()
         };
-        let mut tab = Tab::new(location, tab_config);
+        let mut tab = Tab::new(location, tab_config, None);
         tab.mode = tab::Mode::Dialog(flags.kind.clone());
         tab.sort_name = tab::HeadingOptions::Modified;
         tab.sort_direction = false;
