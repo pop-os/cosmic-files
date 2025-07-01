@@ -54,10 +54,11 @@ use std::{
     error::Error,
     fmt::{self, Display},
     fs::{self, File, Metadata},
+    hash::Hash,
     io::{BufRead, BufReader},
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
-    sync::{atomic, Arc, Mutex, RwLock},
+    sync::{atomic, Arc, LazyLock, Mutex, RwLock},
     time::{Duration, Instant, SystemTime},
 };
 use tokio::sync::mpsc;
@@ -89,6 +90,16 @@ const MAX_SEARCH_RESULTS: usize = 200;
 const THUMBNAIL_SIZE: u32 = (ICON_SIZE_GRID as u32) * (ICON_SCALE_MAX as u32);
 
 const DRAG_SCROLL_DISTANCE: f32 = 15.0;
+
+static SORT_OPTION_FALLBACK: LazyLock<HashMap<String, (HeadingOptions, bool)>> =
+    LazyLock::new(|| {
+        HashMap::from_iter(dirs::download_dir().into_iter().map(|dir| {
+            (
+                Location::Path(dir).normalize().to_string(),
+                (HeadingOptions::Modified, false),
+            )
+        }))
+    });
 
 static MODE_NAMES: Lazy<Vec<String>> = Lazy::new(|| {
     vec![
@@ -1506,6 +1517,7 @@ pub enum Command {
     Preview(PreviewKind),
     SetOpenWith(Mime, String),
     SetPermissions(PathBuf, u32),
+    SetSort(String, HeadingOptions, bool),
     WindowDrag,
     WindowToggleMaximize,
 }
@@ -2351,7 +2363,17 @@ fn parse_hidden_file(path: &PathBuf) -> Vec<String> {
 }
 
 impl Tab {
-    pub fn new(location: Location, config: TabConfig) -> Self {
+    pub fn new(
+        location: Location,
+        config: TabConfig,
+        sorting_options: Option<&HashMap<String, (HeadingOptions, bool)>>,
+    ) -> Self {
+        let location_str = location.to_string();
+        let (sort_name, sort_direction) = sorting_options
+            .and_then(|opts| opts.get(&location_str))
+            .or_else(|| SORT_OPTION_FALLBACK.get(&location_str))
+            .cloned()
+            .unwrap_or_else(|| (HeadingOptions::Name, true));
         let location = location.normalize();
         let location_ancestors = location.ancestors();
         let location_title = location.title();
@@ -2372,8 +2394,8 @@ impl Tab {
             history_i: 0,
             history,
             config,
-            sort_name: HeadingOptions::Name,
-            sort_direction: true,
+            sort_name,
+            sort_direction,
             gallery: false,
             parent_item_opt: None,
             items_opt: None,
@@ -3669,6 +3691,13 @@ impl Tab {
                 if !matches!(self.location, Location::Search(..)) {
                     self.sort_name = heading_option;
                     self.sort_direction = dir;
+                    if !matches!(self.location, Location::Desktop(..)) {
+                        commands.push(Command::SetSort(
+                            self.location.normalize().to_string(),
+                            heading_option,
+                            self.sort_direction,
+                        ));
+                    }
                 }
             }
             Message::TabComplete(path, completions) => {
@@ -3721,6 +3750,15 @@ impl Tab {
                         // Default modified to descending, and others to ascending.
                         heading_option != HeadingOptions::Modified
                     };
+
+                    if !matches!(self.location, Location::Desktop(..)) {
+                        commands.push(Command::SetSort(
+                            self.location.normalize().to_string(),
+                            heading_option,
+                            heading_sort,
+                        ));
+                    }
+
                     self.sort_direction = heading_sort;
                     self.sort_name = heading_option;
                 }
@@ -5941,7 +5979,7 @@ mod tests {
     fn tab_history() -> io::Result<(TempDir, Tab, Vec<PathBuf>)> {
         let fs = simple_fs(NUM_FILES, NUM_NESTED, NUM_DIRS, NUM_NESTED, NAME_LEN)?;
         let path = fs.path();
-        let mut tab = Tab::new(Location::Path(path.into()), TabConfig::default());
+        let mut tab = Tab::new(Location::Path(path.into()), TabConfig::default(), None);
 
         // All directories (simple_fs only produces one nested layer)
         let dirs: Vec<PathBuf> = filter_dirs(path)?
@@ -6038,7 +6076,7 @@ mod tests {
             .next()
             .expect("temp directory should have at least one directory");
 
-        let mut tab = Tab::new(Location::Path(path.to_owned()), TabConfig::default());
+        let mut tab = Tab::new(Location::Path(path.to_owned()), TabConfig::default(), None);
         debug!(
             "Emitting Message::Location(Location::Path(\"{}\"))",
             next_dir.display()
@@ -6170,7 +6208,7 @@ mod tests {
     fn tab_empty_history_does_nothing_on_prev_next() -> io::Result<()> {
         let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
         let path = fs.path();
-        let mut tab = Tab::new(Location::Path(path.into()), TabConfig::default());
+        let mut tab = Tab::new(Location::Path(path.into()), TabConfig::default(), None);
 
         // Tab's location shouldn't change if GoPrev or GoNext is triggered
         debug!("Emitting Message::GoPrevious",);
@@ -6192,7 +6230,7 @@ mod tests {
             .next()
             .expect("should be at least one directory");
 
-        let mut tab = Tab::new(Location::Path(next_dir.clone()), TabConfig::default());
+        let mut tab = Tab::new(Location::Path(next_dir.clone()), TabConfig::default(), None);
         // This will eventually yield false once root is hit
         while next_dir.pop() {
             debug!("Emitting Message::LocationUp",);
@@ -6225,7 +6263,7 @@ mod tests {
         }
 
         debug!("Creating tab for directory of long file names");
-        Tab::new(Location::Path(path.into()), TabConfig::default());
+        Tab::new(Location::Path(path.into()), TabConfig::default(), None);
 
         Ok(())
     }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::{any::TypeId, num::NonZeroU16, path::PathBuf};
+use std::{any::TypeId, collections::HashMap, num::NonZeroU16, path::PathBuf};
 
 use cosmic::{
     cosmic_config::{self, cosmic_config_derive::CosmicConfigEntry, CosmicConfigEntry},
@@ -9,7 +9,10 @@ use cosmic::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{app::App, tab::View};
+use crate::{
+    app::App,
+    tab::{HeadingOptions, Location, View},
+};
 
 pub const CONFIG_VERSION: u64 = 1;
 
@@ -110,6 +113,7 @@ pub struct Config {
     pub show_details: bool,
     pub tab: TabConfig,
     pub type_to_search: TypeToSearch,
+    pub sort_names: HashMap<String, (HeadingOptions, bool)>,
 }
 
 impl Config {
@@ -158,6 +162,12 @@ impl Default for Config {
             show_details: false,
             tab: TabConfig::default(),
             type_to_search: TypeToSearch::Recursive,
+            sort_names: HashMap::from_iter(dirs::download_dir().into_iter().map(|dir| {
+                (
+                    Location::Path(dir).normalize().to_string(),
+                    (HeadingOptions::Modified, false),
+                )
+            })),
         }
     }
 }

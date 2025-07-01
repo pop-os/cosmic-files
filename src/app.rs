@@ -16,7 +16,8 @@ use cosmic::iced::{
 use cosmic::iced_winit::commands::overlap_notify::overlap_notify;
 use cosmic::{
     app::{self, context_drawer, Core, Task},
-    cosmic_config, cosmic_theme, executor,
+    cosmic_config::{self, ConfigSet},
+    cosmic_theme, executor,
     iced::{
         self,
         clipboard::dnd::DndAction,
@@ -358,6 +359,7 @@ pub enum Message {
     Rename(Option<Entity>),
     ReplaceResult(ReplaceResult),
     RestoreFromTrash(Option<Entity>),
+    SaveSortNames,
     ScrollTab(i16),
     SearchActivate,
     SearchClear,
@@ -574,6 +576,7 @@ pub struct App {
     mime_app_cache: MimeAppCache,
     modifiers: Modifiers,
     mounter_items: HashMap<MounterKey, MounterItems>,
+    must_save_sort_names: bool,
     network_drive_connecting: Option<(MounterKey, String)>,
     network_drive_input: String,
     #[cfg(feature = "notify")]
@@ -873,7 +876,11 @@ impl App {
         activate: bool,
         selection_paths: Option<Vec<PathBuf>>,
     ) -> (Entity, Task<Message>) {
-        let mut tab = Tab::new(location.clone(), self.config.tab);
+        let mut tab = Tab::new(
+            location.clone(),
+            self.config.tab,
+            Some(&self.config.sort_names),
+        );
         tab.mode = match self.mode {
             Mode::App => tab::Mode::App,
             Mode::Desktop => {
@@ -1949,6 +1956,7 @@ impl Application for App {
             mime_app_cache: MimeAppCache::new(),
             modifiers: Modifiers::empty(),
             mounter_items: HashMap::new(),
+            must_save_sort_names: false,
             network_drive_connecting: None,
             network_drive_input: String::new(),
             #[cfg(feature = "notify")]
@@ -3587,6 +3595,19 @@ impl Application for App {
                                 commands.push(window::toggle_maximize(*window_id));
                             }
                         }
+                        tab::Command::SetSort(location, heading_options, direction) => {
+                            self.config
+                                .sort_names
+                                .insert(location, (heading_options, direction));
+                            self.must_save_sort_names = true;
+                            return cosmic::Task::perform(
+                                async move {
+                                    tokio::time::sleep(Duration::from_secs(1)).await;
+                                    cosmic::action::app(Message::SaveSortNames)
+                                },
+                                |x| x,
+                            );
+                        }
                     }
                 }
                 return Task::batch(commands);
@@ -3599,11 +3620,22 @@ impl Application for App {
                 };
                 return self.open_tab(location, true, None);
             }
-            Message::TabRescan(entity, location, parent_item_opt, items, selection_paths) => {
+            Message::TabRescan(entity, mut location, parent_item_opt, items, selection_paths) => {
+                location = location.normalize();
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                    tab.location = tab.location.normalize();
                     if location == tab.location {
                         tab.parent_item_opt = parent_item_opt;
                         tab.set_items(items);
+                        let sort = self
+                            .config
+                            .sort_names
+                            .get(&location.to_string())
+                            .unwrap_or_else(|| &(HeadingOptions::Name, true));
+
+                        tab.sort_name = sort.0;
+                        tab.sort_direction = sort.1;
+
                         if let Some(selection_paths) = selection_paths {
                             tab.select_paths(selection_paths);
                         }
@@ -4193,6 +4225,21 @@ impl Application for App {
                 return cosmic::task::message(cosmic::Action::Cosmic(
                     cosmic::app::Action::Surface(a),
                 ));
+            }
+            Message::SaveSortNames => {
+                if self.must_save_sort_names {
+                    self.must_save_sort_names = false;
+                    if let Some(config_handler) = self.config_handler.as_ref() {
+                        if let Err(err) = config_handler
+                            .set::<HashMap<String, (HeadingOptions, bool)>>(
+                                "sort_names",
+                                self.config.sort_names.clone(),
+                            )
+                        {
+                            log::warn!("Failed to save sort names: {:?}", err);
+                        }
+                    }
+                }
             }
         }
 
@@ -5764,7 +5811,7 @@ pub(crate) mod test_utils {
         // New tab with items
         let location = Location::Path(path.to_owned());
         let (parent_item_opt, items) = location.scan(IconSizes::default());
-        let mut tab = Tab::new(location, TabConfig::default());
+        let mut tab = Tab::new(location, TabConfig::default(), None);
         tab.parent_item_opt = parent_item_opt;
         tab.set_items(items);
 
