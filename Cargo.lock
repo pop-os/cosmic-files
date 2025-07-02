@@ -1032,6 +1032,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap_lex"
+version = "0.7.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
+
+[[package]]
 name = "clipboard-win"
 version = "5.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1484,6 +1490,7 @@ version = "0.1.0"
 dependencies = [
  "bzip2",
  "chrono",
+ "clap_lex",
  "compio",
  "cosmic-mime-apps",
  "dirs 6.0.0",
