@@ -106,6 +106,55 @@ pub enum TypeToSearch {
 
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(default)]
+pub struct State {
+    pub sort_names: HashMap<String, (HeadingOptions, bool)>,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            sort_names: HashMap::from_iter(dirs::download_dir().into_iter().map(|dir| {
+                (
+                    Location::Path(dir).normalize().to_string(),
+                    (HeadingOptions::Modified, false),
+                )
+            })),
+        }
+    }
+}
+
+impl State {
+    pub fn load() -> (Option<cosmic_config::Config>, Self) {
+        match cosmic_config::Config::new_state(App::APP_ID, CONFIG_VERSION) {
+            Ok(config_handler) => {
+                let config = match State::get_entry(&config_handler) {
+                    Ok(ok) => ok,
+                    Err((errs, config)) => {
+                        log::info!("errors loading config: {:?}", errs);
+                        config
+                    }
+                };
+                (Some(config_handler), config)
+            }
+            Err(err) => {
+                log::error!("failed to create config handler: {}", err);
+                (None, State::default())
+            }
+        }
+    }
+
+    pub fn subscription() -> Subscription<cosmic_config::Update<Self>> {
+        struct ConfigSubscription;
+        cosmic_config::config_state_subscription(
+            TypeId::of::<ConfigSubscription>(),
+            App::APP_ID.into(),
+            CONFIG_VERSION,
+        )
+    }
+}
+
+#[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default)]
 pub struct Config {
     pub app_theme: AppTheme,
     pub desktop: DesktopConfig,
@@ -113,7 +162,6 @@ pub struct Config {
     pub show_details: bool,
     pub tab: TabConfig,
     pub type_to_search: TypeToSearch,
-    pub sort_names: HashMap<String, (HeadingOptions, bool)>,
 }
 
 impl Config {
@@ -162,12 +210,6 @@ impl Default for Config {
             show_details: false,
             tab: TabConfig::default(),
             type_to_search: TypeToSearch::Recursive,
-            sort_names: HashMap::from_iter(dirs::download_dir().into_iter().map(|dir| {
-                (
-                    Location::Path(dir).normalize().to_string(),
-                    (HeadingOptions::Modified, false),
-                )
-            })),
         }
     }
 }
