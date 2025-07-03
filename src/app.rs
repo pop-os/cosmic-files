@@ -67,7 +67,6 @@ use trash::TrashItem;
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use wayland_client::{protocol::wl_output::WlOutput, Proxy};
 
-use crate::dialog::DialogSettings;
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{
@@ -89,6 +88,7 @@ use crate::{
     spawn_detached::spawn_detached,
     tab::{self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION},
 };
+use crate::{config::State, dialog::DialogSettings};
 
 #[derive(Clone, Debug)]
 pub enum Mode {
@@ -100,6 +100,8 @@ pub enum Mode {
 pub struct Flags {
     pub config_handler: Option<cosmic_config::Config>,
     pub config: Config,
+    pub state_handler: Option<cosmic_config::Config>,
+    pub state: State,
     pub mode: Mode,
     pub locations: Vec<Location>,
 }
@@ -564,7 +566,9 @@ pub struct App {
     nav_model: segmented_button::SingleSelectModel,
     tab_model: segmented_button::Model<segmented_button::SingleSelect>,
     config_handler: Option<cosmic_config::Config>,
+    state_handler: Option<cosmic_config::Config>,
     config: Config,
+    state: State,
     mode: Mode,
     app_themes: Vec<String>,
     compio_tx: mpsc::Sender<Pin<Box<dyn Future<Output = ()> + Send>>>,
@@ -879,7 +883,7 @@ impl App {
         let mut tab = Tab::new(
             location.clone(),
             self.config.tab,
-            Some(&self.config.sort_names),
+            Some(&self.state.sort_names),
         );
         tab.mode = match self.mode {
             Mode::App => tab::Mode::App,
@@ -1944,7 +1948,9 @@ impl Application for App {
             nav_model: segmented_button::ModelBuilder::default().build(),
             tab_model: segmented_button::ModelBuilder::default().build(),
             config_handler: flags.config_handler,
+            state_handler: flags.state_handler,
             config: flags.config,
+            state: flags.state,
             mode: flags.mode,
             app_themes,
             compio_tx,
@@ -3596,7 +3602,7 @@ impl Application for App {
                             }
                         }
                         tab::Command::SetSort(location, heading_options, direction) => {
-                            self.config
+                            self.state
                                 .sort_names
                                 .insert(location, (heading_options, direction));
                             if !self.must_save_sort_names {
@@ -3630,7 +3636,7 @@ impl Application for App {
                         tab.parent_item_opt = parent_item_opt;
                         tab.set_items(items);
                         let sort = self
-                            .config
+                            .state
                             .sort_names
                             .get(&location.to_string())
                             .unwrap_or_else(|| &(HeadingOptions::Name, true));
@@ -4230,10 +4236,10 @@ impl Application for App {
             }
             Message::SaveSortNames => {
                 self.must_save_sort_names = false;
-                if let Some(config_handler) = self.config_handler.as_ref() {
-                    if let Err(err) = config_handler.set::<HashMap<String, (HeadingOptions, bool)>>(
+                if let Some(state_handler) = self.state_handler.as_ref() {
+                    if let Err(err) = state_handler.set::<HashMap<String, (HeadingOptions, bool)>>(
                         "sort_names",
-                        self.config.sort_names.clone(),
+                        self.state.sort_names.clone(),
                     ) {
                         log::warn!("Failed to save sort names: {:?}", err);
                     }
