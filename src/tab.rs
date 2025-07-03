@@ -45,6 +45,7 @@ use icu::datetime::{
 };
 use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
+use ordermap::OrderMap;
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
@@ -91,7 +92,7 @@ const THUMBNAIL_SIZE: u32 = (ICON_SIZE_GRID as u32) * (ICON_SCALE_MAX as u32);
 
 const DRAG_SCROLL_DISTANCE: f32 = 15.0;
 
-static SORT_OPTION_FALLBACK: LazyLock<HashMap<String, (HeadingOptions, bool)>> =
+pub(crate) static SORT_OPTION_FALLBACK: LazyLock<HashMap<String, (HeadingOptions, bool)>> =
     LazyLock::new(|| {
         HashMap::from_iter(dirs::download_dir().into_iter().map(|dir| {
             (
@@ -2366,7 +2367,7 @@ impl Tab {
     pub fn new(
         location: Location,
         config: TabConfig,
-        sorting_options: Option<&HashMap<String, (HeadingOptions, bool)>>,
+        sorting_options: Option<&OrderMap<String, (HeadingOptions, bool)>>,
     ) -> Self {
         let location_str = location.to_string();
         let (sort_name, sort_direction) = sorting_options

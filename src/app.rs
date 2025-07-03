@@ -86,7 +86,9 @@ use crate::{
         ReplaceResult,
     },
     spawn_detached::spawn_detached,
-    tab::{self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION},
+    tab::{
+        self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION, SORT_OPTION_FALLBACK,
+    },
 };
 use crate::{config::State, dialog::DialogSettings};
 
@@ -3602,10 +3604,35 @@ impl Application for App {
                             }
                         }
                         tab::Command::SetSort(location, heading_options, direction) => {
-                            self.state
-                                .sort_names
-                                .insert(location, (heading_options, direction));
-                            if !self.must_save_sort_names {
+                            let default_sort = tab::SORT_OPTION_FALLBACK
+                                .get(&location)
+                                .cloned()
+                                .unwrap_or((HeadingOptions::Name, true));
+                            let changed = if default_sort == (heading_options, direction) {
+                                self.state.sort_names.remove(&location).is_some()
+                            } else {
+                                // force reordering of inserted values so new settings are not dropped in the truncation step
+                                _ = self.state.sort_names.remove(&location);
+                                _ = self
+                                    .state
+                                    .sort_names
+                                    .insert(location, (heading_options, direction))
+                                    .is_none_or(|old| old != (heading_options, direction));
+
+                                const MAX_SORT_NAMES: usize = 999;
+                                // TODO potentially configurable limit on max size?
+                                if self.state.sort_names.len() > MAX_SORT_NAMES {
+                                    // truncate is not a good fit because it drops the items at the end, which are newest...
+                                    self.state.sort_names = self
+                                        .state
+                                        .sort_names
+                                        .split_off(self.state.sort_names.len() - MAX_SORT_NAMES);
+                                }
+
+                                true
+                            };
+
+                            if !self.must_save_sort_names & changed {
                                 self.must_save_sort_names = true;
                                 return cosmic::Task::perform(
                                     async move {
@@ -3635,10 +3662,12 @@ impl Application for App {
                     if location == tab.location {
                         tab.parent_item_opt = parent_item_opt;
                         tab.set_items(items);
+                        let location_str = location.to_string();
                         let sort = self
                             .state
                             .sort_names
-                            .get(&location.to_string())
+                            .get(&location_str)
+                            .or_else(|| SORT_OPTION_FALLBACK.get(&location_str))
                             .unwrap_or_else(|| &(HeadingOptions::Name, true));
 
                         tab.sort_name = sort.0;
@@ -4237,10 +4266,12 @@ impl Application for App {
             Message::SaveSortNames => {
                 self.must_save_sort_names = false;
                 if let Some(state_handler) = self.state_handler.as_ref() {
-                    if let Err(err) = state_handler.set::<HashMap<String, (HeadingOptions, bool)>>(
-                        "sort_names",
-                        self.state.sort_names.clone(),
-                    ) {
+                    if let Err(err) =
+                        state_handler.set::<ordermap::OrderMap<String, (HeadingOptions, bool)>>(
+                            "sort_names",
+                            self.state.sort_names.clone(),
+                        )
+                    {
                         log::warn!("Failed to save sort names: {:?}", err);
                     }
                 }
