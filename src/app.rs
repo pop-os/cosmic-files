@@ -3599,14 +3599,16 @@ impl Application for App {
                             self.config
                                 .sort_names
                                 .insert(location, (heading_options, direction));
-                            self.must_save_sort_names = true;
-                            return cosmic::Task::perform(
-                                async move {
-                                    tokio::time::sleep(Duration::from_secs(1)).await;
-                                    cosmic::action::app(Message::SaveSortNames)
-                                },
-                                |x| x,
-                            );
+                            if !self.must_save_sort_names {
+                                self.must_save_sort_names = true;
+                                return cosmic::Task::perform(
+                                    async move {
+                                        tokio::time::sleep(Duration::from_secs(1)).await;
+                                        cosmic::action::app(Message::SaveSortNames)
+                                    },
+                                    |x| x,
+                                );
+                            }
                         }
                     }
                 }
@@ -4227,17 +4229,13 @@ impl Application for App {
                 ));
             }
             Message::SaveSortNames => {
-                if self.must_save_sort_names {
-                    self.must_save_sort_names = false;
-                    if let Some(config_handler) = self.config_handler.as_ref() {
-                        if let Err(err) = config_handler
-                            .set::<HashMap<String, (HeadingOptions, bool)>>(
-                                "sort_names",
-                                self.config.sort_names.clone(),
-                            )
-                        {
-                            log::warn!("Failed to save sort names: {:?}", err);
-                        }
+                self.must_save_sort_names = false;
+                if let Some(config_handler) = self.config_handler.as_ref() {
+                    if let Err(err) = config_handler.set::<HashMap<String, (HeadingOptions, bool)>>(
+                        "sort_names",
+                        self.config.sort_names.clone(),
+                    ) {
+                        log::warn!("Failed to save sort names: {:?}", err);
                     }
                 }
             }
