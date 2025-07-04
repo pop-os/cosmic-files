@@ -300,6 +300,7 @@ type-to-search-enter-path = Wprowadź ścieżkę pliku lub katalogu
 add-to-sidebar = Dodaj do bocznego panelu
 compress = Spakuj
 delete-permanently = Usuń definitywnie
+eject = Wysuń
 extract-here = Wypakuj
 new-file = Nowy plik
 new-folder = Nowy katalog
