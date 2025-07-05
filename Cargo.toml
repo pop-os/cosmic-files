@@ -66,6 +66,8 @@ slotmap = "1.0.7"
 recently-used-xbel = "1.1.0"
 zip = "2.2.2"
 uzers = "0.12.1"
+md-5 = "0.10.6"
+png = "0.17.16"
 
 # Completion-based IO runtime to enable io_uring / IOCP file IO support.
 [dependencies.compio]
