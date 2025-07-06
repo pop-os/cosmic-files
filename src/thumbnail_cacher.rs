@@ -27,10 +27,10 @@ pub struct ThumbnailCacher {
 impl ThumbnailCacher {
     pub fn new(file_path: &Path, thumbnail_size: ThumbnailSize) -> Result<Self, String> {
         let file_uri = thumbnail_uri(file_path)
-            .map_err(|err| format!("failed to create URI for {:?}: {}", file_path, err))?;
+            .map_err(|err| format!("failed to create URI for {file_path:?}: {err}"))?;
         let cache_base_dir = THUMBNAIL_CACHE_BASE_DIR
             .as_ref()
-            .ok_or(format!("failed to get thumbnail cache directory"))?;
+            .ok_or("failed to get thumbnail cache directory".to_string())?;
         let thumbnail_filename = thumbnail_cache_filename(&file_uri);
         let thumbnail_dir = cache_base_dir.join(thumbnail_size.subdirectory_name());
         let thumbnail_path = thumbnail_dir.join(&thumbnail_filename);
@@ -110,7 +110,7 @@ impl ThumbnailCacher {
                 .write_image_data(&image.into_raw())?;
         }
 
-        self.update_with_temp_file(temp_file).into()
+        self.update_with_temp_file(temp_file)
     }
 
     pub fn create_fail_marker(&self) -> Result<(), Box<dyn Error>> {
@@ -126,7 +126,6 @@ impl ThumbnailCacher {
         encoder.set_depth(png::BitDepth::One);
         encoder.write_header()?.write_image_data(&[0])?;
         self.update_thumbnail_text_metadata(&self.thumbnail_fail_marker_path)
-            .into()
     }
 
     fn update_thumbnail_text_metadata(&self, path: &Path) -> Result<(), Box<dyn Error>> {
@@ -193,7 +192,7 @@ impl ThumbnailCacher {
         let reader = match decoder.read_info() {
             Ok(reader) => reader,
             Err(err) => {
-                log::warn!("failed to decode {:?} as PNG: {}", thumbnail_path, err);
+                log::warn!("failed to decode {thumbnail_path:?} as PNG: {err}");
                 return false;
             }
         };
@@ -267,11 +266,10 @@ impl ThumbnailCacher {
 }
 
 fn thumbnail_uri(path: &Path) -> io::Result<String> {
-    let absolute_path = fs::canonicalize(&path)?;
+    let absolute_path = fs::canonicalize(path)?;
     let url = Url::from_file_path(&absolute_path).map_err(|_| {
         io::Error::other(format!(
-            "failed to create URI for thumbnail_file: {:?}",
-            absolute_path
+            "failed to create URI for thumbnail_file: {absolute_path:?}"
         ))
     })?;
     // Technically square brackets don't need to be percent encoded,
@@ -284,7 +282,7 @@ fn thumbnail_uri(path: &Path) -> io::Result<String> {
 
 fn thumbnail_cache_filename(file_uri: &str) -> String {
     let hash = Md5::digest(file_uri);
-    format!("{:x}.png", hash)
+    format!("{hash:x}.png")
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -313,12 +311,12 @@ impl ThumbnailSize {
         self as u32
     }
 
-    pub fn subdirectory_name(self) -> String {
+    pub fn subdirectory_name(self) -> &'static str {
         match self {
-            Self::Normal => "normal".to_string(),
-            Self::Large => "large".to_string(),
-            Self::XLarge => "x-large".to_string(),
-            Self::XXLarge => "xx-large".to_string(),
+            Self::Normal => "normal",
+            Self::Large => "large",
+            Self::XLarge => "x-large",
+            Self::XXLarge => "xx-large",
         }
     }
 }
