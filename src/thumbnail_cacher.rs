@@ -33,6 +33,13 @@ impl ThumbnailCacher {
             .ok_or("failed to get thumbnail cache directory".to_string())?;
         let thumbnail_filename = thumbnail_cache_filename(&file_uri);
         let thumbnail_dir = cache_base_dir.join(thumbnail_size.subdirectory_name());
+        if !thumbnail_dir.is_dir() {
+            log::warn!("{:?} is not a directory, creating one now", &thumbnail_dir);
+            fs::create_dir_all(&thumbnail_dir).unwrap_or(log::error!(
+                "{:?} failed to create directory, this error can be expected on first run",
+                &thumbnail_dir
+            ));
+        }
         let thumbnail_path = thumbnail_dir.join(&thumbnail_filename);
         let thumbnail_fail_marker_path = cache_base_dir
             .join("fail")
