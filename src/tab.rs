@@ -1767,52 +1767,46 @@ impl ItemThumbnail {
         if mime.type_() == mime::IMAGE {
             log::warn!("mime is {}", mime.subtype().as_str());
             tried_supported_file = true;
-
             let dyn_img: Option<image::DynamicImage> = match mime.subtype().as_str() {
-                "jxl" => {
-                    log::warn!("image detected as jxl");
-                    match File::open(path) {
-                        Ok(file) => match JxlDecoder::new(file) {
-                            Ok(decoder) => match image::DynamicImage::from_decoder(decoder) {
-                                Ok(img) => Some(img),
-                                Err(err) => {
-                                    log::warn!("failed to decode jxl {:?}: {}", path, err);
-                                    None
-                                }
-                            },
+                "jxl" => match File::open(path) {
+                    Ok(file) => match JxlDecoder::new(file) {
+                        Ok(decoder) => match image::DynamicImage::from_decoder(decoder) {
+                            Ok(img) => Some(img),
                             Err(err) => {
-                                log::warn!("failed to turn path into file {:?}: {}", path, err);
+                                log::warn!("failed to decode jxl {:?}: {}", path, err);
                                 None
-                            },
+                            }
                         },
                         Err(err) => {
-                            log::warn!("failed to open path {:?}: {}", path, err);
+                            log::warn!("failed to turn path into file {:?}: {}", path, err);
                             None
-                        },
+                        }
+                    },
+                    Err(err) => {
+                        log::warn!("failed to open path {:?}: {}", path, err);
+                        None
                     }
-                }
+                },
                 _ => {
                     match image::ImageReader::open(path).and_then(|img| img.with_guessed_format()) {
-                        Ok(reader) => {
-                            match reader.decode() {
-                               Ok(reader) =>  Some(reader),
-                               Err(err) => {
+                        Ok(reader) => match reader.decode() {
+                            Ok(reader) => Some(reader),
+                            Err(err) => {
                                 log::warn!("failed to decode {:?}: {}", path, err);
                                 None
-                               }
                             }
-                        }
+                        },
                         Err(err) => {
                             log::warn!("failed to read {:?}: {}", path, err);
                             None
                         }
-                    }    
+                    }
                 }
             };
 
             match dyn_img {
                 Some(dyn_img) => {
-                if let Ok(cacher) = thumbnail_cacher.as_ref() {
+                    if let Ok(cacher) = thumbnail_cacher.as_ref() {
                         match cacher.update_with_image(dyn_img) {
                             Ok(path) => {
                                 return ItemThumbnail::Image(
@@ -1826,8 +1820,9 @@ impl ItemThumbnail {
                         }
                     } else {
                         // Fallback for when thumbnail cacher isn't available.
-                        let thumbnail =
-                            dyn_img.thumbnail(thumbnail_size, thumbnail_size).into_rgba8();
+                        let thumbnail = dyn_img
+                            .thumbnail(thumbnail_size, thumbnail_size)
+                            .into_rgba8();
                         return ItemThumbnail::Image(
                             widget::image::Handle::from_rgba(
                                 thumbnail.width(),
@@ -1838,10 +1833,9 @@ impl ItemThumbnail {
                         );
                     }
                 }
-                None => ()
+                None => (),
             }
         }
-        
 
         // Try external thumbnailers.
         let thumbnail_dir = thumbnail_cacher.as_ref().ok().map(|c| c.thumbnail_dir());
