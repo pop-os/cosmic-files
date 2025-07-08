@@ -1724,7 +1724,9 @@ impl ItemThumbnail {
                     );
                 }
                 CachedThumbnail::Failed => {
-                    return ItemThumbnail::NotImage;
+                    if mime.type_() != mime::IMAGE {
+                        return ItemThumbnail::NotImage;
+                    }
                 }
                 CachedThumbnail::RequiresUpdate(size) => {
                     thumbnail_size = size.pixel_size();
