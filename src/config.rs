@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::{any::TypeId, collections::HashMap, num::NonZeroU16, path::PathBuf};
+use std::{any::TypeId, num::NonZeroU16, path::PathBuf};
 
 use cosmic::{
     cosmic_config::{self, cosmic_config_derive::CosmicConfigEntry, CosmicConfigEntry},

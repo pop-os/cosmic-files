@@ -5351,7 +5351,6 @@ impl Application for App {
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
-        struct ThemeSubscription;
         struct WatcherSubscription;
         struct TrashWatcherSubscription;
         struct TimeSubscription;
