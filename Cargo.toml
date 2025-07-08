@@ -70,6 +70,7 @@ zip = "2.2.2"
 uzers = "0.12.1"
 md-5 = "0.10.6"
 png = "0.17.16"
+jxl-oxide = { version = "0.12.2", features = ["image"] }
 
 # Completion-based IO runtime to enable io_uring / IOCP file IO support.
 [dependencies.compio]

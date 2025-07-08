@@ -44,6 +44,8 @@ use icu::datetime::{
     options::{components, preferences},
     DateTimeFormatter, DateTimeFormatterOptions,
 };
+use image::DynamicImage;
+use jxl_oxide::integration::JxlDecoder;
 use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
 use ordermap::OrderMap;
@@ -1763,45 +1765,83 @@ impl ItemThumbnail {
         }
         // First try built-in image thumbnailer
         if mime.type_() == mime::IMAGE {
+            log::warn!("mime is {}", mime.subtype().as_str());
             tried_supported_file = true;
-            match image::ImageReader::open(path).and_then(|img| img.with_guessed_format()) {
-                Ok(reader) => match reader.decode() {
-                    Ok(image) => {
-                        if let Ok(cacher) = thumbnail_cacher.as_ref() {
-                            match cacher.update_with_image(image) {
-                                Ok(path) => {
-                                    return ItemThumbnail::Image(
-                                        widget::image::Handle::from_path(path),
-                                        None,
-                                    );
-                                }
+
+            let dyn_img: Option<image::DynamicImage> = match mime.subtype().as_str() {
+                "jxl" => {
+                    log::warn!("image detected as jxl");
+                    match File::open(path) {
+                        Ok(file) => match JxlDecoder::new(file) {
+                            Ok(decoder) => match image::DynamicImage::from_decoder(decoder) {
+                                Ok(img) => Some(img),
                                 Err(err) => {
-                                    log::warn!("failed to decode {:?}: {}", path, err);
+                                    log::warn!("failed to decode jxl {:?}: {}", path, err);
+                                    None
                                 }
-                            }
-                        } else {
-                            // Fallback for when thumbnail cacher isn't available.
-                            let thumbnail =
-                                image.thumbnail(thumbnail_size, thumbnail_size).into_rgba8();
-                            return ItemThumbnail::Image(
-                                widget::image::Handle::from_rgba(
-                                    thumbnail.width(),
-                                    thumbnail.height(),
-                                    thumbnail.into_raw(),
-                                ),
-                                Some((image.width(), image.height())),
-                            );
-                        }
+                            },
+                            Err(err) => {
+                                log::warn!("failed to turn path into file {:?}: {}", path, err);
+                                None
+                            },
+                        },
+                        Err(err) => {
+                            log::warn!("failed to open path {:?}: {}", path, err);
+                            None
+                        },
                     }
-                    Err(err) => {
-                        log::warn!("failed to decode {:?}: {}", path, err);
-                    }
-                },
-                Err(err) => {
-                    log::warn!("failed to read {:?}: {}", path, err);
                 }
+                _ => {
+                    match image::ImageReader::open(path).and_then(|img| img.with_guessed_format()) {
+                        Ok(reader) => {
+                            match reader.decode() {
+                               Ok(reader) =>  Some(reader),
+                               Err(err) => {
+                                log::warn!("failed to decode {:?}: {}", path, err);
+                                None
+                               }
+                            }
+                        }
+                        Err(err) => {
+                            log::warn!("failed to read {:?}: {}", path, err);
+                            None
+                        }
+                    }    
+                }
+            };
+
+            match dyn_img {
+                Some(dyn_img) => {
+                if let Ok(cacher) = thumbnail_cacher.as_ref() {
+                        match cacher.update_with_image(dyn_img) {
+                            Ok(path) => {
+                                return ItemThumbnail::Image(
+                                    widget::image::Handle::from_path(path),
+                                    None,
+                                );
+                            }
+                            Err(err) => {
+                                log::warn!("failed to decode {:?}: {}", path, err);
+                            }
+                        }
+                    } else {
+                        // Fallback for when thumbnail cacher isn't available.
+                        let thumbnail =
+                            dyn_img.thumbnail(thumbnail_size, thumbnail_size).into_rgba8();
+                        return ItemThumbnail::Image(
+                            widget::image::Handle::from_rgba(
+                                thumbnail.width(),
+                                thumbnail.height(),
+                                thumbnail.into_raw(),
+                            ),
+                            Some((dyn_img.width(), dyn_img.height())),
+                        );
+                    }
+                }
+                None => ()
             }
         }
+        
 
         // Try external thumbnailers.
         let thumbnail_dir = thumbnail_cacher.as_ref().ok().map(|c| c.thumbnail_dir());
