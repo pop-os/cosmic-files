@@ -44,7 +44,7 @@ use icu::datetime::{
     options::{components, preferences},
     DateTimeFormatter, DateTimeFormatterOptions,
 };
-use image::DynamicImage;
+use image::ImageDecoder;
 use jxl_oxide::integration::JxlDecoder;
 use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
@@ -1770,13 +1770,21 @@ impl ItemThumbnail {
             let dyn_img: Option<image::DynamicImage> = match mime.subtype().as_str() {
                 "jxl" => match File::open(path) {
                     Ok(file) => match JxlDecoder::new(file) {
-                        Ok(decoder) => match image::DynamicImage::from_decoder(decoder) {
-                            Ok(img) => Some(img),
-                            Err(err) => {
-                                log::warn!("failed to decode jxl {:?}: {}", path, err);
-                                None
+                        Ok(mut decoder) => {
+                            let mut limits = image::Limits::default();
+                            //TODO: perhaps this should be jobs / acceptable amount of ram?
+                            let jobs = 8;
+                            let max_ram = 8 * 1000 * 1000 * 1000 / jobs;
+                            limits.max_alloc = Some(max_ram);
+                            let _ = decoder.set_limits(limits);
+                            match image::DynamicImage::from_decoder(decoder) {
+                                Ok(img) => Some(img),
+                                Err(err) => {
+                                    log::warn!("failed to decode jxl {:?}: {}", path, err);
+                                    None
+                                }
                             }
-                        },
+                        }
                         Err(err) => {
                             log::warn!("failed to create jxl decoder {:?}: {}", path, err);
                             None
@@ -1815,7 +1823,7 @@ impl ItemThumbnail {
                                 );
                             }
                             Err(err) => {
-                                log::warn!("failed to decode {:?}: {}", path, err);
+                                log::warn!("cacher failed to decode {:?}: {}", path, err);
                             }
                         }
                     } else {
