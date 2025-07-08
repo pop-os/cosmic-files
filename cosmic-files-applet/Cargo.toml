@@ -5,9 +5,10 @@ edition = "2021"
 
 [dependencies]
 log = "0.4"
-zbus = "4"
+zbus = "5"
 
 [dependencies.cosmic-files]
 path = ".."
 default-features = false
-features = ["desktop", "gvfs", "wayland", "wgpu"]
+features = ["desktop", "gvfs", "wayland", "wgpu", "desktop-applet"]
+

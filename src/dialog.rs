@@ -36,7 +36,7 @@ use std::{
 
 use crate::{
     app::{Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind},
-    config::{Config, Favorite, IconSizes, TabConfig, TimeConfig, TIME_CONFIG_ID},
+    config::{Config, Favorite, TabConfig, TimeConfig, TIME_CONFIG_ID},
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
@@ -204,6 +204,43 @@ impl<'a, M: Clone + 'static> From<&'a DialogLabel> for Element<'a, M> {
     }
 }
 
+pub struct DialogSettings {
+    app_id: String,
+    kind: DialogKind,
+    path_opt: Option<PathBuf>,
+}
+
+impl DialogSettings {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn app_id(mut self, app_id: String) -> Self {
+        self.app_id = app_id;
+        self
+    }
+
+    pub fn kind(mut self, kind: DialogKind) -> Self {
+        self.kind = kind;
+        self
+    }
+
+    pub fn path(mut self, path: PathBuf) -> Self {
+        self.path_opt = Some(path);
+        self
+    }
+}
+
+impl Default for DialogSettings {
+    fn default() -> Self {
+        Self {
+            app_id: App::APP_ID.to_string(),
+            kind: DialogKind::OpenFile,
+            path_opt: None,
+        }
+    }
+}
+
 pub struct Dialog<M> {
     cosmic: Cosmic<App>,
     mapper: fn(DialogMessage) -> M,
@@ -212,8 +249,7 @@ pub struct Dialog<M> {
 
 impl<M: Send + 'static> Dialog<M> {
     pub fn new(
-        kind: DialogKind,
-        path_opt: Option<PathBuf>,
+        dialog_settings: DialogSettings,
         mapper: fn(DialogMessage) -> M,
         on_result: impl Fn(DialogResult) -> M + 'static,
     ) -> (Self, Task<M>) {
@@ -234,7 +270,7 @@ impl<M: Send + 'static> Dialog<M> {
 
         #[cfg(target_os = "linux")]
         {
-            settings.platform_specific.application_id = App::APP_ID.to_string();
+            settings.platform_specific.application_id = dialog_settings.app_id;
         }
 
         let (window_id, window_command) = window::open(settings.clone());
@@ -242,16 +278,16 @@ impl<M: Send + 'static> Dialog<M> {
         let mut core = Core::default();
         core.set_main_window_id(Some(window_id));
         let flags = Flags {
-            kind,
-            path_opt: path_opt
-                .as_ref()
-                .and_then(|path| match fs::canonicalize(path) {
+            kind: dialog_settings.kind,
+            path_opt: dialog_settings.path_opt.as_ref().and_then(|path| {
+                match fs::canonicalize(path) {
                     Ok(ok) => Some(ok),
                     Err(err) => {
                         log::warn!("failed to canonicalize {:?}: {}", path, err);
                         None
                     }
-                }),
+                }
+            }),
             window_id,
             config_handler,
             config,
@@ -382,7 +418,7 @@ enum Message {
     Filename(String),
     Filter(usize),
     Key(Modifiers, Key),
-    Modifiers(Modifiers),
+    ModifiersChanged(Modifiers),
     MounterItems(MounterKey, MounterItems),
     NewFolder,
     NotifyEvents(Vec<DebouncedEvent>),
@@ -576,17 +612,13 @@ impl App {
         let mut children = Vec::with_capacity(1);
         match kind {
             PreviewKind::Custom(PreviewItem(item)) => {
-                children.push(item.preview_view(None, IconSizes::default(), military_time));
+                children.push(item.preview_view(None, military_time));
             }
             PreviewKind::Location(location) => {
                 if let Some(items) = self.tab.items_opt() {
                     for item in items.iter() {
                         if item.location_opt.as_ref() == Some(location) {
-                            children.push(item.preview_view(
-                                None,
-                                self.tab.config.icon_sizes,
-                                military_time,
-                            ));
+                            children.push(item.preview_view(None, military_time));
                             // Only show one property view to avoid issues like hangs when generating
                             // preview images on thousands of files
                             break;
@@ -598,11 +630,7 @@ impl App {
                 if let Some(items) = self.tab.items_opt() {
                     for item in items.iter() {
                         if item.selected {
-                            children.push(item.preview_view(
-                                None,
-                                self.tab.config.icon_sizes,
-                                military_time,
-                            ));
+                            children.push(item.preview_view(None, military_time));
                             // Only show one property view to avoid issues like hangs when generating
                             // preview images on thousands of files
                             break;
@@ -610,11 +638,7 @@ impl App {
                     }
                     if children.is_empty() {
                         if let Some(item) = &self.tab.parent_item_opt {
-                            children.push(item.preview_view(
-                                None,
-                                self.tab.config.icon_sizes,
-                                military_time,
-                            ));
+                            children.push(item.preview_view(None, military_time));
                         }
                     }
                 }
@@ -626,11 +650,26 @@ impl App {
     fn rescan_tab(&self) -> Task<Message> {
         let location = self.tab.location.clone();
         let icon_sizes = self.tab.config.icon_sizes;
+        let mounter_items = self.mounter_items.clone();
         Task::perform(
             async move {
                 let location2 = location.clone();
                 match tokio::task::spawn_blocking(move || location2.scan(icon_sizes)).await {
-                    Ok((parent_item_opt, items)) => {
+                    Ok((parent_item_opt, mut items)) => {
+                        #[cfg(feature = "gvfs")]
+                        {
+                            let mounter_paths: Vec<_> = mounter_items
+                                .iter()
+                                .flat_map(|item| item.1.iter())
+                                .filter_map(|item| item.path())
+                                .collect();
+                            if !mounter_paths.is_empty() {
+                                for item in &mut items {
+                                    item.is_mount_point =
+                                        item.path_opt().is_some_and(|p| mounter_paths.contains(p));
+                                }
+                            }
+                        }
                         cosmic::action::app(Message::TabRescan(location, parent_item_opt, items))
                     }
                     Err(err) => {
@@ -877,7 +916,7 @@ impl Application for App {
             folders_first: false,
             ..Default::default()
         };
-        let mut tab = Tab::new(location, tab_config);
+        let mut tab = Tab::new(location, tab_config, None);
         tab.mode = tab::Mode::Dialog(flags.kind.clone());
         tab.sort_name = tab::HeadingOptions::Modified;
         tab.sort_direction = false;
@@ -1290,8 +1329,11 @@ impl Application for App {
                     }
                 }
             }
-            Message::Modifiers(modifiers) => {
+            Message::ModifiersChanged(modifiers) => {
                 self.modifiers = modifiers;
+                return self.update(Message::TabMessage(tab::Message::ModifiersChanged(
+                    modifiers,
+                )));
             }
             Message::MounterItems(mounter_key, mounter_items) => {
                 // Check for unmounted folders
@@ -1757,7 +1799,7 @@ impl Application for App {
                     event::Status::Captured => None,
                 },
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
-                    Some(Message::Modifiers(modifiers))
+                    Some(Message::ModifiersChanged(modifiers))
                 }
                 Event::Mouse(mouse::Event::CursorMoved { position: pos }) => {
                     Some(Message::CursorMoved(pos))

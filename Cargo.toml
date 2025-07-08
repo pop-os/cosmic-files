@@ -16,8 +16,6 @@ icu = { version = "1.5.0", features = [
     "compiled_data",
     "icu_datetime_experimental",
 ] }
-# Completion-based IO runtime to enable io_uring / IOCP file IO support.
-compio = { version = "0.14.0", features = ["io", "macros", "runtime"] }
 cosmic-mime-apps = { git = "https://github.com/pop-os/cosmic-mime-apps.git", optional = true }
 dirs = "6.0.0"
 env_logger = "0.11"
@@ -52,10 +50,11 @@ xdg = { version = "2.5.2", optional = true }
 # https://github.com/ebassi/xdg-mime-rs/pull/31
 xdg-mime = { git = "https://github.com/ellieplayswow/xdg-mime-rs", branch = "feature/get-same-as" }
 # Compression
-bzip2 = { version = "0.5", optional = true }   #TODO: replace with pure Rust crate
+bzip2 = { version = "0.5", optional = true }           #TODO: replace with pure Rust crate
 flate2 = "1.0"
 tar = "0.4.43"
-xz2 = { version = "0.1", optional = true } #TODO: replace with pure Rust crate
+xz2 = { version = "0.1", optional = true }             #TODO: replace with pure Rust crate
+ordermap = { version = "0.5.8", features = ["serde"] }
 # Internationalization
 i18n-embed = { version = "0.15", features = [
     "fluent-system",
@@ -66,9 +65,20 @@ rust-embed = "8"
 slotmap = "1.0.7"
 recently-used-xbel = "1.1.0"
 zip = "2.2.2"
-unix_permissions_ext = "0.1.2"
 uzers = "0.12.1"
-io-uring = { version = "0.7.4", features = ["bindgen"], optional = true }
+md-5 = "0.10.6"
+png = "0.17.16"
+
+# Completion-based IO runtime to enable io_uring / IOCP file IO support.
+[dependencies.compio]
+version = "0.14.0"
+default-features = false
+features = ["io", "macros", "polling", "runtime"]
+
+[dependencies.io-uring]
+version = "0.7.6"
+default-features = false
+optional = true
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
@@ -79,17 +89,20 @@ features = ["multi-window", "tokio", "winit", "surface-message"]
 [features]
 default = [
     "bzip2",
-    "dbus-config",
     "desktop",
     "gvfs",
     "io-uring",
     "notify",
     "wgpu",
+    "wayland",
     "xz2",
 ]
 dbus-config = ["libcosmic/dbus-config"]
 desktop = ["libcosmic/desktop", "dep:cosmic-mime-apps", "dep:xdg"]
+desktop-applet = []
 gvfs = ["dep:gio", "dep:glib"]
+io-uring = ["compio/io-uring", "dep:io-uring"]
+io-uring-bindgen = ["io-uring?/bindgen"]
 jemalloc = ["dep:tikv-jemallocator"]
 notify = ["dep:notify-rust"]
 wayland = ["libcosmic/wayland", "dep:wayland-client"]
@@ -105,19 +118,15 @@ debug = true
 [target.'cfg(unix)'.dependencies]
 fork = "0.2"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+procfs = "0.17"
+
 [dev-dependencies]
 # cap-std = "3"
 # cap-tempfile = "3"
 fastrand = "2"
 test-log = "0.2"
 tokio = { version = "1", features = ["rt", "macros"] }
-
-[patch.crates-io]
-# https://github.com/smol-rs/polling/pull/235
-polling = { git = "https://github.com/jackpot51/polling.git", branch = "master" }
-# Fixes building on ppc64le, s390x
-# https://github.com/tokio-rs/io-uring/issues/321#issuecomment-2831832546
-io-uring = { git = "https://github.com/tokio-rs/io-uring.git", rev = "2c9010a3316519e02444f41e536623099af58a84" }
 
 # [patch.'https://github.com/pop-os/cosmic-text']
 # cosmic-text = { path = "../cosmic-text" }

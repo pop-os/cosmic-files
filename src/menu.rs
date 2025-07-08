@@ -2,7 +2,10 @@
 
 use cosmic::{
     app::Core,
-    iced::{Alignment, Background, Border, Length},
+    iced::{
+        advanced::widget::text::Style as TextStyle, keyboard::Modifiers, Alignment, Background,
+        Border, Length,
+    },
     theme,
     widget::{
         self, button, column, container, divider, horizontal_space,
@@ -55,6 +58,7 @@ fn menu_button_optional(
 pub fn context_menu<'a>(
     tab: &Tab,
     key_binds: &HashMap<KeyBind, Action>,
+    modifiers: &Modifiers,
 ) -> Element<'a, tab::Message> {
     let find_key = |action: &Action| -> String {
         for (key_bind, key_action) in key_binds.iter() {
@@ -64,11 +68,22 @@ pub fn context_menu<'a>(
         }
         String::new()
     };
+    fn key_style(theme: &cosmic::Theme) -> TextStyle {
+        let mut color = theme.cosmic().background.component.on;
+        color.alpha *= 0.75;
+        TextStyle {
+            color: Some(color.into()),
+        }
+    }
 
     let menu_item = |label, action| {
         let key = find_key(&action);
-        menu_button!(text::body(label), horizontal_space(), text::body(key))
-            .on_press(tab::Message::ContextAction(action))
+        menu_button!(
+            text::body(label),
+            horizontal_space(),
+            text::body(key).class(theme::Text::Custom(key_style))
+        )
+        .on_press(tab::Message::ContextAction(action))
     };
 
     let (sort_name, sort_direction, _) = tab.sort_options();
@@ -93,11 +108,13 @@ pub fn context_menu<'a>(
     let mut selected_trash_only = false;
     let mut selected_desktop_entry = None;
     let mut selected_types: Vec<Mime> = vec![];
+    let mut selected_mount_point = 0;
     if let Some(items) = tab.items_opt() {
         for item in items.iter() {
             if item.selected {
                 selected += 1;
                 if item.metadata.is_dir() {
+                    selected_mount_point += item.is_mount_point as i32;
                     selected_dir += 1;
                 }
                 match &item.location_opt {
@@ -179,8 +196,10 @@ pub fn context_menu<'a>(
                         .push(menu_item(fl!("open-in-new-window"), Action::OpenInNewWindow).into());
                 }
                 children.push(divider::horizontal::light().into());
-                children.push(menu_item(fl!("rename"), Action::Rename).into());
-                children.push(menu_item(fl!("cut"), Action::Cut).into());
+                if selected_mount_point == 0 {
+                    children.push(menu_item(fl!("rename"), Action::Rename).into());
+                    children.push(menu_item(fl!("cut"), Action::Cut).into());
+                }
                 children.push(menu_item(fl!("copy"), Action::Copy).into());
 
                 children.push(divider::horizontal::light().into());
@@ -193,6 +212,10 @@ pub fn context_menu<'a>(
                     "application/x-bzip",
                     #[cfg(feature = "bzip2")]
                     "application/x-bzip-compressed-tar",
+                    #[cfg(feature = "bzip2")]
+                    "application/x-bzip2",
+                    #[cfg(feature = "bzip2")]
+                    "application/x-bzip2-compressed-tar",
                     #[cfg(feature = "xz2")]
                     "application/x-xz",
                     #[cfg(feature = "xz2")]
@@ -216,7 +239,17 @@ pub fn context_menu<'a>(
                     children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
                 }
                 children.push(divider::horizontal::light().into());
-                children.push(menu_item(fl!("move-to-trash"), Action::Delete).into());
+                if selected_mount_point == 0 {
+                    if modifiers.shift() && !modifiers.control() {
+                        children.push(
+                            menu_item(fl!("delete-permanently"), Action::PermanentlyDelete).into(),
+                        );
+                    } else {
+                        children.push(menu_item(fl!("move-to-trash"), Action::Delete).into());
+                    }
+                } else if selected == 1 {
+                    children.push(menu_item(fl!("eject"), Action::Eject).into());
+                }
             } else {
                 //TODO: need better designs for menu with no selection
                 //TODO: have things like properties but they apply to the folder?
@@ -376,13 +409,15 @@ pub fn dialog_menu(
 
     MenuBar::new(vec![
         menu::Tree::with_children(
-            widget::button::icon(widget::icon::from_name(match tab.config.view {
-                tab::View::Grid => "view-grid-symbolic",
-                tab::View::List => "view-list-symbolic",
-            }))
-            // This prevents the button from being shown as insensitive
-            .on_press(Message::None)
-            .padding(8),
+            Element::from(
+                widget::button::icon(widget::icon::from_name(match tab.config.view {
+                    tab::View::Grid => "view-grid-symbolic",
+                    tab::View::List => "view-list-symbolic",
+                }))
+                // This prevents the button from being shown as insensitive
+                .on_press(Message::None)
+                .padding(8),
+            ),
             menu::items(
                 key_binds,
                 vec![
@@ -402,14 +437,16 @@ pub fn dialog_menu(
             ),
         ),
         menu::Tree::with_children(
-            widget::button::icon(widget::icon::from_name(if sort_direction {
-                "view-sort-ascending-symbolic"
-            } else {
-                "view-sort-descending-symbolic"
-            }))
-            // This prevents the button from being shown as insensitive
-            .on_press(Message::None)
-            .padding(8),
+            Element::from(
+                widget::button::icon(widget::icon::from_name(if sort_direction {
+                    "view-sort-ascending-symbolic"
+                } else {
+                    "view-sort-descending-symbolic"
+                }))
+                // This prevents the button from being shown as insensitive
+                .on_press(Message::None)
+                .padding(8),
+            ),
             menu::items(
                 key_binds,
                 vec![
@@ -448,10 +485,12 @@ pub fn dialog_menu(
             ),
         ),
         menu::Tree::with_children(
-            widget::button::icon(widget::icon::from_name("view-more-symbolic"))
-                // This prevents the button from being shown as insensitive
-                .on_press(Message::None)
-                .padding(8),
+            Element::from(
+                widget::button::icon(widget::icon::from_name("view-more-symbolic"))
+                    // This prevents the button from being shown as insensitive
+                    .on_press(Message::None)
+                    .padding(8),
+            ),
             menu::items(
                 key_binds,
                 vec![
@@ -483,7 +522,7 @@ pub fn dialog_menu(
         ),
     ])
     .item_height(ItemHeight::Dynamic(40))
-    .item_width(ItemWidth::Uniform(240))
+    .item_width(ItemWidth::Uniform(360))
     .spacing(theme::active().cosmic().spacing.space_xxxs.into())
     .into()
 }
@@ -492,6 +531,7 @@ pub fn menu_bar<'a>(
     core: &Core,
     tab_opt: Option<&Tab>,
     config: &Config,
+    modifiers: &Modifiers,
     key_binds: &HashMap<KeyBind, Action>,
 ) -> Element<'a, Message> {
     let sort_options = tab_opt.map(|tab| tab.sort_options());
@@ -522,6 +562,12 @@ pub fn menu_bar<'a>(
                 }
             }
         }
+    };
+
+    let (delete_item, delete_item_action) = if in_trash || modifiers.shift() {
+        (fl!("delete-permanently"), Action::Delete)
+    } else {
+        (fl!("move-to-trash"), Action::Delete)
     };
 
     responsive_menu_bar()
@@ -555,6 +601,8 @@ pub fn menu_bar<'a>(
                         menu::Item::Divider,
                         menu_button_optional(fl!("rename"), Action::Rename, selected > 0),
                         menu::Item::Divider,
+                        menu::Item::Button(fl!("reload-folder"), None, Action::Reload),
+                        menu::Item::Divider,
                         menu_button_optional(
                             fl!("add-to-sidebar"),
                             Action::AddToSidebar,
@@ -562,14 +610,11 @@ pub fn menu_bar<'a>(
                         ),
                         menu::Item::Divider,
                         menu_button_optional(
-                            if in_trash {
-                                fl!("delete-permanently")
-                            } else {
-                                fl!("move-to-trash")
-                            },
-                            Action::Delete,
-                            selected > 0,
+                            fl!("restore-from-trash"),
+                            Action::RestoreFromTrash,
+                            selected > 0 && in_trash,
                         ),
+                        menu_button_optional(delete_item, delete_item_action, selected > 0),
                         menu::Item::Divider,
                         menu::Item::Button(fl!("close-tab"), None, Action::TabClose),
                         menu::Item::Button(fl!("quit"), None, Action::WindowClose),

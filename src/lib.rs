@@ -20,7 +20,10 @@ mod mouse_area;
 pub mod operation;
 mod spawn_detached;
 use tab::Location;
+
+use crate::config::State;
 pub mod tab;
+mod thumbnail_cacher;
 mod thumbnailer;
 
 pub(crate) fn err_str<T: ToString>(err: T) -> String {
@@ -57,13 +60,14 @@ pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
     localize::localize();
 
     let (config_handler, config) = Config::load();
+    let (state_handler, state) = State::load();
 
     let mut settings = Settings::default();
     settings = settings.theme(config.app_theme.theme());
     settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
     settings = settings.exit_on_close(false);
     settings = settings.transparent(true);
-    #[cfg(feature = "wayland")]
+    #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     {
         settings = settings.no_main_window(true);
     }
@@ -72,6 +76,8 @@ pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
     let flags = Flags {
         config_handler,
         config,
+        state_handler,
+        state,
         mode: app::Mode::Desktop,
         locations,
     };
@@ -88,6 +94,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     localize::localize();
 
     let (config_handler, config) = Config::load();
+    let (state_handler, state) = State::load();
 
     let mut daemonize = true;
     let mut locations = Vec::new();
@@ -149,6 +156,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let flags = Flags {
         config_handler,
         config,
+        state_handler,
+        state,
         mode: app::Mode::App,
         locations,
     };

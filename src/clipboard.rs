@@ -13,7 +13,7 @@ use url::Url;
 #[derive(Clone, Copy, Debug)]
 pub enum ClipboardKind {
     Copy,
-    Cut,
+    Cut { is_dnd: bool },
 }
 
 #[derive(Clone, Debug)]
@@ -37,7 +37,7 @@ impl ClipboardCopy {
         let mut text_uri_list = String::new();
         let mut x_special_gnome_copied_files = match kind {
             ClipboardKind::Copy => "copy",
-            ClipboardKind::Cut => "cut",
+            ClipboardKind::Cut { .. } => "cut",
         }
         .to_string();
         //TODO: do we have to use \r\n?
@@ -50,7 +50,7 @@ impl ClipboardCopy {
                     if !text_plain.is_empty() {
                         text_plain.push_str(cr_nl);
                     }
-                    //TOOD: what if the path contains CR or NL?
+                    //TODO: what if the path contains CR or NL?
                     text_plain.push_str(path_str);
                 }
                 None => {
@@ -145,7 +145,7 @@ impl TryFrom<(Vec<u8>, String)> for ClipboardPaste {
                     if i == 0 {
                         kind = match line {
                             "copy" => ClipboardKind::Copy,
-                            "cut" => ClipboardKind::Cut,
+                            "cut" => ClipboardKind::Cut { is_dnd: false },
                             _ => Err(format!("unsupported clipboard operation {:?}", line))?,
                         };
                     } else {

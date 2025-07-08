@@ -7,12 +7,6 @@ use cosmic::{
     iced_core::{
         border::Border,
         event::{self, Event},
-        keyboard::{
-            self,
-            key::{self, Key},
-            Event::{KeyPressed, KeyReleased},
-            Modifiers,
-        },
         layout,
         mouse::{self, click},
         overlay,
@@ -201,9 +195,9 @@ impl<'a, Message, F> OnDrag<'a, Message> for F where F: Fn(Option<Rectangle>) ->
 pub trait OnResize<'a, Message>: Fn(Size, Rectangle) -> Message + 'a {}
 impl<'a, Message, F> OnResize<'a, Message> for F where F: Fn(Size, Rectangle) -> Message + 'a {}
 
-pub trait OnScroll<'a, Message>: Fn(mouse::ScrollDelta, Modifiers) -> Option<Message> + 'a {}
+pub trait OnScroll<'a, Message>: Fn(mouse::ScrollDelta) -> Option<Message> + 'a {}
 impl<'a, Message, F> OnScroll<'a, Message> for F where
-    F: Fn(mouse::ScrollDelta, Modifiers) -> Option<Message> + 'a
+    F: Fn(mouse::ScrollDelta) -> Option<Message> + 'a
 {
 }
 
@@ -216,7 +210,6 @@ struct State {
     last_position: Option<Point>,
     last_virtual_position: Option<Point>,
     drag_initiated: Option<Point>,
-    modifiers: Modifiers,
     prev_click: Option<(mouse::Click, Instant)>,
     size: Option<Size>,
 }
@@ -680,16 +673,12 @@ fn update<Message: Clone>(
 
     if let Some(on_scroll) = widget.on_scroll.as_ref() {
         if let Event::Mouse(mouse::Event::WheelScrolled { delta }) = event {
-            if let Some(message) = on_scroll(*delta, state.modifiers) {
+            if let Some(message) = on_scroll(*delta) {
                 shell.publish(message);
                 return event::Status::Captured;
             }
         }
     }
-
-    if let Event::Keyboard(key_event) = event {
-        handle_key_event(key_event, state)
-    };
 
     if let Some((message, drag_rect)) = widget.on_drag.as_ref().zip(state.drag_rect(cursor)) {
         shell.publish(message(drag_rect.intersection(&layout_bounds).map(
@@ -702,54 +691,4 @@ fn update<Message: Clone>(
     }
 
     event::Status::Ignored
-}
-
-fn handle_key_event(key_event: &keyboard::Event, state: &mut State) {
-    if let KeyPressed {
-        key: Key::Named(key::Named::Control),
-        ..
-    } = key_event
-    {
-        state.modifiers.insert(Modifiers::CTRL);
-    }
-
-    if let KeyReleased {
-        key: Key::Named(key::Named::Control),
-        ..
-    } = key_event
-    {
-        state.modifiers.remove(Modifiers::CTRL);
-    }
-
-    if let KeyPressed {
-        key: Key::Named(key::Named::Shift),
-        ..
-    } = key_event
-    {
-        state.modifiers.insert(Modifiers::SHIFT);
-    }
-
-    if let KeyReleased {
-        key: Key::Named(key::Named::Shift),
-        ..
-    } = key_event
-    {
-        state.modifiers.remove(Modifiers::SHIFT);
-    }
-
-    if let KeyPressed {
-        key: Key::Named(key::Named::Alt),
-        ..
-    } = key_event
-    {
-        state.modifiers.insert(Modifiers::ALT);
-    }
-
-    if let KeyReleased {
-        key: Key::Named(key::Named::Alt),
-        ..
-    } = key_event
-    {
-        state.modifiers.remove(Modifiers::ALT);
-    }
 }

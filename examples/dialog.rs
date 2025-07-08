@@ -4,7 +4,7 @@ use cosmic::{
     iced::{window, Subscription},
     widget, Application, Element,
 };
-use cosmic_files::dialog::{Dialog, DialogKind, DialogMessage, DialogResult};
+use cosmic_files::dialog::{Dialog, DialogKind, DialogMessage, DialogResult, DialogSettings};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
@@ -63,8 +63,7 @@ impl Application for App {
             Message::DialogOpen(dialog_kind) => {
                 if self.dialog_opt.is_none() {
                     let (dialog, command) = Dialog::new(
-                        dialog_kind,
-                        None,
+                        DialogSettings::new().kind(dialog_kind),
                         Message::DialogMessage,
                         Message::DialogResult,
                     );

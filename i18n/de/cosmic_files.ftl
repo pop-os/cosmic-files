@@ -30,8 +30,14 @@ size = Größe
 # Fortschrittsfußzeile
 details = Details
 dismiss = Meldung verwerfen
-operations-running = {$running} laufende Vorgänge ({$percent} %)...
-operations-running-finished = {$running} laufende Vorgänge ({$percent} %), {$finished} abgeschlossen...
+operations-running = {$running} {$running ->
+    [one] laufender Vorgang
+    *[other] laufende Vorgänge
+  } ({$percent} %)...
+operations-running-finished = {$running} {$running ->
+    [one] laufender Vorgang
+    *[other] laufende Vorgänge
+  } ({$percent} %), {$finished} abgeschlossen...
 pause = Pause
 resume = Fortsetzen
 
@@ -42,6 +48,8 @@ create-archive = Archiv erstellen
 
 ## Entpacken-Dialog
 extract-password-required = Passwort erforderlich
+extract-to = Entpacken nach...
+extract-to-title = In Ordner entpacken
 
 ## Dialog zum Leeren des Papierkorbs
 empty-trash = Papierkorb leeren?
@@ -78,6 +86,14 @@ save-file = Datei speichern
 ## Öffnen-mit-Dialog
 open-with-title = Wie möchtest du „{$name}“ öffnen?
 browse-store = {$store} durchsuchen
+other-apps = Andere Anwendungen
+related-apps = Ähnliche Anwendungen
+
+## Endgültig-löschen-Dialog
+selected-items = die {$items} ausgewählten Elemente
+permanently-delete-question = Endgültig löschen?
+delete = Löschen
+permanently-delete-warning = Bist du sicher, dass du {$target} endgültig löschen möchtest? Dies kann nicht rückgängig gemacht werden.
 
 # Umbenennen-Dialog
 rename-file = Datei umbenennen
@@ -120,6 +136,16 @@ read-execute = Lesen und ausführen
 read-write = Lesen und schreiben
 ### Modus 7
 read-write-execute = Lesen, schreiben und ausführen
+
+## Fehlerdialog zum gewünschten Pfad
+favorite-path-error = Fehler beim Öffnen des Verzeichnisses
+favorite-path-error-description =
+        „{$path}“ kann nicht geöffnet werden.
+            Möglicherweise existiert es nicht oder du hast keine Berechtigung, es zu öffnen.
+
+            Möchtest du es aus der Seitenleiste entfernen?
+remove = Entfernen
+keep = Behalten
 
 # Kontextseiten
 
@@ -181,6 +207,14 @@ copied = {$items} {$items ->
         [one] Element wurde
         *[other] Elemente wurden
     } „{$from}“ nach „{$to}“ kopiert
+deleting = {$items} {$items ->
+        [one] Element wird
+        *[other] Elemente werden
+    } aus dem {trash} gelöscht ({$progress})...
+deleted = {$items} {$items ->
+        [one] Element wurde
+        *[other] Elemente wurden
+    } aus dem {trash} gelöscht
 emptying-trash = {trash} wird geleert ({$progress})...
 emptied-trash = {trash} geleert
 extracting = {$items} {$items ->
@@ -193,6 +227,8 @@ extracted = {$items} {$items ->
     } von „{$from}“ nach „{$to}“ entpackt
 setting-executable-and-launching = „{$name}“ wird als ausführbar festgelegt und gestartet
 set-executable-and-launched = „{$name}“ als ausführbar festgelegt und gestartet
+setting-permissions = Berechtigungen für „{$name}“ werden auf {$mode} festgelegt
+set-permissions = Berechtigungen für „{$name}“ auf {$mode} festlegen
 moving = {$items} {$items ->
         [one] Element wird
         *[other] Elemente werden
@@ -201,6 +237,14 @@ moved = {$items} {$items ->
         [one] Element wurde
         *[other] Elemente wurden
     } von „{$from}“ nach „{$to}“ verschoben
+permanently-deleting = {$items} {$items ->
+        [one] Element wird
+        *[other] Elemente werden
+    } endgültig gelöscht
+permanently-deleted = {$items} {$items ->
+        [one] Element wurde
+        *[other] Element wurden
+    } endgültig gelöscht
 renaming = „{$from}“ wird in „{$to}“ umbenannt
 renamed = „{$from}“ wurde in „{$to}“ umbenannt
 restoring = {$items} {$items ->
@@ -229,6 +273,7 @@ calculating = Wird berechnet...
 
 ## Einstellungen
 settings = Einstellungen
+single-click = Einzelklick zum Öffnen
 
 ### Aussehen
 appearance = Aussehen
@@ -237,12 +282,18 @@ match-desktop = An Desktop anpassen
 dark = Dunkel
 light = Hell
 
+### Zum Suchen tippen
+type-to-search = Zum Suchen tippen
+type-to-search-recursive = Durchsucht den aktuellen Ordner und alle Unterordner
+type-to-search-enter-path = Gibt den Pfad zu einem Verzeichnis oder einer Datei ein
+
 # Kontextmenü
 add-to-sidebar = Zur Seitenleiste hinzufügen
 compress = Komprimieren
+delete-permanently = Endgültig löschen
 extract-here = Entpacken
-new-file = Neue Datei
-new-folder = Neuer Ordner
+new-file = Neue Datei...
+new-folder = Neuer Ordner...
 open-in-terminal = Im Terminal öffnen
 move-to-trash = In den Papierkorb verschieben
 restore-from-trash = Aus dem Papierkorb wiederherstellen
@@ -263,6 +314,7 @@ display-settings = Anzeigeeinstellungen...
 file = Datei
 new-tab = Neuer Tab
 new-window = Neues Fenster
+reload-folder = Ordner neu laden
 rename = Umbenennen...
 close-tab = Tab schließen
 quit = Beenden

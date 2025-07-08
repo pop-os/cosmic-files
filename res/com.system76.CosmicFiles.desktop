@@ -1,6 +1,7 @@
 #TODO: more build-out, desktop actions, translations?
 [Desktop Entry]
 Name=COSMIC Files
+Name[zh_CN]=COSMIC 文件管理器
 Name[pl]=Pliki COSMIC
 Name[pt_BR]=Arquivos
 Name[hu]=COSMIC Fájlok

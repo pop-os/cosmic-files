@@ -65,16 +65,6 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
         .map_err(err_str)?
     {
         let info = info_res.map_err(err_str)?;
-        println!("{:?}", info.display_name());
-        for attribute in info.list_attributes(None) {
-            println!(
-                "  {:?}: {:?}: {:?}",
-                attribute,
-                info.attribute_type(&attribute),
-                info.attribute_as_string(&attribute)
-            );
-        }
-
         let name = info.name().to_string_lossy().to_string();
         let display_name = info.display_name().to_string();
 
@@ -119,6 +109,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
 
         items.push(tab::Item {
             name,
+            is_mount_point: false,
             display_name,
             metadata,
             hidden: false,
@@ -136,6 +127,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
             overlaps_drag_rect: false,
             //TODO: scan directory size on gvfs mounts?
             dir_size: DirSize::NotDirectory,
+            cut: false,
         });
     }
     Ok(items)
