@@ -1778,7 +1778,7 @@ impl ItemThumbnail {
                             }
                         },
                         Err(err) => {
-                            log::warn!("failed to turn path into file {:?}: {}", path, err);
+                            log::warn!("failed to create jxl decoder {:?}: {}", path, err);
                             None
                         }
                     },
