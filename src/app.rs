@@ -299,6 +299,7 @@ impl MenuAction for NavMenuAction {
 pub enum Message {
     AddToSidebar(Option<Entity>),
     AppTheme(AppTheme),
+    CloseId(window::Id),
     CloseToast(widget::ToastId),
     Compress(Option<Entity>),
     Config(Config),
@@ -311,6 +312,7 @@ pub enum Message {
     DesktopViewOptions,
     DialogCancel,
     DialogComplete,
+    DragId(window::Id),
     Eject,
     FileDialogMessage(DialogMessage),
     DialogPush(DialogPage),
@@ -2396,7 +2398,7 @@ impl Application for App {
             }
             Message::DesktopViewOptions => {
                 let mut settings = window::Settings {
-                    decorations: true,
+                    decorations: false,
                     min_size: Some(Size::new(360.0, 180.0)),
                     resizable: true,
                     size: Size::new(480.0, 444.0),
@@ -3246,7 +3248,7 @@ impl Application for App {
                         let mut commands = Vec::with_capacity(selected_paths.len());
                         for path in selected_paths {
                             let mut settings = window::Settings {
-                                decorations: true,
+                                decorations: false,
                                 min_size: Some(Size::new(360.0, 180.0)),
                                 resizable: true,
                                 size: Size::new(480.0, 600.0),
@@ -4275,6 +4277,12 @@ impl Application for App {
                         log::warn!("Failed to save sort names: {:?}", err);
                     }
                 }
+            }
+            Message::CloseId(id) => {
+                return window::close(id);
+            }
+            Message::DragId(id) => {
+                return window::drag(id);
             }
         }
 
@@ -5335,11 +5343,21 @@ impl Application for App {
             }
         };
 
-        widget::container(widget::scrollable(content))
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .class(theme::Container::WindowBackground)
-            .into()
+        widget::container(
+            widget::column::column()
+                .push(Element::from(
+                    widget::header_bar()
+                        .on_close(Message::CloseId(id))
+                        .on_drag(Message::DragId(id))
+                        .build(),
+                ))
+                .push(widget::scrollable(content))
+                .width(Length::Fill),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .class(theme::Container::WindowBackground)
+        .into()
     }
 
     fn system_theme_update(
