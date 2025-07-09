@@ -1425,8 +1425,8 @@ impl Location {
                 Self::Desktop(path, display.clone(), *desktop_config)
             }
             Self::Path(..) => Self::Path(path),
-            Self::Search(_, term, show_hidden, _) => {
-                Self::Search(path, term.clone(), *show_hidden, Instant::now())
+            Self::Search(_, term, show_hidden, time) => {
+                Self::Search(path, term.clone(), *show_hidden, *time)
             }
             other => other.clone(),
         }
