@@ -8,8 +8,7 @@ use cosmic::{
         alignment::{Horizontal, Vertical},
         clipboard::dnd::DndAction,
         event,
-        futures,
-        futures::SinkExt,
+        futures::{self, SinkExt},
         keyboard::Modifiers,
         stream,
         //TODO: export in cosmic::widget
@@ -26,6 +25,7 @@ use cosmic::{
         Rectangle,
         Size,
         Subscription,
+        Vector,
     },
     iced_core::{mouse::ScrollDelta, widget::tree},
     theme,
@@ -5402,9 +5402,13 @@ impl Tab {
                     .drag_content(move || {
                         ClipboardCopy::new(crate::clipboard::ClipboardKind::Copy, &files)
                     })
-                    .drag_icon(move |v| {
+                    .drag_icon(move |_| {
                         let state: tree::State = Widget::<Message, _, _>::state(&drag_list);
-                        (Element::from(drag_list.clone()).map(|_m| ()), state, v)
+                        (
+                            Element::from(drag_list.clone()).map(|_m| ()),
+                            state,
+                            Vector::ZERO,
+                        )
                     })
             }
             _ => item_view,
