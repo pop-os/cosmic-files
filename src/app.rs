@@ -5363,7 +5363,7 @@ impl Application for App {
     fn system_theme_update(
         &mut self,
         _keys: &[&'static str],
-        new_theme: &cosmic::cosmic_theme::Theme,
+        _new_theme: &cosmic::cosmic_theme::Theme,
     ) -> Task<Self::Message> {
         self.update(Message::SystemThemeModeChange)
     }

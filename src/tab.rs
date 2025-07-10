@@ -4738,6 +4738,16 @@ impl Tab {
             rows_m1 + 1
         };
 
+        //TODO: move to function
+        let visible_rect = {
+            let point = match self.scroll_opt {
+                Some(offset) => Point::new(0.0, offset.y),
+                None => Point::new(0.0, 0.0),
+            };
+            let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
+            Rectangle::new(point, size)
+        };
+
         let mut grid = widget::grid()
             .column_spacing(column_spacing)
             .row_spacing(grid_spacing)
@@ -4765,93 +4775,106 @@ impl Tab {
                     continue;
                 }
                 item.pos_opt.set(Some((row, col)));
-                item.rect_opt.set(Some(Rectangle::new(
+                let item_rect = Rectangle::new(
                     Point::new(
                         (col * (item_width + column_spacing as usize) + space_m as usize) as f32,
                         (row * (item_height + grid_spacing as usize)) as f32,
                     ),
                     Size::new(item_width as f32, item_height as f32),
-                )));
-
-                //TODO: one focus group per grid item (needs custom widget)
-                let buttons: Vec<Element<Message>> = vec![
-                    widget::button::custom(
-                        widget::icon::icon(item.icon_handle_grid.clone())
-                            .content_fit(ContentFit::Contain)
-                            .size(icon_sizes.grid())
-                            .width(Length::Shrink),
-                    )
-                    .padding(space_xxxs)
-                    .class(button_style(
-                        item.selected,
-                        item.highlighted,
-                        item.cut,
-                        false,
-                        false,
-                        false,
-                    ))
-                    .into(),
-                    widget::tooltip(
-                        widget::button::custom(widget::text::body(&item.display_name))
-                            .id(item.button_id.clone())
-                            .padding([0, space_xxxs])
-                            .class(button_style(
-                                item.selected,
-                                item.highlighted,
-                                item.cut,
-                                true,
-                                true,
-                                matches!(self.mode, Mode::Desktop),
-                            )),
-                        widget::text::body(&item.name),
-                        widget::tooltip::Position::Bottom,
-                    )
-                    .into(),
-                ];
-
-                let mut column = widget::column::with_capacity(buttons.len())
-                    .align_x(Alignment::Center)
-                    .height(Length::Fixed(item_height as f32))
-                    .width(Length::Fixed(item_width as f32));
-                for button in buttons {
-                    if self.context_menu.is_some() {
-                        column = column.push(button)
-                    } else {
-                        column = column.push(
-                            mouse_area::MouseArea::new(button).on_right_press_no_capture(
-                                move |_point_opt| Message::RightClick(Some(i)),
-                            ),
-                        );
-                    }
-                }
-
-                let column: Element<Message> =
-                    if item.metadata.is_dir() && item.location_opt.is_some() {
-                        self.dnd_dest(&item.location_opt.clone().unwrap(), column)
-                    } else {
-                        column.into()
-                    };
-
-                if item.selected {
-                    dnd_items.push((i, (row, col), item));
-                    drag_w_i = drag_w_i.min(col);
-                    drag_n_i = drag_n_i.min(row);
-                    drag_e_i = drag_e_i.max(col);
-                    drag_s_i = drag_s_i.max(row);
-                }
-                let mouse_area = crate::mouse_area::MouseArea::new(column)
-                    .on_press(move |_| Message::Click(Some(i)))
-                    .on_double_click(move |_| Message::DoubleClick(Some(i)))
-                    .on_release(move |_| Message::ClickRelease(Some(i)))
-                    .on_middle_press(move |_| Message::MiddleClick(i))
-                    .on_enter(move || Message::HighlightActivate(i))
-                    .on_exit(move || Message::HighlightDeactivate(i));
+                );
+                item.rect_opt.set(Some(item_rect));
 
                 //TODO: error if the row or col is already set?
                 while grid_elements.len() <= row {
                     grid_elements.push(Vec::new());
                 }
-                grid_elements[row].push(mouse_area);
+
+                // Only build elements if visible (for performance)
+                if item_rect.intersects(&visible_rect) {
+                    //TODO: one focus group per grid item (needs custom widget)
+                    let buttons: Vec<Element<Message>> = vec![
+                        widget::button::custom(
+                            widget::icon::icon(item.icon_handle_grid.clone())
+                                .content_fit(ContentFit::Contain)
+                                .size(icon_sizes.grid())
+                                .width(Length::Shrink),
+                        )
+                        .padding(space_xxxs)
+                        .class(button_style(
+                            item.selected,
+                            item.highlighted,
+                            item.cut,
+                            false,
+                            false,
+                            false,
+                        ))
+                        .into(),
+                        widget::tooltip(
+                            widget::button::custom(widget::text::body(&item.display_name))
+                                .id(item.button_id.clone())
+                                .padding([0, space_xxxs])
+                                .class(button_style(
+                                    item.selected,
+                                    item.highlighted,
+                                    item.cut,
+                                    true,
+                                    true,
+                                    matches!(self.mode, Mode::Desktop),
+                                )),
+                            widget::text::body(&item.name),
+                            widget::tooltip::Position::Bottom,
+                        )
+                        .into(),
+                    ];
+
+                    let mut column = widget::column::with_capacity(buttons.len())
+                        .align_x(Alignment::Center)
+                        .height(Length::Fixed(item_height as f32))
+                        .width(Length::Fixed(item_width as f32));
+                    for button in buttons {
+                        if self.context_menu.is_some() {
+                            column = column.push(button)
+                        } else {
+                            column = column.push(
+                                mouse_area::MouseArea::new(button).on_right_press_no_capture(
+                                    move |_point_opt| Message::RightClick(Some(i)),
+                                ),
+                            );
+                        }
+                    }
+
+                    let column: Element<Message> =
+                        if item.metadata.is_dir() && item.location_opt.is_some() {
+                            self.dnd_dest(&item.location_opt.clone().unwrap(), column)
+                        } else {
+                            column.into()
+                        };
+
+                    if item.selected {
+                        dnd_items.push((i, (row, col), item));
+                        drag_w_i = drag_w_i.min(col);
+                        drag_n_i = drag_n_i.min(row);
+                        drag_e_i = drag_e_i.max(col);
+                        drag_s_i = drag_s_i.max(row);
+                    }
+                    let mouse_area = crate::mouse_area::MouseArea::new(column)
+                        .on_press(move |_| Message::Click(Some(i)))
+                        .on_double_click(move |_| Message::DoubleClick(Some(i)))
+                        .on_release(move |_| Message::ClickRelease(Some(i)))
+                        .on_middle_press(move |_| Message::MiddleClick(i))
+                        .on_enter(move || Message::HighlightActivate(i))
+                        .on_exit(move || Message::HighlightDeactivate(i));
+                    grid_elements[row].push(Element::from(mouse_area));
+                } else {
+                    // Add a spacer if the row is empty, so scroll works
+                    if grid_elements[row].is_empty() {
+                        grid_elements[row].push(Element::from(
+                            widget::column()
+                                .width(Length::Fill)
+                                .height(Length::Fixed(item_height as f32)),
+                        ));
+                    }
+                }
 
                 count += 1;
                 if matches!(self.mode, Mode::Desktop) {
@@ -5028,9 +5051,18 @@ impl Tab {
 
         let rule_padding = theme::active().cosmic().corner_radii.radius_xs[0] as u16;
 
-        let items = self.column_sort();
+        //TODO: move to function
+        let visible_rect = {
+            let point = match self.scroll_opt {
+                Some(offset) => Point::new(0.0, offset.y),
+                None => Point::new(0.0, 0.0),
+            };
+            let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
+            Rectangle::new(point, size)
+        };
+
         let mut drag_items = Vec::new();
-        if let Some(items) = items {
+        if let Some(items) = self.column_sort() {
             let mut count = 0;
             let mut hidden = 0;
             for (i, item) in items {
@@ -5041,10 +5073,11 @@ impl Tab {
                     continue;
                 }
                 item.pos_opt.set(Some((count, 0)));
-                item.rect_opt.set(Some(Rectangle::new(
+                let item_rect = Rectangle::new(
                     Point::new(space_m as f32, y),
                     Size::new(size.width - (2 * space_m) as f32, row_height as f32),
-                )));
+                );
+                item.rect_opt.set(Some(item_rect));
 
                 if count > 0 {
                     children.push(
@@ -5055,190 +5088,86 @@ impl Tab {
                     y += 1.0;
                 }
 
-                let modified_text = match &item.metadata {
-                    ItemMetadata::Path { metadata, .. } => match metadata.modified() {
-                        Ok(time) => self.format_time(time).to_string(),
-                        Err(_) => String::new(),
-                    },
-                    ItemMetadata::Trash { entry, .. } => FormatTime::from_secs(
-                        entry.time_deleted,
-                        &self.date_time_formatter,
-                        &self.time_formatter,
-                    )
-                    .map(|t| t.to_string())
-                    .unwrap_or_default(),
-                    #[cfg(feature = "gvfs")]
-                    ItemMetadata::GvfsPath { .. } => match item.metadata.modified() {
-                        Some(mtime) => self.format_time(mtime).to_string(),
-                        None => String::new(),
-                    },
-                    _ => String::new(),
-                };
+                // Only build elements if visible (for performance)
+                let button_row = if item_rect.intersects(&visible_rect) {
+                    let modified_text = match &item.metadata {
+                        ItemMetadata::Path { metadata, .. } => match metadata.modified() {
+                            Ok(time) => self.format_time(time).to_string(),
+                            Err(_) => String::new(),
+                        },
+                        ItemMetadata::Trash { entry, .. } => FormatTime::from_secs(
+                            entry.time_deleted,
+                            &self.date_time_formatter,
+                            &self.time_formatter,
+                        )
+                        .map(|t| t.to_string())
+                        .unwrap_or_default(),
+                        #[cfg(feature = "gvfs")]
+                        ItemMetadata::GvfsPath { .. } => match item.metadata.modified() {
+                            Some(mtime) => self.format_time(mtime).to_string(),
+                            None => String::new(),
+                        },
+                        _ => String::new(),
+                    };
 
-                let size_text = match &item.metadata {
-                    ItemMetadata::Path {
-                        metadata,
-                        children_opt,
-                    } => {
-                        if metadata.is_dir() {
-                            //TODO: translate
-                            if let Some(children) = children_opt {
-                                if *children == 1 {
-                                    format!("{} item", children)
+                    let size_text = match &item.metadata {
+                        ItemMetadata::Path {
+                            metadata,
+                            children_opt,
+                        } => {
+                            if metadata.is_dir() {
+                                //TODO: translate
+                                if let Some(children) = children_opt {
+                                    if *children == 1 {
+                                        format!("{} item", children)
+                                    } else {
+                                        format!("{} items", children)
+                                    }
                                 } else {
-                                    format!("{} items", children)
+                                    String::new()
                                 }
                             } else {
-                                String::new()
+                                format_size(metadata.len())
                             }
-                        } else {
-                            format_size(metadata.len())
                         }
-                    }
-                    ItemMetadata::Trash { metadata, .. } => match metadata.size {
-                        trash::TrashItemSize::Entries(entries) => {
+                        ItemMetadata::Trash { metadata, .. } => match metadata.size {
+                            trash::TrashItemSize::Entries(entries) => {
+                                //TODO: translate
+                                if entries == 1 {
+                                    format!("{} item", entries)
+                                } else {
+                                    format!("{} items", entries)
+                                }
+                            }
+                            trash::TrashItemSize::Bytes(bytes) => format_size(bytes),
+                        },
+                        ItemMetadata::SimpleDir { entries } => {
                             //TODO: translate
-                            if entries == 1 {
+                            if *entries == 1 {
                                 format!("{} item", entries)
                             } else {
                                 format!("{} items", entries)
                             }
                         }
-                        trash::TrashItemSize::Bytes(bytes) => format_size(bytes),
-                    },
-                    ItemMetadata::SimpleDir { entries } => {
-                        //TODO: translate
-                        if *entries == 1 {
-                            format!("{} item", entries)
-                        } else {
-                            format!("{} items", entries)
-                        }
-                    }
-                    ItemMetadata::SimpleFile { size } => format_size(*size),
-                    #[cfg(feature = "gvfs")]
-                    ItemMetadata::GvfsPath {
-                        size_opt,
-                        children_opt,
-                        ..
-                    } => match children_opt {
-                        Some(child_count) => {
-                            if *child_count == 1 {
-                                format!("{} item", child_count)
-                            } else {
-                                format!("{} items", child_count)
+                        ItemMetadata::SimpleFile { size } => format_size(*size),
+                        #[cfg(feature = "gvfs")]
+                        ItemMetadata::GvfsPath {
+                            size_opt,
+                            children_opt,
+                            ..
+                        } => match children_opt {
+                            Some(child_count) => {
+                                if *child_count == 1 {
+                                    format!("{} item", child_count)
+                                } else {
+                                    format!("{} items", child_count)
+                                }
                             }
-                        }
-                        None => format_size(size_opt.unwrap_or_default()),
-                    },
-                };
-
-                let row = if condensed {
-                    widget::row::with_children(vec![
-                        widget::icon::icon(item.icon_handle_list_condensed.clone())
-                            .content_fit(ContentFit::Contain)
-                            .size(icon_size)
-                            .into(),
-                        widget::column::with_children(vec![
-                            widget::text::body(item.display_name.clone()).into(),
-                            //TODO: translate?
-                            widget::text::caption(format!("{} - {}", modified_text, size_text))
-                                .into(),
-                        ])
-                        .into(),
-                    ])
-                    .height(Length::Fixed(row_height as f32))
-                    .align_y(Alignment::Center)
-                    .spacing(space_xxs)
-                } else if is_search {
-                    widget::row::with_children(vec![
-                        widget::icon::icon(item.icon_handle_list_condensed.clone())
-                            .content_fit(ContentFit::Contain)
-                            .size(icon_size)
-                            .into(),
-                        widget::column::with_children(vec![
-                            widget::text::body(item.display_name.clone()).into(),
-                            widget::text::caption(match item.path_opt() {
-                                Some(path) => path.display().to_string(),
-                                None => String::new(),
-                            })
-                            .into(),
-                        ])
-                        .width(Length::Fill)
-                        .into(),
-                        widget::text::body(modified_text.clone())
-                            .width(Length::Fixed(modified_width))
-                            .into(),
-                        widget::text::body(size_text.clone())
-                            .width(Length::Fixed(size_width))
-                            .into(),
-                    ])
-                    .height(Length::Fixed(row_height as f32))
-                    .align_y(Alignment::Center)
-                    .spacing(space_xxs)
-                } else {
-                    widget::row::with_children(vec![
-                        widget::icon::icon(item.icon_handle_list.clone())
-                            .content_fit(ContentFit::Contain)
-                            .size(icon_size)
-                            .into(),
-                        widget::text::body(item.display_name.clone())
-                            .width(Length::Fill)
-                            .into(),
-                        widget::text::body(modified_text.clone())
-                            .width(Length::Fixed(modified_width))
-                            .into(),
-                        widget::text::body(size_text.clone())
-                            .width(Length::Fixed(size_width))
-                            .into(),
-                    ])
-                    .height(Length::Fixed(row_height as f32))
-                    .align_y(Alignment::Center)
-                    .spacing(space_xxs)
-                };
-
-                let button = |row| {
-                    let mouse_area = crate::mouse_area::MouseArea::new(
-                        widget::button::custom(row)
-                            .width(Length::Fill)
-                            .id(item.button_id.clone())
-                            .padding([0, space_xxs])
-                            .class(button_style(
-                                item.selected,
-                                item.highlighted,
-                                item.cut,
-                                true,
-                                true,
-                                false,
-                            )),
-                    )
-                    .on_press(move |_| Message::Click(Some(i)))
-                    .on_double_click(move |_| Message::DoubleClick(Some(i)))
-                    .on_release(move |_| Message::ClickRelease(Some(i)))
-                    .on_middle_press(move |_| Message::MiddleClick(i))
-                    .on_enter(move || Message::HighlightActivate(i))
-                    .on_exit(move || Message::HighlightDeactivate(i));
-
-                    if self.context_menu.is_some() {
-                        mouse_area
-                    } else {
-                        mouse_area.on_right_press_no_capture(move |_point_opt| {
-                            Message::RightClick(Some(i))
-                        })
-                    }
-                };
-
-                let button_row = button(row.into());
-                let button_row: Element<_> =
-                    if item.metadata.is_dir() && item.location_opt.is_some() {
-                        self.dnd_dest(item.location_opt.as_ref().unwrap(), button_row)
-                    } else {
-                        button_row.into()
+                            None => format_size(size_opt.unwrap_or_default()),
+                        },
                     };
 
-                if item.selected || !drag_items.is_empty() {
-                    let dnd_row = if !item.selected {
-                        Element::from(Space::with_height(Length::Fixed(row_height as f32)))
-                    } else if condensed {
+                    let row = if condensed {
                         widget::row::with_children(vec![
                             widget::icon::icon(item.icon_handle_list_condensed.clone())
                                 .content_fit(ContentFit::Contain)
@@ -5247,14 +5176,14 @@ impl Tab {
                             widget::column::with_children(vec![
                                 widget::text::body(item.display_name.clone()).into(),
                                 //TODO: translate?
-                                widget::text::body(format!("{} - {}", modified_text, size_text))
+                                widget::text::caption(format!("{} - {}", modified_text, size_text))
                                     .into(),
                             ])
                             .into(),
                         ])
+                        .height(Length::Fixed(row_height as f32))
                         .align_y(Alignment::Center)
                         .spacing(space_xxs)
-                        .into()
                     } else if is_search {
                         widget::row::with_children(vec![
                             widget::icon::icon(item.icon_handle_list_condensed.clone())
@@ -5278,9 +5207,9 @@ impl Tab {
                                 .width(Length::Fixed(size_width))
                                 .into(),
                         ])
+                        .height(Length::Fixed(row_height as f32))
                         .align_y(Alignment::Center)
                         .spacing(space_xxs)
-                        .into()
                     } else {
                         widget::row::with_children(vec![
                             widget::icon::icon(item.icon_handle_list.clone())
@@ -5290,27 +5219,144 @@ impl Tab {
                             widget::text::body(item.display_name.clone())
                                 .width(Length::Fill)
                                 .into(),
-                            widget::text(modified_text)
+                            widget::text::body(modified_text.clone())
                                 .width(Length::Fixed(modified_width))
                                 .into(),
-                            widget::text::body(size_text)
+                            widget::text::body(size_text.clone())
                                 .width(Length::Fixed(size_width))
                                 .into(),
                         ])
+                        .height(Length::Fixed(row_height as f32))
                         .align_y(Alignment::Center)
                         .spacing(space_xxs)
-                        .into()
                     };
-                    if item.selected {
-                        drag_items.push(
-                            widget::container(button(dnd_row))
-                                .width(Length::Shrink)
+
+                    let button = |row| {
+                        let mouse_area = crate::mouse_area::MouseArea::new(
+                            widget::button::custom(row)
+                                .width(Length::Fill)
+                                .id(item.button_id.clone())
+                                .padding([0, space_xxs])
+                                .class(button_style(
+                                    item.selected,
+                                    item.highlighted,
+                                    item.cut,
+                                    true,
+                                    true,
+                                    false,
+                                )),
+                        )
+                        .on_press(move |_| Message::Click(Some(i)))
+                        .on_double_click(move |_| Message::DoubleClick(Some(i)))
+                        .on_release(move |_| Message::ClickRelease(Some(i)))
+                        .on_middle_press(move |_| Message::MiddleClick(i))
+                        .on_enter(move || Message::HighlightActivate(i))
+                        .on_exit(move || Message::HighlightDeactivate(i));
+
+                        if self.context_menu.is_some() {
+                            mouse_area
+                        } else {
+                            mouse_area.on_right_press_no_capture(move |_point_opt| {
+                                Message::RightClick(Some(i))
+                            })
+                        }
+                    };
+
+                    let button_row = button(row.into());
+                    let button_row: Element<_> =
+                        if item.metadata.is_dir() && item.location_opt.is_some() {
+                            self.dnd_dest(item.location_opt.as_ref().unwrap(), button_row)
+                        } else {
+                            button_row.into()
+                        };
+
+                    if item.selected || !drag_items.is_empty() {
+                        let dnd_row = if !item.selected {
+                            Element::from(Space::with_height(Length::Fixed(row_height as f32)))
+                        } else if condensed {
+                            widget::row::with_children(vec![
+                                widget::icon::icon(item.icon_handle_list_condensed.clone())
+                                    .content_fit(ContentFit::Contain)
+                                    .size(icon_size)
+                                    .into(),
+                                widget::column::with_children(vec![
+                                    widget::text::body(item.display_name.clone()).into(),
+                                    //TODO: translate?
+                                    widget::text::body(format!(
+                                        "{} - {}",
+                                        modified_text, size_text
+                                    ))
+                                    .into(),
+                                ])
                                 .into(),
-                        );
-                    } else {
-                        drag_items.push(dnd_row);
+                            ])
+                            .align_y(Alignment::Center)
+                            .spacing(space_xxs)
+                            .into()
+                        } else if is_search {
+                            widget::row::with_children(vec![
+                                widget::icon::icon(item.icon_handle_list_condensed.clone())
+                                    .content_fit(ContentFit::Contain)
+                                    .size(icon_size)
+                                    .into(),
+                                widget::column::with_children(vec![
+                                    widget::text::body(item.display_name.clone()).into(),
+                                    widget::text::caption(match item.path_opt() {
+                                        Some(path) => path.display().to_string(),
+                                        None => String::new(),
+                                    })
+                                    .into(),
+                                ])
+                                .width(Length::Fill)
+                                .into(),
+                                widget::text::body(modified_text.clone())
+                                    .width(Length::Fixed(modified_width))
+                                    .into(),
+                                widget::text::body(size_text.clone())
+                                    .width(Length::Fixed(size_width))
+                                    .into(),
+                            ])
+                            .align_y(Alignment::Center)
+                            .spacing(space_xxs)
+                            .into()
+                        } else {
+                            widget::row::with_children(vec![
+                                widget::icon::icon(item.icon_handle_list.clone())
+                                    .content_fit(ContentFit::Contain)
+                                    .size(icon_size)
+                                    .into(),
+                                widget::text::body(item.display_name.clone())
+                                    .width(Length::Fill)
+                                    .into(),
+                                widget::text(modified_text)
+                                    .width(Length::Fixed(modified_width))
+                                    .into(),
+                                widget::text::body(size_text)
+                                    .width(Length::Fixed(size_width))
+                                    .into(),
+                            ])
+                            .align_y(Alignment::Center)
+                            .spacing(space_xxs)
+                            .into()
+                        };
+                        if item.selected {
+                            drag_items.push(
+                                widget::container(button(dnd_row))
+                                    .width(Length::Shrink)
+                                    .into(),
+                            );
+                        } else {
+                            drag_items.push(dnd_row);
+                        }
                     }
-                }
+
+                    button_row
+                } else {
+                    widget::column()
+                        .width(Length::Fill)
+                        .height(Length::Fixed(row_height as f32))
+                        .into()
+                };
 
                 count += 1;
                 y += row_height as f32;
@@ -5555,12 +5601,6 @@ impl Tab {
                 };
                 let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
                 Rectangle::new(point, size)
-            };
-
-            //TODO: HACK to ensure positions are up to date since subscription runs before view
-            match self.config.view {
-                View::Grid => _ = self.grid_view(),
-                View::List => _ = self.list_view(),
             };
 
             for item in items.iter() {
