@@ -9,20 +9,56 @@ notification-in-progress = Ідзе аперацыя з файламі.
 trash = Сметніца
 recents = Нядаўняе
 undo = Адрабіць
+today = Сёння
+
+# Desktop view options
+desktop-view-options = Параметры выгляду працоўнага стала...
+show-on-desktop = Паказваць на працоўным стале
+desktop-folder-content = Змесціва папкі "Працоўны стол"
+mounted-drives = Змантаваныя дыскі
+trash-folder-icon = Значок папкі "Сметніца"
+icon-size-and-spacing = Памер і інтэрвал значкоў
+icon-size = Памер значкоў
+grid-spacing = Інтэрвал сеткі
 
 # List view
 name = Назва
 modified = Зменена
+trashed-on = У сметніцы
 size = Памер
+
+# Progress footer
+details = Падрабязнасці
+dismiss = Адхіліць паведамленне
+operations-running = Выконваецца {$running} {$running ->
+    [one] аперацыя
+    [few] аперацыі
+    *[other] аперацый
+} ({$percent}%)...
+operations-running-finished = Выконваецца {$running} {$running ->
+    [one] аперацыя
+    [few] аперацыі
+    *[other] аперацый
+} ({$percent}%), {$finished} завершана...
+pause = Паўза
+resume = Працягнуць
 
 # Dialogs
 
 ## Compress Dialog
 create-archive = Стварыць архіў
 
+## Extract Dialog
+extract-password-required = Патрабуецца пароль
+extract-to = Выняць у...
+extract-to-title = Выняць у папку
+
 ## Empty Trash Dialog
 empty-trash = Ачысціць сметніцу
 empty-trash-warning = Вы сапраўды хочаце назаўсёды выдаліць усе элементы з сметніцы?
+
+## Mount Error Dialog
+mount-error = Немагчыма атрымаць доступ да дыска
 
 # New File/Folder Dialog
 create-new-file = Стварыць новы файл
@@ -49,6 +85,18 @@ open-multiple-folders = Адкрыць некалькі папак
 save = Захаваць
 save-file = Захаваць файл
 
+## Open With Dialog
+open-with-title = Як вы хочаце адкрыць "{$name}"?
+browse-store = Прагляд {$store}
+other-apps = Іншыя праграмы
+related-apps = Звязаныя праграмы
+
+## Permanently delete Dialog
+selected-items = выбрана {$items} элементаў
+permanently-delete-question = Выдалісь назаўжды
+delete = Выдаліць
+permanently-delete-warning = Вы ўпэўненыя, што хочаце назаўжды выдаліць {$target}? Гэта дзеянне немагчыма адмяніць.
+
 # Rename Dialog
 rename-file = Перайменаваць файл
 rename-folder = Перайменаваць папку
@@ -64,13 +112,42 @@ apply-to-all = Прымяніць на ўсіх
 keep-both = Захаваць абодва
 skip = Прапусціць
 
+## Set as Executable and Launch Dialog
+set-executable-and-launch = Зрабіць выконвальным і запусціць
+set-executable-and-launch-description = Вы хочаце зрабіць "{$name}" выконвальным і запусціць?
+set-and-launch = Задаць і запусціць
+
 ## Metadata Dialog
+open-with = Адкрыць праз
 owner = Уладальнік
 group = Група
 other = Іншыя
-read = Чытаць
-write = Пісаць
-execute = Выконваць
+### Mode 0
+none = Няма
+### Mode 1 (unusual)
+execute-only = Толькі выкананне
+### Mode 2 (unusual)
+write-only = Толькі запіс
+### Mode 3 (unusual)
+write-execute = Запіс і выкананне
+### Mode 4
+read-only = Толькі чытанне
+### Mode 5
+read-execute = Чытанне і выкананне
+### Mode 6
+read-write = Чытанне і запіс
+### Mode 7
+read-write-execute = Чытанне, запіс і выкананне
+
+## Favorite Path Error Dialog
+favorite-path-error = Памылка адкрыцця каталога
+favorite-path-error-description =
+    Немагчыма адкрыць "{$path}".
+    Магчыма, ён не існуе ці ў вас няма дазволу на яго адкрыццё.
+    
+    Ці жадаеце вы выдаліць яго з бакавой панэлі?
+remove = Выдаліць
+keep = Захаваць
 
 # Context Pages
 
@@ -103,18 +180,24 @@ try-again = Паўтарыць спробу
 username = Імя карыстальніка
 
 ## Operations
+cancelled = Скасавана
 edit-history = Гісторыя рэдагавання
 history = Гісторыя
 no-history = Няма элементаў у гісторыі
 pending = У чаканні
+progress = {$percent}%
+progress-cancelled = {$percent}%, скасавана
+progress-paused = {$percent}%, прыпынена
 failed = Няўдала
 complete = Завершана
 compressing = Сцісканне {$items} {$items ->
         [one] элементу
+        [few] элементы
         *[other] элементаў
     } з {$from} у {$to}
 compressed = Сціснута {$items} {$items ->
         [one] элемент
+        [few] элементы
         *[other] элементаў
     } з {$from} у {$to}
 copy_noun = Капіяваць
@@ -122,38 +205,70 @@ creating = Стварэнне {$name} у {$parent}
 created = Створана {$name} у {$parent}
 copying = Капіяванне {$items} {$items ->
         [one] элементу
+        [few] элементы
         *[other] элементаў
     } з {$from} у {$to}
 copied = Скапіявана {$items} {$items ->
         [one] элемент
+        [few] элементы
         *[other] элементаў
     } з {$from} у {$to}
+deleting = Выдаленне {$items} {$items ->
+        [one] элемента
+        [few] элементы
+        *[other] элементаў
+    } са {trash} ({$progress})...
+deleted = Выдалена {$items} {$items ->
+        [one] элемент
+        [few] элементы
+        *[other] элементаў
+    } са {trash}
 emptying-trash = Emptying {trash}
 emptied-trash = Emptied {trash}
 extracting = Выманне {$items} {$items ->
         [one] элементу
+        [few] элементы
         *[other] элементаў
     } з {$from} у {$to}
 extracted = Вынята {$items} {$items ->
         [one] элемент
+        [few] элементы
         *[other] элементаў
     } з {$from} у {$to}
+setting-executable-and-launching = Робім "{$name}" выконвальным і запускаем
+set-executable-and-launched = "{$name}" зроблены выконвальным і запушчаны
+setting-permissions = Усталёўваем дазволы для "{$name}" на {$mode}
+set-permissions = Дазволы для "{$name}" усталяваны на {$mode}
 moving = Перамяшчэнне {$items} {$items ->
         [one] элементу
+        [few] элементы
         *[other] элементаў
     } з {$from} у {$to}
 moved = Перанесена {$items} {$items ->
         [one] элемент
+        [few] элементы
         *[other] элементаў
     } з {$from} у {$to}
+permanently-deleting = Назаўсёды выдаляем {$items} {$items ->
+    [one] элемент
+    [few] элементы
+    *[other] элементаў
+}
+permanently-deleted = Назаўсёды выдалена {$items} {$items ->
+    [one] элемент
+    [few] элементы
+    *[other] элементаў
+}
 renaming = Перайменаванне {$from} у {$to}
 renamed = Перайменавана {$from} у {$to}
 restoring = Аднаўленне {$items} {$items ->
         [one] элементу
+        [few] элементы
         *[other] элементаў
     } з {trash}
 restored = Адноўлена {$items} {$items ->
         [one] элемент
+        [few] элементы
         *[other] элементаў
     } з {trash}
 unknown-folder = невядомая папка
@@ -162,14 +277,19 @@ unknown-folder = невядомая папка
 menu-open-with = Адкрыць з дапамогай
 default-app = {$name} (па змаўчанні)
 
-## Properties
-properties = Уласцівасці
-
 ## Show details
 show-details = Паказаць дэталі
+type = Тып: {$mime}
+items = Элементаў: {$items}
+item-size = Памер: {$size}
+item-created = Створана: {$created}
+item-modified = Зменена: {$modified}
+item-accessed = Апошні доступ: {$accessed}
+calculating = Вылічэнне...
 
 ## Settings
 settings = Налады
+single-click = Адзін клік каб адкрыць
 
 ### Appearance
 appearance = Выгляд
@@ -178,9 +298,16 @@ match-desktop = Як у сістэме
 dark = Цёмная
 light = Светлая
 
+### Type to Search
+type-to-search = Увядзіце для пошуку
+type-to-search-recursive = Шукае ў бягучай папцы і ва ўсіх укладзеных папках
+type-to-search-enter-path = Уводзіць шлях да каталога або файла
+
 # Context menu
 add-to-sidebar = Дадаць на бакавую панэль
 compress = Сціснуць
+delete-permanently = Выдаліць назаўжды
+eject = Выняць
 extract-here = Выняць
 new-file = Новы файл
 new-folder = Новая папка
@@ -191,6 +318,12 @@ remove-from-sidebar = Выдаліць з бакавой панэлі
 sort-by-name = Сартаваць па назве
 sort-by-modified = Сартаваць па змяненні
 sort-by-size = Сартаваць па памеры
+sort-by-trashed = Сартаваць па часе выдалення
+
+## Desktop
+change-wallpaper = Змяніць шпалеры...
+desktop-appearance = Выгляд працоўнага стала...
+display-settings = Налады дысплэя...
 
 # Menu
 
@@ -198,8 +331,8 @@ sort-by-size = Сартаваць па памеры
 file = Файл
 new-tab = Новая ўкладка
 new-window = Новае акно
+reload-folder = Аднавіць папку
 rename = Перайменаваць
-menu-show-details = Паказаць уласцівасці...
 close-tab = Закрыць укладку
 quit = Выйсці
 
@@ -219,6 +352,7 @@ grid-view = Рэжым сеткі
 list-view = Рэжым спіса
 show-hidden-files = Паказваць схаваныя файлы
 list-directories-first = Размяшчаць папкі перад файламі
+gallery-preview = Папярэдні прагляд
 menu-settings = Налады...
 menu-about = Пра Файлы COSMIC...
 
