@@ -5366,6 +5366,7 @@ impl Tab {
         self.size_opt.set(Some(size));
 
         let cosmic_theme::Spacing {
+            space_xxxs,
             space_xxs,
             space_xs,
             ..
@@ -5395,6 +5396,7 @@ impl Tab {
         let item_view =
             DndSource::<Message, ClipboardCopy>::with_id(item_view, Id::new("tab-view"));
 
+        let view = self.config.view;
         let item_view = match drag_list {
             Some(drag_list) if self.selected_clicked => {
                 let drag_list = ArcElementWrapper::<Message>(Arc::new(Mutex::new(drag_list)));
@@ -5407,7 +5409,14 @@ impl Tab {
                         (
                             Element::from(drag_list.clone()).map(|_m| ()),
                             state,
-                            Vector::ZERO,
+                            match view {
+                                // offset by grid padding so that we grab the top left corner of the item in the drag grid.
+                                View::Grid => Vector::new(
+                                    -3. * space_xxs as f32 - space_xxxs as f32,
+                                    -4. * (space_xxxs as f32),
+                                ),
+                                View::List => Vector::ZERO,
+                            },
                         )
                     })
             }
