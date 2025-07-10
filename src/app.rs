@@ -305,7 +305,6 @@ pub enum Message {
     Config(Config),
     Copy(Option<Entity>),
     CosmicSettings(&'static str),
-    CursorMoved(Point),
     Cut(Option<Entity>),
     Delete(Option<Entity>),
     DesktopConfig(DesktopConfig),
@@ -2328,13 +2327,6 @@ impl Application for App {
                 let paths = self.selected_paths(entity_opt);
                 let contents = ClipboardCopy::new(ClipboardKind::Copy, &paths);
                 return clipboard::write_data(contents);
-            }
-            Message::CursorMoved(pos) => {
-                let entity = self.tab_model.active();
-                return self.update(Message::TabMessage(
-                    Some(entity),
-                    tab::Message::CursorMoved(pos),
-                ));
             }
             Message::Cut(entity_opt) => {
                 self.set_cut(entity_opt);
@@ -5374,7 +5366,7 @@ impl Application for App {
         struct TimeSubscription;
 
         let mut subscriptions = vec![
-            event::listen_with(|event, status, window_id| match event {
+            event::listen_with(|event, status, _window_id| match event {
                 Event::Keyboard(KeyEvent::KeyPressed {
                     key,
                     modifiers,
@@ -5408,7 +5400,6 @@ impl Application for App {
                         _ => None,
                     }
                 }
-                Event::Mouse(CursorMoved { position: pos }) => Some(Message::CursorMoved(pos)),
                 _ => None,
             }),
             Config::subscription().map(|update| {

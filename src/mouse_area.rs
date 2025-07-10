@@ -24,6 +24,7 @@ use cosmic::{
 pub struct MouseArea<'a, Message> {
     id: Id,
     content: Element<'a, Message>,
+    on_auto_scroll: Option<Box<dyn OnAutoScroll<'a, Message>>>,
     on_drag: Option<Box<dyn OnDrag<'a, Message>>>,
     on_double_click: Option<Box<dyn OnMouseButton<'a, Message>>>,
     on_press: Option<Box<dyn OnMouseButton<'a, Message>>>,
@@ -46,6 +47,13 @@ pub struct MouseArea<'a, Message> {
 }
 
 impl<'a, Message> MouseArea<'a, Message> {
+    /// The message to emit when auto scroll changes.
+    #[must_use]
+    pub fn on_auto_scroll(mut self, message: impl OnAutoScroll<'a, Message>) -> Self {
+        self.on_auto_scroll = Some(Box::new(message));
+        self
+    }
+
     /// The message to emit when a drag is initiated.
     #[must_use]
     pub fn on_drag(mut self, message: impl OnDrag<'a, Message>) -> Self {
@@ -186,6 +194,9 @@ impl<'a, Message> MouseArea<'a, Message> {
     }
 }
 
+pub trait OnAutoScroll<'a, Message>: Fn(Option<f32>) -> Message + 'a {}
+impl<'a, Message, F> OnAutoScroll<'a, Message> for F where F: Fn(Option<f32>) -> Message + 'a {}
+
 pub trait OnMouseButton<'a, Message>: Fn(Option<Point>) -> Message + 'a {}
 impl<'a, Message, F> OnMouseButton<'a, Message> for F where F: Fn(Option<Point>) -> Message + 'a {}
 
@@ -207,6 +218,7 @@ impl<'a, Message, F> OnEnterExit<'a, Message> for F where F: Fn() -> Message + '
 /// Local state of the [`MouseArea`].
 #[derive(Default)]
 struct State {
+    last_auto_scroll: Option<f32>,
     last_position: Option<Point>,
     last_virtual_position: Option<Point>,
     drag_initiated: Option<Point>,
@@ -266,6 +278,7 @@ impl<'a, Message> MouseArea<'a, Message> {
         MouseArea {
             id: Id::unique(),
             content: content.into(),
+            on_auto_scroll: None,
             on_drag: None,
             on_drag_end: None,
             on_double_click: None,
@@ -518,10 +531,31 @@ fn update<Message: Clone>(
         }
         state.last_position = position_in;
 
-        state.last_virtual_position = Some(Point::new(
+        let virtual_position = Point::new(
             viewport.x - layout_bounds.x + position.x,
             viewport.y - layout_bounds.y + position.y,
-        ));
+        );
+        state.last_virtual_position = Some(virtual_position);
+
+        if let Some(message) = widget.on_auto_scroll.as_ref() {
+            let auto_scroll = if state.drag_initiated.is_some() {
+                let bottom = viewport.y;
+                let top = viewport.y + viewport.height;
+                if virtual_position.y < bottom {
+                    Some(virtual_position.y - bottom)
+                } else if virtual_position.y > top {
+                    Some(virtual_position.y - top)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            if state.last_auto_scroll != auto_scroll {
+                shell.publish(message(auto_scroll));
+                state.last_auto_scroll = auto_scroll;
+            }
+        }
     }
 
     if state.drag_initiated.is_none() && !cursor.is_over(layout_bounds) {

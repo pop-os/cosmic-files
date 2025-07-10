@@ -92,8 +92,6 @@ const MAX_SEARCH_RESULTS: usize = 200;
 //TODO: configurable thumbnail size?
 const THUMBNAIL_SIZE: u32 = (ICON_SIZE_GRID as u32) * (ICON_SCALE_MAX as u32);
 
-const DRAG_SCROLL_DISTANCE: f32 = 15.0;
-
 pub(crate) static SORT_OPTION_FALLBACK: LazyLock<HashMap<String, (HeadingOptions, bool)>> =
     LazyLock::new(|| {
         HashMap::from_iter(dirs::download_dir().into_iter().map(|dir| {
@@ -1528,11 +1526,10 @@ pub enum Command {
 #[derive(Clone, Debug)]
 pub enum Message {
     AddNetworkDrive,
+    AutoScroll(Option<f32>),
     Click(Option<usize>),
     DoubleClick(Option<usize>),
     ClickRelease(Option<usize>),
-    CursorMoved(Point),
-    DragEnd(Option<usize>),
     Config(TabConfig),
     ContextAction(Action),
     ContextMenu(Option<Point>),
@@ -1540,6 +1537,7 @@ pub enum Message {
     LocationContextMenuIndex(Option<usize>),
     LocationMenuAction(LocationMenuAction),
     Drag(Option<Rectangle>),
+    DragEnd,
     EditLocation(Option<EditLocation>),
     EditLocationComplete(usize),
     EditLocationEnable,
@@ -2402,12 +2400,6 @@ pub struct Tab {
     modifiers: Modifiers,
     last_right_click: Option<usize>,
     search_context: Option<SearchContext>,
-    global_cursor_position: Option<Point>,
-    current_drag_rect: Option<Rectangle>,
-    virtual_cursor_offset: Option<Point>,
-    last_scroll_position: Option<Point>,
-    last_scroll_offset: Option<Point>,
-    scroll_bounds_opt: Option<Rectangle>,
     date_time_formatter: DateTimeFormatter,
     time_formatter: DateTimeFormatter,
 }
@@ -2518,12 +2510,6 @@ impl Tab {
             modifiers: Modifiers::default(),
             last_right_click: None,
             search_context: None,
-            global_cursor_position: None,
-            current_drag_rect: None,
-            virtual_cursor_offset: None,
-            last_scroll_position: None,
-            last_scroll_offset: None,
-            scroll_bounds_opt: None,
             date_time_formatter: date_time_formatter(config.military_time),
             time_formatter: time_formatter(config.military_time),
         }
@@ -2831,7 +2817,6 @@ impl Tab {
         self.items_opt = None;
         //TODO: remember scroll by location?
         self.scroll_opt = None;
-        self.scroll_bounds_opt = None;
         self.select_focus = None;
         self.search_context = None;
         if let Some(history_i) = history_i_opt {
@@ -2872,6 +2857,9 @@ impl Tab {
             Message::AddNetworkDrive => {
                 commands.push(Command::AddNetworkDrive);
             }
+            Message::AutoScroll(auto_scroll) => {
+                commands.push(Command::AutoScroll(auto_scroll));
+            }
             Message::ClickRelease(click_i_opt) => {
                 if click_i_opt == self.clicked.take() {
                     return commands;
@@ -2891,80 +2879,8 @@ impl Tab {
                     }
                 }
             }
-            Message::CursorMoved(pos) => {
-                self.global_cursor_position = Some(pos);
-
-                // we're currently dragging
-                if self.current_drag_rect.is_some() {
-                    if let Some(scroll_bounds) = self.scroll_bounds_opt {
-                        if !scroll_bounds.contains(pos) {
-                            if pos.y < scroll_bounds.y
-                                || pos.y > (scroll_bounds.y + scroll_bounds.height)
-                            {
-                                // if our mouse is above the scroll bounds, we want to scroll up
-                                let drag_start_point = Point {
-                                    x: scroll_bounds.x,
-                                    y: scroll_bounds.y,
-                                };
-                                // diff_y should be NEGATIVE here when close to y=0 (above the MouseArea)
-                                // and positive when below the scroll bounds
-                                let diff_y = pos.y - drag_start_point.y;
-                                let scroll_y: f32 = if diff_y > 0.0 {
-                                    DRAG_SCROLL_DISTANCE
-                                } else if diff_y < 0.0 {
-                                    -DRAG_SCROLL_DISTANCE
-                                } else {
-                                    0.0
-                                };
-
-                                commands.push(Command::AutoScroll(Some(scroll_y)));
-                            } else {
-                                if let Some(last_scroll_offset) = self.last_scroll_offset {
-                                    if let Some(last_scroll_position) = self.last_scroll_position {
-                                        self.virtual_cursor_offset = Some(Point {
-                                            x: 0.0,
-                                            y: (pos.y - last_scroll_position.y
-                                                + last_scroll_offset.y),
-                                        });
-                                    }
-                                } else {
-                                    if let Some(last_scroll_position) = self.last_scroll_position {
-                                        self.virtual_cursor_offset = Some(Point {
-                                            x: 0.0,
-                                            y: (pos.y - last_scroll_position.y),
-                                        });
-                                    } else {
-                                        self.virtual_cursor_offset = Some(Point { x: 0.0, y: 0.0 });
-                                    }
-                                }
-
-                                commands.push(Command::AutoScroll(None));
-                            }
-                        } else {
-                            // reset our virtual cursor offset when we're back in bounds
-                            self.virtual_cursor_offset = None;
-                            self.last_scroll_position = Some(pos);
-                            self.last_scroll_offset = None;
-
-                            commands.push(Command::AutoScroll(None));
-                        }
-                    }
-                }
-            }
-            Message::DragEnd(_) => {
+            Message::DragEnd => {
                 self.clicked = None;
-                self.virtual_cursor_offset = None;
-                self.last_scroll_offset = None;
-                self.last_scroll_position = None;
-
-                self.current_drag_rect = None;
-                if let Some(ref mut items) = self.items_opt {
-                    for item in items.iter_mut() {
-                        item.overlaps_drag_rect = false;
-                    }
-                }
-
-                commands.push(Command::AutoScroll(None));
             }
             Message::DoubleClick(click_i_opt) => {
                 if let Some(clicked_item) = self
@@ -3225,9 +3141,6 @@ impl Tab {
                 }
             }
             Message::Drag(rect_opt) => {
-                if self.mode.multiple() {
-                    self.current_drag_rect = rect_opt;
-                }
                 if let Some(rect) = rect_opt {
                     self.context_menu = None;
                     self.location_context_menu_index = None;
@@ -3655,31 +3568,9 @@ impl Tab {
             }
 
             Message::Scroll(viewport) => {
-                self.scroll_bounds_opt = Some(viewport.bounds());
                 self.scroll_opt = Some(viewport.absolute_offset());
             }
             Message::ScrollTab(scroll_speed) => {
-                let mut new_offset = Point {
-                    x: 0.0,
-                    y: scroll_speed,
-                };
-
-                if let Some(virtual_cursor_offset) = self.virtual_cursor_offset {
-                    new_offset = Point {
-                        x: new_offset.x + virtual_cursor_offset.x,
-                        y: new_offset.y + virtual_cursor_offset.y,
-                    };
-                }
-
-                if let Some(last_scroll_position) = self.last_scroll_position {
-                    if let Some(global_cursor_position) = self.global_cursor_position {
-                        new_offset.x = global_cursor_position.x - last_scroll_position.x;
-                    }
-                }
-
-                self.virtual_cursor_offset = Some(new_offset);
-                self.last_scroll_offset = Some(new_offset);
-
                 commands.push(Command::Iced(
                     scrollable::scroll_by(
                         self.scrollable_id.clone(),
@@ -5009,8 +4900,9 @@ impl Tab {
             }),
             mouse_area::MouseArea::new(widget::column::with_children(children).width(Length::Fill))
                 .on_press(|_| Message::Click(None))
+                .on_auto_scroll(Message::AutoScroll)
                 .on_drag(Message::Drag)
-                .on_drag_end(|_| Message::DragEnd(None))
+                .on_drag_end(|_| Message::DragEnd)
                 .show_drag_rect(self.mode.multiple())
                 .on_release(|_| Message::ClickRelease(None))
                 .into(),
@@ -5394,8 +5286,9 @@ impl Tab {
             )
             .with_id(Id::new("list-view"))
             .on_press(|_| Message::Click(None))
+            .on_auto_scroll(Message::AutoScroll)
             .on_drag(Message::Drag)
-            .on_drag_end(|_| Message::DragEnd(None))
+            .on_drag_end(|_| Message::DragEnd)
             .show_drag_rect(self.mode.multiple())
             .on_release(|_| Message::ClickRelease(None))
             .into(),

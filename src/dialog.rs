@@ -411,7 +411,6 @@ enum Message {
     Cancel,
     Choice(usize, usize),
     Config(Config),
-    CursorMoved(Point),
     DialogCancel,
     DialogComplete,
     DialogUpdate(DialogPage),
@@ -1262,9 +1261,6 @@ impl Application for App {
                     return self.update_config();
                 }
             }
-            Message::CursorMoved(pos) => {
-                return self.update(Message::TabMessage(tab::Message::CursorMoved(pos)));
-            }
             Message::DialogCancel => {
                 self.dialog_pages.pop_front();
             }
@@ -1800,9 +1796,6 @@ impl Application for App {
                 },
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
                     Some(Message::ModifiersChanged(modifiers))
-                }
-                Event::Mouse(mouse::Event::CursorMoved { position: pos }) => {
-                    Some(Message::CursorMoved(pos))
                 }
                 _ => None,
             }),
