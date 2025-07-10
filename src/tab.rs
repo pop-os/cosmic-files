@@ -3575,9 +3575,9 @@ impl Tab {
 
             Message::Scroll(viewport) => {
                 self.scroll_opt = Some(viewport.absolute_offset());
+                self.watch_drag = true;
             }
             Message::ScrollTab(scroll_speed) => {
-                self.watch_drag = true;
                 commands.push(Command::Iced(
                     scrollable::scroll_by(
                         self.scrollable_id.clone(),
