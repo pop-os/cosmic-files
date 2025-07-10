@@ -8,7 +8,7 @@ use cosmic::{
         self, event,
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers},
-        mouse, stream, window, Alignment, Event, Length, Point, Size, Subscription,
+        stream, window, Alignment, Event, Length, Size, Subscription,
     },
     theme,
     widget::{

@@ -30,7 +30,7 @@ use cosmic::{
         Alignment, Event, Length, Point, Rectangle, Size, Subscription,
     },
     iced_runtime::clipboard,
-    style, theme,
+    style, surface, theme,
     widget::{
         self,
         dnd_destination::DragId,
@@ -41,7 +41,6 @@ use cosmic::{
     },
     Application, ApplicationExt, Element,
 };
-use cosmic::{iced::mouse::Event::CursorMoved, surface};
 use mime_guess::Mime;
 use notify_debouncer_full::{
     new_debouncer,

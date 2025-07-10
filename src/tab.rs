@@ -2402,6 +2402,7 @@ pub struct Tab {
     search_context: Option<SearchContext>,
     date_time_formatter: DateTimeFormatter,
     time_formatter: DateTimeFormatter,
+    watch_drag: bool,
 }
 
 async fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, String> {
@@ -2512,6 +2513,7 @@ impl Tab {
             search_context: None,
             date_time_formatter: date_time_formatter(config.military_time),
             time_formatter: time_formatter(config.military_time),
+            watch_drag: true,
         }
     }
 
@@ -2881,6 +2883,7 @@ impl Tab {
             }
             Message::DragEnd => {
                 self.clicked = None;
+                self.watch_drag = true;
             }
             Message::DoubleClick(click_i_opt) => {
                 if let Some(clicked_item) = self
@@ -3141,6 +3144,7 @@ impl Tab {
                 }
             }
             Message::Drag(rect_opt) => {
+                self.watch_drag = false;
                 if let Some(rect) = rect_opt {
                     self.context_menu = None;
                     self.location_context_menu_index = None;
@@ -3557,11 +3561,13 @@ impl Tab {
                 }
             }
             Message::HighlightDeactivate(i) => {
+                self.watch_drag = true;
                 if let Some(item) = self.items_opt.as_mut().and_then(|f| f.get_mut(i)) {
                     item.highlighted = false;
                 }
             }
             Message::HighlightActivate(i) => {
+                self.watch_drag = true;
                 if let Some(item) = self.items_opt.as_mut().and_then(|f| f.get_mut(i)) {
                     item.highlighted = true;
                 }
@@ -3571,6 +3577,7 @@ impl Tab {
                 self.scroll_opt = Some(viewport.absolute_offset());
             }
             Message::ScrollTab(scroll_speed) => {
+                self.watch_drag = true;
                 commands.push(Command::Iced(
                     scrollable::scroll_by(
                         self.scrollable_id.clone(),
@@ -4579,7 +4586,6 @@ impl Tab {
 
     pub fn grid_view(&self) -> (Option<Element<'static, Message>>, Element<Message>, bool) {
         let cosmic_theme::Spacing {
-            space_m,
             space_xxs,
             space_xxxs,
             ..
@@ -4605,7 +4611,7 @@ impl Tab {
         let (width, height) = match self.size_opt.get() {
             Some(size) => (
                 (size.width.floor() as usize)
-                    .saturating_sub(2 * (space_m as usize))
+                    .saturating_sub(2 * (space_xxs as usize))
                     .max(item_width),
                 (size.height.floor() as usize).max(item_height),
             ),
@@ -4650,7 +4656,6 @@ impl Tab {
         let mut drag_s_i = 0;
 
         let mut children = Vec::new();
-
         if let Some(items) = self.column_sort() {
             let mut count = 0;
             let mut col = 0;
@@ -4668,8 +4673,8 @@ impl Tab {
                 item.pos_opt.set(Some((row, col)));
                 let item_rect = Rectangle::new(
                     Point::new(
-                        (col * (item_width + column_spacing as usize) + space_m as usize) as f32,
-                        (row * (item_height + grid_spacing as usize)) as f32,
+                        (col * (item_width + column_spacing as usize) + space_xxs as usize) as f32,
+                        (row * (item_height + grid_spacing as usize) + space_xxs as usize) as f32,
                     ),
                     Size::new(item_width as f32, item_height as f32),
                 );
@@ -4831,40 +4836,37 @@ impl Tab {
             }
         }
 
-        (
-            (!dnd_items.is_empty()).then(|| {
-                let mut dnd_grid = widget::grid()
-                    .column_spacing(column_spacing)
-                    .row_spacing(grid_spacing)
-                    .padding(space_xxs.into());
+        let drag_list = (!dnd_items.is_empty()).then(|| {
+            let mut dnd_grid = widget::grid()
+                .column_spacing(column_spacing)
+                .row_spacing(grid_spacing)
+                .padding(space_xxs.into());
 
-                let mut dnd_item_i = 0;
-                for r in drag_n_i..=drag_s_i {
-                    dnd_grid = dnd_grid.insert_row();
-                    for c in drag_w_i..=drag_e_i {
-                        let Some((i, (row, col), item)) = dnd_items.get(dnd_item_i) else {
-                            break;
-                        };
-                        if *row == r && *col == c {
-                            let buttons = vec![
-                                widget::button::custom(
-                                    widget::icon::icon(item.icon_handle_grid.clone())
-                                        .content_fit(ContentFit::Contain)
-                                        .size(icon_sizes.grid()),
-                                )
-                                .on_press(Message::Click(Some(*i)))
-                                .padding(space_xxxs)
-                                .class(button_style(
-                                    item.selected,
-                                    item.highlighted,
-                                    item.cut,
-                                    false,
-                                    false,
-                                    false,
-                                )),
-                                widget::button::custom(widget::text::body(
-                                    item.display_name.clone(),
-                                ))
+            let mut dnd_item_i = 0;
+            for r in drag_n_i..=drag_s_i {
+                dnd_grid = dnd_grid.insert_row();
+                for c in drag_w_i..=drag_e_i {
+                    let Some((i, (row, col), item)) = dnd_items.get(dnd_item_i) else {
+                        break;
+                    };
+                    if *row == r && *col == c {
+                        let buttons = vec![
+                            widget::button::custom(
+                                widget::icon::icon(item.icon_handle_grid.clone())
+                                    .content_fit(ContentFit::Contain)
+                                    .size(icon_sizes.grid()),
+                            )
+                            .on_press(Message::Click(Some(*i)))
+                            .padding(space_xxxs)
+                            .class(button_style(
+                                item.selected,
+                                item.highlighted,
+                                item.cut,
+                                false,
+                                false,
+                                false,
+                            )),
+                            widget::button::custom(widget::text::body(item.display_name.clone()))
                                 .id(item.button_id.clone())
                                 .on_press(Message::Click(Some(*i)))
                                 .padding([0, space_xxxs])
@@ -4876,46 +4878,46 @@ impl Tab {
                                     true,
                                     false,
                                 )),
-                            ];
+                        ];
 
-                            let mut column = widget::column::with_capacity(buttons.len())
-                                .align_x(Alignment::Center)
-                                .height(Length::Fixed(item_height as f32))
-                                .width(Length::Fixed(item_width as f32));
-                            for button in buttons {
-                                column = column.push(button)
-                            }
-
-                            dnd_grid = dnd_grid.push(column);
-                            dnd_item_i += 1;
-                        } else {
-                            dnd_grid = dnd_grid.push(
-                                widget::container(Space::with_height(item_width as f32))
-                                    .height(Length::Fixed(item_height as f32)),
-                            );
+                        let mut column = widget::column::with_capacity(buttons.len())
+                            .align_x(Alignment::Center)
+                            .height(Length::Fixed(item_height as f32))
+                            .width(Length::Fixed(item_width as f32));
+                        for button in buttons {
+                            column = column.push(button)
                         }
+
+                        dnd_grid = dnd_grid.push(column);
+                        dnd_item_i += 1;
+                    } else {
+                        dnd_grid = dnd_grid.push(
+                            widget::container(Space::with_height(item_width as f32))
+                                .height(Length::Fixed(item_height as f32)),
+                        );
                     }
                 }
-                Element::from(dnd_grid)
-            }),
+            }
+            Element::from(dnd_grid)
+        });
+
+        let mut mouse_area =
             mouse_area::MouseArea::new(widget::column::with_children(children).width(Length::Fill))
                 .on_press(|_| Message::Click(None))
                 .on_auto_scroll(Message::AutoScroll)
-                .on_drag(Message::Drag)
                 .on_drag_end(|_| Message::DragEnd)
                 .show_drag_rect(self.mode.multiple())
-                .on_release(|_| Message::ClickRelease(None))
-                .into(),
-            true,
-        )
+                .on_release(|_| Message::ClickRelease(None));
+        if self.watch_drag {
+            mouse_area = mouse_area.on_drag(Message::Drag);
+        }
+
+        (drag_list, mouse_area.into(), true)
     }
 
     pub fn list_view(&self) -> (Option<Element<'static, Message>>, Element<Message>, bool) {
         let cosmic_theme::Spacing {
-            space_m,
-            space_s,
-            space_xxs,
-            ..
+            space_s, space_xxs, ..
         } = theme::active().cosmic().spacing;
 
         let TabConfig {
@@ -4964,12 +4966,6 @@ impl Tab {
                     hidden += 1;
                     continue;
                 }
-                item.pos_opt.set(Some((count, 0)));
-                let item_rect = Rectangle::new(
-                    Point::new(space_m as f32, y),
-                    Size::new(size.width - (2 * space_m) as f32, row_height as f32),
-                );
-                item.rect_opt.set(Some(item_rect));
 
                 if count > 0 {
                     children.push(
@@ -4979,6 +4975,13 @@ impl Tab {
                     );
                     y += 1.0;
                 }
+
+                item.pos_opt.set(Some((count, 0)));
+                let item_rect = Rectangle::new(
+                    Point::new(space_s as f32, y),
+                    Size::new(size.width - (2 * space_s) as f32, row_height as f32),
+                );
+                item.rect_opt.set(Some(item_rect));
 
                 // Only build elements if visible (for performance)
                 let button_row = if item_rect.intersects(&visible_rect) {
@@ -5279,21 +5282,20 @@ impl Tab {
         let drag_col = (!drag_items.is_empty())
             .then(|| Element::from(widget::column::with_children(drag_items)));
 
-        (
-            drag_col,
-            mouse_area::MouseArea::new(
-                widget::column::with_children(children).padding([0, space_s]),
-            )
-            .with_id(Id::new("list-view"))
-            .on_press(|_| Message::Click(None))
-            .on_auto_scroll(Message::AutoScroll)
-            .on_drag(Message::Drag)
-            .on_drag_end(|_| Message::DragEnd)
-            .show_drag_rect(self.mode.multiple())
-            .on_release(|_| Message::ClickRelease(None))
-            .into(),
-            true,
+        let mut mouse_area = mouse_area::MouseArea::new(
+            widget::column::with_children(children).padding([0, space_s]),
         )
+        .with_id(Id::new("list-view"))
+        .on_press(|_| Message::Click(None))
+        .on_auto_scroll(Message::AutoScroll)
+        .on_drag_end(|_| Message::DragEnd)
+        .show_drag_rect(self.mode.multiple())
+        .on_release(|_| Message::ClickRelease(None));
+        if self.watch_drag {
+            mouse_area = mouse_area.on_drag(Message::Drag);
+        }
+
+        (drag_col, mouse_area.into(), true)
     }
 
     pub fn view_responsive(
