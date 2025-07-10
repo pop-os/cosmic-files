@@ -73,7 +73,9 @@ use walkdir::WalkDir;
 use crate::{
     app::{Action, PreviewItem, PreviewKind},
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
-    config::{DesktopConfig, IconSizes, TabConfig, ICON_SCALE_MAX, ICON_SIZE_GRID},
+    config::{
+        Config, DesktopConfig, IconSizes, TabConfig, ThumbCfg, ICON_SCALE_MAX, ICON_SIZE_GRID,
+    },
     dialog::DialogKind,
     fl,
     localize::{LANGUAGE_SORTER, LOCALE},
@@ -1717,6 +1719,9 @@ impl ItemThumbnail {
         metadata: ItemMetadata,
         mime: mime::Mime,
         mut thumbnail_size: u32,
+        max_mem: u64,
+        jobs: usize,
+        max_size_mb: u64,
     ) -> Self {
         let thumbnail_cacher =
             ThumbnailCacher::new(path, ThumbnailSize::from_pixel_size(thumbnail_size));
@@ -1759,7 +1764,6 @@ impl ItemThumbnail {
         };
 
         let mut tried_supported_file = false;
-
         if !check_size("image", 64 * 1000 * 1000) {
             return ItemThumbnail::NotImage;
         }
@@ -1772,9 +1776,7 @@ impl ItemThumbnail {
                     Ok(file) => match JxlDecoder::new(file) {
                         Ok(mut decoder) => {
                             let mut limits = image::Limits::default();
-                            //TODO: perhaps this should be jobs / acceptable amount of ram?
-                            let jobs = 8;
-                            let max_ram = 8 * 1000 * 1000 * 1000 / jobs;
+                            let max_ram = max_mem * 1000 * 1000 / jobs as u64;
                             limits.max_alloc = Some(max_ram);
                             let _ = decoder.set_limits(limits);
                             match image::DynamicImage::from_decoder(decoder) {
@@ -1797,13 +1799,19 @@ impl ItemThumbnail {
                 },
                 _ => {
                     match image::ImageReader::open(path).and_then(|img| img.with_guessed_format()) {
-                        Ok(reader) => match reader.decode() {
-                            Ok(reader) => Some(reader),
-                            Err(err) => {
-                                log::warn!("failed to decode {:?}: {}", path, err);
-                                None
+                        Ok(mut reader) => {
+                            let mut limits = image::Limits::default();
+                            let max_ram = max_mem * 1000 * 1000 / jobs as u64;
+                            limits.max_alloc = Some(max_ram);
+                            reader.limits(limits);
+                            match reader.decode() {
+                                Ok(reader) => Some(reader),
+                                Err(err) => {
+                                    log::warn!("failed to decode {:?}: {}", path, err);
+                                    None
+                                }
                             }
-                        },
+                        }
                         Err(err) => {
                             log::warn!("failed to read {:?}: {}", path, err);
                             None
@@ -2437,6 +2445,7 @@ pub struct Tab {
     pub history_i: usize,
     pub history: Vec<Location>,
     pub config: TabConfig,
+    pub thumb_config: ThumbCfg,
     pub sort_name: HeadingOptions,
     pub sort_direction: bool,
     pub gallery: bool,
@@ -2521,6 +2530,7 @@ impl Tab {
     pub fn new(
         location: Location,
         config: TabConfig,
+        thumb_config: ThumbCfg,
         sorting_options: Option<&OrderMap<String, (HeadingOptions, bool)>>,
         window_id: Option<window::Id>,
     ) -> Self {
@@ -2551,6 +2561,7 @@ impl Tab {
             history_i: 0,
             history,
             config,
+            thumb_config,
             sort_name,
             sort_direction,
             gallery: false,
@@ -5560,7 +5571,9 @@ impl Tab {
 
     pub fn subscription(&self, preview: bool) -> Subscription<Message> {
         //TODO: how many thumbnail loads should be in flight at once?
-        let jobs = 8;
+        let jobs = self.thumb_config.jobs.get().clone() as usize;
+        let max_mem_mb = self.thumb_config.max_mem_mb.get().clone() as u64;
+
         let mut subscriptions = Vec::with_capacity(jobs + 3);
 
         if let Some(items) = &self.items_opt {
@@ -5606,16 +5619,26 @@ impl Tab {
                 };
                 if can_thumbnail {
                     let mime = item.mime.clone();
-
+                    let max_mb = max_mem_mb.clone();
+                    let max_jobs = jobs.clone();
+                    let max_size = self.thumb_config.max_size_mb.get().clone() as u64;
                     subscriptions.push(Subscription::run_with_id(
                         ("thumbnail", path.clone()),
-                        stream::channel(1, |mut output| async move {
+                        stream::channel(1, move |mut output| async move {
                             let message = {
                                 let path = path.clone();
+
                                 tokio::task::spawn_blocking(move || {
                                     let start = Instant::now();
-                                    let thumbnail =
-                                        ItemThumbnail::new(&path, metadata, mime, THUMBNAIL_SIZE);
+                                    let thumbnail = ItemThumbnail::new(
+                                        &path,
+                                        metadata,
+                                        mime,
+                                        THUMBNAIL_SIZE,
+                                        max_mb,
+                                        max_jobs,
+                                        max_size,
+                                    );
                                     log::debug!("thumbnailed {:?} in {:?}", path, start.elapsed());
                                     Message::Thumbnail(path.clone(), thumbnail)
                                 })
@@ -6117,6 +6140,7 @@ mod tests {
             Location::Path(path.into()),
             TabConfig::default(),
             None,
+            ThumbCfg::default(),
             None,
         );
 
@@ -6219,6 +6243,7 @@ mod tests {
             Location::Path(path.to_owned()),
             TabConfig::default(),
             None,
+            ThumbCfg::default(),
             None,
         );
         debug!(
@@ -6356,6 +6381,7 @@ mod tests {
             Location::Path(path.into()),
             TabConfig::default(),
             None,
+            ThumbCfg::default(),
             None,
         );
 
@@ -6383,6 +6409,7 @@ mod tests {
             Location::Path(next_dir.clone()),
             TabConfig::default(),
             None,
+            ThumbCfg::default(),
             None,
         );
         // This will eventually yield false once root is hit
