@@ -159,6 +159,7 @@ impl State {
 pub struct Config {
     pub app_theme: AppTheme,
     pub desktop: DesktopConfig,
+    pub thumb_cfg: ThumbCfg,
     pub favorites: Vec<Favorite>,
     pub show_details: bool,
     pub tab: TabConfig,
@@ -200,6 +201,7 @@ impl Default for Config {
         Self {
             app_theme: AppTheme::System,
             desktop: DesktopConfig::default(),
+            thumb_cfg: ThumbCfg::default(),
             favorites: vec![
                 Favorite::Home,
                 Favorite::Documents,
@@ -240,6 +242,24 @@ impl Default for DesktopConfig {
 impl DesktopConfig {
     pub fn grid_spacing_for(&self, space: u16) -> u16 {
         percent!(self.grid_spacing, space) as _
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
+#[serde(default)]
+pub struct ThumbCfg {
+    pub jobs: NonZeroU16,
+    pub max_mem_mb: NonZeroU16,
+    pub max_size_mb: NonZeroU16,
+}
+
+impl Default for ThumbCfg {
+    fn default() -> Self {
+        Self {
+            jobs: 4.try_into().unwrap(),
+            max_mem_mb: 2000.try_into().unwrap(),
+            max_size_mb: 64.try_into().unwrap(),
+        }
     }
 }
 
