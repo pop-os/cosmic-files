@@ -63,7 +63,7 @@ i18n-embed = { version = "0.15", features = [
 i18n-embed-fl = "0.9"
 rust-embed = "8"
 slotmap = "1.0.7"
-recently-used-xbel = "1.1.0"
+recently-used-xbel = { git = "https://github.com/pop-os/recently-used-xbel.git" }
 zip = "2.2.2"
 uzers = "0.12.1"
 md-5 = "0.10.6"
