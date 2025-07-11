@@ -518,6 +518,9 @@ pub enum Operation {
     PermanentlyDelete {
         paths: Vec<PathBuf>,
     },
+    RemoveFromRecents {
+        paths: Vec<PathBuf>,
+    },
     Rename {
         from: PathBuf,
         to: PathBuf,
@@ -630,6 +633,7 @@ impl Operation {
             Self::Rename { from, to } => {
                 fl!("renaming", from = file_name(from), to = file_name(to))
             }
+            Self::RemoveFromRecents { paths } => fl!("removing-from-recents", items = paths.len()),
             Self::Restore { items } => fl!("restoring", items = items.len(), progress = progress()),
             Self::SetExecutableAndLaunch { path } => {
                 fl!("setting-executable-and-launching", name = file_name(path))
@@ -693,6 +697,7 @@ impl Operation {
                 parent = parent_name(path)
             ),
             Self::PermanentlyDelete { paths } => fl!("permanently-deleted", items = paths.len()),
+            Self::RemoveFromRecents { paths } => fl!("removed-from-recents", items = paths.len()),
             Self::Rename { from, to } => fl!("renamed", from = file_name(from), to = file_name(to)),
             Self::Restore { items } => fl!("restored", items = items.len()),
             Self::SetExecutableAndLaunch { path } => {
@@ -722,6 +727,7 @@ impl Operation {
             | Self::Restore { .. } => true,
             Self::NewFile { .. }
             | Self::NewFolder { .. }
+            | Self::RemoveFromRecents { .. }
             | Self::Rename { .. }
             | Self::SetExecutableAndLaunch { .. }
             | Self::SetPermissions { .. } => false,
@@ -1146,6 +1152,17 @@ impl Operation {
                     .map_err(OperationError::from_str)?
                     .map_err(OperationError::from_str)?;
                 }
+
+                Ok(OperationSelection::default())
+            }
+            Self::RemoveFromRecents { paths } => {
+                tokio::task::spawn_blocking(move || {
+                    let path_refs = paths.iter().map(|p| p.as_ref()).collect::<Vec<&Path>>();
+                    recently_used_xbel::remove_recently_used(&path_refs)
+                })
+                .await
+                .map_err(OperationError::from_str)?
+                .map_err(OperationError::from_str)?;
 
                 Ok(OperationSelection::default())
             }

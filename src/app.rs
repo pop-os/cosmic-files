@@ -147,6 +147,7 @@ pub enum Action {
     PermanentlyDelete,
     Preview,
     Reload,
+    RemoveFromRecents,
     Rename,
     RestoreFromTrash,
     SearchActivate,
@@ -217,6 +218,7 @@ impl Action {
             Action::PermanentlyDelete => Message::PermanentlyDelete(entity_opt),
             Action::Preview => Message::Preview(entity_opt),
             Action::Reload => Message::TabMessage(entity_opt, tab::Message::Reload),
+            Action::RemoveFromRecents => Message::RemoveFromRecents(entity_opt),
             Action::Rename => Message::Rename(entity_opt),
             Action::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
             Action::SearchActivate => Message::SearchActivate,
@@ -360,6 +362,7 @@ pub enum Message {
     PermanentlyDelete(Option<Entity>),
     Preview(Option<Entity>),
     RescanTrash,
+    RemoveFromRecents(Option<Entity>),
     Rename(Option<Entity>),
     ReplaceResult(ReplaceResult),
     RestoreFromTrash(Option<Entity>),
@@ -1106,6 +1109,23 @@ impl App {
             if let Some(tab) = self.tab_model.data::<Tab>(entity) {
                 if let Location::Trash = &tab.location {
                     needs_reload.push((entity, Location::Trash));
+                }
+            }
+        }
+
+        let mut commands = Vec::with_capacity(needs_reload.len());
+        for (entity, location) in needs_reload {
+            commands.push(self.update_tab(entity, location, None));
+        }
+        Task::batch(commands)
+    }
+
+    fn rescan_recents(&mut self) -> Task<Message> {
+        let mut needs_reload = Vec::new();
+        for entity in self.tab_model.iter() {
+            if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+                if let Location::Recents = &tab.location {
+                    needs_reload.push((entity, Location::Recents));
                 }
             }
         }
@@ -3152,6 +3172,10 @@ impl Application for App {
                         }
                     }
 
+                    if matches!(op, Operation::RemoveFromRecents { .. }) {
+                        commands.push(self.rescan_recents());
+                    }
+
                     self.complete_operations.insert(id, op);
                 }
                 // Close progress notification if all relevant operations are finished
@@ -3168,6 +3192,7 @@ impl Application for App {
                 commands.push(self.rescan_operation_selection(op_sel));
                 // Manually rescan any trash tabs after any operation is completed
                 commands.push(self.rescan_trash());
+
                 return Task::batch(commands);
             }
             Message::PendingDismiss => {
@@ -3267,6 +3292,10 @@ impl Application for App {
                         return Task::batch(commands);
                     }
                 }
+            }
+            Message::RemoveFromRecents(entity_opt) => {
+                let paths = self.selected_paths(entity_opt);
+                return self.operation(Operation::RemoveFromRecents { paths });
             }
             Message::RescanTrash => {
                 // Update trash icon if empty/full

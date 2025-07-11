@@ -239,6 +239,12 @@ pub fn context_menu<'a>(
                     children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
                 }
                 children.push(divider::horizontal::light().into());
+                if matches!(tab.location, Location::Recents) {
+                    children.push(
+                        menu_item(fl!("remove-from-recents"), Action::RemoveFromRecents).into(),
+                    );
+                    children.push(divider::horizontal::light().into());
+                }
                 if selected_mount_point == 0 {
                     if modifiers.shift() && !modifiers.control() {
                         children.push(
