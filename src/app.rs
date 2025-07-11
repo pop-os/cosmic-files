@@ -4807,35 +4807,39 @@ impl Application for App {
                         last_kind = *kind;
                     }
                     column = column.add(
-                        widget::button::custom(
-                            widget::row::with_children(vec![
-                                widget::icon(app.icon.clone()).size(32).into(),
-                                if app.is_default && !displayed_default {
-                                    displayed_default = true;
-                                    widget::text::body(fl!(
-                                        "default-app",
-                                        name = Some(app.name.as_str())
-                                    ))
-                                    .into()
-                                } else {
-                                    widget::text::body(app.name.to_string()).into()
-                                },
-                                widget::horizontal_space().into(),
-                                if *selected == i {
-                                    widget::icon::from_name("checkbox-checked-symbolic")
-                                        .size(16)
+                        widget::mouse_area(
+                            widget::button::custom(
+                                widget::row::with_children(vec![
+                                    widget::icon(app.icon.clone()).size(32).into(),
+                                    if app.is_default && !displayed_default {
+                                        displayed_default = true;
+                                        widget::text::body(fl!(
+                                            "default-app",
+                                            name = Some(app.name.as_str())
+                                        ))
                                         .into()
-                                } else {
-                                    widget::Space::with_width(Length::Fixed(16.0)).into()
-                                },
-                            ])
-                            .spacing(space_s)
-                            .height(Length::Fixed(item_height))
-                            .align_y(Alignment::Center),
+                                    } else {
+                                        widget::text::body(app.name.to_string()).into()
+                                    },
+                                    widget::horizontal_space().into(),
+                                    if *selected == i {
+                                        widget::icon::from_name("checkbox-checked-symbolic")
+                                            .size(16)
+                                            .into()
+                                    } else {
+                                        widget::Space::with_width(Length::Fixed(16.0)).into()
+                                    },
+                                ])
+                                .spacing(space_s)
+                                .height(Length::Fixed(item_height))
+                                .align_y(Alignment::Center),
+                            )
+                            .width(Length::Fill)
+                            .class(theme::Button::MenuItem)
+                            .force_enabled(true),
                         )
-                        .width(Length::Fill)
-                        .class(theme::Button::MenuItem)
-                        .on_press(Message::OpenWithSelection(i)),
+                        .on_press(Message::OpenWithSelection(i))
+                        .on_double_press(Message::DialogComplete),
                     );
                 }
 
