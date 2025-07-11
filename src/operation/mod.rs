@@ -310,6 +310,11 @@ async fn copy_or_move(
         //TODO: allow rename to be used for directories in recursive context?
         if matches!(method, Method::Move { .. }) {
             from_to_pairs.retain(|(from, to)| {
+                //TODO: show replace dialog here?
+                if to.exists() {
+                    return true;
+                }
+
                 //TODO: use compio::fs::rename?
                 match fs::rename(from, to) {
                     Ok(()) => {
