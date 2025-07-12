@@ -107,7 +107,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else if &arg == "--recents" {
             Location::Recents
         } else if &arg == "--network" {
-            Location::Network("network:///".to_string(), fl!("networks"))
+            Location::Network("network:///".to_string(), fl!("networks"), None)
         } else {
             //TODO: support more URLs
             let path = match url::Url::parse(&arg) {

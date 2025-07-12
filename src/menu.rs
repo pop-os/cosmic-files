@@ -152,7 +152,11 @@ pub fn context_menu<'a>(
     match (&tab.mode, &tab.location) {
         (
             tab::Mode::App | tab::Mode::Desktop,
-            Location::Desktop(..) | Location::Path(..) | Location::Search(..) | Location::Recents,
+            Location::Desktop(..)
+            | Location::Path(..)
+            | Location::Search(..)
+            | Location::Recents
+            | Location::Network(_, _, Some(_)),
         ) => {
             if selected_trash_only {
                 children.push(menu_item(fl!("open"), Action::Open).into());
@@ -298,7 +302,11 @@ pub fn context_menu<'a>(
         }
         (
             tab::Mode::Dialog(dialog_kind),
-            Location::Desktop(..) | Location::Path(..) | Location::Search(..) | Location::Recents,
+            Location::Desktop(..)
+            | Location::Path(..)
+            | Location::Search(..)
+            | Location::Recents
+            | Location::Network(_, _, Some(_)),
         ) => {
             if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
@@ -327,6 +335,7 @@ pub fn context_menu<'a>(
             }
         }
         (_, Location::Network(..)) => {
+            dbg!(selected, &tab.mode);
             if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
                     children.push(menu_item(fl!("open"), Action::Open).into());
