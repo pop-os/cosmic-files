@@ -1,6 +1,11 @@
 use cosmic::{iced::Subscription, widget, Task};
 use once_cell::sync::Lazy;
-use std::{collections::BTreeMap, fmt, path::PathBuf, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    fmt,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use tokio::sync::mpsc;
 
 use crate::{config::IconSizes, tab};
@@ -55,6 +60,14 @@ impl MounterItem {
         }
     }
 
+    pub fn uri(&self) -> String {
+        match self {
+            #[cfg(feature = "gvfs")]
+            Self::Gvfs(item) => item.uri(),
+            Self::None => unreachable!(),
+        }
+    }
+
     pub fn is_mounted(&self) -> bool {
         match self {
             #[cfg(feature = "gvfs")]
@@ -95,7 +108,12 @@ pub trait Mounter: Send + Sync {
     //TODO: send result
     fn mount(&self, item: MounterItem) -> Task<()>;
     fn network_drive(&self, uri: String) -> Task<()>;
-    fn network_scan(&self, uri: &str, sizes: IconSizes) -> Option<Result<Vec<tab::Item>, String>>;
+    fn network_scan(
+        &self,
+        uri: &str,
+        sizes: IconSizes,
+        path: Option<&Path>,
+    ) -> Option<Result<Vec<tab::Item>, String>>;
     fn unmount(&self, item: MounterItem) -> Task<()>;
     fn subscription(&self) -> Subscription<MounterMessage>;
 }

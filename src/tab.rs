@@ -1205,9 +1205,9 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
     recents.into_iter().take(50).map(|(item, _)| item).collect()
 }
 
-pub fn scan_network(uri: &str, sizes: IconSizes) -> Vec<Item> {
+pub fn scan_network(uri: &str, sizes: IconSizes, path: Option<&Path>) -> Vec<Item> {
     for (_key, mounter) in MOUNTERS.iter() {
-        match mounter.network_scan(uri, sizes) {
+        match mounter.network_scan(uri, sizes, path) {
             Some(Ok(items)) => return items,
             Some(Err(err)) => {
                 log::warn!("failed to scan {:?}: {}", uri, err);
@@ -1361,7 +1361,7 @@ impl From<Location> for EditLocation {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Location {
     Desktop(PathBuf, String, DesktopConfig),
-    Network(String, String),
+    Network(String, String, Option<PathBuf>),
     Path(PathBuf),
     Recents,
     Search(PathBuf, String, bool, Instant),
@@ -1413,6 +1413,7 @@ impl Location {
             Self::Desktop(path, ..) => Some(path),
             Self::Path(path) => Some(path),
             Self::Search(path, ..) => Some(path),
+            Self::Network(_, _, path) => path.as_ref(),
             _ => None,
         }
     }
@@ -1426,6 +1427,8 @@ impl Location {
             Self::Search(_, term, show_hidden, time) => {
                 Self::Search(path, term.clone(), *show_hidden, *time)
             }
+            Self::Network(id, name, path) => Self::Network(id.clone(), name.clone(), path.clone()),
+
             other => other.clone(),
         }
     }
@@ -1442,7 +1445,7 @@ impl Location {
             }
             Self::Trash => scan_trash(sizes),
             Self::Recents => scan_recents(sizes),
-            Self::Network(uri, _) => scan_network(uri, sizes),
+            Self::Network(uri, _, path) => scan_network(uri, sizes, path.as_deref()),
         };
         let parent_item_opt = match self.path_opt() {
             Some(path) => match item_from_path(path, sizes) {
@@ -1479,7 +1482,7 @@ impl Location {
             Self::Recents => {
                 fl!("recents")
             }
-            Self::Network(_uri, display_name) => display_name.clone(),
+            Self::Network(display_name, ..) => display_name.clone(),
         }
     }
 }
@@ -3033,6 +3036,7 @@ impl Tab {
                                 }
                                 if !item.selected {
                                     self.clicked = click_i_opt;
+                                    dbg!(&item.location_opt);
                                     item.selected = true;
                                 }
                                 self.select_range = Some((i, i));
@@ -3133,6 +3137,7 @@ impl Tab {
                     }
                     LocationMenuAction::AddToSidebar(ancestor_index) => {
                         if let Some(path) = path_for_index(ancestor_index) {
+                            dbg!(&path);
                             commands.push(Command::AddToSidebar(path));
                         } else {
                             log::warn!(
@@ -4512,13 +4517,14 @@ impl Tab {
                         .into(),
                 );
             }
-            Location::Network(uri, display_name) => {
+            Location::Network(uri, display_name, path) => {
                 children.push(
                     widget::button::custom(widget::text::heading(display_name))
                         .padding(space_xxxs)
                         .on_press(Message::Location(Location::Network(
                             uri.clone(),
                             display_name.clone(),
+                            path.clone(),
                         )))
                         .class(theme::Button::Text)
                         .into(),
@@ -5421,7 +5427,7 @@ impl Tab {
                     }
                 }
             }
-            Location::Network(uri, _display_name) if uri == "network:///" => {
+            Location::Network(uri, _display_name, path) if uri == "network:///" => {
                 tab_column = tab_column.push(
                     widget::layer_container(widget::row::with_children(vec![
                         widget::horizontal_space().into(),

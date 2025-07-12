@@ -10,6 +10,7 @@ rust-version = "1.85.0"
 vergen = { version = "8", features = ["git", "gitcl"] }
 
 [dependencies]
+anyhow = "1"
 chrono = { version = "0.4", features = ["unstable-locales"] }
 icu = { version = "1.5.0", features = [
     "experimental",

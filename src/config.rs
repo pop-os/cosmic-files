@@ -64,6 +64,11 @@ pub enum Favorite {
     Pictures,
     Videos,
     Path(PathBuf),
+    Network {
+        uri: String,
+        name: String,
+        path: PathBuf,
+    },
 }
 
 impl Favorite {
@@ -95,6 +100,7 @@ impl Favorite {
             Self::Pictures => dirs::picture_dir(),
             Self::Videos => dirs::video_dir(),
             Self::Path(path) => Some(path.clone()),
+            Self::Network { path, .. } => Some(path.clone()),
         }
     }
 }

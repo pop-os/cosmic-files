@@ -3,7 +3,13 @@ use cosmic::{
     widget, Task,
 };
 use gio::{glib, prelude::*};
-use std::{any::TypeId, cell::Cell, future::pending, path::PathBuf, sync::Arc};
+use std::{
+    any::TypeId,
+    cell::Cell,
+    future::pending,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use tokio::sync::{mpsc, Mutex};
 
 use super::{Mounter, MounterAuth, MounterItem, MounterItems, MounterMessage};
@@ -30,6 +36,7 @@ fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
     let mut items = MounterItems::new();
     for (i, mount) in monitor.mounts().into_iter().enumerate() {
         items.push(MounterItem::Gvfs(Item {
+            uri: MountExt::root(&mount).uri().to_string(),
             kind: ItemKind::Mount,
             index: i,
             name: MountExt::name(&mount).to_string(),
@@ -44,7 +51,12 @@ fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
             // Volumes with mounts are already listed by mount
             continue;
         }
+        let uri = VolumeExt::activation_root(&volume)
+            .map(|f| f.uri().to_string())
+            .unwrap_or_default();
         items.push(MounterItem::Gvfs(Item {
+            // TODO can we get URI for volumes with no mount?
+            uri,
             kind: ItemKind::Volume,
             index: i,
             name: VolumeExt::name(&volume).to_string(),
@@ -57,7 +69,11 @@ fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
     items
 }
 
-fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
+fn network_scan(
+    uri: &str,
+    sizes: IconSizes,
+    path: Option<&Path>,
+) -> Result<Vec<tab::Item>, String> {
     let file = gio::File::for_uri(uri);
     let mut items = Vec::new();
     for info_res in file
@@ -77,6 +93,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
                 file.child(info.name()).uri().to_string()
             },
             display_name.clone(),
+            file.child(info.name()).path(),
         );
 
         //TODO: support dir or file
@@ -193,11 +210,15 @@ fn mount_op(uri: String, event_tx: mpsc::UnboundedSender<Event>) -> gio::MountOp
 enum Cmd {
     Items(IconSizes, mpsc::Sender<MounterItems>),
     Rescan,
-    Mount(MounterItem),
-    NetworkDrive(String),
+    Mount(
+        MounterItem,
+        tokio::sync::oneshot::Sender<anyhow::Result<()>>,
+    ),
+    NetworkDrive(String, tokio::sync::oneshot::Sender<anyhow::Result<()>>),
     NetworkScan(
         String,
         IconSizes,
+        Option<PathBuf>,
         mpsc::Sender<Result<Vec<tab::Item>, String>>,
     ),
     Unmount(MounterItem),
@@ -220,6 +241,7 @@ enum ItemKind {
 //TODO: better method of matching items
 #[derive(Clone, Debug)]
 pub struct Item {
+    uri: String,
     kind: ItemKind,
     index: usize,
     name: String,
@@ -236,6 +258,10 @@ impl Item {
 
     pub fn is_mounted(&self) -> bool {
         self.is_mounted
+    }
+
+    pub fn uri(&self) -> String {
+        self.uri.clone()
     }
 
     pub fn icon(&self, symbolic: bool) -> Option<widget::icon::Handle> {
@@ -318,9 +344,15 @@ impl Gvfs {
                         Cmd::Rescan => {
                             event_tx.send(Event::Items(items(&monitor, IconSizes::default()))).unwrap();
                         }
-                        Cmd::Mount(mounter_item) => {
-                            let MounterItem::Gvfs(ref item) = mounter_item else { continue };
-                            let ItemKind::Volume = item.kind else { continue };
+                        Cmd::Mount(mounter_item, complete_tx) => {
+                            let MounterItem::Gvfs(ref item) = mounter_item else {
+                                _ = complete_tx.send(Err(anyhow::anyhow!("No mounter item")));
+                                continue
+                            };
+                            let ItemKind::Volume = item.kind else {
+                                _ = complete_tx.send(Err(anyhow::anyhow!("No mounter volume")));
+                                continue
+                            };
                             for (i, volume) in monitor.volumes().into_iter().enumerate() {
                                 if i != item.index {
                                     continue;
@@ -345,17 +377,23 @@ impl Gvfs {
                                     move |res| {
                                         log::info!("mount {}: result {:?}", name, res);
                                         event_tx.send(Event::MountResult(mounter_item, match res {
-                                            Ok(()) => Ok(true),
-                                            Err(err) => match err.kind::<gio::IOErrorEnum>() {
+                                            Ok(()) => {
+                                                _ = complete_tx.send(Ok(()));
+                                                Ok(true)
+                                            },
+                                            Err(err) => {
+                                                _ = complete_tx.send(Err(anyhow::anyhow!("{err:?}")));
+                                                match err.kind::<gio::IOErrorEnum>() {
                                                 Some(gio::IOErrorEnum::FailedHandled) => Ok(false),
                                                 _ => Err(format!("{}", err))
-                                            }
+                                            }}
                                         })).unwrap();
                                     },
                                 );
+                                break;
                             }
                         }
-                        Cmd::NetworkDrive(uri) => {
+                        Cmd::NetworkDrive(uri, result_tx) => {
                             let file = gio::File::for_uri(&uri);
                             let mount_op = mount_op(uri.clone(), event_tx.clone());
                             let event_tx = event_tx.clone();
@@ -366,16 +404,20 @@ impl Gvfs {
                                 move |res| {
                                     log::info!("network drive {}: result {:?}", uri, res);
                                     event_tx.send(Event::NetworkResult(uri, match res {
-                                        Ok(()) => Ok(true),
-                                        Err(err) => match err.kind::<gio::IOErrorEnum>() {
+                                        Ok(()) => {
+                                            _ = result_tx.send(Ok(()));
+                                            Ok(true)},
+                                        Err(err) => {
+                                            _ = result_tx.send(Err(anyhow::anyhow!("{err:?}")));
+                                            match err.kind::<gio::IOErrorEnum>() {
                                             Some(gio::IOErrorEnum::FailedHandled) => Ok(false),
                                             _ => Err(format!("{}", err))
-                                        }
+                                        }}
                                     })).unwrap();
                                 }
                             );
                         }
-                        Cmd::NetworkScan(uri, sizes, items_tx) => {
+                        Cmd::NetworkScan(uri, sizes, path, items_tx) => {
                             let file = gio::File::for_uri(&uri);
                             let needs_mount = match file.find_enclosing_mount(gio::Cancellable::NONE) {
                                 Ok(_) => false,
@@ -468,9 +510,16 @@ impl Mounter for Gvfs {
         let command_tx = self.command_tx.clone();
         Task::perform(
             async move {
-                command_tx.send(Cmd::Mount(item)).unwrap();
+                let (res_tx, res_rx) = tokio::sync::oneshot::channel();
+
+                command_tx.send(Cmd::Mount(item, res_tx)).unwrap();
+                res_rx.await
             },
-            |x| x,
+            |x| {
+                if let Err(err) = x {
+                    log::error!("{err:?}");
+                }
+            },
         )
     }
 
@@ -478,16 +527,33 @@ impl Mounter for Gvfs {
         let command_tx = self.command_tx.clone();
         Task::perform(
             async move {
-                command_tx.send(Cmd::NetworkDrive(uri)).unwrap();
+                let (res_tx, res_rx) = tokio::sync::oneshot::channel();
+
+                command_tx.send(Cmd::NetworkDrive(uri, res_tx)).unwrap();
+                res_rx.await
             },
-            |x| x,
+            |x| {
+                if let Err(err) = x {
+                    log::error!("{err:?}");
+                }
+            },
         )
     }
 
-    fn network_scan(&self, uri: &str, sizes: IconSizes) -> Option<Result<Vec<tab::Item>, String>> {
+    fn network_scan(
+        &self,
+        uri: &str,
+        sizes: IconSizes,
+        path: Option<&Path>,
+    ) -> Option<Result<Vec<tab::Item>, String>> {
         let (items_tx, mut items_rx) = mpsc::channel(1);
         self.command_tx
-            .send(Cmd::NetworkScan(uri.to_string(), sizes, items_tx))
+            .send(Cmd::NetworkScan(
+                uri.to_string(),
+                sizes,
+                path.map(|p| p.to_owned()),
+                items_tx,
+            ))
             .unwrap();
         items_rx.blocking_recv()
     }
