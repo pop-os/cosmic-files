@@ -36,7 +36,7 @@ use std::{
 
 use crate::{
     app::{Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind},
-    config::{Config, Favorite, TabConfig, TimeConfig, TIME_CONFIG_ID},
+    config::{Config, Favorite, TabConfig, ThumbCfg, TimeConfig, TIME_CONFIG_ID},
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
@@ -915,7 +915,7 @@ impl Application for App {
             folders_first: false,
             ..Default::default()
         };
-        let mut tab = Tab::new(location, tab_config, None);
+        let mut tab = Tab::new(location, tab_config, ThumbCfg::default(), None);
         tab.mode = tab::Mode::Dialog(flags.kind.clone());
         tab.sort_name = tab::HeadingOptions::Modified;
         tab.sort_direction = false;
