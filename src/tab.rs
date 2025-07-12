@@ -73,9 +73,7 @@ use walkdir::WalkDir;
 use crate::{
     app::{Action, PreviewItem, PreviewKind},
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
-    config::{
-        Config, DesktopConfig, IconSizes, TabConfig, ThumbCfg, ICON_SCALE_MAX, ICON_SIZE_GRID,
-    },
+    config::{DesktopConfig, IconSizes, TabConfig, ThumbCfg, ICON_SCALE_MAX, ICON_SIZE_GRID},
     dialog::DialogKind,
     fl,
     localize::{LANGUAGE_SORTER, LOCALE},
@@ -5572,8 +5570,6 @@ impl Tab {
     pub fn subscription(&self, preview: bool) -> Subscription<Message> {
         //TODO: how many thumbnail loads should be in flight at once?
         let jobs = self.thumb_config.jobs.get().clone() as usize;
-        let max_mem_mb = self.thumb_config.max_mem_mb.get().clone() as u64;
-
         let mut subscriptions = Vec::with_capacity(jobs + 3);
 
         if let Some(items) = &self.items_opt {
@@ -5619,8 +5615,8 @@ impl Tab {
                 };
                 if can_thumbnail {
                     let mime = item.mime.clone();
-                    let max_mb = max_mem_mb.clone();
                     let max_jobs = jobs.clone();
+                    let max_mb = self.thumb_config.max_mem_mb.get().clone() as u64;
                     let max_size = self.thumb_config.max_size_mb.get().clone() as u64;
                     subscriptions.push(Subscription::run_with_id(
                         ("thumbnail", path.clone()),
