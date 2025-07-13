@@ -1,4 +1,4 @@
-cosmic-files = Arquivos
+cosmic-files = Gestor de Arquivos COSMIC
 empty-folder = Pasta vazia
 empty-folder-hidden = Pasta vazia (contém itens ocultos)
 no-results = Nenhum item encontrado
@@ -191,40 +191,40 @@ complete = Concluído
 compressing = Compactando {$items} {$items ->
         [one] item
         *[other] itens
-    } de {$from} para {$to} ({$progress})...
+    } de "{$from}" para "{$to}" ({$progress})...
 compressed = Compactado(s) {$items} {$items ->
         [one] item
         *[other] itens
-    } de {$from} para {$to}
+    } de "{$from}" para "{$to}"
 copy_noun = Copiado
 creating = Criando {$name} em {$parent}
 created = Criado {$name} em {$parent}
 copying = Copiando {$items} {$items ->
         [one] item
         *[other] itens
-    } de {$from} para {$to} ({$progress})...
+    } de "{$from}" para "{$to}" ({$progress})...
 copied = Copiado(s) {$items} {$items ->
         [one] item
         *[other] itens
-    } de {$from} para {$to}
+    } de "{$from}" para "{$to}"
 deleting = Excluindo {$items} {$items ->
         [one] item
         *[other] itens
-    } da {trash} ({$progress})...
+    } da Lixeira ({$progress})...
 deleted = Excluído(s) {$items} {$items ->
         [one] item
         *[other] itens
-    } da {trash}
-emptying-trash = Esvaziando a lixeira
+    } da Lixeira
+emptying-trash = Esvaziando a lixeira ({$progress})...
 emptied-trash = Lixeira vazia
 extracting = Extraindo {$items} {$items ->
         [one] item
         *[other] itens
-    } de {$from} para {$to}
+    } de "{$from}" para "{$to}" ({$progress})...
 extracted = Extraído(s) {$items} {$items ->
         [one] item
         *[other] itens
-    } de {$from} para {$to}
+    } de "{$from}" para "{$to}"
 setting-executable-and-launching = Marcando "{$name}" como executável e iniciando
 set-executable-and-launched = Marcado "{$name}" como executável e iniciado
 setting-permissions = Definindo permissões de "{$name}" para {$mode}
@@ -232,7 +232,7 @@ set-permissions = Definir permissões de "{$name}" para {$mode}
 moving = Movendo {$items} {$items ->
         [one] item
         *[other] itens
-    } de {$from} para {$to} ({$progress})...
+    } de "{$from}" para "{$to}" ({$progress})...
 moved = Movido(s) {$items} {$items ->
         [one] item
         *[other] itens
@@ -244,17 +244,25 @@ permanently-deleting = Excluindo permanentemente "{$items}" "{$items ->
 permanently-deleted = Excluído(s) permanentemente "{$items}" "{$items ->
         [one] item
         *[other] itens
-    }"
-renaming = Renomeando {$from} para {$to}
-renamed = Renomeado {$from} para {$to}
+    }
+removing-from-recents = Removendo {$items} {$items ->
+        [one] item
+        *[other] itens
+    } da lista de itens recentes
+removed-from-recents = Removido(s) {$items} {$items ->
+        [one] item
+        *[other] itens
+    } da lista de itens recentes
+renaming = Renomeando "{$from}" para "{$to}"
+renamed = Renomeado(s) "{$from}" para "{$to}"
 restoring = Restaurando {$items} {$items ->
         [one] item
         *[other] itens
-    } da lixeira
+    } da Lixeira ({$progress})...
 restored = Restaurado(s) {$items} {$items ->
         [one] item
         *[other] itens
-    } da lixeira
+    } da Lixeira
 unknown-folder = pasta desconhecida
 
 ## Open with
@@ -283,7 +291,7 @@ dark = Estilo escuro
 light = Estilo claro
 
 ### Type to Search
-type-to-search = Pesquisar digitando
+type-to-search = Digite para pesquisar
 type-to-search-recursive = Pesquisa na pasta atual e em todas as subpastas
 type-to-search-enter-path = Insere o caminho do diretório ou arquivo
 
@@ -291,6 +299,7 @@ type-to-search-enter-path = Insere o caminho do diretório ou arquivo
 add-to-sidebar = Adicionar à barra lateral
 compress = Compactar
 delete-permanently = Excluir permanentemente
+eject = Desmontar
 extract-here = Extrair
 new-file = Novo arquivo...
 new-folder = Nova pasta...
@@ -302,6 +311,7 @@ sort-by-name = Ordenar por nome
 sort-by-modified = Ordenar por data de modificação
 sort-by-size = Ordenar por tamanho
 sort-by-trashed = Ordernar por data de exclusão
+remove-from-recents = Remover dos itens recentes
 
 ## Desktop
 change-wallpaper = Alterar papel de parede...
@@ -337,7 +347,7 @@ show-hidden-files = Mostrar arquivos ocultos
 list-directories-first = Listar pastas primeiro
 gallery-preview = Pré-visualizar
 menu-settings = Configurações...
-menu-about = Sobre o Arquivos...
+menu-about = Sobre o Gestor de Arquivos COSMIC...
 
 ## Sort
 sort = Ordenar
