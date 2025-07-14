@@ -69,11 +69,7 @@ fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
     items
 }
 
-fn network_scan(
-    uri: &str,
-    sizes: IconSizes,
-    path: Option<&Path>,
-) -> Result<Vec<tab::Item>, String> {
+fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
     let file = gio::File::for_uri(uri);
     let mut items = Vec::new();
     for info_res in file
@@ -84,18 +80,9 @@ fn network_scan(
         let name = info.name().to_string_lossy().to_string();
         let display_name = info.display_name().to_string();
 
+        let uri = file.child(info.name()).uri().to_string();
         //TODO: what is the best way to resolve shortcuts?
-        let location = Location::Network(
-            if let Some(target_uri) = info.attribute_string(gio::FILE_ATTRIBUTE_STANDARD_TARGET_URI)
-            {
-                target_uri.to_string()
-            } else {
-                file.child(info.name()).uri().to_string()
-            },
-            display_name.clone(),
-            file.child(info.name()).path(),
-        );
-
+        let location = Location::Network(uri, display_name.clone(), file.child(info.name()).path());
         //TODO: support dir or file
         let metadata = ItemMetadata::SimpleDir { entries: 0 };
 

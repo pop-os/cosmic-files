@@ -105,6 +105,7 @@ pub struct Flags {
     pub state: State,
     pub mode: Mode,
     pub locations: Vec<Location>,
+    pub uris: Vec<url::Url>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -890,7 +891,6 @@ impl App {
     ) -> (Entity, Task<Message>) {
         #[cfg(feature = "gvfs")]
         if let Location::Network(ref uri, ref name, Some(ref path)) = location {
-            dbg!(path, self.mounter_items.len());
             let mut found = false;
 
             if let Some(key) = self
@@ -901,30 +901,18 @@ impl App {
                         found |= item.path().is_some_and(|p| path.starts_with(p))
                             || item.name() == *name
                             || item.uri() == *uri;
-                        dbg!(
-                            item.is_mounted(),
-                            item.path(),
-                            path,
-                            name,
-                            item.name(),
-                            item.uri(),
-                            uri
-                        );
                         (!item.is_mounted() && found).then(|| *k)
                     })
                 })
                 .or(if found {
-                    dbg!("found so skip...");
                     None
                 } else {
-                    dbg!("not found...");
                     // TODO do we need to choose the correct mounter?
                     self.mounter_items.iter().map(|(k, _)| *k).next()
                 })
             {
                 if let Some(mounter) = MOUNTERS.get(&key) {
                     let location = location.clone();
-                    dbg!(&location);
                     return (
                         Entity::null(),
                         mounter.network_drive(uri.clone()).map(move |_| {
@@ -934,12 +922,9 @@ impl App {
                         }),
                     );
                 }
-            } else {
-                dbg!("huh...");
             }
         }
 
-        dbg!(&location);
         let mut tab = Tab::new(
             location.clone(),
             self.config.tab,
@@ -1116,7 +1101,6 @@ impl App {
         location: Location,
         selection_paths: Option<Vec<PathBuf>>,
     ) -> Task<Message> {
-        dbg!("rescan", &location);
         log::info!("rescan_tab {entity:?} {location:?} {selection_paths:?}");
         let icon_sizes = self.config.tab.icon_sizes;
         let mounter_items = self.mounter_items.clone();
@@ -2081,6 +2065,17 @@ impl Application for App {
             }
             commands.push(app.open_tab(location, true, None));
         }
+        for location in flags.uris {
+            if let Some(e) = app.nav_model.iter().find(|e| {
+                app.nav_model.data::<Location>(*e).is_some_and(
+                    |l| matches!(l, Location::Network(ref uri, ..) if *uri == location.to_string()),
+                )
+            }) {
+                commands.push(cosmic::task::message(cosmic::Action::App(
+                    Message::NetworkDriveOpenEntityAfterMount { entity: e },
+                )));
+            }
+        }
 
         if app.tab_model.iter().next().is_none() {
             if let Ok(current_dir) = env::current_dir() {
@@ -2206,14 +2201,11 @@ impl Application for App {
     fn on_nav_select(&mut self, entity: Entity) -> Task<Self::Message> {
         self.nav_model.activate(entity);
         if let Some(location) = self.nav_model.data::<Location>(entity) {
-            dbg!(&location);
-
             let should_open = match location {
                 #[cfg(feature = "gvfs")]
                 Location::Network(uri, name, Some(path))
                     if !path.try_exists().unwrap_or_default() =>
                 {
-                    dbg!(&location, path, self.mounter_items.len(), uri, path);
                     let mut found = false;
 
                     if let Some(key) = self
@@ -2224,7 +2216,6 @@ impl Application for App {
                                 found |= item.path().is_some_and(|p| path.starts_with(&p))
                                     || item.name() == *name
                                     || item.uri() == *uri;
-                                dbg!(item.is_mounted(), item.path());
                                 (!item.is_mounted() && found).then(|| *k)
                             })
                         })
@@ -2236,9 +2227,6 @@ impl Application for App {
                         })
                     {
                         if let Some(mounter) = MOUNTERS.get(&key) {
-                            dbg!(&location);
-                            // TODO can we detect an error and handle failure?
-                            let location = location.clone();
                             return mounter.network_drive(uri.clone()).map(move |_| {
                                 cosmic::Action::App(Message::NetworkDriveOpenEntityAfterMount {
                                     entity,
@@ -2279,7 +2267,6 @@ impl Application for App {
                 _ => true,
             };
 
-            dbg!(should_open);
             if should_open {
                 let message = Message::TabMessage(None, tab::Message::Location(location.clone()));
                 return self.update(message);
@@ -2402,15 +2389,12 @@ impl Application for App {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
 
                 for path in self.selected_paths(entity_opt) {
-                    dbg!(&path);
                     let is_network = self.tab_model.data::<Tab>(entity).and_then(|tab| {
-                        let in_current_tab =
-                            tab.location.path_opt().zip(path.parent()).is_some_and(
-                                |(t_path, parent)| {
-                                    dbg!(&parent, &t_path);
-                                    parent == t_path
-                                },
-                            );
+                        let in_current_tab = tab
+                            .location
+                            .path_opt()
+                            .zip(path.parent())
+                            .is_some_and(|(t_path, parent)| parent == t_path);
                         let tab = if in_current_tab {
                             self.tab_model
                                 .data::<Tab>(self.tab_model.active())
@@ -2418,15 +2402,23 @@ impl Application for App {
                         } else {
                             tab
                         };
-                        dbg!(in_current_tab, &tab.location);
+
                         let name = Location::Path(path.clone()).title();
-                        if let Location::Network(uri, _, _) = tab.location.clone() {
+                        if let Location::Network(uri, _, _) = tab
+                            .items_opt
+                            .as_ref()
+                            .and_then(|items| items.iter().find(|i| i.path_opt() == Some(&path)))
+                            .unwrap()
+                            .location_opt
+                            .clone()
+                            .unwrap()
+                            .clone()
+                        {
                             Some((uri, name, path.clone()))
                         } else {
                             None
                         }
                     });
-                    dbg!(&is_network);
                     let name = Location::Path(path.clone()).title();
                     let favorite = if let Some((uri, _, _)) = is_network.clone() {
                         Favorite::Network { uri, name, path }
@@ -2435,7 +2427,6 @@ impl Application for App {
                     };
                     if !favorites.iter().any(|f| f == &favorite) {
                         favorites.push(favorite);
-                        dbg!(&favorites);
                     }
                 }
                 config_set!(favorites, favorites);
@@ -3127,7 +3118,6 @@ impl Application for App {
             Message::OpenInNewTab(entity_opt) => {
                 return Task::batch(self.selected_paths(entity_opt).into_iter().filter_map(
                     |path| {
-                        dbg!(&path);
                         if path.is_dir() {
                             Some(self.open_tab(Location::Path(path), false, None))
                         } else {
@@ -3657,7 +3647,6 @@ impl Application for App {
                 for tab_command in tab_commands {
                     match tab_command {
                         tab::Command::Action(action) => {
-                            dbg!(&action);
                             commands.push(self.update(action.message(Some(entity))));
                         }
                         tab::Command::AddNetworkDrive => {
@@ -3665,7 +3654,6 @@ impl Application for App {
                             self.set_show_context(true);
                         }
                         tab::Command::AddToSidebar(path) => {
-                            dbg!("add to sidebar");
                             let mut favorites = self.config.favorites.clone();
                             let favorite = Favorite::from_path(path);
                             if !favorites.iter().any(|f| f == &favorite) {
@@ -3711,7 +3699,6 @@ impl Application for App {
                         }
                         tab::Command::OpenFile(paths) => self.open_file(&paths),
                         tab::Command::OpenInNewTab(path) => {
-                            dbg!(&path);
                             commands.push(self.open_tab(Location::Path(path.clone()), false, None));
                         }
                         tab::Command::OpenInNewWindow(path) => match env::current_exe() {
@@ -4177,7 +4164,6 @@ impl Application for App {
                             );
                         }
                         Some(Location::Path(ref path)) => {
-                            dbg!(path);
                             return self.open_tab(Location::Path(path.clone()), false, None);
                         }
                         Some(Location::Recents) => {
@@ -4202,6 +4188,9 @@ impl Application for App {
                                     }
                                     Location::Trash => {
                                         command.arg("--trash");
+                                    }
+                                    Location::Network(uri, _, Some(_)) => {
+                                        command.arg(uri);
                                     }
                                     Location::Network(..) => {
                                         command.arg("--network");
@@ -4441,7 +4430,6 @@ impl Application for App {
                 return self.on_nav_select(entity);
             }
             Message::NetworkDriveOpenTabAfterMount { location } => {
-                dbg!("location");
                 return self.open_tab(location, false, None);
             }
         }
@@ -6016,7 +6004,6 @@ pub(crate) mod test_utils {
         nested: usize,
         name_len: usize,
     ) -> io::Result<(TempDir, Tab)> {
-        dbg!("new tab...");
         let fs = simple_fs(files, hidden, dirs, nested, name_len)?;
         let path = fs.path();
 

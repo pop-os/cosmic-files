@@ -329,7 +329,6 @@ pub fn context_menu<'a>(
             }
         }
         (_, Location::Network(..)) => {
-            dbg!(selected, &tab.mode);
             if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
                     children.push(menu_item(fl!("open"), Action::Open).into());

@@ -3036,7 +3036,6 @@ impl Tab {
                                 }
                                 if !item.selected {
                                     self.clicked = click_i_opt;
-                                    dbg!(&item.location_opt);
                                     item.selected = true;
                                 }
                                 self.select_range = Some((i, i));
@@ -3137,7 +3136,6 @@ impl Tab {
                     }
                     LocationMenuAction::AddToSidebar(ancestor_index) => {
                         if let Some(path) = path_for_index(ancestor_index) {
-                            dbg!(&path);
                             commands.push(Command::AddToSidebar(path));
                         } else {
                             log::warn!(
