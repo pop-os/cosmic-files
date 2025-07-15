@@ -1205,9 +1205,9 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
     recents.into_iter().take(50).map(|(item, _)| item).collect()
 }
 
-pub fn scan_network(uri: &str, sizes: IconSizes, path: Option<&Path>) -> Vec<Item> {
+pub fn scan_network(uri: &str, sizes: IconSizes) -> Vec<Item> {
     for (_key, mounter) in MOUNTERS.iter() {
-        match mounter.network_scan(uri, sizes, path) {
+        match mounter.network_scan(uri, sizes) {
             Some(Ok(items)) => return items,
             Some(Err(err)) => {
                 log::warn!("failed to scan {:?}: {}", uri, err);
@@ -1445,7 +1445,7 @@ impl Location {
             }
             Self::Trash => scan_trash(sizes),
             Self::Recents => scan_recents(sizes),
-            Self::Network(uri, _, path) => scan_network(uri, sizes, path.as_deref()),
+            Self::Network(uri, _, _) => scan_network(uri, sizes),
         };
         let parent_item_opt = match self.path_opt() {
             Some(path) => match item_from_path(path, sizes) {

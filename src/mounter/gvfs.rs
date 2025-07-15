@@ -3,13 +3,7 @@ use cosmic::{
     widget, Task,
 };
 use gio::{glib, prelude::*};
-use std::{
-    any::TypeId,
-    cell::Cell,
-    future::pending,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{any::TypeId, cell::Cell, future::pending, path::PathBuf, sync::Arc};
 use tokio::sync::{mpsc, Mutex};
 
 use super::{Mounter, MounterAuth, MounterItem, MounterItems, MounterMessage};
@@ -205,7 +199,6 @@ enum Cmd {
     NetworkScan(
         String,
         IconSizes,
-        Option<PathBuf>,
         mpsc::Sender<Result<Vec<tab::Item>, String>>,
     ),
     Unmount(MounterItem),
@@ -404,7 +397,7 @@ impl Gvfs {
                                 }
                             );
                         }
-                        Cmd::NetworkScan(uri, sizes, path, items_tx) => {
+                        Cmd::NetworkScan(uri, sizes, items_tx) => {
                             let file = gio::File::for_uri(&uri);
                             let needs_mount = match file.find_enclosing_mount(gio::Cancellable::NONE) {
                                 Ok(_) => false,
@@ -527,20 +520,10 @@ impl Mounter for Gvfs {
         )
     }
 
-    fn network_scan(
-        &self,
-        uri: &str,
-        sizes: IconSizes,
-        path: Option<&Path>,
-    ) -> Option<Result<Vec<tab::Item>, String>> {
+    fn network_scan(&self, uri: &str, sizes: IconSizes) -> Option<Result<Vec<tab::Item>, String>> {
         let (items_tx, mut items_rx) = mpsc::channel(1);
         self.command_tx
-            .send(Cmd::NetworkScan(
-                uri.to_string(),
-                sizes,
-                path.map(|p| p.to_owned()),
-                items_tx,
-            ))
+            .send(Cmd::NetworkScan(uri.to_string(), sizes, items_tx))
             .unwrap();
         items_rx.blocking_recv()
     }
