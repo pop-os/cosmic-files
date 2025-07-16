@@ -117,8 +117,11 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
                         }
                         Err(err) => {
                             log::warn!("failed to read directory {:?}: {}", path, err);
+                            children_opt = Some(0);
                         }
                     }
+                } else {
+                    children_opt = Some(0);
                 }
             }
             ItemMetadata::GvfsPath {
