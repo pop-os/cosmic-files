@@ -931,6 +931,7 @@ impl App {
         let mut tab = Tab::new(
             location.clone(),
             self.config.tab,
+            self.config.thumb_cfg,
             Some(&self.state.sort_names),
         );
         tab.mode = match self.mode {
@@ -5879,7 +5880,7 @@ pub(crate) mod test_utils {
     use tempfile::{tempdir, TempDir};
 
     use crate::{
-        config::{IconSizes, TabConfig},
+        config::{IconSizes, TabConfig, ThumbCfg},
         tab::Item,
     };
 
@@ -6043,7 +6044,7 @@ pub(crate) mod test_utils {
         // New tab with items
         let location = Location::Path(path.to_owned());
         let (parent_item_opt, items) = location.scan(IconSizes::default());
-        let mut tab = Tab::new(location, TabConfig::default(), None);
+        let mut tab = Tab::new(location, TabConfig::default(), ThumbCfg::default(), None);
         tab.parent_item_opt = parent_item_opt;
         tab.set_items(items);
 
