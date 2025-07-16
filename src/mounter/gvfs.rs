@@ -13,6 +13,8 @@ use crate::{
     tab::{self, DirSize, ItemMetadata, ItemThumbnail, Location},
 };
 
+const TARGET_URI_ATTRIBUTE: &str = "standard::target-uri";
+
 fn gio_icon_to_path(icon: &gio::Icon, size: u16) -> Option<PathBuf> {
     if let Some(themed_icon) = icon.downcast_ref::<gio::ThemedIcon>() {
         for name in themed_icon.names() {
@@ -64,7 +66,22 @@ fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
 }
 
 fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
-    let file = gio::File::for_uri(uri);
+    let mut uri = uri.to_string();
+    let mut file = gio::File::for_uri(&uri);
+    let force_dir = uri.starts_with("network:///");
+
+    // Resolve the target-uri if it exists
+    if let Ok(file_info) = file.query_info(
+        TARGET_URI_ATTRIBUTE,
+        gio::FileQueryInfoFlags::NONE,
+        gio::Cancellable::NONE,
+    ) {
+        if let Some(resolved_uri) = file_info.attribute_as_string(TARGET_URI_ATTRIBUTE) {
+            uri = resolved_uri.to_string();
+            file = gio::File::for_uri(&uri);
+        }
+    }
+
     let mut items = Vec::new();
     for info_res in file
         .enumerate_children("*", gio::FileQueryInfoFlags::NONE, gio::Cancellable::NONE)
@@ -75,10 +92,43 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
         let display_name = info.display_name().to_string();
 
         let uri = file.child(info.name()).uri().to_string();
+
         //TODO: what is the best way to resolve shortcuts?
-        let location = Location::Network(uri, display_name.clone(), file.child(info.name()).path());
-        //TODO: support dir or file
-        let metadata = ItemMetadata::SimpleDir { entries: 0 };
+        let location = Location::Network(uri, display_name.clone(), file.child(&name).path());
+
+        let metadata = if !force_dir && !info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE) {
+            let mtime = info.attribute_uint64(gio::FILE_ATTRIBUTE_TIME_MODIFIED);
+            let is_dir = match info.file_type() {
+                gio::FileType::Directory => true,
+                _ => false,
+            };
+            let size_opt = match is_dir {
+                true => None,
+                false => Some(info.size() as u64),
+            };
+            let mut children_opt = None;
+
+            if is_dir {
+                if let Some(path) = file.child(&name).path() {
+                    //TODO: calculate children in the background (and make it cancellable?)
+                    match std::fs::read_dir(&path) {
+                        Ok(entries) => {
+                            children_opt = Some(entries.count());
+                        }
+                        Err(err) => {
+                            log::warn!("failed to read directory {:?}: {}", path, err);
+                        }
+                    }
+                }
+            }
+            ItemMetadata::GvfsPath {
+                mtime,
+                size_opt,
+                children_opt,
+            }
+        } else {
+            ItemMetadata::SimpleDir { entries: 0 }
+        };
 
         let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) = {
             let file_icon = |size| {
@@ -397,12 +447,25 @@ impl Gvfs {
                                 }
                             );
                         }
-                        Cmd::NetworkScan(uri, sizes, items_tx) => {
-                            let file = gio::File::for_uri(&uri);
-                            let needs_mount = match file.find_enclosing_mount(gio::Cancellable::NONE) {
+                        Cmd::NetworkScan(mut uri, sizes, items_tx) => {
+                            let original_uri = uri.clone();
+                            let mut file = gio::File::for_uri(&uri);
+                            if let Ok(file_info) = file.query_info(
+                                TARGET_URI_ATTRIBUTE,
+                                gio::FileQueryInfoFlags::NONE,
+                                gio::Cancellable::NONE,
+                            ) {
+                                if let Some(resolved_uri) = file_info.attribute_as_string(TARGET_URI_ATTRIBUTE) {
+                                    uri = resolved_uri.to_string();
+                                    file = gio::File::for_uri(&uri);
+                                }
+                            }
+
+                            let needs_mount = uri != "network:///" && match file.find_enclosing_mount(gio::Cancellable::NONE) {
                                 Ok(_) => false,
                                 Err(err) => matches!(err.kind::<gio::IOErrorEnum>(), Some(gio::IOErrorEnum::NotMounted))
                             };
+
                             if needs_mount {
                                 let mount_op = mount_op(uri.clone(), event_tx.clone());
                                 let event_tx = event_tx.clone();
@@ -412,7 +475,9 @@ impl Gvfs {
                                     gio::Cancellable::NONE,
                                     move |res| {
                                         log::info!("network scan mounted {}: result {:?}", uri, res);
-                                        items_tx.blocking_send(network_scan(&uri, sizes)).unwrap();
+                                        // FIXME sometimes a uri can be mounted and then not recognized as mounted...
+                                        // seems to be related to uri with a path
+                                        items_tx.blocking_send(network_scan(&original_uri, sizes)).unwrap();
                                         event_tx.send(Event::NetworkResult(uri, match res {
                                             Ok(()) => {
                                                 Ok(true)
@@ -425,7 +490,7 @@ impl Gvfs {
                                     }
                                 );
                             } else {
-                                items_tx.send(network_scan(&uri, sizes)).await.unwrap();
+                                items_tx.send(network_scan(&original_uri, sizes)).await.unwrap();
                             }
                         }
                         Cmd::Unmount(mounter_item) => {
