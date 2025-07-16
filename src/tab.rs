@@ -1756,8 +1756,11 @@ impl ItemThumbnail {
 
         let mut tried_supported_file = false;
 
+        if !check_size("image", 64 * 1000 * 1000) {
+            return ItemThumbnail::NotImage;
+        }
         // First try built-in image thumbnailer
-        if mime.type_() == mime::IMAGE && check_size("image", 64 * 1000 * 1000) {
+        if mime.type_() == mime::IMAGE {
             tried_supported_file = true;
             match image::ImageReader::open(path).and_then(|img| img.with_guessed_format()) {
                 Ok(reader) => match reader.decode() {
