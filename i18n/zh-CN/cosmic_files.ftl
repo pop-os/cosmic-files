@@ -33,7 +33,7 @@ dismiss = 关闭
 operations-running = 正在进行 {$running} 个操作 （{$percent}%）...
 operations-running-finished = 正在进行 {$running} 个操作 （{$percent}%）, {$finished} 个操作已完成...
 pause = 暂停
-resume = 恢复
+resume = 继续
 
 # Dialogs
 
@@ -47,7 +47,7 @@ extract-to-title = 提取到文件夹
 
 ## Empty Trash Dialog
 empty-trash = 清空回收站
-empty-trash-warning = 确定要永久清空回收站中的所有内容吗？
+empty-trash-warning = 确定要彻底删除回收站中的所有内容吗？
 
 ## Mount Error Dialog
 mount-error = 无法访问驱动器
@@ -87,10 +87,7 @@ related-apps = 相关应用程序
 selected-items = 选中的 {$items} 个项目
 permanently-delete-question = 永久删除
 delete = 删除
-permanently-delete-warning = 确定要永久删除 {$target} ? {$nb_items ->
-        [one] 它
-        *[other] 它们
-    } 之后将无法恢复。
+permanently-delete-warning = 确定要永久删除 {$target} ? 该操作无法撤回。
 
 ## Rename Dialog
 rename-file = 重命名文件
@@ -120,9 +117,9 @@ other = 其他用户
 ### Mode 0
 none = 无
 ### Mode 1 (unusual)
-execute-only = 只执行
+execute-only = 仅执行
 ### Mode 2 (unusual)
-write-only = 只写入
+write-only = 仅写入
 ### Mode 3 (unusual)
 write-execute = 写入和执行
 ### Mode 4
@@ -161,13 +158,13 @@ network-drive-description =
     示例: ssh://192.168.0.1, ftp://[2001:db8::1]
 ### Make sure to keep the comma which separates the columns
 network-drive-schemes =
-    可用协议,前缀
-    AppleTalk,afp://
-    文件传输协议,ftp:// or ftps://
-    网络文件系统,nfs://
-    服务器消息块,smb://
-    SSH文件传输协议,sftp:// or ssh://
-    WebDav,dav:// or davs://
+    可用协议，前缀
+    AppleTalk，afp://
+    文件传输协议，ftp:// 或者 ftps://
+    网络文件系统，nfs://
+    服务器消息块，smb://
+    SSH 文件传输协议，sftp:// 或者 ssh://
+    WebDav，dav:// 或者 davs://
 network-drive-error = 无法访问网络驱动器
 password = 密码
 remember-password = 记住密码
@@ -178,7 +175,7 @@ username = 用户名
 cancelled = 已取消
 edit-history = 编辑历史记录
 history = 历史记录
-no-history = 历史记录为空。
+no-history = 历史记录为空
 pending = 待处理
 progress = {$percent}%
 progress-cancelled = {$percent}%, 已取消
@@ -224,6 +221,8 @@ extracted = 已提取 {$items} {$items ->
     } 从 "{$from}" 到 "{$to}"
 setting-executable-and-launching = 设置 "{$name}" 为可执行文件并启动
 set-executable-and-launched = 设置 "{$name}" 为可执行文件并启动
+setting-permissions = 正在设置 "{$name}" 的权限为 {$mode}
+set-permissions = 设置 "{$name}" 的权限为 {$mode}
 moving = 正在移动 {$items} {$items ->
         [one] 项目
         *[other] 项目
@@ -240,6 +239,14 @@ permanently-deleted = 已永久删除 "{$items}" "{$items ->
         [one] 项目
         *[other] 项目
     }"
+removing-from-recents = 正在从 {recents} 中移除 {$items} {$items ->
+        [one] 项目
+        *[other] 项目
+    }
+removed-from-recents = 已从 {recents} 中移除 {$items} {$items ->
+        [one] 项目
+        *[other] 项目
+    } 
 renaming = 正在重命名 "{$from}" 到 "{$to}"
 renamed = 已重命名 "{$from}" 到 "{$to}"
 restoring = 正在还原 {$items} {$items ->
@@ -286,6 +293,7 @@ type-to-search-enter-path = 输入目录或文件的路径
 add-to-sidebar = 加入侧边栏
 compress = 压缩
 delete-permanently = 永久删除
+eject = 弹出
 extract-here = 解压到此处
 new-file = 新建文件...
 new-folder = 新建文件夹...
@@ -297,6 +305,7 @@ sort-by-name = 按名称排序
 sort-by-modified = 按修改时间排序
 sort-by-size = 按文件大小排序
 sort-by-trashed = 按删除时间排序
+remove-from-recents = 从最近访问中移除
 
 ## Desktop
 change-wallpaper = 更改壁纸...
@@ -309,6 +318,7 @@ display-settings = 显示设置...
 file = 文件
 new-tab = 新建标签页
 new-window = 新建窗口
+reload-folder = 刷新文件夹
 rename = 重命名...
 close-tab = 关闭标签页
 quit = 退出
