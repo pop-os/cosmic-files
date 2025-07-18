@@ -809,6 +809,8 @@ impl App {
                                 None,
                             );
                         }
+
+                        return true;
                     }
                     Err(err) => {
                         // More than one command: The app doesn't support lists of paths so each command
