@@ -253,17 +253,26 @@ permanently-deleted = Definitywnie usunięto "{$items}" "{$items ->
         [few] elementy
         *[other] elementów
     }"
+removing-from-recents = Usuwanie {$items} {$items ->
+        [one] elementu
+        *[other] elementów
+    } z Ubiegłych
+removed-from-recents = Usunięto {$items} {$items ->
+        [one] element
+        [few] elementy
+        *[other] elementów
+    } z Ubiegłych
 renaming = Zmieniana nazwa {$from} na {$to}
 renamed = Zmieniono nazwę {$from} na {$to}
 restoring = Przywracanie {$items} {$items ->
         [one] elementu
         *[other] elementów
-    } z {trash} ({$progress})…
+    } z Kosza ({$progress})…
 restored = Przywrócono {$items} {$items ->
         [one] element
         [few] elementy
         *[other] elementów
-    } z {trash}
+    } z Kosza
 unknown-folder = nieznany katalog
 
 ## Open with
@@ -312,6 +321,7 @@ sort-by-name = Uszereguj według nazwy
 sort-by-modified = Uszereguj według czasu modyfikacji
 sort-by-size = Uszereguj według rozmiaru
 sort-by-trashed = Uszereguj według czasu usunięcia
+remove-from-recents = Usuń z ubiegłych
 
 ## Desktop
 change-wallpaper = Zmień tapetę…
