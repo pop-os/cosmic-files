@@ -1461,15 +1461,11 @@ impl App {
         for (i, (key, item)) in nav_items.into_iter().enumerate() {
             nav_model = nav_model.insert(|mut b| {
                 b = b.text(item.name()).data(MounterData(key, item.clone()));
+                let uri = item.uri().to_string();
                 if let Some(path) = item.path() {
-                    b = b.data(Location::Network(
-                        item.uri().to_string(),
-                        item.name(),
-                        Some(path),
-                    ));
-                } else {
-                    println!("{:?}: {:?}", item.name(), item.uri());
-                    b = b.data(Location::Network(item.uri().to_string(), item.name(), None));
+                    b = b.data(Location::Network(uri, item.name(), Some(path)));
+                } else if !uri.is_empty() {
+                    b = b.data(Location::Network(uri, item.name(), None));
                 }
                 if let Some(icon) = item.icon(true) {
                     b = b.icon(widget::icon::icon(icon).size(16));
