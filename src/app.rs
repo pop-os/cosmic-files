@@ -682,7 +682,9 @@ pub struct App {
 }
 
 impl App {
-    fn open_file(&mut self, paths: &[impl AsRef<Path>]) {
+    fn open_file(&mut self, paths: &[impl AsRef<Path>]) -> Task<Message> {
+        let mut tasks = Vec::new();
+
         // Associate all paths to its MIME type
         // This allows handling paths as groups if possible, such as launching a single video
         // player that is passed every path.
@@ -713,10 +715,11 @@ impl App {
                         Err(err) => match err.kind() {
                             io::ErrorKind::PermissionDenied => {
                                 // If permission is denied, try marking as executable, then running
-                                self.dialog_pages
-                                    .push_back(DialogPage::SetExecutableAndLaunch {
+                                tasks.push(self.dialog_pages.push_back(
+                                    DialogPage::SetExecutableAndLaunch {
                                         path: path.to_path_buf(),
-                                    });
+                                    },
+                                ));
                             }
                             _ => {
                                 log::warn!("failed to execute {:?}: {}", path, err);
@@ -759,6 +762,8 @@ impl App {
                 }
             }
         }
+
+        Task::batch(tasks)
     }
 
     fn launch_desktop_entries(paths: &[impl AsRef<Path>]) {
@@ -1060,17 +1065,16 @@ impl App {
             }
         }
 
+        let mut tasks = Vec::new();
         if !dialog_paths.is_empty() {
-            self.dialog_pages.push_back(DialogPage::PermanentlyDelete {
+            tasks.push(self.dialog_pages.push_back(DialogPage::PermanentlyDelete {
                 paths: dialog_paths,
-            });
+            }));
         }
-
         if !trash_paths.is_empty() {
-            self.operation(Operation::Delete { paths: trash_paths })
-        } else {
-            Task::none()
+            tasks.push(self.operation(Operation::Delete { paths: trash_paths }));
         }
+        Task::batch(tasks)
     }
 
     #[must_use]
@@ -1464,6 +1468,7 @@ impl App {
                         Some(path),
                     ));
                 } else {
+                    println!("{:?}: {:?}", item.name(), item.uri());
                     b = b.data(Location::Network(item.uri().to_string(), item.name(), None));
                 }
                 if let Some(icon) = item.icon(true) {
@@ -2319,30 +2324,27 @@ impl Application for App {
                     }
 
                     log::warn!("failed to open favorite, path does not exist: {:?}", path);
-                    self.dialog_pages.push_back(DialogPage::FavoritePathError {
+                    return self.dialog_pages.push_back(DialogPage::FavoritePathError {
                         path: path.clone(),
                         entity,
                     });
-                    false
                 }
                 Location::Path(path) | Location::Network(_, _, Some(path)) => {
                     match path.try_exists() {
                         Ok(true) => true,
                         Ok(false) => {
                             log::warn!("failed to open favorite, path does not exist: {:?}", path);
-                            self.dialog_pages.push_back(DialogPage::FavoritePathError {
+                            return self.dialog_pages.push_back(DialogPage::FavoritePathError {
                                 path: path.clone(),
                                 entity,
                             });
-                            false
                         }
                         Err(err) => {
                             log::warn!("failed to open favorite for path: {:?}, {}", path, err);
-                            self.dialog_pages.push_back(DialogPage::FavoritePathError {
+                            return self.dialog_pages.push_back(DialogPage::FavoritePathError {
                                 path: path.clone(),
                                 entity,
                             });
-                            false
                         }
                     }
                 }
@@ -3508,7 +3510,8 @@ impl Application for App {
             Message::PermanentlyDelete(entity_opt) => {
                 let paths = self.selected_paths(entity_opt);
                 if !paths.is_empty() {
-                    self.dialog_pages
+                    return self
+                        .dialog_pages
                         .push_back(DialogPage::PermanentlyDelete { paths });
                 }
             }
@@ -3842,7 +3845,7 @@ impl Application for App {
                                 cosmic::action::app(Message::TabMessage(Some(entity), x))
                             }));
                         }
-                        tab::Command::OpenFile(paths) => self.open_file(&paths),
+                        tab::Command::OpenFile(paths) => commands.push(self.open_file(&paths)),
                         tab::Command::OpenInNewTab(path) => {
                             commands.push(self.open_tab(Location::Path(path.clone()), false, None));
                         }
@@ -5595,13 +5598,7 @@ impl Application for App {
                     None => widget::vertical_space().into(),
                 };
 
-                let mut popover = widget::popover(tab_view);
-                /*
-                if let Some(dialog) = self.dialog() {
-                    popover = popover.popup(dialog);
-                }
-                */
-                tab_column = tab_column.push(popover);
+                tab_column = tab_column.push(tab_view);
 
                 // The toaster is added on top of an empty element to ensure that it does not override context menus
                 tab_column =
