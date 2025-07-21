@@ -521,6 +521,7 @@ impl App {
             space_l,
             ..
         } = theme::active().cosmic().spacing;
+        let is_condensed = self.core().is_condensed();
 
         let mut col = widget::column::with_capacity(2).spacing(space_xxs);
         if let DialogKind::SaveFile { filename } = &self.flags.kind {
@@ -533,7 +534,9 @@ impl App {
         }
 
         let mut row = widget::row::with_capacity(
-            if !self.filters.is_empty() { 1 } else { 0 } + self.choices.len() * 2 + 3,
+            if !self.filters.is_empty() { 1 } else { 0 }
+                + self.choices.len() * 2
+                + if is_condensed { 0 } else { 3 },
         )
         .align_y(Alignment::Center)
         .spacing(space_xxs);
@@ -563,6 +566,13 @@ impl App {
                     }));
                 }
             }
+        }
+
+        if is_condensed {
+            col = col.push(row);
+            row = widget::row::with_capacity(3)
+                .align_y(Alignment::Center)
+                .spacing(space_xxs);
         }
         row = row.push(widget::horizontal_space());
         row = row.push(widget::button::standard(fl!("cancel")).on_press(Message::Cancel));
