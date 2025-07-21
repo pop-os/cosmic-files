@@ -4,7 +4,10 @@ use cosmic::{
     iced::{window, Subscription},
     widget, Application, Element,
 };
-use cosmic_files::dialog::{Dialog, DialogKind, DialogMessage, DialogResult, DialogSettings};
+use cosmic_files::dialog::{
+    Dialog, DialogChoice, DialogChoiceOption, DialogFilter, DialogFilterPattern, DialogKind,
+    DialogMessage, DialogResult, DialogSettings,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
@@ -62,13 +65,43 @@ impl Application for App {
             }
             Message::DialogOpen(dialog_kind) => {
                 if self.dialog_opt.is_none() {
-                    let (dialog, command) = Dialog::new(
+                    let (mut dialog, task) = Dialog::new(
                         DialogSettings::new().kind(dialog_kind),
                         Message::DialogMessage,
                         Message::DialogResult,
                     );
+                    let mut tasks = vec![task];
+                    dialog.set_choices(vec![
+                        DialogChoice::ComboBox {
+                            id: "example-combobox".into(),
+                            label: "Combobox".into(),
+                            options: vec![
+                                DialogChoiceOption {
+                                    id: "foo".into(),
+                                    label: "foo".into(),
+                                },
+                                DialogChoiceOption {
+                                    id: "bar".into(),
+                                    label: "bar".into(),
+                                },
+                            ],
+                            selected: Some(0),
+                        },
+                        DialogChoice::CheckBox {
+                            id: "example-checkbox".into(),
+                            label: "Checkbox".into(),
+                            value: false,
+                        },
+                    ]);
+                    tasks.push(dialog.set_filters(
+                        vec![DialogFilter {
+                            label: "Any file".into(),
+                            patterns: vec![DialogFilterPattern::Glob("*".into())],
+                        }],
+                        Some(0),
+                    ));
                     self.dialog_opt = Some(dialog);
-                    return command;
+                    return Task::batch(tasks);
                 }
             }
             Message::DialogResult(result) => {
