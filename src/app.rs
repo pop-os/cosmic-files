@@ -2262,14 +2262,14 @@ impl Application for App {
                 NavMenuAction::RemoveFromSidebar(entity),
             ));
         }
-        if matches!(location_opt, Some(Location::Trash)) {
-            if tab::trash_entries() > 0 {
-                items.push(cosmic::widget::menu::Item::Button(
-                    fl!("empty-trash"),
-                    None,
-                    NavMenuAction::EmptyTrash,
-                ));
-            }
+        if matches!(location_opt, Some(Location::Trash))
+            && !trash::os_limited::is_empty().unwrap_or(true)
+        {
+            items.push(cosmic::widget::menu::Item::Button(
+                fl!("empty-trash"),
+                None,
+                NavMenuAction::EmptyTrash,
+            ));
         }
 
         Some(cosmic::widget::menu::items(&HashMap::new(), items))
