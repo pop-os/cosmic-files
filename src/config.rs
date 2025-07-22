@@ -200,6 +200,18 @@ impl Config {
             CONFIG_VERSION,
         )
     }
+
+    /// Construct tab config for dialog
+    pub fn dialog_tab(&self) -> TabConfig {
+        TabConfig {
+            folders_first: self.dialog.folders_first,
+            icon_sizes: self.dialog.icon_sizes,
+            military_time: self.tab.military_time,
+            show_hidden: self.dialog.show_hidden,
+            single_click: false,
+            view: self.dialog.view,
+        }
+    }
 }
 
 impl Default for Config {
@@ -251,15 +263,30 @@ impl DesktopConfig {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
 #[serde(default)]
 pub struct DialogConfig {
+    /// Show folders before files
+    pub folders_first: bool,
+    /// Icon zoom
+    pub icon_sizes: IconSizes,
+    /// Show details sidebar
     pub show_details: bool,
+    /// Show hidden files and folders
+    pub show_hidden: bool,
+    /// Selected view, grid or list
+    pub view: View,
 }
 
 impl Default for DialogConfig {
     fn default() -> Self {
-        Self { show_details: true }
+        Self {
+            folders_first: false,
+            icon_sizes: IconSizes::default(),
+            show_details: true,
+            show_hidden: false,
+            view: View::List,
+        }
     }
 }
 
@@ -271,30 +298,31 @@ impl Default for DialogConfig {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
 #[serde(default)]
 pub struct TabConfig {
-    pub view: View,
     /// Show folders before files
     pub folders_first: bool,
-    /// Show hidden files and folders
-    pub show_hidden: bool,
     /// Icon zoom
     pub icon_sizes: IconSizes,
     #[serde(skip)]
     /// 24 hour clock; this is neither serialized nor deserialized because we use the user's global
     /// preference rather than save it
     pub military_time: bool,
+    /// Show hidden files and folders
+    pub show_hidden: bool,
     /// Single click to open
     pub single_click: bool,
+    /// Selected view, grid or list
+    pub view: View,
 }
 
 impl Default for TabConfig {
     fn default() -> Self {
         Self {
-            view: View::List,
             folders_first: true,
-            show_hidden: false,
             icon_sizes: IconSizes::default(),
             military_time: false,
+            show_hidden: false,
             single_click: false,
+            view: View::List,
         }
     }
 }

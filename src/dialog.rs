@@ -36,7 +36,7 @@ use std::{
 
 use crate::{
     app::{Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind},
-    config::{Config, Favorite, TabConfig, TimeConfig, TIME_CONFIG_ID},
+    config::{Config, DialogConfig, Favorite, TimeConfig, TIME_CONFIG_ID},
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
@@ -436,6 +436,7 @@ enum Message {
     TabView(tab::View),
     TimeConfigChange(TimeConfig),
     ToggleFoldersFirst,
+    ToggleShowHidden,
     ZoomDefault,
     ZoomIn,
     ZoomOut,
@@ -451,6 +452,7 @@ impl From<AppMessage> for Message {
             AppMessage::TabMessage(_entity_opt, tab_message) => Message::TabMessage(tab_message),
             AppMessage::TabView(_entity_opt, view) => Message::TabView(view),
             AppMessage::ToggleFoldersFirst => Message::ToggleFoldersFirst,
+            AppMessage::ToggleShowHidden => Message::ToggleShowHidden,
             AppMessage::ZoomDefault(_entity_opt) => Message::ZoomDefault,
             AppMessage::ZoomIn(_entity_opt) => Message::ZoomIn,
             AppMessage::ZoomOut(_entity_opt) => Message::ZoomOut,
@@ -735,12 +737,33 @@ impl App {
 
     fn update_config(&mut self) -> Task<Message> {
         self.core.window.show_context = self.flags.config.dialog.show_details;
-
+        self.tab.config = self.flags.config.dialog_tab();
         self.update_nav_model();
+        self.update(Message::TabMessage(tab::Message::Config(self.tab.config)))
+    }
 
-        self.update(Message::TabMessage(tab::Message::Config(
-            self.flags.config.tab,
-        )))
+    fn with_dialog_config<F: Fn(&mut DialogConfig)>(&mut self, f: F) -> Task<Message> {
+        let mut dialog = self.flags.config.dialog;
+        f(&mut dialog);
+        if dialog != self.flags.config.dialog {
+            match &self.flags.config_handler {
+                Some(config_handler) => {
+                    match self.flags.config.set_dialog(config_handler, dialog) {
+                        Ok(_) => {}
+                        Err(err) => {
+                            log::warn!("failed to save config \"dialog\": {}", err);
+                        }
+                    }
+                }
+                None => {
+                    self.flags.config.dialog = dialog;
+                    log::warn!("failed to save config \"dialog\": no config handler",);
+                }
+            }
+            self.update_config()
+        } else {
+            Task::none()
+        }
     }
 
     fn activate_nav_model_location(&mut self, location: &Location) {
@@ -920,12 +943,7 @@ impl Application for App {
             },
         });
 
-        let tab_config = TabConfig {
-            view: tab::View::List,
-            folders_first: false,
-            ..Default::default()
-        };
-        let mut tab = Tab::new(location, tab_config, None);
+        let mut tab = Tab::new(location, flags.config.dialog_tab(), None);
         tab.mode = tab::Mode::Dialog(flags.kind.clone());
         tab.sort_name = tab::HeadingOptions::Modified;
         tab.sort_direction = false;
@@ -1242,33 +1260,6 @@ impl Application for App {
 
     /// Handle application events here.
     fn update(&mut self, message: Message) -> Task<Message> {
-        // Helper for updating config values efficiently
-        macro_rules! config_set {
-            ($name: ident, $value: expr) => {
-                match &self.flags.config_handler {
-                    Some(config_handler) => {
-                        match paste::paste! { self.flags.config.[<set_ $name>](config_handler, $value) } {
-                            Ok(_) => {}
-                            Err(err) => {
-                                log::warn!(
-                                    "failed to save config {:?}: {}",
-                                    stringify!($name),
-                                    err
-                                );
-                            }
-                        }
-                    }
-                    None => {
-                        self.flags.config.$name = $value;
-                        log::warn!(
-                            "failed to save config {:?}: no config handler",
-                            stringify!($name)
-                        );
-                    }
-                }
-            };
-        }
-
         match message {
             Message::None => {}
             Message::Cancel => {
@@ -1537,10 +1528,9 @@ impl Application for App {
             }
             Message::Preview => {
                 self.context_page = ContextPage::Preview(None, PreviewKind::Selected);
-                let mut new_dialog = self.flags.config.dialog;
-                new_dialog.show_details = !new_dialog.show_details;
-                config_set!(dialog, new_dialog);
-                return self.update_config();
+                return self.with_dialog_config(|config| {
+                    config.show_details = !config.show_details;
+                });
             }
             Message::Save(replace) => {
                 if let DialogKind::SaveFile { filename } = &self.flags.kind {
@@ -1627,10 +1617,9 @@ impl Application for App {
                         }
                         tab::Command::Preview(kind) => {
                             self.context_page = ContextPage::Preview(None, kind);
-                            let mut new_dialog = self.flags.config.dialog;
-                            new_dialog.show_details = true;
-                            config_set!(dialog, new_dialog);
-                            commands.push(self.update_config());
+                            commands.push(self.with_dialog_config(|config| {
+                                config.show_details = true;
+                            }));
                         }
                         tab::Command::WindowDrag => {
                             commands.push(window::drag(self.flags.window_id));
@@ -1736,19 +1725,30 @@ impl Application for App {
                 }
             }
             Message::TabView(view) => {
-                self.tab.config.view = view;
+                return self.with_dialog_config(|config| {
+                    config.view = view;
+                });
             }
             Message::TimeConfigChange(time_config) => {
                 self.flags.config.tab.military_time = time_config.military_time;
                 return self.update_config();
             }
             Message::ToggleFoldersFirst => {
-                self.tab.config.folders_first = !self.tab.config.folders_first;
+                return self.with_dialog_config(|config| {
+                    config.folders_first = !config.folders_first;
+                });
             }
-            Message::ZoomDefault => match self.tab.config.view {
-                tab::View::List => self.tab.config.icon_sizes.list = 100.try_into().unwrap(),
-                tab::View::Grid => self.tab.config.icon_sizes.grid = 100.try_into().unwrap(),
-            },
+            Message::ToggleShowHidden => {
+                return self.with_dialog_config(|config| {
+                    config.show_hidden = !config.show_hidden;
+                });
+            }
+            Message::ZoomDefault => {
+                return self.with_dialog_config(|config| match config.view {
+                    tab::View::List => config.icon_sizes.list = 100.try_into().unwrap(),
+                    tab::View::Grid => config.icon_sizes.grid = 100.try_into().unwrap(),
+                });
+            }
             Message::ZoomIn => {
                 let zoom_in = |size: &mut NonZeroU16, min: u16, max: u16| {
                     let mut step = min;
@@ -1763,10 +1763,10 @@ impl Application for App {
                         *size = step.try_into().unwrap();
                     }
                 };
-                match self.tab.config.view {
-                    tab::View::List => zoom_in(&mut self.tab.config.icon_sizes.list, 50, 500),
-                    tab::View::Grid => zoom_in(&mut self.tab.config.icon_sizes.grid, 50, 500),
-                }
+                return self.with_dialog_config(|config| match config.view {
+                    tab::View::List => zoom_in(&mut config.icon_sizes.list, 50, 500),
+                    tab::View::Grid => zoom_in(&mut config.icon_sizes.grid, 50, 500),
+                });
             }
             Message::ZoomOut => {
                 let zoom_out = |size: &mut NonZeroU16, min: u16, max: u16| {
@@ -1782,10 +1782,10 @@ impl Application for App {
                         *size = step.try_into().unwrap();
                     }
                 };
-                match self.tab.config.view {
-                    tab::View::List => zoom_out(&mut self.tab.config.icon_sizes.list, 50, 500),
-                    tab::View::Grid => zoom_out(&mut self.tab.config.icon_sizes.grid, 50, 500),
-                }
+                return self.with_dialog_config(|config| match config.view {
+                    tab::View::List => zoom_out(&mut config.icon_sizes.list, 50, 500),
+                    tab::View::Grid => zoom_out(&mut config.icon_sizes.grid, 50, 500),
+                });
             }
             Message::Surface(a) => {
                 return cosmic::task::message(cosmic::Action::Cosmic(
