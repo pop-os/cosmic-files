@@ -734,6 +734,8 @@ impl App {
     }
 
     fn update_config(&mut self) -> Task<Message> {
+        self.core.window.show_context = self.flags.config.dialog.show_details;
+
         self.update_nav_model();
 
         self.update(Message::TabMessage(tab::Message::Config(
@@ -1240,6 +1242,33 @@ impl Application for App {
 
     /// Handle application events here.
     fn update(&mut self, message: Message) -> Task<Message> {
+        // Helper for updating config values efficiently
+        macro_rules! config_set {
+            ($name: ident, $value: expr) => {
+                match &self.flags.config_handler {
+                    Some(config_handler) => {
+                        match paste::paste! { self.flags.config.[<set_ $name>](config_handler, $value) } {
+                            Ok(_) => {}
+                            Err(err) => {
+                                log::warn!(
+                                    "failed to save config {:?}: {}",
+                                    stringify!($name),
+                                    err
+                                );
+                            }
+                        }
+                    }
+                    None => {
+                        self.flags.config.$name = $value;
+                        log::warn!(
+                            "failed to save config {:?}: no config handler",
+                            stringify!($name)
+                        );
+                    }
+                }
+            };
+        }
+
         match message {
             Message::None => {}
             Message::Cancel => {
@@ -1506,15 +1535,13 @@ impl Application for App {
                     }
                 }
             }
-            Message::Preview => match self.context_page {
-                ContextPage::Preview(..) => {
-                    self.core.window.show_context = !self.core.window.show_context;
-                }
-                _ => {
-                    self.context_page = ContextPage::Preview(None, PreviewKind::Selected);
-                    self.core.window.show_context = true;
-                }
-            },
+            Message::Preview => {
+                self.context_page = ContextPage::Preview(None, PreviewKind::Selected);
+                let mut new_dialog = self.flags.config.dialog;
+                new_dialog.show_details = !new_dialog.show_details;
+                config_set!(dialog, new_dialog);
+                return self.update_config();
+            }
             Message::Save(replace) => {
                 if let DialogKind::SaveFile { filename } = &self.flags.kind {
                     if !filename.is_empty() {
@@ -1600,7 +1627,10 @@ impl Application for App {
                         }
                         tab::Command::Preview(kind) => {
                             self.context_page = ContextPage::Preview(None, kind);
-                            self.set_show_context(true);
+                            let mut new_dialog = self.flags.config.dialog;
+                            new_dialog.show_details = true;
+                            config_set!(dialog, new_dialog);
+                            commands.push(self.update_config());
                         }
                         tab::Command::WindowDrag => {
                             commands.push(window::drag(self.flags.window_id));

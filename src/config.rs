@@ -164,6 +164,7 @@ impl State {
 #[serde(default)]
 pub struct Config {
     pub app_theme: AppTheme,
+    pub dialog: DialogConfig,
     pub desktop: DesktopConfig,
     pub favorites: Vec<Favorite>,
     pub show_details: bool,
@@ -206,6 +207,7 @@ impl Default for Config {
         Self {
             app_theme: AppTheme::System,
             desktop: DesktopConfig::default(),
+            dialog: DialogConfig::default(),
             favorites: vec![
                 Favorite::Home,
                 Favorite::Documents,
@@ -246,6 +248,18 @@ impl Default for DesktopConfig {
 impl DesktopConfig {
     pub fn grid_spacing_for(&self, space: u16) -> u16 {
         percent!(self.grid_spacing, space) as _
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
+#[serde(default)]
+pub struct DialogConfig {
+    pub show_details: bool,
+}
+
+impl Default for DialogConfig {
+    fn default() -> Self {
+        Self { show_details: true }
     }
 }
 
