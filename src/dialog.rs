@@ -1636,6 +1636,9 @@ impl Application for App {
                                 self.auto_scroll_speed = None;
                             }
                         }
+                        tab::Command::Surface(action) => {
+                            commands.push(self.update(Message::Surface(action)));
+                        }
                         unsupported => {
                             log::warn!("{unsupported:?} not supported in dialog mode");
                         }
@@ -1818,7 +1821,8 @@ impl Application for App {
             }
         }
 
-        col = col.push(self.tab.view(&self.key_binds).map(Message::TabMessage));
+        //TODO: context menu
+        col = col.push(self.tab.view().map(Message::TabMessage));
 
         col.into()
     }

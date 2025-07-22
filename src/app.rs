@@ -2179,7 +2179,7 @@ impl Application for App {
 
         let nav_model = self.nav_model()?;
 
-        let mut nav = cosmic::widget::nav_bar(nav_model, |entity| {
+        let mut nav = widget::nav_bar(nav_model, |entity| {
             cosmic::Action::Cosmic(cosmic::app::Action::NavBar(entity))
         })
         .drag_id(self.nav_drag_id)
@@ -2224,39 +2224,39 @@ impl Application for App {
             .and_then(|x| x.path_opt())
             .map_or(false, |x| x.is_file())
         {
-            items.push(cosmic::widget::menu::Item::Button(
+            items.push(widget::menu::Item::Button(
                 fl!("open"),
                 None,
                 NavMenuAction::Open(entity),
             ));
-            items.push(cosmic::widget::menu::Item::Button(
+            items.push(widget::menu::Item::Button(
                 fl!("menu-open-with"),
                 None,
                 NavMenuAction::OpenWith(entity),
             ));
         } else {
-            items.push(cosmic::widget::menu::Item::Button(
+            items.push(widget::menu::Item::Button(
                 fl!("open-in-new-tab"),
                 None,
                 NavMenuAction::OpenInNewTab(entity),
             ));
-            items.push(cosmic::widget::menu::Item::Button(
+            items.push(widget::menu::Item::Button(
                 fl!("open-in-new-window"),
                 None,
                 NavMenuAction::OpenInNewWindow(entity),
             ));
         }
-        items.push(cosmic::widget::menu::Item::Divider);
+        items.push(widget::menu::Item::Divider);
         if matches!(location_opt, Some(Location::Path(..))) {
-            items.push(cosmic::widget::menu::Item::Button(
+            items.push(widget::menu::Item::Button(
                 fl!("show-details"),
                 None,
                 NavMenuAction::Preview(entity),
             ));
         }
-        items.push(cosmic::widget::menu::Item::Divider);
+        items.push(widget::menu::Item::Divider);
         if favorite_index_opt.is_some() {
-            items.push(cosmic::widget::menu::Item::Button(
+            items.push(widget::menu::Item::Button(
                 fl!("remove-from-sidebar"),
                 None,
                 NavMenuAction::RemoveFromSidebar(entity),
@@ -2264,7 +2264,7 @@ impl Application for App {
         }
         if matches!(location_opt, Some(Location::Trash)) {
             if tab::trash_entries() > 0 {
-                items.push(cosmic::widget::menu::Item::Button(
+                items.push(widget::menu::Item::Button(
                     fl!("empty-trash"),
                     None,
                     NavMenuAction::EmptyTrash,
@@ -2272,7 +2272,7 @@ impl Application for App {
             }
         }
 
-        Some(cosmic::widget::menu::items(&HashMap::new(), items))
+        Some(widget::menu::items(&HashMap::new(), items))
     }
 
     fn nav_model(&self) -> Option<&segmented_button::SingleSelectModel> {
@@ -3928,6 +3928,9 @@ impl Application for App {
                                 );
                             }
                         }
+                        tab::Command::Surface(action) => {
+                            commands.push(self.update(Message::Surface(action)));
+                        }
                     }
                 }
                 return Task::batch(commands);
@@ -4550,6 +4553,7 @@ impl Application for App {
                 }
             }
             Message::Surface(a) => {
+                println!("{:?}", a);
                 return cosmic::task::message(cosmic::Action::Cosmic(
                     cosmic::app::Action::Surface(a),
                 ));
@@ -5562,9 +5566,13 @@ impl Application for App {
         let entity = self.tab_model.active();
         match self.tab_model.data::<Tab>(entity) {
             Some(tab) => {
-                let tab_view = tab
-                    .view(&self.key_binds)
-                    .map(move |message| Message::TabMessage(Some(entity), message));
+                let tab_view = widget::context_menu(
+                    tab.view()
+                        .map(move |message| Message::TabMessage(Some(entity), message)),
+                    Some(menu::context_menu(tab, &self.key_binds, &self.modifiers)),
+                )
+                .on_surface_action(Message::Surface)
+                .window_id(self.window_id_opt.unwrap_or_else(|| WindowId::NONE));
                 tab_column = tab_column.push(tab_view);
             }
             None => {
@@ -5583,14 +5591,20 @@ impl Application for App {
     }
 
     fn view_window(&self, id: WindowId) -> Element<Self::Message> {
+        println!("{:?}", id);
         let content = match self.windows.get(&id) {
             Some(WindowKind::Desktop(entity)) => {
                 let mut tab_column = widget::column::with_capacity(3);
 
-                let tab_view = match self.tab_model.data::<Tab>(*entity) {
-                    Some(tab) => tab
-                        .view(&self.key_binds)
-                        .map(move |message| Message::TabMessage(Some(*entity), message)),
+                let tab_view: Element<Message> = match self.tab_model.data::<Tab>(*entity) {
+                    Some(tab) => widget::context_menu(
+                        tab.view()
+                            .map(move |message| Message::TabMessage(Some(*entity), message)),
+                        Some(menu::context_menu(tab, &self.key_binds, &self.modifiers)),
+                    )
+                    .on_surface_action(Message::Surface)
+                    .window_id(id)
+                    .into(),
                     None => widget::vertical_space().into(),
                 };
 

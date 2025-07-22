@@ -16,6 +16,7 @@ use cosmic::{
             horizontal_rule, rule,
             scrollable::{self, AbsoluteOffset, Viewport},
         },
+        window::Id as WindowId,
         Alignment,
         Border,
         Color,
@@ -1522,6 +1523,7 @@ pub enum Command {
     SetOpenWith(Mime, String),
     SetPermissions(PathBuf, u32),
     SetSort(String, HeadingOptions, bool),
+    Surface(cosmic::surface::Action),
     WindowDrag,
     WindowToggleMaximize,
 }
@@ -1577,6 +1579,7 @@ pub enum Message {
     SetOpenWith(Mime, String),
     SetPermissions(PathBuf, u32),
     SetSort(HeadingOptions, bool),
+    Surface(cosmic::surface::Action),
     TabComplete(PathBuf, Vec<(String, PathBuf)>),
     Thumbnail(PathBuf, ItemThumbnail),
     View(View),
@@ -3714,6 +3717,9 @@ impl Tab {
                     }
                 }
             }
+            Message::Surface(action) => {
+                commands.push(Command::Surface(action));
+            }
             Message::TabComplete(path, completions) => {
                 if let Some(edit_location) = &mut self.edit_location {
                     if edit_location.location.path_opt() == Some(&path) {
@@ -5305,11 +5311,7 @@ impl Tab {
         (drag_col, mouse_area.into(), true)
     }
 
-    pub fn view_responsive(
-        &self,
-        key_binds: &HashMap<KeyBind, Action>,
-        size: Size,
-    ) -> Element<Message> {
+    pub fn view_responsive(&self, size: Size) -> Element<Message> {
         // Update cached size
         self.size_opt.set(Some(size));
 
@@ -5387,29 +5389,20 @@ impl Tab {
             mouse_area = mouse_area.on_right_press(Message::ContextMenu);
         }
 
-        let mut popover = widget::popover(mouse_area);
-
-        if let Some(point) = self.context_menu {
-            let context_menu = menu::context_menu(self, key_binds, &self.modifiers);
-            popover = popover
-                .popup(context_menu)
-                .position(widget::popover::Position::Point(point));
-        }
-
         let mut tab_column = widget::column::with_capacity(3);
         if let Some(location_view) = location_view_opt {
             tab_column = tab_column.push(location_view);
         }
         if can_scroll {
             tab_column = tab_column.push(
-                widget::scrollable(popover)
+                widget::scrollable(mouse_area)
                     .id(self.scrollable_id.clone())
                     .on_scroll(Message::Scroll)
                     .width(Length::Fill)
                     .height(Length::Fill),
             );
         } else {
-            tab_column = tab_column.push(popover);
+            tab_column = tab_column.push(mouse_area);
         }
         match &self.location {
             Location::Trash => {
@@ -5485,8 +5478,8 @@ impl Tab {
         dnd_dest.into()
     }
 
-    pub fn view<'a>(&'a self, key_binds: &'a HashMap<KeyBind, Action>) -> Element<'a, Message> {
-        widget::responsive(|size| self.view_responsive(key_binds, size)).into()
+    pub fn view<'a>(&'a self) -> Element<'a, Message> {
+        widget::responsive(move |size| self.view_responsive(size)).into()
     }
 
     pub fn subscription(&self, preview: bool) -> Subscription<Message> {

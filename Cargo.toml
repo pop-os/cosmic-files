@@ -83,6 +83,7 @@ optional = true
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
+branch = "context-menu-borrow"
 default-features = false
 #TODO: a11y feature crashes
 features = ["autosize","multi-window", "tokio", "winit", "surface-message"]
