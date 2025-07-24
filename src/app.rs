@@ -3871,7 +3871,7 @@ impl Application for App {
                                         );
                                         commands.push(self.update(Message::Surface(
                                             cosmic::surface::action::app_popup(
-                                                move |app: &mut crate::App| -> SctkPopupSettings {
+                                                move |app: &mut App| -> SctkPopupSettings {
                                                     let anchor_rect = Rectangle {
                                                         x: point.x as i32,
                                                         y: point.y as i32,

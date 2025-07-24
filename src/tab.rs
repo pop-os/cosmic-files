@@ -3879,18 +3879,6 @@ impl Tab {
             ));
         }
 
-        //TODO: check for wayland
-        if self.context_menu != last_context_menu {
-            if last_context_menu.is_some() {
-                commands.push(Command::ContextMenu(None));
-            }
-            if let Some(point) = self.context_menu {
-                commands.push(Command::ContextMenu(Some(
-                    point + self.offset_opt.unwrap_or_default(),
-                )));
-            }
-        }
-
         // Change directory if requested
         if let Some(mut location) = cd {
             if matches!(self.mode, Mode::Desktop) {
@@ -3932,6 +3920,18 @@ impl Tab {
                         log::warn!("tried to cd to {:?} which is not a directory", location);
                     }
                 }
+            }
+        }
+
+        // Update context menu popup
+        if self.context_menu != last_context_menu {
+            if last_context_menu.is_some() {
+                commands.push(Command::ContextMenu(None));
+            }
+            if let Some(point) = self.context_menu {
+                commands.push(Command::ContextMenu(Some(
+                    point + self.offset_opt.unwrap_or_default(),
+                )));
             }
         }
 

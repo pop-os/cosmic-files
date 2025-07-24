@@ -497,6 +497,7 @@ struct App {
     title: String,
     accept_label: DialogLabel,
     choices: Vec<DialogChoice>,
+    context_menu_window: Option<window::Id>,
     context_page: ContextPage,
     dialog_pages: VecDeque<DialogPage>,
     dialog_text_input: widget::Id,
@@ -957,6 +958,7 @@ impl Application for App {
             title,
             accept_label: DialogLabel::from(accept_label),
             choices: Vec::new(),
+            context_menu_window: None,
             context_page: ContextPage::Preview(None, PreviewKind::Selected),
             dialog_pages: VecDeque::new(),
             dialog_text_input: widget::Id::unique(),
@@ -1602,6 +1604,75 @@ impl Application for App {
                         }
                         tab::Command::ChangeLocation(_tab_title, _tab_path, _selection_paths) => {
                             commands.push(Task::batch([self.update_watcher(), self.rescan_tab()]));
+                        }
+                        tab::Command::ContextMenu(point_opt) => {
+                            #[cfg(feature = "wayland")]
+                            match point_opt {
+                                Some(point) => {
+                                    if crate::is_wayland() {
+                                        // Open context menu
+                                        use cctk::wayland_protocols::xdg::shell::client::xdg_positioner::{
+                                            Anchor, Gravity,
+                                        };
+                                        use cosmic::iced_runtime::platform_specific::wayland::popup::{
+                                            SctkPopupSettings, SctkPositioner,
+                                        };
+                                        use cosmic::iced::Rectangle;
+                                        let window_id = window::Id::unique();
+                                        self.context_menu_window = Some(window_id.clone());
+                                        let autosize_id = widget::Id::unique();
+                                        commands.push(self.update(Message::Surface(
+                                            cosmic::surface::action::app_popup(
+                                                move |app: &mut App| -> SctkPopupSettings {
+                                                    let anchor_rect = Rectangle {
+                                                        x: point.x as i32,
+                                                        y: point.y as i32,
+                                                        width: 1,
+                                                        height: 1,
+                                                    };
+                                                    let positioner = SctkPositioner {
+                                                        size: None,
+                                                        anchor_rect,
+                                                        anchor: Anchor::None,
+                                                        gravity: Gravity::BottomRight,
+                                                        reactive: true,
+                                                        ..Default::default()
+                                                    };
+                                                    SctkPopupSettings {
+                                                        parent: app.flags.window_id,
+                                                        id: window_id,
+                                                        positioner,
+                                                        parent_size: None,
+                                                        grab: true,
+                                                        close_with_children: false,
+                                                        input_zone: None,
+                                                    }
+                                                },
+                                                Some(Box::new(move |app: &App| {
+                                                    widget::autosize::autosize(
+                                                        menu::context_menu(
+                                                            &app.tab,
+                                                            &app.key_binds,
+                                                            &app.modifiers,
+                                                        )
+                                                        .map(Message::TabMessage)
+                                                        .map(cosmic::Action::App),
+                                                        autosize_id.clone(),
+                                                    )
+                                                    .into()
+                                                })),
+                                            ),
+                                        )));
+                                    }
+                                }
+                                None => {
+                                    if let Some(window_id) = self.context_menu_window.take() {
+                                        commands.push(self.update(Message::Surface(
+                                            cosmic::surface::action::destroy_popup(window_id),
+                                        )));
+                                    }
+                                }
+                            }
                         }
                         tab::Command::Iced(iced_command) => {
                             commands.push(iced_command.0.map(|tab_message| {
