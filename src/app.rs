@@ -1553,7 +1553,6 @@ impl App {
             // Watch new paths
             for path in new_paths.iter() {
                 if !old_paths.contains(path) {
-                    //TODO: should this be recursive?
                     match watcher
                         .watcher()
                         .watch(path, notify::RecursiveMode::NonRecursive)
