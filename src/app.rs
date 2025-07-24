@@ -602,11 +602,12 @@ pub struct MounterData(MounterKey, MounterItem);
 
 #[derive(Clone, Debug)]
 pub enum WindowKind {
+    ContextMenu(Entity, widget::Id),
     Desktop(Entity),
     DesktopViewOptions,
     Dialogs(widget::Id),
-    Preview(Option<Entity>, PreviewKind),
     FileDialog(Option<Vec<PathBuf>>),
+    Preview(Option<Entity>, PreviewKind),
 }
 
 pub struct WatcherWrapper {
@@ -671,7 +672,7 @@ pub struct App {
     surface_names: HashMap<WindowId, String>,
     toasts: widget::toaster::Toasts<Message>,
     watcher_opt: Option<(Debouncer<RecommendedWatcher, FileIdMap>, HashSet<PathBuf>)>,
-    window_id_opt: Option<window::Id>,
+    pub(crate) window_id_opt: Option<window::Id>,
     windows: HashMap<window::Id, WindowKind>,
     nav_dnd_hover: Option<(Location, Instant)>,
     tab_dnd_hover: Option<(Entity, Instant)>,
@@ -1120,9 +1121,20 @@ impl App {
     }
 
     fn remove_window(&mut self, id: &window::Id) {
-        if let Some(WindowKind::Desktop(entity)) = self.windows.remove(id) {
-            // Remove the tab from the tab model
-            self.tab_model.remove(entity);
+        if let Some(window_kind) = self.windows.remove(id) {
+            match window_kind {
+                WindowKind::ContextMenu(entity, _) => {
+                    // Close context menu
+                    if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                        tab.context_menu = None;
+                    }
+                }
+                WindowKind::Desktop(entity) => {
+                    // Remove the tab from the tab model
+                    self.tab_model.remove(entity);
+                }
+                _ => {}
+            }
         }
     }
 
@@ -2410,8 +2422,10 @@ impl Application for App {
         }
         if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
             if tab.context_menu.is_some() {
-                tab.context_menu = None;
-                return Task::none();
+                return self.update(Message::TabMessage(
+                    Some(entity),
+                    tab::Message::ContextMenu(None),
+                ));
             }
 
             if tab.edit_location.is_some() {
@@ -3683,12 +3697,26 @@ impl Application for App {
                 return self.update_config();
             }
             Message::TabActivate(entity) => {
-                self.tab_model.activate(entity);
+                let mut tasks = Vec::new();
 
+                // Close old context menu
+                let active = self.tab_model.active();
+                if let Some(tab) = self.tab_model.data_mut::<Tab>(active) {
+                    if tab.context_menu.is_some() {
+                        tasks.push(self.update(Message::TabMessage(
+                            Some(active),
+                            tab::Message::ContextMenu(None),
+                        )));
+                    }
+                }
+
+                // Activate new tab
+                self.tab_model.activate(entity);
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
                     self.activate_nav_model_location(&tab.location.clone());
                 }
-                return self.update_title();
+                tasks.push(self.update_title());
+                return Task::batch(tasks);
             }
             Message::TabNext => {
                 let len = self.tab_model.iter().count();
@@ -3823,6 +3851,75 @@ impl Application for App {
                                 self.update_watcher(),
                                 self.update_tab(entity, tab_path, selection_paths),
                             ]));
+                        }
+                        tab::Command::ContextMenu(point_opt) => {
+                            #[cfg(feature = "wayland")]
+                            match point_opt {
+                                Some(point) => {
+                                    if crate::is_wayland() {
+                                        // Open context menu
+                                        use cctk::wayland_protocols::xdg::shell::client::xdg_positioner::{
+                                            Anchor, Gravity,
+                                        };
+                                        use cosmic::iced_runtime::platform_specific::wayland::popup::{
+                                            SctkPopupSettings, SctkPositioner,
+                                        };
+                                        let window_id = WindowId::unique();
+                                        self.windows.insert(
+                                            window_id.clone(),
+                                            WindowKind::ContextMenu(entity, widget::Id::unique()),
+                                        );
+                                        commands.push(self.update(Message::Surface(
+                                            cosmic::surface::action::app_popup(
+                                                move |app: &mut crate::App| -> SctkPopupSettings {
+                                                    let anchor_rect = Rectangle {
+                                                        x: point.x as i32,
+                                                        y: point.y as i32,
+                                                        width: 1,
+                                                        height: 1,
+                                                    };
+                                                    let positioner = SctkPositioner {
+                                                        size: None,
+                                                        anchor_rect,
+                                                        anchor: Anchor::None,
+                                                        gravity: Gravity::BottomRight,
+                                                        reactive: true,
+                                                        ..Default::default()
+                                                    };
+                                                    SctkPopupSettings {
+                                                        parent: app
+                                                            .window_id_opt
+                                                            .unwrap_or_else(|| WindowId::NONE),
+                                                        id: window_id,
+                                                        positioner,
+                                                        parent_size: None,
+                                                        grab: true,
+                                                        close_with_children: false,
+                                                        input_zone: None,
+                                                    }
+                                                },
+                                                None,
+                                            ),
+                                        )));
+                                    }
+                                }
+                                None => {
+                                    // Destroy previous popup
+                                    let mut window_ids = Vec::new();
+                                    for (window_id, window_kind) in self.windows.iter() {
+                                        if let WindowKind::ContextMenu(e, _) = window_kind {
+                                            if *e == entity {
+                                                window_ids.push(*window_id);
+                                            }
+                                        }
+                                    }
+                                    for window_id in window_ids {
+                                        commands.push(self.update(Message::Surface(
+                                            cosmic::surface::action::destroy_popup(window_id),
+                                        )));
+                                    }
+                                }
+                            }
                         }
                         tab::Command::Delete(paths) => commands.push(self.delete(paths)),
                         tab::Command::DropFiles(to, from) => {
@@ -4055,10 +4152,12 @@ impl Application for App {
                 }
             }
             Message::WindowUnfocus => {
+                /*TODO
                 let tab_entity = self.tab_model.active();
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(tab_entity) {
                     tab.context_menu = None;
                 }
+                */
             }
             Message::WindowCloseRequested(id) => {
                 self.remove_window(&id);
@@ -4548,9 +4647,9 @@ impl Application for App {
                     };
                 }
             }
-            Message::Surface(a) => {
+            Message::Surface(action) => {
                 return cosmic::task::message(cosmic::Action::Cosmic(
-                    cosmic::app::Action::Surface(a),
+                    cosmic::app::Action::Surface(action),
                 ));
             }
             Message::SaveSortNames => {
@@ -5583,6 +5682,19 @@ impl Application for App {
 
     fn view_window(&self, id: WindowId) -> Element<Self::Message> {
         let content = match self.windows.get(&id) {
+            Some(WindowKind::ContextMenu(entity, id)) => {
+                match self.tab_model.data::<Tab>(*entity) {
+                    Some(tab) => {
+                        return widget::autosize::autosize(
+                            menu::context_menu(tab, &self.key_binds, &self.modifiers)
+                                .map(|x| Message::TabMessage(Some(*entity), x)),
+                            id.clone(),
+                        )
+                        .into()
+                    }
+                    None => widget::text("Unknown tab ID").into(),
+                }
+            }
             Some(WindowKind::Desktop(entity)) => {
                 let mut tab_column = widget::column::with_capacity(3);
 

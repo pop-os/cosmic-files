@@ -52,6 +52,13 @@ pub fn home_dir() -> PathBuf {
     }
 }
 
+pub fn is_wayland() -> bool {
+    matches!(
+        cosmic::app::cosmic::windowing_system(),
+        Some(cosmic::app::cosmic::WindowingSystem::Wayland)
+    )
+}
+
 /// Runs application in desktop mode
 #[rustfmt::skip]
 pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {

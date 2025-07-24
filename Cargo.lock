@@ -1484,6 +1484,7 @@ dependencies = [
  "bzip2",
  "chrono",
  "compio",
+ "cosmic-client-toolkit",
  "cosmic-mime-apps",
  "dirs 6.0.0",
  "env_logger",

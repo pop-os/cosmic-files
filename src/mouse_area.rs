@@ -32,7 +32,8 @@ pub struct MouseArea<'a, Message> {
     on_release: Option<Box<dyn OnMouseButton<'a, Message>>>,
     on_resize: Option<Box<dyn OnResize<'a, Message>>>,
     on_right_press: Option<Box<dyn OnMouseButton<'a, Message>>>,
-    on_right_press_no_capture: Option<Box<dyn OnMouseButton<'a, Message>>>,
+    on_right_press_no_capture: bool,
+    on_right_press_window_position: bool,
     on_right_release: Option<Box<dyn OnMouseButton<'a, Message>>>,
     on_middle_press: Option<Box<dyn OnMouseButton<'a, Message>>>,
     on_middle_release: Option<Box<dyn OnMouseButton<'a, Message>>>,
@@ -103,10 +104,17 @@ impl<'a, Message> MouseArea<'a, Message> {
         self
     }
 
-    /// The message to emit on a right button press without capturing.
+    /// on_right_press will not capture input
     #[must_use]
-    pub fn on_right_press_no_capture(mut self, message: impl OnMouseButton<'a, Message>) -> Self {
-        self.on_right_press_no_capture = Some(Box::new(message));
+    pub fn on_right_press_no_capture(mut self) -> Self {
+        self.on_right_press_no_capture = true;
+        self
+    }
+
+    /// on_right_press will provide window position instead of widget relative
+    #[must_use]
+    pub fn on_right_press_window_position(mut self) -> Self {
+        self.on_right_press_window_position = true;
         self
     }
 
@@ -203,8 +211,8 @@ impl<'a, Message, F> OnMouseButton<'a, Message> for F where F: Fn(Option<Point>)
 pub trait OnDrag<'a, Message>: Fn(Option<Rectangle>) -> Message + 'a {}
 impl<'a, Message, F> OnDrag<'a, Message> for F where F: Fn(Option<Rectangle>) -> Message + 'a {}
 
-pub trait OnResize<'a, Message>: Fn(Size, Rectangle) -> Message + 'a {}
-impl<'a, Message, F> OnResize<'a, Message> for F where F: Fn(Size, Rectangle) -> Message + 'a {}
+pub trait OnResize<'a, Message>: Fn(Rectangle) -> Message + 'a {}
+impl<'a, Message, F> OnResize<'a, Message> for F where F: Fn(Rectangle) -> Message + 'a {}
 
 pub trait OnScroll<'a, Message>: Fn(mouse::ScrollDelta) -> Option<Message> + 'a {}
 impl<'a, Message, F> OnScroll<'a, Message> for F where
@@ -223,7 +231,7 @@ struct State {
     last_virtual_position: Option<Point>,
     drag_initiated: Option<Point>,
     prev_click: Option<(mouse::Click, Instant)>,
-    size: Option<Size>,
+    viewport: Option<Rectangle>,
 }
 
 impl State {
@@ -286,7 +294,8 @@ impl<'a, Message> MouseArea<'a, Message> {
             on_release: None,
             on_resize: None,
             on_right_press: None,
-            on_right_press_no_capture: None,
+            on_right_press_no_capture: false,
+            on_right_press_window_position: false,
             on_right_release: None,
             on_middle_press: None,
             on_middle_release: None,
@@ -507,10 +516,9 @@ fn update<Message: Clone>(
     let layout_bounds = layout.bounds();
 
     if let Some(message) = widget.on_resize.as_ref() {
-        let size = layout_bounds.size();
-        if state.size != Some(size) {
-            state.size = Some(size);
-            shell.publish(message(size, *viewport));
+        if state.viewport != Some(*viewport) {
+            state.viewport = Some(*viewport);
+            shell.publish(message(*viewport));
         }
     }
 
@@ -635,17 +643,18 @@ fn update<Message: Clone>(
 
     if let Some(message) = widget.on_right_press.as_ref() {
         if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)) = event {
-            shell.publish(message(cursor.position_in(layout_bounds)));
+            let point_opt = if widget.on_right_press_window_position {
+                cursor.position_over(layout_bounds)
+            } else {
+                cursor.position_in(layout_bounds)
+            };
+            shell.publish(message(point_opt));
 
-            return event::Status::Captured;
-        }
-    }
-
-    if let Some(message) = widget.on_right_press_no_capture.as_ref() {
-        if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)) = event {
-            shell.publish(message(cursor.position_in(layout_bounds)));
-
-            return event::Status::Ignored;
+            if widget.on_right_press_no_capture {
+                return event::Status::Ignored;
+            } else {
+                return event::Status::Captured;
+            }
         }
     }
 

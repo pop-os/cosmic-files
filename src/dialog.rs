@@ -457,6 +457,7 @@ impl From<AppMessage> for Message {
             AppMessage::ZoomIn(_entity_opt) => Message::ZoomIn,
             AppMessage::ZoomOut(_entity_opt) => Message::ZoomOut,
             AppMessage::NewItem(_entity_opt, true) => Message::NewFolder,
+            AppMessage::Surface(action) => Message::Surface(action),
             unsupported => {
                 log::warn!("{unsupported:?} not supported in dialog mode");
                 Message::None
@@ -1236,8 +1237,7 @@ impl Application for App {
         }
 
         if self.tab.context_menu.is_some() {
-            self.tab.context_menu = None;
-            return Task::none();
+            return self.update(Message::TabMessage(tab::Message::ContextMenu(None)));
         }
 
         if self.tab.edit_location.is_some() {
@@ -1787,9 +1787,9 @@ impl Application for App {
                     tab::View::Grid => zoom_out(&mut config.icon_sizes.grid, 50, 500),
                 });
             }
-            Message::Surface(a) => {
+            Message::Surface(action) => {
                 return cosmic::task::message(cosmic::Action::Cosmic(
-                    cosmic::app::Action::Surface(a),
+                    cosmic::app::Action::Surface(action),
                 ));
             }
         }

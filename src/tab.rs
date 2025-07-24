@@ -1508,6 +1508,7 @@ pub enum Command {
     AddToSidebar(PathBuf),
     AutoScroll(Option<f32>),
     ChangeLocation(String, Location, Option<Vec<PathBuf>>),
+    ContextMenu(Option<Point>),
     Delete(Vec<PathBuf>),
     DropFiles(PathBuf, ClipboardPaste),
     EmptyTrash,
@@ -1566,9 +1567,9 @@ pub enum Message {
     Reload,
     RightClick(Option<usize>),
     MiddleClick(usize),
+    Resize(Rectangle),
     Scroll(Viewport),
     ScrollTab(f32),
-    ScrollToFocus,
     SearchContext(Location, SearchContextWrapper),
     SearchReady(bool),
     SelectAll,
@@ -2384,6 +2385,7 @@ pub struct Tab {
     pub location_context_menu_index: Option<usize>,
     pub context_menu: Option<Point>,
     pub mode: Mode,
+    pub offset_opt: Option<Vector>,
     pub scroll_opt: Option<AbsoluteOffset>,
     pub size_opt: Cell<Option<Size>>,
     pub item_view_size_opt: Cell<Option<Size>>,
@@ -2495,6 +2497,7 @@ impl Tab {
             location_context_menu_point: None,
             location_context_menu_index: None,
             mode: Mode::App,
+            offset_opt: None,
             scroll_opt: None,
             size_opt: Cell::new(None),
             item_view_size_opt: Cell::new(None),
@@ -2861,6 +2864,7 @@ impl Tab {
         let mut history_i_opt = None;
         let mod_ctrl = modifiers.contains(Modifiers::CTRL) && self.mode.multiple();
         let mod_shift = modifiers.contains(Modifiers::SHIFT) && self.mode.multiple();
+        let last_context_menu = self.context_menu;
         match message {
             Message::AddNetworkDrive => {
                 commands.push(Command::AddNetworkDrive);
@@ -3087,6 +3091,7 @@ impl Tab {
                 self.edit_location = None;
                 if point_opt.is_none() || !mod_shift {
                     self.context_menu = point_opt;
+
                     //TODO: hack for clearing selecting when right clicking empty space
                     if self.context_menu.is_some() && self.last_right_click.take().is_none() {
                         if let Some(ref mut items) = self.items_opt {
@@ -3578,7 +3583,16 @@ impl Tab {
                     item.highlighted = true;
                 }
             }
+            Message::Resize(viewport) => {
+                self.offset_opt = Some(Vector::new(viewport.x, viewport.y));
 
+                // Scroll to ensure focused item still in view
+                if let Some(offset) = self.select_focus_scroll() {
+                    commands.push(Command::Iced(
+                        scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                    ));
+                }
+            }
             Message::Scroll(viewport) => {
                 self.scroll_opt = Some(viewport.absolute_offset());
                 self.watch_drag = true;
@@ -3594,13 +3608,6 @@ impl Tab {
                     )
                     .into(),
                 ));
-            }
-            Message::ScrollToFocus => {
-                if let Some(offset) = self.select_focus_scroll() {
-                    commands.push(Command::Iced(
-                        scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
-                    ));
-                }
             }
             Message::SearchContext(location, context) => {
                 if location == self.location {
@@ -3870,6 +3877,18 @@ impl Tab {
             commands.push(Command::Iced(
                 scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
             ));
+        }
+
+        //TODO: check for wayland
+        if self.context_menu != last_context_menu {
+            if last_context_menu.is_some() {
+                commands.push(Command::ContextMenu(None));
+            }
+            if let Some(point) = self.context_menu {
+                commands.push(Command::ContextMenu(Some(
+                    point + self.offset_opt.unwrap_or_default(),
+                )));
+            }
         }
 
         // Change directory if requested
@@ -4480,9 +4499,9 @@ impl Tab {
                             Message::LocationContextMenuIndex(None)
                         })
                     } else {
-                        mouse_area = mouse_area.on_right_press_no_capture(move |_point_opt| {
-                            Message::LocationContextMenuIndex(Some(index))
-                        })
+                        mouse_area = mouse_area.on_right_press_no_capture().on_right_press(
+                            move |_point_opt| Message::LocationContextMenuIndex(Some(index)),
+                        )
                     }
 
                     let mouse_area = if let Location::Path(_) = &self.location {
@@ -4739,9 +4758,9 @@ impl Tab {
                             column = column.push(button)
                         } else {
                             column = column.push(
-                                mouse_area::MouseArea::new(button).on_right_press_no_capture(
-                                    move |_point_opt| Message::RightClick(Some(i)),
-                                ),
+                                mouse_area::MouseArea::new(button)
+                                    .on_right_press_no_capture()
+                                    .on_right_press(move |_point_opt| Message::RightClick(Some(i))),
                             );
                         }
                     }
@@ -5158,9 +5177,9 @@ impl Tab {
                         if self.context_menu.is_some() {
                             mouse_area
                         } else {
-                            mouse_area.on_right_press_no_capture(move |_point_opt| {
-                                Message::RightClick(Some(i))
-                            })
+                            mouse_area
+                                .on_right_press_no_capture()
+                                .on_right_press(move |_point_opt| Message::RightClick(Some(i)))
                         }
                     };
 
@@ -5375,8 +5394,7 @@ impl Tab {
         let mut mouse_area = mouse_area::MouseArea::new(item_view)
             .on_press(move |_point_opt| Message::Click(None))
             .on_release(|_| Message::ClickRelease(None))
-            //TODO: better way to keep focused item in view
-            .on_resize(|_, _| Message::ScrollToFocus)
+            .on_resize(Message::Resize)
             .on_back_press(move |_point_opt| Message::GoPrevious)
             .on_forward_press(move |_point_opt| Message::GoNext)
             .on_scroll(|delta| respond_to_scroll_direction(delta, self.modifiers));
@@ -5388,12 +5406,13 @@ impl Tab {
         }
 
         let mut popover = widget::popover(mouse_area);
-
         if let Some(point) = self.context_menu {
-            let context_menu = menu::context_menu(self, key_binds, &self.modifiers);
-            popover = popover
-                .popup(context_menu)
-                .position(widget::popover::Position::Point(point));
+            if !cfg!(feature = "wayland") || !crate::is_wayland() {
+                let context_menu = menu::context_menu(self, key_binds, &self.modifiers);
+                popover = popover
+                    .popup(context_menu)
+                    .position(widget::popover::Position::Point(point));
+            }
         }
 
         let mut tab_column = widget::column::with_capacity(3);
