@@ -5852,7 +5852,7 @@ impl Application for App {
                             for path in trash_bins {
                                 if let Err(e) = watcher
                                     .watcher()
-                                    .watch(&path, notify::RecursiveMode::Recursive)
+                                    .watch(&path, notify::RecursiveMode::NonRecursive)
                                 {
                                     log::warn!(
                                         "failed to add trash bin `{}` to watcher: {e:?}",
