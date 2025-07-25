@@ -945,7 +945,7 @@ impl Application for App {
             },
         });
 
-        let mut tab = Tab::new(location, flags.config.dialog_tab(), None);
+        let mut tab = Tab::new(location, flags.config.dialog_tab(), None, None);
         tab.mode = tab::Mode::Dialog(flags.kind.clone());
         tab.sort_name = tab::HeadingOptions::Modified;
         tab.sort_direction = false;
@@ -1239,7 +1239,7 @@ impl Application for App {
         }
 
         if self.tab.context_menu.is_some() {
-            return self.update(Message::TabMessage(tab::Message::ContextMenu(None)));
+            return self.update(Message::TabMessage(tab::Message::ContextMenu(None, None)));
         }
 
         if self.tab.edit_location.is_some() {
@@ -1605,7 +1605,7 @@ impl Application for App {
                         tab::Command::ChangeLocation(_tab_title, _tab_path, _selection_paths) => {
                             commands.push(Task::batch([self.update_watcher(), self.rescan_tab()]));
                         }
-                        tab::Command::ContextMenu(point_opt) => {
+                        tab::Command::ContextMenu(point_opt, parent_id) => {
                             #[cfg(feature = "wayland")]
                             match point_opt {
                                 Some(point) => {
@@ -1639,7 +1639,8 @@ impl Application for App {
                                                         ..Default::default()
                                                     };
                                                     SctkPopupSettings {
-                                                        parent: app.flags.window_id,
+                                                        parent: parent_id
+                                                            .unwrap_or(app.flags.window_id),
                                                         id: window_id,
                                                         positioner,
                                                         parent_size: None,

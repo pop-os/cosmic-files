@@ -16,6 +16,7 @@ use cosmic::{
             horizontal_rule, rule,
             scrollable::{self, AbsoluteOffset, Viewport},
         },
+        window,
         Alignment,
         Border,
         Color,
@@ -1508,7 +1509,7 @@ pub enum Command {
     AddToSidebar(PathBuf),
     AutoScroll(Option<f32>),
     ChangeLocation(String, Location, Option<Vec<PathBuf>>),
-    ContextMenu(Option<Point>),
+    ContextMenu(Option<Point>, Option<window::Id>),
     Delete(Vec<PathBuf>),
     DropFiles(PathBuf, ClipboardPaste),
     EmptyTrash,
@@ -1536,7 +1537,7 @@ pub enum Message {
     ClickRelease(Option<usize>),
     Config(TabConfig),
     ContextAction(Action),
-    ContextMenu(Option<Point>),
+    ContextMenu(Option<Point>, Option<window::Id>),
     LocationContextMenuPoint(Option<Point>),
     LocationContextMenuIndex(Option<usize>),
     LocationMenuAction(LocationMenuAction),
@@ -2411,6 +2412,7 @@ pub struct Tab {
     date_time_formatter: DateTimeFormatter,
     time_formatter: DateTimeFormatter,
     watch_drag: bool,
+    window_id: Option<window::Id>,
 }
 
 async fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, String> {
@@ -2478,6 +2480,7 @@ impl Tab {
         location: Location,
         config: TabConfig,
         sorting_options: Option<&OrderMap<String, (HeadingOptions, bool)>>,
+        window_id: Option<window::Id>,
     ) -> Self {
         let location_str = location.to_string();
         let (sort_name, sort_direction) = sorting_options
@@ -2523,6 +2526,7 @@ impl Tab {
             date_time_formatter: date_time_formatter(config.military_time),
             time_formatter: time_formatter(config.military_time),
             watch_drag: true,
+            window_id,
         }
     }
 
@@ -3087,7 +3091,7 @@ impl Tab {
 
                 commands.push(Command::Action(action));
             }
-            Message::ContextMenu(point_opt) => {
+            Message::ContextMenu(point_opt, _) => {
                 self.edit_location = None;
                 if point_opt.is_none() || !mod_shift {
                     self.context_menu = point_opt;
@@ -3926,12 +3930,13 @@ impl Tab {
         // Update context menu popup
         if self.context_menu != last_context_menu {
             if last_context_menu.is_some() {
-                commands.push(Command::ContextMenu(None));
+                commands.push(Command::ContextMenu(None, self.window_id.clone()));
             }
             if let Some(point) = self.context_menu {
-                commands.push(Command::ContextMenu(Some(
-                    point + self.offset_opt.unwrap_or_default(),
-                )));
+                commands.push(Command::ContextMenu(
+                    Some(point + self.offset_opt.unwrap_or_default()),
+                    self.window_id.clone(),
+                ));
             }
         }
 
@@ -5400,9 +5405,12 @@ impl Tab {
             .on_scroll(|delta| respond_to_scroll_direction(delta, self.modifiers));
 
         if self.context_menu.is_some() {
-            mouse_area = mouse_area.on_right_press(move |_point_opt| Message::ContextMenu(None));
+            mouse_area = mouse_area.on_right_press(move |_point_opt| {
+                Message::ContextMenu(None, self.window_id.clone())
+            });
         } else {
-            mouse_area = mouse_area.on_right_press(Message::ContextMenu);
+            let window_id = self.window_id.clone();
+            mouse_area = mouse_area.on_right_press(move |p| Message::ContextMenu(p, window_id));
         }
 
         let mut popover = widget::popover(mouse_area);
@@ -6063,7 +6071,12 @@ mod tests {
     fn tab_history() -> io::Result<(TempDir, Tab, Vec<PathBuf>)> {
         let fs = simple_fs(NUM_FILES, NUM_NESTED, NUM_DIRS, NUM_NESTED, NAME_LEN)?;
         let path = fs.path();
-        let mut tab = Tab::new(Location::Path(path.into()), TabConfig::default(), None);
+        let mut tab = Tab::new(
+            Location::Path(path.into()),
+            TabConfig::default(),
+            None,
+            None,
+        );
 
         // All directories (simple_fs only produces one nested layer)
         let dirs: Vec<PathBuf> = filter_dirs(path)?
@@ -6160,7 +6173,12 @@ mod tests {
             .next()
             .expect("temp directory should have at least one directory");
 
-        let mut tab = Tab::new(Location::Path(path.to_owned()), TabConfig::default(), None);
+        let mut tab = Tab::new(
+            Location::Path(path.to_owned()),
+            TabConfig::default(),
+            None,
+            None,
+        );
         debug!(
             "Emitting Message::Location(Location::Path(\"{}\"))",
             next_dir.display()
@@ -6292,7 +6310,12 @@ mod tests {
     fn tab_empty_history_does_nothing_on_prev_next() -> io::Result<()> {
         let fs = simple_fs(0, NUM_NESTED, NUM_DIRS, 0, NAME_LEN)?;
         let path = fs.path();
-        let mut tab = Tab::new(Location::Path(path.into()), TabConfig::default(), None);
+        let mut tab = Tab::new(
+            Location::Path(path.into()),
+            TabConfig::default(),
+            None,
+            None,
+        );
 
         // Tab's location shouldn't change if GoPrev or GoNext is triggered
         debug!("Emitting Message::GoPrevious",);
@@ -6314,7 +6337,12 @@ mod tests {
             .next()
             .expect("should be at least one directory");
 
-        let mut tab = Tab::new(Location::Path(next_dir.clone()), TabConfig::default(), None);
+        let mut tab = Tab::new(
+            Location::Path(next_dir.clone()),
+            TabConfig::default(),
+            None,
+            None,
+        );
         // This will eventually yield false once root is hit
         while next_dir.pop() {
             debug!("Emitting Message::LocationUp",);
@@ -6347,7 +6375,12 @@ mod tests {
         }
 
         debug!("Creating tab for directory of long file names");
-        Tab::new(Location::Path(path.into()), TabConfig::default(), None);
+        Tab::new(
+            Location::Path(path.into()),
+            TabConfig::default(),
+            None,
+            None,
+        );
 
         Ok(())
     }
