@@ -960,6 +960,7 @@ impl App {
         location: Location,
         activate: bool,
         selection_paths: Option<Vec<PathBuf>>,
+        window_id: Option<window::Id>,
     ) -> (Entity, Task<Message>) {
         #[cfg(feature = "gvfs")]
         if let Location::Network(ref uri, ref name, Some(ref path)) = location {
@@ -1001,6 +1002,7 @@ impl App {
             location.clone(),
             self.config.tab,
             Some(&self.state.sort_names),
+            window_id,
         );
         tab.mode = match self.mode {
             Mode::App => tab::Mode::App,
@@ -1009,6 +1011,7 @@ impl App {
                 tab::Mode::Desktop
             }
         };
+
         let entity = self
             .tab_model
             .insert()
@@ -1038,7 +1041,8 @@ impl App {
         activate: bool,
         selection_paths: Option<Vec<PathBuf>>,
     ) -> Task<Message> {
-        self.open_tab_entity(location, activate, selection_paths).1
+        self.open_tab_entity(location, activate, selection_paths, None)
+            .1
     }
 
     // This wrapper ensures that local folders use trash and remote folders permanently delete with a dialog
@@ -2424,7 +2428,7 @@ impl Application for App {
             if tab.context_menu.is_some() {
                 return self.update(Message::TabMessage(
                     Some(entity),
-                    tab::Message::ContextMenu(None),
+                    tab::Message::ContextMenu(None, None),
                 ));
             }
 
@@ -3705,7 +3709,7 @@ impl Application for App {
                     if tab.context_menu.is_some() {
                         tasks.push(self.update(Message::TabMessage(
                             Some(active),
-                            tab::Message::ContextMenu(None),
+                            tab::Message::ContextMenu(None, None),
                         )));
                     }
                 }
@@ -3804,7 +3808,7 @@ impl Application for App {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
 
                 //TODO: move to Task?
-                if let tab::Message::ContextMenu(_point_opt) = tab_message {
+                if let tab::Message::ContextMenu(_point_opt, _) = tab_message {
                     // Disable side context page
                     self.set_show_context(false);
                 }
@@ -3852,7 +3856,7 @@ impl Application for App {
                                 self.update_tab(entity, tab_path, selection_paths),
                             ]));
                         }
-                        tab::Command::ContextMenu(point_opt) => {
+                        tab::Command::ContextMenu(point_opt, parent_id) => {
                             #[cfg(feature = "wayland")]
                             match point_opt {
                                 Some(point) => {
@@ -3887,9 +3891,10 @@ impl Application for App {
                                                         ..Default::default()
                                                     };
                                                     SctkPopupSettings {
-                                                        parent: app
-                                                            .window_id_opt
-                                                            .unwrap_or_else(|| WindowId::NONE),
+                                                        parent: parent_id.unwrap_or(
+                                                            app.window_id_opt
+                                                                .unwrap_or_else(|| WindowId::NONE),
+                                                        ),
                                                         id: window_id,
                                                         positioner,
                                                         parent_size: None,
@@ -4543,6 +4548,7 @@ impl Application for App {
                             Location::Desktop(crate::desktop_dir(), display, self.config.desktop),
                             false,
                             None,
+                            Some(surface_id),
                         );
                         self.windows.insert(surface_id, WindowKind::Desktop(entity));
                         return Task::batch([
