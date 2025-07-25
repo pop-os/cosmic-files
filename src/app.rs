@@ -369,6 +369,7 @@ pub enum Message {
     PendingPauseAll(bool),
     PermanentlyDelete(Option<Entity>),
     Preview(Option<Entity>),
+    RescanRecents,
     RescanTrash,
     RemoveFromRecents(Option<Entity>),
     Rename(Option<Entity>),
@@ -1243,6 +1244,23 @@ impl App {
         for (entity, location) in needs_reload {
             commands.push(self.update_tab(entity, location, None));
         }
+        Task::batch(commands)
+    }
+
+    /// Refresh all tabs that are opened in [`Location::Recents`].
+    fn refresh_recents_tabs(&mut self) -> Task<Message> {
+        let commands: Vec<_> = self
+            .tab_model
+            .iter()
+            .filter_map(|entity| {
+                let tab = self.tab_model.data::<Tab>(entity)?;
+                (tab.location == Location::Recents).then_some(entity)
+            })
+            .collect();
+        let commands: Vec<_> = commands
+            .into_iter()
+            .map(|entity| self.update_tab(entity, Location::Recents, None))
+            .collect();
         Task::batch(commands)
     }
 
@@ -3574,6 +3592,9 @@ impl Application for App {
                 let paths = self.selected_paths(entity_opt);
                 return self.operation(Operation::RemoveFromRecents { paths });
             }
+            Message::RescanRecents => {
+                return self.refresh_recents_tabs();
+            }
             Message::RescanTrash => {
                 // Update trash icon if empty/full
                 let maybe_entity = self.nav_model.iter().find(|&entity| {
@@ -5788,6 +5809,12 @@ impl Application for App {
         struct WatcherSubscription;
         struct TrashWatcherSubscription;
         struct TimeSubscription;
+        #[cfg(all(
+            not(feature = "desktop-applet"),
+            not(target_os = "ios"),
+            not(target_os = "android")
+        ))]
+        struct RecentsWatcherSubscription;
 
         let mut subscriptions = vec![
             event::listen_with(|event, status, window_id| match event {
@@ -5986,6 +6013,73 @@ impl Application for App {
                         }
                         (_, Err(e)) => {
                             log::warn!("could not find any valid trash bins to watch: {e:?}")
+                        }
+                    }
+
+                    std::future::pending().await
+                }),
+            ),
+            #[cfg(all(
+                not(feature = "desktop-applet"),
+                not(target_os = "ios"),
+                not(target_os = "android")
+            ))]
+            Subscription::run_with_id(
+                TypeId::of::<RecentsWatcherSubscription>(),
+                stream::channel(1, |mut output| async move {
+                    let Some(recents_path) = recently_used_xbel::dir() else {
+                        log::warn!(
+                            "failed to watch recents changes: .recently_used.xbel does not exist"
+                        );
+                        return std::future::pending().await;
+                    };
+
+                    let watcher_res = new_debouncer(
+                        time::Duration::from_millis(250),
+                        Some(time::Duration::from_millis(250)),
+                        move |event_res: notify_debouncer_full::DebounceEventResult| match event_res
+                        {
+                            Ok(events) => {
+                                // Programs differ in how they modify the recents file so the
+                                // rescan is triggered on any event but access.
+                                if events.iter().any(|event| {
+                                    let kind = event.kind;
+                                    kind.is_create()
+                                        || kind.is_modify()
+                                        || kind.is_remove()
+                                        || kind.is_other()
+                                }) {
+                                    if let Err(e) = futures::executor::block_on(async {
+                                        output.send(Message::RescanRecents).await
+                                    }) {
+                                        log::warn!("open recents tabs need to be updated but sending message failed: {e:?}");
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log::warn!("failed to watch recents file for changes: {e:?}")
+                            }
+                        },
+                    );
+
+                    match watcher_res {
+                        Ok(mut watcher) => {
+                            if let Err(e) = watcher
+                                .watcher()
+                                .watch(&recents_path, notify::RecursiveMode::NonRecursive)
+                            {
+                                log::warn!(
+                                    "failed to add recents file `{}` to watcher: {}",
+                                    recents_path.display(),
+                                    e
+                                );
+                            }
+
+                            // Don't drop the watcher.
+                            std::future::pending::<()>().await;
+                        }
+                        Err(e) => {
+                            log::warn!("failed to create new watcher for recents file: {e:?}")
                         }
                     }
 
