@@ -945,13 +945,13 @@ impl Application for App {
             },
         });
 
-        let tab_config = TabConfig {
-            view: tab::View::List,
-            folders_first: false,
-            ..Default::default()
-        };
-
-        let mut tab = Tab::new(location, flags.config.dialog_tab(), tab_config, ThumbCfg::default(), None);
+        let mut tab = Tab::new(
+            location,
+            flags.config.dialog_tab(),
+            ThumbCfg::default(),
+            None,
+            None,
+        );
         tab.mode = tab::Mode::Dialog(flags.kind.clone());
         tab.sort_name = tab::HeadingOptions::Modified;
         tab.sort_direction = false;

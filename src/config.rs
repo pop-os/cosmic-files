@@ -288,6 +288,9 @@ impl Default for DialogConfig {
             show_details: true,
             show_hidden: false,
             view: View::List,
+        }
+    }
+}
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
 #[serde(default)]
 pub struct ThumbCfg {

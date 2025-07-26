@@ -1762,7 +1762,7 @@ impl ItemThumbnail {
         };
 
         let mut tried_supported_file = false;
-        if !check_size("image", 64 * 1000 * 1000) {
+        if !check_size("image", max_size_mb * 1000 * 1000) {
             return ItemThumbnail::NotImage;
         }
         // First try built-in image thumbnailer
