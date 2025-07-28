@@ -1138,8 +1138,14 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
 }
 
 fn uri_to_path(uri: String) -> Option<PathBuf> {
-    //TODO support for external drive or cloud?
-    uri.strip_prefix("file://").map(PathBuf::from)
+    uri.parse::<url::Url>().ok().and_then(|url| {
+        //TODO support for external drive or cloud?
+        if url.scheme() == "file" {
+            url.to_file_path().ok()
+        } else {
+            None
+        }
+    })
 }
 
 pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
