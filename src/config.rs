@@ -166,6 +166,7 @@ pub struct Config {
     pub app_theme: AppTheme,
     pub dialog: DialogConfig,
     pub desktop: DesktopConfig,
+    pub thumb_cfg: ThumbCfg,
     pub favorites: Vec<Favorite>,
     pub show_details: bool,
     pub tab: TabConfig,
@@ -220,6 +221,7 @@ impl Default for Config {
             app_theme: AppTheme::System,
             desktop: DesktopConfig::default(),
             dialog: DialogConfig::default(),
+            thumb_cfg: ThumbCfg::default(),
             favorites: vec![
                 Favorite::Home,
                 Favorite::Documents,
@@ -286,6 +288,23 @@ impl Default for DialogConfig {
             show_details: true,
             show_hidden: false,
             view: View::List,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
+#[serde(default)]
+pub struct ThumbCfg {
+    pub jobs: NonZeroU16,
+    pub max_mem_mb: NonZeroU16,
+    pub max_size_mb: NonZeroU16,
+}
+
+impl Default for ThumbCfg {
+    fn default() -> Self {
+        Self {
+            jobs: 4.try_into().unwrap(),
+            max_mem_mb: 2000.try_into().unwrap(),
+            max_size_mb: 64.try_into().unwrap(),
         }
     }
 }

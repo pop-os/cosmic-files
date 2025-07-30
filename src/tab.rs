@@ -44,6 +44,8 @@ use icu::datetime::{
     options::{components, preferences},
     DateTimeFormatter, DateTimeFormatterOptions,
 };
+use image::ImageDecoder;
+use jxl_oxide::integration::JxlDecoder;
 use mime_guess::{mime, Mime};
 use once_cell::sync::Lazy;
 use ordermap::OrderMap;
@@ -71,7 +73,7 @@ use walkdir::WalkDir;
 use crate::{
     app::{Action, PreviewItem, PreviewKind},
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
-    config::{DesktopConfig, IconSizes, TabConfig, ICON_SCALE_MAX, ICON_SIZE_GRID},
+    config::{DesktopConfig, IconSizes, TabConfig, ThumbCfg, ICON_SCALE_MAX, ICON_SIZE_GRID},
     dialog::DialogKind,
     fl,
     localize::{LANGUAGE_SORTER, LOCALE},
@@ -1721,6 +1723,9 @@ impl ItemThumbnail {
         metadata: ItemMetadata,
         mime: mime::Mime,
         mut thumbnail_size: u32,
+        max_mem: u64,
+        jobs: usize,
+        max_size_mb: u64,
     ) -> Self {
         let thumbnail_cacher =
             ThumbnailCacher::new(path, ThumbnailSize::from_pixel_size(thumbnail_size));
@@ -1763,49 +1768,92 @@ impl ItemThumbnail {
         };
 
         let mut tried_supported_file = false;
-
-        if !check_size("image", 64 * 1000 * 1000) {
+        if !check_size("image", max_size_mb * 1000 * 1000) {
             return ItemThumbnail::NotImage;
         }
         // First try built-in image thumbnailer
         if mime.type_() == mime::IMAGE {
+            log::warn!("mime is {}", mime.subtype().as_str());
             tried_supported_file = true;
-            match image::ImageReader::open(path).and_then(|img| img.with_guessed_format()) {
-                Ok(reader) => match reader.decode() {
-                    Ok(image) => {
-                        if let Ok(cacher) = thumbnail_cacher.as_ref() {
-                            match cacher.update_with_image(image) {
-                                Ok(path) => {
-                                    return ItemThumbnail::Image(
-                                        widget::image::Handle::from_path(path),
-                                        None,
-                                    );
-                                }
+            let dyn_img: Option<image::DynamicImage> = match mime.subtype().as_str() {
+                "jxl" => match File::open(path) {
+                    Ok(file) => match JxlDecoder::new(file) {
+                        Ok(mut decoder) => {
+                            let mut limits = image::Limits::default();
+                            let max_ram = max_mem * 1000 * 1000 / jobs as u64;
+                            limits.max_alloc = Some(max_ram);
+                            let _ = decoder.set_limits(limits);
+                            match image::DynamicImage::from_decoder(decoder) {
+                                Ok(img) => Some(img),
                                 Err(err) => {
-                                    log::warn!("failed to decode {:?}: {}", path, err);
+                                    log::warn!("failed to decode jxl {:?}: {}", path, err);
+                                    None
                                 }
                             }
-                        } else {
-                            // Fallback for when thumbnail cacher isn't available.
-                            let thumbnail =
-                                image.thumbnail(thumbnail_size, thumbnail_size).into_rgba8();
-                            return ItemThumbnail::Image(
-                                widget::image::Handle::from_rgba(
-                                    thumbnail.width(),
-                                    thumbnail.height(),
-                                    thumbnail.into_raw(),
-                                ),
-                                Some((image.width(), image.height())),
-                            );
                         }
-                    }
+                        Err(err) => {
+                            log::warn!("failed to create jxl decoder {:?}: {}", path, err);
+                            None
+                        }
+                    },
                     Err(err) => {
-                        log::warn!("failed to decode {:?}: {}", path, err);
+                        log::warn!("failed to open path {:?}: {}", path, err);
+                        None
                     }
                 },
-                Err(err) => {
-                    log::warn!("failed to read {:?}: {}", path, err);
+                _ => {
+                    match image::ImageReader::open(path).and_then(|img| img.with_guessed_format()) {
+                        Ok(mut reader) => {
+                            let mut limits = image::Limits::default();
+                            let max_ram = max_mem * 1000 * 1000 / jobs as u64;
+                            limits.max_alloc = Some(max_ram);
+                            reader.limits(limits);
+                            match reader.decode() {
+                                Ok(reader) => Some(reader),
+                                Err(err) => {
+                                    log::warn!("failed to decode {:?}: {}", path, err);
+                                    None
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            log::warn!("failed to read {:?}: {}", path, err);
+                            None
+                        }
+                    }
                 }
+            };
+
+            match dyn_img {
+                Some(dyn_img) => {
+                    if let Ok(cacher) = thumbnail_cacher.as_ref() {
+                        match cacher.update_with_image(dyn_img) {
+                            Ok(path) => {
+                                return ItemThumbnail::Image(
+                                    widget::image::Handle::from_path(path),
+                                    None,
+                                );
+                            }
+                            Err(err) => {
+                                log::warn!("cacher failed to decode {:?}: {}", path, err);
+                            }
+                        }
+                    } else {
+                        // Fallback for when thumbnail cacher isn't available.
+                        let thumbnail = dyn_img
+                            .thumbnail(thumbnail_size, thumbnail_size)
+                            .into_rgba8();
+                        return ItemThumbnail::Image(
+                            widget::image::Handle::from_rgba(
+                                thumbnail.width(),
+                                thumbnail.height(),
+                                thumbnail.into_raw(),
+                            ),
+                            Some((dyn_img.width(), dyn_img.height())),
+                        );
+                    }
+                }
+                None => (),
             }
         }
 
@@ -2401,6 +2449,7 @@ pub struct Tab {
     pub history_i: usize,
     pub history: Vec<Location>,
     pub config: TabConfig,
+    pub thumb_config: ThumbCfg,
     pub sort_name: HeadingOptions,
     pub sort_direction: bool,
     pub gallery: bool,
@@ -2485,6 +2534,7 @@ impl Tab {
     pub fn new(
         location: Location,
         config: TabConfig,
+        thumb_config: ThumbCfg,
         sorting_options: Option<&OrderMap<String, (HeadingOptions, bool)>>,
         window_id: Option<window::Id>,
     ) -> Self {
@@ -2515,6 +2565,7 @@ impl Tab {
             history_i: 0,
             history,
             config,
+            thumb_config,
             sort_name,
             sort_direction,
             gallery: false,
@@ -5524,7 +5575,7 @@ impl Tab {
 
     pub fn subscription(&self, preview: bool) -> Subscription<Message> {
         //TODO: how many thumbnail loads should be in flight at once?
-        let jobs = 8;
+        let jobs = self.thumb_config.jobs.get().clone() as usize;
         let mut subscriptions = Vec::with_capacity(jobs + 3);
 
         if let Some(items) = &self.items_opt {
@@ -5570,16 +5621,26 @@ impl Tab {
                 };
                 if can_thumbnail {
                     let mime = item.mime.clone();
-
+                    let max_jobs = jobs.clone();
+                    let max_mb = self.thumb_config.max_mem_mb.get().clone() as u64;
+                    let max_size = self.thumb_config.max_size_mb.get().clone() as u64;
                     subscriptions.push(Subscription::run_with_id(
                         ("thumbnail", path.clone()),
-                        stream::channel(1, |mut output| async move {
+                        stream::channel(1, move |mut output| async move {
                             let message = {
                                 let path = path.clone();
+
                                 tokio::task::spawn_blocking(move || {
                                     let start = Instant::now();
-                                    let thumbnail =
-                                        ItemThumbnail::new(&path, metadata, mime, THUMBNAIL_SIZE);
+                                    let thumbnail = ItemThumbnail::new(
+                                        &path,
+                                        metadata,
+                                        mime,
+                                        THUMBNAIL_SIZE,
+                                        max_mb,
+                                        max_jobs,
+                                        max_size,
+                                    );
                                     log::debug!("thumbnailed {:?} in {:?}", path, start.elapsed());
                                     Message::Thumbnail(path.clone(), thumbnail)
                                 })
@@ -6081,6 +6142,7 @@ mod tests {
             Location::Path(path.into()),
             TabConfig::default(),
             None,
+            ThumbCfg::default(),
             None,
         );
 
@@ -6183,6 +6245,7 @@ mod tests {
             Location::Path(path.to_owned()),
             TabConfig::default(),
             None,
+            ThumbCfg::default(),
             None,
         );
         debug!(
@@ -6320,6 +6383,7 @@ mod tests {
             Location::Path(path.into()),
             TabConfig::default(),
             None,
+            ThumbCfg::default(),
             None,
         );
 
@@ -6347,6 +6411,7 @@ mod tests {
             Location::Path(next_dir.clone()),
             TabConfig::default(),
             None,
+            ThumbCfg::default(),
             None,
         );
         // This will eventually yield false once root is hit
