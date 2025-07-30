@@ -1773,7 +1773,6 @@ impl ItemThumbnail {
         }
         // First try built-in image thumbnailer
         if mime.type_() == mime::IMAGE {
-            log::warn!("mime is {}", mime.subtype().as_str());
             tried_supported_file = true;
             let dyn_img: Option<image::DynamicImage> = match mime.subtype().as_str() {
                 "jxl" => match File::open(path) {
