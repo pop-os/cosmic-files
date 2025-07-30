@@ -1768,11 +1768,8 @@ impl ItemThumbnail {
         };
 
         let mut tried_supported_file = false;
-        if !check_size("image", max_size_mb * 1000 * 1000) {
-            return ItemThumbnail::NotImage;
-        }
         // First try built-in image thumbnailer
-        if mime.type_() == mime::IMAGE {
+        if mime.type_() == mime::IMAGE && check_size("image", max_size_mb * 1000 * 1000) {
             tried_supported_file = true;
             let dyn_img: Option<image::DynamicImage> = match mime.subtype().as_str() {
                 "jxl" => match File::open(path) {
