@@ -2436,9 +2436,9 @@ pub struct Tab {
     pub location_context_menu_index: Option<usize>,
     pub context_menu: Option<Point>,
     pub mode: Mode,
-    pub offset_opt: Option<Vector>,
     pub scroll_opt: Option<AbsoluteOffset>,
     pub size_opt: Cell<Option<Size>>,
+    pub viewport_opt: Option<Rectangle>,
     pub item_view_size_opt: Cell<Option<Size>>,
     pub edit_location: Option<EditLocation>,
     pub edit_location_id: widget::Id,
@@ -2552,9 +2552,9 @@ impl Tab {
             location_context_menu_point: None,
             location_context_menu_index: None,
             mode: Mode::App,
-            offset_opt: None,
             scroll_opt: None,
             size_opt: Cell::new(None),
+            viewport_opt: None,
             item_view_size_opt: Cell::new(None),
             edit_location: None,
             edit_location_id: widget::Id::unique(),
@@ -3641,14 +3641,16 @@ impl Tab {
                 }
             }
             Message::Resize(viewport) => {
-                self.offset_opt = Some(Vector::new(viewport.x, viewport.y));
-
                 // Scroll to ensure focused item still in view
-                if let Some(offset) = self.select_focus_scroll() {
-                    commands.push(Command::Iced(
-                        scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
-                    ));
+                if self.viewport_opt.map(|v| v.size()) != Some(viewport.size()) {
+                    if let Some(offset) = self.select_focus_scroll() {
+                        commands.push(Command::Iced(
+                            scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                        ));
+                    }
                 }
+
+                self.viewport_opt = Some(viewport);
             }
             Message::Scroll(viewport) => {
                 self.scroll_opt = Some(viewport.absolute_offset());
@@ -3987,7 +3989,13 @@ impl Tab {
             }
             if let Some(point) = self.context_menu {
                 commands.push(Command::ContextMenu(
-                    Some(point + self.offset_opt.unwrap_or_default()),
+                    Some(
+                        point
+                            + self
+                                .viewport_opt
+                                .map(|v| Vector::new(v.x, v.y))
+                                .unwrap_or_default(),
+                    ),
                     self.window_id.clone(),
                 ));
             }
