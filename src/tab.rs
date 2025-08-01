@@ -1776,6 +1776,7 @@ impl ItemThumbnail {
             tried_supported_file = true;
             let dyn_img: Option<image::DynamicImage> = match mime.subtype().as_str() {
                 "jxl" => match File::open(path) {
+                    //TODO: working
                     Ok(file) => match JxlDecoder::new(file) {
                         Ok(mut decoder) => {
                             let mut limits = image::Limits::default();
@@ -2056,7 +2057,29 @@ impl Item {
             ItemThumbnail::Image(handle, _) => {
                 if let Some(path) = self.path_opt() {
                     if self.mime.type_() == mime::IMAGE {
-                        return widget::image(widget::image::Handle::from_path(path)).into();
+                        //TODO: working
+                        match self.mime.subtype().as_str() {
+                            "jxl" => {
+                                let jxl_buffer = (|| {
+                                    let file = File::open(path).ok()?;
+                                    let jxl = JxlDecoder::new(file).ok()?;
+                                    let image = image::DynamicImage::from_decoder(jxl).ok()?;
+                                    Some(image.into_rgba8())
+                                })();
+                                //TODO: This will be unwrap_or(generic image)
+                                let imagebuffer = jxl_buffer.unwrap();
+                                return widget::image(widget::image::Handle::from_rgba(
+                                    imagebuffer.width(),
+                                    imagebuffer.height(),
+                                    imagebuffer.into_raw(),
+                                ))
+                                .into();
+                            }
+                            _ => {
+                                //TODO: add thumbnailer/generic image
+                                return widget::image(widget::image::Handle::from_path(path)).into()
+                            }
+                        }
                     }
                 }
                 widget::image(handle.clone()).into()
@@ -4197,12 +4220,34 @@ impl Tab {
                                 element_opt = Some(
                                     widget::container(
                                         //TODO: use widget::image::viewer, when its zoom can be reset
-                                        widget::image(widget::image::Handle::from_path(path)),
+                                        //TODO: working
+                                        match item.mime.subtype().as_str() {
+                                            "jxl" => {
+                                                let jxl_buffer = (|| {
+                                                    let file = File::open(path).ok()?;
+                                                    let jxl = JxlDecoder::new(file).ok()?;
+                                                    let image =
+                                                        image::DynamicImage::from_decoder(jxl)
+                                                            .ok()?;
+                                                    Some(image.into_rgba8())
+                                                })(
+                                                );
+                                                //TODO: This will be unwrap_or(generic image)
+                                                let imagebuffer = jxl_buffer.unwrap();
+                                                widget::image(widget::image::Handle::from_rgba(
+                                                    imagebuffer.width(),
+                                                    imagebuffer.height(),
+                                                    imagebuffer.into_raw(),
+                                                ))
+                                            }     //TODO: Add a generic image or don't don't display
+                                            _ =>  { widget::image(widget::image::Handle::from_path(path)) }
+                                        },
                                     )
                                     .center(Length::Fill)
                                     .into(),
                                 );
                             } else {
+                                log::warn!("gallery view is handle?");
                                 element_opt = Some(
                                     widget::container(
                                         //TODO: use widget::image::viewer, when its zoom can be reset
