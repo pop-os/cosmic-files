@@ -7,6 +7,7 @@ use std::time::Instant;
 use std::{cell::Cell, error::Error, fs, ops::ControlFlow, path::PathBuf, rc::Rc};
 use walkdir::WalkDir;
 
+use super::reflink::reflink_copy;
 use super::{copy_unique_path, Controller, OperationSelection, ReplaceResult};
 
 pub enum Method {
@@ -270,82 +271,88 @@ impl Op {
                     }
                 }
 
-                let (from_file, metadata, mut to_file) = futures::try_join!(
-                    async {
-                        compio::fs::OpenOptions::new()
-                            .read(true)
-                            .open(&self.from)
-                            .await
-                    },
-                    compio::fs::metadata(&self.from),
-                    // This is atomic and ensures `to` is not created by any other process
-                    async {
-                        compio::fs::OpenOptions::new()
-                            .create_new(true)
-                            .write(true)
-                            .open(&self.to)
-                            .await
-                    }
-                )?;
+                // Try reflink copy first (copy-on-write), fall back to standard copy
+                match reflink_copy(&self.from, &self.to).await {
+                    Ok(_) => {}
+                    Err(_) => {
+                        let (from_file, metadata, mut to_file) = futures::try_join!(
+                            async {
+                                compio::fs::OpenOptions::new()
+                                    .read(true)
+                                    .open(&self.from)
+                                    .await
+                            },
+                            compio::fs::metadata(&self.from),
+                            // This is atomic and ensures `to` is not created by any other process
+                            async {
+                                compio::fs::OpenOptions::new()
+                                    .create_new(true)
+                                    .write(true)
+                                    .open(&self.to)
+                                    .await
+                            }
+                        )?;
 
-                progress.total_bytes = Some(metadata.len());
-                (ctx.on_progress)(self, &progress);
-                if let Err(err) = to_file.set_permissions(metadata.permissions()).await {
-                    // This error is not propagated upwards as some filesystems do not support setting permissions
-                    log::warn!("failed to set permissions for {:?}: {}", self.to, err);
-                }
-
-                // Prevent spamming the progress callbacks.
-                let mut last_progress_update = Instant::now();
-                // io_uring/IOCP requires transferring ownership of the buffer to the kernel.
-                let mut buf_in = std::mem::take(&mut ctx.buf);
-                // Track where the current read/write position is at.
-                let mut pos = 0;
-
-                loop {
-                    let BufResult(result, buf_out) = from_file.read_at(buf_in, pos).await;
-
-                    let count = match result {
-                        Ok(0) => {
-                            ctx.buf = buf_out;
-                            break;
-                        }
-                        Ok(count) => count,
-                        Err(why) => {
-                            ctx.buf = buf_out;
-                            return Err(why.into());
-                        }
-                    };
-
-                    let BufResult(result, buf_out_slice) =
-                        to_file.write_at(buf_out.slice(..count), pos).await;
-                    let buf_out = buf_out_slice.into_inner();
-
-                    if let Err(why) = result {
-                        ctx.buf = buf_out;
-                        return Err(why.into());
-                    }
-
-                    progress.current_bytes += count as u64;
-                    pos += count as u64;
-
-                    // Avoid spamming progress messages too early.
-                    let current = Instant::now();
-                    if current.duration_since(last_progress_update).as_millis() > 49 {
-                        last_progress_update = current;
+                        progress.total_bytes = Some(metadata.len());
                         (ctx.on_progress)(self, &progress);
-
-                        // Also check if the progress was cancelled.
-                        if let Err(why) = ctx.controller.check().await {
-                            ctx.buf = buf_out;
-                            return Err(why.into());
+                        if let Err(err) = to_file.set_permissions(metadata.permissions()).await {
+                            // This error is not propagated upwards as some filesystems do not support setting permissions
+                            log::warn!("failed to set permissions for {:?}: {}", self.to, err);
                         }
+
+                        // Prevent spamming the progress callbacks.
+                        let mut last_progress_update = Instant::now();
+                        // io_uring/IOCP requires transferring ownership of the buffer to the kernel.
+                        let mut buf_in = std::mem::take(&mut ctx.buf);
+                        // Track where the current read/write position is at.
+                        let mut pos = 0;
+
+                        loop {
+                            let BufResult(result, buf_out) = from_file.read_at(buf_in, pos).await;
+
+                            let count = match result {
+                                Ok(0) => {
+                                    ctx.buf = buf_out;
+                                    break;
+                                }
+                                Ok(count) => count,
+                                Err(why) => {
+                                    ctx.buf = buf_out;
+                                    return Err(why.into());
+                                }
+                            };
+
+                            let BufResult(result, buf_out_slice) =
+                                to_file.write_at(buf_out.slice(..count), pos).await;
+                            let buf_out = buf_out_slice.into_inner();
+
+                            if let Err(why) = result {
+                                ctx.buf = buf_out;
+                                return Err(why.into());
+                            }
+
+                            progress.current_bytes += count as u64;
+                            pos += count as u64;
+
+                            // Avoid spamming progress messages too early.
+                            let current = Instant::now();
+                            if current.duration_since(last_progress_update).as_millis() > 49 {
+                                last_progress_update = current;
+                                (ctx.on_progress)(self, &progress);
+
+                                // Also check if the progress was cancelled.
+                                if let Err(why) = ctx.controller.check().await {
+                                    ctx.buf = buf_out;
+                                    return Err(why.into());
+                                }
+                            }
+
+                            buf_in = buf_out;
+                        }
+
+                        to_file.sync_all().await?;
                     }
-
-                    buf_in = buf_out;
                 }
-
-                to_file.sync_all().await?;
             }
             OpKind::Move { cross_device_copy } => {
                 // Remove `to` if overwriting and it is an existing file
