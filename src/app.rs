@@ -5957,21 +5957,20 @@ impl Application for App {
             ),
             Subscription::run_with_id(
                 TypeId::of::<TrashWatcherSubscription>(),
-                stream::channel(25, |mut output| async move {
+                stream::channel(1, |mut output| async move {
                     let watcher_res = new_debouncer(
                         time::Duration::from_millis(250),
                         Some(time::Duration::from_millis(250)),
                         move |event_res: notify_debouncer_full::DebounceEventResult| match event_res
                         {
-                            Ok(mut events) => {
-                                events.retain(|event| {
-                                    matches!(
-                                        event.kind,
-                                        notify::EventKind::Create(_) | notify::EventKind::Remove(_)
-                                    )
-                                });
+                            Ok(events) => {
+                                // Rescan on any event. We don't need to evaluate each event
+                                // because as long as the trash changed in any way we need to
+                                // rescan.
+                                let should_rescan =
+                                    events.iter().any(|event| !event.kind.is_access());
 
-                                if !events.is_empty() {
+                                if should_rescan {
                                     if let Err(e) = futures::executor::block_on(async {
                                         output.send(Message::RescanTrash).await
                                     }) {
@@ -5994,7 +5993,14 @@ impl Application for App {
                     ))]
                     match (watcher_res, trash::os_limited::trash_folders()) {
                         (Ok(mut watcher), Ok(trash_bins)) => {
-                            for path in trash_bins {
+                            // Watch the "bins" themselves as well as the files folder where
+                            // trashed items are placed. This allows us to avoid recursively
+                            // watching the trash which is slow but also properly get events.
+                            let trash_paths = trash_bins
+                                .into_iter()
+                                .map(|path| [path.join("files"), path])
+                                .flatten();
+                            for path in trash_paths {
                                 if let Err(e) = watcher
                                     .watcher()
                                     .watch(&path, notify::RecursiveMode::NonRecursive)
