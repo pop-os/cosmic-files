@@ -6,6 +6,7 @@ use std::{env, fs, path::PathBuf, process};
 
 use app::{App, Flags};
 pub mod app;
+mod archive;
 pub mod clipboard;
 use config::Config;
 pub mod config;

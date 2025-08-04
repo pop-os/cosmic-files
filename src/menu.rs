@@ -207,27 +207,10 @@ pub fn context_menu<'a>(
                 children.push(menu_item(fl!("copy"), Action::Copy).into());
 
                 children.push(divider::horizontal::light().into());
-                let supported_archive_types = [
-                    "application/gzip",
-                    "application/x-compressed-tar",
-                    "application/x-tar",
-                    "application/zip",
-                    #[cfg(feature = "bzip2")]
-                    "application/x-bzip",
-                    #[cfg(feature = "bzip2")]
-                    "application/x-bzip-compressed-tar",
-                    #[cfg(feature = "bzip2")]
-                    "application/x-bzip2",
-                    #[cfg(feature = "bzip2")]
-                    "application/x-bzip2-compressed-tar",
-                    #[cfg(feature = "xz2")]
-                    "application/x-xz",
-                    #[cfg(feature = "xz2")]
-                    "application/x-xz-compressed-tar",
-                ]
-                .iter()
-                .filter_map(|mime_type| mime_type.parse::<Mime>().ok())
-                .collect::<Vec<_>>();
+                let supported_archive_types = crate::archive::SUPPORTED_ARCHIVE_TYPES
+                    .iter()
+                    .filter_map(|mime_type| mime_type.parse::<Mime>().ok())
+                    .collect::<Vec<_>>();
                 selected_types.retain(|t| !supported_archive_types.contains(t));
                 if selected_types.is_empty() {
                     children.push(menu_item(fl!("extract-here"), Action::ExtractHere).into());
