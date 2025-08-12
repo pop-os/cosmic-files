@@ -1547,7 +1547,7 @@ pub enum Message {
     ContextAction(Action),
     ContextMenu(Option<Point>, Option<window::Id>),
     LocationContextMenuPoint(Option<Point>),
-    LocationContextMenuIndex(Option<usize>),
+    LocationContextMenuIndex(Option<Point>, Option<usize>),
     LocationMenuAction(LocationMenuAction),
     Drag(Option<Rectangle>),
     DragEnd,
@@ -1574,7 +1574,7 @@ pub enum Message {
     ModifiersChanged(Modifiers),
     Open(Option<PathBuf>),
     Reload,
-    RightClick(Option<usize>),
+    RightClick(Option<Point>, Option<usize>),
     MiddleClick(usize),
     Resize(Rectangle),
     Scroll(Viewport),
@@ -3160,9 +3160,12 @@ impl Tab {
                 }
             }
             Message::LocationContextMenuPoint(point_opt) => {
+                self.context_menu = point_opt;
                 self.location_context_menu_point = point_opt;
             }
-            Message::LocationContextMenuIndex(index_opt) => {
+            Message::LocationContextMenuIndex(p, index_opt) => {
+                self.context_menu = p;
+                self.location_context_menu_point = p;
                 self.location_context_menu_index = index_opt;
             }
             Message::LocationMenuAction(action) => {
@@ -3583,7 +3586,7 @@ impl Tab {
                     Some(selected_paths),
                 ));
             }
-            Message::RightClick(click_i_opt) => {
+            Message::RightClick(p, click_i_opt) => {
                 if mod_ctrl || mod_shift {
                     self.update(Message::Click(click_i_opt), modifiers);
                 }
@@ -3988,16 +3991,7 @@ impl Tab {
                 commands.push(Command::ContextMenu(None, self.window_id.clone()));
             }
             if let Some(point) = self.context_menu {
-                commands.push(Command::ContextMenu(
-                    Some(
-                        point
-                            + self
-                                .viewport_opt
-                                .map(|v| Vector::new(v.x, v.y))
-                                .unwrap_or_default(),
-                    ),
-                    self.window_id.clone(),
-                ));
+                commands.push(Command::ContextMenu(Some(point), self.window_id.clone()));
             }
         }
 
@@ -4561,13 +4555,18 @@ impl Tab {
                     );
 
                     if self.location_context_menu_index.is_some() {
-                        mouse_area = mouse_area.on_right_press(move |_point_opt| {
-                            Message::LocationContextMenuIndex(None)
-                        })
+                        mouse_area = mouse_area
+                            .on_right_press(move |point_opt| {
+                                Message::LocationContextMenuIndex(point_opt, None)
+                            })
+                            .wayland_on_right_press_window_position()
                     } else {
-                        mouse_area = mouse_area.on_right_press_no_capture().on_right_press(
-                            move |_point_opt| Message::LocationContextMenuIndex(Some(index)),
-                        )
+                        mouse_area = mouse_area
+                            .on_right_press_no_capture()
+                            .on_right_press(move |point_opt| {
+                                Message::LocationContextMenuIndex(point_opt, Some(index))
+                            })
+                            .wayland_on_right_press_window_position()
                     }
 
                     let mouse_area = if let Location::Path(_) = &self.location {
@@ -4631,7 +4630,8 @@ impl Tab {
         }
 
         let mouse_area = crate::mouse_area::MouseArea::new(column)
-            .on_right_press(Message::LocationContextMenuPoint);
+            .on_right_press(Message::LocationContextMenuPoint)
+            .wayland_on_right_press_window_position();
 
         let mut popover = widget::popover(mouse_area);
         if let (Some(point), Some(index)) = (
@@ -4826,7 +4826,10 @@ impl Tab {
                             column = column.push(
                                 mouse_area::MouseArea::new(button)
                                     .on_right_press_no_capture()
-                                    .on_right_press(move |_point_opt| Message::RightClick(Some(i))),
+                                    .wayland_on_right_press_window_position()
+                                    .on_right_press(move |point_opt| {
+                                        Message::RightClick(point_opt, Some(i))
+                                    }),
                             );
                         }
                     }
@@ -5245,7 +5248,10 @@ impl Tab {
                         } else {
                             mouse_area
                                 .on_right_press_no_capture()
-                                .on_right_press(move |_point_opt| Message::RightClick(Some(i)))
+                                .wayland_on_right_press_window_position()
+                                .on_right_press(move |point_opt| {
+                                    Message::RightClick(point_opt, Some(i))
+                                })
                         }
                     };
 
@@ -5466,12 +5472,16 @@ impl Tab {
             .on_scroll(|delta| respond_to_scroll_direction(delta, self.modifiers));
 
         if self.context_menu.is_some() {
-            mouse_area = mouse_area.on_right_press(move |_point_opt| {
-                Message::ContextMenu(None, self.window_id.clone())
-            });
+            mouse_area = mouse_area
+                .on_right_press(move |point_opt| {
+                    Message::ContextMenu(point_opt, self.window_id.clone())
+                })
+                .wayland_on_right_press_window_position();
         } else {
             let window_id = self.window_id.clone();
-            mouse_area = mouse_area.on_right_press(move |p| Message::ContextMenu(p, window_id));
+            mouse_area = mouse_area
+                .on_right_press(move |p| Message::ContextMenu(p, window_id))
+                .wayland_on_right_press_window_position();
         }
 
         let mut popover = widget::popover(mouse_area);
