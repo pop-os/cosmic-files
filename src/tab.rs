@@ -95,10 +95,8 @@ const MAX_SEARCH_RESULTS: usize = 200;
 //TODO: configurable thumbnail size?
 const THUMBNAIL_SIZE: u32 = (ICON_SIZE_GRID as u32) * (ICON_SCALE_MAX as u32);
 
-pub static THUMB_SEMAPHORE: LazyLock<tokio::sync::Semaphore> = LazyLock::new(|| {
-    tokio::sync::Semaphore::const_new(num_cpus::get())
-});
-
+pub static THUMB_SEMAPHORE: LazyLock<tokio::sync::Semaphore> =
+    LazyLock::new(|| tokio::sync::Semaphore::const_new(num_cpus::get()));
 
 pub(crate) static SORT_OPTION_FALLBACK: LazyLock<HashMap<String, (HeadingOptions, bool)>> =
     LazyLock::new(|| {
