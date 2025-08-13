@@ -111,6 +111,16 @@ impl<'a, Message> MouseArea<'a, Message> {
         self
     }
 
+    /// Only on wayland, on_right_press will provide window position instead of widget relative
+    #[must_use]
+    pub fn wayland_on_right_press_window_position(mut self) -> Self {
+        #[cfg(feature = "wayland")]
+        {
+            self.on_right_press_window_position = true;
+        }
+        self
+    }
+
     /// on_right_press will provide window position instead of widget relative
     #[must_use]
     pub fn on_right_press_window_position(mut self) -> Self {
@@ -513,7 +523,8 @@ fn update<Message: Clone>(
     state: &mut State,
     viewport: &Rectangle,
 ) -> event::Status {
-    let layout_bounds = layout.bounds();
+    let offset = layout.virtual_offset();
+    let mut layout_bounds = layout.bounds();
 
     if let Some(message) = widget.on_resize.as_ref() {
         if state.viewport != Some(*viewport) {
@@ -644,7 +655,11 @@ fn update<Message: Clone>(
     if let Some(message) = widget.on_right_press.as_ref() {
         if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)) = event {
             let point_opt = if widget.on_right_press_window_position {
-                cursor.position_over(layout_bounds)
+                cursor.position_over(layout_bounds).map(|mut p| {
+                    p.x -= offset.x;
+                    p.y -= offset.y;
+                    p
+                })
             } else {
                 cursor.position_in(layout_bounds)
             };
