@@ -1537,6 +1537,7 @@ dependencies = [
  "mime_guess",
  "notify-debouncer-full",
  "notify-rust",
+ "num_cpus",
  "once_cell",
  "open",
  "ordermap",
