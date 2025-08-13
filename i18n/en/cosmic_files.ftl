@@ -170,7 +170,7 @@ network-drive-schemes =
     Network File System,nfs://
     Server Message Block,smb://
     SSH File Transfer Protocol,sftp:// or ssh://
-    WebDav,dav:// or davs://
+    WebDAV,dav:// or davs://
 network-drive-error = Unable to access network drive
 password = Password
 remember-password = Remember password
@@ -292,7 +292,7 @@ light = Light
 
 ### Type to Search
 type-to-search = Type to Search
-type-to-search-recursive = Searches the current folder and all sub-folders
+type-to-search-recursive = Searches the current folder and all subfolders
 type-to-search-enter-path = Enters the path to the directory or file
 
 # Context menu

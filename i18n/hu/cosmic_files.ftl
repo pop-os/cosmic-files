@@ -93,7 +93,7 @@ related-apps = Hasonló alkalmazások
 selected-items = a(z) {$items} kijelölt elemet
 permanently-delete-question = Végleges törlés
 delete = Törlés
-permanently-delete-warning = Biztosan véglegesen törölni szeretnéd {$target}? A művelet nem visszavonható.
+permanently-delete-warning = Biztosan véglegesen törölni szeretnéd ezt: {$target}? A művelet nem visszavonható.
 
 ## Rename Dialog
 rename-file = Fájl átnevezése
@@ -170,7 +170,7 @@ network-drive-schemes =
     Network File System,nfs://
     Server Message Block,smb://
     SSH File Transfer Protocol,sftp:// vagy ssh://
-    WebDav,dav:// vagy davs://
+    WebDAV,dav:// vagy davs://
 network-drive-error = A hálózati meghajtó nem elérhető
 password = Jelszó
 remember-password = Jelszó megjegyzése
@@ -245,8 +245,16 @@ permanently-deleted = {$items} {$items ->
         [one] elem
         *[other] elem
     } véglegesen törölve
-renaming = Átnevezés „{$from}”-ról „{$to}”-ra
-renamed = Átnevezve „{$from}”-ról „{$to}”-ra
+removing-from-recents = {$items} {$items ->
+        [one] elem
+        *[other] elem
+    } eltávolítása a {recents}ból
+removed-from-recents = {$items} {$items ->
+        [one] elem
+        *[other] elem
+    } eltávolítva a {recents}ból
+renaming = „{$from}” átnevezése erre: „{$to}”
+renamed = „{$from}” átnevezve erre: „{$to}”
 restoring = {$items} {$items ->
         [one] elem
         *[other] elem
@@ -291,6 +299,7 @@ type-to-search-enter-path = Elérési út megadása
 add-to-sidebar = Hozzáadás az oldalsávhoz
 compress = Tömörítés
 delete-permanently = Végleges törlés
+eject = Kiadás
 extract-here = Kibontás
 new-file = Új fájl...
 new-folder = Új mappa...
@@ -302,6 +311,7 @@ sort-by-name = Név szerinti rendezés
 sort-by-modified = Módosítás szerinti rendezés
 sort-by-size = Méret szerinti rendezés
 sort-by-trashed = Törlés ideje szerinti rendezés
+remove-from-recents = Eltávolítás a legutóbbiak közül
 
 ## Desktop
 change-wallpaper = Háttérkép cseréje...
