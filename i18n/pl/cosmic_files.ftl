@@ -302,7 +302,7 @@ light = Jasny
 
 ### Type to Search
 type-to-search = Naciśnij by wyszukać…
-type-to-search-recursive = Wyszukuj w obecnym katalogu i jego subkatalogach
+type-to-search-recursive = Wyszukuj w obecnym katalogu i jego podkatalogach
 type-to-search-enter-path = Wprowadź ścieżkę pliku lub katalogu
 
 # Context menu
