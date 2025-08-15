@@ -3853,7 +3853,9 @@ impl Tab {
             Message::Drop(Some((to, mut from))) => {
                 self.dnd_hovered = None;
                 match to {
-                    Location::Desktop(to, ..) | Location::Path(to) => {
+                    Location::Desktop(to, ..)
+                    | Location::Path(to)
+                    | Location::Network(_, _, Some(to)) => {
                         if let Ok(entries) = fs::read_dir(&to) {
                             for i in entries.into_iter().filter_map(|e| e.ok()) {
                                 let i = i.path();
