@@ -258,11 +258,11 @@ impl MimeAppCache {
 
         // Load desktop applications by supported mime types
         //TODO: hashmap for all apps by id?
-        let mut all_apps = desktop::load_applications(locale, false, None);
-        for app in &mut all_apps {
+        let all_apps: Vec<_> = desktop::load_applications(locale, false, None).collect();
+        for app in all_apps.iter() {
             //TODO: just collect apps that can be executed with a file argument?
             if !app.mime_types.is_empty() {
-                self.apps.push(MimeApp::from(&app));
+                self.apps.push(MimeApp::from(app));
             }
             for mime in app.mime_types.iter() {
                 let apps = self
@@ -270,12 +270,12 @@ impl MimeAppCache {
                     .entry(mime.clone())
                     .or_insert_with(|| Vec::with_capacity(1));
                 if !apps.iter().any(|x| x.id == app.id) {
-                    apps.push(MimeApp::from(&app));
+                    apps.push(MimeApp::from(app));
                 }
             }
             for category in app.categories.iter() {
                 if category == "TerminalEmulator" {
-                    self.terminals.push(MimeApp::from(&app));
+                    self.terminals.push(MimeApp::from(app));
                     break;
                 }
             }
@@ -341,11 +341,12 @@ impl MimeAppCache {
                                 .entry(mime.clone())
                                 .or_insert_with(|| Vec::with_capacity(1));
                             if !apps.iter().any(|x| filename_eq(&x.path, filename)) {
-                                if let Some(app) = all_apps.find(|x| filename_eq(&x.path, filename))
+                                if let Some(app) =
+                                    all_apps.iter().find(|x| filename_eq(&x.path, filename))
                                 {
-                                    apps.push(MimeApp::from(&app));
+                                    apps.push(MimeApp::from(app));
                                 } else {
-                                    log::debug!("failed to add association for {:?}: application {:?} not found", mime, filename);
+                                    log::info!("failed to add association for {:?}: application {:?} not found", mime, filename);
                                 }
                             }
                         }
