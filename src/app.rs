@@ -1353,11 +1353,8 @@ impl App {
         let mut title_location_opt = None;
         if let Some(tab) = self.tab_model.data_mut::<Tab>(tab) {
             let location_opt = match term_opt {
-                Some(term) => match &tab.location {
-                    Location::Desktop(path, ..)
-                    | Location::Network(_, _, Some(path))
-                    | Location::Path(path)
-                    | Location::Search(path, ..) => Some((
+                Some(term) => tab.location.path_opt().map(|path| {
+                    (
                         Location::Search(
                             path.to_path_buf(),
                             term,
@@ -1365,9 +1362,8 @@ impl App {
                             Instant::now(),
                         ),
                         true,
-                    )),
-                    _ => None,
-                },
+                    )
+                }),
                 None => match &tab.location {
                     Location::Search(path, ..) => Some((Location::Path(path.to_path_buf()), false)),
                     _ => None,
@@ -4380,20 +4376,22 @@ impl Application for App {
                         _ => ClipboardKind::Copy,
                     };
                     let ret = match &tab.location {
-                        Location::Path(p) => self.update(Message::PasteContents(
-                            p.clone(),
-                            ClipboardPaste {
-                                kind,
-                                paths: data.paths,
-                            },
-                        )),
                         Location::Trash if matches!(action, DndAction::Move) => {
                             self.delete(data.paths)
                         }
-                        _ => {
-                            log::warn!("Copy to trash is not supported.");
-                            Task::none()
-                        }
+                        _ => match tab.location.path_opt() {
+                            Some(path) => self.update(Message::PasteContents(
+                                path.clone(),
+                                ClipboardPaste {
+                                    kind,
+                                    paths: data.paths,
+                                },
+                            )),
+                            None => {
+                                log::warn!("{:?} to {:?} is not supported.", action, tab.location);
+                                Task::none()
+                            }
+                        },
                     };
                     return ret;
                 }

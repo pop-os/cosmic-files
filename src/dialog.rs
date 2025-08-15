@@ -704,8 +704,8 @@ impl App {
 
     fn search_set(&mut self, term_opt: Option<String>) -> Task<Message> {
         let location_opt = match term_opt {
-            Some(term) => match &self.tab.location {
-                Location::Path(path) | Location::Search(path, ..) => Some((
+            Some(term) => self.tab.location.path_opt().map(|path| {
+                (
                     Location::Search(
                         path.to_path_buf(),
                         term,
@@ -713,9 +713,8 @@ impl App {
                         Instant::now(),
                     ),
                     true,
-                )),
-                _ => None,
-            },
+                )
+            }),
             None => match &self.tab.location {
                 Location::Search(path, ..) => Some((Location::Path(path.to_path_buf()), false)),
                 _ => None,
