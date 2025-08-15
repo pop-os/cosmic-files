@@ -691,13 +691,26 @@ impl App {
         // This allows handling paths as groups if possible, such as launching a single video
         // player that is passed every path.
         let mut groups: HashMap<Mime, Vec<PathBuf>> = HashMap::new();
+        let mut all_archives = true;
+        let supported_archive_types = crate::archive::SUPPORTED_ARCHIVE_TYPES
+            .iter()
+            .filter_map(|mime_type| mime_type.parse::<Mime>().ok())
+            .collect::<Vec<_>>();
         for (mime, path) in paths.iter().map(|path| {
             (
                 mime_icon::mime_for_path(path, None, false),
                 path.as_ref().to_owned(),
             )
         }) {
+            if !supported_archive_types.contains(&mime) {
+                all_archives = false;
+            }
             groups.entry(mime).or_default().push(path);
+        }
+
+        if all_archives {
+            // Use extract to dialog if all selected paths are supported archives
+            return self.extract_to(paths);
         }
 
         'outer: for (mime, paths) in groups {
@@ -729,7 +742,6 @@ impl App {
                         },
                     }
                 }
-
                 continue;
             }
 
@@ -861,6 +873,34 @@ impl App {
                 "Invalid actions index `{action}` for desktop entry {}",
                 entry.name
             );
+        }
+    }
+
+    fn extract_to(&mut self, paths: &[impl AsRef<Path>]) -> Task<Message> {
+        if let Some(destination) = paths
+            .first()
+            .and_then(|first| first.as_ref().parent())
+            .map(|parent| parent.to_path_buf())
+        {
+            let (mut dialog, dialog_task) = Dialog::new(
+                DialogSettings::new()
+                    .kind(DialogKind::OpenFolder)
+                    .path(destination),
+                Message::FileDialogMessage,
+                Message::ExtractToResult,
+            );
+            let set_title_task = dialog.set_title(fl!("extract-to-title"));
+            dialog.set_accept_label(fl!("extract-here"));
+            self.windows.insert(
+                dialog.window_id(),
+                WindowKind::FileDialog(Some(
+                    paths.iter().map(|x| x.as_ref().to_path_buf()).collect(),
+                )),
+            );
+            self.file_dialog_opt = Some(dialog);
+            Task::batch([set_title_task, dialog_task])
+        } else {
+            Task::none()
         }
     }
 
@@ -2897,26 +2937,7 @@ impl Application for App {
                 }
             }
             Message::ExtractTo(entity_opt) => {
-                let paths = self.selected_paths(entity_opt);
-                if let Some(destination) = paths
-                    .first()
-                    .and_then(|first| first.parent())
-                    .map(|parent| parent.to_path_buf())
-                {
-                    let (mut dialog, dialog_task) = Dialog::new(
-                        DialogSettings::new()
-                            .kind(DialogKind::OpenFolder)
-                            .path(destination),
-                        Message::FileDialogMessage,
-                        Message::ExtractToResult,
-                    );
-                    let set_title_task = dialog.set_title(fl!("extract-to-title"));
-                    dialog.set_accept_label(fl!("extract-here"));
-                    self.windows
-                        .insert(dialog.window_id(), WindowKind::FileDialog(Some(paths)));
-                    self.file_dialog_opt = Some(dialog);
-                    return Task::batch([set_title_task, dialog_task]);
-                };
+                return self.extract_to(&self.selected_paths(entity_opt));
             }
             Message::ExtractToResult(result) => {
                 match result {
