@@ -1004,42 +1004,6 @@ impl App {
         scrollable_id: widget::Id,
         window_id: Option<window::Id>,
     ) -> (Entity, Task<Message>) {
-        #[cfg(feature = "gvfs")]
-        if let Location::Network(ref uri, ref name, Some(ref path)) = location {
-            let mut found = false;
-
-            if let Some(key) = self
-                .mounter_items
-                .iter()
-                .find_map(|(k, items)| {
-                    items.iter().find_map(|item| {
-                        found |= item.path().is_some_and(|p| path.starts_with(p))
-                            || item.name() == *name
-                            || item.uri() == *uri;
-                        (!item.is_mounted() && found).then(|| *k)
-                    })
-                })
-                .or(if found {
-                    None
-                } else {
-                    // TODO do we need to choose the correct mounter?
-                    self.mounter_items.iter().map(|(k, _)| *k).next()
-                })
-            {
-                if let Some(mounter) = MOUNTERS.get(&key) {
-                    let location = location.clone();
-                    return (
-                        Entity::null(),
-                        mounter.network_drive(uri.clone()).map(move |_| {
-                            cosmic::Action::App(Message::NetworkDriveOpenTabAfterMount {
-                                location: location.clone(),
-                            })
-                        }),
-                    );
-                }
-            }
-        }
-
         let mut tab = Tab::new(
             location.clone(),
             self.config.tab,
