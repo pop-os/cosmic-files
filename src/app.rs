@@ -1354,7 +1354,10 @@ impl App {
         if let Some(tab) = self.tab_model.data_mut::<Tab>(tab) {
             let location_opt = match term_opt {
                 Some(term) => match &tab.location {
-                    Location::Path(path) | Location::Search(path, ..) => Some((
+                    Location::Desktop(path, ..)
+                    | Location::Network(_, _, Some(path))
+                    | Location::Path(path)
+                    | Location::Search(path, ..) => Some((
                         Location::Search(
                             path.to_path_buf(),
                             term,
