@@ -2455,7 +2455,7 @@ pub struct Tab {
     pub(crate) parent_item_opt: Option<Item>,
     pub(crate) items_opt: Option<Vec<Item>>,
     pub dnd_hovered: Option<(Location, Instant)>,
-    scrollable_id: widget::Id,
+    pub(crate) scrollable_id: widget::Id,
     select_focus: Option<usize>,
     select_range: Option<(usize, usize)>,
     clicked: Option<usize>,
@@ -2535,6 +2535,7 @@ impl Tab {
         config: TabConfig,
         thumb_config: ThumbCfg,
         sorting_options: Option<&OrderMap<String, (HeadingOptions, bool)>>,
+        scrollable_id: widget::Id,
         window_id: Option<window::Id>,
     ) -> Self {
         let location_str = location.to_string();
@@ -2570,7 +2571,7 @@ impl Tab {
             gallery: false,
             parent_item_opt: None,
             items_opt: None,
-            scrollable_id: widget::Id::unique(),
+            scrollable_id,
             select_focus: None,
             select_range: None,
             clicked: None,
@@ -3589,7 +3590,7 @@ impl Tab {
                     Some(selected_paths),
                 ));
             }
-            Message::RightClick(p, click_i_opt) => {
+            Message::RightClick(_point_opt, click_i_opt) => {
                 if mod_ctrl || mod_shift {
                     self.update(Message::Click(click_i_opt), modifiers);
                 }
@@ -5529,7 +5530,7 @@ impl Tab {
                     }
                 }
             }
-            Location::Network(uri, _display_name, path) if uri == "network:///" => {
+            Location::Network(uri, _display_name, _path) if uri == "network:///" => {
                 tab_column = tab_column.push(
                     widget::layer_container(widget::row::with_children(vec![
                         widget::horizontal_space().into(),

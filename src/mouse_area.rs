@@ -524,7 +524,7 @@ fn update<Message: Clone>(
     viewport: &Rectangle,
 ) -> event::Status {
     let offset = layout.virtual_offset();
-    let mut layout_bounds = layout.bounds();
+    let layout_bounds = layout.bounds();
 
     if let Some(message) = widget.on_resize.as_ref() {
         if state.viewport != Some(*viewport) {

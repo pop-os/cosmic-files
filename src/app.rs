@@ -26,6 +26,7 @@ use cosmic::{
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers},
         stream,
+        widget::scrollable,
         window::{self, Event as WindowEvent, Id as WindowId},
         Alignment, Event, Length, Point, Rectangle, Size, Subscription,
     },
@@ -664,6 +665,7 @@ pub struct App {
     progress_operations: BTreeSet<u64>,
     complete_operations: BTreeMap<u64, Operation>,
     failed_operations: BTreeMap<u64, (Operation, Controller, String)>,
+    scrollable_id: widget::Id,
     search_id: widget::Id,
     size: Option<Size>,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
@@ -959,6 +961,7 @@ impl App {
         location: Location,
         activate: bool,
         selection_paths: Option<Vec<PathBuf>>,
+        scrollable_id: widget::Id,
         window_id: Option<window::Id>,
     ) -> (Entity, Task<Message>) {
         #[cfg(feature = "gvfs")]
@@ -1002,6 +1005,7 @@ impl App {
             self.config.tab,
             self.config.thumb_cfg,
             Some(&self.state.sort_names),
+            scrollable_id,
             window_id,
         );
         tab.mode = match self.mode {
@@ -1041,8 +1045,14 @@ impl App {
         activate: bool,
         selection_paths: Option<Vec<PathBuf>>,
     ) -> Task<Message> {
-        self.open_tab_entity(location, activate, selection_paths, None)
-            .1
+        self.open_tab_entity(
+            location,
+            activate,
+            selection_paths,
+            self.scrollable_id.clone(),
+            None,
+        )
+        .1
     }
 
     // This wrapper ensures that local folders use trash and remote folders permanently delete with a dialog
@@ -2144,6 +2154,7 @@ impl Application for App {
             progress_operations: BTreeSet::new(),
             complete_operations: BTreeMap::new(),
             failed_operations: BTreeMap::new(),
+            scrollable_id: widget::Id::unique(),
             search_id: widget::Id::unique(),
             size: None,
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
@@ -3742,6 +3753,12 @@ impl Application for App {
                 // Activate new tab
                 self.tab_model.activate(entity);
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+                    {
+                        //Restore scroll
+                        //TODO: why do scrollers with different IDs get the same scroll position?
+                        let scroll = tab.scroll_opt.unwrap_or_default();
+                        tasks.push(scrollable::scroll_to(tab.scrollable_id.clone(), scroll));
+                    }
                     self.activate_nav_model_location(&tab.location.clone());
                 }
                 tasks.push(self.update_title());
@@ -3781,6 +3798,8 @@ impl Application for App {
                 }
             }
             Message::TabClose(entity_opt) => {
+                let mut tasks = Vec::with_capacity(3);
+
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
 
                 // Activate closest item
@@ -3791,12 +3810,8 @@ impl Application for App {
                         position + 1
                     };
 
-                    if self.tab_model.activate_position(new_position) {
-                        if let Some(new_entity) = self.tab_model.entity_at(new_position) {
-                            if let Some(tab) = self.tab_model.data::<Tab>(new_entity) {
-                                self.activate_nav_model_location(&tab.location.clone());
-                            }
-                        }
+                    if let Some(new_entity) = self.tab_model.entity_at(new_position) {
+                        tasks.push(self.update(Message::TabActivate(new_entity)));
                     }
                 }
 
@@ -3806,11 +3821,13 @@ impl Application for App {
                 // If that was the last tab, close window
                 if self.tab_model.iter().next().is_none() {
                     if let Some(window_id) = self.core.main_window_id() {
-                        return window::close(window_id);
+                        tasks.push(window::close(window_id));
                     }
                 }
 
-                return Task::batch([self.update_title(), self.update_watcher()]);
+                tasks.push(self.update_watcher());
+
+                return Task::batch(tasks);
             }
             Message::TabConfig(config) => {
                 if config != self.config.tab {
@@ -4567,6 +4584,7 @@ impl Application for App {
                             Location::Desktop(crate::desktop_dir(), display, self.config.desktop),
                             false,
                             None,
+                            widget::Id::unique(),
                             Some(surface_id),
                         );
                         self.windows.insert(surface_id, WindowKind::Desktop(entity));
@@ -6378,7 +6396,13 @@ pub(crate) mod test_utils {
         // New tab with items
         let location = Location::Path(path.to_owned());
         let (parent_item_opt, items) = location.scan(IconSizes::default());
-        let mut tab = Tab::new(location, TabConfig::default(), ThumbCfg::default(), None);
+        let mut tab = Tab::new(
+            location,
+            TabConfig::default(),
+            ThumbCfg::default(),
+            widget::Id::unique(),
+            None,
+        );
         tab.parent_item_opt = parent_item_opt;
         tab.set_items(items);
 

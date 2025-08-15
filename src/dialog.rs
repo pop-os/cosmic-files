@@ -36,7 +36,7 @@ use std::{
 
 use crate::{
     app::{Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind},
-    config::{Config, DialogConfig, Favorite, TabConfig, ThumbCfg, TimeConfig, TIME_CONFIG_ID},
+    config::{Config, DialogConfig, Favorite, ThumbCfg, TimeConfig, TIME_CONFIG_ID},
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
@@ -950,6 +950,7 @@ impl Application for App {
             flags.config.dialog_tab(),
             ThumbCfg::default(),
             None,
+            widget::Id::unique(),
             None,
         );
         tab.mode = tab::Mode::Dialog(flags.kind.clone());
