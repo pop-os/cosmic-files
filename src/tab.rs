@@ -1775,32 +1775,52 @@ impl ItemThumbnail {
         if mime.type_() == mime::IMAGE && check_size("image", max_size_mb * 1000 * 1000) {
             tried_supported_file = true;
             let dyn_img: Option<image::DynamicImage> = match mime.subtype().as_str() {
-                "jxl" => match File::open(path) {
-                    //TODO: working
-                    Ok(file) => match JxlDecoder::new(file) {
-                        Ok(mut decoder) => {
-                            let mut limits = image::Limits::default();
-                            let max_ram = max_mem * 1000 * 1000 / jobs as u64;
-                            limits.max_alloc = Some(max_ram);
-                            let _ = decoder.set_limits(limits);
-                            match image::DynamicImage::from_decoder(decoder) {
-                                Ok(img) => Some(img),
-                                Err(err) => {
-                                    log::warn!("failed to decode jxl {:?}: {}", path, err);
-                                    None
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            log::warn!("failed to create jxl decoder {:?}: {}", path, err);
-                            None
-                        }
-                    },
-                    Err(err) => {
-                        log::warn!("failed to open path {:?}: {}", path, err);
-                        None
-                    }
-                },
+                "jxl" => {
+                    let jxldynimg = (|| {
+                        let file = File::open(path).map_err(|err| {
+                            log::warn!("failed to open file {:?}: {}", path, err);
+                        }).ok()?;
+                        let mut limits = image::Limits::default();
+                        let max_ram = max_mem * 1000 * 1000 / jobs as u64;
+                        limits.max_alloc = Some(max_ram);
+                        let mut jxl = JxlDecoder::new(file).map_err(|err| {
+                            log::warn!("to create JxlDecoder for {:?}: {}", path, err);
+                        }).ok()?;
+                        let _ = jxl.set_limits(limits);
+                        Some(image::DynamicImage::from_decoder(jxl).map_err(|err| {
+                            log::warn!("failed to decode the file {:?}: {}", path, err);
+                            }).ok()?
+                        )
+                    })();
+                    //TODO: This will be unwrap_or(generic image)
+                    jxldynimg
+                }
+                //match File::open(path) {
+                //    //TODO: working
+                //    Ok(file) => match JxlDecoder::new(file) {
+                //        Ok(mut decoder) => {
+                //            let mut limits = image::Limits::default();
+                //            let max_ram = max_mem * 1000 * 1000 / jobs as u64;
+                //            limits.max_alloc = Some(max_ram);
+                //            let _ = decoder.set_limits(limits);
+                //            match image::DynamicImage::from_decoder(decoder) {
+                //                Ok(img) => Some(img),
+                //                Err(err) => {
+                //                    log::warn!("failed to decode jxl {:?}: {}", path, err);
+                //                    None
+                //                }
+                //            }
+                //        }
+                //        Err(err) => {
+                //            log::warn!("failed to create jxl decoder {:?}: {}", path, err);
+                //            None
+                //        }
+                //    },
+                //    Err(err) => {
+                //        log::warn!("failed to open path {:?}: {}", path, err);
+                //        None
+                //    }
+                //},
                 _ => {
                     match image::ImageReader::open(path).and_then(|img| img.with_guessed_format()) {
                         Ok(mut reader) => {
@@ -2077,7 +2097,7 @@ impl Item {
                             }
                             _ => {
                                 //TODO: add thumbnailer/generic image
-                                return widget::image(widget::image::Handle::from_path(path)).into()
+                                return widget::image(widget::image::Handle::from_path(path)).into();
                             }
                         }
                     }
@@ -4239,8 +4259,10 @@ impl Tab {
                                                     imagebuffer.height(),
                                                     imagebuffer.into_raw(),
                                                 ))
-                                            }     //TODO: Add a generic image or don't don't display
-                                            _ =>  { widget::image(widget::image::Handle::from_path(path)) }
+                                            } //TODO: Add a generic image or don't don't display
+                                            _ => widget::image(widget::image::Handle::from_path(
+                                                path,
+                                            )),
                                         },
                                     )
                                     .center(Length::Fill)
