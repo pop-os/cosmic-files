@@ -5469,26 +5469,20 @@ impl Tab {
         };
 
         let tab_location = self.location.clone();
-        let mut mouse_area = mouse_area::MouseArea::new(item_view)
+        let mouse_area = mouse_area::MouseArea::new(item_view)
             .on_press(move |_point_opt| Message::Click(None))
             .on_release(|_| Message::ClickRelease(None))
             .on_resize(Message::Resize)
             .on_back_press(move |_point_opt| Message::GoPrevious)
             .on_forward_press(move |_point_opt| Message::GoNext)
-            .on_scroll(|delta| respond_to_scroll_direction(delta, self.modifiers));
-
-        if self.context_menu.is_some() {
-            mouse_area = mouse_area
-                .on_right_press(move |point_opt| {
-                    Message::ContextMenu(point_opt, self.window_id.clone())
-                })
-                .wayland_on_right_press_window_position();
-        } else {
-            let window_id = self.window_id.clone();
-            mouse_area = mouse_area
-                .on_right_press(move |p| Message::ContextMenu(p, window_id))
-                .wayland_on_right_press_window_position();
-        }
+            .on_scroll(|delta| respond_to_scroll_direction(delta, self.modifiers))
+            .on_right_press(move |p| {
+                Message::ContextMenu(
+                    if self.context_menu.is_some() { None } else { p },
+                    self.window_id.clone(),
+                )
+            })
+            .wayland_on_right_press_window_position();
 
         let mut popover = widget::popover(mouse_area);
         if let Some(point) = self.context_menu {
