@@ -1,0 +1,20 @@
+name: Cargo Build & Test
+
+on:
+  push:
+    branches:
+    - master
+  pull_request:
+
+env: 
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: cosmic-files - latest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update; sudo apt-get install libclang-dev libglib2.0-dev libxkbcommon-dev
+      - run: rustup update stable && rustup default stable
+      - run: cargo test --verbose
