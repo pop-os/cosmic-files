@@ -6101,7 +6101,7 @@ fn text_editor_class(
 mod tests {
     use std::{fs, io, path::PathBuf};
 
-    use cosmic::{iced::mouse::ScrollDelta, iced_runtime::keyboard::Modifiers};
+    use cosmic::{iced::mouse::ScrollDelta, iced_runtime::keyboard::Modifiers, widget};
     use log::{debug, trace};
     use tempfile::TempDir;
     use test_log::test;
@@ -6112,7 +6112,7 @@ mod tests {
             assert_eq_tab_path, empty_fs, eq_path_item, filter_dirs, read_dir_sorted, simple_fs,
             tab_click_new, NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED,
         },
-        config::{IconSizes, TabConfig},
+        config::{IconSizes, TabConfig, ThumbCfg},
     };
 
     // Boilerplate for tab tests. Checks if simulated clicks selected items.
@@ -6156,8 +6156,9 @@ mod tests {
         let mut tab = Tab::new(
             Location::Path(path.into()),
             TabConfig::default(),
-            None,
             ThumbCfg::default(),
+            None,
+            widget::Id::unique(),
             None,
         );
 
@@ -6259,8 +6260,9 @@ mod tests {
         let mut tab = Tab::new(
             Location::Path(path.to_owned()),
             TabConfig::default(),
-            None,
             ThumbCfg::default(),
+            None,
+            widget::Id::unique(),
             None,
         );
         debug!(
@@ -6397,8 +6399,9 @@ mod tests {
         let mut tab = Tab::new(
             Location::Path(path.into()),
             TabConfig::default(),
-            None,
             ThumbCfg::default(),
+            None,
+            widget::Id::unique(),
             None,
         );
 
@@ -6425,8 +6428,9 @@ mod tests {
         let mut tab = Tab::new(
             Location::Path(next_dir.clone()),
             TabConfig::default(),
-            None,
             ThumbCfg::default(),
+            None,
+            widget::Id::unique(),
             None,
         );
         // This will eventually yield false once root is hit
@@ -6464,7 +6468,9 @@ mod tests {
         Tab::new(
             Location::Path(path.into()),
             TabConfig::default(),
+            ThumbCfg::default(),
             None,
+            widget::Id::unique(),
             None,
         );
 

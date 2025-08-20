@@ -6386,6 +6386,7 @@ pub(crate) mod test_utils {
             location,
             TabConfig::default(),
             ThumbCfg::default(),
+            None,
             widget::Id::unique(),
             None,
         );
