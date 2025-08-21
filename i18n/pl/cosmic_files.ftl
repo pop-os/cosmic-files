@@ -171,7 +171,7 @@ network-drive-schemes =
     Network File System,nfs://
     Server Message Block,smb://
     SSH File Transfer Protocol,sftp:// or ssh://
-    WebDav,dav:// or davs://
+    WebDAV,dav:// or davs://
 network-drive-error = Brak dostępu do dysku sieciowego
 password = Hasło
 remember-password = Zapamiętaj hasło
