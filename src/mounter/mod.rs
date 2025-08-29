@@ -55,6 +55,14 @@ impl MounterItem {
         }
     }
 
+    pub fn uri(&self) -> String {
+        match self {
+            #[cfg(feature = "gvfs")]
+            Self::Gvfs(item) => item.uri(),
+            Self::None => unreachable!(),
+        }
+    }
+
     pub fn is_mounted(&self) -> bool {
         match self {
             #[cfg(feature = "gvfs")]

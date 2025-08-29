@@ -170,7 +170,7 @@ network-drive-schemes =
     Network File System,nfs://
     Server Message Block,smb://
     SSH File Transfer Protocol,sftp:// or ssh://
-    WebDav,dav:// or davs://
+    WebDAV,dav:// or davs://
 network-drive-error = Unable to access network drive
 password = Password
 remember-password = Remember password
@@ -245,6 +245,14 @@ permanently-deleted = Permanently deleted {$items} {$items ->
         [one] item
         *[other] items
     }
+removing-from-recents = Removing {$items} {$items ->
+        [one] item
+        *[other] items
+    } from {recents}
+removed-from-recents = Removed {$items} {$items ->
+        [one] item
+        *[other] items
+    } from {recents}
 renaming = Renaming "{$from}" to "{$to}"
 renamed = Renamed "{$from}" to "{$to}"
 restoring = Restoring {$items} {$items ->
@@ -284,7 +292,7 @@ light = Light
 
 ### Type to Search
 type-to-search = Type to Search
-type-to-search-recursive = Searches the current folder and all sub-folders
+type-to-search-recursive = Searches the current folder and all subfolders
 type-to-search-enter-path = Enters the path to the directory or file
 
 # Context menu
@@ -303,6 +311,7 @@ sort-by-name = Sort by name
 sort-by-modified = Sort by modified
 sort-by-size = Sort by size
 sort-by-trashed = Sort by delete time
+remove-from-recents = Remove from recents
 
 ## Desktop
 change-wallpaper = Change wallpaper...

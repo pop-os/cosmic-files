@@ -152,11 +152,15 @@ pub fn context_menu<'a>(
     match (&tab.mode, &tab.location) {
         (
             tab::Mode::App | tab::Mode::Desktop,
-            Location::Desktop(..) | Location::Path(..) | Location::Search(..) | Location::Recents,
+            Location::Desktop(..)
+            | Location::Path(..)
+            | Location::Search(..)
+            | Location::Recents
+            | Location::Network(_, _, Some(_)),
         ) => {
             if selected_trash_only {
                 children.push(menu_item(fl!("open"), Action::Open).into());
-                if tab::trash_entries() > 0 {
+                if !trash::os_limited::is_empty().unwrap_or(true) {
                     children.push(menu_item(fl!("empty-trash"), Action::EmptyTrash).into());
                 }
             } else if let Some(entry) = selected_desktop_entry {
@@ -203,27 +207,10 @@ pub fn context_menu<'a>(
                 children.push(menu_item(fl!("copy"), Action::Copy).into());
 
                 children.push(divider::horizontal::light().into());
-                let supported_archive_types = [
-                    "application/gzip",
-                    "application/x-compressed-tar",
-                    "application/x-tar",
-                    "application/zip",
-                    #[cfg(feature = "bzip2")]
-                    "application/x-bzip",
-                    #[cfg(feature = "bzip2")]
-                    "application/x-bzip-compressed-tar",
-                    #[cfg(feature = "bzip2")]
-                    "application/x-bzip2",
-                    #[cfg(feature = "bzip2")]
-                    "application/x-bzip2-compressed-tar",
-                    #[cfg(feature = "xz2")]
-                    "application/x-xz",
-                    #[cfg(feature = "xz2")]
-                    "application/x-xz-compressed-tar",
-                ]
-                .iter()
-                .filter_map(|mime_type| mime_type.parse::<Mime>().ok())
-                .collect::<Vec<_>>();
+                let supported_archive_types = crate::archive::SUPPORTED_ARCHIVE_TYPES
+                    .iter()
+                    .filter_map(|mime_type| mime_type.parse::<Mime>().ok())
+                    .collect::<Vec<_>>();
                 selected_types.retain(|t| !supported_archive_types.contains(t));
                 if selected_types.is_empty() {
                     children.push(menu_item(fl!("extract-here"), Action::ExtractHere).into());
@@ -239,6 +226,12 @@ pub fn context_menu<'a>(
                     children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
                 }
                 children.push(divider::horizontal::light().into());
+                if matches!(tab.location, Location::Recents) {
+                    children.push(
+                        menu_item(fl!("remove-from-recents"), Action::RemoveFromRecents).into(),
+                    );
+                    children.push(divider::horizontal::light().into());
+                }
                 if selected_mount_point == 0 {
                     if modifiers.shift() && !modifiers.control() {
                         children.push(
@@ -292,7 +285,11 @@ pub fn context_menu<'a>(
         }
         (
             tab::Mode::Dialog(dialog_kind),
-            Location::Desktop(..) | Location::Path(..) | Location::Search(..) | Location::Recents,
+            Location::Desktop(..)
+            | Location::Path(..)
+            | Location::Search(..)
+            | Location::Recents
+            | Location::Network(_, _, Some(_)),
         ) => {
             if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {

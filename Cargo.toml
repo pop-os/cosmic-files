@@ -10,12 +10,14 @@ rust-version = "1.85.0"
 vergen = { version = "8", features = ["git", "gitcl"] }
 
 [dependencies]
+anyhow = "1"
 chrono = { version = "0.4", features = ["unstable-locales"] }
 icu = { version = "1.5.0", features = [
     "experimental",
     "compiled_data",
     "icu_datetime_experimental",
 ] }
+cctk = { git = "https://github.com/pop-os/cosmic-protocols", package = "cosmic-client-toolkit", rev = "178eb0b", optional = true }
 cosmic-mime-apps = { git = "https://github.com/pop-os/cosmic-mime-apps.git", optional = true }
 dirs = "6.0.0"
 env_logger = "0.11"
@@ -63,11 +65,13 @@ i18n-embed = { version = "0.15", features = [
 i18n-embed-fl = "0.9"
 rust-embed = "8"
 slotmap = "1.0.7"
-recently-used-xbel = "1.1.0"
+recently-used-xbel = { git = "https://github.com/pop-os/recently-used-xbel.git" }
 zip = "2.2.2"
 uzers = "0.12.1"
 md-5 = "0.10.6"
 png = "0.17.16"
+jxl-oxide = { version = "0.12.2", features = ["image"] }
+num_cpus = "1.17.0"
 
 # Completion-based IO runtime to enable io_uring / IOCP file IO support.
 [dependencies.compio]
@@ -84,7 +88,7 @@ optional = true
 git = "https://github.com/pop-os/libcosmic.git"
 default-features = false
 #TODO: a11y feature crashes
-features = ["multi-window", "tokio", "winit", "surface-message"]
+features = ["autosize","multi-window", "tokio", "winit", "surface-message"]
 
 [features]
 default = [
@@ -105,7 +109,7 @@ io-uring = ["compio/io-uring", "dep:io-uring"]
 io-uring-bindgen = ["io-uring?/bindgen"]
 jemalloc = ["dep:tikv-jemallocator"]
 notify = ["dep:notify-rust"]
-wayland = ["libcosmic/wayland", "dep:wayland-client"]
+wayland = ["libcosmic/wayland", "dep:cctk", "dep:wayland-client"]
 wgpu = ["libcosmic/wgpu"]
 
 [profile.dev]

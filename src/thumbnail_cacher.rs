@@ -341,9 +341,8 @@ pub enum CachedThumbnail {
 }
 
 static THUMBNAIL_CACHE_BASE_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| {
-    if let Ok(base_dirs) = xdg::BaseDirectories::new() {
-        let base_dir = base_dirs.get_cache_home().join("thumbnails");
-        return Some(base_dir);
+    if let Some(cache_dir) = dirs::cache_dir() {
+        return Some(cache_dir.join("thumbnails"));
     }
 
     log::warn!("failed to get thumbnail cache directory, thumbnails will not be cached");

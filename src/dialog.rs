@@ -8,7 +8,7 @@ use cosmic::{
         self, event,
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers},
-        mouse, stream, window, Alignment, Event, Length, Point, Size, Subscription,
+        stream, window, Alignment, Event, Length, Size, Subscription,
     },
     theme,
     widget::{
@@ -36,7 +36,7 @@ use std::{
 
 use crate::{
     app::{Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind},
-    config::{Config, Favorite, TabConfig, TimeConfig, TIME_CONFIG_ID},
+    config::{Config, DialogConfig, Favorite, ThumbCfg, TimeConfig, TIME_CONFIG_ID},
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
@@ -411,7 +411,6 @@ enum Message {
     Cancel,
     Choice(usize, usize),
     Config(Config),
-    CursorMoved(Point),
     DialogCancel,
     DialogComplete,
     DialogUpdate(DialogPage),
@@ -437,6 +436,7 @@ enum Message {
     TabView(tab::View),
     TimeConfigChange(TimeConfig),
     ToggleFoldersFirst,
+    ToggleShowHidden,
     ZoomDefault,
     ZoomIn,
     ZoomOut,
@@ -452,10 +452,12 @@ impl From<AppMessage> for Message {
             AppMessage::TabMessage(_entity_opt, tab_message) => Message::TabMessage(tab_message),
             AppMessage::TabView(_entity_opt, view) => Message::TabView(view),
             AppMessage::ToggleFoldersFirst => Message::ToggleFoldersFirst,
+            AppMessage::ToggleShowHidden => Message::ToggleShowHidden,
             AppMessage::ZoomDefault(_entity_opt) => Message::ZoomDefault,
             AppMessage::ZoomIn(_entity_opt) => Message::ZoomIn,
             AppMessage::ZoomOut(_entity_opt) => Message::ZoomOut,
             AppMessage::NewItem(_entity_opt, true) => Message::NewFolder,
+            AppMessage::Surface(action) => Message::Surface(action),
             unsupported => {
                 log::warn!("{unsupported:?} not supported in dialog mode");
                 Message::None
@@ -495,6 +497,7 @@ struct App {
     title: String,
     accept_label: DialogLabel,
     choices: Vec<DialogChoice>,
+    context_menu_window: Option<window::Id>,
     context_page: ContextPage,
     dialog_pages: VecDeque<DialogPage>,
     dialog_text_input: widget::Id,
@@ -522,6 +525,7 @@ impl App {
             space_l,
             ..
         } = theme::active().cosmic().spacing;
+        let is_condensed = self.core().is_condensed();
 
         let mut col = widget::column::with_capacity(2).spacing(space_xxs);
         if let DialogKind::SaveFile { filename } = &self.flags.kind {
@@ -534,7 +538,9 @@ impl App {
         }
 
         let mut row = widget::row::with_capacity(
-            if !self.filters.is_empty() { 1 } else { 0 } + self.choices.len() * 2 + 3,
+            if !self.filters.is_empty() { 1 } else { 0 }
+                + self.choices.len() * 2
+                + if is_condensed { 0 } else { 3 },
         )
         .align_y(Alignment::Center)
         .spacing(space_xxs);
@@ -564,6 +570,13 @@ impl App {
                     }));
                 }
             }
+        }
+
+        if is_condensed {
+            col = col.push(row);
+            row = widget::row::with_capacity(3)
+                .align_y(Alignment::Center)
+                .spacing(space_xxs);
         }
         row = row.push(widget::horizontal_space());
         row = row.push(widget::button::standard(fl!("cancel")).on_press(Message::Cancel));
@@ -691,8 +704,8 @@ impl App {
 
     fn search_set(&mut self, term_opt: Option<String>) -> Task<Message> {
         let location_opt = match term_opt {
-            Some(term) => match &self.tab.location {
-                Location::Path(path) | Location::Search(path, ..) => Some((
+            Some(term) => self.tab.location.path_opt().map(|path| {
+                (
                     Location::Search(
                         path.to_path_buf(),
                         term,
@@ -700,9 +713,8 @@ impl App {
                         Instant::now(),
                     ),
                     true,
-                )),
-                _ => None,
-            },
+                )
+            }),
             None => match &self.tab.location {
                 Location::Search(path, ..) => Some((Location::Path(path.to_path_buf()), false)),
                 _ => None,
@@ -725,11 +737,34 @@ impl App {
     }
 
     fn update_config(&mut self) -> Task<Message> {
+        self.core.window.show_context = self.flags.config.dialog.show_details;
+        self.tab.config = self.flags.config.dialog_tab();
         self.update_nav_model();
+        self.update(Message::TabMessage(tab::Message::Config(self.tab.config)))
+    }
 
-        self.update(Message::TabMessage(tab::Message::Config(
-            self.flags.config.tab,
-        )))
+    fn with_dialog_config<F: Fn(&mut DialogConfig)>(&mut self, f: F) -> Task<Message> {
+        let mut dialog = self.flags.config.dialog;
+        f(&mut dialog);
+        if dialog != self.flags.config.dialog {
+            match &self.flags.config_handler {
+                Some(config_handler) => {
+                    match self.flags.config.set_dialog(config_handler, dialog) {
+                        Ok(_) => {}
+                        Err(err) => {
+                            log::warn!("failed to save config \"dialog\": {}", err);
+                        }
+                    }
+                }
+                None => {
+                    self.flags.config.dialog = dialog;
+                    log::warn!("failed to save config \"dialog\": no config handler",);
+                }
+            }
+            self.update_config()
+        } else {
+            Task::none()
+        }
     }
 
     fn activate_nav_model_location(&mut self, location: &Location) {
@@ -897,8 +932,6 @@ impl Application for App {
         core.window.show_close = false;
         core.window.show_maximize = false;
         core.window.show_minimize = false;
-        // Only show details context drawer by default in open dialog
-        core.window.show_context = !flags.kind.save();
 
         let title = flags.kind.title();
         let accept_label = flags.kind.accept_label();
@@ -911,12 +944,14 @@ impl Application for App {
             },
         });
 
-        let tab_config = TabConfig {
-            view: tab::View::List,
-            folders_first: false,
-            ..Default::default()
-        };
-        let mut tab = Tab::new(location, tab_config, None);
+        let mut tab = Tab::new(
+            location,
+            flags.config.dialog_tab(),
+            ThumbCfg::default(),
+            None,
+            widget::Id::unique(),
+            None,
+        );
         tab.mode = tab::Mode::Dialog(flags.kind.clone());
         tab.sort_name = tab::HeadingOptions::Modified;
         tab.sort_direction = false;
@@ -929,6 +964,7 @@ impl Application for App {
             title,
             accept_label: DialogLabel::from(accept_label),
             choices: Vec::new(),
+            context_menu_window: None,
             context_page: ContextPage::Preview(None, PreviewKind::Selected),
             dialog_pages: VecDeque::new(),
             dialog_text_input: widget::Id::unique(),
@@ -1209,8 +1245,7 @@ impl Application for App {
         }
 
         if self.tab.context_menu.is_some() {
-            self.tab.context_menu = None;
-            return Task::none();
+            return self.update(Message::TabMessage(tab::Message::ContextMenu(None, None)));
         }
 
         if self.tab.edit_location.is_some() {
@@ -1261,9 +1296,6 @@ impl Application for App {
                     self.flags.config = config;
                     return self.update_config();
                 }
-            }
-            Message::CursorMoved(pos) => {
-                return self.update(Message::TabMessage(tab::Message::CursorMoved(pos)));
             }
             Message::DialogCancel => {
                 self.dialog_pages.pop_front();
@@ -1502,15 +1534,12 @@ impl Application for App {
                     }
                 }
             }
-            Message::Preview => match self.context_page {
-                ContextPage::Preview(..) => {
-                    self.core.window.show_context = !self.core.window.show_context;
-                }
-                _ => {
-                    self.context_page = ContextPage::Preview(None, PreviewKind::Selected);
-                    self.core.window.show_context = true;
-                }
-            },
+            Message::Preview => {
+                self.context_page = ContextPage::Preview(None, PreviewKind::Selected);
+                return self.with_dialog_config(|config| {
+                    config.show_details = !config.show_details;
+                });
+            }
             Message::Save(replace) => {
                 if let DialogKind::SaveFile { filename } = &self.flags.kind {
                     if !filename.is_empty() {
@@ -1582,6 +1611,76 @@ impl Application for App {
                         tab::Command::ChangeLocation(_tab_title, _tab_path, _selection_paths) => {
                             commands.push(Task::batch([self.update_watcher(), self.rescan_tab()]));
                         }
+                        tab::Command::ContextMenu(point_opt, parent_id) => {
+                            #[cfg(feature = "wayland")]
+                            match point_opt {
+                                Some(point) => {
+                                    if crate::is_wayland() {
+                                        // Open context menu
+                                        use cctk::wayland_protocols::xdg::shell::client::xdg_positioner::{
+                                            Anchor, Gravity,
+                                        };
+                                        use cosmic::iced_runtime::platform_specific::wayland::popup::{
+                                            SctkPopupSettings, SctkPositioner,
+                                        };
+                                        use cosmic::iced::Rectangle;
+                                        let window_id = window::Id::unique();
+                                        self.context_menu_window = Some(window_id.clone());
+                                        let autosize_id = widget::Id::unique();
+                                        commands.push(self.update(Message::Surface(
+                                            cosmic::surface::action::app_popup(
+                                                move |app: &mut App| -> SctkPopupSettings {
+                                                    let anchor_rect = Rectangle {
+                                                        x: point.x as i32,
+                                                        y: point.y as i32,
+                                                        width: 1,
+                                                        height: 1,
+                                                    };
+                                                    let positioner = SctkPositioner {
+                                                        size: None,
+                                                        anchor_rect,
+                                                        anchor: Anchor::None,
+                                                        gravity: Gravity::BottomRight,
+                                                        reactive: true,
+                                                        ..Default::default()
+                                                    };
+                                                    SctkPopupSettings {
+                                                        parent: parent_id
+                                                            .unwrap_or(app.flags.window_id),
+                                                        id: window_id,
+                                                        positioner,
+                                                        parent_size: None,
+                                                        grab: true,
+                                                        close_with_children: false,
+                                                        input_zone: None,
+                                                    }
+                                                },
+                                                Some(Box::new(move |app: &App| {
+                                                    widget::autosize::autosize(
+                                                        menu::context_menu(
+                                                            &app.tab,
+                                                            &app.key_binds,
+                                                            &app.modifiers,
+                                                        )
+                                                        .map(Message::TabMessage)
+                                                        .map(cosmic::Action::App),
+                                                        autosize_id.clone(),
+                                                    )
+                                                    .into()
+                                                })),
+                                            ),
+                                        )));
+                                    }
+                                }
+                                None => {
+                                    if let Some(window_id) = self.context_menu_window.take() {
+                                        commands.push(self.update(Message::Surface(
+                                            cosmic::surface::action::destroy_popup(window_id),
+                                        )));
+                                    }
+                                }
+                            }
+                        }
                         tab::Command::Iced(iced_command) => {
                             commands.push(iced_command.0.map(|tab_message| {
                                 cosmic::action::app(Message::TabMessage(tab_message))
@@ -1596,7 +1695,9 @@ impl Application for App {
                         }
                         tab::Command::Preview(kind) => {
                             self.context_page = ContextPage::Preview(None, kind);
-                            self.set_show_context(true);
+                            commands.push(self.with_dialog_config(|config| {
+                                config.show_details = true;
+                            }));
                         }
                         tab::Command::WindowDrag => {
                             commands.push(window::drag(self.flags.window_id));
@@ -1702,19 +1803,30 @@ impl Application for App {
                 }
             }
             Message::TabView(view) => {
-                self.tab.config.view = view;
+                return self.with_dialog_config(|config| {
+                    config.view = view;
+                });
             }
             Message::TimeConfigChange(time_config) => {
                 self.flags.config.tab.military_time = time_config.military_time;
                 return self.update_config();
             }
             Message::ToggleFoldersFirst => {
-                self.tab.config.folders_first = !self.tab.config.folders_first;
+                return self.with_dialog_config(|config| {
+                    config.folders_first = !config.folders_first;
+                });
             }
-            Message::ZoomDefault => match self.tab.config.view {
-                tab::View::List => self.tab.config.icon_sizes.list = 100.try_into().unwrap(),
-                tab::View::Grid => self.tab.config.icon_sizes.grid = 100.try_into().unwrap(),
-            },
+            Message::ToggleShowHidden => {
+                return self.with_dialog_config(|config| {
+                    config.show_hidden = !config.show_hidden;
+                });
+            }
+            Message::ZoomDefault => {
+                return self.with_dialog_config(|config| match config.view {
+                    tab::View::List => config.icon_sizes.list = 100.try_into().unwrap(),
+                    tab::View::Grid => config.icon_sizes.grid = 100.try_into().unwrap(),
+                });
+            }
             Message::ZoomIn => {
                 let zoom_in = |size: &mut NonZeroU16, min: u16, max: u16| {
                     let mut step = min;
@@ -1729,10 +1841,10 @@ impl Application for App {
                         *size = step.try_into().unwrap();
                     }
                 };
-                match self.tab.config.view {
-                    tab::View::List => zoom_in(&mut self.tab.config.icon_sizes.list, 50, 500),
-                    tab::View::Grid => zoom_in(&mut self.tab.config.icon_sizes.grid, 50, 500),
-                }
+                return self.with_dialog_config(|config| match config.view {
+                    tab::View::List => zoom_in(&mut config.icon_sizes.list, 50, 500),
+                    tab::View::Grid => zoom_in(&mut config.icon_sizes.grid, 50, 500),
+                });
             }
             Message::ZoomOut => {
                 let zoom_out = |size: &mut NonZeroU16, min: u16, max: u16| {
@@ -1748,14 +1860,14 @@ impl Application for App {
                         *size = step.try_into().unwrap();
                     }
                 };
-                match self.tab.config.view {
-                    tab::View::List => zoom_out(&mut self.tab.config.icon_sizes.list, 50, 500),
-                    tab::View::Grid => zoom_out(&mut self.tab.config.icon_sizes.grid, 50, 500),
-                }
+                return self.with_dialog_config(|config| match config.view {
+                    tab::View::List => zoom_out(&mut config.icon_sizes.list, 50, 500),
+                    tab::View::Grid => zoom_out(&mut config.icon_sizes.grid, 50, 500),
+                });
             }
-            Message::Surface(a) => {
+            Message::Surface(action) => {
                 return cosmic::task::message(cosmic::Action::Cosmic(
-                    cosmic::app::Action::Surface(a),
+                    cosmic::app::Action::Surface(action),
                 ));
             }
         }
@@ -1800,9 +1912,6 @@ impl Application for App {
                 },
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
                     Some(Message::ModifiersChanged(modifiers))
-                }
-                Event::Mouse(mouse::Event::CursorMoved { position: pos }) => {
-                    Some(Message::CursorMoved(pos))
                 }
                 _ => None,
             }),

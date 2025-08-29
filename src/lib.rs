@@ -6,6 +6,7 @@ use std::{env, fs, path::PathBuf, process};
 
 use app::{App, Flags};
 pub mod app;
+mod archive;
 pub mod clipboard;
 use config::Config;
 pub mod config;
@@ -52,6 +53,13 @@ pub fn home_dir() -> PathBuf {
     }
 }
 
+pub fn is_wayland() -> bool {
+    matches!(
+        cosmic::app::cosmic::windowing_system(),
+        Some(cosmic::app::cosmic::WindowingSystem::Wayland)
+    )
+}
+
 /// Runs application in desktop mode
 #[rustfmt::skip]
 pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
@@ -80,6 +88,7 @@ pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
         state,
         mode: app::Mode::Desktop,
         locations,
+        uris: Vec::new()
     };
     cosmic::app::run::<App>(settings, flags)?;
 
@@ -98,6 +107,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut daemonize = true;
     let mut locations = Vec::new();
+    let mut uris = Vec::new();
     for arg in env::args().skip(1) {
         let location = if &arg == "--no-daemon" {
             daemonize = false;
@@ -107,18 +117,22 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else if &arg == "--recents" {
             Location::Recents
         } else if &arg == "--network" {
-            Location::Network("network:///".to_string(), fl!("networks"))
+            Location::Network("network:///".to_string(), fl!("networks"), None)
         } else {
             //TODO: support more URLs
             let path = match url::Url::parse(&arg) {
-                Ok(url) => match url.to_file_path() {
+                Ok(url) if url.scheme() == "file" => match url.to_file_path() {
                     Ok(path) => path,
                     Err(()) => {
                         log::warn!("invalid argument {:?}", arg);
                         continue;
                     }
                 },
-                Err(_) => PathBuf::from(arg),
+                Ok(url) => {
+                    uris.push(url);
+                    continue;
+                }
+                _ => PathBuf::from(arg),
             };
             match fs::canonicalize(&path) {
                 Ok(absolute) => Location::Path(absolute),
@@ -160,6 +174,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         state,
         mode: app::Mode::App,
         locations,
+        uris
     };
     cosmic::app::run::<App>(settings, flags)?;
 

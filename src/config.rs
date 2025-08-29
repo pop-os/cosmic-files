@@ -64,6 +64,11 @@ pub enum Favorite {
     Pictures,
     Videos,
     Path(PathBuf),
+    Network {
+        uri: String,
+        name: String,
+        path: PathBuf,
+    },
 }
 
 impl Favorite {
@@ -95,6 +100,7 @@ impl Favorite {
             Self::Pictures => dirs::picture_dir(),
             Self::Videos => dirs::video_dir(),
             Self::Path(path) => Some(path.clone()),
+            Self::Network { path, .. } => Some(path.clone()),
         }
     }
 }
@@ -158,7 +164,9 @@ impl State {
 #[serde(default)]
 pub struct Config {
     pub app_theme: AppTheme,
+    pub dialog: DialogConfig,
     pub desktop: DesktopConfig,
+    pub thumb_cfg: ThumbCfg,
     pub favorites: Vec<Favorite>,
     pub show_details: bool,
     pub tab: TabConfig,
@@ -193,6 +201,18 @@ impl Config {
             CONFIG_VERSION,
         )
     }
+
+    /// Construct tab config for dialog
+    pub fn dialog_tab(&self) -> TabConfig {
+        TabConfig {
+            folders_first: self.dialog.folders_first,
+            icon_sizes: self.dialog.icon_sizes,
+            military_time: self.tab.military_time,
+            show_hidden: self.dialog.show_hidden,
+            single_click: false,
+            view: self.dialog.view,
+        }
+    }
 }
 
 impl Default for Config {
@@ -200,6 +220,8 @@ impl Default for Config {
         Self {
             app_theme: AppTheme::System,
             desktop: DesktopConfig::default(),
+            dialog: DialogConfig::default(),
+            thumb_cfg: ThumbCfg::default(),
             favorites: vec![
                 Favorite::Home,
                 Favorite::Documents,
@@ -243,6 +265,50 @@ impl DesktopConfig {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
+#[serde(default)]
+pub struct DialogConfig {
+    /// Show folders before files
+    pub folders_first: bool,
+    /// Icon zoom
+    pub icon_sizes: IconSizes,
+    /// Show details sidebar
+    pub show_details: bool,
+    /// Show hidden files and folders
+    pub show_hidden: bool,
+    /// Selected view, grid or list
+    pub view: View,
+}
+
+impl Default for DialogConfig {
+    fn default() -> Self {
+        Self {
+            folders_first: false,
+            icon_sizes: IconSizes::default(),
+            show_details: true,
+            show_hidden: false,
+            view: View::List,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
+#[serde(default)]
+pub struct ThumbCfg {
+    pub jobs: NonZeroU16,
+    pub max_mem_mb: NonZeroU16,
+    pub max_size_mb: NonZeroU16,
+}
+
+impl Default for ThumbCfg {
+    fn default() -> Self {
+        Self {
+            jobs: 4.try_into().unwrap(),
+            max_mem_mb: 2000.try_into().unwrap(),
+            max_size_mb: 64.try_into().unwrap(),
+        }
+    }
+}
+
 /// Global and local [`crate::tab::Tab`] config.
 ///
 /// [`TabConfig`] contains options that are passed to each instance of [`crate::tab::Tab`].
@@ -251,30 +317,31 @@ impl DesktopConfig {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, CosmicConfigEntry, Deserialize, Serialize)]
 #[serde(default)]
 pub struct TabConfig {
-    pub view: View,
     /// Show folders before files
     pub folders_first: bool,
-    /// Show hidden files and folders
-    pub show_hidden: bool,
     /// Icon zoom
     pub icon_sizes: IconSizes,
     #[serde(skip)]
     /// 24 hour clock; this is neither serialized nor deserialized because we use the user's global
     /// preference rather than save it
     pub military_time: bool,
+    /// Show hidden files and folders
+    pub show_hidden: bool,
     /// Single click to open
     pub single_click: bool,
+    /// Selected view, grid or list
+    pub view: View,
 }
 
 impl Default for TabConfig {
     fn default() -> Self {
         Self {
-            view: View::List,
             folders_first: true,
-            show_hidden: false,
             icon_sizes: IconSizes::default(),
             military_time: false,
+            show_hidden: false,
             single_click: false,
+            view: View::List,
         }
     }
 }
