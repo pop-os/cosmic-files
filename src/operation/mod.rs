@@ -6,9 +6,9 @@ use crate::{
     tab,
 };
 use cosmic::iced::futures::{channel::mpsc::Sender, SinkExt};
-use std::fmt::Formatter;
 use std::{
     borrow::Cow,
+    fmt::Formatter,
     fs,
     io::{self, Read, Write},
     path::{Path, PathBuf},
@@ -90,8 +90,10 @@ async fn copy_or_move(
     controller: Controller,
 ) -> Result<OperationSelection, OperationError> {
     let msg_tx = msg_tx.clone();
+    let controller_c = controller.clone();
 
     compio::runtime::spawn(async move {
+        let controller = controller_c;
         log::info!(
             "{} {:?} to {:?}",
             match method {
@@ -150,6 +152,7 @@ async fn copy_or_move(
         let mut context = Context::new(controller.clone());
 
         {
+            let controller = controller.clone();
             context = context.on_progress(move |_op, progress| {
                 let item_progress = match progress.total_bytes {
                     Some(total_bytes) => {
@@ -177,14 +180,12 @@ async fn copy_or_move(
 
         context
             .recursive_copy_or_move(from_to_pairs, method)
-            .await
-            .map_err(OperationError::from_str)?;
+            .await?;
 
         Result::<OperationSelection, OperationError>::Ok(context.op_sel)
     })
     .await
     .map_err(wrap_compio_spawn_error)?
-    .map_err(OperationError::from_str)
 }
 
 fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
@@ -374,12 +375,41 @@ pub struct OperationError {
 }
 
 impl OperationError {
-    pub fn from_str<T: ToString>(err: T) -> Self {
+    pub fn from_state(state: ControllerState, controller: &Controller) -> Self {
+        let message = if state == ControllerState::Failed {
+            controller.set_state(ControllerState::Failed);
+            fl!("failed")
+        } else {
+            controller.cancel();
+            fl!("cancelled")
+        };
+
+        Self {
+            kind: OperationErrorType::Generic(message),
+        }
+    }
+
+    pub fn from_err<T: ToString>(err: T, controller: &Controller) -> Self {
+        controller.set_state(ControllerState::Failed);
+
         OperationError {
             kind: OperationErrorType::Generic(err.to_string()),
         }
     }
+
+    pub fn from_kind(kind: OperationErrorType, controller: &Controller) -> Self {
+        controller.set_state(ControllerState::Failed);
+        OperationError { kind }
+    }
+
+    pub fn from_msg(m: impl Into<String>) -> Self {
+        OperationError {
+            kind: OperationErrorType::Generic(m.into()),
+        }
+    }
 }
+
+impl std::error::Error for OperationError {}
 
 impl std::fmt::Display for OperationError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -397,6 +427,7 @@ impl Operation {
             ControllerState::Running => fl!("progress", percent = percent),
             ControllerState::Paused => fl!("progress-paused", percent = percent),
             ControllerState::Cancelled => fl!("progress-cancelled", percent = percent),
+            ControllerState::Failed => fl!("progress-failed", percent = percent),
         };
         match self {
             Self::Compress { paths, to, .. } => fl!(
@@ -583,13 +614,15 @@ impl Operation {
                 archive_type,
                 password,
             } => {
+                let controller_c = controller.clone();
                 compio::runtime::spawn_blocking(
                     move || -> Result<OperationSelection, OperationError> {
+                        let controller = controller_c;
                         let Some(relative_root) = to.parent() else {
-                            return Err(OperationError::from_str(format!(
-                                "path {:?} has no parent directory",
-                                to
-                            )));
+                            return Err(OperationError::from_err(
+                                format!("path {:?} has no parent directory", to),
+                                &controller,
+                            ));
                         };
 
                         let op_sel = OperationSelection {
@@ -602,7 +635,8 @@ impl Operation {
                             if path.is_dir() {
                                 let new_paths_it = WalkDir::new(path).into_iter();
                                 for entry in new_paths_it.skip(1) {
-                                    let entry = entry.map_err(OperationError::from_str)?;
+                                    let entry = entry
+                                        .map_err(|e| OperationError::from_err(e, &controller))?;
                                     paths.push(entry.into_path());
                                 }
                             }
@@ -619,40 +653,50 @@ impl Operation {
                                         )
                                     })
                                     .map(tar::Builder::new)
-                                    .map_err(OperationError::from_str)?;
+                                    .map_err(|e| OperationError::from_err(e, &controller))?;
 
                                 let total_paths = paths.len();
                                 for (i, path) in paths.iter().enumerate() {
                                     futures::executor::block_on(async {
-                                        controller.check().await.map_err(OperationError::from_str)
+                                        controller
+                                            .check()
+                                            .await
+                                            .map_err(|e| OperationError::from_state(e, &controller))
                                     })?;
 
                                     controller.set_progress((i as f32) / total_paths as f32);
 
                                     if let Some(relative_path) = path
                                         .strip_prefix(relative_root)
-                                        .map_err(OperationError::from_str)?
+                                        .map_err(|e| OperationError::from_err(e, &controller))?
                                         .to_str()
                                     {
                                         archive
                                             .append_path_with_name(path, relative_path)
-                                            .map_err(OperationError::from_str)?;
+                                            .map_err(|e| {
+                                                OperationError::from_err(e, &controller)
+                                            })?;
                                     }
                                 }
 
-                                archive.finish().map_err(OperationError::from_str)?;
+                                archive
+                                    .finish()
+                                    .map_err(|e| OperationError::from_err(e, &controller))?;
                             }
                             ArchiveType::Zip => {
                                 let mut archive = fs::File::create(&to)
                                     .map(io::BufWriter::new)
                                     .map(zip::ZipWriter::new)
-                                    .map_err(OperationError::from_str)?;
+                                    .map_err(|e| OperationError::from_err(e, &controller))?;
 
                                 let total_paths = paths.len();
                                 let mut buffer = vec![0; 4 * 1024 * 1024];
                                 for (i, path) in paths.iter().enumerate() {
                                     futures::executor::block_on(async {
-                                        controller.check().await.map_err(OperationError::from_str)
+                                        controller
+                                            .check()
+                                            .await
+                                            .map_err(|s| OperationError::from_state(s, &controller))
                                     })?;
 
                                     controller.set_progress((i as f32) / total_paths as f32);
@@ -666,15 +710,16 @@ impl Operation {
                                     }
                                     if let Some(relative_path) = path
                                         .strip_prefix(relative_root)
-                                        .map_err(OperationError::from_str)?
+                                        .map_err(|e| OperationError::from_err(e, &controller))?
                                         .to_str()
                                     {
                                         if path.is_file() {
-                                            let mut file = fs::File::open(path)
-                                                .map_err(OperationError::from_str)?;
-                                            let metadata = file
-                                                .metadata()
-                                                .map_err(OperationError::from_str)?;
+                                            let mut file = fs::File::open(path).map_err(|e| {
+                                                OperationError::from_err(e, &controller)
+                                            })?;
+                                            let metadata = file.metadata().map_err(|e| {
+                                                OperationError::from_err(e, &controller)
+                                            })?;
                                             let total = metadata.len();
                                             if total >= 4 * 1024 * 1024 * 1024 {
                                                 // The large file option must be enabled for files above 4 GiB
@@ -688,25 +733,27 @@ impl Operation {
                                             }
                                             archive
                                                 .start_file(relative_path, zip_options)
-                                                .map_err(OperationError::from_str)?;
+                                                .map_err(|e| {
+                                                    OperationError::from_err(e, &controller)
+                                                })?;
                                             let mut current = 0;
                                             loop {
                                                 futures::executor::block_on(async {
-                                                    controller
-                                                        .check()
-                                                        .await
-                                                        .map_err(OperationError::from_str)
+                                                    controller.check().await.map_err(|s| {
+                                                        OperationError::from_state(s, &controller)
+                                                    })
                                                 })?;
 
-                                                let count = file
-                                                    .read(&mut buffer)
-                                                    .map_err(OperationError::from_str)?;
+                                                let count =
+                                                    file.read(&mut buffer).map_err(|e| {
+                                                        OperationError::from_err(e, &controller)
+                                                    })?;
                                                 if count == 0 {
                                                     break;
                                                 }
-                                                archive
-                                                    .write_all(&buffer[..count])
-                                                    .map_err(OperationError::from_str)?;
+                                                archive.write_all(&buffer[..count]).map_err(
+                                                    |e| OperationError::from_err(e, &controller),
+                                                )?;
                                                 current += count;
 
                                                 let file_progress = current as f32 / total as f32;
@@ -717,12 +764,16 @@ impl Operation {
                                         } else {
                                             archive
                                                 .add_directory(relative_path, zip_options)
-                                                .map_err(OperationError::from_str)?;
+                                                .map_err(|e| {
+                                                    OperationError::from_err(e, &controller)
+                                                })?;
                                         }
                                     }
                                 }
 
-                                archive.finish().map_err(OperationError::from_str)?;
+                                archive
+                                    .finish()
+                                    .map_err(|e| OperationError::from_err(e, &controller))?;
                             }
                         }
 
@@ -731,7 +782,6 @@ impl Operation {
                 )
                 .await
                 .map_err(wrap_compio_spawn_error)?
-                .map_err(OperationError::from_str)
             }
             Self::Copy { paths, to } => {
                 copy_or_move(paths, to, Method::Copy, msg_tx, controller).await
@@ -740,15 +790,17 @@ impl Operation {
                 let total = paths.len();
                 for (i, path) in paths.into_iter().enumerate() {
                     futures::executor::block_on(async {
-                        controller.check().await.map_err(OperationError::from_str)
+                        controller
+                            .check()
+                            .await
+                            .map_err(|s| OperationError::from_state(s, &controller))
                     })?;
 
                     controller.set_progress((i as f32) / (total as f32));
 
                     let _items_opt = compio::runtime::spawn_blocking(|| trash::delete(path))
                         .await
-                        .map_err(wrap_compio_spawn_error)?
-                        .map_err(OperationError::from_str)?;
+                        .map_err(wrap_compio_spawn_error)?;
                     //TODO: items_opt allows for easy restore
                 }
                 Ok(OperationSelection::default())
@@ -764,23 +816,28 @@ impl Operation {
                     )
                 ))]
                 {
+                    let controller_clone = controller.clone();
                     compio::runtime::spawn_blocking(move || -> Result<(), OperationError> {
+                        let controller = controller_clone;
                         let count = items.len();
                         for (i, item) in items.into_iter().enumerate() {
                             futures::executor::block_on(async {
-                                controller.check().await.map_err(OperationError::from_str)
+                                controller
+                                    .check()
+                                    .await
+                                    .map_err(|s| OperationError::from_state(s, &controller))
                             })?;
 
                             controller.set_progress(i as f32 / count as f32);
 
                             trash::os_limited::purge_all([item])
-                                .map_err(OperationError::from_str)?;
+                                .map_err(|e| OperationError::from_err(e, &controller))?;
                         }
                         Ok(())
                     })
                     .await
                     .map_err(wrap_compio_spawn_error)?
-                    .map_err(OperationError::from_str)?;
+                    .map_err(|e| OperationError::from_err(e, &controller))?;
                 }
                 Ok(OperationSelection::default())
             }
@@ -795,24 +852,30 @@ impl Operation {
                     )
                 ))]
                 {
+                    let controller_clone = controller.clone();
                     compio::runtime::spawn_blocking(move || -> Result<(), OperationError> {
-                        let items = trash::os_limited::list().map_err(OperationError::from_str)?;
+                        let controller = controller_clone;
+                        let items = trash::os_limited::list()
+                            .map_err(|e| OperationError::from_err(e, &controller))?;
                         let count = items.len();
                         for (i, item) in items.into_iter().enumerate() {
                             futures::executor::block_on(async {
-                                controller.check().await.map_err(OperationError::from_str)
+                                controller
+                                    .check()
+                                    .await
+                                    .map_err(|s| OperationError::from_state(s, &controller))
                             })?;
 
                             controller.set_progress(i as f32 / count as f32);
 
                             trash::os_limited::purge_all([item])
-                                .map_err(OperationError::from_str)?;
+                                .map_err(|e| OperationError::from_err(e, &controller))?;
                         }
                         Ok(())
                     })
                     .await
                     .map_err(wrap_compio_spawn_error)?
-                    .map_err(OperationError::from_str)?;
+                    .map_err(|e| OperationError::from_err(e, &controller))?;
                 }
                 Ok(OperationSelection::default())
             }
@@ -820,40 +883,46 @@ impl Operation {
                 paths,
                 to,
                 password,
-            } => compio::runtime::spawn_blocking(
-                move || -> Result<OperationSelection, OperationError> {
-                    let total_paths = paths.len();
-                    let mut op_sel = OperationSelection::default();
-                    for (i, path) in paths.iter().enumerate() {
-                        futures::executor::block_on(async {
-                            controller.check().await.map_err(OperationError::from_str)
-                        })?;
+            } => {
+                let controller_clone = controller.clone();
+                compio::runtime::spawn_blocking(
+                    move || -> Result<OperationSelection, OperationError> {
+                        let controller = controller_clone;
+                        let total_paths = paths.len();
+                        let mut op_sel = OperationSelection::default();
+                        for (i, path) in paths.iter().enumerate() {
+                            futures::executor::block_on(async {
+                                controller
+                                    .check()
+                                    .await
+                                    .map_err(|s| OperationError::from_state(s, &controller))
+                            })?;
 
-                        controller.set_progress((i as f32) / total_paths as f32);
+                            controller.set_progress((i as f32) / total_paths as f32);
 
-                        if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
-                            let dir_name = get_directory_name(file_name);
-                            let mut new_dir = to.join(dir_name);
+                            if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
+                                let dir_name = get_directory_name(file_name);
+                                let mut new_dir = to.join(dir_name);
 
-                            if new_dir.exists() {
-                                if let Some(new_dir_parent) = new_dir.parent() {
-                                    new_dir = copy_unique_path(&new_dir, new_dir_parent);
+                                if new_dir.exists() {
+                                    if let Some(new_dir_parent) = new_dir.parent() {
+                                        new_dir = copy_unique_path(&new_dir, new_dir_parent);
+                                    }
                                 }
+
+                                op_sel.ignored.push(path.clone());
+                                op_sel.selected.push(new_dir.clone());
+
+                                crate::archive::extract(path, &new_dir, &password, &controller)?;
                             }
-
-                            op_sel.ignored.push(path.clone());
-                            op_sel.selected.push(new_dir.clone());
-
-                            crate::archive::extract(path, &new_dir, &password, &controller)?;
                         }
-                    }
 
-                    Ok(op_sel)
-                },
-            )
+                        Ok(op_sel)
+                    },
+                )
+            }
             .await
-            .map_err(wrap_compio_spawn_error)?
-            .map_err(OperationError::from_str),
+            .map_err(wrap_compio_spawn_error)?,
             Self::Move {
                 paths,
                 to,
@@ -868,36 +937,51 @@ impl Operation {
                 )
                 .await
             }
-            Self::NewFolder { path } => compio::runtime::spawn(async move {
-                controller.check().await.map_err(OperationError::from_str)?;
-                compio::fs::create_dir(&path)
-                    .await
-                    .map_err(OperationError::from_str)?;
-                Result::<_, OperationError>::Ok(OperationSelection {
-                    ignored: Vec::new(),
-                    selected: vec![path],
+            Self::NewFolder { path } => {
+                let controller_clone = controller.clone();
+                compio::runtime::spawn(async move {
+                    let controller = controller_clone;
+                    controller
+                        .check()
+                        .await
+                        .map_err(|s| OperationError::from_state(s, &controller))?;
+                    compio::fs::create_dir(&path)
+                        .await
+                        .map_err(|e| OperationError::from_err(e, &controller))?;
+                    Result::<_, OperationError>::Ok(OperationSelection {
+                        ignored: Vec::new(),
+                        selected: vec![path],
+                    })
                 })
-            })
+            }
             .await
-            .map_err(wrap_compio_spawn_error)?
-            .map_err(OperationError::from_str),
-            Self::NewFile { path } => compio::runtime::spawn(async move {
-                controller.check().await.map_err(OperationError::from_str)?;
-                compio::fs::File::create(&path)
-                    .await
-                    .map_err(OperationError::from_str)?;
-                Result::<_, OperationError>::Ok(OperationSelection {
-                    ignored: Vec::new(),
-                    selected: vec![path],
+            .map_err(wrap_compio_spawn_error)?,
+            Self::NewFile { path } => {
+                let controller_clone = controller.clone();
+                compio::runtime::spawn(async move {
+                    let controller = controller_clone;
+                    controller
+                        .check()
+                        .await
+                        .map_err(|s| OperationError::from_state(s, &controller))?;
+                    compio::fs::File::create(&path)
+                        .await
+                        .map_err(|e| OperationError::from_err(e, &controller))?;
+                    Result::<_, OperationError>::Ok(OperationSelection {
+                        ignored: Vec::new(),
+                        selected: vec![path],
+                    })
                 })
-            })
+            }
             .await
-            .map_err(wrap_compio_spawn_error)?
-            .map_err(OperationError::from_str),
+            .map_err(wrap_compio_spawn_error)?,
             Self::PermanentlyDelete { paths } => {
                 let total = paths.len();
                 for (idx, path) in paths.into_iter().enumerate() {
-                    controller.check().await.map_err(OperationError::from_str)?;
+                    controller
+                        .check()
+                        .await
+                        .map_err(|s| OperationError::from_state(s, &controller))?;
 
                     controller.set_progress((idx as f32) / (total as f32));
 
@@ -914,8 +998,8 @@ impl Operation {
                         }
                     })
                     .await
-                    .map_err(OperationError::from_str)?
-                    .map_err(OperationError::from_str)?;
+                    .map_err(|e| OperationError::from_err(e, &controller))?
+                    .map_err(|e| OperationError::from_err(e, &controller))?;
                 }
 
                 Ok(OperationSelection::default())
@@ -926,35 +1010,45 @@ impl Operation {
                     recently_used_xbel::remove_recently_used(&path_refs)
                 })
                 .await
-                .map_err(OperationError::from_str)?
-                .map_err(OperationError::from_str)?;
+                .map_err(|e| OperationError::from_err(e, &controller))?
+                .map_err(|e| OperationError::from_err(e, &controller))?;
 
                 Ok(OperationSelection::default())
             }
-            Self::Rename { from, to } => compio::runtime::spawn(async move {
-                controller.check().await.map_err(OperationError::from_str)?;
-                compio::fs::rename(&from, &to)
-                    .await
-                    .map_err(OperationError::from_str)?;
-                Result::<_, OperationError>::Ok(OperationSelection {
-                    ignored: vec![from],
-                    selected: vec![to],
+            Self::Rename { from, to } => {
+                let controller_clone = controller.clone();
+
+                compio::runtime::spawn(async move {
+                    let controller = controller_clone;
+                    controller
+                        .check()
+                        .await
+                        .map_err(|s| OperationError::from_state(s, &controller))?;
+                    compio::fs::rename(&from, &to)
+                        .await
+                        .map_err(|e| OperationError::from_err(e, &controller))?;
+                    Result::<_, OperationError>::Ok(OperationSelection {
+                        ignored: vec![from],
+                        selected: vec![to],
+                    })
                 })
-            })
+            }
             .await
-            .map_err(wrap_compio_spawn_error)?
-            .map_err(OperationError::from_str),
+            .map_err(wrap_compio_spawn_error)?,
             #[cfg(target_os = "macos")]
             Self::Restore { .. } => {
                 // TODO: add support for macos
-                return OperationError::from_str("Restoring from trash is not supported on macos");
+                return OperationError::from_msg("Restoring from trash is not supported on macos");
             }
             #[cfg(not(target_os = "macos"))]
             Self::Restore { items } => {
                 let total = items.len();
                 let mut paths = Vec::with_capacity(total);
                 for (i, item) in items.into_iter().enumerate() {
-                    controller.check().await.map_err(OperationError::from_str)?;
+                    controller
+                        .check()
+                        .await
+                        .map_err(|s| OperationError::from_state(s, &controller))?;
 
                     controller.set_progress((i as f32) / (total as f32));
 
@@ -963,7 +1057,7 @@ impl Operation {
                     compio::runtime::spawn_blocking(|| trash::os_limited::restore_all([item]))
                         .await
                         .map_err(wrap_compio_spawn_error)?
-                        .map_err(OperationError::from_str)?;
+                        .map_err(|e| OperationError::from_err(e, &controller))?;
                 }
                 Ok(OperationSelection {
                     ignored: Vec::new(),
@@ -971,50 +1065,63 @@ impl Operation {
                 })
             }
             Self::SetExecutableAndLaunch { path } => {
-                controller.check().await.map_err(OperationError::from_str)?;
+                controller
+                    .check()
+                    .await
+                    .map_err(|s| OperationError::from_state(s, &controller))?;
 
+                let controller_clone = controller.clone();
                 compio::runtime::spawn_blocking(move || -> Result<(), OperationError> {
+                    let controller = controller_clone;
                     //TODO: what to do on non-Unix systems?
                     #[cfg(unix)]
                     {
                         use std::os::unix::fs::PermissionsExt;
 
                         let mut perms = fs::metadata(&path)
-                            .map_err(OperationError::from_str)?
+                            .map_err(|e| OperationError::from_err(e, &controller))?
                             .permissions();
                         let current_mode = perms.mode();
                         let new_mode = current_mode | 0o111;
                         perms.set_mode(new_mode);
-                        fs::set_permissions(&path, perms).map_err(OperationError::from_str)?;
+                        fs::set_permissions(&path, perms)
+                            .map_err(|e| OperationError::from_err(e, &controller))?;
                     }
 
                     let mut command = std::process::Command::new(path);
-                    spawn_detached(&mut command).map_err(OperationError::from_str)?;
+                    spawn_detached(&mut command)
+                        .map_err(|e| OperationError::from_err(e, &controller))?;
 
                     Ok(())
                 })
                 .await
                 .map_err(wrap_compio_spawn_error)?
-                .map_err(OperationError::from_str)?;
+                .map_err(|e| OperationError::from_err(e, &controller))?;
                 Ok(OperationSelection::default())
             }
             Self::SetPermissions { path, mode } => {
-                controller.check().await.map_err(OperationError::from_str)?;
+                controller
+                    .check()
+                    .await
+                    .map_err(|s| OperationError::from_state(s, &controller))?;
 
+                let controller_clone = controller.clone();
                 compio::runtime::spawn_blocking(move || -> Result<(), OperationError> {
+                    let controller = controller_clone;
                     //TODO: what to do on non-Unix systems?
                     #[cfg(unix)]
                     {
                         use std::os::unix::fs::PermissionsExt;
                         let perms = fs::Permissions::from_mode(mode);
-                        fs::set_permissions(&path, perms).map_err(OperationError::from_str)?;
+                        fs::set_permissions(&path, perms)
+                            .map_err(|e| OperationError::from_err(e, &controller))?;
                     }
 
                     Ok(())
                 })
                 .await
                 .map_err(wrap_compio_spawn_error)?
-                .map_err(OperationError::from_str)?;
+                .map_err(|e| OperationError::from_err(e, &controller))?;
                 Ok(OperationSelection::default())
             }
         };
@@ -1026,13 +1133,18 @@ impl Operation {
 }
 
 #[track_caller]
-fn wrap_compio_spawn_error(_unwind: Box<dyn std::any::Any + Send>) -> OperationError {
+fn wrap_compio_spawn_error(err: Box<dyn std::any::Any + Send>) -> OperationError {
     log::error!(
         "compio runtime spawn failed: {}",
         std::backtrace::Backtrace::capture()
     );
 
-    OperationError::from_str("compio runtime spawn failed")
+    // Preserve error if it's already an OperationError
+    if let Ok(err) = err.downcast() {
+        *err
+    } else {
+        OperationError::from_msg("compio runtime spawn failed")
+    }
 }
 
 #[cfg(test)]

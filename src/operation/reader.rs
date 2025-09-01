@@ -1,5 +1,7 @@
 use std::{fs, io, path::Path};
 
+use crate::operation::OperationError;
+
 use super::Controller;
 
 // Special reader just for operations, handling cancel and progress
@@ -29,7 +31,7 @@ impl io::Read for OpReader {
             self.controller
                 .check()
                 .await
-                .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+                .map_err(|s| io::Error::other(OperationError::from_state(s, &self.controller)))
         })?;
 
         let count = self.file.read(buf)?;
