@@ -185,6 +185,7 @@ no-history = No items in history.
 pending = Pending
 progress = {$percent}%
 progress-cancelled = {$percent}%, cancelled
+progress-failed = {$percent}%, failed
 progress-paused = {$percent}%, paused
 failed = Failed
 complete = Complete

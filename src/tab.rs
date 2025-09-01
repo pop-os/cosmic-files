@@ -81,7 +81,7 @@ use crate::{
     mime_icon::{mime_for_path, mime_icon},
     mounter::MOUNTERS,
     mouse_area,
-    operation::Controller,
+    operation::{Controller, OperationError},
     thumbnail_cacher::{CachedThumbnail, ThumbnailCacher, ThumbnailSize},
     thumbnailer::thumbnailer,
 };
@@ -2469,10 +2469,13 @@ pub struct Tab {
     window_id: Option<window::Id>,
 }
 
-async fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, String> {
+async fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, OperationError> {
     let mut total = 0;
     for entry_res in WalkDir::new(path) {
-        controller.check().await?;
+        controller
+            .check()
+            .await
+            .map_err(|s| OperationError::from_state(s, &controller))?;
 
         //TODO: report more errors?
         if let Ok(entry) = entry_res {
@@ -5717,7 +5720,7 @@ impl Tab {
                                             );
                                                 Message::DirectorySize(
                                                     path.clone(),
-                                                    DirSize::Error(err),
+                                                    DirSize::Error(err.to_string()),
                                                 )
                                             }
                                         }
