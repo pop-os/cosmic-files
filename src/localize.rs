@@ -3,8 +3,8 @@
 use std::str::FromStr;
 
 use i18n_embed::{
-    fluent::{fluent_language_loader, FluentLanguageLoader},
     DefaultLocalizer, LanguageLoader, Localizer,
+    fluent::{FluentLanguageLoader, fluent_language_loader},
 };
 use icu::locid::Locale;
 use icu_collator::{Collator, CollatorOptions, Numeric};

@@ -1,8 +1,9 @@
 use cosmic::{
+    Application, Element,
     app::{self, Core, Settings, Task},
     executor,
-    iced::{window, Subscription},
-    widget, Application, Element,
+    iced::{Subscription, window},
+    widget,
 };
 use cosmic_files::dialog::{
     Dialog, DialogChoice, DialogChoiceOption, DialogFilter, DialogFilterPattern, DialogKind,

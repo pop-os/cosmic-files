@@ -1,6 +1,6 @@
+use compio::BufResult;
 use compio::buf::{IntoInner, IoBuf};
 use compio::io::{AsyncReadAt, AsyncWriteAt};
-use compio::BufResult;
 use std::future::Future;
 use std::pin::Pin;
 use std::time::Instant;
@@ -9,7 +9,7 @@ use walkdir::WalkDir;
 
 use crate::operation::OperationError;
 
-use super::{copy_unique_path, Controller, OperationSelection, ReplaceResult};
+use super::{Controller, OperationSelection, ReplaceResult, copy_unique_path};
 
 pub enum Method {
     Copy,

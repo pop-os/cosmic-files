@@ -346,7 +346,11 @@ impl MimeAppCache {
                                 {
                                     apps.push(MimeApp::from(app));
                                 } else {
-                                    log::info!("failed to add association for {:?}: application {:?} not found", mime, filename);
+                                    log::info!(
+                                        "failed to add association for {:?}: application {:?} not found",
+                                        mime,
+                                        filename
+                                    );
                                 }
                             }
                         }
@@ -385,7 +389,11 @@ impl MimeAppCache {
                                 if found {
                                     break;
                                 } else {
-                                    log::debug!("failed to set default for {:?}: application {:?} not found", mime, filename);
+                                    log::debug!(
+                                        "failed to set default for {:?}: application {:?} not found",
+                                        mime,
+                                        filename
+                                    );
                                 }
                             }
                         }
@@ -625,10 +633,12 @@ mod tests {
         let command = commands.first().unwrap();
 
         assert_eq!("/usr/games/gzdoom", command.get_program().to_str().unwrap());
-        assert!(paths
-            .iter()
-            .zip(command.get_args())
-            .all(|(&expected, actual)| expected == actual.to_string_lossy()));
+        assert!(
+            paths
+                .iter()
+                .zip(command.get_args())
+                .all(|(&expected, actual)| expected == actual.to_string_lossy())
+        );
     }
 
     #[test]
@@ -669,10 +679,12 @@ mod tests {
         assert_eq!(paths.len(), command.get_args().count());
 
         assert_eq!("/usr/bin/mpv", command.get_program().to_str().unwrap());
-        assert!(paths
-            .iter()
-            .zip(command.get_args())
-            .all(|(&expected, actual)| expected == actual.to_string_lossy()));
+        assert!(
+            paths
+                .iter()
+                .zip(command.get_args())
+                .all(|(&expected, actual)| expected == actual.to_string_lossy())
+        );
     }
 
     #[test]
@@ -695,11 +707,12 @@ mod tests {
         assert_eq!(args.len() + paths.len(), command.get_args().count());
 
         assert_eq!("/usr/bin/flatpak", command.get_program().to_str().unwrap());
-        assert!(args
-            .iter()
-            .chain(paths.iter())
-            .zip(command.get_args())
-            .all(|(&expected, actual)| expected == actual.to_string_lossy()));
+        assert!(
+            args.iter()
+                .chain(paths.iter())
+                .zip(command.get_args())
+                .all(|(&expected, actual)| expected == actual.to_string_lossy())
+        );
     }
 
     #[test]
@@ -719,10 +732,12 @@ mod tests {
             "/usr/games/roguelike",
             command.get_program().to_str().unwrap()
         );
-        assert!(paths
-            .iter()
-            .zip(command.get_args())
-            .all(|(&expected, actual)| expected == actual.to_string_lossy()));
+        assert!(
+            paths
+                .iter()
+                .zip(command.get_args())
+                .all(|(&expected, actual)| expected == actual.to_string_lossy())
+        );
     }
 
     #[test]
@@ -751,11 +766,13 @@ mod tests {
         );
 
         assert_eq!("/usr/bin/flatpak", command.get_program().to_str().unwrap());
-        assert!(args_leading
-            .iter()
-            .chain(paths.iter())
-            .chain(args_trailing.iter())
-            .zip(command.get_args())
-            .all(|(&expected, actual)| expected == actual.to_string_lossy()));
+        assert!(
+            args_leading
+                .iter()
+                .chain(paths.iter())
+                .chain(args_trailing.iter())
+                .zip(command.get_args())
+                .all(|(&expected, actual)| expected == actual.to_string_lossy())
+        );
     }
 }

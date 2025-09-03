@@ -5,7 +5,7 @@ use crate::{
     spawn_detached::spawn_detached,
     tab,
 };
-use cosmic::iced::futures::{channel::mpsc::Sender, SinkExt};
+use cosmic::iced::futures::{SinkExt, channel::mpsc::Sender};
 use std::{
     borrow::Cow,
     fmt::Formatter,
@@ -14,7 +14,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use tokio::sync::{mpsc, Mutex as TokioMutex};
+use tokio::sync::{Mutex as TokioMutex, mpsc};
 use walkdir::WalkDir;
 use zip::AesMode::Aes256;
 
@@ -140,9 +140,11 @@ async fn copy_or_move(
                     Ok(()) => {
                         log::info!("renamed {from:?} to {to:?}");
                         false
-                    },
+                    }
                     Err(err) => {
-                        log::info!("failed to rename {from:?} to {to:?}, fallback to recursive move: {err}");
+                        log::info!(
+                            "failed to rename {from:?} to {to:?}, fallback to recursive move: {err}"
+                        );
                         true
                     }
                 }
@@ -1155,7 +1157,7 @@ mod tests {
         path::PathBuf,
     };
 
-    use cosmic::iced::futures::{channel::mpsc, StreamExt};
+    use cosmic::iced::futures::{StreamExt, channel::mpsc};
     use log::debug;
     use test_log::test;
     use tokio::sync;
@@ -1163,11 +1165,11 @@ mod tests {
     use super::{Controller, Operation, OperationError, OperationSelection, ReplaceResult};
     use crate::{
         app::{
-            test_utils::{
-                empty_fs, filter_dirs, filter_files, simple_fs, NAME_LEN, NUM_DIRS, NUM_FILES,
-                NUM_HIDDEN, NUM_NESTED,
-            },
             DialogPage, Message,
+            test_utils::{
+                NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED, empty_fs, filter_dirs,
+                filter_files, simple_fs,
+            },
         },
         fl,
     };
@@ -1198,10 +1200,13 @@ mod tests {
                 match msg {
                     Message::DialogPush(DialogPage::Replace { tx, .. }) => {
                         debug!("[{id}] Replace request");
-                        tx.send(ReplaceResult::Cancel).await.expect("Sending a response to a replace request should succeed")
-
+                        tx.send(ReplaceResult::Cancel)
+                            .await
+                            .expect("Sending a response to a replace request should succeed")
                     }
-                    _ => unreachable!("Only [ `Message::PendingProgress`, `Message::DialogPush(DialogPage::Replace)` ] are sent from operation"),
+                    _ => unreachable!(
+                        "Only [ `Message::PendingProgress`, `Message::DialogPush(DialogPage::Replace)` ] are sent from operation"
+                    ),
                 }
             }
         };
