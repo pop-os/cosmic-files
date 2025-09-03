@@ -2,8 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use mime_guess::Mime;
-use once_cell::sync::Lazy;
-use std::{collections::HashMap, fs, path::Path, process, sync::Mutex, time::Instant};
+use std::{
+    collections::HashMap,
+    fs,
+    path::Path,
+    process,
+    sync::{LazyLock, Mutex},
+    time::Instant,
+};
 
 #[derive(Clone, Debug)]
 pub struct Thumbnailer {
@@ -72,16 +78,13 @@ impl ThumbnailerCache {
         self.cache.clear();
 
         let mut search_dirs = Vec::new();
-        match xdg::BaseDirectories::new() {
-            Ok(xdg_dirs) => {
-                search_dirs.push(xdg_dirs.get_data_home().join("thumbnailers"));
-                for data_dir in xdg_dirs.get_data_dirs() {
-                    search_dirs.push(data_dir.join("thumbnailers"));
-                }
-            }
-            Err(err) => {
-                log::warn!("failed to get xdg base directories: {}", err);
-            }
+        let xdg_dirs = xdg::BaseDirectories::new();
+
+        if let Some(data_home) = xdg_dirs.get_data_home() {
+            search_dirs.push(data_home.join("thumbnailers"));
+        }
+        for data_dir in xdg_dirs.get_data_dirs() {
+            search_dirs.push(data_dir.join("thumbnailers"));
         }
 
         let mut thumbnailer_paths = Vec::new();
@@ -148,8 +151,8 @@ impl ThumbnailerCache {
     }
 }
 
-static THUMBNAILER_CACHE: Lazy<Mutex<ThumbnailerCache>> =
-    Lazy::new(|| Mutex::new(ThumbnailerCache::new()));
+static THUMBNAILER_CACHE: LazyLock<Mutex<ThumbnailerCache>> =
+    LazyLock::new(|| Mutex::new(ThumbnailerCache::new()));
 
 pub fn thumbnailer(mime: &Mime) -> Vec<Thumbnailer> {
     let thumbnailer_cache = THUMBNAILER_CACHE.lock().unwrap();

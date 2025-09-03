@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::str::FromStr;
-
 use i18n_embed::{
     DefaultLocalizer, LanguageLoader, Localizer,
     fluent::{FluentLanguageLoader, fluent_language_loader},
@@ -9,14 +7,15 @@ use i18n_embed::{
 use icu::locid::Locale;
 use icu_collator::{Collator, CollatorOptions, Numeric};
 use icu_provider::DataLocale;
-use once_cell::sync::Lazy;
 use rust_embed::RustEmbed;
+use std::str::FromStr;
+use std::sync::LazyLock;
 
 #[derive(RustEmbed)]
 #[folder = "i18n/"]
 struct Localizations;
 
-pub static LANGUAGE_LOADER: Lazy<FluentLanguageLoader> = Lazy::new(|| {
+pub static LANGUAGE_LOADER: LazyLock<FluentLanguageLoader> = LazyLock::new(|| {
     let loader: FluentLanguageLoader = fluent_language_loader!();
 
     loader
@@ -26,7 +25,7 @@ pub static LANGUAGE_LOADER: Lazy<FluentLanguageLoader> = Lazy::new(|| {
     loader
 });
 
-pub static LANGUAGE_SORTER: Lazy<Collator> = Lazy::new(|| {
+pub static LANGUAGE_SORTER: LazyLock<Collator> = LazyLock::new(|| {
     let mut options = CollatorOptions::new();
     options.numeric = Some(Numeric::On);
 
@@ -41,7 +40,7 @@ pub static LANGUAGE_SORTER: Lazy<Collator> = Lazy::new(|| {
         .expect("Creating a collator from the system's current language, the fallback language, or American English should succeed")
 });
 
-pub static LOCALE: Lazy<Locale> = Lazy::new(|| {
+pub static LOCALE: LazyLock<Locale> = LazyLock::new(|| {
     fn get_local() -> Result<Locale, Box<dyn std::error::Error>> {
         let locale = std::env::var("LC_TIME").or_else(|_| std::env::var("LANG"))?;
 

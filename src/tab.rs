@@ -1,5 +1,5 @@
 use cosmic::{
-    Element, cosmic_theme, font,
+    Apply, Element, cosmic_theme, font,
     iced::{
         Alignment,
         Border,
@@ -45,7 +45,6 @@ use icu::datetime::{
 use image::ImageDecoder;
 use jxl_oxide::integration::JxlDecoder;
 use mime_guess::{Mime, mime};
-use once_cell::sync::Lazy;
 use ordermap::OrderMap;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -106,7 +105,7 @@ pub(crate) static SORT_OPTION_FALLBACK: LazyLock<HashMap<String, (HeadingOptions
         }))
     });
 
-static MODE_NAMES: Lazy<Vec<String>> = Lazy::new(|| {
+static MODE_NAMES: LazyLock<Vec<String>> = LazyLock::new(|| {
     vec![
         // Mode 0
         fl!("none"),
@@ -127,7 +126,7 @@ static MODE_NAMES: Lazy<Vec<String>> = Lazy::new(|| {
     ]
 });
 
-static SPECIAL_DIRS: Lazy<HashMap<PathBuf, &'static str>> = Lazy::new(|| {
+static SPECIAL_DIRS: LazyLock<HashMap<PathBuf, &'static str>> = LazyLock::new(|| {
     let mut special_dirs = HashMap::new();
     if let Some(dir) = dirs::document_dir() {
         special_dirs.insert(dir, "folder-documents");
@@ -533,7 +532,7 @@ pub enum FsKind {
 pub fn fs_kind(metadata: &Metadata) -> FsKind {
     //TODO: method to reload remote filesystems dynamically
     //TODO: fix for https://github.com/eminence/procfs/issues/262
-    static DEVICES: Lazy<HashMap<u64, FsKind>> = Lazy::new(|| {
+    static DEVICES: LazyLock<HashMap<u64, FsKind>> = LazyLock::new(|| {
         let mut devices = HashMap::new();
         match procfs::process::Process::myself() {
             Ok(process) => match process.mountinfo() {
@@ -5520,7 +5519,9 @@ impl Tab {
                                     .into(),
                             ]))
                             .padding([space_xxs, space_xs])
-                            .layer(cosmic_theme::Layer::Primary),
+                            .layer(cosmic_theme::Layer::Primary)
+                            .apply(widget::container)
+                            .padding([0, 0, 7, 0]),
                         );
                     }
                 }
@@ -5534,7 +5535,9 @@ impl Tab {
                             .into(),
                     ]))
                     .padding([space_xxs, space_xs])
-                    .layer(cosmic_theme::Layer::Primary),
+                    .layer(cosmic_theme::Layer::Primary)
+                    .apply(widget::container)
+                    .padding([0, 0, 7, 0]),
                 );
             }
             _ => {}
