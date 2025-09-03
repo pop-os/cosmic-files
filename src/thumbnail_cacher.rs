@@ -1,6 +1,5 @@
 use image::DynamicImage;
 use md5::{Digest, Md5};
-use once_cell::sync::Lazy;
 use std::{
     collections::HashMap,
     error::Error,
@@ -8,6 +7,7 @@ use std::{
     io::{self, BufReader, BufWriter},
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
+    sync::LazyLock,
     time::UNIX_EPOCH,
 };
 use tempfile::NamedTempFile;
@@ -158,7 +158,12 @@ impl ThumbnailCacher {
             )
         };
 
-        let mut image_data = vec![0; reader.output_buffer_size()];
+        let mut image_data = vec![
+            0;
+            reader.output_buffer_size().ok_or_else(
+                || "The required image buffer size is too large."
+            )?
+        ];
         reader.next_frame(&mut image_data)?;
 
         let file = File::create(path)?;
@@ -340,7 +345,7 @@ pub enum CachedThumbnail {
     Failed,
 }
 
-static THUMBNAIL_CACHE_BASE_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| {
+static THUMBNAIL_CACHE_BASE_DIR: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
     if let Some(cache_dir) = dirs::cache_dir() {
         return Some(cache_dir.join("thumbnails"));
     }

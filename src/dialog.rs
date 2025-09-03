@@ -19,8 +19,8 @@ use cosmic::{
     },
 };
 use notify_debouncer_full::{
-    DebouncedEvent, Debouncer, FileIdMap, new_debouncer,
-    notify::{self, RecommendedWatcher, Watcher},
+    DebouncedEvent, Debouncer, RecommendedCache, new_debouncer,
+    notify::{self, RecommendedWatcher},
 };
 use recently_used_xbel::update_recently_used;
 use std::{
@@ -468,7 +468,7 @@ impl From<AppMessage> for Message {
 pub struct MounterData(MounterKey, MounterItem);
 
 struct WatcherWrapper {
-    watcher_opt: Option<Debouncer<RecommendedWatcher, FileIdMap>>,
+    watcher_opt: Option<Debouncer<RecommendedWatcher, RecommendedCache>>,
 }
 
 impl Clone for WatcherWrapper {
@@ -510,7 +510,10 @@ struct App {
     search_id: widget::Id,
     tab: Tab,
     key_binds: HashMap<KeyBind, Action>,
-    watcher_opt: Option<(Debouncer<RecommendedWatcher, FileIdMap>, HashSet<PathBuf>)>,
+    watcher_opt: Option<(
+        Debouncer<RecommendedWatcher, RecommendedCache>,
+        HashSet<PathBuf>,
+    )>,
     auto_scroll_speed: Option<i16>,
 }
 
@@ -866,7 +869,7 @@ impl App {
             // Unwatch paths no longer used
             for path in old_paths.iter() {
                 if !new_paths.contains(path) {
-                    match watcher.watcher().unwatch(path) {
+                    match watcher.unwatch(path) {
                         Ok(()) => {
                             log::debug!("unwatching {:?}", path);
                         }
@@ -881,10 +884,7 @@ impl App {
             for path in new_paths.iter() {
                 if !old_paths.contains(path) {
                     //TODO: should this be recursive?
-                    match watcher
-                        .watcher()
-                        .watch(path, notify::RecursiveMode::NonRecursive)
-                    {
+                    match watcher.watch(path, notify::RecursiveMode::NonRecursive) {
                         Ok(()) => {
                             log::debug!("watching {:?}", path);
                         }

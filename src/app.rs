@@ -44,8 +44,8 @@ use cosmic::{
 };
 use mime_guess::Mime;
 use notify_debouncer_full::{
-    DebouncedEvent, Debouncer, FileIdMap, new_debouncer,
-    notify::{self, RecommendedWatcher, Watcher},
+    DebouncedEvent, Debouncer, RecommendedCache, new_debouncer,
+    notify::{self, RecommendedWatcher},
 };
 use slotmap::Key as SlotMapKey;
 use std::{
@@ -611,7 +611,7 @@ pub enum WindowKind {
 }
 
 pub struct WatcherWrapper {
-    watcher_opt: Option<Debouncer<RecommendedWatcher, FileIdMap>>,
+    watcher_opt: Option<Debouncer<RecommendedWatcher, RecommendedCache>>,
 }
 
 impl Clone for WatcherWrapper {
@@ -673,7 +673,10 @@ pub struct App {
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     surface_names: HashMap<WindowId, String>,
     toasts: widget::toaster::Toasts<Message>,
-    watcher_opt: Option<(Debouncer<RecommendedWatcher, FileIdMap>, HashSet<PathBuf>)>,
+    watcher_opt: Option<(
+        Debouncer<RecommendedWatcher, RecommendedCache>,
+        HashSet<PathBuf>,
+    )>,
     windows: HashMap<window::Id, WindowKind>,
     nav_dnd_hover: Option<(Location, Instant)>,
     tab_dnd_hover: Option<(Entity, Instant)>,
@@ -1583,7 +1586,7 @@ impl App {
             // Unwatch paths no longer used
             for path in old_paths.iter() {
                 if !new_paths.contains(path) {
-                    match watcher.watcher().unwatch(path) {
+                    match watcher.unwatch(path) {
                         Ok(()) => {
                             log::debug!("unwatching {:?}", path);
                         }
@@ -1597,10 +1600,7 @@ impl App {
             // Watch new paths
             for path in new_paths.iter() {
                 if !old_paths.contains(path) {
-                    match watcher
-                        .watcher()
-                        .watch(path, notify::RecursiveMode::NonRecursive)
-                    {
+                    match watcher.watch(path, notify::RecursiveMode::NonRecursive) {
                         Ok(()) => {
                             log::debug!("watching {:?}", path);
                         }
@@ -5983,9 +5983,8 @@ impl Application for App {
                                 .map(|path| [path.join("files"), path])
                                 .flatten();
                             for path in trash_paths {
-                                if let Err(e) = watcher
-                                    .watcher()
-                                    .watch(&path, notify::RecursiveMode::NonRecursive)
+                                if let Err(e) =
+                                    watcher.watch(&path, notify::RecursiveMode::NonRecursive)
                                 {
                                     log::warn!(
                                         "failed to add trash bin `{}` to watcher: {e:?}",
@@ -6055,9 +6054,8 @@ impl Application for App {
 
                     match watcher_res {
                         Ok(mut watcher) => {
-                            if let Err(e) = watcher
-                                .watcher()
-                                .watch(&recents_path, notify::RecursiveMode::NonRecursive)
+                            if let Err(e) =
+                                watcher.watch(&recents_path, notify::RecursiveMode::NonRecursive)
                             {
                                 log::warn!(
                                     "failed to add recents file `{}` to watcher: {}",

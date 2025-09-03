@@ -24,9 +24,9 @@ pub const SUPPORTED_ARCHIVE_TYPES: &[&str] = &[
     "application/x-bzip2",
     #[cfg(feature = "bzip2")]
     "application/x-bzip2-compressed-tar",
-    #[cfg(feature = "xz2")]
+    #[cfg(feature = "liblzma")]
     "application/x-xz",
-    #[cfg(feature = "xz2")]
+    #[cfg(feature = "liblzma")]
     "application/x-xz-compressed-tar",
 ];
 
@@ -86,11 +86,11 @@ pub fn extract(
             .map(tar::Archive::new)
             .and_then(|mut archive| archive.unpack(new_dir))
             .map_err(|e| OperationError::from_err(e, controller))?,
-        #[cfg(feature = "xz2")]
+        #[cfg(feature = "liblzma")]
         "application/x-xz" | "application/x-xz-compressed-tar" => {
             OpReader::new(path, controller.clone())
                 .map(io::BufReader::new)
-                .map(xz2::read::XzDecoder::new)
+                .map(liblzma::read::XzDecoder::new)
                 .map(tar::Archive::new)
                 .and_then(|mut archive| archive.unpack(new_dir))
                 .map_err(|e| OperationError::from_err(e, controller))?

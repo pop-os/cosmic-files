@@ -14,14 +14,14 @@ icu = { version = "1.5.0", features = [
     "compiled_data",
     "icu_datetime_experimental",
 ] }
-cctk = { git = "https://github.com/pop-os/cosmic-protocols", package = "cosmic-client-toolkit", rev = "178eb0b", optional = true }
+cctk = { git = "https://github.com/pop-os/cosmic-protocols", package = "cosmic-client-toolkit", rev = "6254f50", optional = true }
 cosmic-mime-apps = { git = "https://github.com/pop-os/cosmic-mime-apps.git", optional = true }
 dirs = "6.0.0"
 env_logger = "0.11"
 freedesktop_entry_parser = "1.3"
 futures = "0.3.31"
-gio = { version = "0.20", optional = true }
-glib = { version = "0.20", optional = true }
+gio = { version = "0.21", optional = true }
+glib = { version = "0.21", optional = true }
 glob = "0.3"
 icu_collator = "1.5"
 icu_provider = { version = "1.5", features = ["sync"] }
@@ -30,9 +30,8 @@ image = "0.25"
 libc = "0.2"
 log = "0.4"
 mime_guess = "2"
-notify-debouncer-full = "0.3"
+notify-debouncer-full = "0.6"
 notify-rust = { version = "4", optional = true }
-once_cell = "1.20"
 open = "5.3.2"
 paste = "1.0"
 regex = "1"
@@ -44,40 +43,40 @@ tokio = { version = "1", features = ["process", "sync"] }
 trash = { git = "https://github.com/jackpot51/trash-rs.git", branch = "cosmic" }
 url = "2.5"
 walkdir = "2.5.0"
-wayland-client = { version = "0.31.8", optional = true }
-xdg = { version = "2.5.2", optional = true }
+wayland-client = { version = "0.31.11", optional = true }
+xdg = { version = "3.0", optional = true }
 # https://github.com/ebassi/xdg-mime-rs/pull/31
 xdg-mime = { git = "https://github.com/ellieplayswow/xdg-mime-rs", branch = "feature/get-same-as" }
 # Compression
-bzip2 = { version = "0.5", optional = true }           #TODO: replace with pure Rust crate
-flate2 = "1.0"
-tar = "0.4.43"
-xz2 = { version = "0.1", optional = true }             #TODO: replace with pure Rust crate
-ordermap = { version = "0.5.8", features = ["serde"] }
+bzip2 = { version = "0.6", optional = true }           #TODO: replace with pure Rust crate
+flate2 = "1.1"
+tar = "0.4.44"
+liblzma = { version = "0.4.4", optional = true }       #TODO: replace with pure Rust crate
+ordermap = { version = "0.5.9", features = ["serde"] }
 # Internationalization
-i18n-embed = { version = "0.15", features = [
+i18n-embed = { version = "0.16", features = [
     "fluent-system",
     "desktop-requester",
 ] }
-i18n-embed-fl = "0.9"
+i18n-embed-fl = "0.10"
 rust-embed = "8"
 slotmap = "1.0.7"
 recently-used-xbel = { git = "https://github.com/pop-os/recently-used-xbel.git" }
-zip = "2.2.2"
+zip = "5.0.0"
 uzers = "0.12.1"
 md-5 = "0.10.6"
-png = "0.17.16"
-jxl-oxide = { version = "0.12.2", features = ["image"] }
+png = "0.18"
+jxl-oxide = { version = "0.12.4", features = ["image"] }
 num_cpus = "1.17.0"
 
 # Completion-based IO runtime to enable io_uring / IOCP file IO support.
 [dependencies.compio]
-version = "0.14.0"
+version = "0.16.0"
 default-features = false
 features = ["io", "macros", "polling", "runtime"]
 
 [dependencies.io-uring]
-version = "0.7.6"
+version = "0.7.10"
 default-features = false
 optional = true
 
@@ -85,7 +84,7 @@ optional = true
 git = "https://github.com/pop-os/libcosmic.git"
 default-features = false
 #TODO: a11y feature crashes
-features = ["autosize", "multi-window", "tokio", "winit", "surface-message"]
+features = ["autosize", "dbus-config", "multi-window", "tokio", "winit", "surface-message"]
 
 [features]
 default = [
@@ -96,7 +95,7 @@ default = [
     "notify",
     "wgpu",
     "wayland",
-    "xz2",
+    "liblzma",
 ]
 dbus-config = ["libcosmic/dbus-config"]
 desktop = [
@@ -125,7 +124,7 @@ debug = true
 fork = "0.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-procfs = "0.17"
+procfs = "0.18"
 
 [dev-dependencies]
 # cap-std = "3"
