@@ -34,8 +34,9 @@ use cosmic::{
     style, surface, theme,
     widget::{
         self,
+        about::About,
         dnd_destination::DragId,
-        horizontal_space,
+        horizontal_space, icon,
         menu::{action::MenuAction, key_bind::KeyBind},
         segmented_button::{self, Entity},
         vertical_space,
@@ -634,6 +635,7 @@ impl PartialEq for WatcherWrapper {
 // The [`App`] stores application-specific state.
 pub struct App {
     core: Core,
+    about: About,
     nav_bar_context_id: segmented_button::Entity,
     nav_model: segmented_button::SingleSelectModel,
     tab_model: segmented_button::Model<segmented_button::SingleSelect>,
@@ -1432,7 +1434,7 @@ impl App {
 
         nav_model = nav_model.insert(|b| {
             b.text(fl!("recents"))
-                .icon(widget::icon::from_name("document-open-recent-symbolic"))
+                .icon(icon::from_name("document-open-recent-symbolic"))
                 .data(Location::Recents)
         });
 
@@ -1448,12 +1450,10 @@ impl App {
                 nav_model = nav_model.insert(move |b| {
                     b.text(name.clone())
                         .icon(
-                            widget::icon::icon(if path.is_dir() {
+                            icon::icon(if path.is_dir() {
                                 tab::folder_icon_symbolic(&path, 16)
                             } else {
-                                widget::icon::from_name("text-x-generic-symbolic")
-                                    .size(16)
-                                    .handle()
+                                icon::from_name("text-x-generic-symbolic").size(16).handle()
                             })
                             .size(16),
                         )
@@ -1470,7 +1470,7 @@ impl App {
 
         nav_model = nav_model.insert(|b| {
             b.text(fl!("trash"))
-                .icon(widget::icon::icon(tab::trash_icon_symbolic(16)))
+                .icon(icon::icon(tab::trash_icon_symbolic(16)))
                 .data(Location::Trash)
                 .divider_above()
         });
@@ -1478,8 +1478,8 @@ impl App {
         if !MOUNTERS.is_empty() {
             nav_model = nav_model.insert(|b| {
                 b.text(fl!("networks"))
-                    .icon(widget::icon::icon(
-                        widget::icon::from_name("network-workgroup-symbolic")
+                    .icon(icon::icon(
+                        icon::from_name("network-workgroup-symbolic")
                             .size(16)
                             .handle(),
                     ))
@@ -1512,7 +1512,7 @@ impl App {
                     b = b.data(Location::Network(uri, item.name(), None));
                 }
                 if let Some(icon) = item.icon(true) {
-                    b = b.icon(widget::icon::icon(icon).size(16));
+                    b = b.icon(icon::icon(icon).size(16));
                 }
                 if item.is_mounted() {
                     b = b.closable();
@@ -1616,38 +1616,6 @@ impl App {
 
         //TODO: should any of this run in a command?
         Task::none()
-    }
-
-    fn about(&self) -> Element<Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
-        let repository = "https://github.com/pop-os/cosmic-files";
-        let hash = env!("VERGEN_GIT_SHA");
-        let short_hash: String = hash.chars().take(7).collect();
-        let date = env!("VERGEN_GIT_COMMIT_DATE");
-        widget::column::with_children(vec![
-                widget::svg(widget::svg::Handle::from_memory(
-                    &include_bytes!(
-                        "../res/icons/hicolor/128x128/apps/com.system76.CosmicFiles.svg"
-                    )[..],
-                ))
-                .into(),
-                widget::text::title3(fl!("cosmic-files")).into(),
-                widget::button::link(repository)
-                    .on_press(Message::LaunchUrl(repository.to_string()))
-                    .padding(0)
-                    .into(),
-                widget::button::link(fl!(
-                    "git-description",
-                    hash = short_hash.as_str(),
-                    date = date
-                ))
-                    .on_press(Message::LaunchUrl(format!("{}/commits/{}", repository, hash)))
-                    .padding(0)
-                .into(),
-            ])
-        .align_x(Alignment::Center)
-        .spacing(space_xxs)
-        .into()
     }
 
     fn network_drive(&self) -> Element<Message> {
@@ -1782,7 +1750,7 @@ impl App {
                             .into(),
                         if controller.is_paused() {
                             widget::tooltip(
-                                widget::button::icon(widget::icon::from_name(
+                                widget::button::icon(icon::from_name(
                                     "media-playback-start-symbolic",
                                 ))
                                 .on_press(Message::PendingPause(*id, false))
@@ -1793,7 +1761,7 @@ impl App {
                             .into()
                         } else {
                             widget::tooltip(
-                                widget::button::icon(widget::icon::from_name(
+                                widget::button::icon(icon::from_name(
                                     "media-playback-pause-symbolic",
                                 ))
                                 .on_press(Message::PendingPause(*id, true))
@@ -1804,7 +1772,7 @@ impl App {
                             .into()
                         },
                         widget::tooltip(
-                            widget::button::icon(widget::icon::from_name("window-close-symbolic"))
+                            widget::button::icon(icon::from_name("window-close-symbolic"))
                                 .on_press(Message::PendingCancel(*id))
                                 .padding(8),
                             widget::text::body(fl!("cancel")),
@@ -2124,8 +2092,24 @@ impl Application for App {
                 })
         });
 
+        let about = About::default()
+            .name(fl!("cosmic-files"))
+            .icon(icon::from_name(Self::APP_ID))
+            .version(env!("CARGO_PKG_VERSION"))
+            .author("System76")
+            .license("GPL-3.0-only")
+            .developers([("Jeremy Soller", "jeremy@system76.com")])
+            .links([
+                (fl!("repository"), "https://github.com/pop-os/cosmic-files"),
+                (
+                    fl!("support"),
+                    "https://github.com/pop-os/cosmic-files/issues",
+                ),
+            ]);
+
         let mut app = App {
             core,
+            about,
             nav_bar_context_id: segmented_button::Entity::null(),
             nav_model: segmented_button::ModelBuilder::default().build(),
             tab_model: segmented_button::ModelBuilder::default().build(),
@@ -2235,11 +2219,7 @@ impl Application for App {
             cosmic::Action::App(Message::NavMenuAction(NavMenuAction::OpenInNewTab(entity)))
         })
         .context_menu(self.nav_context_menu(self.nav_bar_context_id))
-        .close_icon(
-            widget::icon::from_name("media-eject-symbolic")
-                .size(16)
-                .icon(),
-        )
+        .close_icon(icon::from_name("media-eject-symbolic").size(16).icon())
         .into_container();
 
         if !self.core.is_condensed() {
@@ -3606,7 +3586,7 @@ impl Application for App {
                 });
                 if let Some(entity) = maybe_entity {
                     self.nav_model
-                        .icon_set(entity, widget::icon::icon(tab::trash_icon_symbolic(16)));
+                        .icon_set(entity, icon::icon(tab::trash_icon_symbolic(16)));
                 }
 
                 return Task::batch([self.rescan_trash(), self.update_desktop()]);
@@ -4721,8 +4701,9 @@ impl Application for App {
         }
 
         Some(match &self.context_page {
-            ContextPage::About => context_drawer::context_drawer(
-                self.about(),
+            ContextPage::About => context_drawer::about(
+                &self.about,
+                Message::LaunchUrl,
                 Message::ToggleContextPage(ContextPage::About),
             ),
             ContextPage::EditHistory => context_drawer::context_drawer(
@@ -4932,7 +4913,7 @@ impl Application for App {
                 widget::dialog()
                     .title("Failed operation")
                     .body(format!("{:#?}\n{}", operation, err))
-                    .icon(widget::icon::from_name("dialog-error").size(64))
+                    .icon(icon::from_name("dialog-error").size(64))
                     //TODO: retry action
                     .primary_action(
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
@@ -4941,7 +4922,7 @@ impl Application for App {
             DialogPage::ExtractPassword { id, password } => {
                 widget::dialog()
                     .title(fl!("extract-password-required"))
-                    .icon(widget::icon::from_name("dialog-error").size(64))
+                    .icon(icon::from_name("dialog-error").size(64))
                     .control(widget::text_input("", password).password().on_input(
                         move |password| {
                             Message::DialogUpdate(DialogPage::ExtractPassword { id: *id, password })
@@ -4962,7 +4943,7 @@ impl Application for App {
             } => widget::dialog()
                 .title(fl!("mount-error"))
                 .body(error)
-                .icon(widget::icon::from_name("dialog-error").size(64))
+                .icon(icon::from_name("dialog-error").size(64))
                 .primary_action(
                     widget::button::standard(fl!("try-again")).on_press(Message::DialogComplete),
                 )
@@ -5105,7 +5086,7 @@ impl Application for App {
             } => widget::dialog()
                 .title(fl!("network-drive-error"))
                 .body(error)
-                .icon(widget::icon::from_name("dialog-error").size(64))
+                .icon(icon::from_name("dialog-error").size(64))
                 .primary_action(
                     widget::button::standard(fl!("try-again")).on_press(Message::DialogComplete),
                 )
@@ -5216,7 +5197,7 @@ impl Application for App {
                         widget::mouse_area(
                             widget::button::custom(
                                 widget::row::with_children(vec![
-                                    widget::icon(app.icon.clone()).size(32).into(),
+                                    icon(app.icon.clone()).size(32).into(),
                                     if app.is_default && !displayed_default {
                                         displayed_default = true;
                                         widget::text::body(fl!(
@@ -5229,9 +5210,7 @@ impl Application for App {
                                     },
                                     widget::horizontal_space().into(),
                                     if *selected == i {
-                                        widget::icon::from_name("checkbox-checked-symbolic")
-                                            .size(16)
-                                            .into()
+                                        icon::from_name("checkbox-checked-symbolic").size(16).into()
                                     } else {
                                         widget::Space::with_width(Length::Fixed(16.0)).into()
                                     },
@@ -5473,7 +5452,7 @@ impl Application for App {
                     "favorite-path-error-description",
                     path = path.as_os_str().to_str()
                 ))
-                .icon(widget::icon::from_name("dialog-error").size(64))
+                .icon(icon::from_name("dialog-error").size(64))
                 .primary_action(
                     widget::button::destructive(fl!("remove")).on_press(Message::DialogComplete),
                 )
@@ -5547,29 +5526,25 @@ impl Application for App {
                 progress_bar.into(),
                 if all_paused {
                     widget::tooltip(
-                        widget::button::icon(widget::icon::from_name(
-                            "media-playback-start-symbolic",
-                        ))
-                        .on_press(Message::PendingPauseAll(false))
-                        .padding(8),
+                        widget::button::icon(icon::from_name("media-playback-start-symbolic"))
+                            .on_press(Message::PendingPauseAll(false))
+                            .padding(8),
                         widget::text::body(fl!("resume")),
                         widget::tooltip::Position::Top,
                     )
                     .into()
                 } else {
                     widget::tooltip(
-                        widget::button::icon(widget::icon::from_name(
-                            "media-playback-pause-symbolic",
-                        ))
-                        .on_press(Message::PendingPauseAll(true))
-                        .padding(8),
+                        widget::button::icon(icon::from_name("media-playback-pause-symbolic"))
+                            .on_press(Message::PendingPauseAll(true))
+                            .padding(8),
                         widget::text::body(fl!("pause")),
                         widget::tooltip::Position::Top,
                     )
                     .into()
                 },
                 widget::tooltip(
-                    widget::button::icon(widget::icon::from_name("window-close-symbolic"))
+                    widget::button::icon(icon::from_name("window-close-symbolic"))
                         .on_press(Message::PendingCancelAll)
                         .padding(8),
                     widget::text::body(fl!("cancel")),
@@ -5618,7 +5593,7 @@ impl Application for App {
             if self.core.is_condensed() {
                 elements.push(
                     //TODO: selected state is not appearing different
-                    widget::button::icon(widget::icon::from_name("system-search-symbolic"))
+                    widget::button::icon(icon::from_name("system-search-symbolic"))
                         .on_press(Message::SearchClear)
                         .padding(8)
                         .selected(true)
@@ -5636,7 +5611,7 @@ impl Application for App {
             }
         } else {
             elements.push(
-                widget::button::icon(widget::icon::from_name("system-search-symbolic"))
+                widget::button::icon(icon::from_name("system-search-symbolic"))
                     .on_press(Message::SearchActivate)
                     .padding(8)
                     .into(),
