@@ -3,23 +3,24 @@
 
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use cosmic::iced::{
+    Limits,
     event::wayland::{Event as WaylandEvent, OutputEvent, OverlapNotifyEvent},
     platform_specific::runtime::wayland::layer_surface::{
         IcedMargin, IcedOutput, SctkLayerSurfaceSettings,
     },
     platform_specific::shell::wayland::commands::layer_surface::{
-        destroy_layer_surface, get_layer_surface, Anchor, KeyboardInteractivity, Layer,
+        Anchor, KeyboardInteractivity, Layer, destroy_layer_surface, get_layer_surface,
     },
-    Limits,
 };
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use cosmic::iced_winit::commands::overlap_notify::overlap_notify;
 use cosmic::{
-    app::{self, context_drawer, Core, Task},
+    Application, ApplicationExt, Element,
+    app::{self, Core, Task, context_drawer},
     cosmic_config::{self, ConfigSet},
     cosmic_theme, executor,
     iced::{
-        self,
+        self, Alignment, Event, Length, Point, Rectangle, Size, Subscription,
         clipboard::dnd::DndAction,
         core::SmolStr,
         event,
@@ -28,7 +29,6 @@ use cosmic::{
         stream,
         widget::scrollable,
         window::{self, Event as WindowEvent, Id as WindowId},
-        Alignment, Event, Length, Point, Rectangle, Size, Subscription,
     },
     iced_runtime::clipboard,
     style, surface, theme,
@@ -40,13 +40,11 @@ use cosmic::{
         segmented_button::{self, Entity},
         vertical_space,
     },
-    Application, ApplicationExt, Element,
 };
 use mime_guess::Mime;
 use notify_debouncer_full::{
-    new_debouncer,
+    DebouncedEvent, Debouncer, FileIdMap, new_debouncer,
     notify::{self, RecommendedWatcher, Watcher},
-    DebouncedEvent, Debouncer, FileIdMap,
 };
 use slotmap::Key as SlotMapKey;
 use std::{
@@ -65,13 +63,13 @@ use std::{
 use tokio::sync::mpsc;
 use trash::TrashItem;
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
-use wayland_client::{protocol::wl_output::WlOutput, Proxy};
+use wayland_client::{Proxy, protocol::wl_output::WlOutput};
 
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{
-        AppTheme, Config, DesktopConfig, Favorite, IconSizes, TabConfig, TimeConfig, TypeToSearch,
-        TIME_CONFIG_ID,
+        AppTheme, Config, DesktopConfig, Favorite, IconSizes, TIME_CONFIG_ID, TabConfig,
+        TimeConfig, TypeToSearch,
     },
     dialog::{Dialog, DialogKind, DialogMessage, DialogResult},
     fl, home_dir,
@@ -80,14 +78,14 @@ use crate::{
     menu,
     mime_app::{self, MimeApp, MimeAppCache},
     mime_icon,
-    mounter::{MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage, MOUNTERS},
+    mounter::{MOUNTERS, MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage},
     operation::{
         Controller, Operation, OperationError, OperationErrorType, OperationSelection,
         ReplaceResult,
     },
     spawn_detached::spawn_detached,
     tab::{
-        self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION, SORT_OPTION_FALLBACK,
+        self, HOVER_DURATION, HeadingOptions, ItemMetadata, Location, SORT_OPTION_FALLBACK, Tab,
     },
 };
 use crate::{config::State, dialog::DialogSettings};
@@ -2195,7 +2193,7 @@ impl Application for App {
         for location in flags.uris {
             if let Some(e) = app.nav_model.iter().find(|e| {
                 app.nav_model.data::<Location>(*e).is_some_and(
-                    |l| matches!(l, Location::Network(ref uri, ..) if *uri == location.to_string()),
+                    |l| matches!(l, Location::Network(uri, ..) if *uri == location.to_string()),
                 )
             }) {
                 commands.push(cosmic::task::message(cosmic::Action::App(
@@ -3194,7 +3192,11 @@ impl Application for App {
                                                                 }
 
                                                                 Err(err) => {
-                                                                    log::warn!("failed to reload metadata for {:?}: {}", path, err);
+                                                                    log::warn!(
+                                                                        "failed to reload metadata for {:?}: {}",
+                                                                        path,
+                                                                        err
+                                                                    );
                                                                 }
                                                             }
                                                             //TODO item.thumbnail_opt =
@@ -3283,7 +3285,7 @@ impl Application for App {
                             None
                         }
                     },
-                ))
+                ));
             }
             Message::OpenInNewWindow(entity_opt) => match env::current_exe() {
                 Ok(exe) => self
@@ -3307,7 +3309,7 @@ impl Application for App {
                             self.open_tab(Location::Path(parent), true, Some(vec![path]))
                         })
                     },
-                ))
+                ));
             }
             Message::OpenWithBrowse => match self.dialog_pages.pop_front() {
                 Some((
@@ -4428,14 +4430,14 @@ impl Application for App {
                 }
                 NavMenuAction::OpenInNewTab(entity) => {
                     match self.nav_model.data::<Location>(entity) {
-                        Some(Location::Network(ref uri, ref display_name, path)) => {
+                        Some(Location::Network(uri, display_name, path)) => {
                             return self.open_tab(
                                 Location::Network(uri.clone(), display_name.clone(), path.clone()),
                                 false,
                                 None,
                             );
                         }
-                        Some(Location::Path(ref path)) => {
+                        Some(Location::Path(path)) => {
                             return self.open_tab(Location::Path(path.clone()), false, None);
                         }
                         Some(Location::Recents) => {
@@ -5721,7 +5723,7 @@ impl Application for App {
                                 .map(|x| Message::TabMessage(Some(*entity), x)),
                             id.clone(),
                         )
-                        .into()
+                        .into();
                     }
                     None => widget::text("Unknown tab ID").into(),
                 }
@@ -5977,7 +5979,9 @@ impl Application for App {
                                     if let Err(e) = futures::executor::block_on(async {
                                         output.send(Message::RescanTrash).await
                                     }) {
-                                        log::warn!("trash needs to be rescanned but sending message failed: {e:?}");
+                                        log::warn!(
+                                            "trash needs to be rescanned but sending message failed: {e:?}"
+                                        );
                                     }
                                 }
                             }
@@ -6062,7 +6066,9 @@ impl Application for App {
                                     if let Err(e) = futures::executor::block_on(async {
                                         output.send(Message::RescanRecents).await
                                     }) {
-                                        log::warn!("open recents tabs need to be updated but sending message failed: {e:?}");
+                                        log::warn!(
+                                            "open recents tabs need to be updated but sending message failed: {e:?}"
+                                        );
                                     }
                                 }
                             }
@@ -6215,7 +6221,7 @@ pub(crate) mod test_utils {
     };
 
     use log::{debug, trace};
-    use tempfile::{tempdir, TempDir};
+    use tempfile::{TempDir, tempdir};
 
     use crate::{
         config::{IconSizes, TabConfig, ThumbCfg},
@@ -6274,7 +6280,9 @@ pub(crate) mod test_utils {
         // TempDir won't leak resources as long as the destructor runs
         let root = tempdir()?;
         debug!("Root temp directory: {}", root.as_ref().display());
-        trace!("Creating {files} files and {hidden} hidden files in {dirs} temp dirs with {nested} nested temp dirs");
+        trace!(
+            "Creating {files} files and {hidden} hidden files in {dirs} temp dirs with {nested} nested temp dirs"
+        );
 
         // All paths for directories and nested directories
         let paths = (0..dirs).flat_map(|_| {
@@ -6349,11 +6357,7 @@ pub(crate) mod test_utils {
         Ok(path.read_dir()?.filter_map(|entry| {
             entry.ok().and_then(|entry| {
                 let path = entry.path();
-                if path.is_dir() {
-                    Some(path)
-                } else {
-                    None
-                }
+                if path.is_dir() { Some(path) } else { None }
             })
         }))
     }

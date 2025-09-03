@@ -4,7 +4,9 @@ use std::time::Instant;
 
 use crate::tab::DOUBLE_CLICK_DURATION;
 use cosmic::{
+    Element, Renderer, Theme,
     iced_core::{
+        Clipboard, Color, Layout, Length, Point, Rectangle, Shell, Size, Vector, Widget,
         border::Border,
         event::{self, Event},
         layout,
@@ -12,11 +14,9 @@ use cosmic::{
         overlay,
         renderer::{self, Quad, Renderer as _},
         touch,
-        widget::{tree, Operation, Tree},
-        Clipboard, Color, Layout, Length, Point, Rectangle, Shell, Size, Vector, Widget,
+        widget::{Operation, Tree, tree},
     },
     widget::Id,
-    Element, Renderer, Theme,
 };
 
 /// Emit messages on mouse events.

@@ -2,26 +2,25 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{
-    app::{context_drawer, cosmic::Cosmic, Core, Task},
+    Application, ApplicationExt, Element,
+    app::{Core, Task, context_drawer, cosmic::Cosmic},
     cosmic_config, cosmic_theme, executor,
     iced::{
-        self, event,
+        self, Alignment, Event, Length, Size, Subscription, event,
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers},
-        stream, window, Alignment, Event, Length, Size, Subscription,
+        stream, window,
     },
     theme,
     widget::{
         self,
-        menu::{key_bind::Modifier, Action as MenuAction, KeyBind},
+        menu::{Action as MenuAction, KeyBind, key_bind::Modifier},
         segmented_button,
     },
-    Application, ApplicationExt, Element,
 };
 use notify_debouncer_full::{
-    new_debouncer,
+    DebouncedEvent, Debouncer, FileIdMap, new_debouncer,
     notify::{self, RecommendedWatcher, Watcher},
-    DebouncedEvent, Debouncer, FileIdMap,
 };
 use recently_used_xbel::update_recently_used;
 use std::{
@@ -36,12 +35,12 @@ use std::{
 
 use crate::{
     app::{Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind},
-    config::{Config, DialogConfig, Favorite, ThumbCfg, TimeConfig, TIME_CONFIG_ID},
+    config::{Config, DialogConfig, Favorite, TIME_CONFIG_ID, ThumbCfg, TimeConfig},
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
     menu,
-    mounter::{MounterItem, MounterItems, MounterKey, MounterMessage, MOUNTERS},
+    mounter::{MOUNTERS, MounterItem, MounterItems, MounterKey, MounterMessage},
     tab::{self, ItemMetadata, Location, Tab},
 };
 
@@ -1452,7 +1451,11 @@ impl Application for App {
                                                             }
                                                         }
                                                         Err(err) => {
-                                                            log::warn!("failed to reload metadata for {:?}: {}", path, err);
+                                                            log::warn!(
+                                                                "failed to reload metadata for {:?}: {}",
+                                                                path,
+                                                                err
+                                                            );
                                                         }
                                                     }
                                                     //TODO item.thumbnail_opt =

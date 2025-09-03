@@ -2,9 +2,9 @@
 name = "cosmic-files"
 version = "0.1.0"
 authors = ["Jeremy Soller <jeremy@system76.com>"]
-edition = "2021"
+edition = "2024"
 license = "GPL-3.0-only"
-rust-version = "1.85.0"
+rust-version = "1.85"
 
 [build-dependencies]
 vergen = { version = "8", features = ["git", "gitcl"] }
@@ -88,7 +88,7 @@ optional = true
 git = "https://github.com/pop-os/libcosmic.git"
 default-features = false
 #TODO: a11y feature crashes
-features = ["autosize","multi-window", "tokio", "winit", "surface-message"]
+features = ["autosize", "multi-window", "tokio", "winit", "surface-message"]
 
 [features]
 default = [

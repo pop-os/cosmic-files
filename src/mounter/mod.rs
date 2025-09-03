@@ -1,4 +1,4 @@
-use cosmic::{iced::Subscription, widget, Task};
+use cosmic::{Task, iced::Subscription, widget};
 use once_cell::sync::Lazy;
 use std::{collections::BTreeMap, fmt, path::PathBuf, sync::Arc};
 use tokio::sync::mpsc;

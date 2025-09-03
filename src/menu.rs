@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{
+    Element,
     app::Core,
     iced::{
-        advanced::widget::text::Style as TextStyle, keyboard::Modifiers, Alignment, Background,
-        Border, Length,
+        Alignment, Background, Border, Length, advanced::widget::text::Style as TextStyle,
+        keyboard::Modifiers,
     },
     theme,
     widget::{
-        self, button, column, container, divider, horizontal_space,
-        menu::{self, key_bind::KeyBind, ItemHeight, ItemWidth, MenuBar},
-        responsive_menu_bar, text, Row,
+        self, Row, button, column, container, divider, horizontal_space,
+        menu::{self, ItemHeight, ItemWidth, MenuBar, key_bind::KeyBind},
+        responsive_menu_bar, text,
     },
-    Element,
 };
 use i18n_embed::LanguageLoader;
 use mime_guess::Mime;
