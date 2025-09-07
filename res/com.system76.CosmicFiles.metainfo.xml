@@ -13,17 +13,20 @@
   <name xml:lang="hu">COSMIC Fájlok</name>
   <name xml:lang="pt_BR">Arquivos</name>
   <name xml:lang="pt">Arquivos</name>
+  <name xml:lang="sk">Súbory COSMIC</name>
   <summary>File manager for the COSMIC desktop</summary>
   <summary xml:lang="pl">Menedżer plików pulpitu COSMIC</summary>
   <summary xml:lang="hu">Fájlkezelő a COSMIC asztali környezethez</summary>
   <summary xml:lang="pt_BR">Gerenciador de arquivos do COSMIC</summary>
   <summary xml:lang="pt">Gerenciador de arquivos do COSMIC</summary>
+  <summary xml:lang="sk">Správca súborov pre prostredie COSMIC</summary>
   <description>
     <p>File manager for the COSMIC desktop</p>
     <p xml:lang="pl">Menedżer plików pulpitu COSMIC</p>
     <p xml:lang="hu">Fájlkezelő a COSMIC asztali környezethez</p>
     <p xml:lang="pt_BR">Gerenciador de arquivos do COSMIC</p>
     <p xml:lang="pt">Gerenciador de arquivos do COSMIC</p>
+    <p xml:lang="sk">Správca súborov pre prostredie COSMIC</p>
   </description>
   <launchable type="desktop-id">com.system76.CosmicFiles.desktop</launchable>
   <icon type="remote" height="256" width="256">https://raw.githubusercontent.com/pop-os/cosmic-files/master/res/icons/hicolor/256x256/apps/com.system76.CosmicFiles.svg</icon>

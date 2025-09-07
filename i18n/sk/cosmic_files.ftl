@@ -1,53 +1,77 @@
 cosmic-files = Súbory COSMIC
-empty-folder = Prázdny priečinok
-empty-folder-hidden = Prázdny priečinok (obsahuje skryté položky)
-no-results = Žiadne výsledky
+empty-folder = Priečinok je prázdny
+empty-folder-hidden = Priečinok je prázdny (obsahuje skryté položky)
+no-results = Neboli nájdené žiadne výsledky
 filesystem = Súborový systém
 home = Domov
-networks = Sieť
-notification-in-progress = Prebiehajú operácie so súbormi
+networks = Siete
+notification-in-progress = Prebiehajú operácie so súbormi.
 trash = Kôš
-recents = Nedávne položky
+recents = Nedávne
 undo = Späť
 today = Dnes
 
 # Desktop view options
-desktop-view-options = Nastavenia zobrazenia na ploche...
-show-on-desktop = Zobraziť na ploche
-desktop-folder-content = Obsah priečinku plocha
+desktop-view-options = Možnosti zobrazenia pracovnej plochy...
+show-on-desktop = Zobraziť na pracovnej ploche
+desktop-folder-content = Obsah priečinka Pracovná plocha
 mounted-drives = Pripojené disky
-trash-folder-icon = Ikona koša
-icon-size-and-spacing = Veľkosť a rozostup medzi ikonami
+trash-folder-icon = Ikona priečinka Kôš
+icon-size-and-spacing = Veľkosť ikon a rozostupy
 icon-size = Veľkosť ikon
+grid-spacing = Rozostupy mriežky
 
 # List view
-name = Meno
-modified = Dátum úpravy
-trashed-on = Odstránené
+name = Názov
+modified = Upravené
+trashed-on = Vymazané
 size = Veľkosť
+
+# Progress footer
+details = Podrobnosti
+dismiss = Zavrieť správu
+operations-running = {$running} {$running ->
+    [one] operácia
+    [few] operácie
+    [many] operácií
+    [other] operácie
+  } prebieha ({$percent}%)...
+operations-running-finished = {$running} {$running ->
+    [one] operácia
+    [few] operácie
+    [many] operácií
+    [other] operácie
+  } prebieha ({$percent}%), {$finished} dokončených...
+pause = Pozastaviť
+resume = Pokračovať
 
 # Dialogs
 
 ## Compress Dialog
 create-archive = Vytvoriť archív
 
+## Extract Dialog
+extract-password-required = Vyžaduje sa heslo
+extract-to = Extrahovať do...
+extract-to-title = Extrahovať do priečinka
+
 ## Empty Trash Dialog
-empty-trash = Vysypať kôš
-empty-trash-warning = Ste si istý, že chcete trvalo vymazať všetky položky v koši?
+empty-trash = Vyprázdniť kôš
+empty-trash-warning = Naozaj chcete trvalo odstrániť všetky položky v koši?
 
 ## Mount Error Dialog
-mount-error = Nepodarilo sa pristúpiť ku zariadeniu
+mount-error = Nie je možné získať prístup k disku
 
 ## New File/Folder Dialog
 create-new-file = Vytvoriť nový súbor
 create-new-folder = Vytvoriť nový priečinok
 file-name = Názov súboru
-folder-name = Názov priečinku
-file-already-exists = Súbor s rovnakým názvom už existuje.
-folder-already-exists = Priečinok s rovnakým názvom už existuje.
-name-hidden = Názvy začínajúce na "." budú skryté.
-name-invalid = Názov nesmie byť "{$filename}".
-name-no-slashes = Názov nesmie obsahovať lomítko.
+folder-name = Názov priečinka
+file-already-exists = Súbor s týmto názvom už existuje.
+folder-already-exists = Priečinok s týmto názvom už existuje.
+name-hidden = Názvy začínajúce bodkou budú skryté.
+name-invalid = Názov nemôže byť "{$filename}".
+name-no-slashes = Názov nemôže obsahovať lomítka.
 
 ## Open/Save Dialog
 cancel = Zrušiť
@@ -55,17 +79,25 @@ create = Vytvoriť
 open = Otvoriť
 open-file = Otvoriť súbor
 open-folder = Otvoriť priečinok
-open-in-new-tab = Otvoriť na novej karte
+open-in-new-tab = Otvoriť v novej záložke
 open-in-new-window = Otvoriť v novom okne
-open-item-location = Otvoriť umiestenie položky
-open-multiple-files = Otvoriť viacero súborov
-open-multiple-folders = Otvoriť viacero priečinkov
+open-item-location = Otvoriť umiestnenie položky
+open-multiple-files = Otvoriť viac súborov
+open-multiple-folders = Otvoriť viac priečinkov
 save = Uložiť
 save-file = Uložiť súbor
 
 ## Open With Dialog
 open-with-title = Ako chcete otvoriť "{$name}"?
-browse-store = Prehľadať {$store}
+browse-store = Prehľadávať {$store}
+other-apps = Iné aplikácie
+related-apps = Súvisiace aplikácie
+
+## Permanently delete Dialog
+selected-items = {$items} vybraných položiek
+permanently-delete-question = Trvalo odstrániť
+delete = Odstrániť
+permanently-delete-warning = Naozaj chcete trvalo odstrániť {$target}? Toto nie je možné vrátiť späť.
 
 ## Rename Dialog
 rename-file = Premenovať súbor
@@ -73,43 +105,67 @@ rename-folder = Premenovať priečinok
 
 ## Replace Dialog
 replace = Nahradiť
-replace-title = {$filename} už existuje v tomto umiestnení.
-replace-warning = Chcete ho nahradiť tým, ktorý práve ukladáte? Nahradením bude prepísaný jeho obsah.
-replace-warning-operation = Chcete ho nahradiť? Nahradením bude jeho obsah prepísaný.
+replace-title = "{$filename}" už existuje v tomto umiestnení.
+replace-warning = Chcete ho nahradiť tým, ktorý práve ukladáte? Nahradením sa prepíše jeho obsah.
+replace-warning-operation = Chcete ho nahradiť? Nahradením sa prepíše jeho obsah.
 original-file = Pôvodný súbor
 replace-with = Nahradiť s
 apply-to-all = Použiť na všetky
-keep-both = Uchovať oba
+keep-both = Ponechať oboje
 skip = Preskočiť
 
 ## Set as Executable and Launch Dialog
 set-executable-and-launch = Nastaviť ako spustiteľné a spustiť
-set-executable-and-launch-description = Chcete nastaviť "{$name}" ako spustiteľné a spustiť?
+set-executable-and-launch-description = Chcete nastaviť "{$name}" ako spustiteľné a spustiť ho?
 set-and-launch = Nastaviť a spustiť
 
 ## Metadata Dialog
-owner = Majiteľ
+open-with = Otvoriť pomocou
+owner = Vlastník
 group = Skupina
-other = Iné
-read = Čítanie
-write = Zapisovanie
-execute = Spustenie
+other = Ostatní
+### Mode 0
+none = Žiadne
+### Mode 1 (unusual)
+execute-only = Len spúšťanie
+### Mode 2 (unusual)
+write-only = Len zápis
+### Mode 3 (unusual)
+write-execute = Zápis a spúšťanie
+### Mode 4
+read-only = Len čítanie
+### Mode 5
+read-execute = Čítanie a spúšťanie
+### Mode 6
+read-write = Čítanie a zápis
+### Mode 7
+read-write-execute = Čítanie, zápis a spúšťanie
+
+## Favorite Path Error Dialog
+favorite-path-error = Chyba pri otváraní adresára
+favorite-path-error-description =
+    Nepodarilo sa otvoriť "{$path}".
+    Možno neexistuje alebo nemáte povolenie na jeho otvorenie.
+    
+    Chcete ho odstrániť z bočného panela?
+remove = Odstrániť
+keep = Ponechať
 
 # Context Pages
 
 ## About
-git-description = Git commit {$hash} o {$date}
+git-description = Git commit {$hash} z {$date}
 
 ## Add Network Drive
 add-network-drive = Pridať sieťový disk
 connect = Pripojiť
-connect-anonymously = Pripojiť sa anonymne
-connecting = Pripája sa...
+connect-anonymously = Pripojiť anonymne
+connecting = Pripájanie...
 domain = Doména
-enter-server-address = Zadajte názov servera
+enter-server-address = Zadajte adresu servera
 network-drive-description =
-    Adresa servera obsahuje protokol a adresu.
-    Ukážka: ssh://192.168.0.1, ftp://[2001:db8::1]
+    Adresy serverov obsahujú prefix protokolu a adresu.
+    Príklady: ssh://192.168.0.1, ftp://[2001:db8::1]
 ### Make sure to keep the comma which separates the columns
 network-drive-schemes =
     Dostupné protokoly,Prefix
@@ -118,127 +174,195 @@ network-drive-schemes =
     Network File System,nfs://
     Server Message Block,smb://
     SSH File Transfer Protocol,sftp:// alebo ssh://
-    WebDav,dav:// alebo davs://
-network-drive-error = Nepodarilo sa pripojiť ku sieťovému disku
+    WebDAV,dav:// alebo davs://
+network-drive-error = Nie je možné získať prístup k sieťovému disku
 password = Heslo
 remember-password = Zapamätať heslo
-try-again = Skúsiť znovu
-username = Prihlasovanie meno
+try-again = Skúsiť znova
+username = Používateľské meno
 
 ## Operations
-edit-history = História zmien
+cancelled = Zrušené
+edit-history = Upraviť históriu
 history = História
-no-history = Žiadne položky v histórií.
-pending = V poradí
+no-history = Žiadne položky v histórii.
+pending = Čakajúce
+progress = {$percent}%
+progress-cancelled = {$percent}%, zrušené
+progress-paused = {$percent}%, pozastavené
 failed = Zlyhalo
 complete = Dokončené
 compressing = Komprimujem {$items} {$items ->
         [one] položku
         [few] položky
-        *[other] položiek
+        [many] položiek
+        [other] položky
+    } z "{$from}" do "{$to}" ({$progress})...
+compressed = Komprimované {$items} {$items ->
+        [one] položka
+        [few] položky
+        [many] položiek
+        [other] položky
     } z "{$from}" do "{$to}"
-compressed = {$items} {$items ->
-        [one] položka zkomprimovaná
-        [few] položky zkomprimované
-        *[other] položiek zkomprimovaných
-    } z "{$from}" do "{$to}"
-copy_noun = Skopírované
-creating = Vytváram {$name} v {$parent}
-created = Vytvorené {$name} v {$parent}
+copy_noun = Kopírovať
+creating = Vytváram "{$name}" v "{$parent}"
+created = Vytvorené "{$name}" v "{$parent}"
 copying = Kopírujem {$items} {$items ->
         [one] položku
         [few] položky
-        *[other] položiek
-    } z {$from} do {$to}
-copied = {$items ->
-        [one] Skopírovaná {$items} položka
-        [few] Skopírované {$items} položky
-        *[other] Skopírovaných {$items} položiek
-    } z {$from} do {$to}
-emptying-trash = Kôš sa vysypáva
-emptied-trash = Kôš bol vysypaný
+        [many] položiek
+        [other] položky
+    } z "{$from}" do "{$to}" ({$progress})...
+copied = Skopírované {$items} {$items ->
+        [one] položka
+        [few] položky
+        [many] položiek
+        [other] položky
+    } z "{$from}" do "{$to}"
+deleting = Odstraňujem {$items} {$items ->
+        [one] položku
+        [few] položky
+        [many] položiek
+        [other] položky
+    } z {trash} ({$progress})...
+deleted = Odstránené {$items} {$items ->
+        [one] položka
+        [few] položky
+        [many] položiek
+        [other] položky
+    } z {trash}
+emptying-trash = Vyprázdňujem {trash} ({$progress})...
+emptied-trash = Kôš bol vyprázdnený
 extracting = Extrahujem {$items} {$items ->
         [one] položku
         [few] položky
-        *[other] položiek
+        [many] položiek
+        [other] položky
+    } z "{$from}" do "{$to}" ({$progress})...
+extracted = Extrahované {$items} {$items ->
+        [one] položka
+        [few] položky
+        [many] položiek
+        [other] položky
     } z "{$from}" do "{$to}"
-extracted = {$items} {$items ->
-        [one] položka extrahovaná
-        [few] položky extrahované
-        *[other] položiek extrahovaných
-    } z "{$from}" do "{$to}"
-setting-executable-and-launching = Nastavuje "{$name}" ako spustiteľné a spúšťam
-set-executable-and-launched = "{$name}" bolo nastavené ako spustiteľné a bolo spustené
+setting-executable-and-launching = Nastavujem "{$name}" ako spustiteľné a spúšťam
+set-executable-and-launched = "{$name}" nastavené ako spustiteľné a spustené
+setting-permissions = Nastavujem oprávnenia pre "{$name}" na {$mode}
+set-permissions = Oprávnenia pre "{$name}" nastavené na {$mode}
 moving = Presúvam {$items} {$items ->
         [one] položku
         [few] položky
-        *[other] položiek
-    } z {$from} do {$to}
-moved = {$items ->
-        [one] Presunutá {$items} položka
-        [few] Presunuté {$items} položky
-        *[other] Presunutých {$items} položiek
-    } z {$from} do {$to}
-renaming = Premenovávanie z {$from} na {$to}
-renamed = Premenované z {$from} na {$to}
+        [many] položiek
+        [other] položky
+    } z "{$from}" do "{$to}" ({$progress})...
+moved = Presunuté {$items} {$items ->
+        [one] položka
+        [few] položky
+        [many] položiek
+        [other] položky
+    } z "{$from}" do "{$to}"
+permanently-deleting = Trvalo odstraňujem {$items} {$items ->
+        [one] položku
+        [few] položky
+        [many] položiek
+        [other] položky
+    }
+permanently-deleted = Trvalo odstránené {$items} {$items ->
+        [one] položka
+        [few] položky
+        [many] položiek
+        [other] položky
+    }
+removing-from-recents = Odstraňujem {$items} {$items ->
+        [one] položku
+        [few] položky
+        [many] položiek
+        [other] položky
+    } z {recents}
+removed-from-recents = Odstránené {$items} {$items ->
+        [one] položka
+        [few] položky
+        [many] položiek
+        [other] položky
+    } z {recents}
+renaming = Premenovávam "{$from}" na "{$to}"
+renamed = Premenované "{$from}" na "{$to}"
 restoring = Obnovujem {$items} {$items ->
         [one] položku
         [few] položky
-        *[other] položiek
-    } z koša 
-restored = {$items ->
-        [one] Obnovená {$items} položka
-        [few] Obnovené {$items} položky
-        *[other] Obnovených {$items} položiek
-    } z koša 
-undo = Späť
+        [many] položiek
+        [other] položky
+    } z {trash} ({$progress})...
+restored = Obnovené {$items} {$items ->
+        [one] položka
+        [few] položky
+        [many] položiek
+        [other] položky
+    } z {trash}
 unknown-folder = neznámy priečinok
 
 ## Open with
-menu-open-with = Otvoriť s
-default-app = {$name} (Predvolené)
+menu-open-with = Otvoriť pomocou...
+default-app = {$name} (predvolené)
 
 ## Show details
-show-details = Podrobnosti
+show-details = Zobraziť podrobnosti
+type = Typ: {$mime}
+items = Položky: {$items}
+item-size = Veľkosť: {$size}
+item-created = Vytvorené: {$created}
+item-modified = Upravené: {$modified}
+item-accessed = Prístup: {$accessed}
+calculating = Vypočítavam...
 
 ## Settings
 settings = Nastavenia
+single-click = Otvoriť jedným kliknutím
 
 ### Appearance
 appearance = Vzhľad
 theme = Téma
-match-desktop = Podľa systému
+match-desktop = Prispôsobiť pracovnej ploche
 dark = Tmavá
 light = Svetlá
 
+### Type to Search
+type-to-search = Hľadať písaním
+type-to-search-recursive = Prehľadáva aktuálny priečinok a všetky podpriečinky
+type-to-search-enter-path = Zadajte cestu k adresáru alebo súboru
+
 # Context menu
-add-to-sidebar = Pridať do panelu
+add-to-sidebar = Pridať do bočného panela
 compress = Komprimovať
-extract-here = Extrahovať
-new-file = Nový súbor
-new-folder = Nový priečinok
+delete-permanently = Trvalo odstrániť
+eject = Vysunúť
+extract-here = Extrahovať sem
+new-file = Nový súbor...
+new-folder = Nový priečinok...
 open-in-terminal = Otvoriť v termináli
 move-to-trash = Presunúť do koša
 restore-from-trash = Obnoviť z koša
-remove-from-sidebar = Odstrániť z panelu
-sort-by-name = Zoradiť podľa mena
-sort-by-modified = Zoradiť podľa dátumu úpravy
+remove-from-sidebar = Odstrániť z bočného panela
+sort-by-name = Zoradiť podľa názvu
+sort-by-modified = Zoradiť podľa úpravy
 sort-by-size = Zoradiť podľa veľkosti
-sort-by-trashed = Zoradiť podľa dátumu odstránenia
+sort-by-trashed = Zoradiť podľa času odstránenia
+remove-from-recents = Odstrániť z nedávnych
 
 ## Desktop
-change-wallpaper = Zmeniť pozadie...
-desktop-appearance = Nastavenia vzhľadu...
-display-settings = Nastavenia obrazovky...
+change-wallpaper = Zmeniť tapetu...
+desktop-appearance = Vzhľad pracovnej plochy...
+display-settings = Nastavenia zobrazenia...
 
 # Menu
 
 ## File
 file = Súbor
-new-tab = Nová karta
+new-tab = Nová záložka
 new-window = Nové okno
-rename = Premenovať
-close-tab = Zatvoriť kartu
+reload-folder = Obnoviť priečinok
+rename = Premenovať...
+close-tab = Zavrieť záložku
 quit = Ukončiť
 
 ## Edit
@@ -256,17 +380,16 @@ view = Zobraziť
 grid-view = Zobrazenie mriežky
 list-view = Zobrazenie zoznamu
 show-hidden-files = Zobraziť skryté súbory
-list-directories-first = Zobraziť priečinky ako prvé
-gallery-preview = Rýchla ukážka
+list-directories-first = Najskôr priečinky
+gallery-preview = Náhľad galérie
 menu-settings = Nastavenia...
-menu-about = O aplikácií...
-
+menu-about = O aplikácii Súbory COSMIC...
 
 ## Sort
 sort = Zoradiť
 sort-a-z = A-Z
 sort-z-a = Z-A
-sort-newest-first = Najnovšie ako prvé
-sort-oldest-first = Najstaršie ako prvé
-sort-smallest-to-largest = Vzostupne
-sort-largest-to-smallest = Zostupne
+sort-newest-first = Najnovšie najskôr
+sort-oldest-first = Najstaršie najskôr
+sort-smallest-to-largest = Od najmenších po najväčšie
+sort-largest-to-smallest = Od najväčších po najmenšie
