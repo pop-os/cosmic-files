@@ -51,8 +51,8 @@ xdg-mime = { git = "https://github.com/ellieplayswow/xdg-mime-rs", branch = "fea
 bzip2 = { version = "0.6", optional = true }           #TODO: replace with pure Rust crate
 flate2 = "1.1"
 tar = "0.4.44"
-liblzma = { version = "0.4.4", optional = true }       #TODO: replace with pure Rust crate
-ordermap = { version = "0.5.9", features = ["serde"] }
+lzma-rust2 = { version = "0.13", optional = true }
+ordermap = { version = "0.5.10", features = ["serde"] }
 # Internationalization
 i18n-embed = { version = "0.16", features = [
     "fluent-system",
@@ -92,10 +92,10 @@ default = [
     "desktop",
     "gvfs",
     "io-uring",
+    "lzma-rust2",
     "notify",
     "wgpu",
     "wayland",
-    "liblzma",
 ]
 dbus-config = ["libcosmic/dbus-config"]
 desktop = [
