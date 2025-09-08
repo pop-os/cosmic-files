@@ -26,6 +26,7 @@ pub mod reader;
 
 use self::recursive::{Context, Method};
 pub mod recursive;
+pub mod reflink;
 
 async fn handle_replace(
     msg_tx: Arc<TokioMutex<Sender<Message>>>,
