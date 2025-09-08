@@ -24,9 +24,9 @@ pub const SUPPORTED_ARCHIVE_TYPES: &[&str] = &[
     "application/x-bzip2",
     #[cfg(feature = "bzip2")]
     "application/x-bzip2-compressed-tar",
-    #[cfg(feature = "liblzma")]
+    #[cfg(feature = "lzma-rust2")]
     "application/x-xz",
-    #[cfg(feature = "liblzma")]
+    #[cfg(feature = "lzma-rust2")]
     "application/x-xz-compressed-tar",
 ];
 
@@ -86,11 +86,11 @@ pub fn extract(
             .map(tar::Archive::new)
             .and_then(|mut archive| archive.unpack(new_dir))
             .map_err(|e| OperationError::from_err(e, controller))?,
-        #[cfg(feature = "liblzma")]
+        #[cfg(feature = "lzma-rust2")]
         "application/x-xz" | "application/x-xz-compressed-tar" => {
             OpReader::new(path, controller.clone())
                 .map(io::BufReader::new)
-                .map(liblzma::read::XzDecoder::new)
+                .map(|reader| lzma_rust2::XzReader::new(reader, true))
                 .map(tar::Archive::new)
                 .and_then(|mut archive| archive.unpack(new_dir))
                 .map_err(|e| OperationError::from_err(e, controller))?
@@ -151,7 +151,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
         }?;
         let filepath = file
             .enclosed_name()
-            .ok_or(ZipError::InvalidArchive("Invalid file path"))?;
+            .ok_or(ZipError::InvalidArchive("Invalid file path".into()))?;
 
         let outpath = directory.as_ref().join(filepath);
 
