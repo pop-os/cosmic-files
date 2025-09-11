@@ -4572,8 +4572,7 @@ dependencies = [
 [[package]]
 name = "license"
 version = "3.7.0+3.27.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2db9430f1c0c6079d5650a97674467ff3934cb852400817eeb6c216b0a4eddb"
+source = "git+https://github.com/evenorog/license.git#6dac4a556165c96b8e94fefe1a6ad75f45721891"
 dependencies = [
  "reword",
  "serde",
