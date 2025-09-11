@@ -8951,7 +8951,7 @@ dependencies = [
 [[package]]
 name = "xdg-mime"
 version = "0.4.0"
-source = "git+https://github.com/ellieplayswow/xdg-mime-rs?branch=feature%2Fget-same-as#4f8d07ceedabbe58368a8e7f5547232490860790"
+source = "git+https://github.com/ebassi/xdg-mime-rs#f8efb3fb1fad582539e2af7d1e9fbc9613dcc7d9"
 dependencies = [
  "dirs-next",
  "glob",

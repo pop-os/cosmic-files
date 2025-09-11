@@ -45,8 +45,7 @@ url = "2.5"
 walkdir = "2.5.0"
 wayland-client = { version = "0.31.11", optional = true }
 xdg = { version = "3.0", optional = true }
-# https://github.com/ebassi/xdg-mime-rs/pull/31
-xdg-mime = { git = "https://github.com/ellieplayswow/xdg-mime-rs", branch = "feature/get-same-as" }
+xdg-mime = { git = "https://github.com/ebassi/xdg-mime-rs" }
 # Compression
 bzip2 = { version = "0.6", optional = true }            #TODO: replace with pure Rust crate
 flate2 = "1.1"
