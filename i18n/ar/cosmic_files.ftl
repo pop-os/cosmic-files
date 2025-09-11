@@ -1,4 +1,4 @@
-cosmic-files = مدير ملفات كُوزمِك
+cosmic-files = مدير ملفات COSMIC
 empty-folder = مجلّد فارغ
 empty-folder-hidden = مجلّد فارغ (يحتوي على ملفّات أو مجلّدات مخفية)
 filesystem = نظام ملفات
@@ -117,4 +117,4 @@ list-view = عرض اللائحة
 show-hidden-files = أظهر الملفّات والمجلدات المخفية
 list-directories-first = أظهِر المجلّدات أوّلًا
 menu-settings = الإعدادات...
-menu-about = عن مدير ملفات كُوزمِك...
+menu-about = عن مدير ملفات COSMIC...
