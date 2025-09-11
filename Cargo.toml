@@ -148,3 +148,6 @@ tokio = { version = "1", features = ["rt", "macros"] }
 
 [workspace]
 members = ["cosmic-files-applet"]
+
+[patch.crates-io]
+license = { git = "https://github.com/evenorog/license.git" }
