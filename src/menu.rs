@@ -262,8 +262,7 @@ pub fn context_menu<'a>(
                         menu_item(fl!("change-wallpaper"), Action::CosmicSettingsWallpaper).into(),
                     );
                     children.push(
-                        menu_item(fl!("desktop-appearance"), Action::CosmicSettingsAppearance)
-                            .into(),
+                        menu_item(fl!("desktop-appearance"), Action::CosmicSettingsDesktop).into(),
                     );
                     children.push(
                         menu_item(fl!("display-settings"), Action::CosmicSettingsDisplays).into(),
