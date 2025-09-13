@@ -1616,7 +1616,7 @@ impl App {
         Task::none()
     }
 
-    fn network_drive(&self) -> Element<Message> {
+    fn network_drive(&self) -> Element<'_, Message> {
         let cosmic_theme::Spacing {
             space_xxs, space_m, ..
         } = theme::active().cosmic().spacing;
@@ -1647,7 +1647,7 @@ impl App {
         .into()
     }
 
-    fn desktop_view_options(&self) -> Element<Message> {
+    fn desktop_view_options(&self) -> Element<'_, Message> {
         let cosmic_theme::Spacing {
             space_m, space_l, ..
         } = theme::active().cosmic().spacing;
@@ -1729,7 +1729,7 @@ impl App {
             .into()
     }
 
-    fn edit_history(&self) -> Element<Message> {
+    fn edit_history(&self) -> Element<'_, Message> {
         let cosmic_theme::Spacing { space_m, .. } = theme::active().cosmic().spacing;
 
         let mut children = Vec::new();
@@ -1879,7 +1879,7 @@ impl App {
             .into()
     }
 
-    fn settings(&self) -> Element<Message> {
+    fn settings(&self) -> Element<'_, Message> {
         let tab_config = self.config.tab;
 
         // TODO: Should dialog be updated here too?
@@ -2195,7 +2195,7 @@ impl Application for App {
         (app, Task::batch(commands))
     }
 
-    fn nav_bar(&self) -> Option<Element<cosmic::Action<Self::Message>>> {
+    fn nav_bar(&self) -> Option<Element<'_, cosmic::Action<Self::Message>>> {
         if !self.core.nav_bar_active() {
             return None;
         }
@@ -4687,7 +4687,7 @@ impl Application for App {
         Task::none()
     }
 
-    fn context_drawer(&self) -> Option<context_drawer::ContextDrawer<Message>> {
+    fn context_drawer(&self) -> Option<context_drawer::ContextDrawer<'_, Message>> {
         if !self.core.window.show_context {
             return None;
         }
@@ -4755,7 +4755,7 @@ impl Application for App {
         })
     }
 
-    fn dialog(&self) -> Option<Element<Message>> {
+    fn dialog(&self) -> Option<Element<'_, Message>> {
         //TODO: should gallery view just be a dialog?
         let entity = self.tab_model.active();
         if let Some(tab) = self.tab_model.data::<Tab>(entity) {
@@ -5455,7 +5455,7 @@ impl Application for App {
         Some(dialog.into())
     }
 
-    fn footer(&self) -> Option<Element<Message>> {
+    fn footer(&self) -> Option<Element<'_, Message>> {
         if self.progress_operations.is_empty() {
             return None;
         }
@@ -5568,7 +5568,7 @@ impl Application for App {
         Some(container.into())
     }
 
-    fn header_start(&self) -> Vec<Element<Self::Message>> {
+    fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
         vec![menu::menu_bar(
             &self.core,
             self.tab_model.active_data::<Tab>(),
@@ -5578,7 +5578,7 @@ impl Application for App {
         )]
     }
 
-    fn header_end(&self) -> Vec<Element<Self::Message>> {
+    fn header_end(&self) -> Vec<Element<'_, Self::Message>> {
         let mut elements = Vec::with_capacity(2);
 
         if let Some(term) = self.search_get() {
@@ -5614,7 +5614,7 @@ impl Application for App {
     }
 
     /// Creates a view after each update.
-    fn view(&self) -> Element<Self::Message> {
+    fn view(&self) -> Element<'_, Self::Message> {
         let cosmic_theme::Spacing {
             space_xxs, space_s, ..
         } = theme::active().cosmic().spacing;
@@ -5680,7 +5680,7 @@ impl Application for App {
         content
     }
 
-    fn view_window(&self, id: WindowId) -> Element<Self::Message> {
+    fn view_window(&self, id: WindowId) -> Element<'_, Self::Message> {
         let content = match self.windows.get(&id) {
             Some(WindowKind::ContextMenu(entity, id)) => {
                 match self.tab_model.data::<Tab>(*entity) {

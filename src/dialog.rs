@@ -375,7 +375,7 @@ impl<M: Send + 'static> Dialog<M> {
         }
     }
 
-    pub fn view(&self, window_id: window::Id) -> Element<M> {
+    pub fn view(&self, window_id: window::Id) -> Element<'_, M> {
         self.cosmic
             .view(window_id)
             .map(DialogMessage)
@@ -518,7 +518,7 @@ struct App {
 }
 
 impl App {
-    fn button_view(&self) -> Element<Message> {
+    fn button_view(&self) -> Element<'_, Message> {
         let cosmic_theme::Spacing {
             space_xxxs,
             space_xxs,
@@ -991,7 +991,7 @@ impl Application for App {
         (app, commands)
     }
 
-    fn context_drawer(&self) -> Option<context_drawer::ContextDrawer<Message>> {
+    fn context_drawer(&self) -> Option<context_drawer::ContextDrawer<'_, Message>> {
         if !self.core.window.show_context {
             return None;
         }
@@ -1022,7 +1022,7 @@ impl Application for App {
         }
     }
 
-    fn dialog(&self) -> Option<Element<Message>> {
+    fn dialog(&self) -> Option<Element<'_, Message>> {
         let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
 
         //TODO: should gallery view just be a dialog?
@@ -1122,11 +1122,11 @@ impl Application for App {
         Some(dialog.into())
     }
 
-    fn footer(&self) -> Option<Element<Message>> {
+    fn footer(&self) -> Option<Element<'_, Message>> {
         Some(self.button_view())
     }
 
-    fn header_end(&self) -> Vec<Element<Message>> {
+    fn header_end(&self) -> Vec<Element<'_, Message>> {
         let mut elements = Vec::with_capacity(3);
 
         if let Some(term) = self.search_get() {
@@ -1177,7 +1177,7 @@ impl Application for App {
         elements
     }
 
-    fn nav_bar(&self) -> Option<Element<cosmic::Action<Self::Message>>> {
+    fn nav_bar(&self) -> Option<Element<'_, cosmic::Action<Self::Message>>> {
         if !self.core().nav_bar_active() {
             return None;
         }
@@ -1879,7 +1879,7 @@ impl Application for App {
     }
 
     /// Creates a view after each update.
-    fn view(&self) -> Element<Message> {
+    fn view(&self) -> Element<'_, Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
 
         let mut col = widget::column::with_capacity(2);
