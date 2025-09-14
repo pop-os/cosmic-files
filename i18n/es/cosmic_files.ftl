@@ -1,4 +1,4 @@
-cosmic-files = COSMIC Files
+cosmic-files = Archivos COSMIC
 empty-folder = Carpeta vacía
 empty-folder-hidden = Carpeta vacía (Contiene archivos ocultos)
 no-results = No se encontraron resultados
@@ -30,8 +30,14 @@ size = Tamaño
 # Progress footer
 details = Detalles
 dismiss = Descartar mensaje
-operations-running = {$running} operaciones ejecutándose ({$percent}%)...
-operations-running-finished = {$running} operaciones ejecutándose ({$percent}%), {$finished} finalizadas...
+operations-running = {$running} {$running ->
+    [one] operación
+    *[other] operaciones
+  } ejecutándose ({$percent}%)...
+operations-running-finished = {$running} {$running ->
+    [one] operación
+    *[other] operaciones
+  } ejecutándose ({$percent}%), {$finished} finished...
 pause = Pausar
 resume = Reanudar
 
@@ -147,7 +153,8 @@ keep = Mantener
 # Context Pages
 
 ## About
-git-description = Git Commit: {$hash} - Fecha: {$date}
+repository = Repositorio
+support = Soporte
 
 ## Add Network Drive
 add-network-drive = Agregar una unidad de red
@@ -286,6 +293,7 @@ type-to-search-enter-path = Escriba la ruta del directorio o archivo
 add-to-sidebar = Añadir a la barra lateral
 compress = Comprimir
 delete-permanently = Eliminar permanentemente
+eject = Expulsar
 extract-here = Extraer aquí
 new-file = Nuevo archivo
 new-folder = Nueva carpeta
@@ -297,6 +305,7 @@ sort-by-name = Ordenar por nombre
 sort-by-modified = Ordenar por fecha de modificación
 sort-by-size = Ordenar por tamaño
 sort-by-trashed = Ordenar por fecha de eliminación
+remove-from-recents = Quitar de recientes
 
 ## Desktop
 change-wallpaper = Cambiar fondo de pantalla...
@@ -309,6 +318,7 @@ display-settings = Configuración de pantalla...
 file = Archivo
 new-tab = Nueva pestaña
 new-window = Nueva ventana
+reload-folder = Refrescar carpeta
 rename = Renombrar...
 close-tab = Cerrar pestaña
 quit = Cerrar
