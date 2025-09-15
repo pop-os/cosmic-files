@@ -36,11 +36,15 @@ use cosmic::{
     },
 };
 
-use chrono::{DateTime, Datelike, Timelike, Utc};
+use chrono::{Datelike, Timelike, Utc};
 use i18n_embed::LanguageLoader;
-use icu::datetime::{
-    DateTimeFormatter, DateTimeFormatterOptions,
-    options::{components, preferences},
+use icu::{
+    datetime::{
+        DateTimeFormatter, DateTimeFormatterPreferences, fieldsets,
+        input::{Date, DateTime, Time},
+        options::TimePrecision,
+    },
+    locale::preferences::extensions::unicode::keywords::HourCycle,
 };
 use image::ImageDecoder;
 use jxl_oxide::integration::JxlDecoder;
@@ -399,49 +403,45 @@ fn set_mode_part(mode: u32, shift: u32, bits: u32) -> u32 {
     (mode & !(0o7 << shift)) | (bits << shift)
 }
 
-fn date_time_formatter(military_time: bool) -> DateTimeFormatter {
-    let mut bag = components::Bag::empty();
-    bag.day = Some(components::Day::NumericDayOfMonth);
-    bag.month = Some(components::Month::Short);
-    bag.year = Some(components::Year::Numeric);
-    bag = bag.merge(time_bag(military_time));
-    let options = DateTimeFormatterOptions::Components(bag);
-
-    DateTimeFormatter::try_new_experimental(&LOCALE.as_ref().into(), options)
-        .expect("failed to create DateTimeFormatter")
-}
-
-fn time_formatter(military_time: bool) -> DateTimeFormatter {
-    let options = DateTimeFormatterOptions::Components(time_bag(military_time));
-
-    DateTimeFormatter::try_new_experimental(&LOCALE.as_ref().into(), options)
-        .expect("failed to create DateTimeFormatter")
-}
-
-fn time_bag(military_time: bool) -> components::Bag {
-    let mut bag = components::Bag::empty();
-    bag.hour = Some(components::Numeric::Numeric);
-    bag.minute = Some(components::Numeric::Numeric);
-    let hour_cycle = if military_time {
-        preferences::HourCycle::H23
+fn date_time_formatter(military_time: bool) -> DateTimeFormatter<fieldsets::YMDT> {
+    let mut prefs = DateTimeFormatterPreferences::from(LOCALE.clone());
+    prefs.hour_cycle = Some(if military_time {
+        HourCycle::H23
     } else {
-        preferences::HourCycle::H12
-    };
-    bag.preferences = Some(preferences::Bag::from_hour_cycle(hour_cycle));
-    bag
+        HourCycle::H12
+    });
+
+    let mut fs = fieldsets::YMDT::medium();
+    fs = fs.with_time_precision(TimePrecision::Minute);
+
+    DateTimeFormatter::try_new(prefs, fs).expect("failed to create DateTimeFormatter")
+}
+
+fn time_formatter(military_time: bool) -> DateTimeFormatter<fieldsets::T> {
+    let mut prefs = DateTimeFormatterPreferences::from(LOCALE.clone());
+    prefs.hour_cycle = Some(if military_time {
+        HourCycle::H23
+    } else {
+        HourCycle::H12
+    });
+
+    let mut fs = fieldsets::T::medium();
+    fs = fs.with_time_precision(TimePrecision::Minute);
+
+    DateTimeFormatter::try_new(prefs, fs).expect("failed to create DateTimeFormatter")
 }
 
 struct FormatTime<'a> {
     pub time: SystemTime,
-    pub date_time_formatter: &'a DateTimeFormatter,
-    pub time_formatter: &'a DateTimeFormatter,
+    pub date_time_formatter: &'a DateTimeFormatter<fieldsets::YMDT>,
+    pub time_formatter: &'a DateTimeFormatter<fieldsets::T>,
 }
 
 impl<'a> FormatTime<'a> {
     fn from_secs(
         secs: i64,
-        date_time_formatter: &'a DateTimeFormatter,
-        time_formatter: &'a DateTimeFormatter,
+        date_time_formatter: &'a DateTimeFormatter<fieldsets::YMDT>,
+        time_formatter: &'a DateTimeFormatter<fieldsets::T>,
     ) -> Option<Self> {
         // This looks convoluted because we need to ensure the units match up
         let secs: u64 = secs.try_into().ok()?;
@@ -464,33 +464,34 @@ impl Display for FormatTime<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let datetime = chrono::DateTime::<chrono::Local>::from(self.time);
         let now = chrono::Local::now();
-        let icu_datetime = icu::calendar::DateTime::try_new_iso_datetime(
-            datetime.year(),
-            datetime.month() as u8,
-            datetime.day() as u8,
-            datetime.hour() as u8,
-            datetime.minute() as u8,
-            datetime.second() as u8,
-        )
-        .expect("failed to construct DateTime")
-        .to_any();
+        let icu_datetime = DateTime {
+            date: Date::try_new_gregorian(
+                datetime.year(),
+                datetime.month() as u8,
+                datetime.day() as u8,
+            )
+            .unwrap(),
+            time: Time::try_new(
+                datetime.hour() as u8,
+                datetime.minute() as u8,
+                datetime.second() as u8,
+                0,
+            )
+            .unwrap(),
+        };
 
         if datetime.date_naive() == now.date_naive() {
             write!(
                 f,
                 "{}, {}",
                 fl!("today"),
-                self.time_formatter
-                    .format(&icu_datetime)
-                    .map_err(|_| fmt::Error)?
+                self.time_formatter.format(&icu_datetime).to_string()
             )
         } else {
             write!(
                 f,
                 "{}",
-                self.date_time_formatter
-                    .format(&icu_datetime)
-                    .map_err(|_| fmt::Error)?
+                self.date_time_formatter.format(&icu_datetime).to_string()
             )
         }
     }
@@ -498,8 +499,8 @@ impl Display for FormatTime<'_> {
 
 const fn format_time<'a>(
     time: SystemTime,
-    date_time_formatter: &'a DateTimeFormatter,
-    time_formatter: &'a DateTimeFormatter,
+    date_time_formatter: &'a DateTimeFormatter<fieldsets::YMDT>,
+    time_formatter: &'a DateTimeFormatter<fieldsets::T>,
 ) -> FormatTime<'a> {
     FormatTime {
         time,
@@ -1161,11 +1162,11 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
                     None => continue,
                     Some(path) => path,
                 };
-                let last_edit = match bookmark.modified.parse::<DateTime<Utc>>() {
+                let last_edit = match bookmark.modified.parse::<chrono::DateTime<Utc>>() {
                     Ok(last_edit) => last_edit,
                     Err(_) => continue,
                 };
-                let last_visit = match bookmark.visited.parse::<DateTime<Utc>>() {
+                let last_visit = match bookmark.visited.parse::<chrono::DateTime<Utc>>() {
                     Ok(last_visit) => last_visit,
                     Err(_) => continue,
                 };
@@ -2460,8 +2461,8 @@ pub struct Tab {
     modifiers: Modifiers,
     last_right_click: Option<usize>,
     search_context: Option<SearchContext>,
-    date_time_formatter: DateTimeFormatter,
-    time_formatter: DateTimeFormatter,
+    date_time_formatter: DateTimeFormatter<fieldsets::YMDT>,
+    time_formatter: DateTimeFormatter<fieldsets::T>,
     watch_drag: bool,
     window_id: Option<window::Id>,
 }
