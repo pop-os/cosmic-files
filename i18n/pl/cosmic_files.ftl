@@ -151,7 +151,8 @@ keep = Zachowaj
 # Context Pages
 
 ## About
-git-description = Git commit {$hash} z {$date}
+repository = Repozytorium
+support = Wsparcie
 
 ## Add Network Drive
 add-network-drive = Dodaj dysk sieciowy
@@ -186,6 +187,7 @@ no-history = Brak pozycji w historii.
 pending = Oczekujące
 progress = {$percent}%
 progress-cancelled = {$percent}%, anulowano
+progress-failed = {$percent}%, nieudane
 progress-paused = {$percent}%, wstrzymano
 failed = Nieudane
 complete = Ukończone
