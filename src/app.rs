@@ -2716,15 +2716,15 @@ impl Application for App {
                             let extension = archive_type.extension();
                             let name = format!("{}{}", name, extension);
                             let to = to.join(name);
-                            return self.operation(Operation::Compress {
+                            tasks.push(self.operation(Operation::Compress {
                                 paths,
                                 to,
                                 archive_type,
                                 password,
-                            });
+                            }));
                         }
                         DialogPage::EmptyTrash => {
-                            return self.operation(Operation::EmptyTrash);
+                            tasks.push(self.operation(Operation::EmptyTrash));
                         }
                         DialogPage::FailedOperation(id) => {
                             log::warn!("TODO: retry operation {}", id);
@@ -2739,7 +2739,7 @@ impl Application for App {
                                 },
                                 _ => unreachable!(),
                             };
-                            return self.operation(new_op);
+                            tasks.push(self.operation(new_op));
                         }
                         DialogPage::MountError {
                             mounter_key,
@@ -2747,7 +2747,7 @@ impl Application for App {
                             error: _,
                         } => {
                             if let Some(mounter) = MOUNTERS.get(&mounter_key) {
-                                return mounter.mount(item).map(|_| cosmic::action::none());
+                                tasks.push(mounter.mount(item).map(|_| cosmic::action::none()));
                             }
                         }
                         DialogPage::NetworkAuth {
@@ -2775,11 +2775,11 @@ impl Application for App {
                         }
                         DialogPage::NewItem { parent, name, dir } => {
                             let path = parent.join(name);
-                            return self.operation(if dir {
+                            tasks.push(self.operation(if dir {
                                 Operation::NewFolder { path }
                             } else {
                                 Operation::NewFile { path }
-                            });
+                            }));
                         }
                         DialogPage::OpenWith {
                             path,
@@ -2821,19 +2821,19 @@ impl Application for App {
                             }
                         }
                         DialogPage::PermanentlyDelete { paths } => {
-                            return self.operation(Operation::PermanentlyDelete { paths });
+                            tasks.push(self.operation(Operation::PermanentlyDelete { paths }));
                         }
                         DialogPage::RenameItem {
                             from, parent, name, ..
                         } => {
                             let to = parent.join(name);
-                            return self.operation(Operation::Rename { from, to });
+                            tasks.push(self.operation(Operation::Rename { from, to }));
                         }
                         DialogPage::Replace { .. } => {
                             log::warn!("replace dialog should be completed with replace result");
                         }
                         DialogPage::SetExecutableAndLaunch { path } => {
-                            return self.operation(Operation::SetExecutableAndLaunch { path });
+                            tasks.push(self.operation(Operation::SetExecutableAndLaunch { path }));
                         }
                         DialogPage::FavoritePathError { entity, .. } => {
                             if let Some(FavoriteIndex(favorite_i)) =
@@ -2842,7 +2842,7 @@ impl Application for App {
                                 let mut favorites = self.config.favorites.clone();
                                 favorites.remove(*favorite_i);
                                 config_set!(favorites, favorites);
-                                return self.update_config();
+                                tasks.push(self.update_config());
                             }
                         }
                     }
