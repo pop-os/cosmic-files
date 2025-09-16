@@ -196,13 +196,13 @@ compressing = Komprimujem {$items} {$items ->
         [one] položku
         [few] položky
         [many] položiek
-        [other] položky
+        *[other] položky
     } z "{$from}" do "{$to}" ({$progress})...
 compressed = Komprimované {$items} {$items ->
         [one] položka
         [few] položky
         [many] položiek
-        [other] položky
+        *[other] položky
     } z "{$from}" do "{$to}"
 copy_noun = Kopírovať
 creating = Vytváram "{$name}" v "{$parent}"
@@ -211,25 +211,25 @@ copying = Kopírujem {$items} {$items ->
         [one] položku
         [few] položky
         [many] položiek
-        [other] položky
+        *[other] položky
     } z "{$from}" do "{$to}" ({$progress})...
 copied = Skopírované {$items} {$items ->
         [one] položka
         [few] položky
         [many] položiek
-        [other] položky
+        *[other] položky
     } z "{$from}" do "{$to}"
 deleting = Odstraňujem {$items} {$items ->
         [one] položku
         [few] položky
         [many] položiek
-        [other] položky
+        *[other] položky
     } z {trash} ({$progress})...
 deleted = Odstránené {$items} {$items ->
         [one] položka
         [few] položky
         [many] položiek
-        [other] položky
+        *[other] položky
     } z {trash}
 emptying-trash = Vyprázdňujem {trash} ({$progress})...
 emptied-trash = Kôš bol vyprázdnený
@@ -237,13 +237,13 @@ extracting = Extrahujem {$items} {$items ->
         [one] položku
         [few] položky
         [many] položiek
-        [other] položky
+        *[other] položky
     } z "{$from}" do "{$to}" ({$progress})...
 extracted = Extrahované {$items} {$items ->
         [one] položka
         [few] položky
         [many] položiek
-        [other] položky
+        *[other] položky
     } z "{$from}" do "{$to}"
 setting-executable-and-launching = Nastavujem "{$name}" ako spustiteľné a spúšťam
 set-executable-and-launched = "{$name}" nastavené ako spustiteľné a spustené
@@ -253,37 +253,37 @@ moving = Presúvam {$items} {$items ->
         [one] položku
         [few] položky
         [many] položiek
-        [other] položky
+        *[other] položky
     } z "{$from}" do "{$to}" ({$progress})...
 moved = Presunuté {$items} {$items ->
         [one] položka
         [few] položky
         [many] položiek
-        [other] položky
+        *[other] položky
     } z "{$from}" do "{$to}"
 permanently-deleting = Trvalo odstraňujem {$items} {$items ->
         [one] položku
         [few] položky
         [many] položiek
-        [other] položky
+        *[other] položky
     }
 permanently-deleted = Trvalo odstránené {$items} {$items ->
         [one] položka
         [few] položky
         [many] položiek
-        [other] položky
+        *[other] položky
     }
 removing-from-recents = Odstraňujem {$items} {$items ->
         [one] položku
         [few] položky
         [many] položiek
-        [other] položky
+        *[other] položky
     } z {recents}
 removed-from-recents = Odstránené {$items} {$items ->
         [one] položka
         [few] položky
         [many] položiek
-        [other] položky
+        *[other] položky
     } z {recents}
 renaming = Premenovávam "{$from}" na "{$to}"
 renamed = Premenované "{$from}" na "{$to}"
@@ -291,13 +291,13 @@ restoring = Obnovujem {$items} {$items ->
         [one] položku
         [few] položky
         [many] položiek
-        [other] položky
+        *[other] položky
     } z {trash} ({$progress})...
 restored = Obnovené {$items} {$items ->
         [one] položka
         [few] položky
         [many] položiek
-        [other] položky
+        *[other] položky
     } z {trash}
 unknown-folder = neznámy priečinok
 
