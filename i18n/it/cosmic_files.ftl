@@ -5,7 +5,7 @@ no-results = Nessun risultato trovato
 filesystem = Filesystem
 home = Home
 networks = Reti
-notification-in-progress = Operazioni sui files in corso.
+notification-in-progress = Operazioni sui file in corso.
 trash = Cestino
 recents = Recenti
 undo = Annulla
@@ -30,8 +30,14 @@ size = Dimensione
 # Progress footer
 details = Dettagli
 dismiss = Nascondi messaggio
-operations-running = {$running} operazioni in corso: ({$percent}%)...
-operations-running-finished = {$running} operazioni in corso: ({$percent}%), {$finished} completate...
+operations-running = {$running} {$running ->
+    [one] operazione
+    *[other] operazioni
+  } running ({$percent}%)...
+operations-running-finished = {$running} {$running ->
+    [one] operazione
+    *[other] operazioni
+  } running ({$percent}%), {$finished} finished...
 pause = Pausa
 resume = Riprendi
 
@@ -80,6 +86,14 @@ save-file = Salva file
 ## Open With Dialog
 open-with-title = Come vuoi aprire il file "{$name}"?
 browse-store = Cerca in {$store}
+other-apps = Altre applicazioni
+related-apps = Applicazioni simili
+
+## Permanently delete Dialog
+selected-items = i {$items} elementi selezionati
+permanently-delete-question = Elimina definitivamente
+delete = Elimina
+permanently-delete-warning = Sei sicuro di voler eliminare definitivamente {$target}? Questa azione non può essere annullata.
 
 ## Rename Dialog
 rename-file = Rinomina file
@@ -136,7 +150,8 @@ keep = Mantieni
 # Context Pages
 
 ## About
-git-description = Git commit {$hash} in data {$date}
+repository = Repository
+support = Supporto
 
 ## Add Network Drive
 add-network-drive = Aggiungi dispositivo di rete
@@ -267,6 +282,7 @@ type-to-search-enter-path = Inserisci il percorso della cartella o del file
 add-to-sidebar = Aggiungi alla barra laterale
 compress = Comprimi
 delete-permanently = Elimina permanentemente
+eject = Espelli
 extract-here = Estrai
 new-file = Nuovo file...
 new-folder = Nuova cartella...
@@ -278,6 +294,7 @@ sort-by-name = Ordina per nome
 sort-by-modified = Ordina per data di modifica
 sort-by-size = Ordina per dimensione
 sort-by-trashed = Ordina per data di eliminazione
+remove-from-recents = Rimuovi da recenti
 
 ## Desktop
 change-wallpaper = Modifica sfondo...
@@ -290,6 +307,7 @@ display-settings = Impostazioni del display...
 file = File
 new-tab = Nuova scheda
 new-window = Nuova finestra
+reload-folder = Aggiorna cartella
 rename = Rinomina...
 close-tab = Chiudi scheda
 quit = Chiudi
