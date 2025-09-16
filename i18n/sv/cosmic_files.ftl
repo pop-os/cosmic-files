@@ -294,7 +294,3 @@ sort-newest-first = Nyaste först
 sort-oldest-first = Äldst först
 sort-smallest-to-largest = Minsta till största
 sort-largest-to-smallest = Största till minsta
-
-
-## Visa detaljer
-show-details = Visa detaljer
