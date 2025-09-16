@@ -21,8 +21,6 @@ icon-size-and-spacing = Ikonstorlek och mellanrum
 icon-size = Ikonstorlek
 
 # Dialogruta
-cancel = Avbryt
-open = Öppna
 
 # Dialogrutor
 

@@ -206,7 +206,7 @@ copying = {$items} {$items ->
 copied = {$items} {$items ->
         [one] bestand
         *[other] bestanden
-    } gekopieerd van '$from}' naar '{$to}'
+    } gekopieerd van '{$from}' naar '{$to}'
 deleting = {$items} {$items ->
         [one] bestand
         *[other] bestanden

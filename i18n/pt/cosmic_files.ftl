@@ -118,7 +118,6 @@ restored = Restaurado {$items} {$items ->
         [one] item
         *[other] itens
     } para {trash}
-undo = Desfazer
 unknown-folder = pasta desconhecida
 
 ## Open with

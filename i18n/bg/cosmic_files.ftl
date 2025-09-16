@@ -34,7 +34,6 @@ operations-running = {$running} {$running ->
     [one] операция се изпълнява
     *[other] операции се изпълняват
   } ({$percent}%)...
-operations-running-finished = {$running} операции се изпълняват ({$percent}%), {$finished} завършени...
 operations-running-finished = {$running} {$running -> 
     [one] операция се изпълнява
     *[other] операции се изпълняват

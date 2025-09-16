@@ -34,13 +34,13 @@ operations-running = {$running} {$running ->
     [one] operácia
     [few] operácie
     [many] operácií
-    [other] operácie
+    [*other] operácie
   } prebieha ({$percent}%)...
 operations-running-finished = {$running} {$running ->
     [one] operácia
     [few] operácie
     [many] operácií
-    [other] operácie
+    [*other] operácie
   } prebieha ({$percent}%), {$finished} dokončených...
 pause = Pozastaviť
 resume = Pokračovať
