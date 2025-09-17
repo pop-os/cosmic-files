@@ -15,6 +15,7 @@
   <name xml:lang="pt">Arquivos</name>
   <name xml:lang="sk">Súbory COSMIC</name>
   <name xml:lang="es">Archivos COSMIC</name>
+  <name xml:lang="it">COSMIC File</name>
   <summary>File manager for the COSMIC desktop</summary>
   <summary xml:lang="pl">Menedżer plików pulpitu COSMIC</summary>
   <summary xml:lang="hu">Fájlkezelő a COSMIC asztali környezethez</summary>
@@ -22,6 +23,7 @@
   <summary xml:lang="pt">Gerenciador de arquivos do COSMIC</summary>
   <summary xml:lang="sk">Správca súborov pre prostredie COSMIC</summary>
   <summary xml:lang="es">Gestor de archivos de COSMIC</summary>
+  <summary xml:lang="it">File manager di COSMIC</summary>
   <description>
     <p>File manager for the COSMIC desktop</p>
     <p xml:lang="pl">Menedżer plików pulpitu COSMIC</p>
