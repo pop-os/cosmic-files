@@ -8,6 +8,7 @@ Name[hu]=COSMIC Fájlok
 Name[pt]=Arquivos
 Name[sk]=Súbory COSMIC
 Name[es]=Archivos COSMIC
+Name[it]=COSMIC File
 Comment[sk]=Správca súborov pre prostredie COSMIC
 Exec=cosmic-files %U
 Terminal=false
