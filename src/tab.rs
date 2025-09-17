@@ -4365,6 +4365,16 @@ impl Tab {
         row = row.push(next_button);
         w += 16.0 + 2.0 * space_xxs as f32;
 
+        let mut up_button =
+            widget::button::custom(widget::icon::from_name("go-up-symbolic").size(16))
+                .padding(space_xxs)
+                .class(theme::Button::Icon);
+        if self.location.ancestors().len() > 1 {
+            up_button = up_button.on_press(Message::LocationUp);
+        }
+        row = row.push(up_button);
+        w += 16.0 + 2.0 * space_xxs as f32;
+
         row = row.push(widget::Space::with_width(Length::Fixed(space_s.into())));
         w += space_s as f32;
 
