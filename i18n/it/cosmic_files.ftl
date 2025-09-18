@@ -33,11 +33,11 @@ dismiss = Nascondi messaggio
 operations-running = {$running} {$running ->
     [one] operazione
     *[other] operazioni
-  } running ({$percent}%)...
+  } in corso ({$percent}%)...
 operations-running-finished = {$running} {$running ->
     [one] operazione
     *[other] operazioni
-  } running ({$percent}%), {$finished} finished...
+  } in corso ({$percent}%), {$finished} completata...
 pause = Pausa
 resume = Riprendi
 
