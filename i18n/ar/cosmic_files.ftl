@@ -71,7 +71,7 @@ copy_noun = ينسخ
 
 ## Open with
 
-menu-open-with = افتح ب‍استخدام
+menu-open-with = افتح ب‍استخدام...
 default-app = { $name } (المبدئي)
 
 ## Properties
@@ -91,8 +91,8 @@ dark = داكنة
 light = فاتحة
 # Context menu
 add-to-sidebar = اضف إلى الشريط الجانبي
-new-file = ملف جديد
-new-folder = مجلّد جديد
+new-file = ملف جديد...
+new-folder = مجلّد جديد...
 open-in-terminal = افتح في الطرفيّة
 move-to-trash = انقل إلى المهملات
 restore-from-trash = استعِد من سلة المهملات
@@ -109,7 +109,7 @@ sort-by-size = رتب حسب الحجم
 file = ملف
 new-tab = لسان جديد
 new-window = نافذة جديدة
-rename = غيّر الاسم
+rename = غيّر الاسم...
 close-tab = أغلِق اللسان
 quit = غادِر
 
@@ -246,14 +246,22 @@ sort-smallest-to-largest = من الأصغر إلى الأكبر
 sort-largest-to-smallest = من الأكبر للأصغر
 operations-running =
     { $running } { $running ->
-        [one] operation
-       *[other] operations
-    } running ({ $percent }%)...
+        [zero] لا عمليات
+        [one] عملية
+        [two] عمليتان
+        [few] { running } عمليات
+        [many] { running } عملية
+       *[other] { running } عملية
+    } جارية ({ $percent }٪)...
 operations-running-finished =
     { $running } { $running ->
-        [one] operation
-       *[other] operations
-    } running ({ $percent }%), { $finished } finished...
+        [zero] لا عمليات جارية
+        [one] عملية جارية
+        [two] عمليتان جاريتان
+        [few] { running } عمليات جارية
+        [many] { running } عملية جارية
+       *[other] { running } عملية جارية
+    } جارية ({ $percent }٪)، { $finished } انتهى...
 browse-store = تصفح { $store }
 other-apps = تطبيقات أخرى
 related-apps = تطبيقات ذات صلة
@@ -296,3 +304,129 @@ compressed =
         [many] { $items } عنصراً
        *[other] { $items } عنصر
     } من «{ $from }» إلى «{ $to }»
+copied =
+    نُسخ { $items } { $items ->
+        [zero] لا عناصر
+        [one] عنصر
+        [two] عنصران
+        [few] { $items } عناصر
+        [many] { $items } عنصراً
+       *[other] { $items } عنصر
+    } من «{ $from }» إلى «{ $to }»
+deleting =
+    يحذف { $items } { $items ->
+        [zero] لا عناصر
+        [one] عنصر
+        [two] عنصران
+        [few] { $items } عناصر
+        [many] { $items } عنصراً
+       *[other] { $items } عنصر
+    } من «{ trash }» ({ $progress })...
+deleted =
+    حُذف { $items } { $items ->
+        [zero] لا عناصر
+        [one] عنصر
+        [two] عنصران
+        [few] { $items } عناصر
+        [many] { $items } عنصراً
+       *[other] { $items } عنصر
+    } من «{ trash }»
+copying =
+    ينسخ { $items } { $items ->
+        [zero] لا عناصر
+        [one] عنصر
+        [two] عنصران
+        [few] { $items } عناصر
+        [many] { $items } عنصراً
+       *[other] { $items } عنصر
+    } من «{ $from }» إلى «{ $to }» ({ $progress })...
+extracting =
+    يستخرِج { $items } { $items ->
+        [zero] لا عناصر
+        [one] عنصر
+        [two] عنصران
+        [few] { $items } عناصر
+        [many] { $items } عنصراً
+       *[other] { $items } عنصر
+    } من «{ $from }» إلى «{ $to }» ({ $progress })...
+extracted =
+    استُخرِج { $items } { $items ->
+        [zero] لا عناصر
+        [one] عنصر
+        [two] عنصران
+        [few] { $items } عناصر
+        [many] { $items } عنصراً
+       *[other] { $items } عنصر
+    } من «{ $from }» إلى «{ $to }»
+moving =
+    ينقل { $items } { $items ->
+        [zero] لا عناصر
+        [one] عنصر
+        [two] عنصران
+        [few] { $items } عناصر
+        [many] { $items } عنصراً
+       *[other] { $items } عنصر
+    } من «{ $from }» إلى «{ $to }» ({ $progress })...
+moved =
+    نُقل { $items } { $items ->
+        [zero] لا عناصر
+        [one] عنصر
+        [two] عنصران
+        [few] { $items } عناصر
+        [many] { $items } عنصراً
+       *[other] { $items } عنصر
+    } من «{ $from }» إلى «{ $to }»
+permanently-deleting =
+    يحذف نهائيًا { $items } { $items ->
+        [zero] عناصر
+        [one] عنصر
+        [two] عنصران
+        [few] { $items } عناصر
+        [many] { $items } عنصراً
+       *[other] { $items } عنصر
+    }
+permanently-deleted =
+    حُذف نهائيًا { $items } { $items ->
+        [zero] عناصر
+        [one] عنصر
+        [two] عنصران
+        [few] { $items } عناصر
+        [many] { $items } عنصراً
+       *[other] { $items } عنصر
+    }
+removing-from-recents =
+    يزيل { $items } { $items ->
+        [zero] عناصر
+        [one] عنصر
+        [two] عنصران
+        [few] { $items } عناصر
+        [many] { $items } عنصراً
+       *[other] { $items } عنصر
+    } من { recents }
+removed-from-recents =
+    أُزيل { $items } { $items ->
+        [zero] عناصر
+        [one] عنصر
+        [two] عنصران
+        [few] { $items } عناصر
+        [many] { $items } عنصراً
+       *[other] { $items } عنصر
+    } من { recents }
+restoring =
+    يستعيد { $items } { $items ->
+        [zero] عناصر
+        [one] عنصر
+        [two] عنصران
+        [few] { $items } عناصر
+        [many] { $items } عنصراً
+       *[other] { $items } عنصر
+    } من { trash } ({ $progress })...
+restored =
+    استُعيد { $items } { $items ->
+        [zero] عناصر
+        [one] عنصر
+        [two] عنصران
+        [few] { $items } عناصر
+        [many] { $items } عنصراً
+       *[other] { $items } عنصر
+    } من { trash }
