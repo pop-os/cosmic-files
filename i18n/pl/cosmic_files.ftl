@@ -35,7 +35,7 @@ operations-running =
 operations-running-finished =
     { $running } bieżące { $running ->
         [one] działanie
-       *[other] działąnia
+       *[other] działania
     } ({ $percent }%), { $finished } ukończone…
 pause = Wstrzymaj
 resume = Wznów
@@ -104,7 +104,7 @@ rename-file = Zmień nazwę pliku
 rename-folder = Zmień nazwę katalogu
 # Replace Dialog
 replace = Zastąp
-replace-title = { $filename } już istnieje w tym miejscu.
+replace-title = „{ $filename }” już istnieje w tym miejscu.
 replace-warning = Czy chcesz by został on zastąpiony? To nadpisze jego zawartość.
 replace-warning-operation = Czy chcesz by został on zastąpiony? To nadpisze jego zawartość.
 original-file = Oryginalny plik
@@ -162,7 +162,7 @@ read-write-execute = Odczyt, zapis i wykonywanie
 
 favorite-path-error = Błąd podczas otwierania katalogu
 favorite-path-error-description =
-    Nie można otworzyćUnable to open "{ $path }".
+    Nie można otworzyć „{ $path }”.
     Może on nie istnieć lub możesz nie mieć uprawnień do otwierania go.
 
     Czy chcesz usunąć go z bocznego panelu?
@@ -268,8 +268,8 @@ extracted =
         [few] elementy
        *[other] elementów
     } z „{ $from }” do „{ $to }”
-setting-executable-and-launching = Ustawianie "{ $name }" jako wykonywalnego i uruchamianie
-set-executable-and-launched = Ustaw "{ $name }" jako wykonywalny i uruchom
+setting-executable-and-launching = Ustawianie „{ $name }” jako wykonywalnego i uruchamianie
+set-executable-and-launched = Ustaw „{ $name }” jako wykonywalny i uruchom
 setting-permissions = Ustawianie uprawnień dla "{ $name }" na { $mode }
 set-permissions = Ustaw uprawnienia dla "{ $name }" na { $mode }
 moving =
@@ -350,7 +350,8 @@ dark = Ciemny
 light = Jasny
 
 ### Type to Search
-type-to-search = Zacznij wpisywanie by wyszukać
+
+type-to-search = Zacznij pisać by wyszukać
 type-to-search-recursive = Wyszukuj w obecnym katalogu i jego podkatalogach
 type-to-search-enter-path = Wprowadź ścieżkę pliku lub katalogu
 # Context menu
