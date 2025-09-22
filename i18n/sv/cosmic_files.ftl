@@ -109,7 +109,7 @@ trashed-on = Kastad
 size = Storlek
 # Framstegssidfot
 details = Detaljer
-dismiss = Stäng meddelande
+dismiss = Avfärda meddelande
 operations-running = { $running } operationer körs ({ $percent }%)...
 operations-running-finished = { $running } operationer körs ({ $percent }%), { $finished } färdig...
 pause = Paus
@@ -160,7 +160,7 @@ pending = Väntar
 progress = { $percent }%
 progress-cancelled = { $percent }%, avbruten
 progress-paused = { $percent }%, pausad
-failed = Misslyckades
+failed = Misslyckad
 complete = Färdig
 compressing =
     Komprimerar { $items } { $items ->
@@ -327,3 +327,67 @@ sort-oldest-first = Äldst först
 sort-smallest-to-largest = Minsta till största
 sort-largest-to-smallest = Största till minsta
 remove = Ta bort
+repository = Arkiv
+support = Support
+grid-spacing = Rutnätsmellanrum
+extract-password-required = Lösenord krävs
+extract-to = Packa upp till...
+extract-to-title = Packa upp till folder
+other-apps = Andra applikationer
+related-apps = Relaterade applikationer
+permanently-delete-question = Ta bort permanent
+delete = Ta bort
+permanently-delete-warning = Är du säker att du vill ta bort { $target } permanent? Detta kan inte göras ogjort.
+none = Ingen
+execute-only = Endast exekvera
+write-only = Endast skriva
+write-execute = Skriva och exekvera
+read-only = Endast läsa
+read-execute = Läsa och exekvera
+read-write = Läsa och skriva
+read-write-execute = Läsa, skriva och exekvera
+favorite-path-error = Fel vid öppning av katalog
+favorite-path-error-description =
+    Kunde inte öppna "{ $path }".
+    Den finns inte eller så har du inte behörighet att öppna den.
+
+    Vill du ta bort den från sidolisten?
+keep = Behåll
+progress-failed = { $percent }%, misslyckades
+deleting =
+    Raderar { $items } { $items ->
+        [one] objekt
+       *[other] objekt
+    } från { trash } ({ $progress })...
+deleted =
+    Raderade { $items } { $items ->
+        [one] objekt
+       *[other] objekt
+    } från { trash }
+setting-permissions = Sätter behörigheter för "{ $name }" till { $mode }
+set-permissions = Satte behörigheter för "{ $name }" to { $mode }
+permanently-deleting =
+    Raderar { $items } { $items ->
+        [one] objekt
+       *[other] objekt
+    } permanent
+permanently-deleted =
+    Raderade { $items } { $items ->
+        [one] objekt
+       *[other] objekt
+    } permanent
+removing-from-recents =
+    Tar bort { $items } { $items ->
+        [one] objekt
+       *[other] objekt
+    } från { recents }
+removed-from-recents =
+    Tog bort { $items } { $items ->
+        [one] objekt
+       *[other] objekt
+    } från { recents }
+delete-permanently = Radera permanent
+eject = Mata ut
+remove-from-recents = Ta bort från senaste
+reload-folder = Ladda om folder
+selected-items = de { $items } valda objekten
