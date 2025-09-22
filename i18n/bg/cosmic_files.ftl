@@ -416,18 +416,3 @@ sort-newest-first = Най-новите първи
 sort-oldest-first = Най-старите първи
 sort-smallest-to-largest = Най-малките до най-големите
 sort-largest-to-smallest = Най-големите до най-малките
-repository = Хранилище
-support = Поддръжка
-progress-failed = { $percent }%, неуспешно
-removing-from-recents =
-    Премахване на { $items } { $items ->
-        [one] елемент
-       *[other] елемента
-    } от { recents }
-removed-from-recents =
-    Премахнато е { $items } { $items ->
-        [one] елемент
-       *[other] елемента
-    } от { recents }
-eject = Изваждане
-remove-from-recents = Премахване от скорошни
