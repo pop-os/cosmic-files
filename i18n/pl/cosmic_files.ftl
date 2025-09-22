@@ -35,7 +35,7 @@ operations-running =
 operations-running-finished =
     { $running } bieżące { $running ->
         [one] działanie
-       *[other] działania
+       *[other] działąnia
     } ({ $percent }%), { $finished } ukończone…
 pause = Wstrzymaj
 resume = Wznów
@@ -350,8 +350,7 @@ dark = Ciemny
 light = Jasny
 
 ### Type to Search
-
-type-to-search = Zacznij pisać by wyszukać
+type-to-search = Zacznij wpisywanie by wyszukać
 type-to-search-recursive = Wyszukuj w obecnym katalogu i jego podkatalogach
 type-to-search-enter-path = Wprowadź ścieżkę pliku lub katalogu
 # Context menu
