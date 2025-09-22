@@ -321,7 +321,7 @@ deleting =
         [few] { $items } عناصر
         [many] { $items } عنصراً
        *[other] { $items } عنصر
-    } من «{ trash }» ({ $progress })...
+    } من { trash } ({ $progress })...
 deleted =
     حُذف { $items } { $items ->
         [zero] لا عناصر
@@ -330,7 +330,7 @@ deleted =
         [few] { $items } عناصر
         [many] { $items } عنصراً
        *[other] { $items } عنصر
-    } من «{ trash }»
+    } من { trash }
 copying =
     ينسخ { $items } { $items ->
         [zero] لا عناصر
