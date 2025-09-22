@@ -35,7 +35,7 @@ operations-running =
 operations-running-finished =
     { $running } bieżące { $running ->
         [one] działanie
-       *[other] działąnia
+       *[other] działania
     } ({ $percent }%), { $finished } ukończone…
 pause = Wstrzymaj
 resume = Wznów
