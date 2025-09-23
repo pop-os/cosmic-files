@@ -1,6 +1,6 @@
 cosmic-files = COSMIC Files
-empty-folder = Tom katalog
-empty-folder-hidden = Tom katalog (har dolda objekt)
+empty-folder = Mappen är tom
+empty-folder-hidden = Mappen är tom (har dolda objekt)
 no-results = Inga resultat hittades
 filesystem = Filsystem
 home = Hem
@@ -41,11 +41,11 @@ mount-error = Kan inte komma åt enheten
 ## Ny Fil/katalog dialogruta
 
 create-new-file = Skapa ny fil
-create-new-folder = Skapa ny katalog
+create-new-folder = Skapa ny mapp
 file-name = Filnamn
-folder-name = Katalognamn
+folder-name = Mappnamn
 file-already-exists = En fil med det namnet finns redan.
-folder-already-exists = En katalog med det namnet finns redan.
+folder-already-exists = En mapp med det namnet finns redan.
 name-hidden = Namn som börjar med "." kommer att vara dolda.
 name-invalid = Namnet kan inte vara "{ $filename }".
 name-no-slashes = Namnet får inte innehålla snedstreck.
@@ -56,12 +56,12 @@ cancel = Avbryt
 create = Skapa
 open = Öppna
 open-file = Öppna fil
-open-folder = Öppna katalog
+open-folder = Öppna mapp
 open-in-new-tab = Öppna i en ny flik
 open-in-new-window = Öppna i nytt fönster
 open-item-location = Öppna objektets plats
 open-multiple-files = Öppna flera filer
-open-multiple-folders = Öppna flera kataloger
+open-multiple-folders = Öppna flera mappar
 save = Spara
 save-file = Spara fil
 
@@ -73,7 +73,7 @@ browse-store = Bläddra i { $store }
 ## Byt namn dialogruta
 
 rename-file = Byt namn på fil
-rename-folder = Byt namn på katalog
+rename-folder = Byt namn på mapp
 
 ## Ersätt dialogruta
 
@@ -110,8 +110,16 @@ size = Storlek
 # Framstegssidfot
 details = Detaljer
 dismiss = Avfärda meddelande
-operations-running = { $running } operationer körs ({ $percent }%)...
-operations-running-finished = { $running } operationer körs ({ $percent }%), { $finished } färdig...
+operations-running =
+    { $running } { $running ->
+        [one] operation
+       *[other] operationer
+    } kör ({ $percent }%)...
+operations-running-finished =
+    { $running } { $running ->
+        [one] operation
+       *[other] operationer
+    } kör ({ $percent }%), { $finished } slutförda...
 pause = Paus
 resume = Återuppta
 
@@ -133,19 +141,19 @@ enter-server-address = Ange serveradress
 try-again = Försök igen
 username = Användarnamn
 network-drive-description =
-       Serveradresser består av ett protokollprefix och en adress.
+    Serveradresser består av ett protokollprefix och en adress.
     Exempel: ssh://192.168.0.1, ftp://[2001:db8::1]
 
 ### Se till att behålla kommatecken som skiljer kolumnerna åt
 
 network-drive-schemes =
-     Tillgängliga protokoll, Prefix
-     AppleTalk,afp://
-     File Transfer Protocol,ftp:// eller ftps://
-     Network File System (NFS),nfs://
-     Server Message Block (SMB),smb://
+    Tillgängliga protokoll, Prefix
+    AppleTalk,afp://
+    File Transfer Protocol,ftp:// eller ftps://
+    Network File System (NFS),nfs://
+    Server Message Block (SMB),smb://
     SSH-filöverföringsprotokoll,sftp:// eller ssh://
-     WebDav,dav:// eller davs://
+    WebDav,dav:// eller davs://
 network-drive-error = Kan inte komma åt nätverksenheten
 password = Lösenord
 remember-password = Kom ihåg lösenord
@@ -221,12 +229,12 @@ restored =
         [one] objekt
        *[other] flera objekt
     } från { trash }
-unknown-folder = okänd katalog
+unknown-folder = okänd mapp
 
 ## Öppna med
 
 menu-open-with = Öppna med...
-default-app = { $name } (default)
+default-app = { $name } (standard)
 
 ## Visa detaljer
 
@@ -265,8 +273,8 @@ type-to-search-enter-path = Anger sökvägen till katalogen eller filen
 add-to-sidebar = Lägg till i sidofält
 compress = Komprimera
 extract-here = Packa upp
-new-file = Ny fil
-new-folder = Ny katalog
+new-file = Ny fil…
+new-folder = Ny mapp…
 open-in-terminal = Öppna i terminal
 move-to-trash = Flytta till papperskorg
 restore-from-trash = Återställ från papperskorgen
@@ -312,7 +320,7 @@ view = Visa
 grid-view = Rutnätsvy
 list-view = Listvy
 show-hidden-files = Visa dolda filer
-list-directories-first = Lista kataloger först
+list-directories-first = Lista mappar först
 gallery-preview = Galleri förhandsvisning
 menu-settings = Inställningar...
 menu-about = Om COSMIC Files...
@@ -327,12 +335,12 @@ sort-oldest-first = Äldst först
 sort-smallest-to-largest = Minsta till största
 sort-largest-to-smallest = Största till minsta
 remove = Ta bort
-repository = Arkiv
+repository = Källkod
 support = Support
 grid-spacing = Rutnätsmellanrum
 extract-password-required = Lösenord krävs
 extract-to = Packa upp till...
-extract-to-title = Packa upp till folder
+extract-to-title = Packa upp till mapp
 other-apps = Andra applikationer
 related-apps = Relaterade applikationer
 permanently-delete-question = Ta bort permanent
@@ -389,5 +397,5 @@ removed-from-recents =
 delete-permanently = Radera permanent
 eject = Mata ut
 remove-from-recents = Ta bort från senaste
-reload-folder = Ladda om folder
+reload-folder = Ladda om mapp
 selected-items = de { $items } valda objekten

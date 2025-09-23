@@ -21,7 +21,7 @@ empty-trash-warning = أمتأكّد من حذف كل عناصر سلة المه
 ## New File/Folder Dialog
 
 create-new-file = أنشئ ملف جديد
-create-new-folder = أنشئ مجلد جديد
+create-new-folder = أنشئ مجلّد جديد
 file-name = اسم الملف
 folder-name = اسم المجلّد
 file-already-exists = ملف بذلك الاسم موجود مسبقًا.
@@ -99,7 +99,7 @@ restore-from-trash = استعِد من سلة المهملات
 remove-from-sidebar = أزِل من الشريط الجانبي
 sort-by-name = رتّب حسب الاسم
 sort-by-modified = رتّب حسب التعديل
-sort-by-size = رتب حسب الحجم
+sort-by-size = رتّب حسب الحجم
 
 # Menu
 
@@ -249,18 +249,18 @@ operations-running =
         [zero] لا عمليات
         [one] عملية
         [two] عمليتان
-        [few] { running } عمليات
-        [many] { running } عملية
-       *[other] { running } عملية
+        [few] عمليات
+        [many] عملية
+       *[other] عملية
     } جارية ({ $percent }٪)...
 operations-running-finished =
     { $running } { $running ->
         [zero] لا عمليات جارية
         [one] عملية جارية
         [two] عمليتان جاريتان
-        [few] { running } عمليات جارية
-        [many] { running } عملية جارية
-       *[other] { running } عملية جارية
+        [few] عمليات جارية
+        [many] عملية جارية
+       *[other] عملية جارية
     } جارية ({ $percent }٪)، { $finished } انتهى...
 browse-store = تصفح { $store }
 other-apps = تطبيقات أخرى
