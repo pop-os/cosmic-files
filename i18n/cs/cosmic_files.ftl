@@ -64,9 +64,9 @@ git-description = Git commit { $hash } dne { $date }
 ## Operations
 
 operations = Operace
-pending = Čeká
-failed = Nezdařilo se
-complete = Hotovo
+pending = Čekající
+failed = Selhalo
+complete = Dokončené
 copy_noun = Kopírovat
 
 ## Open with
@@ -158,7 +158,7 @@ extract-password-required = Vyžadováno heslo
 extract-to = Rozbalit do...
 extract-to-title = Rozbalit do složky
 mount-error = Nelze přistoupit k disku
-create = Vytvořit
+create = Tvorba
 open-item-location = Otevřít umístění položky
 open-with-title = Jak chcete otevřít "{ $name }"?
 browse-store = Procházet { $store }
