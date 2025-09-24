@@ -408,3 +408,9 @@ sort-smallest-to-largest = Van klein naar groot
 sort-largest-to-smallest = Van groot naar klein
 progress-failed = { $percent }%, mislukt
 eject = Uitwerpen
+support = Ondersteuning
+removing-from-recents =
+    { $items } { $items ->
+        [one] item
+       *[other] items
+    } van { recents }
