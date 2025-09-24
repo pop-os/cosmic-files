@@ -56,7 +56,7 @@ extract-to-title = Estrai nella cartella
 ## Empty Trash Dialog
 
 empty-trash = Svuota cestino
-empty-trash-warning = Sei sicuro di voler eliminare permanentemente tutti gli elementi nel cestino?
+empty-trash-warning = Sei sicuro di voler eliminare definitivamente tutti gli elementi nel cestino?
 
 ## Mount Error Dialog
 
@@ -112,8 +112,8 @@ rename-folder = Rinomina cartella
 
 replace = Sostituisci
 replace-title = "{ $filename }" esiste già in questo percorso.
-replace-warning = Vuoi sostituirlo con quello che stai per salvare? La sostituzione sovrascriverà il contenuto.
-replace-warning-operation = Vuoi sostituirlo? La sostituzione sovrascriverà il contenuto.
+replace-warning = Vuoi sostituirlo con quello che stai per salvare? La sostituzione sovrascriverà il suo contenuto.
+replace-warning-operation = Vuoi sostituirlo? La sostituzione sovrascriverà il suo contenuto.
 original-file = File originale
 replace-with = Sostituisci con
 apply-to-all = Applica a tutti
@@ -147,7 +147,7 @@ write-only = Sola scrittura
 
 ### Mode 3 (unusual)
 
-write-execute = Scrittura e esecuzione
+write-execute = Scrittura ed esecuzione
 
 ### Mode 4
 
@@ -163,7 +163,7 @@ read-write = Lettura e scrittura
 
 ### Mode 7
 
-read-write-execute = Lettura, scrittura e esecuzione
+read-write-execute = Lettura, scrittura ed esecuzione
 
 ## Favorite Path Error Dialog
 
@@ -194,7 +194,7 @@ domain = Dominio
 enter-server-address = Inserisci indirizzo di rete
 network-drive-description =
     Gli indirizzi dei server includono il prefisso del protocollo e l'indirizzo.
-    Esempio: ssh://192.168.0.1, ftp://[2001:db8::1]
+    Esempi: ssh://192.168.0.1, ftp://[2001:db8::1]
 
 ### Make sure to keep the comma which separates the columns
 
@@ -230,7 +230,7 @@ compressing =
        *[other] elementi
     } da "{ $from }" a "{ $to }" ({ $progress })...
 compressed =
-    Compressione completata di { $items } { $items ->
+    Compressi { $items } { $items ->
         [one] elemento
        *[other] elementi
     } da "{ $from }" a "{ $to }"
@@ -243,7 +243,7 @@ copying =
        *[other] elementi
     } da "{ $from }" a "{ $to }" ({ $progress })...
 copied =
-    Copia completata di { $items } { $items ->
+    Copiati { $items } { $items ->
         [one] elemento
        *[other] elementi
     } da "{ $from }" a "{ $to }"
@@ -253,7 +253,7 @@ deleting =
        *[other] elementi
     } dal { trash }: ({ $progress })...
 deleted =
-    Eliminazione completata di { $items } { $items ->
+    Eliminati { $items } { $items ->
         [one] elemento
        *[other] elementi
     } dal { trash }
@@ -265,7 +265,7 @@ extracting =
        *[other] elementi
     } da "{ $from }" a "{ $to }": ({ $progress })...
 extracted =
-    Estrazione completata di { $items } { $items ->
+    Estratti { $items } { $items ->
         [one] elemento
        *[other] elementi
     } da "{ $from }" a "{ $to }"
@@ -277,7 +277,7 @@ moving =
        *[other] elementi
     } da "{ $from }" a "{ $to }": ({ $progress })...
 moved =
-    Spostamento completato di { $items } { $items ->
+    Spostati { $items } { $items ->
         [one] elemento
        *[other] elementi
     } da "{ $from }" a "{ $to }"
@@ -289,7 +289,7 @@ restoring =
        *[other] elementi
     } dal { trash }: ({ $progress })...
 restored =
-    Ripristino completato di { $items } { $items ->
+    Ripristinati { $items } { $items ->
         [one] elemento
        *[other] elementi
     } dal { trash }
@@ -298,7 +298,7 @@ unknown-folder = cartella sconosciuta
 ## Open with
 
 menu-open-with = Apri con...
-default-app = { $name } (default)
+default-app = { $name } (predefinito)
 
 ## Show details
 
@@ -332,7 +332,7 @@ type-to-search-enter-path = Inserisci il percorso della cartella o del file
 # Context menu
 add-to-sidebar = Aggiungi alla barra laterale
 compress = Comprimi
-delete-permanently = Elimina permanentemente
+delete-permanently = Eliminazione definitiva
 eject = Espelli
 extract-here = Estrai
 new-file = Nuovo file...
@@ -382,7 +382,7 @@ zoom-out = Diminuisci zoom
 view = Visualizza
 grid-view = Visualizzazione a griglia
 list-view = Visualizzazione a elenco
-show-hidden-files = Mostra files nascosti
+show-hidden-files = Mostra file nascosti
 list-directories-first = Mostra prima le cartelle
 gallery-preview = Anteprima immagine
 menu-settings = Impostazioni...
@@ -397,3 +397,26 @@ sort-newest-first = Prima i più recenti
 sort-oldest-first = Prima i più vecchi
 sort-smallest-to-largest = Dal più piccolo al più grande
 sort-largest-to-smallest = Dal più grande al più piccolo
+progress-failed = { $percent }%, fallito
+setting-permissions = Impostazione dei permessi per "{ $name }" su { $mode }
+set-permissions = Permessi impostati per "{ $name }" su { $mode }
+permanently-deleting =
+    Eliminazione definitva in corso di { $items } { $items ->
+        [one] elemento
+       *[other] elementi
+    }
+permanently-deleted =
+    Eliminazione definitivamente { $items } { $items ->
+        [one] elemento
+       *[other] elementi
+    }
+removing-from-recents =
+    Rimozione in corso di { $items } { $items ->
+        [one] elemento
+       *[other] elementi
+    } da { recents }
+removed-from-recents =
+    Rimossi { $items } { $items ->
+        [one] elemento
+       *[other] elementi
+    } da { recents }
