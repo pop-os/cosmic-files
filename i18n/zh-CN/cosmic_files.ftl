@@ -26,7 +26,7 @@ trashed-on = 删除时间
 size = 大小
 # Progress footer
 details = 详细信息
-dismiss = 关闭
+dismiss = 清除消息
 operations-running = 正在进行 { $running } 个操作 （{ $percent }%）...
 operations-running-finished = 正在进行 { $running } 个操作 （{ $percent }%）, { $finished } 个操作已完成...
 pause = 暂停
