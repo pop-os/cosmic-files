@@ -12,10 +12,10 @@ undo = Annulla
 today = Oggi
 # Desktop view options
 desktop-view-options = Impostazioni visualizzazione Desktop...
-show-on-desktop = Mostra nel Desktop
+show-on-desktop = Mostra sul Desktop
 desktop-folder-content = Contenuto cartella del Desktop
 mounted-drives = Dispositivi montati
-trash-folder-icon = Icona del Cestino
+trash-folder-icon = Icona del cestino
 icon-size-and-spacing = Dimensioni e spaziatura icona
 icon-size = Dimensione icona
 grid-spacing = Spaziatura griglia
