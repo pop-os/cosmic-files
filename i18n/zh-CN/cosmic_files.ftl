@@ -333,8 +333,8 @@ single-click = 单击打开
 
 appearance = 外观
 theme = 主题
-match-desktop = 与桌面保持一致
-dark = 深色模式
+match-desktop = 匹配桌面
+dark = 暗色模式
 light = 亮色模式
 
 ### Type to Search
