@@ -12,13 +12,13 @@ undo = Отменяне
 today = Днес
 # Desktop view options
 desktop-view-options = Опции за изглед на работния плот...
-show-on-desktop = Показване на работния плот
-desktop-folder-content = Съдържание на папката за работния плот
+show-on-desktop = Покажи на работния плот
+desktop-folder-content = Съдържание на папката на работния плот
 mounted-drives = Монтирани устройства
 trash-folder-icon = Иконка на кошчето
 icon-size-and-spacing = Размер и разстояние между иконките
-icon-size = Размер на иконките
-grid-spacing = Разстояние между решетките
+icon-size = Размер
+grid-spacing = Разстояние
 # List view
 name = Име
 modified = Променян
@@ -180,6 +180,7 @@ keep = Запазване
 
 
 ## About
+
 repository = Хранилище
 support = Поддръжка
 
@@ -293,17 +294,20 @@ permanently-deleted =
         [one] елемент
        *[other] елемента
     }
-removing-from-recents = Премахване на {$items} {$items ->
+removing-from-recents =
+    Премахване на { $items } { $items ->
         [one] елемент
-        *[other] елемента
-    } от {recents}
-removed-from-recents = Премахнато е {$items} {$items ->
+       *[other] елемента
+    } от { recents }
+removed-from-recents =
+    Премахнато е { $items } { $items ->
         [one] елемент
-        *[other] елемента
-    } от {recents}
-renaming = Преименуване на „{$from}“ на „{$to}“
-renamed = „{$from}“ е преименувано на „{$to}“
-restoring = Възстановяване на {$items} {$items ->
+       *[other] елемента
+    } от { recents }
+renaming = Преименуване на „{ $from }“ на „{ $to }“
+renamed = „{ $from }“ е преименувано на „{ $to }“
+restoring =
+    Възстановяване на { $items } { $items ->
         [one] елемент
        *[other] елемента
     } от { trash } ({ $progress })...
