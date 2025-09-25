@@ -87,7 +87,7 @@ settings = Nastavení
 appearance = Vzhled
 theme = Téma
 match-desktop = Dle systému
-dark = Tmavý
+dark = Tmavé
 light = Světlý
 # Context menu
 add-to-sidebar = Přidat do postranního panelu
@@ -97,7 +97,7 @@ open-in-terminal = Otevřít v terminálu
 move-to-trash = Přesunout do koše
 restore-from-trash = Obnovit z koše
 remove-from-sidebar = Odstranit z postranního panelu
-sort-by-name = Seřadit podle jména
+sort-by-name = Seřadit podle názvu
 sort-by-modified = Seřadit podle data změny
 sort-by-size = Seřadit podle velikosti
 
@@ -185,7 +185,7 @@ deleting =
         [one] položky
        *[other] položek
     } z { trash } ({ $progress })...
-sort-by-trashed = Seřadit dle času smazání
+sort-by-trashed = Seřadit podle času smazání
 deleted =
     { $items } { $items ->
         [one] položka smazána
@@ -360,9 +360,9 @@ item-modified = Změněno: { $modified }
 item-accessed = Přístup: { $accessed }
 calculating = Vypočítávání...
 single-click = Otevřít jedním kliknutím
-type-to-search = Pište pro vyhledávání
+type-to-search = Vyhledávání psaním
 type-to-search-recursive = Prohledává současnou složku a její podsložky
-type-to-search-enter-path = Zadá cestu ke složce nebo souboru
+type-to-search-enter-path = Zadává cestu ke složce nebo souboru
 compress = Komprimovat
 eject = Vysunout
 extract-here = Extrahovat
