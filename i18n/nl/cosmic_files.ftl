@@ -55,7 +55,7 @@ extract-to-title = Uitpakken naar map
 
 ## Empty Trash Dialog
 
-empty-trash = Prullenbak legen?
+empty-trash = Prullenbak legen
 empty-trash-warning = Weet u zeker dat u alles in de prullenbak permanent wilt verwijderen?
 
 ## Mount Error Dialog
@@ -79,7 +79,7 @@ name-no-slashes = De naam mag geen slash '/' bevatten.
 cancel = Annuleren
 create = Aanmaken
 open = Openen
-open-file = Bestand openen
+open-file = Open een bestand
 open-folder = Map openen
 open-in-new-tab = Open in nieuw tabblad
 open-in-new-window = Open in nieuw venster
@@ -414,3 +414,4 @@ removing-from-recents =
         [one] item
        *[other] items
     } van { recents }
+repository = Archief
