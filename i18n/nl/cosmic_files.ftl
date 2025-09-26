@@ -80,7 +80,7 @@ cancel = Annuleren
 create = Aanmaken
 open = Openen
 open-file = Open een bestand
-open-folder = Map openen
+open-folder = Open een map
 open-in-new-tab = Open in nieuw tabblad
 open-in-new-window = Open in nieuw venster
 open-item-location = Open locatie van item
@@ -100,7 +100,7 @@ related-apps = Gerelateerde toepassingen
 
 selected-items = de { $items } geselecteerde items
 permanently-delete-question = Permanent verwijderen?
-delete = Verwijderen
+delete = Verwijder
 permanently-delete-warning = Weet u zeker dat u { $target } permanent wilt verwijderen? Dit kan niet ongedaan worden gemaakt.
 
 ## Rename Dialog
@@ -373,7 +373,7 @@ new-window = Nieuw venster
 reload-folder = Opnieuw laden
 rename = Hernoemen...
 close-tab = Tabblad sluiten
-quit = Sluiten
+quit = Sluit
 
 ## Edit
 
