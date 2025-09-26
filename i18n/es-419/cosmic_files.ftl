@@ -140,9 +140,9 @@ username = Nombre de usuario
 edit-history = Historial de ediciones
 history = Historial
 no-history = No hay elementos en el historial.
-pending = Pendiente
-failed = Fallido
-complete = Completo
+pending = Pendientes
+failed = Falladas
+complete = Completadas
 compressing =
     Comprimiendo { $items } { $items ->
         [one] elemento
@@ -255,7 +255,7 @@ new-tab = Nueva pestaña
 new-window = Nueva ventana
 rename = Renombrar
 close-tab = Cerrar pestaña
-quit = Cerrar
+quit = Salir
 
 ## Edit
 
@@ -267,9 +267,9 @@ select-all = Seleccionar todo
 
 ## View
 
-zoom-in = Acercar
+zoom-in = Ampliar
 default-size = Tamaño predeterminado
-zoom-out = Alejar
+zoom-out = Disminuir
 view = Vistar
 grid-view = Vista de cuadrícula
 list-view = Vista de lista
@@ -290,3 +290,24 @@ sort-smallest-to-largest = De menor a mayor
 sort-largest-to-smallest = De mayor a menor
 repository = Repositorio
 support = Apoyo
+details = Detalles
+dismiss = Descartar mensaje
+remove = Quitar
+cancelled = Canceladas
+grid-spacing = Espaciado de cuadrícula
+operations-running =
+    { $running ->
+        [one] Operación de { $running }
+       *[other] Operaciones de { $running }
+    } en ejecución ({ $percent } %)...
+operations-running-finished =
+    { $running ->
+        [one] Operación de { $running }
+       *[other] Operaciones de { $running }
+    } en ejecución ({ $percent } %), { $finished } completada(s)...
+pause = Pausar
+resume = Reanudar
+extract-password-required = Contraseña requerida
+extract-to = Extraer en...
+extract-to-title = Extraer a una carpeta
+mount-error = No se puede acceder a la unidad
