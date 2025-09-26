@@ -88,7 +88,7 @@ appearance = Vzhled
 theme = Téma
 match-desktop = Dle systému
 dark = Tmavé
-light = Světlý
+light = Světlé
 # Context menu
 add-to-sidebar = Přidat do postranního panelu
 new-file = Nový soubor...
@@ -115,7 +115,7 @@ quit = Ukončit
 
 ## Edit
 
-edit = Upravit
+edit = Úpravy
 cut = Vyjmout
 copy = Kopírovat
 paste = Vložit
@@ -126,7 +126,7 @@ select-all = Vybrat vše
 zoom-in = Přiblížit
 default-size = Výchozí velikost
 zoom-out = Oddálit
-view = Zobrazit
+view = Zobrazení
 grid-view = Zobrazit jako mřížku
 list-view = Zobrazit jako seznam
 show-hidden-files = Zobrazit skryté soubory
@@ -376,5 +376,5 @@ sort-oldest-first = Nejstarší první
 sort-smallest-to-largest = Od nejmenšího po největší
 sort-largest-to-smallest = Od největšího po nejmenší
 gallery-preview = Náhled galerie
-sort = Seřadit
+sort = Řazení
 sort-a-z = A-Z
