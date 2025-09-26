@@ -10,7 +10,6 @@ trash = Bruscar
 recents = Le Déanaí
 undo = Cealaigh
 today = Inniu
-
 # Desktop view options
 desktop-view-options = Roghanna radhairc deisce...
 show-on-desktop = Taispeáin ar an Deasc
@@ -20,39 +19,51 @@ trash-folder-icon = Deilbhín an bhruscair
 icon-size-and-spacing = Méid agus spásáil na ndeilbhíní
 icon-size = Méid na ndeilbhíní
 grid-spacing = Spásáil an ghreille
-
 # List view
 name = Ainm
 modified = Athraithe
 trashed-on = Curtha sa Bhruscar
 size = Méid
-
 # Progress footer
 details = Sonraí
-dismiss = Dún an teachtaireacht
-operations-running = {$running} oibríocht ar siúl ({$percent}%)...
-operations-running-finished = {$running} oibríocht ar siúl ({$percent}%), {$finished} críochnaithe...
+dismiss = Diúltaigh an teachtaireacht
+operations-running =
+    { $running } { $running ->
+        [one] oibríocht
+       *[other] oibríochtaí
+    } ag rith ({ $percent }%)...
+operations-running-finished =
+    { $running } { $running ->
+        [one] oibríocht
+       *[other] oibríochtaí
+    } ag rith ({ $percent }%), { $finished } críochnaithe...
 pause = Sos
 resume = Lean ar aghaidh
 
 # Dialogs
 
+
 ## Compress Dialog
+
 create-archive = Cruthaigh cartlann
 
 ## Extract Dialog
+
 extract-password-required = Pasfhocal riachtanach
 extract-to = Asbhaint Go...
 extract-to-title = Asbhaint go fillteán
 
 ## Empty Trash Dialog
+
 empty-trash = Folmhaigh an bruscar
 empty-trash-warning = An bhfuil tú cinnte gur mian leat na míreanna go léir sa Bhruscar a scriosadh go buan?
 
 ## Mount Error Dialog
+
 mount-error = Ní féidir rochtain a fháil ar an tiomántán
 
 ## New File/Folder Dialog
+
 create-new-file = Cruthaigh comhad nua
 create-new-folder = Cruthaigh fillteán nua
 file-name = Ainm an chomhaid
@@ -60,10 +71,11 @@ folder-name = Ainm an fhillteáin
 file-already-exists = Tá comhad leis an ainm sin ann cheana.
 folder-already-exists = Tá fillteán leis an ainm sin ann cheana.
 name-hidden = Beidh ainmneacha a thosaíonn le "." folaithe.
-name-invalid = Ní féidir an t-ainm a bheith "{$filename}".
+name-invalid = Ní féidir an t-ainm a bheith "{ $filename }".
 name-no-slashes = Ní féidir siombailí slasa a bheith san ainm.
 
 ## Open/Save Dialog
+
 cancel = Cealaigh
 create = Cruthaigh
 open = Oscail
@@ -78,16 +90,19 @@ save = Sábháil
 save-file = Sábháil comhad
 
 ## Open With Dialog
-open-with-title = Conas is mian leat "{$name}" a oscailt?
-browse-store = Brabhsáil {$store}
+
+open-with-title = Conas is mian leat "{ $name }" a oscailt?
+browse-store = Brabhsáil { $store }
 
 ## Rename Dialog
+
 rename-file = Athainmnigh comhad
 rename-folder = Athainmnigh fillteán
 
 ## Replace Dialog
+
 replace = Ionadaigh
-replace-title = Tá "{$filename}" ann sa suíomh seo cheana féin.
+replace-title = Tá "{ $filename }" ann sa suíomh seo cheana féin.
 replace-warning = An bhfuil tú cinnte gur mian leat é a athsholáthar leis an gceann atá á shábháil agat? Scriosfar an t-ábhar atá ann cheana.
 replace-warning-operation = An bhfuil tú cinnte gur mian leat é a athsholáthar? Scriosfar an t-ábhar atá ann cheana.
 original-file = An comhad bunaidh
@@ -97,48 +112,70 @@ keep-both = Coinnigh an dá cheann
 skip = Scip
 
 ## Set as Executable and Launch Dialog
+
 set-executable-and-launch = Socraigh mar inrite agus seol
-set-executable-and-launch-description = An bhfuil tú ag iarraidh "{$name}" a dhéanamh inrite agus é a sheoladh?
+set-executable-and-launch-description = An bhfuil tú ag iarraidh "{ $name }" a dhéanamh inrite agus é a sheoladh?
 set-and-launch = Socraigh agus seol
 
 ## Metadata Dialog
+
 open-with = Oscail le
 owner = Úinéir
 group = Grúpa
 other = Eile
+
 ### Mode 0
+
 none = Dada
+
 ### Mode 1 (unusual)
+
 execute-only = Inrite amháin
+
 ### Mode 2 (unusual)
+
 write-only = Scríofa amháin
+
 ### Mode 3 (unusual)
+
 write-execute = Scríobh agus inrite
+
 ### Mode 4
+
 read-only = Léamh amháin
+
 ### Mode 5
+
 read-execute = Léamh agus inrite
+
 ### Mode 6
+
 read-write = Léamh agus scríobh
+
 ### Mode 7
+
 read-write-execute = Léamh, scríobh, agus inrite
 
 ## Favorite Path Error Dialog
+
 favorite-path-error = Earráid ag oscailt an eolaire
 favorite-path-error-description =
-    Ní féidir oscailt "{$path}".
+    Ní féidir oscailt "{ $path }".
     B’fhéidir nach bhfuil sé ann nó nach bhfuil cead agat é a oscailt.
-    
+
     Ar mhaith leat é a bhaint den bharra taoibh?
 remove = Bain
 keep = Coinnigh
 
 # Context Pages
 
+
 ## About
-git-description = Tiomantas Git {$hash} ar {$date}
+
+git-description = Tiomantas Git { $hash } ar { $date }
 
 ## Add Network Drive
+
 add-network-drive = Cuir tiomántán líonra leis
 connect = Ceangail
 connect-anonymously = Ceangail gan ainm
@@ -148,7 +185,9 @@ enter-server-address = Cuir isteach seoladh an fhreastalaí
 network-drive-description =
     Áirítear le seoltaí freastalaí réimír prótacail agus seoladh.
     Samplaí: ssh://192.168.0.1, ftp://[2001:db8::1]
+
 ### Make sure to keep the comma which separates the columns
+
 network-drive-schemes =
     Prótacail atá ar fáil, Réimír
     AppleTalk,afp://
@@ -164,94 +203,111 @@ try-again = Bain triail eile as
 username = Ainm úsáideora
 
 ## Operations
+
 cancelled = Cealaithe
 edit-history = Cuir stair in eagar
 history = Stair
 no-history = Níl aon mhír sa stair.
 pending = Ar feitheamh
-progress = {$percent}%
-progress-cancelled = {$percent}%, cealaithe
-progress-paused = {$percent}%, curtha ar shos
+progress = { $percent }%
+progress-cancelled = { $percent }%, cealaithe
+progress-paused = { $percent }%, curtha ar shos
 failed = Theip
 complete = Críochnaithe
-compressing = Á chomhbhrú {$items} {$items ->
+compressing =
+    Á chomhbhrú { $items } { $items ->
         [one] mhír
-        *[other] míreanna
-    } ó "{$from}" go "{$to}" ({$progress})...
-compressed = Comhbhrúdh {$items} {$items ->
+       *[other] míreanna
+    } ó "{ $from }" go "{ $to }" ({ $progress })...
+compressed =
+    Comhbhrúdh { $items } { $items ->
         [one] mhír
-        *[other] míreanna
-    } ó "{$from}" go "{$to}"
+       *[other] míreanna
+    } ó "{ $from }" go "{ $to }"
 copy_noun = Cóipeáil
-creating = Á chruthú "{$name}" i "{$parent}"
-created = Cruthaíodh "{$name}" i "{$parent}"
-copying = Á chóipeáil {$items} {$items ->
+creating = Á chruthú "{ $name }" i "{ $parent }"
+created = Cruthaíodh "{ $name }" i "{ $parent }"
+copying =
+    Á chóipeáil { $items } { $items ->
         [one] mhír
-        *[other] míreanna
-    } ó "{$from}" go "{$to}" ({$progress})...
-copied = Cóipeáladh {$items} {$items ->
+       *[other] míreanna
+    } ó "{ $from }" go "{ $to }" ({ $progress })...
+copied =
+    Cóipeáladh { $items } { $items ->
         [one] mhír
-        *[other] míreanna
-    } ó "{$from}" go "{$to}"
-deleting = Ag scriosadh {$items} {$items ->
+       *[other] míreanna
+    } ó "{ $from }" go "{ $to }"
+deleting =
+    Ag scriosadh { $items } { $items ->
         [one] mhír
-        *[other] míreanna
-    } ó {trash} ({$progress})...
-deleted = Scriosta {$items} {$items ->
+       *[other] míreanna
+    } ó { trash } ({ $progress })...
+deleted =
+    Scriosta { $items } { $items ->
         [one] mhír
-        *[other] míreanna
-    } ó {trash}
-emptying-trash = Á fholmhú {trash} ({$progress})...
-emptied-trash = Folmhíodh {trash}
-extracting = Á bhaint {$items} {$items ->
+       *[other] míreanna
+    } ó { trash }
+emptying-trash = Á fholmhú { trash } ({ $progress })...
+emptied-trash = Folmhíodh { trash }
+extracting =
+    Á bhaint { $items } { $items ->
         [one] mhír
-        *[other] míreanna
-    } ó "{$from}" go "{$to}" ({$progress})...
-extracted = Bainíodh {$items} {$items ->
+       *[other] míreanna
+    } ó "{ $from }" go "{ $to }" ({ $progress })...
+extracted =
+    Bainíodh { $items } { $items ->
         [one] mhír
-        *[other] míreanna
-    } ó "{$from}" go "{$to}"
-setting-executable-and-launching = Á shocrú "{$name}" mar chomhad inrite agus á thosú
-set-executable-and-launched = Socraíodh "{$name}" mar chomhad inrite agus tosaíodh é
-moving = Á bhogadh {$items} {$items ->
+       *[other] míreanna
+    } ó "{ $from }" go "{ $to }"
+setting-executable-and-launching = Á shocrú "{ $name }" mar chomhad inrite agus á thosú
+set-executable-and-launched = Socraíodh "{ $name }" mar chomhad inrite agus tosaíodh é
+moving =
+    Á bhogadh { $items } { $items ->
         [one] mhír
-        *[other] míreanna
-    } ó "{$from}" go "{$to}" ({$progress})...
-moved = Bogadh {$items} {$items ->
+       *[other] míreanna
+    } ó "{ $from }" go "{ $to }" ({ $progress })...
+moved =
+    Bogadh { $items } { $items ->
         [one] mhír
-        *[other] míreanna
-    } ó "{$from}" go "{$to}"
-renaming = Á athainmniú "{$from}" go "{$to}"
-renamed = Athainmníodh "{$from}" go "{$to}"
-restoring = Á chur ar ais {$items} {$items ->
+       *[other] míreanna
+    } ó "{ $from }" go "{ $to }"
+renaming = Á athainmniú "{ $from }" go "{ $to }"
+renamed = Athainmníodh "{ $from }" go "{ $to }"
+restoring =
+    Á chur ar ais { $items } { $items ->
         [one] mhír
-        *[other] míreanna
-    } ó {trash} ({$progress})...
-restored = Cuireadh ar ais {$items} {$items ->
+       *[other] míreanna
+    } ó { trash } ({ $progress })...
+restored =
+    Cuireadh ar ais { $items } { $items ->
         [one] mhír
-        *[other] míreanna
-    } ó {trash}
+       *[other] míreanna
+    } ó { trash }
 unknown-folder = Fillteán anaithnid
 
 ## Open with
+
 menu-open-with = Oscail le...
-default-app = {$name} (réamhshocraithe)
+default-app = { $name } (réamhshocraithe)
 
 ## Show details
+
 show-details = Taispeáin sonraí
-type = Cineál: {$mime}
-items = Míreanna: {$items}
-item-size = Méid: {$size}
-item-created = Cruthaithe: {$created}
-item-modified = Athraithe: {$modified}
-item-accessed = Rochtain: {$accessed}
+type = Cineál: { $mime }
+items = Míreanna: { $items }
+item-size = Méid: { $size }
+item-created = Cruthaithe: { $created }
+item-modified = Athraithe: { $modified }
+item-accessed = Rochtain: { $accessed }
 calculating = Á ríomh...
 
 ## Settings
+
 settings = Socruithe
 single-click = Cliceáil amháin le hoscailt
 
 ### Appearance
+
 appearance = Cuma
 theme = Téama
 match-desktop = Comhoiriúnaigh an deasc
@@ -259,10 +315,10 @@ dark = Dorcha
 light = Geal
 
 ### Type to Search
+
 type-to-search = Clóscríobh le Cuardach
 type-to-search-recursive = Cuardaíonn sé an fillteán reatha agus na fo-fhillteáin go léir
 type-to-search-enter-path = Iontrálann sé seo an cosán chuig an eolaire nó an comhad
-
 # Context menu
 add-to-sidebar = Cuir leis an mbarra taoibh
 compress = Comhbhrúigh
@@ -280,13 +336,16 @@ sort-by-size = Sórtáil de réir méid
 sort-by-trashed = Sórtáil de réir ama scriosta
 
 ## Desktop
+
 change-wallpaper = Athraigh an páipéar balla...
 desktop-appearance = Cuma na deisce...
 display-settings = Socruithe taispeána...
 
 # Menu
 
+
 ## File
+
 file = Comhad
 new-tab = Cluaisín nua
 new-window = Fuinneog nua
@@ -295,6 +354,7 @@ close-tab = Dún cluaisín
 quit = Scoir
 
 ## Edit
+
 edit = Eagar
 cut = Gearr
 copy = Cóipeáil
@@ -302,9 +362,10 @@ paste = Greamaigh
 select-all = Roghnaigh gach ceann
 
 ## View
-zoom-in = Méadaigh
+
+zoom-in = Zúmáil isteach
 default-size = Méid réamhshocraithe
-zoom-out = Laghdaigh
+zoom-out = Zúmáil amach
 view = Amharc
 grid-view = Amharc greille
 list-view = Amharc liosta
@@ -315,6 +376,7 @@ menu-settings = Socruithe...
 menu-about = Maidir le Comhaid COSMIC...
 
 ## Sort
+
 sort = Sórtáil
 sort-a-z = A-Z
 sort-z-a = Z-A
@@ -322,3 +384,37 @@ sort-newest-first = Is nuaí ar dtús
 sort-oldest-first = Is sine ar dtús
 sort-smallest-to-largest = Is lú go dtí an ceann is mó
 sort-largest-to-smallest = Is mó go ceann is lú
+repository = Stór
+support = Tacaíocht
+other-apps = Feidhmchláir eile
+related-apps = Feidhmchláir ghaolmhara
+selected-items = na míreanna roghnaithe { $items }
+permanently-delete-question = Scrios go buan
+delete = Scrios
+permanently-delete-warning = An bhfuil tú cinnte gur mian leat { $target } a scriosadh go buan? Ní féidir é seo a chealú.
+progress-failed = Theip ar { $percent }%
+setting-permissions = Ceadanna á socrú do "{ $name }" go { $mode }
+set-permissions = Socraigh ceadanna do "{ $name }" go { $mode }
+permanently-deleting =
+    Ag scriosadh go buan { $items } { $items ->
+        [one] mhír
+       *[other] míreanna
+    }
+permanently-deleted =
+    Scriosta go buan { $items } { $items ->
+        [one] mhír amháin
+       *[other] míreanna
+    }
+removing-from-recents =
+    Ag baint { $items } { $items ->
+        [one] mhír
+       *[other] míreanna
+    } ó { recents }
+removed-from-recents =
+    Baineadh { $items } { $items ->
+        [one] mhír
+       *[other] míreanna
+    } ó { recents }
+eject = Díbirt
+remove-from-recents = Bain as na cinn is déanaí
+reload-folder = Athlódáil an fillteán
