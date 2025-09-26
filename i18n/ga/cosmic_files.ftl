@@ -30,8 +30,14 @@ size = Méid
 # Progress footer
 details = Sonraí
 dismiss = Dún an teachtaireacht
-operations-running = {$running} oibríocht ar siúl ({$percent}%)...
-operations-running-finished = {$running} oibríocht ar siúl ({$percent}%), {$finished} críochnaithe...
+operations-running = {$running} {$running ->
+    [one] oibríocht
+    *[other] oibríochtaí
+  } ag rith ({$percent}%)...
+operations-running-finished = {$running} {$running ->
+    [one] oibríocht
+    *[other] oibríochtaí
+ } ag rith ({$percent}%), {$finished} críochnaithe...
 pause = Sos
 resume = Lean ar aghaidh
 
@@ -80,6 +86,14 @@ save-file = Sábháil comhad
 ## Open With Dialog
 open-with-title = Conas is mian leat "{$name}" a oscailt?
 browse-store = Brabhsáil {$store}
+other-apps = Feidhmchláir eile
+related-apps = Feidhmchláir ghaolmhara
+
+## Permanently delete Dialog
+selected-items = na míreanna roghnaithe {$items}
+permanently-delete-question = Scrios go buan
+delete = Scrios
+permanently-delete-warning = An bhfuil tú cinnte gur mian leat {$target} a scriosadh go buan? Ní féidir é seo a chealú.
 
 ## Rename Dialog
 rename-file = Athainmnigh comhad
@@ -128,7 +142,7 @@ favorite-path-error = Earráid ag oscailt an eolaire
 favorite-path-error-description =
     Ní féidir oscailt "{$path}".
     B’fhéidir nach bhfuil sé ann nó nach bhfuil cead agat é a oscailt.
-    
+
     Ar mhaith leat é a bhaint den bharra taoibh?
 remove = Bain
 keep = Coinnigh
@@ -136,7 +150,8 @@ keep = Coinnigh
 # Context Pages
 
 ## About
-git-description = Tiomantas Git {$hash} ar {$date}
+repository = Stór
+support = Tacaíocht
 
 ## Add Network Drive
 add-network-drive = Cuir tiomántán líonra leis
@@ -171,6 +186,7 @@ no-history = Níl aon mhír sa stair.
 pending = Ar feitheamh
 progress = {$percent}%
 progress-cancelled = {$percent}%, cealaithe
+progress-failed = {$percent}%, theip
 progress-paused = {$percent}%, curtha ar shos
 failed = Theip
 complete = Críochnaithe
@@ -213,6 +229,8 @@ extracted = Bainíodh {$items} {$items ->
     } ó "{$from}" go "{$to}"
 setting-executable-and-launching = Á shocrú "{$name}" mar chomhad inrite agus á thosú
 set-executable-and-launched = Socraíodh "{$name}" mar chomhad inrite agus tosaíodh é
+setting-permissions = Ceadanna a shocrú do "{$name}" go {$mode}
+set-permissions = Socraigh ceadanna do "{$name}" go {$mode}
 moving = Á bhogadh {$items} {$items ->
         [one] mhír
         *[other] míreanna
@@ -221,6 +239,22 @@ moved = Bogadh {$items} {$items ->
         [one] mhír
         *[other] míreanna
     } ó "{$from}" go "{$to}"
+permanently-deleting = Ag scriosadh {$items} go buan {$items ->
+        [one] mhír
+        *[other] míreanna
+    }
+permanently-deleted = Scriosta go buan {$items} {$items ->
+        [one] mhír
+        *[other] míreanna
+    }
+removing-from-recents = Ag baint {$items} {$items ->
+        [one] mhír
+        *[other] míreanna
+    } ó {recents}
+removed-from-recents = Baineadh {$items} {$items ->
+        [one] mhír
+        *[other] míreanna
+    } ó {recents}
 renaming = Á athainmniú "{$from}" go "{$to}"
 renamed = Athainmníodh "{$from}" go "{$to}"
 restoring = Á chur ar ais {$items} {$items ->
@@ -267,6 +301,7 @@ type-to-search-enter-path = Iontrálann sé seo an cosán chuig an eolaire nó a
 add-to-sidebar = Cuir leis an mbarra taoibh
 compress = Comhbhrúigh
 delete-permanently = Scrios go buan
+eject = Díchuir
 extract-here = Bain anseo
 new-file = Comhad nua...
 new-folder = Fillteán nua...
@@ -278,6 +313,7 @@ sort-by-name = Sórtáil de réir ainm
 sort-by-modified = Sórtáil de réir athraithe
 sort-by-size = Sórtáil de réir méid
 sort-by-trashed = Sórtáil de réir ama scriosta
+remove-from-recents = Bain as na cinn is déanaí
 
 ## Desktop
 change-wallpaper = Athraigh an páipéar balla...
@@ -290,6 +326,7 @@ display-settings = Socruithe taispeána...
 file = Comhad
 new-tab = Cluaisín nua
 new-window = Fuinneog nua
+reload-folder = Athlódáil an fillteán
 rename = Athainmnigh...
 close-tab = Dún cluaisín
 quit = Scoir
