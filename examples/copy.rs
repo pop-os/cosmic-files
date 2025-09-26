@@ -1,5 +1,5 @@
 use cosmic_files::operation::recursive::Method;
-use cosmic_files::operation::{recursive::Context, Controller, ReplaceResult};
+use cosmic_files::operation::{Controller, ReplaceResult, recursive::Context};
 use std::{error::Error, io, path::PathBuf};
 
 #[compio::main]

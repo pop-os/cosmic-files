@@ -3,9 +3,10 @@
 use std::{any::TypeId, num::NonZeroU16, path::PathBuf};
 
 use cosmic::{
-    cosmic_config::{self, cosmic_config_derive::CosmicConfigEntry, CosmicConfigEntry},
+    Application,
+    cosmic_config::{self, CosmicConfigEntry, cosmic_config_derive::CosmicConfigEntry},
     iced::Subscription,
-    theme, Application,
+    theme,
 };
 use ordermap::OrderMap;
 use serde::{Deserialize, Serialize};

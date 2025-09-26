@@ -2,26 +2,25 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{
-    app::{context_drawer, cosmic::Cosmic, Core, Task},
+    Application, ApplicationExt, Element,
+    app::{Core, Task, context_drawer, cosmic::Cosmic},
     cosmic_config, cosmic_theme, executor,
     iced::{
-        self, event,
+        self, Alignment, Event, Length, Size, Subscription, event,
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers},
-        stream, window, Alignment, Event, Length, Size, Subscription,
+        stream, window,
     },
     theme,
     widget::{
         self,
-        menu::{key_bind::Modifier, Action as MenuAction, KeyBind},
+        menu::{Action as MenuAction, KeyBind, key_bind::Modifier},
         segmented_button,
     },
-    Application, ApplicationExt, Element,
 };
 use notify_debouncer_full::{
-    new_debouncer,
-    notify::{self, RecommendedWatcher, Watcher},
-    DebouncedEvent, Debouncer, FileIdMap,
+    DebouncedEvent, Debouncer, RecommendedCache, new_debouncer,
+    notify::{self, RecommendedWatcher},
 };
 use recently_used_xbel::update_recently_used;
 use std::{
@@ -36,12 +35,12 @@ use std::{
 
 use crate::{
     app::{Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind},
-    config::{Config, DialogConfig, Favorite, ThumbCfg, TimeConfig, TIME_CONFIG_ID},
+    config::{Config, DialogConfig, Favorite, TIME_CONFIG_ID, ThumbCfg, TimeConfig},
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
     menu,
-    mounter::{MounterItem, MounterItems, MounterKey, MounterMessage, MOUNTERS},
+    mounter::{MOUNTERS, MounterItem, MounterItems, MounterKey, MounterMessage},
     tab::{self, ItemMetadata, Location, Tab},
 };
 
@@ -376,7 +375,7 @@ impl<M: Send + 'static> Dialog<M> {
         }
     }
 
-    pub fn view(&self, window_id: window::Id) -> Element<M> {
+    pub fn view(&self, window_id: window::Id) -> Element<'_, M> {
         self.cosmic
             .view(window_id)
             .map(DialogMessage)
@@ -469,7 +468,7 @@ impl From<AppMessage> for Message {
 pub struct MounterData(MounterKey, MounterItem);
 
 struct WatcherWrapper {
-    watcher_opt: Option<Debouncer<RecommendedWatcher, FileIdMap>>,
+    watcher_opt: Option<Debouncer<RecommendedWatcher, RecommendedCache>>,
 }
 
 impl Clone for WatcherWrapper {
@@ -511,12 +510,15 @@ struct App {
     search_id: widget::Id,
     tab: Tab,
     key_binds: HashMap<KeyBind, Action>,
-    watcher_opt: Option<(Debouncer<RecommendedWatcher, FileIdMap>, HashSet<PathBuf>)>,
+    watcher_opt: Option<(
+        Debouncer<RecommendedWatcher, RecommendedCache>,
+        HashSet<PathBuf>,
+    )>,
     auto_scroll_speed: Option<i16>,
 }
 
 impl App {
-    fn button_view(&self) -> Element<Message> {
+    fn button_view(&self) -> Element<'_, Message> {
         let cosmic_theme::Spacing {
             space_xxxs,
             space_xxs,
@@ -867,7 +869,7 @@ impl App {
             // Unwatch paths no longer used
             for path in old_paths.iter() {
                 if !new_paths.contains(path) {
-                    match watcher.watcher().unwatch(path) {
+                    match watcher.unwatch(path) {
                         Ok(()) => {
                             log::debug!("unwatching {:?}", path);
                         }
@@ -882,10 +884,7 @@ impl App {
             for path in new_paths.iter() {
                 if !old_paths.contains(path) {
                     //TODO: should this be recursive?
-                    match watcher
-                        .watcher()
-                        .watch(path, notify::RecursiveMode::NonRecursive)
-                    {
+                    match watcher.watch(path, notify::RecursiveMode::NonRecursive) {
                         Ok(()) => {
                             log::debug!("watching {:?}", path);
                         }
@@ -992,7 +991,7 @@ impl Application for App {
         (app, commands)
     }
 
-    fn context_drawer(&self) -> Option<context_drawer::ContextDrawer<Message>> {
+    fn context_drawer(&self) -> Option<context_drawer::ContextDrawer<'_, Message>> {
         if !self.core.window.show_context {
             return None;
         }
@@ -1023,7 +1022,7 @@ impl Application for App {
         }
     }
 
-    fn dialog(&self) -> Option<Element<Message>> {
+    fn dialog(&self) -> Option<Element<'_, Message>> {
         let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
 
         //TODO: should gallery view just be a dialog?
@@ -1123,11 +1122,11 @@ impl Application for App {
         Some(dialog.into())
     }
 
-    fn footer(&self) -> Option<Element<Message>> {
+    fn footer(&self) -> Option<Element<'_, Message>> {
         Some(self.button_view())
     }
 
-    fn header_end(&self) -> Vec<Element<Message>> {
+    fn header_end(&self) -> Vec<Element<'_, Message>> {
         let mut elements = Vec::with_capacity(3);
 
         if let Some(term) = self.search_get() {
@@ -1178,7 +1177,7 @@ impl Application for App {
         elements
     }
 
-    fn nav_bar(&self) -> Option<Element<cosmic::Action<Self::Message>>> {
+    fn nav_bar(&self) -> Option<Element<'_, cosmic::Action<Self::Message>>> {
         if !self.core().nav_bar_active() {
             return None;
         }
@@ -1452,7 +1451,11 @@ impl Application for App {
                                                             }
                                                         }
                                                         Err(err) => {
-                                                            log::warn!("failed to reload metadata for {:?}: {}", path, err);
+                                                            log::warn!(
+                                                                "failed to reload metadata for {:?}: {}",
+                                                                path,
+                                                                err
+                                                            );
                                                         }
                                                     }
                                                     //TODO item.thumbnail_opt =
@@ -1876,7 +1879,7 @@ impl Application for App {
     }
 
     /// Creates a view after each update.
-    fn view(&self) -> Element<Message> {
+    fn view(&self) -> Element<'_, Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
 
         let mut col = widget::column::with_capacity(2);

@@ -1,13 +1,15 @@
+use compio::BufResult;
 use compio::buf::{IntoInner, IoBuf};
 use compio::io::{AsyncReadAt, AsyncWriteAt};
-use compio::BufResult;
 use std::future::Future;
 use std::pin::Pin;
 use std::time::Instant;
 use std::{cell::Cell, error::Error, fs, ops::ControlFlow, path::PathBuf, rc::Rc};
 use walkdir::WalkDir;
 
-use super::{copy_unique_path, Controller, OperationSelection, ReplaceResult};
+use crate::operation::OperationError;
+
+use super::{Controller, OperationSelection, ReplaceResult, copy_unique_path};
 
 pub enum Method {
     Copy,
@@ -52,11 +54,14 @@ impl Context {
         &mut self,
         from_to_pairs: Vec<(PathBuf, PathBuf)>,
         method: Method,
-    ) -> Result<bool, String> {
+    ) -> Result<bool, OperationError> {
         let mut ops = Vec::new();
         let mut cleanup_ops = Vec::new();
         for (from_parent, to_parent) in from_to_pairs {
-            self.controller.check().await?;
+            self.controller
+                .check()
+                .await
+                .map_err(|s| OperationError::from_state(s, &self.controller))?;
 
             if from_parent == to_parent {
                 // Skip matching source and destination
@@ -64,10 +69,16 @@ impl Context {
             }
 
             for entry in WalkDir::new(&from_parent).into_iter() {
-                self.controller.check().await?;
+                self.controller
+                    .check()
+                    .await
+                    .map_err(|s| OperationError::from_state(s, &self.controller))?;
 
                 let entry = entry.map_err(|err| {
-                    format!("failed to walk directory {:?}: {}", from_parent, err)
+                    OperationError::from_err(
+                        format!("failed to walk directory {:?}: {}", from_parent, err),
+                        &self.controller,
+                    )
                 })?;
                 let file_type = entry.file_type();
                 let from = entry.into_path();
@@ -79,21 +90,31 @@ impl Context {
                         Method::Move { cross_device_copy } => OpKind::Move { cross_device_copy },
                     }
                 } else if file_type.is_symlink() {
-                    let target = fs::read_link(&from)
-                        .map_err(|err| format!("failed to read link {:?}: {}", from, err))?;
+                    let target = fs::read_link(&from).map_err(|err| {
+                        OperationError::from_err(
+                            format!("failed to read link {:?}: {}", from, err),
+                            &self.controller,
+                        )
+                    })?;
                     OpKind::Symlink { target }
                 } else {
                     //TODO: present dialog and allow continue
-                    return Err(format!("{} is not a known file type", from.display()));
+                    return Err(OperationError::from_err(
+                        format!("{} is not a known file type", from.display()),
+                        &self.controller,
+                    ));
                 };
                 let to = if from == from_parent {
                     // When copying a file, from matches from_parent, and to_parent must be used
                     to_parent.clone()
                 } else {
                     let relative = from.strip_prefix(&from_parent).map_err(|err| {
-                        format!(
-                            "failed to remove prefix {:?} from {:?}: {}",
-                            from_parent, from, err
+                        OperationError::from_err(
+                            format!(
+                                "failed to remove prefix {:?} from {:?}: {}",
+                                from_parent, from, err
+                            ),
+                            &self.controller,
                         )
                     })?;
                     //TODO: ensure to is inside of to_parent?
@@ -127,7 +148,10 @@ impl Context {
 
         let total_ops = ops.len();
         for (current_ops, mut op) in ops.into_iter().enumerate() {
-            self.controller.check().await?;
+            self.controller
+                .check()
+                .await
+                .map_err(|s| OperationError::from_state(s, &self.controller))?;
 
             let progress = Progress {
                 current_ops,
@@ -137,9 +161,12 @@ impl Context {
             };
             (self.on_progress)(&op, &progress);
             if op.run(self, progress).await.map_err(|err| {
-                format!(
-                    "failed to {:?} {:?} to {:?}: {}",
-                    op.kind, op.from, op.to, err
+                OperationError::from_err(
+                    format!(
+                        "failed to {:?} {:?} to {:?}: {}",
+                        op.kind, op.from, op.to, err
+                    ),
+                    &self.controller,
                 )
             })? {
                 // The from path is ignored in the operation selection if it is a top level item
@@ -336,9 +363,9 @@ impl Op {
                         (ctx.on_progress)(self, &progress);
 
                         // Also check if the progress was cancelled.
-                        if let Err(why) = ctx.controller.check().await {
+                        if let Err(state) = ctx.controller.check().await {
                             ctx.buf = buf_out;
-                            return Err(why.into());
+                            return Err(OperationError::from_state(state, &ctx.controller).into());
                         }
                     }
 

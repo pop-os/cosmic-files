@@ -1,10 +1,11 @@
 use cosmic::{
-    iced::{futures::SinkExt, stream, Subscription},
-    widget, Task,
+    Task,
+    iced::{Subscription, futures::SinkExt, stream},
+    widget,
 };
 use gio::{glib, prelude::*};
 use std::{any::TypeId, cell::Cell, future::pending, path::PathBuf, sync::Arc};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{Mutex, mpsc};
 
 use super::{Mounter, MounterAuth, MounterItem, MounterItems, MounterMessage};
 use crate::{

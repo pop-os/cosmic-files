@@ -29,7 +29,7 @@ size = Tamaño
 # Dialogs
 
 ## Compress Dialog
-Crear archivo comprimido
+create-archive = Crear archivo comprimido
 
 ## Empty Trash Dialog
 empty-trash = Papelera vacía

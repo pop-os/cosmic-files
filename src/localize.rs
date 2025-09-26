@@ -1,22 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::str::FromStr;
-
 use i18n_embed::{
-    fluent::{fluent_language_loader, FluentLanguageLoader},
     DefaultLocalizer, LanguageLoader, Localizer,
+    fluent::{FluentLanguageLoader, fluent_language_loader},
 };
-use icu::locid::Locale;
-use icu_collator::{Collator, CollatorOptions, Numeric};
-use icu_provider::DataLocale;
-use once_cell::sync::Lazy;
+use icu::collator::{
+    Collator, CollatorBorrowed, CollatorPreferences, options::CollatorOptions,
+    preferences::CollationNumericOrdering,
+};
+use icu::locale::Locale;
 use rust_embed::RustEmbed;
+use std::sync::LazyLock;
 
 #[derive(RustEmbed)]
 #[folder = "i18n/"]
 struct Localizations;
 
-pub static LANGUAGE_LOADER: Lazy<FluentLanguageLoader> = Lazy::new(|| {
+pub static LANGUAGE_LOADER: LazyLock<FluentLanguageLoader> = LazyLock::new(|| {
     let loader: FluentLanguageLoader = fluent_language_loader!();
 
     loader
@@ -26,44 +26,51 @@ pub static LANGUAGE_LOADER: Lazy<FluentLanguageLoader> = Lazy::new(|| {
     loader
 });
 
-pub static LANGUAGE_SORTER: Lazy<Collator> = Lazy::new(|| {
-    let mut options = CollatorOptions::new();
-    options.numeric = Some(Numeric::On);
+pub static LANGUAGE_SORTER: LazyLock<CollatorBorrowed> = LazyLock::new(|| {
+    let create_collator = |locale: Locale| {
+        let mut prefs = CollatorPreferences::from(locale);
+        prefs.numeric_ordering = Some(CollationNumericOrdering::True);
+        Collator::try_new(prefs, CollatorOptions::default()).ok()
+    };
 
-    DataLocale::from_str(&LANGUAGE_LOADER.current_language().to_string())
-        .or_else(|_| DataLocale::from_str(&LANGUAGE_LOADER.fallback_language().to_string()))
-        .ok()
-        .and_then(|locale| Collator::try_new(&locale, options).ok())
-        .or_else(|| {
-            let locale = DataLocale::from_str("en-US").expect("en-US is a valid BCP-47 tag");
-            Collator::try_new(&locale, options).ok()
-        })
-        .expect("Creating a collator from the system's current language, the fallback language, or American English should succeed")
+    Locale::try_from_str(&LANGUAGE_LOADER.current_language().to_string())
+            .ok()
+            .and_then(create_collator)
+            .or_else(|| {
+                Locale::try_from_str(&LANGUAGE_LOADER.fallback_language().to_string())
+                    .ok()
+                    .and_then(create_collator)
+            })
+            .unwrap_or_else(|| {
+                let locale = Locale::try_from_str("en-US").expect("en-US is a valid BCP-47 tag");
+                create_collator(locale)
+                    .expect("Creating a collator from the system's current language, the fallback language, or American English should succeed")
+            })
 });
 
-pub static LOCALE: Lazy<Locale> = Lazy::new(|| {
-    fn get_local() -> Result<Locale, Box<dyn std::error::Error>> {
-        let locale = std::env::var("LC_TIME").or_else(|_| std::env::var("LANG"))?;
+pub static LOCALE: LazyLock<Locale> = LazyLock::new(|| {
+    for var in ["LC_TIME", "LC_ALL", "LANG"] {
+        if let Ok(locale_str) = std::env::var(var) {
+            let cleaned_locale = locale_str
+                .split('.')
+                .next()
+                .unwrap_or(&locale_str)
+                .replace('_', "-");
 
-        let locale = locale
-            .split('.')
-            .next()
-            .ok_or(format!("Can't split the locale {locale}"))?;
+            if let Ok(locale) = Locale::try_from_str(&cleaned_locale) {
+                return locale;
+            }
 
-        let locale = Locale::from_str(locale).map_err(|e| format!("{e:?}"))?;
-
-        Ok(locale)
-    }
-
-    match get_local() {
-        Ok(locale) => locale,
-
-        Err(e) => {
-            log::error!("can't get locale {e}");
-
-            Locale::default()
+            // Try language-only fallback (e.g., "en" from "en-US")
+            if let Some(lang) = cleaned_locale.split('-').next() {
+                if let Ok(locale) = Locale::try_from_str(lang) {
+                    return locale;
+                }
+            }
         }
     }
+    log::warn!("No valid locale found in environment, using fallback");
+    Locale::try_from_str("en-US").expect("Failed to parse fallback locale 'en-US'")
 });
 
 #[macro_export]
@@ -87,6 +94,6 @@ pub fn localize() {
     let requested_languages = i18n_embed::DesktopLanguageRequester::requested_languages();
 
     if let Err(error) = localizer.select(&requested_languages) {
-        eprintln!("Error while loading language for App List {}", error);
+        eprintln!("Error while loading language for COSMIC Files {}", error);
     }
 }

@@ -3,23 +3,24 @@
 
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use cosmic::iced::{
+    Limits,
     event::wayland::{Event as WaylandEvent, OutputEvent, OverlapNotifyEvent},
     platform_specific::runtime::wayland::layer_surface::{
         IcedMargin, IcedOutput, SctkLayerSurfaceSettings,
     },
     platform_specific::shell::wayland::commands::layer_surface::{
-        destroy_layer_surface, get_layer_surface, Anchor, KeyboardInteractivity, Layer,
+        Anchor, KeyboardInteractivity, Layer, destroy_layer_surface, get_layer_surface,
     },
-    Limits,
 };
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use cosmic::iced_winit::commands::overlap_notify::overlap_notify;
 use cosmic::{
-    app::{self, context_drawer, Core, Task},
+    Application, ApplicationExt, Element,
+    app::{self, Core, Task, context_drawer},
     cosmic_config::{self, ConfigSet},
     cosmic_theme, executor,
     iced::{
-        self,
+        self, Alignment, Event, Length, Point, Rectangle, Size, Subscription,
         clipboard::dnd::DndAction,
         core::SmolStr,
         event,
@@ -28,25 +29,23 @@ use cosmic::{
         stream,
         widget::scrollable,
         window::{self, Event as WindowEvent, Id as WindowId},
-        Alignment, Event, Length, Point, Rectangle, Size, Subscription,
     },
     iced_runtime::clipboard,
     style, surface, theme,
     widget::{
         self,
+        about::About,
         dnd_destination::DragId,
-        horizontal_space,
+        horizontal_space, icon,
         menu::{action::MenuAction, key_bind::KeyBind},
         segmented_button::{self, Entity},
         vertical_space,
     },
-    Application, ApplicationExt, Element,
 };
 use mime_guess::Mime;
 use notify_debouncer_full::{
-    new_debouncer,
-    notify::{self, RecommendedWatcher, Watcher},
-    DebouncedEvent, Debouncer, FileIdMap,
+    DebouncedEvent, Debouncer, RecommendedCache, new_debouncer,
+    notify::{self, RecommendedWatcher},
 };
 use slotmap::Key as SlotMapKey;
 use std::{
@@ -65,13 +64,13 @@ use std::{
 use tokio::sync::mpsc;
 use trash::TrashItem;
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
-use wayland_client::{protocol::wl_output::WlOutput, Proxy};
+use wayland_client::{Proxy, protocol::wl_output::WlOutput};
 
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{
-        AppTheme, Config, DesktopConfig, Favorite, IconSizes, TabConfig, TimeConfig, TypeToSearch,
-        TIME_CONFIG_ID,
+        AppTheme, Config, DesktopConfig, Favorite, IconSizes, TIME_CONFIG_ID, TabConfig,
+        TimeConfig, TypeToSearch,
     },
     dialog::{Dialog, DialogKind, DialogMessage, DialogResult},
     fl, home_dir,
@@ -80,14 +79,14 @@ use crate::{
     menu,
     mime_app::{self, MimeApp, MimeAppCache},
     mime_icon,
-    mounter::{MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage, MOUNTERS},
+    mounter::{MOUNTERS, MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage},
     operation::{
         Controller, Operation, OperationError, OperationErrorType, OperationSelection,
         ReplaceResult,
     },
     spawn_detached::spawn_detached,
     tab::{
-        self, HeadingOptions, ItemMetadata, Location, Tab, HOVER_DURATION, SORT_OPTION_FALLBACK,
+        self, HOVER_DURATION, HeadingOptions, ItemMetadata, Location, SORT_OPTION_FALLBACK, Tab,
     },
 };
 use crate::{config::State, dialog::DialogSettings};
@@ -116,7 +115,7 @@ pub enum Action {
     Compress,
     Copy,
     Cut,
-    CosmicSettingsAppearance,
+    CosmicSettingsDesktop,
     CosmicSettingsDisplays,
     CosmicSettingsWallpaper,
     DesktopViewOptions,
@@ -183,7 +182,7 @@ impl Action {
             Action::Compress => Message::Compress(entity_opt),
             Action::Copy => Message::Copy(entity_opt),
             Action::Cut => Message::Cut(entity_opt),
-            Action::CosmicSettingsAppearance => Message::CosmicSettings("appearance"),
+            Action::CosmicSettingsDesktop => Message::CosmicSettings("desktop"),
             Action::CosmicSettingsDisplays => Message::CosmicSettings("displays"),
             Action::CosmicSettingsWallpaper => Message::CosmicSettings("wallpaper"),
             Action::Delete => Message::Delete(entity_opt),
@@ -302,7 +301,6 @@ impl MenuAction for NavMenuAction {
 pub enum Message {
     AddToSidebar(Option<Entity>),
     AppTheme(AppTheme),
-    CloseId(window::Id),
     CloseToast(widget::ToastId),
     Compress(Option<Entity>),
     Config(Config),
@@ -315,7 +313,6 @@ pub enum Message {
     DesktopDialogs(bool),
     DialogCancel,
     DialogComplete,
-    DragId(window::Id),
     Eject,
     FileDialogMessage(DialogMessage),
     DialogPush(DialogPage),
@@ -612,7 +609,7 @@ pub enum WindowKind {
 }
 
 pub struct WatcherWrapper {
-    watcher_opt: Option<Debouncer<RecommendedWatcher, FileIdMap>>,
+    watcher_opt: Option<Debouncer<RecommendedWatcher, RecommendedCache>>,
 }
 
 impl Clone for WatcherWrapper {
@@ -636,6 +633,7 @@ impl PartialEq for WatcherWrapper {
 // The [`App`] stores application-specific state.
 pub struct App {
     core: Core,
+    about: About,
     nav_bar_context_id: segmented_button::Entity,
     nav_model: segmented_button::SingleSelectModel,
     tab_model: segmented_button::Model<segmented_button::SingleSelect>,
@@ -673,7 +671,10 @@ pub struct App {
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     surface_names: HashMap<WindowId, String>,
     toasts: widget::toaster::Toasts<Message>,
-    watcher_opt: Option<(Debouncer<RecommendedWatcher, FileIdMap>, HashSet<PathBuf>)>,
+    watcher_opt: Option<(
+        Debouncer<RecommendedWatcher, RecommendedCache>,
+        HashSet<PathBuf>,
+    )>,
     windows: HashMap<window::Id, WindowKind>,
     nav_dnd_hover: Option<(Location, Instant)>,
     tab_dnd_hover: Option<(Entity, Instant)>,
@@ -1434,7 +1435,7 @@ impl App {
 
         nav_model = nav_model.insert(|b| {
             b.text(fl!("recents"))
-                .icon(widget::icon::from_name("document-open-recent-symbolic"))
+                .icon(icon::from_name("document-open-recent-symbolic"))
                 .data(Location::Recents)
         });
 
@@ -1450,12 +1451,10 @@ impl App {
                 nav_model = nav_model.insert(move |b| {
                     b.text(name.clone())
                         .icon(
-                            widget::icon::icon(if path.is_dir() {
+                            icon::icon(if path.is_dir() {
                                 tab::folder_icon_symbolic(&path, 16)
                             } else {
-                                widget::icon::from_name("text-x-generic-symbolic")
-                                    .size(16)
-                                    .handle()
+                                icon::from_name("text-x-generic-symbolic").size(16).handle()
                             })
                             .size(16),
                         )
@@ -1472,7 +1471,7 @@ impl App {
 
         nav_model = nav_model.insert(|b| {
             b.text(fl!("trash"))
-                .icon(widget::icon::icon(tab::trash_icon_symbolic(16)))
+                .icon(icon::icon(tab::trash_icon_symbolic(16)))
                 .data(Location::Trash)
                 .divider_above()
         });
@@ -1480,8 +1479,8 @@ impl App {
         if !MOUNTERS.is_empty() {
             nav_model = nav_model.insert(|b| {
                 b.text(fl!("networks"))
-                    .icon(widget::icon::icon(
-                        widget::icon::from_name("network-workgroup-symbolic")
+                    .icon(icon::icon(
+                        icon::from_name("network-workgroup-symbolic")
                             .size(16)
                             .handle(),
                     ))
@@ -1514,7 +1513,7 @@ impl App {
                     b = b.data(Location::Network(uri, item.name(), None));
                 }
                 if let Some(icon) = item.icon(true) {
-                    b = b.icon(widget::icon::icon(icon).size(16));
+                    b = b.icon(icon::icon(icon).size(16));
                 }
                 if item.is_mounted() {
                     b = b.closable();
@@ -1585,7 +1584,7 @@ impl App {
             // Unwatch paths no longer used
             for path in old_paths.iter() {
                 if !new_paths.contains(path) {
-                    match watcher.watcher().unwatch(path) {
+                    match watcher.unwatch(path) {
                         Ok(()) => {
                             log::debug!("unwatching {:?}", path);
                         }
@@ -1599,10 +1598,7 @@ impl App {
             // Watch new paths
             for path in new_paths.iter() {
                 if !old_paths.contains(path) {
-                    match watcher
-                        .watcher()
-                        .watch(path, notify::RecursiveMode::NonRecursive)
-                    {
+                    match watcher.watch(path, notify::RecursiveMode::NonRecursive) {
                         Ok(()) => {
                             log::debug!("watching {:?}", path);
                         }
@@ -1620,39 +1616,7 @@ impl App {
         Task::none()
     }
 
-    fn about(&self) -> Element<Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
-        let repository = "https://github.com/pop-os/cosmic-files";
-        let hash = env!("VERGEN_GIT_SHA");
-        let short_hash: String = hash.chars().take(7).collect();
-        let date = env!("VERGEN_GIT_COMMIT_DATE");
-        widget::column::with_children(vec![
-                widget::svg(widget::svg::Handle::from_memory(
-                    &include_bytes!(
-                        "../res/icons/hicolor/128x128/apps/com.system76.CosmicFiles.svg"
-                    )[..],
-                ))
-                .into(),
-                widget::text::title3(fl!("cosmic-files")).into(),
-                widget::button::link(repository)
-                    .on_press(Message::LaunchUrl(repository.to_string()))
-                    .padding(0)
-                    .into(),
-                widget::button::link(fl!(
-                    "git-description",
-                    hash = short_hash.as_str(),
-                    date = date
-                ))
-                    .on_press(Message::LaunchUrl(format!("{}/commits/{}", repository, hash)))
-                    .padding(0)
-                .into(),
-            ])
-        .align_x(Alignment::Center)
-        .spacing(space_xxs)
-        .into()
-    }
-
-    fn network_drive(&self) -> Element<Message> {
+    fn network_drive(&self) -> Element<'_, Message> {
         let cosmic_theme::Spacing {
             space_xxs, space_m, ..
         } = theme::active().cosmic().spacing;
@@ -1683,7 +1647,7 @@ impl App {
         .into()
     }
 
-    fn desktop_view_options(&self) -> Element<Message> {
+    fn desktop_view_options(&self) -> Element<'_, Message> {
         let cosmic_theme::Spacing {
             space_m, space_l, ..
         } = theme::active().cosmic().spacing;
@@ -1765,7 +1729,7 @@ impl App {
             .into()
     }
 
-    fn edit_history(&self) -> Element<Message> {
+    fn edit_history(&self) -> Element<'_, Message> {
         let cosmic_theme::Spacing { space_m, .. } = theme::active().cosmic().spacing;
 
         let mut children = Vec::new();
@@ -1784,7 +1748,7 @@ impl App {
                             .into(),
                         if controller.is_paused() {
                             widget::tooltip(
-                                widget::button::icon(widget::icon::from_name(
+                                widget::button::icon(icon::from_name(
                                     "media-playback-start-symbolic",
                                 ))
                                 .on_press(Message::PendingPause(*id, false))
@@ -1795,7 +1759,7 @@ impl App {
                             .into()
                         } else {
                             widget::tooltip(
-                                widget::button::icon(widget::icon::from_name(
+                                widget::button::icon(icon::from_name(
                                     "media-playback-pause-symbolic",
                                 ))
                                 .on_press(Message::PendingPause(*id, true))
@@ -1806,7 +1770,7 @@ impl App {
                             .into()
                         },
                         widget::tooltip(
-                            widget::button::icon(widget::icon::from_name("window-close-symbolic"))
+                            widget::button::icon(icon::from_name("window-close-symbolic"))
                                 .on_press(Message::PendingCancel(*id))
                                 .padding(8),
                             widget::text::body(fl!("cancel")),
@@ -1915,7 +1879,7 @@ impl App {
             .into()
     }
 
-    fn settings(&self) -> Element<Message> {
+    fn settings(&self) -> Element<'_, Message> {
         let tab_config = self.config.tab;
 
         // TODO: Should dialog be updated here too?
@@ -2126,8 +2090,24 @@ impl Application for App {
                 })
         });
 
+        let about = About::default()
+            .name(fl!("cosmic-files"))
+            .icon(icon::from_name(Self::APP_ID))
+            .version(env!("CARGO_PKG_VERSION"))
+            .author("System76")
+            .license("GPL-3.0-only")
+            .developers([("Jeremy Soller", "jeremy@system76.com")])
+            .links([
+                (fl!("repository"), "https://github.com/pop-os/cosmic-files"),
+                (
+                    fl!("support"),
+                    "https://github.com/pop-os/cosmic-files/issues",
+                ),
+            ]);
+
         let mut app = App {
             core,
+            about,
             nav_bar_context_id: segmented_button::Entity::null(),
             nav_model: segmented_button::ModelBuilder::default().build(),
             tab_model: segmented_button::ModelBuilder::default().build(),
@@ -2195,7 +2175,7 @@ impl Application for App {
         for location in flags.uris {
             if let Some(e) = app.nav_model.iter().find(|e| {
                 app.nav_model.data::<Location>(*e).is_some_and(
-                    |l| matches!(l, Location::Network(ref uri, ..) if *uri == location.to_string()),
+                    |l| matches!(l, Location::Network(uri, ..) if *uri == location.to_string()),
                 )
             }) {
                 commands.push(cosmic::task::message(cosmic::Action::App(
@@ -2215,7 +2195,7 @@ impl Application for App {
         (app, Task::batch(commands))
     }
 
-    fn nav_bar(&self) -> Option<Element<cosmic::Action<Self::Message>>> {
+    fn nav_bar(&self) -> Option<Element<'_, cosmic::Action<Self::Message>>> {
         if !self.core.nav_bar_active() {
             return None;
         }
@@ -2237,11 +2217,7 @@ impl Application for App {
             cosmic::Action::App(Message::NavMenuAction(NavMenuAction::OpenInNewTab(entity)))
         })
         .context_menu(self.nav_context_menu(self.nav_bar_context_id))
-        .close_icon(
-            widget::icon::from_name("media-eject-symbolic")
-                .size(16)
-                .icon(),
-        )
+        .close_icon(icon::from_name("media-eject-symbolic").size(16).icon())
         .into_container();
 
         if !self.core.is_condensed() {
@@ -2664,7 +2640,7 @@ impl Application for App {
             }
             Message::DesktopViewOptions => {
                 let mut settings = window::Settings {
-                    decorations: false,
+                    decorations: true,
                     min_size: Some(Size::new(360.0, 180.0)),
                     resizable: true,
                     size: Size::new(480.0, 444.0),
@@ -2740,15 +2716,15 @@ impl Application for App {
                             let extension = archive_type.extension();
                             let name = format!("{}{}", name, extension);
                             let to = to.join(name);
-                            return self.operation(Operation::Compress {
+                            tasks.push(self.operation(Operation::Compress {
                                 paths,
                                 to,
                                 archive_type,
                                 password,
-                            });
+                            }));
                         }
                         DialogPage::EmptyTrash => {
-                            return self.operation(Operation::EmptyTrash);
+                            tasks.push(self.operation(Operation::EmptyTrash));
                         }
                         DialogPage::FailedOperation(id) => {
                             log::warn!("TODO: retry operation {}", id);
@@ -2763,7 +2739,7 @@ impl Application for App {
                                 },
                                 _ => unreachable!(),
                             };
-                            return self.operation(new_op);
+                            tasks.push(self.operation(new_op));
                         }
                         DialogPage::MountError {
                             mounter_key,
@@ -2771,7 +2747,7 @@ impl Application for App {
                             error: _,
                         } => {
                             if let Some(mounter) = MOUNTERS.get(&mounter_key) {
-                                return mounter.mount(item).map(|_| cosmic::action::none());
+                                tasks.push(mounter.mount(item).map(|_| cosmic::action::none()));
                             }
                         }
                         DialogPage::NetworkAuth {
@@ -2799,11 +2775,11 @@ impl Application for App {
                         }
                         DialogPage::NewItem { parent, name, dir } => {
                             let path = parent.join(name);
-                            return self.operation(if dir {
+                            tasks.push(self.operation(if dir {
                                 Operation::NewFolder { path }
                             } else {
                                 Operation::NewFile { path }
-                            });
+                            }));
                         }
                         DialogPage::OpenWith {
                             path,
@@ -2845,19 +2821,19 @@ impl Application for App {
                             }
                         }
                         DialogPage::PermanentlyDelete { paths } => {
-                            return self.operation(Operation::PermanentlyDelete { paths });
+                            tasks.push(self.operation(Operation::PermanentlyDelete { paths }));
                         }
                         DialogPage::RenameItem {
                             from, parent, name, ..
                         } => {
                             let to = parent.join(name);
-                            return self.operation(Operation::Rename { from, to });
+                            tasks.push(self.operation(Operation::Rename { from, to }));
                         }
                         DialogPage::Replace { .. } => {
                             log::warn!("replace dialog should be completed with replace result");
                         }
                         DialogPage::SetExecutableAndLaunch { path } => {
-                            return self.operation(Operation::SetExecutableAndLaunch { path });
+                            tasks.push(self.operation(Operation::SetExecutableAndLaunch { path }));
                         }
                         DialogPage::FavoritePathError { entity, .. } => {
                             if let Some(FavoriteIndex(favorite_i)) =
@@ -2866,7 +2842,7 @@ impl Application for App {
                                 let mut favorites = self.config.favorites.clone();
                                 favorites.remove(*favorite_i);
                                 config_set!(favorites, favorites);
-                                return self.update_config();
+                                tasks.push(self.update_config());
                             }
                         }
                     }
@@ -3194,7 +3170,11 @@ impl Application for App {
                                                                 }
 
                                                                 Err(err) => {
-                                                                    log::warn!("failed to reload metadata for {:?}: {}", path, err);
+                                                                    log::warn!(
+                                                                        "failed to reload metadata for {:?}: {}",
+                                                                        path,
+                                                                        err
+                                                                    );
                                                                 }
                                                             }
                                                             //TODO item.thumbnail_opt =
@@ -3283,7 +3263,7 @@ impl Application for App {
                             None
                         }
                     },
-                ))
+                ));
             }
             Message::OpenInNewWindow(entity_opt) => match env::current_exe() {
                 Ok(exe) => self
@@ -3307,7 +3287,7 @@ impl Application for App {
                             self.open_tab(Location::Path(parent), true, Some(vec![path]))
                         })
                     },
-                ))
+                ));
             }
             Message::OpenWithBrowse => match self.dialog_pages.pop_front() {
                 Some((
@@ -3558,7 +3538,7 @@ impl Application for App {
                         let mut commands = Vec::with_capacity(selected_paths.len());
                         for path in selected_paths {
                             let mut settings = window::Settings {
-                                decorations: false,
+                                decorations: true,
                                 min_size: Some(Size::new(360.0, 180.0)),
                                 resizable: true,
                                 size: Size::new(480.0, 600.0),
@@ -3604,7 +3584,7 @@ impl Application for App {
                 });
                 if let Some(entity) = maybe_entity {
                     self.nav_model
-                        .icon_set(entity, widget::icon::icon(tab::trash_icon_symbolic(16)));
+                        .icon_set(entity, icon::icon(tab::trash_icon_symbolic(16)));
                 }
 
                 return Task::batch([self.rescan_trash(), self.update_desktop()]);
@@ -4428,14 +4408,14 @@ impl Application for App {
                 }
                 NavMenuAction::OpenInNewTab(entity) => {
                     match self.nav_model.data::<Location>(entity) {
-                        Some(Location::Network(ref uri, ref display_name, path)) => {
+                        Some(Location::Network(uri, display_name, path)) => {
                             return self.open_tab(
                                 Location::Network(uri.clone(), display_name.clone(), path.clone()),
                                 false,
                                 None,
                             );
                         }
-                        Some(Location::Path(ref path)) => {
+                        Some(Location::Path(path)) => {
                             return self.open_tab(Location::Path(path.clone()), false, None);
                         }
                         Some(Location::Recents) => {
@@ -4696,12 +4676,6 @@ impl Application for App {
                     }
                 }
             }
-            Message::CloseId(id) => {
-                return window::close(id);
-            }
-            Message::DragId(id) => {
-                return window::drag(id);
-            }
             Message::NetworkDriveOpenEntityAfterMount { entity } => {
                 return self.on_nav_select(entity);
             }
@@ -4713,14 +4687,15 @@ impl Application for App {
         Task::none()
     }
 
-    fn context_drawer(&self) -> Option<context_drawer::ContextDrawer<Message>> {
+    fn context_drawer(&self) -> Option<context_drawer::ContextDrawer<'_, Message>> {
         if !self.core.window.show_context {
             return None;
         }
 
         Some(match &self.context_page {
-            ContextPage::About => context_drawer::context_drawer(
-                self.about(),
+            ContextPage::About => context_drawer::about(
+                &self.about,
+                Message::LaunchUrl,
                 Message::ToggleContextPage(ContextPage::About),
             ),
             ContextPage::EditHistory => context_drawer::context_drawer(
@@ -4780,7 +4755,7 @@ impl Application for App {
         })
     }
 
-    fn dialog(&self) -> Option<Element<Message>> {
+    fn dialog(&self) -> Option<Element<'_, Message>> {
         //TODO: should gallery view just be a dialog?
         let entity = self.tab_model.active();
         if let Some(tab) = self.tab_model.data::<Tab>(entity) {
@@ -4930,7 +4905,7 @@ impl Application for App {
                 widget::dialog()
                     .title("Failed operation")
                     .body(format!("{:#?}\n{}", operation, err))
-                    .icon(widget::icon::from_name("dialog-error").size(64))
+                    .icon(icon::from_name("dialog-error").size(64))
                     //TODO: retry action
                     .primary_action(
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
@@ -4939,7 +4914,7 @@ impl Application for App {
             DialogPage::ExtractPassword { id, password } => {
                 widget::dialog()
                     .title(fl!("extract-password-required"))
-                    .icon(widget::icon::from_name("dialog-error").size(64))
+                    .icon(icon::from_name("dialog-error").size(64))
                     .control(widget::text_input("", password).password().on_input(
                         move |password| {
                             Message::DialogUpdate(DialogPage::ExtractPassword { id: *id, password })
@@ -4960,7 +4935,7 @@ impl Application for App {
             } => widget::dialog()
                 .title(fl!("mount-error"))
                 .body(error)
-                .icon(widget::icon::from_name("dialog-error").size(64))
+                .icon(icon::from_name("dialog-error").size(64))
                 .primary_action(
                     widget::button::standard(fl!("try-again")).on_press(Message::DialogComplete),
                 )
@@ -5103,7 +5078,7 @@ impl Application for App {
             } => widget::dialog()
                 .title(fl!("network-drive-error"))
                 .body(error)
-                .icon(widget::icon::from_name("dialog-error").size(64))
+                .icon(icon::from_name("dialog-error").size(64))
                 .primary_action(
                     widget::button::standard(fl!("try-again")).on_press(Message::DialogComplete),
                 )
@@ -5214,7 +5189,7 @@ impl Application for App {
                         widget::mouse_area(
                             widget::button::custom(
                                 widget::row::with_children(vec![
-                                    widget::icon(app.icon.clone()).size(32).into(),
+                                    icon(app.icon.clone()).size(32).into(),
                                     if app.is_default && !displayed_default {
                                         displayed_default = true;
                                         widget::text::body(fl!(
@@ -5227,9 +5202,7 @@ impl Application for App {
                                     },
                                     widget::horizontal_space().into(),
                                     if *selected == i {
-                                        widget::icon::from_name("checkbox-checked-symbolic")
-                                            .size(16)
-                                            .into()
+                                        icon::from_name("checkbox-checked-symbolic").size(16).into()
                                     } else {
                                         widget::Space::with_width(Length::Fixed(16.0)).into()
                                     },
@@ -5471,7 +5444,7 @@ impl Application for App {
                     "favorite-path-error-description",
                     path = path.as_os_str().to_str()
                 ))
-                .icon(widget::icon::from_name("dialog-error").size(64))
+                .icon(icon::from_name("dialog-error").size(64))
                 .primary_action(
                     widget::button::destructive(fl!("remove")).on_press(Message::DialogComplete),
                 )
@@ -5482,7 +5455,7 @@ impl Application for App {
         Some(dialog.into())
     }
 
-    fn footer(&self) -> Option<Element<Message>> {
+    fn footer(&self) -> Option<Element<'_, Message>> {
         if self.progress_operations.is_empty() {
             return None;
         }
@@ -5545,29 +5518,25 @@ impl Application for App {
                 progress_bar.into(),
                 if all_paused {
                     widget::tooltip(
-                        widget::button::icon(widget::icon::from_name(
-                            "media-playback-start-symbolic",
-                        ))
-                        .on_press(Message::PendingPauseAll(false))
-                        .padding(8),
+                        widget::button::icon(icon::from_name("media-playback-start-symbolic"))
+                            .on_press(Message::PendingPauseAll(false))
+                            .padding(8),
                         widget::text::body(fl!("resume")),
                         widget::tooltip::Position::Top,
                     )
                     .into()
                 } else {
                     widget::tooltip(
-                        widget::button::icon(widget::icon::from_name(
-                            "media-playback-pause-symbolic",
-                        ))
-                        .on_press(Message::PendingPauseAll(true))
-                        .padding(8),
+                        widget::button::icon(icon::from_name("media-playback-pause-symbolic"))
+                            .on_press(Message::PendingPauseAll(true))
+                            .padding(8),
                         widget::text::body(fl!("pause")),
                         widget::tooltip::Position::Top,
                     )
                     .into()
                 },
                 widget::tooltip(
-                    widget::button::icon(widget::icon::from_name("window-close-symbolic"))
+                    widget::button::icon(icon::from_name("window-close-symbolic"))
                         .on_press(Message::PendingCancelAll)
                         .padding(8),
                     widget::text::body(fl!("cancel")),
@@ -5599,7 +5568,7 @@ impl Application for App {
         Some(container.into())
     }
 
-    fn header_start(&self) -> Vec<Element<Self::Message>> {
+    fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
         vec![menu::menu_bar(
             &self.core,
             self.tab_model.active_data::<Tab>(),
@@ -5609,14 +5578,14 @@ impl Application for App {
         )]
     }
 
-    fn header_end(&self) -> Vec<Element<Self::Message>> {
+    fn header_end(&self) -> Vec<Element<'_, Self::Message>> {
         let mut elements = Vec::with_capacity(2);
 
         if let Some(term) = self.search_get() {
             if self.core.is_condensed() {
                 elements.push(
                     //TODO: selected state is not appearing different
-                    widget::button::icon(widget::icon::from_name("system-search-symbolic"))
+                    widget::button::icon(icon::from_name("system-search-symbolic"))
                         .on_press(Message::SearchClear)
                         .padding(8)
                         .selected(true)
@@ -5634,7 +5603,7 @@ impl Application for App {
             }
         } else {
             elements.push(
-                widget::button::icon(widget::icon::from_name("system-search-symbolic"))
+                widget::button::icon(icon::from_name("system-search-symbolic"))
                     .on_press(Message::SearchActivate)
                     .padding(8)
                     .into(),
@@ -5645,7 +5614,7 @@ impl Application for App {
     }
 
     /// Creates a view after each update.
-    fn view(&self) -> Element<Self::Message> {
+    fn view(&self) -> Element<'_, Self::Message> {
         let cosmic_theme::Spacing {
             space_xxs, space_s, ..
         } = theme::active().cosmic().spacing;
@@ -5711,7 +5680,7 @@ impl Application for App {
         content
     }
 
-    fn view_window(&self, id: WindowId) -> Element<Self::Message> {
+    fn view_window(&self, id: WindowId) -> Element<'_, Self::Message> {
         let content = match self.windows.get(&id) {
             Some(WindowKind::ContextMenu(entity, id)) => {
                 match self.tab_model.data::<Tab>(*entity) {
@@ -5721,7 +5690,7 @@ impl Application for App {
                                 .map(|x| Message::TabMessage(Some(*entity), x)),
                             id.clone(),
                         )
-                        .into()
+                        .into();
                     }
                     None => widget::text("Unknown tab ID").into(),
                 }
@@ -5784,21 +5753,11 @@ impl Application for App {
             }
         };
 
-        widget::container(
-            widget::column::column()
-                .push(Element::from(
-                    widget::header_bar()
-                        .on_close(Message::CloseId(id))
-                        .on_drag(Message::DragId(id))
-                        .build(),
-                ))
-                .push(widget::scrollable(content))
-                .width(Length::Fill),
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .class(theme::Container::WindowBackground)
-        .into()
+        widget::container(widget::scrollable(content))
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .class(theme::Container::WindowBackground)
+            .into()
     }
 
     fn system_theme_update(
@@ -5977,7 +5936,9 @@ impl Application for App {
                                     if let Err(e) = futures::executor::block_on(async {
                                         output.send(Message::RescanTrash).await
                                     }) {
-                                        log::warn!("trash needs to be rescanned but sending message failed: {e:?}");
+                                        log::warn!(
+                                            "trash needs to be rescanned but sending message failed: {e:?}"
+                                        );
                                     }
                                 }
                             }
@@ -6004,9 +5965,8 @@ impl Application for App {
                                 .map(|path| [path.join("files"), path])
                                 .flatten();
                             for path in trash_paths {
-                                if let Err(e) = watcher
-                                    .watcher()
-                                    .watch(&path, notify::RecursiveMode::NonRecursive)
+                                if let Err(e) =
+                                    watcher.watch(&path, notify::RecursiveMode::NonRecursive)
                                 {
                                     log::warn!(
                                         "failed to add trash bin `{}` to watcher: {e:?}",
@@ -6062,7 +6022,9 @@ impl Application for App {
                                     if let Err(e) = futures::executor::block_on(async {
                                         output.send(Message::RescanRecents).await
                                     }) {
-                                        log::warn!("open recents tabs need to be updated but sending message failed: {e:?}");
+                                        log::warn!(
+                                            "open recents tabs need to be updated but sending message failed: {e:?}"
+                                        );
                                     }
                                 }
                             }
@@ -6074,9 +6036,8 @@ impl Application for App {
 
                     match watcher_res {
                         Ok(mut watcher) => {
-                            if let Err(e) = watcher
-                                .watcher()
-                                .watch(&recents_path, notify::RecursiveMode::NonRecursive)
+                            if let Err(e) =
+                                watcher.watch(&recents_path, notify::RecursiveMode::NonRecursive)
                             {
                                 log::warn!(
                                     "failed to add recents file `{}` to watcher: {}",
@@ -6215,7 +6176,7 @@ pub(crate) mod test_utils {
     };
 
     use log::{debug, trace};
-    use tempfile::{tempdir, TempDir};
+    use tempfile::{TempDir, tempdir};
 
     use crate::{
         config::{IconSizes, TabConfig, ThumbCfg},
@@ -6274,7 +6235,9 @@ pub(crate) mod test_utils {
         // TempDir won't leak resources as long as the destructor runs
         let root = tempdir()?;
         debug!("Root temp directory: {}", root.as_ref().display());
-        trace!("Creating {files} files and {hidden} hidden files in {dirs} temp dirs with {nested} nested temp dirs");
+        trace!(
+            "Creating {files} files and {hidden} hidden files in {dirs} temp dirs with {nested} nested temp dirs"
+        );
 
         // All paths for directories and nested directories
         let paths = (0..dirs).flat_map(|_| {
@@ -6349,11 +6312,7 @@ pub(crate) mod test_utils {
         Ok(path.read_dir()?.filter_map(|entry| {
             entry.ok().and_then(|entry| {
                 let path = entry.path();
-                if path.is_dir() {
-                    Some(path)
-                } else {
-                    None
-                }
+                if path.is_dir() { Some(path) } else { None }
             })
         }))
     }

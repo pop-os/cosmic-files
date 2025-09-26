@@ -1,11 +1,15 @@
 #TODO: more build-out, desktop actions, translations?
 [Desktop Entry]
 Name=COSMIC Files
+Name[ar]=ملفات COSMIC
 Name[zh_CN]=COSMIC 文件管理器
 Name[pl]=Pliki COSMIC
 Name[pt_BR]=Arquivos
 Name[hu]=COSMIC Fájlok
 Name[pt]=Arquivos
+Name[sk]=Súbory COSMIC
+Name[es]=Archivos COSMIC
+Name[it]=COSMIC File
 Exec=cosmic-files %U
 Terminal=false
 Type=Application
@@ -13,7 +17,10 @@ StartupNotify=true
 Icon=com.system76.CosmicFiles
 Categories=COSMIC;Utility;FileManager;
 Keywords=Folder;Manager;
+Keywords[ar]=مجلد;ملف;مدير;
 Keywords[pl]=Katalogi;Pliki;Menedżer;
 Keywords[pt]=Pastas;Gerenciador;Arquivos;Gestor;Explorer;
 Keywords[hu]=mappa;fájl;kezelő
+Keywords[sk]=Priečinok;Správca;Súbory;Manažér;Prehliadač;
+Keywords[es]=Archivos;Ficheros;Gestor;Explorador;
 MimeType=inode/directory;

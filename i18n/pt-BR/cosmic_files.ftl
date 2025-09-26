@@ -150,7 +150,8 @@ keep = Manter
 # Context Pages
 
 ## About
-git-description = Git commit {$hash} de {$date}
+repository = Repositório
+support = Suporte
 
 ## Add Network Drive
 add-network-drive = Adicionar local de rede
@@ -170,7 +171,7 @@ network-drive-schemes =
     Network File System,nfs://
     Server Message Block,smb://
     SSH File Transfer Protocol,sftp:// ou ssh://
-    WebDav,dav:// ou davs://
+    WebDAV,dav:// ou davs://
 network-drive-error = Não foi possível acessar o local de rede
 password = Senha
 remember-password = Lembrar senha
@@ -185,6 +186,7 @@ no-history = Nenhum item no histórico.
 pending = Pendente
 progress = {$percent}%
 progress-cancelled = {$percent}%, cancelado
+progress-failed = {$percent}%, com falha
 progress-paused = {$percent}%, pausado
 failed = Com falha
 complete = Concluído

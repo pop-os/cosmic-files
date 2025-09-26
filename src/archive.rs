@@ -24,9 +24,9 @@ pub const SUPPORTED_ARCHIVE_TYPES: &[&str] = &[
     "application/x-bzip2",
     #[cfg(feature = "bzip2")]
     "application/x-bzip2-compressed-tar",
-    #[cfg(feature = "xz2")]
+    #[cfg(feature = "lzma-rust2")]
     "application/x-xz",
-    #[cfg(feature = "xz2")]
+    #[cfg(feature = "lzma-rust2")]
     "application/x-xz-compressed-tar",
 ];
 
@@ -47,53 +47,58 @@ pub fn extract(
     controller: &Controller,
 ) -> Result<(), OperationError> {
     let mime = mime_for_path(path, None, false);
-    let controller = controller.clone();
     let password = password.clone();
     match mime.essence_str() {
-        "application/gzip" | "application/x-compressed-tar" => OpReader::new(path, controller)
+        "application/gzip" | "application/x-compressed-tar" => {
+            OpReader::new(path, controller.clone())
+                .map(io::BufReader::new)
+                .map(flate2::read::GzDecoder::new)
+                .map(tar::Archive::new)
+                .and_then(|mut archive| archive.unpack(new_dir))
+                .map_err(|e| OperationError::from_err(e, controller))?
+        }
+        "application/x-tar" => OpReader::new(path, controller.clone())
             .map(io::BufReader::new)
-            .map(flate2::read::GzDecoder::new)
             .map(tar::Archive::new)
-            .and_then(|mut archive| archive.unpack(&new_dir))
-            .map_err(OperationError::from_str)?,
-        "application/x-tar" => OpReader::new(path, controller)
-            .map(io::BufReader::new)
-            .map(tar::Archive::new)
-            .and_then(|mut archive| archive.unpack(&new_dir))
-            .map_err(OperationError::from_str)?,
+            .and_then(|mut archive| archive.unpack(new_dir))
+            .map_err(|e| OperationError::from_err(e, controller))?,
         "application/zip" => fs::File::open(path)
             .map(io::BufReader::new)
             .map(zip::ZipArchive::new)
-            .map_err(OperationError::from_str)?
-            .and_then(move |mut archive| zip_extract(&mut archive, &new_dir, password, controller))
+            .map_err(|e| OperationError::from_err(e, controller))?
+            .and_then(move |mut archive| {
+                zip_extract(&mut archive, new_dir, password, controller.clone())
+            })
             .map_err(|e| match e {
                 ZipError::UnsupportedArchive(ZipError::PASSWORD_REQUIRED)
-                | ZipError::InvalidPassword => OperationError {
-                    kind: OperationErrorType::PasswordRequired,
-                },
-                _ => OperationError::from_str(e),
+                | ZipError::InvalidPassword => {
+                    OperationError::from_kind(OperationErrorType::PasswordRequired, controller)
+                }
+                _ => OperationError::from_err(e, controller),
             })?,
         #[cfg(feature = "bzip2")]
         "application/x-bzip"
         | "application/x-bzip-compressed-tar"
         | "application/x-bzip2"
-        | "application/x-bzip2-compressed-tar" => OpReader::new(path, controller)
+        | "application/x-bzip2-compressed-tar" => OpReader::new(path, controller.clone())
             .map(io::BufReader::new)
             .map(bzip2::read::BzDecoder::new)
             .map(tar::Archive::new)
-            .and_then(|mut archive| archive.unpack(&new_dir))
-            .map_err(OperationError::from_str)?,
-        #[cfg(feature = "xz2")]
-        "application/x-xz" | "application/x-xz-compressed-tar" => OpReader::new(path, controller)
-            .map(io::BufReader::new)
-            .map(xz2::read::XzDecoder::new)
-            .map(tar::Archive::new)
-            .and_then(|mut archive| archive.unpack(&new_dir))
-            .map_err(OperationError::from_str)?,
-        _ => Err(OperationError::from_str(format!(
-            "unsupported mime type {:?}",
-            mime
-        )))?,
+            .and_then(|mut archive| archive.unpack(new_dir))
+            .map_err(|e| OperationError::from_err(e, controller))?,
+        #[cfg(feature = "lzma-rust2")]
+        "application/x-xz" | "application/x-xz-compressed-tar" => {
+            OpReader::new(path, controller.clone())
+                .map(io::BufReader::new)
+                .map(|reader| lzma_rust2::XzReader::new(reader, true))
+                .map(tar::Archive::new)
+                .and_then(|mut archive| archive.unpack(new_dir))
+                .map_err(|e| OperationError::from_err(e, controller))?
+        }
+        _ => Err(OperationError::from_err(
+            format!("unsupported mime type {:?}", mime),
+            controller,
+        ))?,
     }
     Ok(())
 }
@@ -135,7 +140,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
             controller
                 .check()
                 .await
-                .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+                .map_err(|s| io::Error::other(OperationError::from_state(s, &controller)))
         })?;
 
         controller.set_progress((i as f32) / total_files as f32);
@@ -143,8 +148,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
         let mut file = match &password {
             None => archive.by_index(i),
             Some(pwd) => archive.by_index_decrypt(i, pwd.as_bytes()),
-        }
-        .map_err(|e| e)?;
+        }?;
         let filepath = file
             .enclosed_name()
             .ok_or(ZipError::InvalidArchive("Invalid file path".into()))?;
@@ -206,8 +210,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
         let mut file = match &password {
             None => archive.by_index(i),
             Some(pwd) => archive.by_index_decrypt(i, pwd.as_bytes()),
-        }
-        .map_err(|e| e)?;
+        }?;
 
         // create all pending dirs
         while let Some(pending_dir) = pending_directory_creates.pop_front() {
@@ -226,7 +229,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
                 controller
                     .check()
                     .await
-                    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+                    .map_err(|s| io::Error::other(OperationError::from_state(s, &controller)))
             })?;
 
             let count = file.read(&mut buffer)?;

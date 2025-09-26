@@ -1,7 +1,7 @@
 [package]
 name = "cosmic-files-applet"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 log = "0.4"
@@ -11,4 +11,3 @@ zbus = "5"
 path = ".."
 default-features = false
 features = ["desktop", "gvfs", "wayland", "wgpu", "desktop-applet"]
-

@@ -2,8 +2,12 @@
 
 use cosmic::widget::icon;
 use mime_guess::Mime;
-use once_cell::sync::Lazy;
-use std::{collections::HashMap, fs, path::Path, sync::Mutex};
+use std::{
+    collections::HashMap,
+    fs,
+    path::Path,
+    sync::{LazyLock, Mutex},
+};
 
 pub const FALLBACK_MIME_ICON: &str = "text-x-generic";
 
@@ -48,7 +52,8 @@ impl MimeIconCache {
             .clone()
     }
 }
-static MIME_ICON_CACHE: Lazy<Mutex<MimeIconCache>> = Lazy::new(|| Mutex::new(MimeIconCache::new()));
+static MIME_ICON_CACHE: LazyLock<Mutex<MimeIconCache>> =
+    LazyLock::new(|| Mutex::new(MimeIconCache::new()));
 
 pub fn mime_for_path<P: AsRef<Path>>(
     path: P,

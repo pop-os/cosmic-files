@@ -10,7 +10,6 @@ trash = Kosz
 recents = Ubiegłe
 undo = Cofnij
 today = Dzisiaj
-
 # Desktop view options
 desktop-view-options = Opcje widoku pulpitu…
 show-on-desktop = Pokaż na Pulpicie
@@ -20,45 +19,49 @@ trash-folder-icon = Ikona kosza
 icon-size-and-spacing = Rozmiar i rozstaw ikon
 icon-size = Rozmiar ikon
 grid-spacing = Rozstaw siatki
-
 # List view
 name = Nazwa
 modified = Zmodyfikowano
 trashed-on = Wyrzucono do kosza
 size = Rozmiar
-
 # Progress footer
 details = Detale
 dismiss = Odrzuć wiadomość
-operations-running = {$running} bieżące {$running ->
-    [one] działanie
-    *[other] działania
-  } ({$percent}%)…
-operations-running-finished = {$running} bieżące {$running ->
-    [one] działanie
-    *[other] działąnia
-  } ({$percent}%), {$finished} ukończone…
+operations-running =
+    { $running } bieżące { $running ->
+        [one] działanie
+       *[other] działania
+    } ({ $percent }%)…
+operations-running-finished =
+    { $running } bieżące { $running ->
+        [one] działanie
+       *[other] działania
+    } ({ $percent }%), { $finished } ukończone…
 pause = Wstrzymaj
 resume = Wznów
 
 # Dialogs
 
+
 ## Compress Dialog
+
 create-archive = Utwórz archiwum
 
 ## Extract Dialog
+
 extract-password-required = Wymagane hasło
 extract-to = Wypakuj do…
 extract-to-title = Wypakuj do katalogu
 extract-to-prompt = Wprowadź miejsce gdzie wypakowywać.
 
 ## Empty Trash Dialog
+
 empty-trash = Opróżnij kosz
 empty-trash-warning = Czy chcesz bezpowrotnie usunąć zawartość Kosza?
 
 ## Mount Error Dialog
-mount-error = Brak dostępu do dysku
 
+mount-error = Brak dostępu do dysku
 # New File/Folder Dialog
 create-new-file = Utwórz nowy plik
 create-new-folder = Utwórz nowy katalog
@@ -67,9 +70,8 @@ folder-name = Nazwa katalogu
 file-already-exists = Plik z taką nazwą już istnieje.
 folder-already-exists = Katalog z taką nazwą już istnieje.
 name-hidden = Nazwy zaczynające się od „.” będą ukryte.
-name-invalid = Musisz zmienić nazwę na inną z „{$filename}”.
+name-invalid = Musisz zmienić nazwę na inną z „{ $filename }”.
 name-no-slashes = Nazwa nie może zawierać ukośników.
-
 # Open/Save Dialog
 cancel = Anuluj
 open = Otwórz
@@ -85,24 +87,24 @@ save = Zapisz
 save-file = Zapisz plik
 
 ## Open With Dialog
-open-with-title = Czym chcesz otworzyć „{$name}”?
-browse-store = Przeglądaj {$store}
+
+open-with-title = Czym chcesz otworzyć „{ $name }”?
+browse-store = Przeglądaj { $store }
 other-apps = Inne aplikacje
 related-apps = Pokrewne aplikacje
 
 ## Permanently delete Dialog
-selected-items =  {$items} zaznaczonych elementów
+
+selected-items = { $items } zaznaczonych elementów
 permanently-delete-question = Usuń definitywnie
 delete = Usuń
-permanently-delete-warning = Jesteś pewien, że chcesz definitywnie usunąć {$target}? Nie można tego cofnąć.
-
+permanently-delete-warning = Jesteś pewien, że chcesz definitywnie usunąć { $target }? Nie można tego cofnąć.
 # Rename Dialog
 rename-file = Zmień nazwę pliku
 rename-folder = Zmień nazwę katalogu
-
 # Replace Dialog
 replace = Zastąp
-replace-title = {$filename} już istnieje w tym miejscu.
+replace-title = „{ $filename }” już istnieje w tym miejscu.
 replace-warning = Czy chcesz by został on zastąpiony? To nadpisze jego zawartość.
 replace-warning-operation = Czy chcesz by został on zastąpiony? To nadpisze jego zawartość.
 original-file = Oryginalny plik
@@ -112,36 +114,55 @@ keep-both = Zachowaj oba
 skip = Pomiń
 
 ## Set as Executable and Launch Dialog
+
 set-executable-and-launch = Ustaw jako wykonywalny i uruchom
-set-executable-and-launch-description = Czy chcesz ustawić plik „{$name}” jako wykonywalny i uruchomić go?
+set-executable-and-launch-description = Czy chcesz ustawić plik „{ $name }” jako wykonywalny i uruchomić go?
 set-and-launch = Ustaw i uruchom
 
 ## Metadata Dialog
+
 open-with = Otwórz za pomocą
 owner = Właściciel
 group = Grupa
 other = Inni
+
 ### Mode 0
+
 none = Brak
+
 ### Mode 1 (unusual)
+
 execute-only = Tylko wykonywanie
+
 ### Mode 2 (unusual)
+
 write-only = Tylko zapis
+
 ### Mode 3 (unusual)
+
 write-execute = Zapis i wykonywanie
+
 ### Mode 4
+
 read-only = Tylko odczyt
+
 ### Mode 5
+
 read-execute = Odczyt i wykonywanie
+
 ### Mode 6
+
 read-write = Odczyt i zapis
+
 ### Mode 7
+
 read-write-execute = Odczyt, zapis i wykonywanie
 
 ## Favorite Path Error Dialog
+
 favorite-path-error = Błąd podczas otwierania katalogu
 favorite-path-error-description =
-    Nie można otworzyćUnable to open "{$path}".
+    Nie można otworzyć „{ $path }”.
     Może on nie istnieć lub możesz nie mieć uprawnień do otwierania go.
 
     Czy chcesz usunąć go z bocznego panelu?
@@ -150,10 +171,14 @@ keep = Zachowaj
 
 # Context Pages
 
+
 ## About
-git-description = Git commit {$hash} z {$date}
+
+repository = Repozytorium
+support = Wsparcie
 
 ## Add Network Drive
+
 add-network-drive = Dodaj dysk sieciowy
 connect = Połącz
 connect-anonymously = Połącz anonimowo
@@ -163,7 +188,9 @@ enter-server-address = Wprowadź adres serwera
 network-drive-description =
     Adres serwera zawiera prefiks protokołu i adres.
     Przykładowo: ssh://192.168.0.1, ftp://[2001:db8::1]
+
 ### Make sure to keep the comma which separates the columns
+
 network-drive-schemes =
     Dostępne protokoły,Prefiks
     AppleTalk,afp://
@@ -171,7 +198,7 @@ network-drive-schemes =
     Network File System,nfs://
     Server Message Block,smb://
     SSH File Transfer Protocol,sftp:// or ssh://
-    WebDav,dav:// or davs://
+    WebDAV,dav:// or davs://
 network-drive-error = Brak dostępu do dysku sieciowego
 password = Hasło
 remember-password = Zapamiętaj hasło
@@ -179,121 +206,143 @@ try-again = Spróbuj ponownie
 username = Nazwa użytkownika
 
 ## Operations
+
 cancelled = Anulowano
 edit-history = Edytuj historię
 history = Historia
 no-history = Brak pozycji w historii.
 pending = Oczekujące
-progress = {$percent}%
-progress-cancelled = {$percent}%, anulowano
-progress-paused = {$percent}%, wstrzymano
+progress = { $percent }%
+progress-cancelled = { $percent }%, anulowano
+progress-failed = { $percent }%, nieudane
+progress-paused = { $percent }%, wstrzymano
 failed = Nieudane
 complete = Ukończone
-compressing = Spakuj {$items} {$items ->
+compressing =
+    Spakuj { $items } { $items ->
         [one] element
         [few] elementy
-        *[other] elementów
-    } z „{$from}” do „{$to}” ({$progress})…
-compressed = Spakowano {$items} {$items ->
+       *[other] elementów
+    } z „{ $from }” do „{ $to }” ({ $progress })…
+compressed =
+    Spakowano { $items } { $items ->
         [one] element
         [few] elementy
-        *[other] elementów
-    } z „{$from}” do „{$to}”
+       *[other] elementów
+    } z „{ $from }” do „{ $to }”
 copy_noun = Kopiuj
-creating = Tworzy {$name} w {$parent}
-created = Stworzono {$name} w {$parent}
-copying = Kopiowanie {$items} {$items ->
+creating = Tworzy { $name } w { $parent }
+created = Stworzono { $name } w { $parent }
+copying =
+    Kopiowanie { $items } { $items ->
         [one] elementu
-        *[other] elementów
-    } z „{$from}” do „{$to}” ({$progress})…
-copied = Skopiowano {$items} {$items ->
+       *[other] elementów
+    } z „{ $from }” do „{ $to }” ({ $progress })…
+copied =
+    Skopiowano { $items } { $items ->
         [one] element
         [few] elementy
-        *[other] elementów
-    } z „{$from}” do „{$to}”
-deleting = Usuwanie {$items} {$items ->
+       *[other] elementów
+    } z „{ $from }” do „{ $to }”
+deleting =
+    Usuwanie { $items } { $items ->
         [one] elementu
-        *[other] elementów
-    } z {trash} ({$progress})...
-deleted = Usunięto {$items} {$items ->
+       *[other] elementów
+    } z { trash } ({ $progress })...
+deleted =
+    Usunięto { $items } { $items ->
         [one] element
         [few] elementy
-        *[other] elementów
-    } z {trash}
-emptying-trash = Opróżnianie {trash} ({$progress})…
-emptied-trash = Opróżniono {trash}
-extracting = Wypakowywanie {$items} {$items ->
+       *[other] elementów
+    } z { trash }
+emptying-trash = Opróżnianie { trash } ({ $progress })…
+emptied-trash = Opróżniono { trash }
+extracting =
+    Wypakowywanie { $items } { $items ->
         [one] elementu
-        *[other] elementów
-    } z „{$from}” do „{$to}” ({$progress})…
-extracted = Wypakowano {$items} {$items ->
+       *[other] elementów
+    } z „{ $from }” do „{ $to }” ({ $progress })…
+extracted =
+    Wypakowano { $items } { $items ->
         [one] element
         [few] elementy
-        *[other] elementów
-    } z „{$from}” do „{$to}”
-setting-executable-and-launching = Ustawianie "{$name}" jako wykonywalnego i uruchamianie
-set-executable-and-launched = Ustaw "{$name}" jako wykonywalny i uruchom
-setting-permissions = Ustawianie uprawnień dla "{$name}" na {$mode}
-set-permissions = Ustaw uprawnienia dla "{$name}" na {$mode}
-moving = Przenoszenie {$items} {$items ->
+       *[other] elementów
+    } z „{ $from }” do „{ $to }”
+setting-executable-and-launching = Ustawianie „{ $name }” jako wykonywalnego i uruchamianie
+set-executable-and-launched = Ustaw „{ $name }” jako wykonywalny i uruchom
+setting-permissions = Ustawianie uprawnień dla "{ $name }" na { $mode }
+set-permissions = Ustaw uprawnienia dla "{ $name }" na { $mode }
+moving =
+    Przenoszenie { $items } { $items ->
         [one] elementu
-        *[other] elementów
-    } z „{$from}” do „{$to}” ({$progress})…
-moved = Przeniesiono {$items} {$items ->
+       *[other] elementów
+    } z „{ $from }” do „{ $to }” ({ $progress })…
+moved =
+    Przeniesiono { $items } { $items ->
         [one] element
         [few] elementy
-        *[other] elementów
-    } z „{$from}” do „{$to}”
-permanently-deleting = Definitywne usuwanie "{$items}" "{$items ->
+       *[other] elementów
+    } z „{ $from }” do „{ $to }”
+permanently-deleting =
+    Definitywne usuwanie "{ $items }" "{ $items ->
         [one] elementu
-        *[other] elementów
+       *[other] elementów
     }"
-permanently-deleted = Definitywnie usunięto "{$items}" "{$items ->
+permanently-deleted =
+    Definitywnie usunięto "{ $items }" "{ $items ->
         [one] element
         [few] elementy
-        *[other] elementów
+       *[other] elementów
     }"
-removing-from-recents = Usuwanie {$items} {$items ->
+removing-from-recents =
+    Usuwanie { $items } { $items ->
         [one] elementu
-        *[other] elementów
+       *[other] elementów
     } z Ubiegłych
-removed-from-recents = Usunięto {$items} {$items ->
+removed-from-recents =
+    Usunięto { $items } { $items ->
         [one] element
         [few] elementy
-        *[other] elementów
+       *[other] elementów
     } z Ubiegłych
-renaming = Zmieniana nazwa {$from} na {$to}
-renamed = Zmieniono nazwę {$from} na {$to}
-restoring = Przywracanie {$items} {$items ->
+renaming = Zmieniana nazwa { $from } na { $to }
+renamed = Zmieniono nazwę { $from } na { $to }
+restoring =
+    Przywracanie { $items } { $items ->
         [one] elementu
-        *[other] elementów
-    } z Kosza ({$progress})…
-restored = Przywrócono {$items} {$items ->
+       *[other] elementów
+    } z Kosza ({ $progress })…
+restored =
+    Przywrócono { $items } { $items ->
         [one] element
         [few] elementy
-        *[other] elementów
+       *[other] elementów
     } z Kosza
 unknown-folder = nieznany katalog
 
 ## Open with
+
 menu-open-with = Otwórz za pomocą…
-default-app = {$name} (domyślnie)
+default-app = { $name } (domyślnie)
 
 ## Show details
+
 show-details = Pokaż szczegóły
-type = Typ: {$mime}
-items = Elementy: {$items}
-item-size = Rozmiar: {$size}
-item-created = Utworzono: {$created}
-item-modified = Zmodyfikowano: {$modified}
-item-accessed = Otwarto: {$accessed}
+type = Typ: { $mime }
+items = Elementy: { $items }
+item-size = Rozmiar: { $size }
+item-created = Utworzono: { $created }
+item-modified = Zmodyfikowano: { $modified }
+item-accessed = Otwarto: { $accessed }
 calculating = Obliczanie…
 
 ## Settings
+
 settings = Ustawienia
 single-click = Jedno kliknięcie by otwierać
 
 ### Appearance
+
 appearance = Wygląd
 theme = Motyw
 match-desktop = Dopasuj do Pulpitu
@@ -301,18 +350,18 @@ dark = Ciemny
 light = Jasny
 
 ### Type to Search
-type-to-search = Naciśnij by wyszukać…
+
+type-to-search = Zacznij pisać by wyszukać
 type-to-search-recursive = Wyszukuj w obecnym katalogu i jego podkatalogach
 type-to-search-enter-path = Wprowadź ścieżkę pliku lub katalogu
-
 # Context menu
 add-to-sidebar = Dodaj do bocznego panelu
 compress = Spakuj
 delete-permanently = Usuń definitywnie
 eject = Wysuń
 extract-here = Wypakuj
-new-file = Nowy plik
-new-folder = Nowy katalog
+new-file = Nowy plik...
+new-folder = Nowy katalog...
 open-in-terminal = Otwórz w terminalu
 move-to-trash = Przenieś do kosza
 restore-from-trash = Przywróć z kosza
@@ -324,13 +373,16 @@ sort-by-trashed = Uszereguj według czasu usunięcia
 remove-from-recents = Usuń z ubiegłych
 
 ## Desktop
+
 change-wallpaper = Zmień tapetę…
 desktop-appearance = Wygląd pulpitu…
 display-settings = Ustawienia wyświetlacza…
 
 # Menu
 
+
 ## File
+
 file = Plik
 new-tab = Nowa karta
 new-window = Nowe okno
@@ -340,6 +392,7 @@ close-tab = Zamknij kartę
 quit = Zamknij
 
 ## Edit
+
 edit = Edytuj
 cut = Wytnij
 copy = Kopiuj
@@ -347,6 +400,7 @@ paste = Wklej
 select-all = Zaznacz wszystko
 
 ## View
+
 zoom-in = Przybliż
 default-size = Domyślny rozmiar
 zoom-out = Oddal
@@ -360,6 +414,7 @@ menu-settings = Ustawienia…
 menu-about = O Plikach COSMIC…
 
 ## Sort
+
 sort = Uszereguj
 sort-a-z = A-Z
 sort-z-a = Z-A

@@ -102,7 +102,6 @@ restored = Відновлено {$items} {$items ->
         [few] обʼєкти
         *[other] обʼєктів
     } зі {trash} 
-undo = Скасувати
 unknown-folder = невідома тека
 
 ## Open with

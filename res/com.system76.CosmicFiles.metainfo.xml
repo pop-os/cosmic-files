@@ -9,21 +9,32 @@
   <url type="homepage">https://github.com/pop-os/cosmic-files</url>
   <url type="bugtracker">https://github.com/pop-os/cosmic-files</url>
   <name>COSMIC Files</name>
+  <name xml:lang="ar">ملفات COSMIC</name>
   <name xml:lang="pl">Pliki COSMIC</name>
   <name xml:lang="hu">COSMIC Fájlok</name>
   <name xml:lang="pt_BR">Arquivos</name>
   <name xml:lang="pt">Arquivos</name>
+  <name xml:lang="sk">Súbory COSMIC</name>
+  <name xml:lang="es">Archivos COSMIC</name>
+  <name xml:lang="it">COSMIC File</name>
   <summary>File manager for the COSMIC desktop</summary>
+  <summary xml:lang="ar">مدير ملفات لسطح مكتب COSMIC</summary>
   <summary xml:lang="pl">Menedżer plików pulpitu COSMIC</summary>
   <summary xml:lang="hu">Fájlkezelő a COSMIC asztali környezethez</summary>
   <summary xml:lang="pt_BR">Gerenciador de arquivos do COSMIC</summary>
   <summary xml:lang="pt">Gerenciador de arquivos do COSMIC</summary>
+  <summary xml:lang="sk">Správca súborov pre prostredie COSMIC</summary>
+  <summary xml:lang="es">Gestor de archivos de COSMIC</summary>
+  <summary xml:lang="it">File manager di COSMIC</summary>
   <description>
     <p>File manager for the COSMIC desktop</p>
+    <p xml:lang="ar">مدير ملفات لسطح مكتب COSMIC</p>
     <p xml:lang="pl">Menedżer plików pulpitu COSMIC</p>
     <p xml:lang="hu">Fájlkezelő a COSMIC asztali környezethez</p>
     <p xml:lang="pt_BR">Gerenciador de arquivos do COSMIC</p>
     <p xml:lang="pt">Gerenciador de arquivos do COSMIC</p>
+    <p xml:lang="sk">Správca súborov pre prostredie COSMIC</p>
+    <p xml:lang="es">Gestor de archivos de COSMIC</p>
   </description>
   <launchable type="desktop-id">com.system76.CosmicFiles.desktop</launchable>
   <icon type="remote" height="256" width="256">https://raw.githubusercontent.com/pop-os/cosmic-files/master/res/icons/hicolor/256x256/apps/com.system76.CosmicFiles.svg</icon>

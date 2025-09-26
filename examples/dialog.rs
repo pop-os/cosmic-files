@@ -1,8 +1,9 @@
 use cosmic::{
+    Application, Element,
     app::{self, Core, Settings, Task},
     executor,
-    iced::{window, Subscription},
-    widget, Application, Element,
+    iced::{Subscription, window},
+    widget,
 };
 use cosmic_files::dialog::{
     Dialog, DialogChoice, DialogChoiceOption, DialogFilter, DialogFilterPattern, DialogKind,
@@ -113,14 +114,14 @@ impl Application for App {
         Task::none()
     }
 
-    fn view_window(&self, window_id: window::Id) -> Element<Message> {
+    fn view_window(&self, window_id: window::Id) -> Element<'_, Message> {
         match &self.dialog_opt {
             Some(dialog) => dialog.view(window_id),
             None => widget::text::body("No dialog").into(),
         }
     }
 
-    fn view(&self) -> Element<Message> {
+    fn view(&self) -> Element<'_, Message> {
         let mut column = widget::column().spacing(8).padding(8);
         {
             let mut button = widget::button::standard("Open File");

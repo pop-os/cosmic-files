@@ -1,11 +1,10 @@
-use crate::fl;
-
 use std::sync::{Arc, Mutex};
 use tokio::sync::Notify;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ControllerState {
     Cancelled,
+    Failed,
     Paused,
     Running,
 }
@@ -37,10 +36,11 @@ impl Default for Controller {
 }
 
 impl Controller {
-    pub async fn check(&self) -> Result<(), String> {
+    pub async fn check(&self) -> Result<(), ControllerState> {
         loop {
             match self.state() {
-                ControllerState::Cancelled => return Err(fl!("cancelled")),
+                ControllerState::Cancelled => return Err(ControllerState::Cancelled),
+                ControllerState::Failed => return Err(ControllerState::Failed),
                 ControllerState::Paused => (),
                 ControllerState::Running => return Ok(()),
             }
@@ -74,6 +74,10 @@ impl Controller {
         self.set_state(ControllerState::Cancelled);
     }
 
+    pub fn is_failed(&self) -> bool {
+        matches!(self.state(), ControllerState::Failed)
+    }
+
     pub fn is_paused(&self) -> bool {
         matches!(self.state(), ControllerState::Paused)
     }
@@ -83,7 +87,7 @@ impl Controller {
     }
 
     pub fn unpause(&self) {
-        if !self.is_cancelled() {
+        if !self.is_cancelled() | !self.is_failed() {
             self.set_state(ControllerState::Running);
         }
     }
@@ -100,8 +104,8 @@ impl Clone for Controller {
 
 impl Drop for Controller {
     fn drop(&mut self) {
-        // Cancel operations if primary controller is dropped
-        if self.primary {
+        // Cancel operations if primary controller is dropped and controller is still running
+        if self.primary && self.state() != ControllerState::Failed {
             self.cancel();
         }
     }

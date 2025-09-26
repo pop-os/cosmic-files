@@ -124,7 +124,6 @@ renaming = {$from}を{$to}に変更中
 renamed = {$from}を{$to}に変更完了
 restoring = {trash}から{$items}つのアイテムをもとに戻している
 restored = {trash}から{$items}つのアイテムをもとに戻した
-undo = 元に戻す
 unknown-folder = 不明なフォルダー
 
 ## Open with

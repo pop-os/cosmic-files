@@ -30,11 +30,11 @@ size = Size
 # Progress footer
 details = Details
 dismiss = Dismiss message
-operations-running = {$running} {$running -> 
+operations-running = {$running} {$running ->
     [one] operation
-    *[other] operations 
+    *[other] operations
   } running ({$percent}%)...
-operations-running-finished = {$running} {$running -> 
+operations-running-finished = {$running} {$running ->
     [one] operation
     *[other] operations
   } running ({$percent}%), {$finished} finished...
@@ -142,7 +142,7 @@ favorite-path-error = Error opening directory
 favorite-path-error-description =
     Unable to open "{$path}".
     It may not exist or you don't have permission to open it.
-    
+
     Would you like to remove it from the sidebar?
 remove = Remove
 keep = Keep
@@ -150,7 +150,8 @@ keep = Keep
 # Context Pages
 
 ## About
-git-description = Git commit {$hash} on {$date}
+repository = Repository
+support = Support
 
 ## Add Network Drive
 add-network-drive = Add network drive
@@ -185,6 +186,7 @@ no-history = No items in history.
 pending = Pending
 progress = {$percent}%
 progress-cancelled = {$percent}%, cancelled
+progress-failed = {$percent}%, failed
 progress-paused = {$percent}%, paused
 failed = Failed
 complete = Complete
