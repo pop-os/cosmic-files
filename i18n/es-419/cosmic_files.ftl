@@ -44,9 +44,9 @@ file-name = Nombre de archivo
 folder-name = Nombre de carpeta
 file-already-exists = Ya existe un archivo con ese nombre.
 folder-already-exists = Ya existe una carpeta con ese nombre.
-name-hidden = Los nombres que comienzan con «.» estarán ocultos.
-name-invalid = El nombre no puede ser «{ $filename }».
-name-no-slashes = El nombre no puede contener barras («/»).
+name-hidden = Los nombres que comiencen con "." se ocultarán.
+name-invalid = El nombre no puede ser "{ $filename }".
+name-no-slashes = El nombre no puede contener barras.
 
 ## Open/Save Dialog
 
@@ -65,18 +65,18 @@ save-file = Guardar archivo
 
 ## Open With Dialog
 
-open-with-title = ¿Cómo deseas abrir «{ $name }»?
+open-with-title = ¿Cómo deseas abrir "{ $name }"?
 browse-store = Explorar { $store }
 
 ## Rename Dialog
 
-rename-file = Renombrar archivo
-rename-folder = Renombrar carpeta
+rename-file = Cambiar el nombre del archivo
+rename-folder = Cambiar el nombre de la carpeta
 
 ## Replace Dialog
 
 replace = Reemplazar
-replace-title = «{ $filename }» ya existe en esta ubicación.
+replace-title = "{ $filename }" ya existe en esta ubicación.
 replace-warning = ¿Quieres reemplazarlo con el que estás guardando? Reemplazarlo sobrescribirá su contenido.
 replace-warning-operation = ¿Quieres reemplazarlo? Reemplazarlo sobrescribirá su contenido.
 original-file = Archivo original
@@ -88,7 +88,7 @@ skip = Saltar
 ## Set as Executable and Launch Dialog
 
 set-executable-and-launch = Establecer como ejecutable y ejecutar
-set-executable-and-launch-description = ¿Deseas establecer «{ $name }» como ejecutable y ejecutar?
+set-executable-and-launch-description = ¿Deseas establecer "{ $name }" como ejecutable y abrirlo?
 set-and-launch = Establecer y ejecutar
 
 ## Metadata Dialog
@@ -141,13 +141,13 @@ edit-history = Historial de ediciones
 history = Historial
 no-history = No hay elementos en el historial.
 pending = Pendientes
-failed = Falladas
+failed = Con error
 complete = Completadas
 compressing =
     Comprimiendo { $items } { $items ->
         [one] elemento
        *[other] elementos
-    } de { $from } a { $to }
+    } de "{ $from }" a "{ $to }" ({ $progress })...
 compressed =
     Comprimido { $items } { $items ->
         [one] elemento
@@ -160,43 +160,43 @@ copying =
     Copiando { $items } { $items ->
         [one] elemento
        *[other] elementos
-    } desde { $from } a { $to }
+    } desde "{ $from }" a "{ $to }" ({ $progress })...
 copied =
     Se han copiado { $items } { $items ->
         [one] elemento
        *[other] elementos
     } desde { $from } a { $to }
-emptying-trash = Vaciando { trash }
+emptying-trash = Vaciando { trash } ({ $progress })...
 emptied-trash = Se ha vaciado la { trash }
 extracting =
     Extrayendo { $items } { $items ->
         [one] elemento
        *[other] elementos
-    } de { $from } a { $to }
+    } de "{ $from }" a "{ $to }" ({ $progress })...
 extracted =
     Extraído { $items } { $items ->
         [one] elemento
        *[other] elementos
     } de { $from } a { $to }
-setting-executable-and-launching = Estableciendo «{ $name }» como ejecutable y lanzando
-set-executable-and-launched = Se ha establecido «{ $name }» como ejecutable y lanzado
+setting-executable-and-launching = Estableciendo "{ $name }" como ejecutable y abriendo
+set-executable-and-launched = Se ha establecido "{ $name }" como ejecutable y se ha abierto
 moving =
     Moviendo { $items } { $items ->
         [one] elemento
        *[other] elementos
-    } desde { $from } a { $to }
+    } desde "{ $from }" a "{ $to }" ({ $progress })...
 moved =
     Se han movido { $items } { $items ->
         [one] elemento
        *[other] elementos
     } desde { $from } a { $to }
-renaming = Renombrando { $from } a { $to }
-renamed = Se ha renombrado { $from } a { $to }
+renaming = Cambiando el nombre de "{ $from }" a "{ $to }"
+renamed = Se ha cambiado el nombre de "{ $from }" a "{ $to }"
 restoring =
     Restaurando { $items } { $items ->
         [one] elemento
        *[other] elementos
-    } from { trash }
+    } de la { trash } ({ $progress })...
 restored =
     Se ha restaurado { $items } { $items ->
         [one] elemento
@@ -206,7 +206,7 @@ unknown-folder = carpeta desconocida
 
 ## Open with
 
-menu-open-with = Abrir con
+menu-open-with = Abrir con...
 default-app = { $name } (predeterminado)
 
 ## Show details
@@ -228,8 +228,8 @@ light = Claro
 add-to-sidebar = Añadir a la barra lateral
 compress = Comprimir
 extract-here = Extraer aquí
-new-file = Nuevo archivo
-new-folder = Nueva carpeta
+new-file = Archivo nuevo...
+new-folder = Carpeta nueva...
 open-in-terminal = Abrir en una terminal
 move-to-trash = Mover a la papelera
 restore-from-trash = Restaurar desde la papelera
@@ -253,7 +253,7 @@ display-settings = Configuración de pantalla...
 file = Archivo
 new-tab = Nueva pestaña
 new-window = Nueva ventana
-rename = Renombrar
+rename = Cambiar nombre...
 close-tab = Cerrar pestaña
 quit = Salir
 
@@ -292,7 +292,7 @@ repository = Repositorio
 support = Apoyo
 details = Detalles
 dismiss = Descartar mensaje
-remove = Quitar
+remove = Eliminar
 cancelled = Canceladas
 grid-spacing = Espaciado de cuadrícula
 operations-running =
@@ -311,3 +311,76 @@ extract-password-required = Contraseña requerida
 extract-to = Extraer en...
 extract-to-title = Extraer a una carpeta
 mount-error = No se puede acceder a la unidad
+other-apps = Otras aplicaciones
+related-apps = Aplicaciones relacionadas
+selected-items = los { $items } archivos seleccionados
+permanently-delete-question = Eliminar de forma permanente
+delete = Eliminar
+permanently-delete-warning = ¿Estás seguro de que quieres eliminar { $target } de forma permanente? Esta acción no se puede deshacer.
+open-with = Abrir con
+none = Ninguno
+execute-only = Solo ejecución
+write-only = Solo escritura
+write-execute = Escritura y ejecución
+read-only = Solo lectura
+read-execute = Lectura y ejecución
+read-write = Lectura y escritura
+read-write-execute = Lectura, escritura y ejecución
+favorite-path-error = Error al abrir el directorio
+favorite-path-error-description =
+    No se puede abrir "{ $path }".
+    Puede que no exista o que no tengas permiso a abrirlo.
+
+    ¿Quieres eliminarlo de la barra lateral?
+keep = Reservar
+progress = { $percent } %
+progress-cancelled = { $percent } %, cancelado
+progress-failed = { $percent } %, con errores
+progress-paused = { $percent } %, pausado
+setting-permissions = Estableciendo permisos de "{ $name }" como { $mode }
+set-permissions = Establecer permisos de "{ $name }" como { $mode }
+permanently-deleting =
+    Eliminando { $items } { $items ->
+        [one] elemento
+       *[other] elementos
+    } de forma permanente
+deleting =
+    Eliminando { $items } { $items ->
+        [one] elemento
+       *[other] elementos
+    } de la { trash } ({ $progress })...
+deleted =
+    { $items } { $items ->
+        [one] elemento
+       *[other] elementos
+    } de la { trash } eliminados
+permanently-deleted =
+    { $items } { $items ->
+        [one] elemento
+       *[other] elementos
+    } eliminados de forma permanente
+removing-from-recents =
+    Quitando { $items } { $items ->
+        [one] elemento
+       *[other] elementos
+    } de { recents }
+removed-from-recents =
+    { $items } { $items ->
+        [one] elemento
+       *[other] elementos
+    } quitados de { recents }
+reload-folder = Recargar la carpeta
+remove-from-recents = Quitar de recientes
+calculating = Calculando...
+type = Tipo: { $mime }
+items = Elementos: { $items }
+item-size = Tamaños: { $size }
+item-created = Creado: { $created }
+item-modified = Modificado: { $modified }
+item-accessed = Accedido: { $accessed }
+single-click = Abrir con un solo clic
+type-to-search = Escribir para buscar
+type-to-search-recursive = Buscar en la carpeta actual y todas las subcarpetas
+type-to-search-enter-path = Introducir la ruta al directorio o archivo
+delete-permanently = Eliminar de forma permanente
+eject = Expulsar
