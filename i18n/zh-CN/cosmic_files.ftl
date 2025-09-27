@@ -64,7 +64,7 @@ file-already-exists = 已存在同名文件。
 folder-already-exists = 已存在同名文件夹。
 name-hidden = 以 “.” 开头的文件将被隐藏。
 name-invalid = 名称不可以为 “{ $filename }”。
-name-no-slashes = 名称不可以包含 “/”。
+name-no-slashes = 名称不可以包含斜线。
 
 ## Open/Save Dialog
 
