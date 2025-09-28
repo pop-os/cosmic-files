@@ -72,7 +72,7 @@ git-description = Git commit { $hash } за { $date }
 
 edit-history = Редагувати історію
 history = Історія
-no-history = Відсутні обʼєкти в історії.
+no-history = В історії нічого не знайдено.
 pending = Очікують
 failed = Невдалі
 complete = Завершені
@@ -83,14 +83,12 @@ copying =
     Копіювання { $items } { $items ->
         [one] обʼєкта
        *[other] обʼєктів
-    } з { $from } до "{ $to }" ({ $progress })...
+    } з "{ $from }" до "{ $to }" ({ $progress })...
 copied =
-    Скопійовано { $items } { $items ->
-        [one] обʼєкт
-        [few] обʼєкти
-        [many] об'єктів
+    Завершено копіювання { $items } { $items ->
+        [one] обʼєкту
        *[other] обʼєктів
-    } з { $from } до { $to }
+    } з "{ $from }" до "{ $to }"
 emptying-trash = Спорожнення { trash } ({ $progress })...
 emptied-trash = Спорожнено { trash }
 moving =
@@ -99,10 +97,8 @@ moving =
        *[other] обʼєктів
     } з { $from } до "{ $to }" ({ $progress })...
 moved =
-    Переміщено { $items } { $items ->
-        [one] обʼєкт
-        [few] обʼєкти
-        [many] об'єктів
+    Завершено переміщення { $items } { $items ->
+        [one] обʼєкту
        *[other] обʼєктів
     } з "{ $from }" до "{ $to }"
 renaming = Перейменування { $from } на { $to }
@@ -113,10 +109,8 @@ restoring =
        *[other] обʼєктів
     } зі { trash } ({ $progress })...
 restored =
-    Відновлено { $items } { $items ->
-        [one] обʼєкт
-        [few] обʼєкти
-        [many] об'єктів
+    Завершено відновлення { $items } { $items ->
+        [one] обʼєкту
        *[other] обʼєктів
     } зі { trash }
 unknown-folder = невідома тека
@@ -176,7 +170,7 @@ select-all = Вибрати все
 ## View
 
 zoom-in = Збільшити шрифт
-default-size = Стандартний розмір
+default-size = Типовий розмір
 zoom-out = Зменшити шрифт
 view = Перегляд
 grid-view = Перегляд ґраткою
@@ -195,31 +189,31 @@ no-results = Нічого не знайдено
 networks = Мережа
 notification-in-progress = Виконуються операції з файлами.
 today = Сьогодні
-desktop-view-options = Параметри іконок стільниці...
+desktop-view-options = Параметри піктограм стільниці...
 show-on-desktop = Показувати на стільниці
 desktop-folder-content = Вміст теки Стільниця
 mounted-drives = Змонтовані диски
-trash-folder-icon = Іконку теки Смітник
-icon-size-and-spacing = Розмір іконок та відстань між ними
-icon-size = Розмір іконок
-grid-spacing = Відстань між іконками
+trash-folder-icon = Піктограму теки Смітник
+icon-size-and-spacing = Розмір піктограм та відстань між ними
+icon-size = Розмір піктограм
+grid-spacing = Відстань між піктограмами
 trashed-on = В смітнику
 operations-running =
-    { $running } { $running ->
+    Виконується { $running } { $running ->
         [zero] операцій
         [one] операція
         [few] операції
         [many] операцій
        *[other] операцій
-    } запущено ({ $percent }%)...
+    } ({ $percent }%)...
 operations-running-finished =
-    { $running } { $running ->
+    Виконується { $running } { $running ->
         [zero] операцій
         [one] операція
         [few] операції
         [many] операцій
        *[other] операцій
-    } запущено ({ $percent }%), з них { $finished } виконано...
+    } ({ $percent }%), з них { $finished } вже виконано...
 pause = Пауза
 resume = Відновити
 create-archive = Створити архів
@@ -290,10 +284,8 @@ compressing =
        *[other] об'єктів
     } з "{ $from }" у "{ $to }" ({ $progress })...
 compressed =
-    Стиснено { $items } { $items ->
-        [one] об'єкт
-        [few] об'єкти
-        [many] об'єктів
+    Завершено стиснення { $items } { $items ->
+        [one] об'єкту
        *[other] об'єктів
     } з "{ $from }" у "{ $to }"
 deleting =
@@ -302,10 +294,8 @@ deleting =
        *[other] об'єктів
     } з { trash } ({ $progress })...
 deleted =
-    Видалено { $items } { $items ->
-        [one] об'єкт
-        [few] об'єкти
-        [many] об'єктів
+    Завершено видалення { $items } { $items ->
+        [one] об'єкту
        *[other] об'єктів
     } з { trash }
 extracting =
@@ -314,10 +304,8 @@ extracting =
        *[other] об'єктів
     } з "{ $from }" у "{ $to }" ({ $progress })...
 extracted =
-    Видобуто { $items } { $items ->
-        [one] об'єкт
-        [few] об'єкти
-        [many] об'єктів
+    Завершено видобування { $items } { $items ->
+        [one] об'єкту
        *[other] об'єктів
     } з "{ $from }" у "{ $to }"
 setting-executable-and-launching = Надання дозволу на виконання "{ $name }" та запуск
@@ -356,26 +344,22 @@ sort-oldest-first = Спочатку найстаріші
 sort-smallest-to-largest = Від найменшого до найбільшого
 sort-largest-to-smallest = Від найбільшого до найменшого
 permanently-deleting =
-    Видалення { $items } { $items ->
+    Остаточне видалення { $items } { $items ->
         [one] об'єкта
        *[other] об'єктів
-    } назавжди
+    }
 permanently-deleted =
-    Видалено { $items } { $items ->
-        [one] об'єкт
-        [few] об'єкта
-        [many] об'єктів
+    Завершено остаточне видалення { $items } { $items ->
+        [one] об'єкту
        *[other] об'єктів
-    } назавжди
+    }
 removing-from-recents =
     Видалення { $items } { $items ->
         [one] об'єкта
        *[other] об'єктів
     } з { recents }
 removed-from-recents =
-    Видалено { $items } { $items ->
-        [one] об'єкт
-        [few] об'єкта
-        [many] об'єктів
+    Завершено видалення { $items } { $items ->
+        [one] об'єкту
        *[other] об'єктів
     } з { recents }

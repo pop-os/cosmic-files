@@ -1,6 +1,6 @@
 cosmic-files = Файлы COSMIC
-empty-folder = Пустая папка
-empty-folder-hidden = Пустая папка (со скрытыми элементами)
+empty-folder = Папка пуста
+empty-folder-hidden = Папка пуста (есть скрытые элементы)
 no-results = Ничего не найдено
 filesystem = Файловая система
 home = Домашняя папка
@@ -34,9 +34,9 @@ file-name = Имя файла
 folder-name = Имя папки
 file-already-exists = Файл с таким именем уже существует.
 folder-already-exists = Папка с таким именем уже существует.
-name-hidden = Имена начинающиеся на "." будут скрыты.
-name-invalid = Невозможно дать имя "{ $filename }".
-name-no-slashes = Имя не должно содержать "/".
+name-hidden = Имена, начинающиеся на «.», будут скрыты.
+name-invalid = Имя не может быть «{ $filename }».
+name-no-slashes = Имя не должно содержать «/».
 # Open/Save Dialog
 cancel = Отменить
 open = Открыть
@@ -55,7 +55,7 @@ rename-folder = Переименовать папку
 # Replace Dialog
 replace = Заменить
 replace-title = { $filename } уже существует в данном каталоге.
-replace-warning = Действительно ли Вы хотите заменить файл на тот, что Вы сохраняете? Замена перезапишет все данные файла.
+replace-warning = Вы хотите заменить этот файл на тот, что сохраняете? Замена перезапишет все данные файла.
 replace-warning-operation = Хотите заменить? Замена приведёт к перезаписи содержимого.
 original-file = Оригинальный файл
 replace-with = Заменить на
@@ -84,7 +84,7 @@ git-description = Git коммит { $hash } от { $date }
 add-network-drive = Добавить сетевой диск
 connect = Подключиться
 connect-anonymously = Подключиться анонимно
-connecting = Подключение...
+connecting = Подключение…
 domain = Домен
 enter-server-address = Введите адрес сервера
 network-drive-description =
@@ -96,15 +96,15 @@ network-drive-description =
 network-drive-schemes =
     Доступные протоколы,Префикс
     AppleTalk,afp://
-    File Transfer Protocol,ftp:// or ftps://
+    File Transfer Protocol,ftp:// или ftps://
     Network File System,nfs://
     Server Message Block,smb://
-    SSH File Transfer Protocol,sftp:// or ssh://
-    WebDav,dav:// or davs://
+    SSH File Transfer Protocol,sftp:// или ssh://
+    WebDav,dav:// или davs://
 network-drive-error = Невозможно получить доступ к сетевому диску
 password = Пароль
 remember-password = Запомнить пароль
-try-again = Попробовать еще раз
+try-again = Попробовать ещё раз
 username = Имя пользователя
 
 ## Operations
@@ -119,65 +119,65 @@ complete = Завершена
 compressing =
     Сжатие { $items } { $items ->
         [one] элемента
-       *[other] элементов
-    } из { $from } в { $to }
+       *[other] элем.
+    } из «{ $from }» в «{ $to }» ({ $progress })…
 compressed =
-    Сжат { $items } { $items ->
+    Сжато { $items } { $items ->
         [one] элемент
-       *[other] элементы
-    } из { $from } в { $to }
+       *[other] элем.
+    } из «{ $from }» в «{ $to }»
 copy_noun = Копирование
 creating = Создание { $name } в { $parent }
 created = Создан { $name } в { $parent }
 copying =
     Копирование { $items } { $items ->
-        [one] элемент
-       *[other] элементов
-    } из { $from } в { $to }
+        [one] элемента
+       *[other] элем.
+    } из «{ $from }» в «{ $to }» ({ $progress })…
 copied =
     Скопировано { $items } { $items ->
         [one] элемент
-       *[other] элементов
-    } из { $from } в { $to }
-emptying-trash = Очистка { trash }
-emptied-trash = Очищена { trash }
+       *[other] элем.
+    } из «{ $from }» в «{ $to }»
+emptying-trash = Очистка { trash } ({ $progress })…
+emptied-trash = { trash } очищена
 extracting =
     Извлечение { $items } { $items ->
         [one] элемента
-       *[other] элементов
-    } из { $from } в { $to }
+       *[other] элем.
+    } из «{ $from }» в «{ $to }» ({ $progress })…
 extracted =
     Извлечено { $items } { $items ->
         [one] элемент
-       *[other] элементы
-    } из { $from } в { $to }
+       *[other] элем.
+    } из «{ $from }» в «{ $to }»
 moving =
     Перемещение { $items } { $items ->
         [one] элемента
-       *[other] элементов
-    } из { $from } в { $to }
+       *[other] элем.
+    } из «{ $from }» в «{ $to }» ({ $progress })…
 moved =
     Перемещено { $items } { $items ->
         [one] элемент
-       *[other] элементы
-    } из { $from } в { $to }
-renaming = Переименование { $from } в { $to }
-renamed = Переименован { $from } в { $to }
+       *[other] элем.
+    } из «{ $from }» в «{ $to }»
+renaming = Переименование «{ $from }» в «{ $to }»
+renamed = «{ $from }» переименован в «{ $to }»
 restoring =
     Восстановление { $items } { $items ->
         [one] элемента
-       *[other] элементов
-    } из { trash }
+       *[other] элем.
+    } из { trash } ({ $progress })…
 restored =
     Восстановлено { $items } { $items ->
         [one] элемент
-       *[other] элементов
+       *[other] элем.
     } из { trash }
 unknown-folder = неизвестная папка
 
 ## Open with
 
-menu-open-with = Открыть с помощью
+menu-open-with = Открыть с помощью…
 default-app = { $name } (по умолчанию)
 
 ## Show details
@@ -202,13 +202,13 @@ light = Светлая
 # Context menu
 add-to-sidebar = Добавить на боковую панель
 compress = Сжать
-extract-here = Извлечь
-new-file = Новый файл
-new-folder = Новая папка
+extract-here = Распаковать
+new-file = Новый файл…
+new-folder = Новая папка…
 open-in-terminal = Открыть в терминале
 move-to-trash = Переместить в корзину
 restore-from-trash = Восстановить из корзины
-remove-from-sidebar = Убрать из боковой панели
+remove-from-sidebar = Убрать с боковой панели
 sort-by-name = Разместить по имени
 sort-by-modified = Разместить по дате изменения
 sort-by-size = Разместить по размеру
@@ -222,7 +222,7 @@ sort-by-trashed = Разместить по дате удаления
 file = Файл
 new-tab = Новая вкладка
 new-window = Новое окно
-rename = Переименовать
+rename = Переименовать…
 menu-show-details = Показать подробности
 close-tab = Закрыть вкладку
 quit = Выйти
@@ -255,11 +255,120 @@ sort-a-z = По алфавиту (от А до Я)
 sort-z-a = По алфавиту (от Я до А)
 sort-newest-first = Сначала новые
 sort-oldest-first = Сначала старые
-sort-smallest-to-largest = От наименьшего к большему
+sort-smallest-to-largest = От меньшего к большему
 sort-largest-to-smallest = От большего к меньшему
 support = Поддержка
 repository = Репозиторий
 cancelled = Отменена
 details = Сведения
 dismiss = Скрыть сообщение
-remove = Удалить
+remove = Убрать
+desktop-view-options = Параметры рабочего слова…
+show-on-desktop = Показывать на рабочем столе
+desktop-folder-content = Содержимое папки рабочего стола
+mounted-drives = Подключённые диски
+trash-folder-icon = Значок папки корзины
+icon-size-and-spacing = Размер и отступы значков
+icon-size = Размер значка
+grid-spacing = Отступ по сетке
+pause = Приостановить
+resume = Продолжить
+extract-password-required = Требуется пароль
+extract-to = Распаковать в…
+extract-to-title = Распаковать в папку
+mount-error = Не удалось получить доступ к диску
+create = Создать
+open-with-title = Как вы хотите открыть «{ $name }»?
+browse-store = Искать в { $store }
+other-apps = Другие приложения
+related-apps = Связанные приложения
+selected-items = { $items } выделенных элем.
+permanently-delete-question = Навсегда удалить
+delete = Удалить
+permanently-delete-warning = Вы уверены, что хотите навсегда удалить { $target }? Это действие необратимо.
+set-executable-and-launch = Сделать исполняемым и запустить
+set-executable-and-launch-description = Вы хотите сделать «{ $name }» исполняемым и запустить его?
+set-and-launch = Сделать и запустить
+open-with = Открывать в
+none = Нет прав
+execute-only = Только исполнение
+write-only = Только запись
+write-execute = Запись и исполнение
+read-only = Только чтение
+read-execute = Чтение и исполнение
+read-write = Чтение и запись
+read-write-execute = Чтение, запись, исполнение
+favorite-path-error = Не удалось открыть каталог
+favorite-path-error-description =
+    Не удалось открыть «{ $path }».
+    Возможно, он не существует, либо у вас нет прав на его открытие.
+
+    Хотите убрать его с боковой панели?
+keep = Оставить
+progress = { $percent } %
+progress-cancelled = { $percent } %, отменена
+progress-failed = { $percent } %, не удалась
+progress-paused = { $percent } %, приостановлена
+setting-executable-and-launching = Установка «{ $name }» исполняемым и запуск
+set-executable-and-launched = «{ $name }» сделан исполнямым и запущен
+setting-permissions = Изменение прав доступа «{ $name }» на { $mode }
+set-permissions = Права доступа «{ $name }» изменены на { $mode }
+type = Тип: { $mime }
+items = Элементов: { $items }
+item-size = Размер: { $size }
+item-created = Дата создания: { $created }
+item-modified = Дата изменения: { $modified }
+item-accessed = Дата доступа: { $accessed }
+calculating = Вычисление…
+single-click = Открывать одним нажатием
+type-to-search = Введите для поиска
+type-to-search-recursive = Поиск по текущей папке и всем подпапкам
+type-to-search-enter-path = Введите путь до каталога или файла
+delete-permanently = Удалить навсегда
+eject = Извлечь
+remove-from-recents = Убрать из недавнего
+change-wallpaper = Изменить обои…
+desktop-appearance = Параметры оформления…
+display-settings = Настройки дисплея…
+reload-folder = Обновить папку
+gallery-preview = Галерея предпросмотра
+operations-running =
+    { $running } { $running ->
+        [one] операция
+       *[other] опер.
+    } выполняется ({ $percent } %)…
+operations-running-finished =
+    { $running } { $running ->
+        [one] операция
+       *[other] опер.
+    } выполняется ({ $percent } %), { $finished } завершено…
+deleting =
+    Удаление { $items } { $items ->
+        [one] элемента
+       *[other] элем.
+    } из { trash } ({ $progress })…
+deleted =
+    Удалено { $items } { $items ->
+        [one] элемент
+       *[other] элем.
+    } из { trash }
+permanently-deleting =
+    Удаление навсегда { $items } { $items ->
+        [one] элемента
+       *[other] элем.
+    }
+permanently-deleted =
+    Удалено навсегда { $items } { $items ->
+        [one] эелмент
+       *[other] элем.
+    }
+removing-from-recents =
+    Убирание { $items } { $items ->
+        [one] элемента
+       *[other] элем.
+    } из { recents }
+removed-from-recents =
+    Убрано { $items } { $items ->
+        [one] элемент
+       *[other] элем.
+    } из { recents }
