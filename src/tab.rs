@@ -2060,7 +2060,7 @@ impl Item {
                 widget::image(handle.clone()).into()
             }
             ItemThumbnail::Svg(handle) => widget::svg(handle.clone()).into(),
-            ItemThumbnail::Text(content) => widget::text_editor(&content)
+            ItemThumbnail::Text(content) => widget::text_editor(content)
                 .class(cosmic::theme::iced::TextEditor::Custom(Box::new(
                     text_editor_class,
                 )))
@@ -5604,7 +5604,7 @@ impl Tab {
 
     pub fn subscription(&self, preview: bool) -> Subscription<Message> {
         //TODO: how many thumbnail loads should be in flight at once?
-        let jobs = self.thumb_config.jobs.get().clone() as usize;
+        let jobs = self.thumb_config.jobs.get() as usize;
         let mut subscriptions = Vec::with_capacity(jobs + 3);
 
         if let Some(items) = &self.items_opt {
@@ -5619,7 +5619,7 @@ impl Tab {
             };
 
             for item in items.iter() {
-                if item.thumbnail_opt.is_some() {
+                if item.thumbnail_opt.is_some() || !self.thumb_config.enabled {
                     // Skip items that already have a mime type and thumbnail
                     continue;
                 }
@@ -5650,9 +5650,9 @@ impl Tab {
                 };
                 if can_thumbnail {
                     let mime = item.mime.clone();
-                    let max_jobs = jobs.clone();
-                    let max_mb = self.thumb_config.max_mem_mb.get().clone() as u64;
-                    let max_size = self.thumb_config.max_size_mb.get().clone() as u64;
+                    let max_jobs = jobs;
+                    let max_mb = self.thumb_config.max_mem_mb.get() as u64;
+                    let max_size = self.thumb_config.max_size_mb.get() as u64;
                     subscriptions.push(Subscription::run_with_id(
                         ("thumbnail", path.clone()),
                         stream::channel(1, move |mut output| async move {
