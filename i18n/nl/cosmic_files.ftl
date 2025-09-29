@@ -372,16 +372,16 @@ new-tab = Nieuw tabblad
 new-window = Nieuw venster
 reload-folder = Opnieuw laden
 rename = Hernoemen...
-close-tab = Tabblad sluiten
+close-tab = Sluit tabblad
 quit = Sluit
 
 ## Edit
 
-edit = Bewerken
+edit = Bewerk
 cut = Knippen
-copy = Kopiëren
-paste = Plakken
-select-all = Alles selecteren
+copy = Kopieer
+paste = Plak
+select-all = Selecteer alles
 
 ## View
 
