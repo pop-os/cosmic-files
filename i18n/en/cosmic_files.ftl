@@ -291,6 +291,7 @@ theme = Theme
 match-desktop = Match desktop
 dark = Dark
 light = Light
+enable-thumbnails = Thumbnails
 
 ### Type to Search
 type-to-search = Type to Search
