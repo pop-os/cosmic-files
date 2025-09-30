@@ -10,7 +10,7 @@ rust-version = "1.85"
 anyhow = "1"
 chrono = { version = "0.4", features = ["unstable-locales"] }
 icu = { version = "2.0.0", features = ["compiled_data"] }
-cctk = { git = "https://github.com/pop-os/cosmic-protocols", package = "cosmic-client-toolkit", rev = "6254f50", optional = true }
+cctk = { git = "https://github.com/pop-os/cosmic-protocols", package = "cosmic-client-toolkit", rev = "d0e95be", optional = true }
 cosmic-mime-apps = { git = "https://github.com/pop-os/cosmic-mime-apps.git", optional = true }
 dirs = "6.0.0"
 env_logger = "0.11"
