@@ -247,7 +247,7 @@ deleted =
     已删除 { $items } { $items ->
         [one] 项目
        *[other] 项目
-    } 从 { trash }
+    }从 { trash }
 emptying-trash = 正在清空{ trash }（{ $progress }）…
 emptied-trash = 已清空{ trash }
 extracting =

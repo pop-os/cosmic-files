@@ -155,7 +155,7 @@ compressed =
     } de "{ $from }" a "{ $to }"
 copy_noun = Copiar
 creating = Creando { $name } en { $parent }
-created = Se ha creado { $name } en { $parent }
+created = Se ha creado "{ $name }" en "{ $parent }"
 copying =
     Copiando { $items } { $items ->
         [one] elemento
@@ -186,10 +186,10 @@ moving =
        *[other] elementos
     } desde "{ $from }" a "{ $to }" ({ $progress })...
 moved =
-    Se han movido { $items } { $items ->
-        [one] elemento
-       *[other] elementos
-    } desde { $from } a { $to }
+    { $items } { $items ->
+        [one] elemento movido
+       *[other] elementos movidos
+    } desde "{ $from }" a "{ $to }"
 renaming = Cambiando el nombre de "{ $from }" a "{ $to }"
 renamed = Se ha cambiado el nombre de "{ $from }" a "{ $to }"
 restoring =

@@ -81,19 +81,19 @@ failed = Com falha
 complete = Concluído
 copy_noun = Copiado
 creating = A criar { $name } em { $parent }
-created = { $name } criado em { $parent }
+created = "{ $name }" criado em { $parent }
 copying =
     A copiar { $items } { $items ->
         [one] item
        *[other] itens
     } de "{ $from }" para "{ $to }" ({ $progress })...
 copied =
-    Copiado { $items } { $items ->
-        [one] item
-       *[other] itens
-    } de { $from } para { $to }
+    { $items } { $items ->
+        [one] item copiado
+       *[other] itens copiados
+    } de "{ $from }" para "{ $to }"
 emptying-trash = A esvaziar { trash } ({ $progress })...
-emptied-trash = { trash } vazio
+emptied-trash = { trash } esvaziado
 extracting =
     A extrair { $items } { $items ->
         [one] item
@@ -110,9 +110,9 @@ moving =
        *[other] itens
     } de "{ $from }" para "{ $to }" ({ $progress })...
 moved =
-    Movido { $items } { $items ->
-        [one] item
-       *[other] itens
+    { $items } { $items ->
+        [one] item movido
+       *[other] itens movidos
     } de "{ $from }" para "{ $to }"
 renaming = A renomear "{ $from }" para "{ $to }"
 renamed = "{ $from }" renomeado para "{ $to }"
@@ -299,9 +299,9 @@ deleting =
        *[other] itens
     } do Lixo { trash } ({ $progress })...
 deleted =
-    Eliminado(s) { $items } { $items ->
-        [one] item
-       *[other] itens
+    { $items } { $items ->
+        [one] item eliminado
+       *[other] itens eliminados
     } do { trash }
 setting-executable-and-launching = A definir "{ $name }" como executável e a iniciar
 set-executable-and-launched = "{ $name }" definido como executável e iniciado

@@ -237,16 +237,16 @@ compressed =
     } de "{ $from }" para "{ $to }"
 copy_noun = Copiado
 creating = Criando { $name } em { $parent }
-created = Criado { $name } em { $parent }
+created = "{ $name }" criado em { $parent }
 copying =
     Copiando { $items } { $items ->
         [one] item
        *[other] itens
     } de "{ $from }" para "{ $to }" ({ $progress })...
 copied =
-    Copiado(s) { $items } { $items ->
-        [one] item
-       *[other] itens
+    { $items } { $items ->
+        [one] item copiado
+       *[other] itens copiados
     } de "{ $from }" para "{ $to }"
 deleting =
     Excluindo { $items } { $items ->
@@ -254,9 +254,9 @@ deleting =
        *[other] itens
     } da { trash } ({ $progress })...
 deleted =
-    Excluído(s) { $items } { $items ->
-        [one] item
-       *[other] itens
+    { $items } { $items ->
+        [one] item excluído
+       *[other] itens excluídos
     } da { trash }
 emptying-trash = Esvaziando a { trash } ({ $progress })...
 emptied-trash = { trash } esvaziada
@@ -280,9 +280,9 @@ moving =
        *[other] itens
     } de "{ $from }" para "{ $to }" ({ $progress })...
 moved =
-    Movido(s) { $items } { $items ->
-        [one] item
-       *[other] itens
+    { $items } { $items ->
+        [one] item movido
+       *[other] itens movidos
     } de "{ $from }" para "{ $to }"
 permanently-deleting =
     Excluindo permanentemente "{ $items }" "{ $items ->

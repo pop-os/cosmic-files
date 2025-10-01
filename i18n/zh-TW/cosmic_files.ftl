@@ -139,10 +139,10 @@ copying =
        *[other] 項目
     } 從「{ $from }」到「{ $to }」（{ $progress }）...
 copied =
-    已複製 { $items } 項目 { $items ->
+    已複製 { $items } { $items ->
         [one] 項目
        *[other] 項目
-    } 從 { $from } 到 { $to }
+    }從「{ $from }」到「{ $to }」
 emptying-trash = 正在清空{ trash }（{ $progress }）…
 emptied-trash = 已清空{ trash }
 extracting =
@@ -161,10 +161,10 @@ moving =
        *[other] 項目
     } 從「{ $from }」到「{ $to }」（{ $progress }）...
 moved =
-    已移動 { $items } 項目 { $items ->
+    已移動 { $items } { $items ->
         [one] 項目
        *[other] 項目
-    } 從 { $from } 到 { $to }
+    } 從「{ $from }」到「{ $to }」
 renaming = 正在重新命名 { $from } 為 { $to }
 renamed = 已重新命名 { $from } 為 { $to }
 restoring =

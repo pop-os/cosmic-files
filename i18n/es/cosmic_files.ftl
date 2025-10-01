@@ -236,7 +236,7 @@ compressed =
     } de { $from } a { $to }
 copy_noun = Copia
 creating = Creando { $name } en { $parent }
-created = Se han creado { $name } en { $parent }
+created = Se han creado "{ $name }" en "{ $parent }"
 copying =
     Copiando { $items ->
         [one] elemento
@@ -244,18 +244,18 @@ copying =
     } de "{ $from }" a "{ $to }" ({ $progress })...
 copied =
     { $items ->
-        [one] Se ha copiado un archivo
-       *[other] Se han copiado { $items } archivos
-    } desde { $from } a { $to }
+        [one] elemento copiado
+       *[other] elementos copiados
+    } de "{ $from }" a "{ $to }"
 deleting =
     { $items ->
         [one] Eliminando un archivo
        *[other] Eliminando { $items } archivos
     } de la { trash } ({ $progress })...
 deleted =
-    { $items ->
-        [one] Se ha eliminado un archivo
-       *[other] Se han eliminado { $items } archivos
+    { $items } { $items ->
+        [one] elemento eliminado
+       *[other] elementos eliminados
     } de la { trash }
 emptying-trash = Vaciando la { trash } ({ $progress })...
 emptied-trash = Se ha vaciado la { trash }
@@ -265,9 +265,9 @@ extracting =
        *[other] elementos
     } de "{ $from }" a "{ $to }" ({ $progress })...
 extracted =
-    { $items ->
-        [one] Se ha extraído un elemento
-       *[other] Se han extraído { $items } elementos
+    { $items } { $items ->
+        [one] elemento extraído
+       *[other] elementos extraídos
     } de "{ $from }" a "{ $to }"
 setting-executable-and-launching = Estableciendo "{ $name }" como ejecutable y lanzando
 set-executable-and-launched = Se ha establecido "{ $name }" como ejecutable y se ha lanzado
