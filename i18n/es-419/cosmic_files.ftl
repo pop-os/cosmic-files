@@ -33,7 +33,7 @@ create-archive = Crear archivo comprimido
 
 ## Empty Trash Dialog
 
-empty-trash = Papelera vacía
+empty-trash = Vaciar la papelera
 empty-trash-warning = ¿Estás seguro de que deseas eliminar permanentemente todos los elementos de la papelera?
 
 ## New File/Folder Dialog
@@ -149,10 +149,10 @@ compressing =
        *[other] elementos
     } de "{ $from }" a "{ $to }" ({ $progress })...
 compressed =
-    Comprimido { $items } { $items ->
-        [one] elemento
-       *[other] elementos
-    } de { $from } a { $to }
+    { $items } { $items ->
+        [one] elemento comprimido
+       *[other] elementos comprimidos
+    } de "{ $from }" a "{ $to }"
 copy_noun = Copiar
 creating = Creando { $name } en { $parent }
 created = Se ha creado { $name } en { $parent }
@@ -160,13 +160,13 @@ copying =
     Copiando { $items } { $items ->
         [one] elemento
        *[other] elementos
-    } desde "{ $from }" a "{ $to }" ({ $progress })...
+    } de "{ $from }" a "{ $to }" ({ $progress })...
 copied =
-    Se han copiado { $items } { $items ->
-        [one] elemento
-       *[other] elementos
-    } desde { $from } a { $to }
-emptying-trash = Vaciando { trash } ({ $progress })...
+    { $items } { $items ->
+        [one] elemento copiado
+       *[other] elementos copiados
+    } de "{ $from }" a "{ $to }"
+emptying-trash = Vaciando la { trash } ({ $progress })...
 emptied-trash = Se ha vaciado la { trash }
 extracting =
     Extrayendo { $items } { $items ->
@@ -174,10 +174,10 @@ extracting =
        *[other] elementos
     } de "{ $from }" a "{ $to }" ({ $progress })...
 extracted =
-    Extraído { $items } { $items ->
-        [one] elemento
-       *[other] elementos
-    } de { $from } a { $to }
+    { $items } { $items ->
+        [one] elemento extraído
+       *[other] elementos extraídos
+    } de "{ $from }" a "{ $to }"
 setting-executable-and-launching = Estableciendo "{ $name }" como ejecutable y abriendo
 set-executable-and-launched = Se ha establecido "{ $name }" como ejecutable y se ha abierto
 moving =
@@ -255,7 +255,7 @@ new-tab = Nueva pestaña
 new-window = Nueva ventana
 rename = Cambiar nombre...
 close-tab = Cerrar pestaña
-quit = Salir
+quit = Cerrar
 
 ## Edit
 
@@ -351,9 +351,9 @@ deleting =
     } de la { trash } ({ $progress })...
 deleted =
     { $items } { $items ->
-        [one] elemento
-       *[other] elementos
-    } de la { trash } eliminados
+        [one] elemento eliminado
+       *[other] elementos eliminados
+    } de la { trash }
 permanently-deleted =
     { $items } { $items ->
         [one] elemento

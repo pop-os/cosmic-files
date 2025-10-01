@@ -143,7 +143,7 @@ copied =
         [one] 項目
        *[other] 項目
     } 從 { $from } 到 { $to }
-emptying-trash = 正在清空{ trash }（{ $progress }）...
+emptying-trash = 正在清空{ trash }（{ $progress }）…
 emptied-trash = 已清空{ trash }
 extracting =
     正在解壓縮 { $items } 項目 { $items ->
@@ -256,3 +256,8 @@ sort-newest-first = 最新的在前
 sort-oldest-first = 最舊的在前
 sort-smallest-to-largest = 由小至大
 sort-largest-to-smallest = 由大至小
+deleted =
+    已刪除 { $items } { $items ->
+        [one] 項目
+       *[other] 項目
+    }從{ trash }

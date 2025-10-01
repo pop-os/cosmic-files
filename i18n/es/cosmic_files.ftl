@@ -10,55 +10,60 @@ trash = Papelera
 recents = Reciente
 undo = Deshacer
 today = Hoy
-
 # Desktop view options
 desktop-view-options = Opciones de vista del escritorio...
 show-on-desktop = Mostrar en el escritorio
 desktop-folder-content = Contenido de la carpeta del escritorio
 mounted-drives = Unidades montadas
-trash-folder-icon = Icono de la {trash}
+trash-folder-icon = Icono de la papelera
 icon-size-and-spacing = Tamaño y espaciado de los iconos
 icon-size = Tamaño del icono
 grid-spacing = Espaciado de la cuadrícula
-
 # List view
 name = Nombre
 modified = Modificado
-trashed-on = Enviado a la {trash}
+trashed-on = Enviado a la papelera
 size = Tamaño
-
 # Progress footer
 details = Detalles
 dismiss = Descartar mensaje
-operations-running = {$running} {$running ->
-    [one] operación
-    *[other] operaciones
-  } ejecutándose ({$percent}%)...
-operations-running-finished = {$running} {$running ->
-    [one] operación
-    *[other] operaciones
-  } ejecutándose ({$percent}%), {$finished} finished...
+operations-running =
+    { $running } { $running ->
+        [one] operación
+       *[other] operaciones
+    } ejecutándose ({ $percent }%)...
+operations-running-finished =
+    { $running } { $running ->
+        [one] operación
+       *[other] operaciones
+    } ejecutándose ({ $percent }%), { $finished } finished...
 pause = Pausar
 resume = Reanudar
 
 # Dialogs
 
+
 ## Compress Dialog
+
 create-archive = Crear archivo
 
 ## Extract Dialog
+
 extract-password-required = Contraseña requerida
 extract-to = Extraer en...
 extract-to-title = Extraer a una carpeta
 
 ## Empty Trash Dialog
-empty-trash = Vaciar la {trash} 
-empty-trash-warning = ¿Está seguro de que quiere eliminar permanentemente todos los archivos de la {trash}?
+
+empty-trash = Vaciar la papelera
+empty-trash-warning = ¿Está seguro de que quiere eliminar permanentemente todos los archivos de la papelera?
 
 ## Mount Error Dialog
+
 mount-error = No se puede acceder a la unidad
 
 ## New File/Folder Dialog
+
 create-new-file = Crear nuevo archivo
 create-new-folder = Crear nueva carpeta
 file-name = Nombre del archivo
@@ -66,10 +71,11 @@ folder-name = Nombre de la carpeta
 file-already-exists = Ya existe un archivo con ese nombre.
 folder-already-exists = Ya existe una carpeta con ese nombre.
 name-hidden = Nombres comenzando con "." serán ocultados.
-name-invalid = El nombre no puede ser: "{$filename}".
+name-invalid = El nombre no puede ser: "{ $filename }".
 name-no-slashes = El nombre no puede contener slashes (barras).
 
 ## Open/Save Dialog
+
 cancel = Cancelar
 create = Crear
 open = Abrir
@@ -84,27 +90,28 @@ save = Guardar
 save-file = Guardar archivo
 
 ## Open With Dialog
-open-with-title = ¿Cómo quiere abrir «{$name}»?
-browse-store = Explorar {$store}
+
+open-with-title = ¿Cómo quiere abrir "{ $name }"?
+browse-store = Explorar { $store }
 other-apps = Otras aplicaciones
 related-apps = Aplicaciones relacionadas
 
 ## Permanently delete Dialog
-selected-items = los {$items} archivos seleccionados
+
+selected-items = los { $items } archivos seleccionados
 permanently-delete-question = Eliminar permanentemente
 delete = Eliminar
-permanently-delete-warning = ¿Quiere eliminar permanentemente {$nb_items ->
-        [one] el archivo {$target}? El archivo no podrá ser restaurado
-        *[other] {$target}? Los archivos no podrán ser restaurados
-    }.
+permanently-delete-warning = ¿Quiere eliminar permanentemente { $target }? Esta acción no se puede deshacer.
 
 ## Rename Dialog
+
 rename-file = Renombrar archivo
 rename-folder = Renombrar carpeta
 
 ## Replace Dialog
+
 replace = Reemplazar
-replace-title = {$filename} ya existe en esta ruta.
+replace-title = { $filename } ya existe en esta ruta.
 replace-warning = ¿Quiere remplazarlo con el que está guardando? Reemplazarlo sobrescribirá su contenido.
 replace-warning-operation = ¿Quieres reemplazarlo? Reemplazarlo sobrescribirá su contenido.
 original-file = Archivo original
@@ -114,49 +121,71 @@ keep-both = Conservar ambos
 skip = Saltar
 
 ## Set as Executable and Launch Dialog
+
 set-executable-and-launch = Establecer como ejecutable y ejecutar
-set-executable-and-launch-description = ¿Quieres establecer «{$name}» como ejecutable y ejecutar?
+set-executable-and-launch-description = ¿Quieres establecer "{ $name }" como ejecutable y ejecutar?
 set-and-launch = Establecer y ejecutar
 
 ## Metadata Dialog
+
 open-with = Abrir con
 owner = Propietario
 group = Grupo
 other = Otro
+
 ### Mode 0
+
 none = Ninguno
+
 ### Mode 1 (unusual)
-execute-only = Únicamente ejecución 
+
+execute-only = Únicamente ejecución
+
 ### Mode 2 (unusual)
-write-only = Únicamente escritura 
+
+write-only = Únicamente escritura
+
 ### Mode 3 (unusual)
+
 write-execute = Escritura y ejecución
+
 ### Mode 4
-read-only = Únicamente lectura 
+
+read-only = Únicamente lectura
+
 ### Mode 5
+
 read-execute = Lectura y ejecución
+
 ### Mode 6
+
 read-write = Lectura y escritura
+
 ### Mode 7
+
 read-write-execute = Lectura, escritura y ejecución
 
 ## Favorite Path Error Dialog
+
 favorite-path-error = Error al abrir el directorio
 favorite-path-error-description =
-    No se puede abrir "{$path}".
+    No se puede abrir "{ $path }".
     Puede que no exista o que no tenga permisos para abrirlo.
-    
+
     ¿Quiere eliminarlo de la barra lateral?
 remove = Eliminar
 keep = Mantener
 
 # Context Pages
 
+
 ## About
+
 repository = Repositorio
 support = Soporte
 
 ## Add Network Drive
+
 add-network-drive = Agregar una unidad de red
 connect = Conectar
 connect-anonymously = Conectar de forma anónima
@@ -166,7 +195,9 @@ enter-server-address = Ingresa la dirección del servidor
 network-drive-description =
     Las direcciones de los servidores incluyen un prefijo de protocolo y una dirección.
     Ejemplos: ssh://192.168.0.1, ftp://[2001:db8::1]
+
 ### Make sure to keep the comma which separates the columns
+
 network-drive-schemes =
     Protocolos disponibles,Prefijo
     AppleTalk,afp://
@@ -182,102 +213,121 @@ try-again = Intentar de nuevo
 username = Nombre de usuario
 
 ## Operations
+
 cancelled = Cancelada
 edit-history = Historial de ediciones
 history = Historial
 no-history = No hay archivos en el historial.
 pending = Pendiente
-progress = {$percent}%
-progress-cancelled = {$percent}%, cancelado
-progress-paused = {$percent}%, pausado
+progress = { $percent } %
+progress-cancelled = { $percent }%, cancelado
+progress-paused = { $percent }%, pausado
 failed = Fallidas
 complete = Completadas
-compressing = {$items ->
-        [one] Comprimiendo un archivo
-        *[other] Comprimiendo {$items} archivos
-    } de {$from} a {$to}
-compressed = {$items ->
+compressing =
+    Comprimiendo { $items ->
+        [one] elemento
+       *[other] { $items } elementos
+    } de "{ $from }" a "{ $to }" ({ $progress })...
+compressed =
+    { $items ->
         [one] Comprimido un archivo
-        *[other] Comprimidos {$items} archivos
-    } de {$from} a {$to}
+       *[other] Comprimidos { $items } archivos
+    } de { $from } a { $to }
 copy_noun = Copia
-creating = Creando {$name} en {$parent}
-created = Se han creado {$name} en {$parent}
-copying = {$items ->
-        [one] Copiando un archivo
-        *[other] Copiando {$items} archivos
-    } desde {$from} a {$to}
-copied = {$items ->
+creating = Creando { $name } en { $parent }
+created = Se han creado { $name } en { $parent }
+copying =
+    Copiando { $items ->
+        [one] elemento
+       *[other] { $items } elementos
+    } de "{ $from }" a "{ $to }" ({ $progress })...
+copied =
+    { $items ->
         [one] Se ha copiado un archivo
-        *[other] Se han copiado {$items} archivos
-    } desde {$from} a {$to}
-deleting = {$items ->
+       *[other] Se han copiado { $items } archivos
+    } desde { $from } a { $to }
+deleting =
+    { $items ->
         [one] Eliminando un archivo
-        *[other] Eliminando {$items} archivos
-    } de la {trash} ({$progress})...
-deleted = {$items ->
+       *[other] Eliminando { $items } archivos
+    } de la { trash } ({ $progress })...
+deleted =
+    { $items ->
         [one] Se ha eliminado un archivo
-        *[other] Se han eliminado {$items} archivos
-    } de la {trash}
-emptying-trash = Vaciando la {trash}
-emptied-trash = Se ha vaciado la {trash}
-extracting = {$items ->
-        [one] Extrayendo un archivo
-        *[other] Extrayendo {$items} archivos
-    } de {$from} a {$to}
-extracted = {$items ->
-        [one] Se ha extraído un archivo
-        *[other] Se han extraído {$items} archivos
-    } de {$from} a {$to}
-setting-executable-and-launching = Estableciendo «{$name}» como ejecutable y lanzando
-set-executable-and-launched = Se ha establecido «{$name}» como ejecutable y lanzado
-moving = {$items ->
-        [one] Moviendo un archivo
-        *[other] Moviendo {$items} archivos
-    } desde {$from} a {$to}
-moved = {$items ->
+       *[other] Se han eliminado { $items } archivos
+    } de la { trash }
+emptying-trash = Vaciando la { trash } ({ $progress })...
+emptied-trash = Se ha vaciado la { trash }
+extracting =
+    Extrayendo{ $items ->
+        [one] elemento
+       *[other] elementos
+    } de "{ $from }" a "{ $to }" ({ $progress })...
+extracted =
+    { $items ->
+        [one] Se ha extraído un elemento
+       *[other] Se han extraído { $items } elementos
+    } de "{ $from }" a "{ $to }"
+setting-executable-and-launching = Estableciendo "{ $name }" como ejecutable y lanzando
+set-executable-and-launched = Se ha establecido "{ $name }" como ejecutable y se ha lanzado
+moving =
+    Moviendo { $items } { $items ->
+        [one] elemento
+       *[other] elementos
+    } de "{ $from }" a "{ $to }" ({ $progress })...
+moved =
+    { $items ->
         [one] Se ha movido un archivo
-        *[other] Se han movido {$items} archivos
-    } desde {$from} a {$to}
-permanently-deleting = {$items ->
+       *[other] Se han movido { $items } archivos
+    } desde { $from } a { $to }
+permanently-deleting =
+    { $items ->
         [one] Eliminando un archivo permanentemente
-        *[other] Eliminando permanentemente {$items} archivos
+       *[other] Eliminando permanentemente { $items } archivos
     }
-permanently-deleted = {$items ->
+permanently-deleted =
+    { $items ->
         [one] Se ha eliminado un archivo permanentemente
-        *[other] Se han eliminado {$items} archivos permanentemente
+       *[other] Se han eliminado { $items } archivos permanentemente
     }
-renaming = Renombrando {$from} a {$to}
-renamed = Se ha renombrado {$from} a {$to}
-restoring = {$items ->
+renaming = Renombrando { $from } a { $to }
+renamed = Se ha renombrado { $from } a { $to }
+restoring =
+    { $items ->
         [one] Restaurando un archivo
-        *[other] Restaurando {$items} archivos
-    } desde la {trash}
-restored = {$items ->
+       *[other] Restaurando { $items } archivos
+    } desde la { trash }
+restored =
+    { $items ->
         [one] Se ha restaurado un archivo
-        *[other] Se han restaurado {$items} archivos
-    } desde la {trash} 
+       *[other] Se han restaurado { $items } archivos
+    } desde la { trash }
 unknown-folder = carpeta desconocida
 
 ## Open with
+
 menu-open-with = Abrir con
-default-app = {$name} (predeterminado)
+default-app = { $name } (predeterminado)
 
 ## Show details
+
 show-details = Mostrar detalles
-type = Tipo: {$mime}
-items = Archivos: {$items}
-item-size = Tamaño: {$size}
-item-created = Fecha de creación: {$created}
-item-modified = Última modificación: {$modified}
-item-accessed = Último acceso: {$accessed}
+type = Tipo: { $mime }
+items = Archivos: { $items }
+item-size = Tamaño: { $size }
+item-created = Fecha de creación: { $created }
+item-modified = Última modificación: { $modified }
+item-accessed = Último acceso: { $accessed }
 calculating = Calculando...
 
 ## Settings
+
 settings = Configuración
 single-click = Abrir con solo un clic
 
 ### Appearance
+
 appearance = Apariencia
 theme = Tema
 match-desktop = Seguir el estilo del escritorio
@@ -285,10 +335,10 @@ dark = Oscuro
 light = Claro
 
 ### Type to Search
+
 type-to-search = Escriba para buscar
 type-to-search-recursive = Buscar en la carpeta actual y todas sus subcarpetas
 type-to-search-enter-path = Escriba la ruta del directorio o archivo
-
 # Context menu
 add-to-sidebar = Añadir a la barra lateral
 compress = Comprimir
@@ -297,9 +347,9 @@ eject = Expulsar
 extract-here = Extraer aquí
 new-file = Nuevo archivo
 new-folder = Nueva carpeta
-open-in-terminal = Abrir en la consola 
-move-to-trash = Mover a la {trash}
-restore-from-trash = Restaurar desde la {trash}
+open-in-terminal = Abrir en la consola
+move-to-trash = Mover a la { trash }
+restore-from-trash = Restaurar desde la { trash }
 remove-from-sidebar = Quitar de la barra lateral
 sort-by-name = Ordenar por nombre
 sort-by-modified = Ordenar por fecha de modificación
@@ -308,13 +358,16 @@ sort-by-trashed = Ordenar por fecha de eliminación
 remove-from-recents = Quitar de recientes
 
 ## Desktop
+
 change-wallpaper = Cambiar fondo de pantalla...
 desktop-appearance = Apariencia del escritorio...
 display-settings = Configuración de pantalla...
 
 # Menu
 
+
 ## File
+
 file = Archivo
 new-tab = Nueva pestaña
 new-window = Nueva ventana
@@ -324,6 +377,7 @@ close-tab = Cerrar pestaña
 quit = Cerrar
 
 ## Edit
+
 edit = Editar
 cut = Cortar
 copy = Copiar
@@ -331,6 +385,7 @@ paste = Pegar
 select-all = Seleccionar todo
 
 ## View
+
 zoom-in = Ampliar
 default-size = Tamaño predeterminado
 zoom-out = Disminuir
@@ -344,6 +399,7 @@ menu-settings = Configuración...
 menu-about = Acerca de COSMIC Files...
 
 ## Sort
+
 sort = Ordenar
 sort-a-z = A-Z
 sort-z-a = Z-A

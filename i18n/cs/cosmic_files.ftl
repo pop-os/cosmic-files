@@ -86,7 +86,7 @@ settings = Nastavení
 
 appearance = Vzhled
 theme = Téma
-match-desktop = Dle systému
+match-desktop = Podle systému
 dark = Tmavé
 light = Světlé
 # Context menu
@@ -230,7 +230,12 @@ operations-running-finished =
         [few] operace
         [many] operací
        *[other] operací
-    } ({ $percent }%), { $finished } dokončeno...
+    } ({ $percent }%), { $finished } { $finished ->
+        [one] dokončena...
+        [few] dokončeny...
+        [many] dokončeno...
+       *[other] dokončeno...
+    }
 apply-to-all = Použít na vše
 owner = Vlastník
 group = Skupina

@@ -100,10 +100,10 @@ extracting =
        *[other] itens
     } de "{ $from }" par "{ $to }" ({ $progress })...
 extracted =
-    Extraído { $items } { $items ->
-        [one] item
-       *[other] itens
-    } de { $from } para { $to }
+    { $items } { $items ->
+        [one] item extraído
+       *[other] itens extraídos
+    } de "{ $from }" para "{ $to }"
 moving =
     A mover { $items } { $items ->
         [one] item
@@ -113,9 +113,9 @@ moved =
     Movido { $items } { $items ->
         [one] item
        *[other] itens
-    } de { $from } para { $to }
-renaming = A renomear { $from } para { $to }
-renamed = { $from } renomeado para { $to }
+    } de "{ $from }" para "{ $to }"
+renaming = A renomear "{ $from }" para "{ $to }"
+renamed = "{ $from }" renomeado para "{ $to }"
 restoring =
     A restaurar { $items } { $items ->
         [one] item
@@ -304,7 +304,7 @@ deleted =
        *[other] itens
     } do { trash }
 setting-executable-and-launching = A definir "{ $name }" como executável e a iniciar
-set-executable-and-launched = Definir "{ $name }" como executável e iniciado
+set-executable-and-launched = "{ $name }" definido como executável e iniciado
 setting-permissions = A definir permissões de "{ $name }" para { $mode }
 set-permissions = Definir permissões de "{ $name }" para { $mode }
 permanently-deleting =

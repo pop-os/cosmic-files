@@ -47,3 +47,44 @@ size = Suurus
 details = Üksikasjad
 pause = Peata
 resume = Jätka
+skip = Jäta vahele
+zoom-in = Suumi sisse
+default-size = Tavasuurus
+zoom-out = Suumi välja
+save-file = Salvesta fail
+create-new-folder = Lisa uus kaust
+create-new-file = Lisa uus fail
+file-name = Failinimi
+folder-name = Kausta nimi
+file-already-exists = Sellise nimega fail on juba olemas.
+folder-already-exists = Sellise nimega kaust on juba olemas.
+name-no-slashes = Nimes ei tohi olla kaldkriipse.
+show-on-desktop = Näita töölaual
+desktop-folder-content = Töölauakausta sisu
+mounted-drives = Haagitud andmekandjad
+trash-folder-icon = Prügikastikausta ikoon
+icon-size-and-spacing = Ikooni suurus ja vahed
+icon-size = Ikooni suurus
+grid-spacing = Vahed ruudustikus
+operations-running =
+    { $running } { $running ->
+        [one] tegevus
+       *[other] tegevust
+    } on töös ({ $percent }%)...
+operations-running-finished =
+    { $running } { $running ->
+        [one] tegevus
+       *[other] tegevust
+    } on töös ({ $percent }%), { $finished } lõppenud...
+name-invalid = Nimi ei saa olla „{ $filename }“.
+name-hidden = Kui nime alguses on punkt, siis fail või kaust muutub peidetuks.
+open-in-new-tab = Ava uuel vahekaardil
+open-in-new-window = Ava uues aknas
+open-item-location = Ava objekti asukoht
+open-multiple-files = Ava mitu faili
+open-multiple-folders = Ava mitu kausta
+cancelled = Katkestatud
+pending = Ootel
+failed = Ebaõnnestunud
+complete = Tehtud
+dismiss = Suulge sõnum
