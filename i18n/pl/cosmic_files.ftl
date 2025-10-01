@@ -298,13 +298,13 @@ removing-from-recents =
     Usuwanie { $items } { $items ->
         [one] elementu
        *[other] elementów
-    } z Ubiegłych
+    } z Poprzednich
 removed-from-recents =
     Usunięto { $items } { $items ->
         [one] element
         [few] elementy
        *[other] elementów
-    } z Ubiegłych
+    } z Poprzednich
 renaming = Zmieniana nazwa { $from } na { $to }
 renamed = Zmieniono nazwę { $from } na { $to }
 restoring =
@@ -370,7 +370,7 @@ sort-by-name = Uszereguj według nazwy
 sort-by-modified = Uszereguj według czasu modyfikacji
 sort-by-size = Uszereguj według rozmiaru
 sort-by-trashed = Uszereguj według czasu usunięcia
-remove-from-recents = Usuń z ubiegłych
+remove-from-recents = Usuń z poprzednich
 
 ## Desktop
 

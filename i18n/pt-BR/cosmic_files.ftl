@@ -22,7 +22,7 @@ grid-spacing = Espaçamento entre ícones
 # List view
 name = Nome
 modified = Modificação
-trashed-on = Exclusão
+trashed-on = Enviado à lixeira
 size = Tamanho
 # Progress footer
 details = Detalhes
@@ -259,19 +259,19 @@ deleted =
        *[other] itens
     } da { trash }
 emptying-trash = Esvaziando a { trash } ({ $progress })...
-emptied-trash = { trash } vazia
+emptied-trash = { trash } esvaziada
 extracting =
     Extraindo { $items } { $items ->
         [one] item
        *[other] itens
     } de "{ $from }" para "{ $to }" ({ $progress })...
 extracted =
-    Extraído(s) { $items } { $items ->
-        [one] item
-       *[other] itens
+    { $items } { $items ->
+        [one] item extraído
+       *[other] itens extraídos
     } de "{ $from }" para "{ $to }"
 setting-executable-and-launching = Marcando "{ $name }" como executável e iniciando
-set-executable-and-launched = Marcado "{ $name }" como executável e iniciado
+set-executable-and-launched = "{ $name }" marcado como executável e iniciado
 setting-permissions = Definindo permissões de "{ $name }" para { $mode }
 set-permissions = Definir permissões de "{ $name }" para { $mode }
 moving =
@@ -305,7 +305,7 @@ removed-from-recents =
        *[other] itens
     } removido(s) de { recents }
 renaming = Renomeando "{ $from }" para "{ $to }"
-renamed = Renomeado(s) "{ $from }" para "{ $to }"
+renamed = "{ $from }" renomeado para "{ $to }"
 restoring =
     Restaurando { $items } { $items ->
         [one] item

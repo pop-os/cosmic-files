@@ -1,4 +1,4 @@
-cosmic-files = COSMIC Files
+cosmic-files = COSMIC Filer
 empty-folder = Mappen är tom
 empty-folder-hidden = Mappen är tom (har dolda objekt)
 no-results = Inga resultat hittades
@@ -268,7 +268,7 @@ light = Ljus
 
 type-to-search = Skriv för att söka
 type-to-search-recursive = Söker i den aktuella mappen och alla undermappar
-type-to-search-enter-path = Anger sökvägen till katalogen eller filen
+type-to-search-enter-path = Anger sökvägen till mappen eller filen
 # Kontext meny
 add-to-sidebar = Lägg till i sidofält
 compress = Komprimera
@@ -323,7 +323,7 @@ show-hidden-files = Visa dolda filer
 list-directories-first = Lista mappar först
 gallery-preview = Galleri förhandsvisning
 menu-settings = Inställningar...
-menu-about = Om COSMIC Files...
+menu-about = Om COSMIC Filer...
 
 ## Sortera
 
@@ -341,8 +341,8 @@ grid-spacing = Rutnätsmellanrum
 extract-password-required = Lösenord krävs
 extract-to = Packa upp till...
 extract-to-title = Packa upp till mapp
-other-apps = Andra applikationer
-related-apps = Relaterade applikationer
+other-apps = Andra program
+related-apps = Relaterade program
 permanently-delete-question = Ta bort permanent
 delete = Ta bort
 permanently-delete-warning = Är du säker att du vill ta bort { $target } permanent? Detta kan inte göras ogjort.
@@ -354,7 +354,7 @@ read-only = Endast läsa
 read-execute = Läsa och exekvera
 read-write = Läsa och skriva
 read-write-execute = Läsa, skriva och exekvera
-favorite-path-error = Fel vid öppning av katalog
+favorite-path-error = Fel vid öppning av mapp
 favorite-path-error-description =
     Kunde inte öppna "{ $path }".
     Den finns inte eller så har du inte behörighet att öppna den.
