@@ -175,7 +175,6 @@ keep = Захаваць
 
 ## About
 
-git-description = Git каміт { $hash } ад { $date }
 
 ## Add Network Drive
 
@@ -210,7 +209,7 @@ username = Імя карыстальніка
 cancelled = Скасавана
 edit-history = Гісторыя рэдагавання
 history = Гісторыя
-no-history = Няма элементаў у гісторыі
+no-history = У гісторыі няма запісаў.
 pending = У чаканні
 progress = { $percent }%
 progress-cancelled = { $percent }%, скасавана

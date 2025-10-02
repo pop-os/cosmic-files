@@ -59,11 +59,9 @@ replace-warning = Chcete nahradit soubor tím, který ukládáte? Nahrazení př
 
 ## About
 
-git-description = Git commit { $hash } dne { $date }
 
 ## Operations
 
-operations = Operace
 pending = Čekající
 failed = Selhalo
 complete = Dokončené
@@ -76,7 +74,6 @@ default-app = { $name } (výchozí)
 
 ## Properties
 
-properties = Vlastnosti
 
 ## Settings
 

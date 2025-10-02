@@ -99,12 +99,9 @@ open-with = Öppna med
 owner = Ägare
 group = Grupp
 other = Andra
-read = Läs
-write = Skriv
-execute = Exekvera
 # Listvy
 name = Namn
-modified = Modifierad
+modified = Ändrad
 trashed-on = Kastad
 size = Storlek
 # Framstegssidfot
@@ -128,7 +125,6 @@ resume = Återuppta
 
 ## Om
 
-git-description = Git commit { $hash } på { $date }
 
 ## Lägg till en Nätverksenhet
 
@@ -243,13 +239,12 @@ type = Typ: { $mime }
 items = Objekt: { $items }
 item-size = Storlek: { $size }
 item-created = Skapad: { $created }
-item-modified = Modifierad: { $modified }
+item-modified = Ändrad: { $modified }
 item-accessed = Åtkomst: { $accessed }
 calculating = Beräknar...
 
 ## Egenskaper
 
-properties = Egenskaper
 
 ## Inställningar
 
@@ -299,7 +294,6 @@ file = Fil
 new-tab = Ny flik
 new-window = Nytt fönster
 rename = Byt namn...
-menu-show-details = Visa detaljer...
 close-tab = Stäng flik
 quit = Avsluta
 

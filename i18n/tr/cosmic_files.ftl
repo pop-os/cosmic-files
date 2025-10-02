@@ -115,16 +115,12 @@ set-and-launch = Ayarla ve başlat
 owner = Sahip
 group = Grup
 other = Diğer
-read = Okuma
-write = Yazma
-execute = Çalıştırma
 
 # Context Pages
 
 
 ## About
 
-git-description = { $date } tarihli git commiti { $hash }
 
 ## Add Network Drive
 

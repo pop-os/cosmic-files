@@ -226,18 +226,18 @@ progress-paused = { $percent }%, pausado
 failed = Com falha
 complete = Concluído
 compressing =
-    Compactando { $items } { $items ->
+    Comprimindo { $items } { $items ->
         [one] item
        *[other] itens
     } de "{ $from }" para "{ $to }" ({ $progress })...
 compressed =
-    Compactado(s) { $items } { $items ->
-        [one] item
-       *[other] itens
+    { $items } { $items ->
+        [one] item comprimido
+       *[other] itens comprimidos
     } de "{ $from }" para "{ $to }"
 copy_noun = Copiado
-creating = Criando { $name } em { $parent }
-created = "{ $name }" criado em { $parent }
+creating = Criando "{ $name }" em "{ $parent }"
+created = "{ $name }" criado em "{ $parent }"
 copying =
     Copiando { $items } { $items ->
         [one] item
@@ -285,15 +285,15 @@ moved =
        *[other] itens movidos
     } de "{ $from }" para "{ $to }"
 permanently-deleting =
-    Excluindo permanentemente "{ $items }" "{ $items ->
-        [one] item
-       *[other] itens
-    }"
-permanently-deleted =
-    Excluído(s) permanentemente "{ $items }" "{ $items ->
+    Excluindo permanentemente { $items } { $items ->
         [one] item
        *[other] itens
     }
+permanently-deleted =
+    { $items } { $items ->
+        [one] item excluído
+       *[other] itens excluídos
+    } permanentemente
 removing-from-recents =
     Removendo { $items } { $items ->
         [one] item
@@ -301,9 +301,9 @@ removing-from-recents =
     } de { recents }
 removed-from-recents =
     { $items } { $items ->
-        [one] item
-       *[other] itens
-    } removido(s) de { recents }
+        [one] item removido
+       *[other] itens removidos
+    } de { recents }
 renaming = Renomeando "{ $from }" para "{ $to }"
 renamed = "{ $from }" renomeado para "{ $to }"
 restoring =
@@ -354,7 +354,7 @@ type-to-search-recursive = Pesquisa na pasta atual e em todas as subpastas
 type-to-search-enter-path = Insere o caminho do diretório ou arquivo
 # Context menu
 add-to-sidebar = Adicionar à barra lateral
-compress = Compactar
+compress = Comprimir
 delete-permanently = Excluir permanentemente
 eject = Desmontar
 extract-here = Extrair

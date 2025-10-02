@@ -231,12 +231,12 @@ compressing =
     } de "{ $from }" a "{ $to }" ({ $progress })...
 compressed =
     { $items ->
-        [one] Comprimido un archivo
-       *[other] Comprimidos { $items } archivos
-    } de { $from } a { $to }
+        [one] Se ha comprimido un elemento
+       *[other] Se han comprimidos { $items } elementos
+    } de "{ $from }" a "{ $to }"
 copy_noun = Copia
-creating = Creando { $name } en { $parent }
-created = Se han creado "{ $name }" en "{ $parent }"
+creating = Creando "{ $name }" en "{ $parent }"
+created = Se ha creado "{ $name }" en "{ $parent }"
 copying =
     Copiando { $items ->
         [one] elemento
@@ -244,8 +244,8 @@ copying =
     } de "{ $from }" a "{ $to }" ({ $progress })...
 copied =
     { $items ->
-        [one] elemento copiado
-       *[other] elementos copiados
+        [one] Se ha copiado un archivo
+       *[other] Se han copiado { $items } archivos
     } de "{ $from }" a "{ $to }"
 deleting =
     { $items ->
@@ -253,21 +253,21 @@ deleting =
        *[other] Eliminando { $items } archivos
     } de la { trash } ({ $progress })...
 deleted =
-    { $items } { $items ->
-        [one] elemento eliminado
-       *[other] elementos eliminados
+    { $items ->
+        [one] Se ha eliminado un elemento
+       *[other] Se han eliminado { $items } elementos
     } de la { trash }
 emptying-trash = Vaciando la { trash } ({ $progress })...
 emptied-trash = Se ha vaciado la { trash }
 extracting =
-    Extrayendo{ $items ->
+    Extrayendo { $items } { $items ->
         [one] elemento
        *[other] elementos
     } de "{ $from }" a "{ $to }" ({ $progress })...
 extracted =
-    { $items } { $items ->
-        [one] elemento extraído
-       *[other] elementos extraídos
+    { $items ->
+        [one] Se ha extraído un elemento
+       *[other] Se han extraído { $items } elementos
     } de "{ $from }" a "{ $to }"
 setting-executable-and-launching = Estableciendo "{ $name }" como ejecutable y lanzando
 set-executable-and-launched = Se ha establecido "{ $name }" como ejecutable y se ha lanzado
@@ -278,36 +278,36 @@ moving =
     } de "{ $from }" a "{ $to }" ({ $progress })...
 moved =
     { $items ->
-        [one] Se ha movido un archivo
-       *[other] Se han movido { $items } archivos
-    } desde { $from } a { $to }
+        [one] Se ha movido un elemento
+       *[other] Se han movido { $items } elementos
+    } de "{ $from }" a "{ $to }"
 permanently-deleting =
-    { $items ->
-        [one] Eliminando un archivo permanentemente
-       *[other] Eliminando permanentemente { $items } archivos
-    }
+    Eliminando { $items } { $items ->
+        [one] elemento
+       *[other] archivos
+    } permanentemente
 permanently-deleted =
     { $items ->
         [one] Se ha eliminado un archivo permanentemente
        *[other] Se han eliminado { $items } archivos permanentemente
     }
-renaming = Renombrando { $from } a { $to }
-renamed = Se ha renombrado { $from } a { $to }
+renaming = Cambiando el nombre de "{ $from }" a "{ $to }"
+renamed = Se ha cambiado el nombre de "{ $from }" a "{ $to }"
 restoring =
-    { $items ->
-        [one] Restaurando un archivo
-       *[other] Restaurando { $items } archivos
-    } desde la { trash }
+    Restaurando { $items } { $items ->
+        [one] elemento
+       *[other] elementos
+    } de la { trash } ({ $progress })...
 restored =
     { $items ->
         [one] Se ha restaurado un archivo
        *[other] Se han restaurado { $items } archivos
-    } desde la { trash }
+    } de la { trash }
 unknown-folder = carpeta desconocida
 
 ## Open with
 
-menu-open-with = Abrir con
+menu-open-with = Abrir con...
 default-app = { $name } (predeterminado)
 
 ## Show details
@@ -345,11 +345,11 @@ compress = Comprimir
 delete-permanently = Eliminar permanentemente
 eject = Expulsar
 extract-here = Extraer aquí
-new-file = Nuevo archivo
-new-folder = Nueva carpeta
+new-file = Nuevo archivo...
+new-folder = Nueva carpeta...
 open-in-terminal = Abrir en la consola
-move-to-trash = Mover a la { trash }
-restore-from-trash = Restaurar desde la { trash }
+move-to-trash = Mover a la papelera
+restore-from-trash = Restaurar de la papelera
 remove-from-sidebar = Quitar de la barra lateral
 sort-by-name = Ordenar por nombre
 sort-by-modified = Ordenar por fecha de modificación
@@ -407,3 +407,13 @@ sort-newest-first = Más reciente primero
 sort-oldest-first = Más antiguo primero
 sort-smallest-to-largest = De menor a mayor
 sort-largest-to-smallest = De mayor a menor
+removing-from-recents =
+    Quitando { $items } { $items ->
+        [one] elemento
+       *[other] elementos
+    } de { recents }
+removed-from-recents =
+    { $items ->
+        [one] Se ha quitado elemento
+       *[other] Se han quitado { $items } elementos
+    } de { recents }

@@ -7,7 +7,7 @@ home = Katalog domowy
 networks = Sieci
 notification-in-progress = Operacje na plikach w toku.
 trash = Kosz
-recents = Ubiegłe
+recents = Poprzednie
 undo = Cofnij
 today = Dzisiaj
 # Desktop view options
@@ -52,7 +52,6 @@ create-archive = Utwórz archiwum
 extract-password-required = Wymagane hasło
 extract-to = Wypakuj do…
 extract-to-title = Wypakuj do katalogu
-extract-to-prompt = Wprowadź miejsce gdzie wypakowywać.
 
 ## Empty Trash Dialog
 

@@ -76,16 +76,12 @@ skip = 跳過
 owner = 擁有者
 group = 群組
 other = 其他
-read = 讀取
-write = 寫入
-execute = 執行
 
 # Context Pages
 
 
 ## About
 
-git-description = Git 提交 { $hash } 於 { $date }
 
 ## Add Network Drive
 
@@ -121,20 +117,20 @@ pending = 待處理
 failed = 失敗
 complete = 完成
 compressing =
-    正在壓縮 { $items } 項目 { $items ->
+    正在壓縮 { $items } { $items ->
         [one] 項目
        *[other] 項目
     } 從「{ $from }」到 「{ $to }」（{ $progress }）...
 compressed =
-    已壓縮 { $items } 項目 { $items ->
+    已壓縮 { $items } { $items ->
         [one] 項目
        *[other] 項目
-    } 從 { $from } 到 { $to }
+    }從「{ $from }」到「{ $to }」
 copy_noun = 複製
-creating = 正在建立 { $name } 於 { $parent }
-created = 已建立 { $name } 於 { $parent }
+creating = 正在建立「{ $name }」於「{ $parent }」
+created = 已建立「{ $name }」於「{ $parent }」
 copying =
-    正在複製 { $items } 項目 { $items ->
+    正在複製 { $items } { $items ->
         [one] 項目
        *[other] 項目
     } 從「{ $from }」到「{ $to }」（{ $progress }）...
@@ -156,7 +152,7 @@ extracted =
        *[other] 項目
     } 從 { $from } 到 { $to }
 moving =
-    正在移動 { $items } 項目 { $items ->
+    正在移動 { $items } { $items ->
         [one] 項目
        *[other] 項目
     } 從「{ $from }」到「{ $to }」（{ $progress }）...
@@ -165,7 +161,7 @@ moved =
         [one] 項目
        *[other] 項目
     } 從「{ $from }」到「{ $to }」
-renaming = 正在重新命名 { $from } 為 { $to }
+renaming = 正在重新命名「{ $from }」為「{ $to }」
 renamed = 已重新命名 { $from } 為 { $to }
 restoring =
     正在還原 { $items } 項目 { $items ->
@@ -222,7 +218,6 @@ file = 檔案
 new-tab = 新分頁
 new-window = 新視窗
 rename = 重新命名...
-menu-show-details = 顯示詳細資料...
 close-tab = 關閉分頁
 quit = 退出
 
@@ -261,3 +256,28 @@ deleted =
         [one] 項目
        *[other] 項目
     }從{ trash }
+permanently-deleting =
+    正在永久刪除 { $items } { $items ->
+        [one] 项目
+       *[other] 项目
+    }
+permanently-deleted =
+    已永久刪除 { $items } { $items ->
+        [one] 项目
+       *[other] 项目
+    }
+removing-from-recents =
+    正在從{ recents }中移除 { $items } { $items ->
+        [one] 项目
+       *[other] 项目
+    }
+deleting =
+    正在刪除 { $items } { $items ->
+        [one] 项目
+       *[other] 项目
+    }從{ trash }（{ $progress }）…
+removed-from-recents =
+    已從{ recents }中移除 { $items } { $items ->
+        [one] 项目
+       *[other] 项目
+    }

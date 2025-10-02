@@ -59,11 +59,9 @@ replace-warning = أتريد استبداله بالملف الذي تحفظه؟
 
 ## About
 
-git-description = إيداع غِت (git commit) { $hash } في { $date }
 
 ## Operations
 
-operations = عمليات
 pending = منتظر
 failed = فشِل
 complete = انتهى
@@ -76,7 +74,6 @@ default-app = { $name } (المبدئي)
 
 ## Properties
 
-properties = الخصائص
 
 ## Settings
 

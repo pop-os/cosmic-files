@@ -173,7 +173,6 @@ keep = 保留
 
 ## About
 
-git-description = Git 提交 { $hash } 于 { $date }
 
 ## Add Network Drive
 
@@ -275,17 +274,17 @@ moved =
        *[other] 项目
     } 从 "{ $from }" 到 "{ $to }"
 permanently-deleting =
-    正在永久删除 "{ $items }" "{ $items ->
+    正在永久删除 { $items } { $items ->
         [one] 项目
        *[other] 项目
-    }"
+    }
 permanently-deleted =
-    已永久删除 "{ $items }" "{ $items ->
+    已永久删除 { $items } { $items ->
         [one] 项目
        *[other] 项目
-    }"
+    }
 removing-from-recents =
-    正在从 { recents } 中移除 { $items } { $items ->
+    正在从{ recents }中移除 { $items } { $items ->
         [one] 项目
        *[other] 项目
     }

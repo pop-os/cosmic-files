@@ -172,7 +172,6 @@ keep = Coinnigh
 
 ## About
 
-git-description = Tiomantas Git { $hash } ar { $date }
 
 ## Add Network Drive
 

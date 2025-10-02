@@ -140,3 +140,165 @@ zoom-out = Zoom ut
 cut = Klipp ut
 set-and-launch = Still inn og start
 domain = Domene
+enter-server-address = Angi serveradresse
+network-drive-description =
+    Serveradresser inkluderer ett protokollprefiks og en addresse.
+    Examples: ssh://192.168.0.1, ftp://[2001:db8::1]
+network-drive-schemes =
+    Tilgjengelige protokoller, Prefiks
+    AppleTalk,afp://
+    File Transfer Protocol,ftp:// eller ftps://
+    Network File System,nfs://
+    Server Message Block,smb://
+    SSH File Transfer Protocol,sftp:// eller ssh://
+    WebDAV,dav:// eller davs://
+network-drive-error = Kunne ikke nå nettverksdisk
+remember-password = Husk passord
+try-again = Prøv igjen
+edit-history = Rediger hisorikk
+history = Historikk
+no-history = Ingenting i historikken.
+progress = { $percent }%
+progress-cancelled = { $percent }%, avbrutt
+progress-failed = { $percent }%, mislykket
+progress-paused = { $percent }%, satt på pause
+compressing =
+    Komprimerer { $items } { $items ->
+        [one] objekt
+       *[other] objekter
+    } fra "{ $from }" til "{ $to }" ({ $progress })...
+compressed =
+    Komprimerete { $items } { $items ->
+        [one] objekt
+       *[other] objekter
+    } fra "{ $from }" til "{ $to }"
+copy_noun = Kopi
+creating = Oppretter "{ $name }" i "{ $parent }"
+created = Opprettet "{ $name }" i "{ $parent }"
+copying =
+    Kopierer { $items } { $items ->
+        [one] objekt
+       *[other] objekter
+    } fra "{ $from }" til "{ $to }" ({ $progress })...
+copied =
+    Kopierete { $items } { $items ->
+        [one] objekt
+       *[other] objekter
+    } fra "{ $from }" til "{ $to }"
+deleting =
+    Sletter { $items } { $items ->
+        [one] objekt
+       *[other] objekt
+    } fra { trash } ({ $progress })...
+deleted =
+    Slettet { $items } { $items ->
+        [one] objekt
+       *[other] objekter
+    } fra { trash }
+emptying-trash = Tømmer { trash } ({ $progress })...
+emptied-trash = Tømte { trash }
+extracting =
+    Pakker ut  { $items } { $items ->
+        [one] objekt
+       *[other] objekter
+    } fra «{ $from }» til «{ $to }» ({ $progress })...
+extracted =
+    Pakka ut  { $items } { $items ->
+        [one] objekt
+       *[other] objekter
+    } fra «{ $from }» til «{ $to }»
+setting-executable-and-launching = Setter «{ $name }» som kjørbar og starter
+set-executable-and-launched = Sett «{ $name }» som kjørbar og startet
+setting-permissions = Setter tillatelser for «{ $name }» til { $mode }
+set-permissions = Sett tillatelser for «{ $name }» til { $mode }
+moving =
+    Flytter { $items } { $items ->
+        [one] objekt
+       *[other] objekter
+    } fra «{ $from }» til «{ $to }» ({ $progress })...
+moved =
+    Flytta { $items } { $items ->
+        [one] objekt
+       *[other] objekter
+    } fra «{ $from }» til «{ $to }»
+permanently-deleting =
+    Sletter { $items } { $items ->
+        [one] objekt
+       *[other] objekter
+    } permanent
+permanently-deleted =
+    Sletta { $items } { $items ->
+        [one] objekt
+       *[other] objekter
+    } permanent
+removing-from-recents =
+    Fjerner { $items } { $items ->
+        [one] objekt
+       *[other] objekter
+    } fra { recents }
+removed-from-recents =
+    Fjerna { $items } { $items ->
+        [one] objekt
+       *[other] objekter
+    } fra { recents }
+renaming = Bytter navn «{ $from }» til «{ $to }»
+renamed = Byttet navn «{ $from }» til «{ $to }»
+restoring =
+    Gjenopretter { $items } { $items ->
+        [one] objekt
+       *[other] objekter
+    } fra { trash } ({ $progress })...
+restored =
+    Gjenopretta { $items } { $items ->
+        [one] objekt
+       *[other] objekter
+    } fra { trash }
+unknown-folder = ukjent mappe
+menu-open-with = Åpne med…
+default-app = { $name } (standard)
+show-details = Vis detaljer
+type = Type: { $mime }
+items = Objekter: { $items }
+item-size = Størrelse: { $size }
+item-created = Opprettet: { $created }
+item-modified = Endret: { $modified }
+item-accessed = Åpnet: { $accessed }
+calculating = Beregner...
+single-click = Ett klikk for å åpne
+type-to-search = Skriv for å Søke
+type-to-search-recursive = Søker i den aktuelle mappen og alle undermapper
+type-to-search-enter-path = Åpner plasseringen til mappen eller filen
+add-to-sidebar = Legg til sidepanelet
+compress = Komprimer
+delete-permanently = Slett permanent
+eject = Løs ut
+extract-here = Pakk ut
+new-file = Ny fil…
+new-folder = Ny mappe…
+open-in-terminal = Åpne i terminal
+move-to-trash = Flytt til papirkurven
+restore-from-trash = Gjenoprett fra papirkurven
+remove-from-sidebar = Fjern fra sidepanelet
+sort-by-name = Sorter etter navn
+sort-by-modified = Sorter etter modifisert
+sort-by-size = Sorter etter størrelse
+sort-by-trashed = Sorter etter slettingsdato
+remove-from-recents = Fjern fra nylige
+change-wallpaper = Bytt bakgrunnsbilde…
+desktop-appearance = Skrivebordsutseende...
+display-settings = Skjerminnstillinger…
+reload-folder = Last inn mappe på nytt
+rename = Gi nytt navn…
+grid-view = Rutevisning
+list-view = Rutenettvisning
+show-hidden-files = Vis skjulte filer
+list-directories-first = List mapper først
+gallery-preview = Galleriforhåndsvisning
+menu-about = Om COSMIC Filer...
+sort = Sorter
+sort-a-z = A-Å
+sort-z-a = Å-A
+sort-newest-first = Nyeste først
+sort-oldest-first = Eldste først
+sort-smallest-to-largest = Minste til største
+sort-largest-to-smallest = Største til minste

@@ -30,6 +30,7 @@ size = Koko
 
 # Dialogs
 
+
 ## Compress Dialog
 
 create-archive = Luo arkisto
@@ -52,7 +53,7 @@ folder-name = Kansion nimi
 file-already-exists = Annetun niminen tiedosto on jo olemassa.
 folder-already-exists = Annetun niminen kansio on jo olemassa.
 name-hidden = Merkillä "." alkavat nimet piilotetaan.
-name-invalid = Nimi ei voi olla "{$filename}".
+name-invalid = Nimi ei voi olla "{ $filename }".
 name-no-slashes = Nimi ei voi sisältää vinoviivoja.
 
 ## Open/Save Dialog
@@ -72,8 +73,8 @@ save-file = Tallenna tiedosto
 
 ## Open With Dialog
 
-open-with-title = Kuinka haluat avata kohteen "{$name}"?
-browse-store = Selaa {$store}
+open-with-title = Kuinka haluat avata kohteen "{ $name }"?
+browse-store = Selaa { $store }
 
 ## Rename Dialog
 
@@ -83,7 +84,7 @@ rename-folder = Nimeä kansio uudelleen
 ## Replace Dialog
 
 replace = Korvaa
-replace-title = Kohde "{$filename}" on jo olemassa tässä sijainnissa.
+replace-title = Kohde "{ $filename }" on jo olemassa tässä sijainnissa.
 replace-warning = Haluatko korvata sen tallentamallasi kohteella? Korvaaminen ylikirjoittaa kohteen sisällön.
 replace-warning-operation = Haluatko korvata sen? Korvaaminen ylikirjoittaa sen sisällön.
 original-file = Alkuperäinen tiedosto
@@ -95,7 +96,7 @@ skip = Jätä välistä
 ## Set as Executable and Launch Dialog
 
 set-executable-and-launch = Aseta käynnistettäväksi ja käynnistä
-set-executable-and-launch-description = Haluatko asettaa kohteen "{$name}" käynnistettväksi ja käynnistää sen?
+set-executable-and-launch-description = Haluatko asettaa kohteen "{ $name }" käynnistettväksi ja käynnistää sen?
 set-and-launch = Aseta ja käynnistä
 
 ## Metadata Dialog
@@ -103,15 +104,12 @@ set-and-launch = Aseta ja käynnistä
 owner = Omistaja
 group = Ryhmä
 other = Muut
-read = Luku
-write = Kirjoitus
-execute = Käynnistys
 
 # Context Pages
 
+
 ## About
 
-git-description = Git-versio {$hash} päivänä {$date}
 
 ## Add Network Drive
 
@@ -149,65 +147,78 @@ no-history = Historia on tyhjä.
 pending = Odottaa käsittelyä
 failed = Epäonnistui
 complete = Valmis
-compressing = Tiivistetään {$items} {$items ->
+compressing =
+    Tiivistetään { $items } { $items ->
         [one] kohde
-        *[other] kohteita
-    } lähteestä "{$from}" arkistoon "{$to}"
-compressed = Tiivistetty {$items} {$items ->
+       *[other] kohteita
+    } lähteestä "{ $from }" arkistoon "{ $to }"
+compressed =
+    Tiivistetty { $items } { $items ->
         [one] kohde
-        *[other] kohteet
-    } lähteestä "{$from}" arkistoon "{$to}"
+       *[other] kohteet
+    } lähteestä "{ $from }" arkistoon "{ $to }"
 copy_noun = Kopio
-creating = Luodaan kohdetta "{$name}" kohteen "{$parent}" alle
-created = Luotu kohde "{$name}" kohteen "{$parent}" alle
-copying = Kopioidaan {$items} {$items ->
+creating = Luodaan kohdetta "{ $name }" kohteen "{ $parent }" alle
+created = Luotu kohde "{ $name }" kohteen "{ $parent }" alle
+copying =
+    Kopioidaan { $items } { $items ->
         [one] kohde
-        *[other] kohteita
-    } lähteestä "{$from}" kohteeseen "{$to}"
-copied = Kopioitu {$items} {$items ->
+       *[other] kohteita
+    } lähteestä "{ $from }" kohteeseen "{ $to }"
+copied =
+    Kopioitu { $items } { $items ->
         [one] kohde
-        *[other] kohteet
-    } lähteestä "{$from}" kohteeseen "{$to}"
-emptying-trash = Tyhjennetään {trash}
-emptied-trash = Tyhjennetty {trash}
-extracting = Puretaan {$items} {$items ->
+       *[other] kohteet
+    } lähteestä "{ $from }" kohteeseen "{ $to }"
+emptying-trash = Tyhjennetään { trash }
+emptied-trash = Tyhjennetty { trash }
+extracting =
+    Puretaan { $items } { $items ->
         [one] kohde
-        *[other] kohteet
-    } arkistosta "{$from}" kohteeseen "{$to}"
-extracted = Purettu {$items} {$items ->
+       *[other] kohteet
+    } arkistosta "{ $from }" kohteeseen "{ $to }"
+extracted =
+    Purettu { $items } { $items ->
         [one] kohde
-        *[other] kohteet
-    } arkistosta "{$from}" kohteeseen "{$to}"
-setting-executable-and-launching = Asetetaan "{$name}" käynnistettäväksi ja käynnistetään
-set-executable-and-launched = Asetettu "{$name}" käynnistettäväksi ja käynnistetty
-moving = Siirretään {$items} {$items ->
+       *[other] kohteet
+    } arkistosta "{ $from }" kohteeseen "{ $to }"
+setting-executable-and-launching = Asetetaan "{ $name }" käynnistettäväksi ja käynnistetään
+set-executable-and-launched = Asetettu "{ $name }" käynnistettäväksi ja käynnistetty
+moving =
+    Siirretään { $items } { $items ->
         [one] kohde
-        *[other] kohteet
-    } lähteestä "{$from}" kohteeseen "{$to}"
-moved = Siirretty {$items} {$items ->
+       *[other] kohteet
+    } lähteestä "{ $from }" kohteeseen "{ $to }"
+moved =
+    Siirretty { $items } { $items ->
         [one] kohde
-        *[other] kohteet
-    } lähteestä "{$from}" kohteeseen "{$to}"
-renaming = Nimetään kohde "{$from}" muotoon "{$to}"
-renamed = Nimetty kohde "{$from}" muotoon "{$to}"
-restoring = Palautetaan {$items} {$items ->
+       *[other] kohteet
+    } lähteestä "{ $from }" kohteeseen "{ $to }"
+renaming = Nimetään kohde "{ $from }" muotoon "{ $to }"
+renamed = Nimetty kohde "{ $from }" muotoon "{ $to }"
+restoring =
+    Palautetaan { $items } { $items ->
         [one] kohde
-        *[other] kohteet
-    } {trash}sta
-restored = Palautettu {$items} {$items ->
+       *[other] kohteet
+    } { trash }sta
+restored =
+    Palautettu { $items } { $items ->
         [one] kohde
-        *[other] kohteet
-    } {trash}sta
+       *[other] kohteet
+    } { trash }sta
 unknown-folder = Tuntematon kansio
 
 ## Open with
+
 menu-open-with = Avaa ohjelmalla…
-default-app = {$name} (oletus)
+default-app = { $name } (oletus)
 
 ## Show details
+
 show-details = Näytä yksityiskohdat
 
 ## Settings
+
 settings = Asetukset
 
 ### Appearance
@@ -242,6 +253,7 @@ display-settings = Näytön asetukset…
 
 # Menu
 
+
 ## File
 
 file = Tiedosto
@@ -274,6 +286,7 @@ menu-settings = Asetukset…
 menu-about = Tietoa COSMIC Tiedostoista…
 
 ## Sort
+
 sort = Järjestä
 sort-a-z = A-Z
 sort-z-a = Z-A
