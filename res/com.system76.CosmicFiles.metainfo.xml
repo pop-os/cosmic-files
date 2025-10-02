@@ -10,6 +10,7 @@
   <url type="bugtracker">https://github.com/pop-os/cosmic-files</url>
   <name>COSMIC Files</name>
   <name xml:lang="ar">ملفات COSMIC</name>
+  <name xml:lang="cs">Soubory COSMIC</name>
   <name xml:lang="pl">Pliki COSMIC</name>
   <name xml:lang="hu">COSMIC Fájlok</name>
   <name xml:lang="pt_BR">Arquivos</name>
@@ -19,6 +20,7 @@
   <name xml:lang="it">COSMIC File</name>
   <summary>File manager for the COSMIC desktop</summary>
   <summary xml:lang="ar">مدير ملفات لسطح مكتب COSMIC</summary>
+  <summary xml:lang="cs">Správce souborů pro prostředí COSMIC</summary>
   <summary xml:lang="pl">Menedżer plików pulpitu COSMIC</summary>
   <summary xml:lang="hu">Fájlkezelő a COSMIC asztali környezethez</summary>
   <summary xml:lang="pt_BR">Gerenciador de arquivos do COSMIC</summary>
@@ -29,6 +31,7 @@
   <description>
     <p>File manager for the COSMIC desktop</p>
     <p xml:lang="ar">مدير ملفات لسطح مكتب COSMIC</p>
+    <p xml:lang="cs">Správce souborů pro prostředí COSMIC</p>
     <p xml:lang="pl">Menedżer plików pulpitu COSMIC</p>
     <p xml:lang="hu">Fájlkezelő a COSMIC asztali környezethez</p>
     <p xml:lang="pt_BR">Gerenciador de arquivos do COSMIC</p>

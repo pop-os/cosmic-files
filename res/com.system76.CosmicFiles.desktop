@@ -2,6 +2,7 @@
 [Desktop Entry]
 Name=COSMIC Files
 Name[ar]=ملفات COSMIC
+Name[cs]=Soubory COSMIC
 Name[zh_CN]=COSMIC 文件管理器
 Name[pl]=Pliki COSMIC
 Name[pt_BR]=Arquivos
@@ -19,6 +20,7 @@ Icon=com.system76.CosmicFiles
 Categories=COSMIC;Utility;FileManager;
 Keywords=Folder;Manager;
 Keywords[ar]=مجلد;ملف;مدير;
+Keywords[cs]=Složky;Správce;Manažer;Prohlížeč;
 Keywords[pl]=Katalogi;Pliki;Menedżer;
 Keywords[pt]=Pastas;Gerenciador;Arquivos;Gestor;Explorer;
 Keywords[hu]=mappa;fájl;kezelő
