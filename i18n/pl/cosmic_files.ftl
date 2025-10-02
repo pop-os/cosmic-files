@@ -7,7 +7,7 @@ home = Katalog domowy
 networks = Sieci
 notification-in-progress = Operacje na plikach w toku.
 trash = Kosz
-recents = Ubiegłe
+recents = Poprzednie
 undo = Cofnij
 today = Dzisiaj
 # Desktop view options

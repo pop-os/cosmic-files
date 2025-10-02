@@ -3,7 +3,7 @@ empty-folder = Pasta vazia
 empty-folder-hidden = Pasta vazia (tem ficheiros ocultos)
 no-results = Nenhum resultado encontrado
 filesystem = Sistema de ficheiros
-home = Pasta pessoal
+home = Pasta Pessoal
 notification-in-progress = Operações em curso.
 trash = Lixo
 undo = Anular
@@ -80,8 +80,8 @@ pending = Pendentes
 failed = Com falha
 complete = Concluído
 copy_noun = Copiado
-creating = A criar { $name } em { $parent }
-created = "{ $name }" criado em { $parent }
+creating = A criar "{ $name }" em "{ $parent }"
+created = "{ $name }" criado em "{ $parent }"
 copying =
     A copiar { $items } { $items ->
         [one] item
@@ -211,7 +211,7 @@ trash-folder-icon = Ícone do lixo
 icon-size-and-spacing = Tamanho e espaçamento do ícone
 icon-size = Tamanho do ícone
 grid-spacing = Espaçamento entre ícones
-trashed-on = Movido para o lixo
+trashed-on = Enviado para o lixo
 operations-running =
     { $running } { $running ->
         [one] operação
@@ -222,7 +222,7 @@ operations-running-finished =
         [one] operação
        *[other] operações
     } em execução ({ $percent }%), { $finished } concluídas...
-pause = Pausar
+pause = Pausa
 resume = Retomar
 create-archive = Criar arquivo
 extract-password-required = Palavra-passe necessária
@@ -289,15 +289,15 @@ compressing =
        *[other] itens
     } de "{ $from }" para "{ $to }" ({ $progress })...
 compressed =
-    Comprimido(s) { $items } { $items ->
-        [one] item
-       *[other] itens
+    { $items } { $items ->
+        [one] item comprimido
+       *[other] itens comprimidos
     } de "{ $from }" para "{ $to }"
 deleting =
     A eliminar { $items } { $items ->
         [one] item
        *[other] itens
-    } do Lixo { trash } ({ $progress })...
+    } do { trash } ({ $progress })...
 deleted =
     { $items } { $items ->
         [one] item eliminado
@@ -308,24 +308,24 @@ set-executable-and-launched = "{ $name }" definido como executável e iniciado
 setting-permissions = A definir permissões de "{ $name }" para { $mode }
 set-permissions = Definir permissões de "{ $name }" para { $mode }
 permanently-deleting =
-    A eliminar permanentemente "{ $items }" "{ $items ->
-        [one] item
-       *[other] itens
-    }"
-permanently-deleted =
-    Eliminado(s) permanentemente "{ $items }" "{ $items ->
+    A eliminar permanentemente { $items } { $items ->
         [one] item
        *[other] itens
     }
+permanently-deleted =
+    { $items } { $items ->
+        [one] item eliminado
+       *[other] itens eliminados
+    } permanentemente
 removing-from-recents =
     A remover { $items } { $items ->
         [one] item
        *[other] itens
     } de { recents }
 removed-from-recents =
-    Removido(s) { $items } { $items ->
-        [one] item
-       *[other] itens
+    { $items } { $items ->
+        [one] item removido
+       *[other] itens removidos
     } de { recents }
 type = Tipo: { $mime }
 items = Itens: { $items }

@@ -104,7 +104,7 @@ write = Skriv
 execute = Exekvera
 # Listvy
 name = Namn
-modified = Modifierad
+modified = Ändrad
 trashed-on = Kastad
 size = Storlek
 # Framstegssidfot
@@ -243,7 +243,7 @@ type = Typ: { $mime }
 items = Objekt: { $items }
 item-size = Storlek: { $size }
 item-created = Skapad: { $created }
-item-modified = Modifierad: { $modified }
+item-modified = Ändrad: { $modified }
 item-accessed = Åtkomst: { $accessed }
 calculating = Beräknar...
 
