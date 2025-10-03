@@ -534,6 +534,12 @@ pub struct DialogPages {
     pages: VecDeque<DialogPage>,
 }
 
+impl Default for DialogPages {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DialogPages {
     pub fn new() -> Self {
         Self {
@@ -996,7 +1002,6 @@ impl App {
         self.margin = overlaps;
     }
 
-    #[must_use]
     fn open_tab_entity(
         &mut self,
         location: Location,
@@ -1061,7 +1066,6 @@ impl App {
     }
 
     // This wrapper ensures that local folders use trash and remote folders permanently delete with a dialog
-    #[must_use]
     fn delete(&mut self, paths: Vec<PathBuf>) -> Task<Message> {
         let mut dialog_paths = Vec::new();
         let mut trash_paths = Vec::new();
@@ -1069,10 +1073,7 @@ impl App {
         for path in paths {
             //TODO: is there a smarter way to check this? (like checking for trash folders)
             let can_trash = match path.metadata() {
-                Ok(metadata) => match tab::fs_kind(&metadata) {
-                    tab::FsKind::Local => true,
-                    _ => false,
-                },
+                Ok(metadata) => matches!(tab::fs_kind(&metadata), tab::FsKind::Local),
                 Err(err) => {
                     log::warn!("failed to get metadata for {:?}: {}", path, err);
                     false
@@ -1097,7 +1098,6 @@ impl App {
         Task::batch(tasks)
     }
 
-    #[must_use]
     fn operation(&mut self, operation: Operation) -> Task<Message> {
         let id = self.pending_operation_id;
         let controller = Controller::default();
@@ -1157,7 +1157,6 @@ impl App {
         }
     }
 
-    #[must_use]
     fn rescan_operation_selection(&mut self, op_sel: OperationSelection) -> Task<Message> {
         log::info!("rescan_operation_selection {:?}", op_sel);
         let entity = self.tab_model.active();
@@ -2023,7 +2022,7 @@ impl App {
             }
         }
 
-        return false;
+        false
     }
 }
 
@@ -2085,7 +2084,7 @@ impl Application for App {
                 .unwrap()
                 .block_on(async move {
                     while let Some(task) = compio_rx.recv().await {
-                        _ = compio::runtime::spawn(task).detach();
+                        compio::runtime::spawn(task).detach();
                     }
                 })
         });
@@ -2242,7 +2241,7 @@ impl Application for App {
 
         if location_opt
             .and_then(|x| x.path_opt())
-            .map_or(false, |x| x.is_file())
+            .is_some_and(|x| x.is_file())
         {
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("open"),
@@ -2320,14 +2319,14 @@ impl Application for App {
                                 found |= item.path().is_some_and(|p| path.starts_with(&p))
                                     || item.name() == *name
                                     || item.uri() == *uri;
-                                (!item.is_mounted() && found).then(|| *k)
+                                (!item.is_mounted() && found).then_some(*k)
                             })
                         })
                         .or(if found {
                             None
                         } else {
                             // TODO do we need to choose the correct mounter?
-                            self.mounter_items.iter().map(|(k, _)| *k).next()
+                            self.mounter_items.keys().map(|k| *k).next()
                         })
                     {
                         if let Some(mounter) = MOUNTERS.get(&key) {
@@ -3079,7 +3078,7 @@ impl Application for App {
             }
             Message::NetworkDriveSubmit => {
                 //TODO: know which mounter to use for network drives
-                for (mounter_key, mounter) in MOUNTERS.iter() {
+                if let Some((mounter_key, mounter)) = MOUNTERS.iter().next() {
                     self.network_drive_connecting =
                         Some((*mounter_key, self.network_drive_input.clone()));
                     return mounter
@@ -3877,7 +3876,7 @@ impl Application for App {
                                         };
                                         let window_id = WindowId::unique();
                                         self.windows.insert(
-                                            window_id.clone(),
+                                            window_id,
                                             WindowKind::ContextMenu(entity, widget::Id::unique()),
                                         );
                                         commands.push(self.update(Message::Surface(
@@ -3901,7 +3900,7 @@ impl Application for App {
                                                         parent: parent_id.unwrap_or(
                                                             app.core
                                                                 .main_window_id()
-                                                                .unwrap_or_else(|| WindowId::NONE),
+                                                                .unwrap_or(WindowId::NONE),
                                                         ),
                                                         id: window_id,
                                                         positioner,
@@ -4062,7 +4061,7 @@ impl Application for App {
                             .sort_names
                             .get(&location_str)
                             .or_else(|| SORT_OPTION_FALLBACK.get(&location_str))
-                            .unwrap_or_else(|| &(HeadingOptions::Name, true));
+                            .unwrap_or(&(HeadingOptions::Name, true));
 
                         tab.sort_name = sort.0;
                         tab.sort_direction = sort.1;
@@ -4377,7 +4376,7 @@ impl Application for App {
                         .and_then(|x| x.path_opt())
                         .map(ToOwned::to_owned)
                     {
-                        return self.open_file(&[path]).into();
+                        return self.open_file(&[path]);
                     }
                 }
                 NavMenuAction::OpenWith(entity) => {
@@ -4635,7 +4634,7 @@ impl Application for App {
                     if let Some(p) = paths.first() {
                         {
                             for (k, mounter_items) in &self.mounter_items {
-                                if let Some(mounter) = MOUNTERS.get(&k) {
+                                if let Some(mounter) = MOUNTERS.get(k) {
                                     if let Some(item) = mounter_items
                                         .iter()
                                         .find(|item| item.path().is_some_and(|path| path == *p))
@@ -4767,10 +4766,7 @@ impl Application for App {
                 );
             }
         }
-
-        let Some(dialog_page) = self.dialog_pages.front() else {
-            return None;
-        };
+        let dialog_page = self.dialog_pages.front()?;
 
         let cosmic_theme::Spacing {
             space_xxs, space_s, ..
@@ -4855,8 +4851,7 @@ impl Application for App {
                                         archive_type: archive_types[index],
                                         password: password.clone(),
                                     })
-                                })
-                                .into(),
+                                }),
                             ])
                             .align_y(Alignment::Center)
                             .spacing(space_xxs)
@@ -5963,8 +5958,7 @@ impl Application for App {
                             // watching the trash which is slow but also properly get events.
                             let trash_paths = trash_bins
                                 .into_iter()
-                                .map(|path| [path.join("files"), path])
-                                .flatten();
+                                .flat_map(|path| [path.join("files"), path]);
                             for path in trash_paths {
                                 if let Err(e) =
                                     watcher.watch(&path, notify::RecursiveMode::NonRecursive)
