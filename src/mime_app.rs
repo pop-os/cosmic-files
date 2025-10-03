@@ -439,7 +439,7 @@ impl MimeAppCache {
 
     fn get_default_terminal(&self) -> Option<String> {
         let output = process::Command::new("xdg-mime")
-            .args(&["query", "default", "x-scheme-handler/terminal"])
+            .args(["query", "default", "x-scheme-handler/terminal"])
             .output()
             .ok()?;
 

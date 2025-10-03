@@ -535,13 +535,13 @@ pub fn menu_bar<'a>(
         menu::Item::CheckBox(
             label,
             None,
-            sort_options.map_or(false, |(sort_name, sort_direction, _)| {
+            sort_options.is_some_and(|(sort_name, sort_direction, _)| {
                 sort_name == sort && sort_direction == dir
             }),
             Action::SetSort(sort, dir),
         )
     };
-    let in_trash = tab_opt.map_or(false, |tab| tab.location == Location::Trash);
+    let in_trash = tab_opt.is_some_and(|tab| tab.location == Location::Trash);
 
     let mut selected_dir = 0;
     let mut selected = 0;
@@ -637,26 +637,26 @@ pub fn menu_bar<'a>(
                         menu::Item::CheckBox(
                             fl!("grid-view"),
                             None,
-                            tab_opt.map_or(false, |tab| matches!(tab.config.view, tab::View::Grid)),
+                            tab_opt.is_some_and(|tab| matches!(tab.config.view, tab::View::Grid)),
                             Action::TabViewGrid,
                         ),
                         menu::Item::CheckBox(
                             fl!("list-view"),
                             None,
-                            tab_opt.map_or(false, |tab| matches!(tab.config.view, tab::View::List)),
+                            tab_opt.is_some_and(|tab| matches!(tab.config.view, tab::View::List)),
                             Action::TabViewList,
                         ),
                         menu::Item::Divider,
                         menu::Item::CheckBox(
                             fl!("show-hidden-files"),
                             None,
-                            tab_opt.map_or(false, |tab| tab.config.show_hidden),
+                            tab_opt.is_some_and(|tab| tab.config.show_hidden),
                             Action::ToggleShowHidden,
                         ),
                         menu::Item::CheckBox(
                             fl!("list-directories-first"),
                             None,
-                            tab_opt.map_or(false, |tab| tab.config.folders_first),
+                            tab_opt.is_some_and(|tab| tab.config.folders_first),
                             Action::ToggleFoldersFirst,
                         ),
                         menu::Item::CheckBox(

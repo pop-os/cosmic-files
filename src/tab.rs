@@ -309,24 +309,24 @@ fn tab_complete(path: &Path) -> Result<Vec<(String, PathBuf)>, Box<dyn Error>> {
             .ok_or_else(|| format!("path has no parent {:?}", path))?
     };
 
-    let child_os = path.strip_prefix(&parent)?;
+    let child_os = path.strip_prefix(parent)?;
     let child = child_os
         .to_str()
         .ok_or_else(|| format!("invalid UTF-8 {:?}", child_os))?;
 
-    let pattern = format!("^{}", regex::escape(&child));
+    let pattern = format!("^{}", regex::escape(child));
     let regex = regex::RegexBuilder::new(&pattern)
         .case_insensitive(true)
         .build()?;
 
     let mut completions = Vec::new();
-    for entry_res in fs::read_dir(&parent)? {
+    for entry_res in fs::read_dir(parent)? {
         let entry = entry_res?;
         let file_name_os = entry.file_name();
         let Some(file_name) = file_name_os.to_str() else {
             continue;
         };
-        if regex.is_match(&file_name) {
+        if regex.is_match(file_name) {
             completions.push((file_name.to_string(), entry.path()));
         }
     }
@@ -610,10 +610,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
     let mtime = file_info.attribute_uint64(gio::FILE_ATTRIBUTE_TIME_MODIFIED);
     let mut display_name = Item::display_name(&file_info.display_name());
     let remote = file_info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE);
-    let is_dir = match file_info.file_type() {
-        gio::FileType::Directory => true,
-        _ => false,
-    };
+    let is_dir = matches!(file_info.file_type(), gio::FileType::Directory);
 
     let size_opt = match is_dir {
         true => None,
@@ -881,11 +878,11 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
     {
         if let Ok(path_meta) = fs::metadata(tab_path) {
             if fs_kind(&path_meta) == FsKind::Gvfs {
-                let file = gio::File::for_path(&tab_path);
+                let file = gio::File::for_path(tab_path);
 
                 // gio crate expects a comma delimited string
                 let mut attr_string = String::new();
-                for attr in vec![
+                for attr in [
                     gio::FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME,
                     gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE,
                     gio::FILE_ATTRIBUTE_TIME_MODIFIED,
@@ -906,11 +903,9 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                 ) {
                     Ok(res) => {
                         remote_scannable = true;
-                        for file in res {
-                            if let Ok(file) = file {
-                                let full_path = Path::new(tab_path).join(file.name());
-                                items.push(item_from_gvfs_info(full_path, file, sizes));
-                            }
+                        for file in res.flatten() {
+                            let full_path = Path::new(tab_path).join(file.name());
+                            items.push(item_from_gvfs_info(full_path, file, sizes));
                         }
                     }
                     Err(err) => {
@@ -1821,36 +1816,33 @@ impl ItemThumbnail {
                 }
             };
 
-            match dyn_img {
-                Some(dyn_img) => {
-                    if let Ok(cacher) = thumbnail_cacher.as_ref() {
-                        match cacher.update_with_image(dyn_img) {
-                            Ok(path) => {
-                                return ItemThumbnail::Image(
-                                    widget::image::Handle::from_path(path),
-                                    None,
-                                );
-                            }
-                            Err(err) => {
-                                log::warn!("cacher failed to decode {:?}: {}", path, err);
-                            }
+            if let Some(dyn_img) = dyn_img {
+                if let Ok(cacher) = thumbnail_cacher.as_ref() {
+                    match cacher.update_with_image(dyn_img) {
+                        Ok(path) => {
+                            return ItemThumbnail::Image(
+                                widget::image::Handle::from_path(path),
+                                None,
+                            );
                         }
-                    } else {
-                        // Fallback for when thumbnail cacher isn't available.
-                        let thumbnail = dyn_img
-                            .thumbnail(thumbnail_size, thumbnail_size)
-                            .into_rgba8();
-                        return ItemThumbnail::Image(
-                            widget::image::Handle::from_rgba(
-                                thumbnail.width(),
-                                thumbnail.height(),
-                                thumbnail.into_raw(),
-                            ),
-                            Some((dyn_img.width(), dyn_img.height())),
-                        );
+                        Err(err) => {
+                            log::warn!("cacher failed to decode {:?}: {}", path, err);
+                        }
                     }
+                } else {
+                    // Fallback for when thumbnail cacher isn't available.
+                    let thumbnail = dyn_img
+                        .thumbnail(thumbnail_size, thumbnail_size)
+                        .into_rgba8();
+                    return ItemThumbnail::Image(
+                        widget::image::Handle::from_rgba(
+                            thumbnail.width(),
+                            thumbnail.height(),
+                            thumbnail.into_raw(),
+                        ),
+                        Some((dyn_img.width(), dyn_img.height())),
+                    );
                 }
-                None => (),
             }
         }
 
@@ -1924,7 +1916,7 @@ impl ItemThumbnail {
         thumbnail_dir: Option<&Path>,
     ) -> Option<(ItemThumbnail, NamedTempFile)> {
         // Try external thumbnailers
-        for thumbnailer in thumbnailer(&mime) {
+        for thumbnailer in thumbnailer(mime) {
             let is_evince = thumbnailer.exec.starts_with("evince-thumbnailer ");
             let prefix = if is_evince {
                 //TODO: apparmor config for evince-thumbnailer does not allow /tmp/cosmic-files*
@@ -1934,15 +1926,13 @@ impl ItemThumbnail {
             };
 
             // It's preferable to create the tempfile in the same directory as the final cached
-            // thumbnail to ensure that no copies accross filesytems need to be made. However,
+            // thumbnail to ensure that no copies across filesytems need to be made. However,
             // the apparmor config for evince-thumbnailer does not allow this, so we need to
             // fallback to the system tempdir.
-            let file = if thumbnail_dir.is_none() || is_evince {
-                tempfile::Builder::new().prefix(prefix).tempfile()
-            } else {
-                tempfile::Builder::new()
-                    .prefix(prefix)
-                    .tempfile_in(thumbnail_dir.unwrap())
+            let dir = if is_evince { None } else { thumbnail_dir };
+            let file = match dir {
+                Some(d) => tempfile::Builder::new().prefix(prefix).tempfile_in(d),
+                None => tempfile::Builder::new().prefix(prefix).tempfile(),
             };
             let file = match file {
                 Ok(ok) => ok,
@@ -2060,7 +2050,7 @@ impl Item {
                 widget::image(handle.clone()).into()
             }
             ItemThumbnail::Svg(handle) => widget::svg(handle.clone()).into(),
-            ItemThumbnail::Text(content) => widget::text_editor(&content)
+            ItemThumbnail::Text(content) => widget::text_editor(content)
                 .class(cosmic::theme::iced::TextEditor::Custom(Box::new(
                     text_editor_class,
                 )))
@@ -2544,7 +2534,7 @@ impl Tab {
             .and_then(|opts| opts.get(&location_str))
             .or_else(|| SORT_OPTION_FALLBACK.get(&location_str))
             .cloned()
-            .unwrap_or_else(|| (HeadingOptions::Name, true));
+            .unwrap_or((HeadingOptions::Name, true));
         let location = location.normalize();
         let location_ancestors = location.ancestors();
         let location_title = location.title();
@@ -3404,10 +3394,10 @@ impl Tab {
                         // Try to select previous item in current row
                         if !col
                             .checked_sub(1)
-                            .map_or(false, |col| self.select_position(row, col, mod_shift))
+                            .is_some_and(|col| self.select_position(row, col, mod_shift))
                         {
                             // Try to select last item in previous row
-                            if !row.checked_sub(1).map_or(false, |row| {
+                            if !row.checked_sub(1).is_some_and(|row| {
                                 let mut col = 0;
                                 if let Some(ref items) = self.items_opt {
                                     for item in items.iter() {
@@ -3496,7 +3486,7 @@ impl Tab {
                         // Try to select item in last row
                         if !row
                             .checked_sub(1)
-                            .map_or(false, |row| self.select_position(row, col, mod_shift))
+                            .is_some_and(|row| self.select_position(row, col, mod_shift))
                         {
                             // Ensure current item is still selected if there are no other items
                             self.select_position(row, col, mod_shift);
@@ -3596,9 +3586,9 @@ impl Tab {
                     self.update(Message::Click(click_i_opt), modifiers);
                 }
                 if let Some(ref mut items) = self.items_opt {
-                    if !click_i_opt.map_or(false, |click_i| {
-                        items.get(click_i).map_or(false, |x| x.selected)
-                    }) {
+                    if !click_i_opt
+                        .is_some_and(|click_i| items.get(click_i).is_some_and(|x| x.selected))
+                    {
                         // If item not selected, clear selection on other items
                         for (i, item) in items.iter_mut().enumerate() {
                             item.selected = Some(i) == click_i_opt;
@@ -3972,7 +3962,7 @@ impl Tab {
                     }
                 }
                 if location != self.location || selected_paths.is_some() {
-                    if location.path_opt().map_or(true, |path| path.is_dir()) {
+                    if location.path_opt().is_none_or(|path| path.is_dir()) {
                         if selected_paths.is_none() {
                             selected_paths = self
                                 .location
@@ -3995,10 +3985,10 @@ impl Tab {
         // Update context menu popup
         if self.context_menu != last_context_menu {
             if last_context_menu.is_some() {
-                commands.push(Command::ContextMenu(None, self.window_id.clone()));
+                commands.push(Command::ContextMenu(None, self.window_id));
             }
             if let Some(point) = self.context_menu {
-                commands.push(Command::ContextMenu(Some(point), self.window_id.clone()));
+                commands.push(Command::ContextMenu(Some(point), self.window_id));
             }
         }
 
@@ -4221,7 +4211,7 @@ impl Tab {
                         ItemThumbnail::Text(text) => {
                             element_opt = Some(
                                 widget::container(
-                                    widget::text_editor(&text).padding(space_xxs).class(
+                                    widget::text_editor(text).padding(space_xxs).class(
                                         cosmic::theme::iced::TextEditor::Custom(Box::new(
                                             text_editor_class,
                                         )),
@@ -5387,7 +5377,7 @@ impl Tab {
                     height: s.height - top_deduct as f32,
                 }));
 
-            let spacer_height = size.height - y as f32 - top_deduct as f32;
+            let spacer_height = size.height - y - top_deduct as f32;
             if spacer_height > 0. {
                 children.push(
                     widget::container(Space::with_height(Length::Fixed(spacer_height))).into(),
@@ -5490,7 +5480,7 @@ impl Tab {
             .on_right_press(move |p| {
                 Message::ContextMenu(
                     if self.context_menu.is_some() { None } else { p },
-                    self.window_id.clone(),
+                    self.window_id,
                 )
             })
             .wayland_on_right_press_window_position();
@@ -5604,7 +5594,7 @@ impl Tab {
 
     pub fn subscription(&self, preview: bool) -> Subscription<Message> {
         //TODO: how many thumbnail loads should be in flight at once?
-        let jobs = self.thumb_config.jobs.get().clone() as usize;
+        let jobs = self.thumb_config.jobs.get() as usize;
         let mut subscriptions = Vec::with_capacity(jobs + 3);
 
         if let Some(items) = &self.items_opt {
@@ -5650,9 +5640,9 @@ impl Tab {
                 };
                 if can_thumbnail {
                     let mime = item.mime.clone();
-                    let max_jobs = jobs.clone();
-                    let max_mb = self.thumb_config.max_mem_mb.get().clone() as u64;
-                    let max_size = self.thumb_config.max_size_mb.get().clone() as u64;
+                    let max_jobs = jobs;
+                    let max_mb = self.thumb_config.max_mem_mb.get() as u64;
+                    let max_size = self.thumb_config.max_size_mb.get() as u64;
                     subscriptions.push(Subscription::run_with_id(
                         ("thumbnail", path.clone()),
                         stream::channel(1, move |mut output| async move {

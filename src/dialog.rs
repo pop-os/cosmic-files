@@ -159,11 +159,9 @@ impl<T: AsRef<str>> From<T> for DialogLabel {
             let underline = next_underline;
             next_underline = false;
 
-            if c == '_' {
-                if !underline {
-                    next_underline = true;
-                    continue;
-                }
+            if c == '_' && !underline {
+                next_underline = true;
+                continue;
             }
 
             if underline && key_bind_opt.is_none() {
@@ -1041,10 +1039,7 @@ impl Application for App {
             );
         }
 
-        let dialog_page = match self.dialog_pages.front() {
-            Some(some) => some,
-            None => return None,
-        };
+        let dialog_page = self.dialog_pages.front()?;
 
         let dialog = match dialog_page {
             DialogPage::NewFolder { parent, name } => {
@@ -1628,7 +1623,7 @@ impl Application for App {
                                         };
                                         use cosmic::iced::Rectangle;
                                         let window_id = window::Id::unique();
-                                        self.context_menu_window = Some(window_id.clone());
+                                        self.context_menu_window = Some(window_id);
                                         let autosize_id = widget::Id::unique();
                                         commands.push(self.update(Message::Surface(
                                             cosmic::surface::action::app_popup(

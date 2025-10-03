@@ -69,7 +69,7 @@ pub fn mime_for_path<P: AsRef<Path>>(
             gb.file_name(file_name);
         }
     } else {
-        gb.path(&path);
+        gb.path(path);
     }
     if let Some(metadata) = metadata_opt {
         gb.metadata(metadata.clone());
@@ -77,7 +77,7 @@ pub fn mime_for_path<P: AsRef<Path>>(
     let guess = gb.guess();
     if guess.uncertain() {
         // If uncertain, try mime_guess. This could happen on platforms without shared-mime-info
-        mime_guess::from_path(&path).first_or_octet_stream()
+        mime_guess::from_path(path).first_or_octet_stream()
     } else {
         guess.mime_type().clone()
     }
