@@ -44,8 +44,8 @@ xdg-mime = { git = "https://github.com/ebassi/xdg-mime-rs" }
 bzip2 = { version = "0.6", optional = true }            #TODO: replace with pure Rust crate
 flate2 = "1.1"
 tar = "0.4.44"
-lzma-rust2 = { version = "0.13", optional = true }
-ordermap = { version = "0.5.10", features = ["serde"] }
+lzma-rust2 = { version = "0.14", optional = true }
+ordermap = { version = "0.5.12", features = ["serde"] }
 # Internationalization
 i18n-embed = { version = "0.16", features = [
     "fluent-system",
@@ -59,7 +59,7 @@ zip = "5.1.1"
 uzers = "0.12.1"
 md-5 = "0.10.6"
 png = "0.18"
-jxl-oxide = { version = "0.12.4", features = ["image"] }
+jxl-oxide = { version = "0.12.5", features = ["image"] }
 num_cpus = "1.17.0"
 
 # Completion-based IO runtime to enable io_uring / IOCP file IO support.
@@ -135,6 +135,3 @@ tokio = { version = "1", features = ["rt", "macros"] }
 
 [workspace]
 members = ["cosmic-files-applet"]
-
-[patch.crates-io]
-license = { git = "https://github.com/evenorog/license.git" }
