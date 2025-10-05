@@ -2271,12 +2271,11 @@ impl Item {
             }
         }
 
-        if let ItemThumbnail::Image(_, Some((width, height))) = self
-            .thumbnail_opt
-            .as_ref()
-            .unwrap_or(&ItemThumbnail::NotImage)
-        {
-            details = details.push(widget::text::body(format!("{}x{}", width, height)));
+        if let Some(path) = self.path_opt() {
+            if let Ok(img) = image::image_dimensions(path) {
+                let (width, height) = img;
+                details = details.push(widget::text::body(format!("{}x{}", width, height)));
+            }
         }
         column = column.push(details);
 
