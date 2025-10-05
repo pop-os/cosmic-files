@@ -2968,8 +2968,8 @@ impl Application for App {
                 }
             },
             Message::ModifiersChanged(window_id, modifiers) => {
+                self.modifiers = modifiers;
                 if self.core.main_window_id() == Some(window_id) {
-                    self.modifiers = modifiers;
                     let entity = self.tab_model.active();
                     return self.update(Message::TabMessage(
                         Some(entity),
