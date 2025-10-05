@@ -245,7 +245,6 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
                 controller.set_progress(total_progress);
             }
         }
-        outfile.sync_all()?;
         #[cfg(unix)]
         {
             // Check for real permissions, which we'll set in a second pass
