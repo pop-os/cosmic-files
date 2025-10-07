@@ -160,9 +160,9 @@ impl ThumbnailCacher {
 
         let mut image_data = vec![
             0;
-            reader.output_buffer_size().ok_or_else(
-                || "The required image buffer size is too large."
-            )?
+            reader
+                .output_buffer_size()
+                .ok_or("The required image buffer size is too large.")?
         ];
         reader.next_frame(&mut image_data)?;
 

@@ -99,10 +99,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
 
         let metadata = if !force_dir && !info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE) {
             let mtime = info.attribute_uint64(gio::FILE_ATTRIBUTE_TIME_MODIFIED);
-            let is_dir = match info.file_type() {
-                gio::FileType::Directory => true,
-                _ => false,
-            };
+            let is_dir = matches!(info.file_type(), gio::FileType::Directory);
             let size_opt = match is_dir {
                 true => None,
                 false => Some(info.size() as u64),
