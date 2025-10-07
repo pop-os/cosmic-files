@@ -207,7 +207,7 @@ username = Nazwa użytkownika
 ## Operations
 
 cancelled = Anulowano
-edit-history = Edytuj historię
+edit-history = Historia edycji
 history = Historia
 no-history = Brak pozycji w historii.
 pending = Oczekujące
