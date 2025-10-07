@@ -181,7 +181,6 @@ keep = Megtartás
 
 ## About
 
-git-description = Git commit { $hash } ekkor: { $date }
 
 ## Add Network Drive
 

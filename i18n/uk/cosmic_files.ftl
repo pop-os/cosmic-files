@@ -66,7 +66,6 @@ skip = Пропустити
 
 ## About
 
-git-description = Git commit { $hash } за { $date }
 
 ## Operations
 
@@ -122,7 +121,6 @@ default-app = { $name } (типово)
 
 ## Properties
 
-properties = Властивості
 
 ## Settings
 

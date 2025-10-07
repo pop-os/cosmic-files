@@ -60,16 +60,12 @@ skip = Ignorar
 owner = Proprietário
 group = Grupo
 other = Outro
-read = Leitura
-write = Escrita
-execute = Execução
 
 # Context Pages
 
 
 ## About
 
-git-description = Git commit { $hash } em { $date }
 
 ## Operations
 
@@ -170,7 +166,6 @@ file = Ficheiro
 new-tab = Novo separador
 new-window = Nova janela
 rename = Renomear...
-menu-show-details = Mostrar detalhes...
 close-tab = Fechar separador
 quit = Sair
 

@@ -96,16 +96,12 @@ set-and-launch = सेट करें और लॉन्च करें
 owner = मालिक
 group = समूह
 other = अन्य
-read = पढ़ें
-write = लिखें
-execute = निष्पादित करें
 
 # Context Pages
 
 
 ## About
 
-git-description = { $date } को { $hash } गिट कमिट किया गया
 
 ## Add Network Drive
 
@@ -254,7 +250,6 @@ file = फ़ाइल
 new-tab = नया टैब
 new-window = नई विंडो
 rename = नाम बदलें...
-menu-show-details = विवरण दिखाएँ...
 close-tab = टैब बंद करें
 quit = बंद करें
 

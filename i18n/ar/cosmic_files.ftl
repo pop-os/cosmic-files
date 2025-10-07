@@ -59,11 +59,9 @@ replace-warning = أتريد استبداله بالملف الذي تحفظه؟
 
 ## About
 
-git-description = إيداع غِت (git commit) { $hash } في { $date }
 
 ## Operations
 
-operations = عمليات
 pending = منتظر
 failed = فشِل
 complete = انتهى
@@ -76,7 +74,6 @@ default-app = { $name } (المبدئي)
 
 ## Properties
 
-properties = الخصائص
 
 ## Settings
 
@@ -174,7 +171,7 @@ keep = أبقِ
 repository = المستودع
 support = الدعم
 add-network-drive = أضِف قرص شبكة
-connect = اتصل
+connect = توصيل
 connect-anonymously = اتصل كمجهول
 connecting = يتصل...
 domain = النطاق
@@ -246,22 +243,14 @@ sort-smallest-to-largest = من الأصغر إلى الأكبر
 sort-largest-to-smallest = من الأكبر للأصغر
 operations-running =
     { $running } { $running ->
-        [zero] لا عمليات
         [one] عملية
-        [two] عمليتان
-        [few] عمليات
-        [many] عملية
-       *[other] عملية
-    } جارية ({ $percent }٪)...
+       *[other] عمليات
+    } قيد التشغيل ({ $percent }%)...
 operations-running-finished =
     { $running } { $running ->
-        [zero] لا عمليات جارية
-        [one] عملية جارية
-        [two] عمليتان جاريتان
-        [few] عمليات جارية
-        [many] عملية جارية
-       *[other] عملية جارية
-    } جارية ({ $percent }٪)، { $finished } انتهى...
+        [one] عملية
+       *[other] عمليات
+    } قيد التشغيل ({ $percent }%)، { $finished } انتهى...
 browse-store = تصفح { $store }
 other-apps = تطبيقات أخرى
 related-apps = تطبيقات ذات صلة
@@ -269,7 +258,7 @@ selected-items = العناصر { $items } المحدّدة
 permanently-delete-question = حذف نهائي
 delete = احذف
 permanently-delete-warning = أمتأكّد أنك تريد حذف { $target } نهائيًا؟ لا يمكن التراجع عن هذا الإجراء.
-replace-warning-operation = أتريد استبداله؟ استبداله سيكتب فوق محتواه.
+replace-warning-operation = هل تريد استبداله؟ سيؤدي استبداله إلى استبدال محتواه.
 original-file = الملف الأصلي
 replace-with = استبدل ب‍
 apply-to-all = طبّق على الكلّ
@@ -341,14 +330,10 @@ copying =
        *[other] { $items } عنصر
     } من «{ $from }» إلى «{ $to }» ({ $progress })...
 extracting =
-    يستخرِج { $items } { $items ->
-        [zero] لا عناصر
-        [one] عنصر
-        [two] عنصران
-        [few] { $items } عناصر
-        [many] { $items } عنصراً
-       *[other] { $items } عنصر
-    } من «{ $from }» إلى «{ $to }» ({ $progress })...
+    جاري استخراج { $items } { $items ->
+        [one] item
+       *[other] items
+    } من ”{ $from }“ إلى ”{ $to }“ ({ $progress })...
 extracted =
     استُخرِج { $items } { $items ->
         [zero] لا عناصر
@@ -368,49 +353,29 @@ moving =
        *[other] { $items } عنصر
     } من «{ $from }» إلى «{ $to }» ({ $progress })...
 moved =
-    نُقل { $items } { $items ->
-        [zero] لا عناصر
-        [one] عنصر
-        [two] عنصران
-        [few] { $items } عناصر
-        [many] { $items } عنصراً
-       *[other] { $items } عنصر
-    } من «{ $from }» إلى «{ $to }»
+    تم نقل { $items } { $items ->
+        [one] item
+       *[other] items
+    } من ”{ $from }“ إلى ”{ $to }“
 permanently-deleting =
-    يحذف نهائيًا { $items } { $items ->
-        [zero] عناصر
+    حذف { $items } بشكل نهائي { $items ->
         [one] عنصر
-        [two] عنصران
-        [few] { $items } عناصر
-        [many] { $items } عنصراً
-       *[other] { $items } عنصر
+       *[other] عناصر
     }
 permanently-deleted =
-    حُذف نهائيًا { $items } { $items ->
-        [zero] عناصر
+    تم حذف { $items } بشكل نهائي { $items ->
         [one] عنصر
-        [two] عنصران
-        [few] { $items } عناصر
-        [many] { $items } عنصراً
-       *[other] { $items } عنصر
+       *[other] عناصر
     }
 removing-from-recents =
-    يزيل { $items } { $items ->
-        [zero] عناصر
+    جاري إزالة { $items } { $items ->
         [one] عنصر
-        [two] عنصران
-        [few] { $items } عناصر
-        [many] { $items } عنصراً
-       *[other] { $items } عنصر
+       *[other] عناصر
     } من { recents }
 removed-from-recents =
-    أُزيل { $items } { $items ->
-        [zero] عناصر
-        [one] عنصر
-        [two] عنصران
-        [few] { $items } عناصر
-        [many] { $items } عنصراً
-       *[other] { $items } عنصر
+    تمت إزالة { $items } { $items ->
+        [one] item
+       *[other] items
     } من { recents }
 restoring =
     يستعيد { $items } { $items ->

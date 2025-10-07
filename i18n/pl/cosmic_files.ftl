@@ -52,7 +52,6 @@ create-archive = Utwórz archiwum
 extract-password-required = Wymagane hasło
 extract-to = Wypakuj do…
 extract-to-title = Wypakuj do katalogu
-extract-to-prompt = Wprowadź miejsce gdzie wypakowywać.
 
 ## Empty Trash Dialog
 
@@ -208,7 +207,7 @@ username = Nazwa użytkownika
 ## Operations
 
 cancelled = Anulowano
-edit-history = Edytuj historię
+edit-history = Historia edycji
 history = Historia
 no-history = Brak pozycji w historii.
 pending = Oczekujące

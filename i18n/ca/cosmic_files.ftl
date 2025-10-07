@@ -159,7 +159,6 @@ read-write-execute = Llegir, escriure i executar
 
 ## About
 
-git-description = Git commit { $hash } el { $date }
 
 ## Add Network Drive
 

@@ -185,7 +185,6 @@ keep = Ponechať
 
 ## About
 
-git-description = Git commit { $hash } z { $date }
 
 ## Add Network Drive
 

@@ -68,16 +68,12 @@ skip = Пропустить
 owner = Владелец
 group = Группа
 other = Остальные
-read = Чтение
-write = Запись
-execute = Выполнение
 
 # Context Pages
 
 
 ## About
 
-git-description = Git коммит { $hash } от { $date }
 
 ## Add Network Drive
 
@@ -109,7 +105,6 @@ username = Имя пользователя
 
 ## Operations
 
-operations = Операции
 edit-history = История редактирования
 history = История
 no-history = В истории нет записей.
@@ -186,7 +181,6 @@ show-details = Показать подробности
 
 ## Properties
 
-properties = Свойства
 
 ## Settings
 
@@ -223,7 +217,6 @@ file = Файл
 new-tab = Новая вкладка
 new-window = Новое окно
 rename = Переименовать…
-menu-show-details = Показать подробности
 close-tab = Закрыть вкладку
 quit = Выйти
 

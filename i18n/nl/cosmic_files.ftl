@@ -181,7 +181,6 @@ keep = Behouden
 
 ## About
 
-git-description = Git commit { $hash } op { $date }
 
 ## Add Network Drive
 

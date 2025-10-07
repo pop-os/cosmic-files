@@ -173,7 +173,6 @@ keep = 保留
 
 ## About
 
-git-description = Git 提交 { $hash } 于 { $date }
 
 ## Add Network Drive
 

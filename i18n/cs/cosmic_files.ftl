@@ -59,11 +59,9 @@ replace-warning = Chcete nahradit soubor tím, který ukládáte? Nahrazení př
 
 ## About
 
-git-description = Git commit { $hash } dne { $date }
 
 ## Operations
 
-operations = Operace
 pending = Čekající
 failed = Selhalo
 complete = Dokončené
@@ -76,7 +74,6 @@ default-app = { $name } (výchozí)
 
 ## Properties
 
-properties = Vlastnosti
 
 ## Settings
 
@@ -263,7 +260,7 @@ network-drive-error = Nelze přistoupit k síťovému disku
 remember-password = Zapamatovat heslo
 try-again = Zkuste to znovu
 cancelled = Zrušeno
-edit-history = Upravit historii
+edit-history = Historie úprav
 history = Historie
 no-history = Žádné položky v historii.
 progress = { $percent }%
@@ -371,7 +368,7 @@ type-to-search-enter-path = Zadává cestu ke složce nebo souboru
 compress = Komprimovat
 eject = Vysunout
 extract-here = Extrahovat
-change-wallpaper = Změnit tapetu...
+change-wallpaper = Změnit pozadí...
 desktop-appearance = Vzhled plochy...
 display-settings = Nastavení displeje...
 reload-folder = Znovu načíst složku

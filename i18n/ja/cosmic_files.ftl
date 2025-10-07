@@ -1,11 +1,11 @@
 cosmic-files = COSMICファイル
 empty-folder = 空のフォルダ
 empty-folder-hidden = 空のフォルダ（隠しファイルあり）
-no-results = 検索結果はありません。
+no-results = 検索結果はありません
 filesystem = ファイルシステム
 home = ホーム
 networks = ネットワーク
-notification-in-progress = ファイル操作中
+notification-in-progress = ファイル処理が進行中です。
 trash = ゴミ箱
 recents = 最近
 undo = 元に戻す
@@ -67,21 +67,17 @@ skip = スキップ
 owner = 所有者
 group = グループ
 other = その他
-read = 読み
-write = 書き
-execute = 実行
 
 # Context Pages
 
 
 ## About
 
-git-description = { $date }に{ $hash }というGitコミット
 
 ## Add Network Drive
 
 add-network-drive = ネットワークドライブを追加
-connect = 接続
+connect = 接続する
 connect-anonymously = 匿名的に接続
 connecting = 接続中...
 domain = ドメイン
@@ -100,7 +96,7 @@ network-drive-schemes =
     Server Message Block,smb://
     SSH File Transfer Protocol,sftp:// または ssh://
     WebDav,dav:// または davs://
-network-drive-error = ネットワークドライブをアクセスできませんでした。
+network-drive-error = ネットワークドライブにアクセスできませんでした
 password = パスワード
 remember-password = パスワードを覚える
 try-again = 再試行
@@ -114,31 +110,30 @@ no-history = 歴史にはアイテムはありません。
 pending = 保留中
 failed = 失敗
 complete = 完了
-compressing = { $items }つのアイテムを{ $from }から{ $to }まで圧縮中
+compressing = { $items }つのアイテムを{ $from }から{ $to }まで圧縮中...
 compressed = { $items }つのアイテムを{ $from }から{ $to }まで圧縮完了
 copy_noun = コピー
 creating = { $parent }で{ $name }を作成中
 created = { $parent }で{ $name }を作成完了
-copying = { $items }つのアイテムを{ $from }から{ $to }までコピー中
+copying = { $items }つのアイテムを{ $from }から{ $to }までコピー中...
 copied = { $items }つのアイテムを{ $from }から{ $to }までコピー完了
-emptying-trash = { trash }を空にしています
+emptying-trash = { trash }を空にしています...
 emptied-trash = { trash }を空にした
-moving = { $items }つのアイテムを{ $from }から{ $to }まで移動中
+moving = { $items }つのアイテムを{ $from }から{ $to }まで移動中...
 moved = { $items }つのアイテムを{ $from }から{ $to }まで移動完了
 renaming = { $from }を{ $to }に変更中
 renamed = { $from }を{ $to }に変更完了
-restoring = { trash }から{ $items }つのアイテムをもとに戻している
+restoring = { trash }から{ $items }つのアイテムをもとに戻している...
 restored = { trash }から{ $items }つのアイテムをもとに戻した
 unknown-folder = 不明なフォルダー
 
 ## Open with
 
-menu-open-with = 別のアプリケーションで開く
+menu-open-with = 別のアプリケーションで開く...
 default-app = { $name } (デフォルト)
 
 ## Properties
 
-properties = プロパティ
 
 ## Settings
 
@@ -174,7 +169,6 @@ file = ファイル
 new-tab = 新しいタブ
 new-window = 新しいウィンドウ
 rename = 名前を変更...
-menu-show-details = 詳細を表示...
 close-tab = タブを閉じる
 quit = 終了
 

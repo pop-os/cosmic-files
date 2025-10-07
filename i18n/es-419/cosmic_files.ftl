@@ -96,16 +96,12 @@ set-and-launch = Establecer y ejecutar
 owner = Propietario
 group = Grupo
 other = Otro
-read = Leer
-write = Escribir
-execute = Ejecutar
 
 # Context Pages
 
 
 ## About
 
-git-description = «Commit» { $hash } de Git del { $date }
 
 ## Add Network Drive
 

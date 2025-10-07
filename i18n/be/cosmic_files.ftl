@@ -1,6 +1,6 @@
 cosmic-files = Файлы COSMIC
 empty-folder = Пустая папка
-empty-folder-hidden = Пустая папка (з захаванымі элементамі)
+empty-folder-hidden = Пустая папка (са схаванымі элементамі)
 no-results = Нічога не знойдзена
 filesystem = Файлавая сістэма
 home = Хатняя папка
@@ -22,7 +22,7 @@ grid-spacing = Інтэрвал сеткі
 # List view
 name = Назва
 modified = Зменена
-trashed-on = У сметніцы
+trashed-on = Дата выдалення
 size = Памер
 # Progress footer
 details = Падрабязнасці
@@ -80,8 +80,8 @@ open = Адкрыць
 open-file = Адкрыць файл
 open-folder = Адкрыць папку
 open-in-new-tab = Адкрыць у новай укладцы
-open-in-new-window = Адкрыць у навым акне
-open-item-location = Адкрыць месцазнаходжанне прадмета
+open-in-new-window = Адкрыць у новым акне
+open-item-location = Адкрыць месцазнаходжанне элемента
 open-multiple-files = Адкрыць некалькі файлаў
 open-multiple-folders = Адкрыць некалькі папак
 save = Захаваць
@@ -97,7 +97,7 @@ related-apps = Звязаныя праграмы
 ## Permanently delete Dialog
 
 selected-items = выбрана { $items } элементаў
-permanently-delete-question = Выдалісь назаўжды
+permanently-delete-question = Выдаліць назаўжды
 delete = Выдаліць
 permanently-delete-warning = Вы ўпэўненыя, што хочаце назаўжды выдаліць { $target }? Гэта дзеянне немагчыма адмяніць.
 # Rename Dialog
@@ -106,18 +106,18 @@ rename-folder = Перайменаваць папку
 # Replace Dialog
 replace = Замяніць
 replace-title = { $filename } ужо існуе ў гэтым месцы.
-replace-warning = Вы сапраўды хочыце замяніць яго на той, які вы захоўваеце? Пры замене яго змесціва будзе перапісана.
+replace-warning = Вы сапраўды хочаце замяніць яго на той, які вы захоўваеце? Пры замене яго змесціва будзе перапісана.
 replace-warning-operation = Вы хочаце замяніць яго? Пры замене яго змесціва будзе перазапісана.
 original-file = Зыходны файл
 replace-with = Замяніць на
-apply-to-all = Прымяніць на ўсіх
+apply-to-all = Прымяніць да ўсіх
 keep-both = Захаваць абодва
 skip = Прапусціць
 
 ## Set as Executable and Launch Dialog
 
-set-executable-and-launch = Зрабіць выконвальным і запусціць
-set-executable-and-launch-description = Вы хочаце зрабіць "{ $name }" выконвальным і запусціць?
+set-executable-and-launch = Зрабіць выканальным і запусціць
+set-executable-and-launch-description = Вы хочаце зрабіць "{ $name }" выканальным і запусціць?
 set-and-launch = Задаць і запусціць
 
 ## Metadata Dialog
@@ -166,7 +166,7 @@ favorite-path-error-description =
     Немагчыма адкрыць "{ $path }".
     Магчыма, ён не існуе ці ў вас няма дазволу на яго адкрыццё.
 
-    Ці жадаеце вы выдаліць яго з бакавой панэлі?
+    Ці хочаце вы выдаліць яго з бакавой панэлі?
 remove = Выдаліць
 keep = Захаваць
 
@@ -175,7 +175,6 @@ keep = Захаваць
 
 ## About
 
-git-description = Git каміт { $hash } ад { $date }
 
 ## Add Network Drive
 
@@ -192,7 +191,7 @@ network-drive-description =
 ### Make sure to keep the comma which separates the columns
 
 network-drive-schemes =
-    Даступная пратаколы,Прэфікс
+    Даступныя пратаколы,Прэфікс
     AppleTalk,afp://
     File Transfer Protocol,ftp:// або ftps://
     Network File System,nfs://
@@ -220,7 +219,7 @@ complete = Завершана
 compressing =
     Сцісканне { $items } { $items ->
         [one] элемента
-        [few] элементаў
+        [few] элементы
        *[other] элементаў
     } з «{ $from }» у «{ $to }» ({ $progress })...
 compressed =
@@ -235,7 +234,7 @@ created = Створана { $name } у { $parent }
 copying =
     Капіяванне { $items } { $items ->
         [one] элемента
-        [few] элементаў
+        [few] элементы
        *[other] элементаў
     } з «{ $from }» у «{ $to }» ({ $progress })...
 copied =
@@ -261,7 +260,7 @@ emptied-trash = Ачышчана { trash }
 extracting =
     Выманне { $items } { $items ->
         [one] элемента
-        [few] элементаў
+        [few] элементы
        *[other] элементаў
     } з «{ $from }» у «{ $to }» ({ $progress })...
 extracted =
@@ -270,14 +269,14 @@ extracted =
         [few] элементы
        *[other] элементаў
     } з { $from } у { $to }
-setting-executable-and-launching = Робім "{ $name }" выконвальным і запускаем
-set-executable-and-launched = "{ $name }" зроблены выконвальным і запушчаны
+setting-executable-and-launching = Робім "{ $name }" выканальным і запускаем
+set-executable-and-launched = "{ $name }" зроблены выканальным і запушчаны
 setting-permissions = Усталёўваем дазволы для "{ $name }" на { $mode }
 set-permissions = Дазволы для "{ $name }" усталяваны на { $mode }
 moving =
     Перамяшчэнне { $items } { $items ->
         [one] элемента
-        [few] элементаў
+        [few] элементы
        *[other] элементаў
     } з «{ $from }» у «{ $to }» ({ $progress })...
 moved =
@@ -303,7 +302,7 @@ renamed = Перайменавана { $from } у { $to }
 restoring =
     Аднаўленне { $items } { $items ->
         [one] элемента
-        [few] элементаў
+        [few] элементы
        *[other] элементаў
     } з { trash } ({ $progress })...
 restored =
@@ -337,7 +336,7 @@ single-click = Адзін клік каб адкрыць
 
 ### Appearance
 
-appearance = Выгляд
+appearance = Знешні выгляд
 theme = Тэма
 match-desktop = Як у сістэме
 dark = Цёмная
@@ -346,8 +345,8 @@ light = Светлая
 ### Type to Search
 
 type-to-search = Увядзіце для пошуку
-type-to-search-recursive = Шукае ў бягучай папцы і ва ўсіх укладзеных папках
-type-to-search-enter-path = Уводзіць шлях да каталога або файла
+type-to-search-recursive = Пошук у бягучай і ўкладзеных папках
+type-to-search-enter-path = Увод шляху да каталога або файла
 # Context menu
 add-to-sidebar = Дадаць на бакавую панэль
 compress = Сціснуць
@@ -361,7 +360,7 @@ move-to-trash = Перамясціць у сметніцу
 restore-from-trash = Аднавіць са сметніцы
 remove-from-sidebar = Выдаліць з бакавой панэлі
 sort-by-name = Сартаваць па назве
-sort-by-modified = Сартаваць па змяненні
+sort-by-modified = Сартаваць па даце змянення
 sort-by-size = Сартаваць па памеры
 sort-by-trashed = Сартаваць па часе выдалення
 
@@ -379,7 +378,7 @@ display-settings = Налады дысплэя...
 file = Файл
 new-tab = Новая ўкладка
 new-window = Новае акно
-reload-folder = Аднавіць папку
+reload-folder = Абнавіць папку
 rename = Перайменаваць...
 close-tab = Закрыць укладку
 quit = Выйсці
@@ -417,3 +416,17 @@ sort-smallest-to-largest = Ад меншага да найбольшага
 sort-largest-to-smallest = Ад вялікага да найменшага
 repository = Рэпазіторый
 support = Падтрымка
+progress-failed = { $percent }%, няўдала
+removing-from-recents =
+    Выдаленне { $items } { $items ->
+        [one] элемента
+        [few] элементы
+       *[other] элементаў
+    } з { recents }
+removed-from-recents =
+    Выдалена { $items } { $items ->
+        [one] элемент
+        [few] элементы
+       *[other] элементаў
+    } з { recents }
+remove-from-recents = Выдаліць з нядаўніх

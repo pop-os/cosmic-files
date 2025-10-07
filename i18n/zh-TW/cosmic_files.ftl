@@ -76,16 +76,12 @@ skip = 跳過
 owner = 擁有者
 group = 群組
 other = 其他
-read = 讀取
-write = 寫入
-execute = 執行
 
 # Context Pages
 
 
 ## About
 
-git-description = Git 提交 { $hash } 於 { $date }
 
 ## Add Network Drive
 
@@ -222,7 +218,6 @@ file = 檔案
 new-tab = 新分頁
 new-window = 新視窗
 rename = 重新命名...
-menu-show-details = 顯示詳細資料...
 close-tab = 關閉分頁
 quit = 退出
 
