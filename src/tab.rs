@@ -2924,20 +2924,44 @@ impl Tab {
                 commands.push(Command::AutoScroll(auto_scroll));
             }
             Message::ClickRelease(click_i_opt) => {
-                if click_i_opt == self.clicked.take() {
-                    return commands;
-                }
-                self.context_menu = None;
-                self.location_context_menu_index = None;
-                if let Some(ref mut items) = self.items_opt {
-                    for (i, item) in items.iter_mut().enumerate() {
-                        if mod_ctrl {
-                            if Some(i) == click_i_opt && item.selected {
-                                item.selected = false;
-                                self.select_range = None;
+                // Single click to open.
+                if !mod_ctrl && self.config.single_click {
+                    let mut paths_to_open = Vec::new();
+                    if let Some(ref mut items) = self.items_opt {
+                        for (i, item) in items.iter_mut().enumerate() {
+                            if Some(i) == click_i_opt {
+                                if let Some(location) = &item.location_opt {
+                                    if item.metadata.is_dir() {
+                                        cd = Some(location.clone());
+                                    } else if let Some(path) = location.path_opt() {
+                                        paths_to_open.push(path.to_path_buf());
+                                    } else {
+                                        log::warn!("no path for item {:?}", item);
+                                    }
+                                } else {
+                                    log::warn!("no location for item {:?}", item);
+                                }
                             }
-                        } else if Some(i) != click_i_opt {
-                            item.selected = false;
+                        }
+                    }
+                    if !paths_to_open.is_empty() {
+                        commands.push(Command::OpenFile(paths_to_open));
+                    }
+                }
+
+                if click_i_opt != self.clicked.take() {
+                    self.context_menu = None;
+                    self.location_context_menu_index = None;
+                    if let Some(ref mut items) = self.items_opt {
+                        for (i, item) in items.iter_mut().enumerate() {
+                            if mod_ctrl {
+                                if Some(i) == click_i_opt && item.selected {
+                                    item.selected = false;
+                                    self.select_range = None;
+                                }
+                            } else if Some(i) != click_i_opt {
+                                item.selected = false;
+                            }
                         }
                     }
                 }
@@ -3062,24 +3086,8 @@ impl Tab {
                                 .any(|(e_i, e)| Some(e_i) == click_i_opt.as_ref() && e.selected)
                         });
                     if let Some(ref mut items) = self.items_opt {
-                        let mut paths_to_open = vec![];
                         for (i, item) in items.iter_mut().enumerate() {
                             if Some(i) == click_i_opt {
-                                // Single click to open.
-                                if !mod_ctrl && self.config.single_click {
-                                    if let Some(location) = &item.location_opt {
-                                        if item.metadata.is_dir() {
-                                            cd = Some(location.clone());
-                                        } else if let Some(path) = location.path_opt() {
-                                            paths_to_open.push(path.to_path_buf());
-                                        } else {
-                                            log::warn!("no path for item {:?}", item);
-                                        }
-                                    } else {
-                                        log::warn!("no location for item {:?}", item);
-                                    }
-                                }
-
                                 // Filter out selection if it does not match dialog kind
                                 if let Mode::Dialog(dialog) = &self.mode {
                                     let item_is_dir = item.metadata.is_dir();
@@ -3103,9 +3111,6 @@ impl Tab {
                                 self.clicked = click_i_opt;
                                 item.selected = false;
                             }
-                        }
-                        if !paths_to_open.is_empty() {
-                            commands.push(Command::OpenFile(paths_to_open));
                         }
                     }
                 }
