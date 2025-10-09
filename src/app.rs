@@ -5224,22 +5224,20 @@ impl Application for App {
                     .secondary_action(
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
                     )
-                    .control(
-                        widget::scrollable(column).height(if let Some(size) = self.size {
-                            let max_size = (size.height - 256.0).min(480.0);
-                            // (32 (item_height) + 5.0 (custom button padding)) + (space_xxs (list item spacing) * 2)
-                            let scrollable_height = available_apps.len() as f32
-                                * (item_height + 5.0 + (2.0 * space_xxs as f32));
+                    .control(widget::scrollable(column).height({
+                        let max_size = self
+                            .size
+                            .map_or(480.0, |size| (size.height - 256.0).min(480.0));
+                        // (32 (item_height) + 5.0 (custom button padding)) + (space_xxs (list item spacing) * 2)
+                        let scrollable_height = available_apps.len() as f32
+                            * (item_height + 5.0 + (2.0 * space_xxs as f32));
 
-                            if scrollable_height > max_size {
-                                Length::Fixed(max_size)
-                            } else {
-                                Length::Shrink
-                            }
+                        if scrollable_height > max_size {
+                            Length::Fixed(max_size)
                         } else {
-                            Length::Fill
-                        }),
-                    );
+                            Length::Shrink
+                        }
+                    }));
 
                 if let Some(app) = store_opt {
                     dialog = dialog.tertiary_action(
