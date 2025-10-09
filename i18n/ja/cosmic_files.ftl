@@ -110,21 +110,53 @@ no-history = 歴史にはアイテムはありません。
 pending = 保留中
 failed = 失敗
 complete = 完了
-compressing = { $items }つのアイテムを{ $from }から{ $to }まで圧縮中...
-compressed = { $items }つのアイテムを{ $from }から{ $to }まで圧縮完了
+compressing =
+    "{ $from }" から "{ $to }" へ { $items }個のアイテムを圧縮中 ({ $progress }) { $items ->
+        [one] 項目
+       *[other] 項目
+    }…
+compressed =
+    "{ $from }" から "{ $to }" へ { $items }個のアイテムを圧縮しました { $items ->
+        [one] 項目
+       *[other] 項目
+    }
 copy_noun = コピー
 creating = { $parent }で{ $name }を作成中
 created = { $parent }で{ $name }を作成完了
-copying = { $items }つのアイテムを{ $from }から{ $to }までコピー中...
-copied = { $items }つのアイテムを{ $from }から{ $to }までコピー完了
-emptying-trash = { trash }を空にしています...
+copying =
+    "{ $from }" から "{ $to }" へ { $items }個のアイテムをコピー中 ({ $progress }) { $items ->
+        [one] 項目
+       *[other] 項目
+    }…
+copied =
+    "{ $from }" から "{ $to }" へ { $items }個のアイテムをコピーしました { $items ->
+        [one] 項目
+       *[other] 項目
+    }
+emptying-trash = { trash }を空にしています ({ $progress })…
 emptied-trash = { trash }を空にした
-moving = { $items }つのアイテムを{ $from }から{ $to }まで移動中...
-moved = { $items }つのアイテムを{ $from }から{ $to }まで移動完了
+moving =
+    "{ $from }" から "{ $to }" へ { $items }個のアイテムを移動中 ({ $progress }) { $items ->
+        [one] 項目
+       *[other] 項目
+    }…
+moved =
+    "{ $from }" から "{ $to }" へ { $items }個のアイテムを移動しました { $items ->
+        [one] 項目
+       *[other] 項目
+    }
 renaming = { $from }を{ $to }に変更中
 renamed = { $from }を{ $to }に変更完了
-restoring = { trash }から{ $items }つのアイテムをもとに戻している...
-restored = { trash }から{ $items }つのアイテムをもとに戻した
+restoring =
+    { trash }から{ $items }個のアイテムを復元中 ({ $progress }) { $items ->
+        [one] 項目
+       *[other] 項目
+    }…
+restored =
+    { trash }から{ $items }個のアイテムを復元しました { $items ->
+        [one] 項目
+       *[other] 項目
+    }
 unknown-folder = 不明なフォルダー
 
 ## Open with
@@ -204,3 +236,129 @@ sort-smallest-to-largest = 最小から最大まで
 sort-largest-to-smallest = 最大から最小まで
 repository = リポジトリ
 support = サポート
+remove = 削除
+today = 今日
+desktop-view-options = デスクトップの表示オプション…
+show-on-desktop = デスクトップの表示オプション
+desktop-folder-content = デスクトップフォルダの内容
+mounted-drives = マウント済みドライブ
+trash-folder-icon = ゴミ箱のアイコン
+icon-size-and-spacing = アイコンのサイズと間隔
+icon-size = アイコンサイズ
+grid-spacing = グリッドの間隔
+trashed-on = ゴミ箱に入れた日時
+details = 詳細
+dismiss = メッセージを閉じる
+operations-running =
+    { $running } { $running ->
+        [one] 件の操作が
+       *[other] 件の操作が
+    }実行中です({ $percent }%)...
+operations-running-finished =
+    { $running } { $running ->
+        [one] 件の操作が
+       *[other] 件の操作が
+    } 実行中です({ $percent }%)、 { $finished } 件が終了...
+pause = 一時停止
+resume = 一時停止
+extract-password-required = パスワードが必要です
+extract-to = 展開先…
+extract-to-title = フォルダーに展開
+mount-error = ドライブにアクセスできません
+open-with-title = 「{ $name }」をどのように開きますか？
+browse-store = { $store } を参照
+other-apps = 他のアプリケーション
+related-apps = 関連アプリケーション
+selected-items = 選択された{ $items }個のアイテム
+permanently-delete-question = 完全に削除
+delete = 削除
+permanently-delete-warning = { $target }を完全に削除してもよろしいですか？この操作は元に戻せません。
+set-executable-and-launch = 実行可能にして起動
+set-executable-and-launch-description = "{ $name }"を実行可能に設定して起動しますか？
+set-and-launch = 設定して起動
+open-with = 別のアプリケーションで開く
+none = なし
+execute-only = 実行のみ
+write-only = 書き込み専用
+write-execute = 書き込みと実行
+read-only = 読み取り専用
+read-execute = 読み取りと実行
+read-write = 読み取りと書き込み
+read-write-execute = 読み取り、書き込み、実行
+favorite-path-error = ディレクトリを開けませんでした
+favorite-path-error-description =
+    "{ $path }"を開けません。
+    このパスが存在しないか、開くための権限がない可能性があります。
+
+    サイドバーから削除しますか？
+keep = そのままにする
+cancelled = キャンセルされました
+progress = { $percent } %
+progress-cancelled = { $percent } %、キャンセルされました
+progress-failed = { $percent } %、失敗
+progress-paused = { $percent } %、一時停止中
+deleting =
+    { $items }個のアイテムを{ trash }から削除中 ({ $progress }) { $items ->
+        [one] 項目
+       *[other] 項目
+    }…
+deleted =
+    { $items } 個のアイテムを { trash } から削除しました { $items ->
+        [one] 項目
+       *[other] 項目
+    }
+extracting =
+    "{ $from }" から "{ $to }" へ { $items } 個のアイテムを展開中 ({ $progress }) { $items ->
+        [one] 項目
+       *[other] 項目
+    }…
+extracted =
+    "{ $from }" から "{ $to }" へ { $items } 個のアイテムを展開しました { $items ->
+        [one] 項目
+       *[other] 項目
+    }
+setting-executable-and-launching = "{ $name }"を実行可能に設定して起動中
+set-executable-and-launched = "{ $name }"を実行可能に設定して起動しました
+setting-permissions = "{ $name }"のパーミッションを{ $mode }に設定中
+set-permissions = "{ $name }"のパーミッションを{ $mode }に設定しました
+permanently-deleting =
+    { $items }個のアイテムを完全に削除中 { $items ->
+        [one] 項目
+       *[other] 項目
+    }
+permanently-deleted =
+    { $items }個のアイテムを完全に削除しました { $items ->
+        [one] 項目
+       *[other] 項目
+    }
+removing-from-recents =
+    { $items }個のアイテムを{ recents }から削除中 { $items ->
+        [one] 項目
+       *[other] 項目
+    }
+removed-from-recents =
+    { $items }個のアイテムを{ recents }から削除しました { $items ->
+        [one] 項目
+       *[other] 項目
+    }
+show-details = 詳細を表示
+type = 種類: { $mime }
+items = アイテム: { $items }
+item-size = サイズ: { $size }
+item-created = 作成日時: { $created }
+item-modified = 最終更新日時: { $modified }
+item-accessed = 最終アクセス日時: { $accessed }
+calculating = 計算中…
+single-click = シングルクリックで開く
+type-to-search = 入力して検索
+type-to-search-recursive = 現在のフォルダーとすべてのサブフォルダーを検索
+type-to-search-enter-path = ディレクトリーまたはファイルのパスを入力
+delete-permanently = 完全に削除する
+eject = 取り出し
+sort-by-trashed = 削除日時
+remove-from-recents = 最近の項目から削除
+change-wallpaper = 壁紙を変更…
+desktop-appearance = デスクトップの見た目…
+display-settings = ディスプレイの設定…
+reload-folder = フォルダーを再読み込み
+gallery-preview = ギャラリープレビュー

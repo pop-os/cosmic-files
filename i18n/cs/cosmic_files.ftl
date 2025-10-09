@@ -62,8 +62,8 @@ replace-warning = Chcete nahradit soubor tím, který ukládáte? Nahrazení př
 
 ## Operations
 
-pending = Čekající
-failed = Selhalo
+pending = Nevyřízené
+failed = Neúspěšné
 complete = Dokončené
 copy_noun = Kopírovat
 
@@ -259,7 +259,7 @@ network-drive-schemes =
 network-drive-error = Nelze přistoupit k síťovému disku
 remember-password = Zapamatovat heslo
 try-again = Zkuste to znovu
-cancelled = Zrušeno
+cancelled = Zrušené
 edit-history = Historie úprav
 history = Historie
 no-history = Žádné položky v historii.

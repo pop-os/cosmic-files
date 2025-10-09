@@ -182,7 +182,7 @@ keep = Mantener
 ## About
 
 repository = Repositorio
-support = Soporte
+support = Apoyo
 
 ## Add Network Drive
 
@@ -417,3 +417,6 @@ removed-from-recents =
         [one] Se ha quitado elemento
        *[other] Se han quitado { $items } elementos
     } de { recents }
+setting-permissions = Estableciendo permisos para "{ $name } " a { $mode }
+progress-failed = { $percent } %, con errores
+set-permissions = Establecer permisos de "{ $name }" como { $mode }

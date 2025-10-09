@@ -8,7 +8,7 @@ networks = Netwerk
 notification-in-progress = Sommige bestanden worden nog bewerkt.
 trash = Prullenbak
 recents = Recente bestanden
-undo = Ongedaan maken
+undo = Ontdoen
 today = Vandaag
 # Desktop view options
 desktop-view-options = Opties voor bureaubladweergave...
@@ -76,7 +76,7 @@ name-no-slashes = De naam mag geen slash '/' bevatten.
 
 ## Open/Save Dialog
 
-cancel = Annuleren
+cancel = Annuleer
 create = Aanmaken
 open = Openen
 open-file = Open een bestand
@@ -86,7 +86,7 @@ open-in-new-window = Open in nieuw venster
 open-item-location = Open locatie van item
 open-multiple-files = Meerdere bestanden openen
 open-multiple-folders = Meerdere mappen openen
-save = Opslaan
+save = Sla op
 save-file = Bestand opslaan
 
 ## Open With Dialog
@@ -110,7 +110,7 @@ rename-folder = Map hernoemen
 
 ## Replace Dialog
 
-replace = Vervangen
+replace = Vervang
 replace-title = '{ $filename }' bestaat al in deze map.
 replace-warning = Wilt u het bestand vervangen door de nieuwe versie? Dit zal de bestaande inhoud overschrijven.
 replace-warning-operation = Wilt u het bestand vervangen? De bestaande inhoud wordt overschreven!
@@ -173,7 +173,7 @@ favorite-path-error-description =
     De map bestaat mogelijk niet of u heeft geen toestemming om die te openen.
 
     Wilt u de map uit de favorieten verwijderen?
-remove = Verwijderen
+remove = Verwijder
 keep = Behouden
 
 # Context Pages
@@ -185,7 +185,7 @@ keep = Behouden
 ## Add Network Drive
 
 add-network-drive = Netwerkschijf toevoegen
-connect = Verbinden
+connect = Verbind
 connect-anonymously = Anoniem verbinden
 connecting = Verbinding maken...
 domain = Domein
@@ -377,16 +377,16 @@ quit = Sluit
 ## Edit
 
 edit = Bewerk
-cut = Knippen
+cut = Knip
 copy = Kopieer
 paste = Plak
 select-all = Selecteer alles
 
 ## View
 
-zoom-in = Inzoomen
-default-size = Zoomniveau terugzetten
-zoom-out = Uitzoomen
+zoom-in = Zoom in
+default-size = Standaardgrootte
+zoom-out = Zoom uit
 view = Aanzicht
 grid-view = Rasterweergave
 list-view = Lijstweergave
@@ -413,4 +413,4 @@ removing-from-recents =
         [one] item
        *[other] items
     } van { recents }
-repository = Archief
+repository = Codearchief
