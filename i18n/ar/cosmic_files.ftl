@@ -387,11 +387,7 @@ restoring =
        *[other] { $items } عنصر
     } من { trash } ({ $progress })...
 restored =
-    استُعيد { $items } { $items ->
-        [zero] عناصر
+    استُعيدت { $items } { $items ->
         [one] عنصر
-        [two] عنصران
-        [few] { $items } عناصر
-        [many] { $items } عنصراً
-       *[other] { $items } عنصر
+       *[other] عناصر
     } من { trash }

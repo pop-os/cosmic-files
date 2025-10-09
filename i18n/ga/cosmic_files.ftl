@@ -109,7 +109,7 @@ original-file = An comhad bunaidh
 replace-with = Ionadaigh le
 apply-to-all = Cuir i bhfeidhm ar gach ceann
 keep-both = Coinnigh an dá cheann
-skip = Scip
+skip = Scipeáil
 
 ## Set as Executable and Launch Dialog
 

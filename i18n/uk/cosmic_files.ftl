@@ -1,6 +1,6 @@
 cosmic-files = Файли COSMIC
 empty-folder = Тека порожня
-empty-folder-hidden = Тека порожня (але містить приховані елементи)
+empty-folder-hidden = Тека порожня (містить приховані елементи)
 filesystem = Файлова система
 home = Домівка
 trash = Смітник
@@ -170,7 +170,7 @@ select-all = Вибрати все
 zoom-in = Збільшити шрифт
 default-size = Типовий розмір
 zoom-out = Зменшити шрифт
-view = Перегляд
+view = Вигляд
 grid-view = Перегляд ґраткою
 list-view = Перегляд списком
 show-hidden-files = Показувати приховані файли

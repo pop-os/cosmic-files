@@ -38,7 +38,7 @@ name-hidden = Имена, начинающиеся на «.», будут скр
 name-invalid = Имя не может быть «{ $filename }».
 name-no-slashes = Имя не должно содержать «/».
 # Open/Save Dialog
-cancel = Отменить
+cancel = Отмена
 open = Открыть
 open-file = Открыть файл
 open-folder = Открыть папку
@@ -256,7 +256,7 @@ cancelled = Отменена
 details = Сведения
 dismiss = Скрыть сообщение
 remove = Убрать
-desktop-view-options = Параметры рабочего слова…
+desktop-view-options = Параметры вида рабочего стола…
 show-on-desktop = Показывать на рабочем столе
 desktop-folder-content = Содержимое папки рабочего стола
 mounted-drives = Подключённые диски
