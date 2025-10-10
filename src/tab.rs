@@ -3147,6 +3147,7 @@ impl Tab {
                 self.edit_location = None;
                 if point_opt.is_none() || !mod_shift {
                     self.context_menu = point_opt;
+                    self.location_context_menu_index = None;
 
                     //TODO: hack for clearing selecting when right clicking empty space
                     if self.context_menu.is_some() && self.last_right_click.take().is_none() {
@@ -3159,11 +3160,11 @@ impl Tab {
                 }
             }
             Message::LocationContextMenuPoint(point_opt) => {
-                self.context_menu = point_opt;
+                self.context_menu = None;
                 self.location_context_menu_point = point_opt;
             }
             Message::LocationContextMenuIndex(p, index_opt) => {
-                self.context_menu = p;
+                self.context_menu = None;
                 self.location_context_menu_point = p;
                 self.location_context_menu_index = index_opt;
             }
@@ -4627,8 +4628,7 @@ impl Tab {
         }
 
         let mouse_area = crate::mouse_area::MouseArea::new(column)
-            .on_right_press(Message::LocationContextMenuPoint)
-            .wayland_on_right_press_window_position();
+            .on_right_press(Message::LocationContextMenuPoint);
 
         let mut popover = widget::popover(mouse_area);
         if let (Some(point), Some(index)) = (
