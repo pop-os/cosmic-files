@@ -673,6 +673,8 @@ pub struct App {
     search_id: widget::Id,
     size: Option<Size>,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
+    layer_sizes: HashMap<window::Id, Size>,
+    #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     surface_ids: HashMap<WlOutput, WindowId>,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     surface_names: HashMap<WindowId, String>,
@@ -911,28 +913,8 @@ impl App {
         }
     }
 
+    #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     fn handle_overlap(&mut self) {
-        let Some((bl, br, tl, tr, mut size)) = self.size.as_ref().map(|s| {
-            (
-                Rectangle::new(
-                    Point::new(0., s.height / 2.),
-                    Size::new(s.width / 2., s.height / 2.),
-                ),
-                Rectangle::new(
-                    Point::new(s.width / 2., s.height / 2.),
-                    Size::new(s.width / 2., s.height / 2.),
-                ),
-                Rectangle::new(Point::new(0., 0.), Size::new(s.width / 2., s.height / 2.)),
-                Rectangle::new(
-                    Point::new(s.width / 2., 0.),
-                    Size::new(s.width / 2., s.height / 2.),
-                ),
-                *s,
-            )
-        }) else {
-            return;
-        };
-
         let mut overlaps: HashMap<_, _> = self
             .windows
             .keys()
@@ -943,6 +925,26 @@ impl App {
             .sort_by(|a, b| (b.1.width * b.1.height).total_cmp(&(a.1.width * b.1.height)));
 
         for (w_id, overlap) in sorted_overlaps {
+            let Some((bl, br, tl, tr, mut size)) = self.layer_sizes.get(w_id).map(|s| {
+                (
+                    Rectangle::new(
+                        Point::new(0., s.height / 2.),
+                        Size::new(s.width / 2., s.height / 2.),
+                    ),
+                    Rectangle::new(
+                        Point::new(s.width / 2., s.height / 2.),
+                        Size::new(s.width / 2., s.height / 2.),
+                    ),
+                    Rectangle::new(Point::new(0., 0.), Size::new(s.width / 2., s.height / 2.)),
+                    Rectangle::new(
+                        Point::new(s.width / 2., 0.),
+                        Size::new(s.width / 2., s.height / 2.),
+                    ),
+                    *s,
+                )
+            }) else {
+                continue;
+            };
             let tl = tl.intersects(overlap);
             let tr = tr.intersects(overlap);
             let bl = bl.intersects(overlap);
@@ -2153,6 +2155,8 @@ impl Application for App {
             tab_drag_id: DragId::new(),
             auto_scroll_speed: None,
             file_dialog_opt: None,
+            #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
+            layer_sizes: HashMap::new(),
         };
 
         let mut commands = vec![app.update_config()];
@@ -4624,7 +4628,9 @@ impl Application for App {
             Message::Size(window_id, size) => {
                 if self.core.main_window_id() == Some(window_id) {
                     self.size = Some(size);
-                    self.handle_overlap();
+                } else {
+                    #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
+                    self.layer_sizes.insert(window_id, size);
                 }
             }
             Message::Eject => {
