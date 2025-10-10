@@ -191,8 +191,8 @@ settings = Параметры
 appearance = Оформление
 theme = Тема
 match-desktop = Как в системе
-dark = Тёмная
-light = Светлая
+dark = Тёмное
+light = Светлое
 # Context menu
 add-to-sidebar = Добавить на боковую панель
 compress = Сжать
