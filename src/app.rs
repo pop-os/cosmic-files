@@ -4360,13 +4360,19 @@ impl Application for App {
                 }
             }
             Message::NavBarContext(entity) => {
-                // Close location editing if enabled
+                self.nav_bar_context_id = entity;
+
                 let tab_entity = self.tab_model.active();
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(tab_entity) {
+                    // Close location editing if enabled
                     tab.edit_location = None;
+                    // Close other context menus.
+                    tab.location_context_menu_index = None;
+                    return Task::done(cosmic::Action::App(Message::TabMessage(
+                        Some(tab_entity),
+                        tab::Message::ContextMenu(None, None),
+                    )));
                 }
-
-                self.nav_bar_context_id = entity;
             }
             Message::NavMenuAction(action) => match action {
                 NavMenuAction::Open(entity) => {
