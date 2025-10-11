@@ -3,7 +3,7 @@ empty-folder = مجلد فارغ
 empty-folder-hidden = مجلد فارغ (يحتوي على عناصر مخفية)
 filesystem = نظام الملفات
 home = منزل
-trash = المهملات
+trash = سلة المهملات
 recents = الأحدث
 # List view
 name = الاسم
@@ -16,7 +16,7 @@ size = حجم
 ## Empty Trash Dialog
 
 empty-trash = تفريغ سلة المهملات
-empty-trash-warning = هل تريد حذف جميع العناصر الموجودة في سلة المهملات نهائيًا؟
+empty-trash-warning = هل تريد حذف جميع العناصر الموجودة في سلة المهملات نهائياً؟
 
 ## New File/Folder Dialog
 
@@ -62,15 +62,15 @@ replace-warning = هل تريد استبداله بالملف الذي تقوم 
 
 ## Operations
 
-pending = منتظر
-failed = فشِل
-complete = انتهى
-copy_noun = ينسخ
+pending = قيد الانتظار
+failed = فشل
+complete = انتهى بنجاح
+copy_noun = نسخ
 
 ## Open with
 
-menu-open-with = افتح ب‍استخدام...
-default-app = { $name } (المبدئي)
+menu-open-with = فتح ب‍استخدام...
+default-app = { $name } (الافتراضي)
 
 ## Properties
 
@@ -89,14 +89,14 @@ light = فاتح
 # Context menu
 add-to-sidebar = اضف إلى الشريط الجانبي
 new-file = ملف جديد...
-new-folder = مجلّد جديد...
-open-in-terminal = افتح في الطرفيّة
-move-to-trash = انقل إلى المهملات
-restore-from-trash = استعِد من سلة المهملات
-remove-from-sidebar = أزِل من الشريط الجانبي
-sort-by-name = رتّب حسب الاسم
-sort-by-modified = رتّب حسب التعديل
-sort-by-size = رتّب حسب الحجم
+new-folder = مجلد جديد...
+open-in-terminal = فتح في الطرفية
+move-to-trash = نقل إلى سلة المهملات
+restore-from-trash = استعادة من سلة المهملات
+remove-from-sidebar = إزالة من الشريط الجانبي
+sort-by-name = ترتيب حسب الاسم
+sort-by-modified = ترتيب حسب التعديل
+sort-by-size = ترتيب حسب الحجم
 
 # Menu
 
@@ -106,9 +106,9 @@ sort-by-size = رتّب حسب الحجم
 file = ملف
 new-tab = علامة تبويب جديدة
 new-window = نافذة جديدة
-rename = غيّر الاسم...
+rename = إعادة تسمية...
 close-tab = إغلاق علامة التبويب
-quit = غادر
+quit = خروج
 
 ## Edit
 
@@ -124,12 +124,12 @@ zoom-in = تقريب
 default-size = الحجم الافتراضي
 zoom-out = إبعاد
 view = عرض
-grid-view = عرض الشبكة
-list-view = عرض اللائحة
-show-hidden-files = أظهر الملفّات والمجلدات المخفية
-list-directories-first = أظهِر المجلّدات أوّلًا
+grid-view = عرض علي شكل شبكة
+list-view = عرض علي شكل لائحة
+show-hidden-files = إظهار الملفات المخفية
+list-directories-first = ترتيب المجلدات اولاً
 menu-settings = الإعدادات...
-menu-about = عن مدير ملفات COSMIC...
+menu-about = حول مدير ملفات COSMIC...
 dismiss = أهمل الرسالة
 no-results = لم يتم العثور على نتائج
 networks = الشبكات
@@ -140,7 +140,7 @@ desktop-view-options = خيارات عرض سطح المكتب...
 show-on-desktop = عرض على سطح المكتب
 desktop-folder-content = محتوى مجلد سطح المكتب
 mounted-drives = محركات الأقراص المثبتة
-trash-folder-icon = أيقونة مجلد المهملات
+trash-folder-icon = أيقونة مجلد سلة المهملات
 icon-size-and-spacing = حجم الأيقونة والتباعد
 icon-size = حجم الأيقونة
 grid-spacing = تباعد شبكي
@@ -165,20 +165,20 @@ open-with-title = كيف تريد فتح ”{ $name }“؟
 read-execute = قراءة وتنفيذ
 read-write = قراءة وكتابة
 read-write-execute = قراءة وكتابة وتنفيذ
-favorite-path-error = خطأ في فتح المجلّد
+favorite-path-error = خطأ في فتح المجلد
 remove = إزالة
-keep = أبقِ
+keep = إبقاء
 repository = المستودع
 support = الدعم
-add-network-drive = أضِف قرص شبكة
+add-network-drive = إضافة محرك أقراص شبكة
 connect = توصيل
-connect-anonymously = اتصل كمجهول
-connecting = يتصل...
+connect-anonymously = اتصل بشكل مجهول
+connecting = جاري الاتصال...
 domain = النطاق
 enter-server-address = أدخل عنوان الخادم
 network-drive-description =
-    تتضمن عناوين الخادم بادئة ميفاق وعنوانًا.
-    أمثلة: ssh://192.168.0.1 ،ftp://[2001:db8::1]
+    تتضمن عناوين الخادم بادئة البروتوكول والعنوان.
+    أمثلة: ssh://192.168.0.1، ftp://[2001:db8::1]
 network-drive-schemes =
     البروتوكولات المتاحة، البادئة
     AppleTalk، afp://
@@ -187,60 +187,60 @@ network-drive-schemes =
     كتلة رسائل الخادم، smb://
     بروتوكول نقل الملفات SSH، sftp:// أو ssh://
     WebDAV، dav:// أو davs://
-network-drive-error = تعذر الوصول إلى القرص الشبكي
+network-drive-error = تعذر الوصول إلى محرك الأقراص الشبكي
 password = كلمة السر
 remember-password = تذكر كلمة السر
 try-again = أعد المحاولة
 username = اسم المستخدم
-cancelled = أُلغِيَ
-edit-history = عدِّل التأريخ
-history = التأريخ
-no-history = لا توجد عناصر في التأريخ.
+cancelled = ملغى
+edit-history = تعديل السجل
+history = السجل
+no-history = لا توجد عناصر في السجل.
 progress = { $percent }٪
-progress-cancelled = { $percent }٪، أُلغِيَ
+progress-cancelled = { $percent }٪، ملغى
 progress-failed = { $percent }٪، فشل
-progress-paused = { $percent }٪، أُلبِث
-creating = ينشئ «{ $name }» في «{ $parent }»
-created = أُنشئ «{ $name }» في «{ $parent }»
-emptying-trash = يفرغ { trash } ({ $progress })...
-emptied-trash = أُفرِغت { trash }
-setting-executable-and-launching = يعيّن «{ $name }» كقابل للتنفيذ والتشغيل
-set-executable-and-launched = عيِّن «{ $name }» كقابل للتنفيذ وشُغَّل
-setting-permissions = يعيّن الأذونات لـ«{ $name }» إلى «{ $mode }»
-set-permissions = عيِّن أذونات «{ $name }» إلى «{ $mode }»
-renaming = تُعاد تسمية «{ $from }» إلى «{ $to }»
-renamed = أُعيدت تسمية «{ $from }» إلى «{ $to }»
-unknown-folder = مجلّد مجهول
-show-details = أظهِر التفاصيل
+progress-paused = { $percent }٪، متوقف مؤقتًا
+creating = جاري إنشاء ”{ $name }“ في ”{ $parent }“
+created = تم إنشاء ”{ $name }“ في ”{ $parent }“
+emptying-trash = جاري تفريغ { trash } ({ $progress })...
+emptied-trash = تم تفريغ { trash }
+setting-executable-and-launching = جاري تعيين ”{ $name }“ كملف قابل للتنفيذ وتشغيله
+set-executable-and-launched = تعيين ”{ $name }“ كملف قابل للتنفيذ وتشغيله
+setting-permissions = جاري تعيين أذونات ”{ $name }“ إلى { $mode }
+set-permissions = تم تعيين أذونات ”{ $name }“ إلى { $mode }
+renaming = جاري إعادة تسمية ”{ $from }“ إلى ”{ $to }“
+renamed = تم إعادة تسمية ”{ $from }“ إلى ”{ $to }“
+unknown-folder = مجلد مجهول
+show-details = عرض التفاصيل
 type = النوع: { $mime }
 items = العناصر: { $items }
 item-size = الحجم: { $size }
-item-created = أُنشئ في: { $created }
-item-modified = عُدّل في: { $modified }
-item-accessed = آخر وصول: { $accessed }
-calculating = يحسب...
+item-created = تم إنشاء: { $created }
+item-modified = تم تعديل: { $modified }
+item-accessed = تم الوصول إلي: { $accessed }
+calculating = جاري الحساب...
 single-click = نقرة واحدة للفتح
-type-to-search = اكتب لتبحث
-type-to-search-recursive = يبحث في المجلّد الحالي وجميع المجلّدات الفرعية
-type-to-search-enter-path = أدخل المسار إلى المجلّد أو الملف
-compress = اضغط
-delete-permanently = احذف نهائيًا
-eject = أخرِج
-extract-here = استخرِج
-sort-by-trashed = رتّب حسب وقت الحذف
-remove-from-recents = أزِل من الحديثة
-change-wallpaper = غيّر خلفية الشاشة...
+type-to-search = اكتب للبحث
+type-to-search-recursive = يبحث في المجلد الحالي وجميع المجلدات الفرعية
+type-to-search-enter-path = يدخل المسار إلي المجلد أو الملف
+compress = ضغط
+delete-permanently = حذف نهائيًا
+eject = إخراج
+extract-here = إستخراج
+sort-by-trashed = ترتيب حسب وقت الحذف
+remove-from-recents = إزالة من الحديثة
+change-wallpaper = تغيير الخلفية...
 desktop-appearance = مظهر سطح المكتب...
 display-settings = إعدادات العرض...
-reload-folder = أعد تحميل المجلّد
+reload-folder = إعادة تحميل المجلد
 gallery-preview = معاينة المعرض
-sort = رتّب
+sort = ترتيب
 sort-a-z = أ-ي
 sort-z-a = ي-أ
 sort-newest-first = الأحدث أولاً
 sort-oldest-first = الأقدم أولاً
 sort-smallest-to-largest = من الأصغر إلى الأكبر
-sort-largest-to-smallest = من الأكبر للأصغر
+sort-largest-to-smallest = من الأكبر إلي الأصغر
 operations-running =
     { $running } { $running ->
         [one] عملية
@@ -281,7 +281,7 @@ compressing =
        *[other] عناصر
     } من ”{ $from }“ إلى ”{ $to }“ ({ $progress })...
 compressed =
-    مضغوط { $items } { $items ->
+    تم ضغط { $items } { $items ->
         [one] عنصر
        *[other] عناصر
     } من ”{ $from }“ إلى ”{ $to }“
@@ -326,7 +326,7 @@ moved =
        *[other] items
     } من ”{ $from }“ إلى ”{ $to }“
 permanently-deleting =
-    حذف { $items } بشكل نهائي { $items ->
+    جاري حذف { $items } بشكل نهائي { $items ->
         [one] عنصر
        *[other] عناصر
     }
@@ -342,8 +342,8 @@ removing-from-recents =
     } من { recents }
 removed-from-recents =
     تمت إزالة { $items } { $items ->
-        [one] item
-       *[other] items
+        [one] عنصر
+       *[other] عناصر
     } من { recents }
 restoring =
     جاري استعادة { $items } { $items ->
@@ -351,7 +351,7 @@ restoring =
        *[other] عناصر
     } من { trash } ({ $progress })...
 restored =
-    استُعيدت { $items } { $items ->
+    تم إستعادة { $items } { $items ->
         [one] عنصر
        *[other] عناصر
     } من { trash }
