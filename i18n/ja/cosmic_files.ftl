@@ -104,9 +104,9 @@ username = ユーザー名
 
 ## Operations
 
-edit-history = 変更の歴史
-history = 歴史
-no-history = 歴史にはアイテムはありません。
+edit-history = 履歴を編集
+history = 履歴
+no-history = 履歴はありません。
 pending = 保留中
 failed = 失敗
 complete = 完了
@@ -221,7 +221,7 @@ view = 表示
 grid-view = グリッドの表示
 list-view = リストの表示
 show-hidden-files = 隠しファイルを表示
-list-directories-first = ダイレクトリーを最初に表示
+list-directories-first = フォルダを最初に表示
 menu-settings = 設定...
 menu-about = COSMICファイルについて...
 
