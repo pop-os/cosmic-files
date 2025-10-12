@@ -11,27 +11,32 @@ pub fn spawn_detached(command: &mut process::Command) -> io::Result<()> {
     unsafe {
         use std::os::unix::process::CommandExt as _;
 
-        command.pre_exec(move || {
-            match libc::fork() {
-                -1 => return Err(io::Error::last_os_error()),
-                0 => (),
-                _ => libc::_exit(0),
-            }
+        command
+            .pre_exec(move || {
+                match libc::fork() {
+                    -1 => return Err(io::Error::last_os_error()),
+                    0 => (),
+                    _ => libc::_exit(0),
+                }
 
-            if libc::setsid() == -1 {
-                return Err(io::Error::last_os_error());
-            }
+                if libc::setsid() == -1 {
+                    return Err(io::Error::last_os_error());
+                }
 
-            Ok(())
-        });
+                Ok(())
+            })
+            .spawn()?
+            .wait()
+            .map(|_| ())
     }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
-        command.creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
+        command
+            .creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW)
+            .spawn()
+            .map(|_| ())
     }
-
-    command.spawn().map(|_| ())
 }
