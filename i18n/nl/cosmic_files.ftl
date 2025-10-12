@@ -413,4 +413,3 @@ removing-from-recents =
         [one] item
        *[other] items
     } van { recents }
-repository = Codearchief
