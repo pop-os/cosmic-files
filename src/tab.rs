@@ -53,7 +53,7 @@ use ordermap::OrderMap;
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
-    cell::Cell,
+    cell::{Cell, RefCell},
     cmp::Ordering,
     collections::HashMap,
     error::Error,
@@ -63,7 +63,8 @@ use std::{
     io::{BufRead, BufReader},
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
-    sync::{Arc, LazyLock, Mutex, RwLock, atomic},
+    rc::Rc,
+    sync::{Arc, LazyLock, RwLock, atomic},
     time::{Duration, Instant, SystemTime},
 };
 use tempfile::NamedTempFile;
@@ -5449,7 +5450,7 @@ impl Tab {
         let view = self.config.view;
         let item_view = match drag_list {
             Some(drag_list) if self.selected_clicked => {
-                let drag_list = ArcElementWrapper::<Message>(Arc::new(Mutex::new(drag_list)));
+                let drag_list = RcElementWrapper::<Message>(Rc::new(RefCell::new(drag_list)));
                 item_view
                     .drag_content(move || {
                         ClipboardCopy::new(crate::clipboard::ClipboardKind::Copy, &files)
@@ -5913,15 +5914,15 @@ pub fn respond_to_scroll_direction(delta: ScrollDelta, modifiers: Modifiers) -> 
 }
 
 #[derive(Clone)]
-pub struct ArcElementWrapper<M>(pub Arc<Mutex<Element<'static, M>>>);
+pub struct RcElementWrapper<M>(pub Rc<RefCell<Element<'static, M>>>);
 
-impl<M> Widget<M, cosmic::Theme, cosmic::Renderer> for ArcElementWrapper<M> {
+impl<M> Widget<M, cosmic::Theme, cosmic::Renderer> for RcElementWrapper<M> {
     fn size(&self) -> Size<Length> {
-        self.0.lock().unwrap().as_widget().size()
+        self.0.borrow().as_widget().size()
     }
 
     fn size_hint(&self) -> Size<Length> {
-        self.0.lock().unwrap().as_widget().size_hint()
+        self.0.borrow().as_widget().size_hint()
     }
 
     fn layout(
@@ -5930,11 +5931,7 @@ impl<M> Widget<M, cosmic::Theme, cosmic::Renderer> for ArcElementWrapper<M> {
         renderer: &cosmic::Renderer,
         limits: &cosmic::iced_core::layout::Limits,
     ) -> cosmic::iced_core::layout::Node {
-        self.0
-            .lock()
-            .unwrap()
-            .as_widget_mut()
-            .layout(tree, renderer, limits)
+        self.0.borrow().as_widget().layout(tree, renderer, limits)
     }
 
     fn draw(
@@ -5948,26 +5945,25 @@ impl<M> Widget<M, cosmic::Theme, cosmic::Renderer> for ArcElementWrapper<M> {
         viewport: &Rectangle,
     ) {
         self.0
-            .lock()
-            .unwrap()
+            .borrow()
             .as_widget()
             .draw(tree, renderer, theme, style, layout, cursor, viewport)
     }
 
     fn tag(&self) -> tree::Tag {
-        self.0.lock().unwrap().as_widget().tag()
+        self.0.borrow().as_widget().tag()
     }
 
     fn state(&self) -> tree::State {
-        self.0.lock().unwrap().as_widget().state()
+        self.0.borrow().as_widget().state()
     }
 
     fn children(&self) -> Vec<tree::Tree> {
-        self.0.lock().unwrap().as_widget().children()
+        self.0.borrow().as_widget().children()
     }
 
     fn diff(&mut self, tree: &mut tree::Tree) {
-        self.0.lock().unwrap().as_widget_mut().diff(tree)
+        self.0.borrow_mut().as_widget_mut().diff(tree)
     }
 
     fn operate(
@@ -5978,8 +5974,7 @@ impl<M> Widget<M, cosmic::Theme, cosmic::Renderer> for ArcElementWrapper<M> {
         operation: &mut dyn widget::Operation,
     ) {
         self.0
-            .lock()
-            .unwrap()
+            .borrow()
             .as_widget()
             .operate(state, layout, renderer, operation)
     }
@@ -5995,7 +5990,7 @@ impl<M> Widget<M, cosmic::Theme, cosmic::Renderer> for ArcElementWrapper<M> {
         _shell: &mut cosmic::iced_core::Shell<'_, M>,
         _viewport: &Rectangle,
     ) -> event::Status {
-        self.0.lock().unwrap().as_widget_mut().on_event(
+        self.0.borrow_mut().as_widget_mut().on_event(
             _state, _event, _layout, _cursor, _renderer, _clipboard, _shell, _viewport,
         )
     }
@@ -6009,8 +6004,7 @@ impl<M> Widget<M, cosmic::Theme, cosmic::Renderer> for ArcElementWrapper<M> {
         _renderer: &cosmic::Renderer,
     ) -> cosmic::iced_core::mouse::Interaction {
         self.0
-            .lock()
-            .unwrap()
+            .borrow()
             .as_widget()
             .mouse_interaction(_state, _layout, _cursor, _viewport, _renderer)
     }
@@ -6027,11 +6021,11 @@ impl<M> Widget<M, cosmic::Theme, cosmic::Renderer> for ArcElementWrapper<M> {
     }
 
     fn id(&self) -> Option<Id> {
-        self.0.lock().unwrap().as_widget().id()
+        self.0.borrow().as_widget().id()
     }
 
     fn set_id(&mut self, _id: Id) {
-        self.0.lock().unwrap().as_widget_mut().set_id(_id)
+        self.0.borrow_mut().as_widget_mut().set_id(_id)
     }
 
     fn drag_destinations(
@@ -6041,17 +6035,15 @@ impl<M> Widget<M, cosmic::Theme, cosmic::Renderer> for ArcElementWrapper<M> {
         renderer: &cosmic::Renderer,
         _dnd_rectangles: &mut cosmic::iced_core::clipboard::DndDestinationRectangles,
     ) {
-        self.0.lock().unwrap().as_widget().drag_destinations(
-            _state,
-            _layout,
-            renderer,
-            _dnd_rectangles,
-        )
+        self.0
+            .borrow()
+            .as_widget()
+            .drag_destinations(_state, _layout, renderer, _dnd_rectangles)
     }
 }
 
-impl<Message: 'static> From<ArcElementWrapper<Message>> for Element<'static, Message> {
-    fn from(wrapper: ArcElementWrapper<Message>) -> Self {
+impl<Message: 'static> From<RcElementWrapper<Message>> for Element<'static, Message> {
+    fn from(wrapper: RcElementWrapper<Message>) -> Self {
         Element::new(wrapper)
     }
 }
