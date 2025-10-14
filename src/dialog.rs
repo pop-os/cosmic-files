@@ -431,7 +431,10 @@ enum Message {
     Surface(cosmic::surface::Action),
     #[allow(clippy::enum_variant_names)]
     TabMessage(tab::Message),
-    TabRescan(Location, Option<tab::Item>, Vec<tab::Item>,
+    TabRescan(
+        Location,
+        Option<tab::Item>,
+        Vec<tab::Item>,
         Option<Vec<PathBuf>>,
     ),
     TabView(tab::View),
@@ -664,9 +667,7 @@ impl App {
         widget::column::with_children(children).into()
     }
 
-    fn rescan_tab(&self,
-        selection_paths: Option<Vec<PathBuf>>,
-    ) -> Task<Message> {
+    fn rescan_tab(&self, selection_paths: Option<Vec<PathBuf>>) -> Task<Message> {
         let location = self.tab.location.clone();
         let icon_sizes = self.tab.config.icon_sizes;
         let mounter_items = self.mounter_items.clone();
@@ -689,7 +690,12 @@ impl App {
                                 }
                             }
                         }
-                        cosmic::action::app(Message::TabRescan(location, parent_item_opt, items, selection_paths))
+                        cosmic::action::app(Message::TabRescan(
+                            location,
+                            parent_item_opt,
+                            items,
+                            selection_paths,
+                        ))
                     }
                     Err(err) => {
                         log::warn!("failed to rescan: {}", err);
@@ -1645,7 +1651,10 @@ impl Application for App {
                             commands.push(self.update(Message::from(action.message())));
                         }
                         tab::Command::ChangeLocation(_tab_title, _tab_path, selection_paths) => {
-                            commands.push(Task::batch([self.update_watcher(), self.rescan_tab(selection_paths)]));
+                            commands.push(Task::batch([
+                                self.update_watcher(),
+                                self.rescan_tab(selection_paths),
+                            ]));
                         }
                         tab::Command::ContextMenu(point_opt, parent_id) => {
                             #[cfg(feature = "wayland")]
@@ -1836,7 +1845,6 @@ impl Application for App {
                         }
                         self.tab.select_paths(selection_paths);
                     }
-
 
                     // Reset focus on location change
                     if self.search_get().is_some() {
