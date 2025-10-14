@@ -6,7 +6,9 @@ use cosmic::{
     app::{Core, Task, context_drawer, cosmic::Cosmic},
     cosmic_config, cosmic_theme, executor,
     iced::{
-        self, Alignment, Event, Length, Size, Subscription, event,
+        self, Alignment, Event, Length, Size, Subscription,
+        core::SmolStr,
+        event,
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers},
         stream, window,
@@ -35,7 +37,7 @@ use std::{
 
 use crate::{
     app::{Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind},
-    config::{Config, DialogConfig, Favorite, TIME_CONFIG_ID, ThumbCfg, TimeConfig},
+    config::{Config, DialogConfig, Favorite, TIME_CONFIG_ID, ThumbCfg, TimeConfig, TypeToSearch},
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
@@ -413,7 +415,7 @@ enum Message {
     DialogUpdate(DialogPage),
     Filename(String),
     Filter(usize),
-    Key(Modifiers, Key),
+    Key(Modifiers, Key, Option<SmolStr>),
     ModifiersChanged(Modifiers),
     MounterItems(MounterKey, MounterItems),
     NewFolder,
@@ -1339,12 +1341,14 @@ impl Application for App {
                 }
                 return self.rescan_tab();
             }
-            Message::Key(modifiers, key) => {
+            Message::Key(modifiers, key, text) => {
                 for (key_bind, action) in self.key_binds.iter() {
                     if key_bind.matches(modifiers, &key) {
                         return self.update(Message::from(action.message()));
                     }
                 }
+
+                // Check key binds from accept label
                 if let Some(key_bind) = &self.accept_label.key_bind_opt {
                     if key_bind.matches(modifiers, &key) {
                         return self.update(if self.flags.kind.save() {
@@ -1352,6 +1356,36 @@ impl Application for App {
                         } else {
                             Message::Open
                         });
+                    }
+                }
+
+                // Uncaptured keys with only shift modifiers go to the search or location box
+                if !modifiers.logo()
+                    && !modifiers.control()
+                    && !modifiers.alt()
+                    && matches!(key, Key::Character(_))
+                {
+                    if let Some(text) = text {
+                        match self.flags.config.type_to_search {
+                            TypeToSearch::Recursive => {
+                                let mut term = self.search_get().unwrap_or_default().to_string();
+                                term.push_str(&text);
+                                return self.search_set(Some(term));
+                            }
+                            TypeToSearch::EnterPath => {
+                                let location = self.tab.edit_location.as_ref().map_or_else(
+                                    || self.tab.location.clone(),
+                                    |x| x.location.clone(),
+                                );
+                                // Try to add text to end of location
+                                if let Some(path) = location.path_opt() {
+                                    let mut path_string = path.to_string_lossy().to_string();
+                                    path_string.push_str(&text);
+                                    self.tab.edit_location =
+                                        Some(location.with_path(PathBuf::from(path_string)).into());
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1904,8 +1938,13 @@ impl Application for App {
         struct TimeSubscription;
         let mut subscriptions = vec![
             event::listen_with(|event, status, _window_id| match event {
-                Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => match status {
-                    event::Status::Ignored => Some(Message::Key(modifiers, key)),
+                Event::Keyboard(KeyEvent::KeyPressed {
+                    key,
+                    modifiers,
+                    text,
+                    ..
+                }) => match status {
+                    event::Status::Ignored => Some(Message::Key(modifiers, key, text)),
                     event::Status::Captured => None,
                 },
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
