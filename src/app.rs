@@ -3766,32 +3766,32 @@ impl Application for App {
                 }
             }
             Message::TabClose(entity_opt) => {
-                let mut tasks = Vec::with_capacity(3);
+                let mut tasks = Vec::with_capacity(2);
 
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
 
-                // Activate closest item
-                if let Some(position) = self.tab_model.position(entity) {
-                    let new_position = if position > 0 {
-                        position - 1
-                    } else {
-                        position + 1
-                    };
+                // If the last tab is closed, close the window
+                // Otherwise, activate closest item
+                if self.tab_model.len() == 1 {
+                    tasks.push(Task::future(async move {
+                        cosmic::action::app(Message::WindowClose)
+                    }));
+                } else {
+                    if let Some(position) = self.tab_model.position(entity) {
+                        let new_position = if position > 0 {
+                            position - 1
+                        } else {
+                            position + 1
+                        };
 
-                    if let Some(new_entity) = self.tab_model.entity_at(new_position) {
-                        tasks.push(self.update(Message::TabActivate(new_entity)));
+                        if let Some(new_entity) = self.tab_model.entity_at(new_position) {
+                            tasks.push(self.update(Message::TabActivate(new_entity)));
+                        }
                     }
                 }
 
                 // Remove item
                 self.tab_model.remove(entity);
-
-                // If that was the last tab, close window
-                if self.tab_model.iter().next().is_none() {
-                    if let Some(window_id) = self.core.main_window_id() {
-                        tasks.push(window::close(window_id));
-                    }
-                }
 
                 tasks.push(self.update_watcher());
 
