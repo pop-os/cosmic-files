@@ -84,7 +84,7 @@ save-file = ذخیره فایل
 ## Open With Dialog
 
 open-with-title = چگونه می‌خواهید "{ $name }" را باز کنید؟
-browse-store = تصفح { $store }
+browse-store = مرور { $store }
 other-apps = برنامه‌های دیگر
 related-apps = برنامه‌های مرتبط
 

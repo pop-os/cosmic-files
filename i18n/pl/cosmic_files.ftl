@@ -104,7 +104,7 @@ rename-folder = Zmień nazwę katalogu
 # Replace Dialog
 replace = Zastąp
 replace-title = „{ $filename }” już istnieje w tym miejscu.
-replace-warning = Czy chcesz by został on zastąpiony? To nadpisze jego zawartość.
+replace-warning = Czy chcesz by został on zastąpiony przez wybrany element? To nadpisze jego zawartość.
 replace-warning-operation = Czy chcesz by został on zastąpiony? To nadpisze jego zawartość.
 original-file = Oryginalny plik
 replace-with = Zastąpiony przez
@@ -230,8 +230,8 @@ compressed =
        *[other] elementów
     } z „{ $from }” do „{ $to }”
 copy_noun = Kopiuj
-creating = Tworzy { $name } w { $parent }
-created = Stworzono { $name } w { $parent }
+creating = Tworzy „{ $name }” w „{ $parent }”
+created = Stworzono „{ $name }” w „{ $parent }”
 copying =
     Kopiowanie { $items } { $items ->
         [one] elementu
@@ -269,8 +269,8 @@ extracted =
     } z „{ $from }” do „{ $to }”
 setting-executable-and-launching = Ustawianie „{ $name }” jako wykonywalnego i uruchamianie
 set-executable-and-launched = Ustaw „{ $name }” jako wykonywalny i uruchom
-setting-permissions = Ustawianie uprawnień dla "{ $name }" na { $mode }
-set-permissions = Ustaw uprawnienia dla "{ $name }" na { $mode }
+setting-permissions = Ustawianie uprawnień dla „{ $name }” na { $mode }
+set-permissions = Ustaw uprawnienia dla „{ $name }” na { $mode }
 moving =
     Przenoszenie { $items } { $items ->
         [one] elementu
@@ -304,8 +304,8 @@ removed-from-recents =
         [few] elementy
        *[other] elementów
     } z Poprzednich
-renaming = Zmieniana nazwa { $from } na { $to }
-renamed = Zmieniono nazwę { $from } na { $to }
+renaming = Zmieniana nazwa z „{ $from }” na „{ $to }”
+renamed = Zmieniono nazwę z „{ $from }” na „{ $to }”
 restoring =
     Przywracanie { $items } { $items ->
         [one] elementu
@@ -400,7 +400,7 @@ select-all = Zaznacz wszystko
 
 ## View
 
-zoom-in = Przybliż
+zoom-in = Zbliż
 default-size = Domyślny rozmiar
 zoom-out = Oddal
 view = Widok

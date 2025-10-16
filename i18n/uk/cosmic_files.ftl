@@ -1,11 +1,11 @@
 cosmic-files = Файли COSMIC
-empty-folder = Тека порожня
-empty-folder-hidden = Тека порожня (містить приховані елементи)
+empty-folder = Порожня тека
+empty-folder-hidden = Порожня тека (містить приховані елементи)
 filesystem = Файлова система
 home = Домівка
 trash = Смітник
 recents = недавній
-undo = Скасувати
+undo = Відмінити
 # List view
 name = Назва
 modified = Змінено
@@ -184,7 +184,7 @@ dismiss = Сховати повідомлення
 remove = Видалити
 cancelled = Скасовані
 no-results = Нічого не знайдено
-networks = Мережа
+networks = Мережі
 notification-in-progress = Виконуються операції з файлами.
 today = Сьогодні
 desktop-view-options = Параметри піктограм стільниці...
