@@ -95,6 +95,9 @@ use crate::{config::State, dialog::DialogSettings};
 static PERMANENT_DELETE_BUTTON_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("permanent-delete-button"));
 
+static CONFIRM_OPEN_WITH_BUTTON_ID: LazyLock<widget::Id> =
+    LazyLock::new(|| widget::Id::new("confirm-open-with-button"));
+
 #[derive(Clone, Debug)]
 pub enum Mode {
     App,
@@ -3370,7 +3373,7 @@ impl Application for App {
                                             self.mime_app_cache.get(&mime).first().cloned()
                                         }),
                                 },
-                                None, // TODO which id to focus?
+                                Some(CONFIRM_OPEN_WITH_BUTTON_ID.clone()),
                             );
                         }
                     }
@@ -5260,7 +5263,9 @@ impl Application for App {
                 let mut dialog = widget::dialog()
                     .title(fl!("open-with-title", name = name))
                     .primary_action(
-                        widget::button::suggested(fl!("open")).on_press(Message::DialogComplete),
+                        widget::button::suggested(fl!("open"))
+                            .on_press(Message::DialogComplete)
+                            .id(CONFIRM_OPEN_WITH_BUTTON_ID.clone()),
                     )
                     .secondary_action(
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
