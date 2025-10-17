@@ -36,7 +36,9 @@ use std::{
 };
 
 use crate::{
-    app::{Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind},
+    app::{
+        Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind, REPLACE_BUTTON_ID,
+    },
     config::{Config, DialogConfig, Favorite, TIME_CONFIG_ID, ThumbCfg, TimeConfig, TypeToSearch},
     fl, home_dir,
     key_bind::key_binds,
@@ -1597,6 +1599,7 @@ impl Application for App {
                                 self.dialog_pages.push_back(DialogPage::Replace {
                                     filename: filename.clone(),
                                 });
+                                return widget::button::focus(REPLACE_BUTTON_ID.clone());
                             } else {
                                 self.result_opt = Some(DialogResult::Open(vec![path]));
                                 return window::close(self.flags.window_id);
