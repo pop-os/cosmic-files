@@ -98,6 +98,9 @@ static PERMANENT_DELETE_BUTTON_ID: LazyLock<widget::Id> =
 static CONFIRM_OPEN_WITH_BUTTON_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("confirm-open-with-button"));
 
+static SET_EXECUTABLE_AND_LAUNCH_CONFIRM_BUTTON_ID: LazyLock<widget::Id> =
+    LazyLock::new(|| widget::Id::new("set-executable-and-launch-confirm-button"));
+
 #[derive(Clone, Debug)]
 pub enum Mode {
     App,
@@ -755,10 +758,11 @@ impl App {
                         Err(err) => match err.kind() {
                             io::ErrorKind::PermissionDenied => {
                                 // If permission is denied, try marking as executable, then running
-                                tasks.push(self.dialog_pages.push_back(
+                                tasks.push(self.push_dialog(
                                     DialogPage::SetExecutableAndLaunch {
                                         path: path.to_path_buf(),
                                     },
+                                    Some(SET_EXECUTABLE_AND_LAUNCH_CONFIRM_BUTTON_ID.clone()),
                                 ));
                             }
                             _ => {
@@ -5461,7 +5465,8 @@ impl Application for App {
                     .primary_action(
                         widget::button::text(fl!("set-and-launch"))
                             .class(theme::Button::Suggested)
-                            .on_press(Message::DialogComplete),
+                            .on_press(Message::DialogComplete)
+                            .id(SET_EXECUTABLE_AND_LAUNCH_CONFIRM_BUTTON_ID.clone()),
                     )
                     .secondary_action(
                         widget::button::text(fl!("cancel"))
