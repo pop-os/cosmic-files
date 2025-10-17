@@ -31,6 +31,7 @@ use cosmic::{
         window::{self, Event as WindowEvent, Id as WindowId},
     },
     iced_runtime::clipboard,
+    iced_widget::button::focus,
     style, surface, theme,
     widget::{
         self,
@@ -58,7 +59,7 @@ use std::{
     path::{Path, PathBuf},
     pin::Pin,
     process,
-    sync::{Arc, Mutex},
+    sync::{Arc, LazyLock, Mutex},
     time::{self, Duration, Instant},
 };
 use tokio::sync::mpsc;
@@ -90,6 +91,9 @@ use crate::{
     },
 };
 use crate::{config::State, dialog::DialogSettings};
+
+static PERMANENT_DELETE_BUTTON_ID: LazyLock<widget::Id> =
+    LazyLock::new(|| widget::Id::new("permanent-delete-button"));
 
 #[derive(Clone, Debug)]
 pub enum Mode {
@@ -315,7 +319,7 @@ pub enum Message {
     DialogComplete,
     Eject,
     FileDialogMessage(DialogMessage),
-    DialogPush(DialogPage),
+    DialogPush(DialogPage, Option<widget::Id>),
     DialogUpdate(DialogPage),
     DialogUpdateComplete(DialogPage),
     ExtractHere(Option<Entity>),
@@ -693,6 +697,15 @@ pub struct App {
 }
 
 impl App {
+    fn push_dialog(&mut self, page: DialogPage, focus_id: Option<widget::Id>) -> Task<Message> {
+        let t = self.dialog_pages.push_back(page);
+        if let Some(focus_id) = focus_id {
+            Task::batch(vec![t, focus(focus_id)])
+        } else {
+            t
+        }
+    }
+
     fn open_file(&mut self, paths: &[impl AsRef<Path>]) -> Task<Message> {
         let mut tasks = Vec::new();
 
@@ -1090,9 +1103,12 @@ impl App {
 
         let mut tasks = Vec::new();
         if !dialog_paths.is_empty() {
-            tasks.push(self.dialog_pages.push_back(DialogPage::PermanentlyDelete {
-                paths: dialog_paths,
-            }));
+            tasks.push(self.update(Message::DialogPush(
+                DialogPage::PermanentlyDelete {
+                    paths: dialog_paths,
+                },
+                Some(PERMANENT_DELETE_BUTTON_ID.clone()),
+            )));
         }
         if !trash_paths.is_empty() {
             tasks.push(self.operation(Operation::Delete { paths: trash_paths }));
@@ -2853,8 +2869,8 @@ impl Application for App {
                     return Task::batch(tasks);
                 }
             }
-            Message::DialogPush(dialog_page) => {
-                return self.dialog_pages.push_back(dialog_page);
+            Message::DialogPush(dialog_page, focused_id) => {
+                return self.push_dialog(dialog_page, focused_id);
             }
             Message::DialogUpdate(dialog_page) => {
                 self.dialog_pages.update_front(dialog_page);
@@ -3336,17 +3352,20 @@ impl Application for App {
                             let Some(path) = item.path_opt() else {
                                 continue;
                             };
-                            return self.update(Message::DialogPush(DialogPage::OpenWith {
-                                path: path.to_path_buf(),
-                                mime: item.mime.clone(),
-                                selected: 0,
-                                store_opt: "x-scheme-handler/mime"
-                                    .parse::<mime_guess::Mime>()
-                                    .ok()
-                                    .and_then(|mime| {
-                                        self.mime_app_cache.get(&mime).first().cloned()
-                                    }),
-                            }));
+                            return self.push_dialog(
+                                DialogPage::OpenWith {
+                                    path: path.to_path_buf(),
+                                    mime: item.mime.clone(),
+                                    selected: 0,
+                                    store_opt: "x-scheme-handler/mime"
+                                        .parse::<mime_guess::Mime>()
+                                        .ok()
+                                        .and_then(|mime| {
+                                            self.mime_app_cache.get(&mime).first().cloned()
+                                        }),
+                                },
+                                None, // TODO which id to focus?
+                            );
                         }
                     }
                 }
@@ -3524,9 +3543,10 @@ impl Application for App {
             Message::PermanentlyDelete(entity_opt) => {
                 let paths = self.selected_paths(entity_opt);
                 if !paths.is_empty() {
-                    return self
-                        .dialog_pages
-                        .push_back(DialogPage::PermanentlyDelete { paths });
+                    return self.push_dialog(
+                        DialogPage::PermanentlyDelete { paths },
+                        Some(PERMANENT_DELETE_BUTTON_ID.clone()),
+                    );
                 }
             }
             Message::Preview(entity_opt) => {
@@ -4398,17 +4418,20 @@ impl Application for App {
                     {
                         match tab::item_from_path(&path, IconSizes::default()) {
                             Ok(item) => {
-                                return self.update(Message::DialogPush(DialogPage::OpenWith {
-                                    path: path.to_path_buf(),
-                                    mime: item.mime.clone(),
-                                    selected: 0,
-                                    store_opt: "x-scheme-handler/mime"
-                                        .parse::<mime_guess::Mime>()
-                                        .ok()
-                                        .and_then(|mime| {
-                                            self.mime_app_cache.get(&mime).first().cloned()
-                                        }),
-                                }));
+                                return self.push_dialog(
+                                    DialogPage::OpenWith {
+                                        path: path.to_path_buf(),
+                                        mime: item.mime.clone(),
+                                        selected: 0,
+                                        store_opt: "x-scheme-handler/mime"
+                                            .parse::<mime_guess::Mime>()
+                                            .ok()
+                                            .and_then(|mime| {
+                                                self.mime_app_cache.get(&mime).first().cloned()
+                                            }),
+                                    },
+                                    None,
+                                );
                             }
                             Err(err) => {
                                 log::warn!("failed to get item for path {:?}: {}", path, err);
@@ -5277,7 +5300,8 @@ impl Application for App {
                     .title(fl!("permanently-delete-question"))
                     .primary_action(
                         widget::button::destructive(fl!("delete"))
-                            .on_press(Message::DialogComplete),
+                            .on_press(Message::DialogComplete)
+                            .id(PERMANENT_DELETE_BUTTON_ID.clone()),
                     )
                     .secondary_action(
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
