@@ -1,5 +1,5 @@
 use crate::{
-    app::{ArchiveType, DialogPage, Message},
+    app::{ArchiveType, DialogPage, Message, REPLACE_BUTTON_ID},
     config::IconSizes,
     fl,
     spawn_detached::spawn_detached,
@@ -53,13 +53,16 @@ async fn handle_replace(
     let _ = msg_tx
         .lock()
         .await
-        .send(Message::DialogPush(DialogPage::Replace {
-            from: item_from,
-            to: item_to,
-            multiple,
-            apply_to_all: false,
-            tx,
-        }))
+        .send(Message::DialogPush(
+            DialogPage::Replace {
+                from: item_from,
+                to: item_to,
+                multiple,
+                apply_to_all: false,
+                tx,
+            },
+            Some(REPLACE_BUTTON_ID.clone()),
+        ))
         .await;
     rx.recv().await.unwrap_or(ReplaceResult::Cancel)
 }
@@ -1198,7 +1201,7 @@ mod tests {
         let handle_messages = async move {
             while let Some(msg) = rx.next().await {
                 match msg {
-                    Message::DialogPush(DialogPage::Replace { tx, .. }) => {
+                    Message::DialogPush(DialogPage::Replace { tx, .. }, _id_to_focus) => {
                         debug!("[{id}] Replace request");
                         tx.send(ReplaceResult::Cancel)
                             .await

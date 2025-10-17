@@ -31,6 +31,7 @@ use cosmic::{
         window::{self, Event as WindowEvent, Id as WindowId},
     },
     iced_runtime::clipboard,
+    iced_widget::button::focus,
     style, surface, theme,
     widget::{
         self,
@@ -58,7 +59,7 @@ use std::{
     path::{Path, PathBuf},
     pin::Pin,
     process,
-    sync::{Arc, Mutex},
+    sync::{Arc, LazyLock, Mutex},
     time::{self, Duration, Instant},
 };
 use tokio::sync::mpsc;
@@ -90,6 +91,27 @@ use crate::{
     },
 };
 use crate::{config::State, dialog::DialogSettings};
+
+static PERMANENT_DELETE_BUTTON_ID: LazyLock<widget::Id> =
+    LazyLock::new(|| widget::Id::new("permanent-delete-button"));
+
+static CONFIRM_OPEN_WITH_BUTTON_ID: LazyLock<widget::Id> =
+    LazyLock::new(|| widget::Id::new("confirm-open-with-button"));
+
+static EMPTY_TRASH_BUTTON_ID: LazyLock<widget::Id> =
+    LazyLock::new(|| widget::Id::new("empty-trash-button"));
+
+static SET_EXECUTABLE_AND_LAUNCH_CONFIRM_BUTTON_ID: LazyLock<widget::Id> =
+    LazyLock::new(|| widget::Id::new("set-executable-and-launch-confirm-button"));
+
+static FAVORITE_PATH_ERROR_REMOVE_BUTTON_ID: LazyLock<widget::Id> =
+    LazyLock::new(|| widget::Id::new("favorite-path-error-remove-button"));
+
+static MOUNT_ERROR_TRY_AGAIN_BUTTON_ID: LazyLock<widget::Id> =
+    LazyLock::new(|| widget::Id::new("mount-error-try-again-button"));
+
+pub(crate) static REPLACE_BUTTON_ID: LazyLock<widget::Id> =
+    LazyLock::new(|| widget::Id::new("replace-button"));
 
 #[derive(Clone, Debug)]
 pub enum Mode {
@@ -315,7 +337,7 @@ pub enum Message {
     DialogComplete,
     Eject,
     FileDialogMessage(DialogMessage),
-    DialogPush(DialogPage),
+    DialogPush(DialogPage, Option<widget::Id>),
     DialogUpdate(DialogPage),
     DialogUpdateComplete(DialogPage),
     ExtractHere(Option<Entity>),
@@ -693,6 +715,15 @@ pub struct App {
 }
 
 impl App {
+    fn push_dialog(&mut self, page: DialogPage, focus_id: Option<widget::Id>) -> Task<Message> {
+        let t = self.dialog_pages.push_back(page);
+        if let Some(focus_id) = focus_id {
+            Task::batch(vec![t, focus(focus_id)])
+        } else {
+            t
+        }
+    }
+
     fn open_file(&mut self, paths: &[impl AsRef<Path>]) -> Task<Message> {
         let mut tasks = Vec::new();
 
@@ -739,10 +770,11 @@ impl App {
                         Err(err) => match err.kind() {
                             io::ErrorKind::PermissionDenied => {
                                 // If permission is denied, try marking as executable, then running
-                                tasks.push(self.dialog_pages.push_back(
+                                tasks.push(self.push_dialog(
                                     DialogPage::SetExecutableAndLaunch {
                                         path: path.to_path_buf(),
                                     },
+                                    Some(SET_EXECUTABLE_AND_LAUNCH_CONFIRM_BUTTON_ID.clone()),
                                 ));
                             }
                             _ => {
@@ -1090,9 +1122,12 @@ impl App {
 
         let mut tasks = Vec::new();
         if !dialog_paths.is_empty() {
-            tasks.push(self.dialog_pages.push_back(DialogPage::PermanentlyDelete {
-                paths: dialog_paths,
-            }));
+            tasks.push(self.update(Message::DialogPush(
+                DialogPage::PermanentlyDelete {
+                    paths: dialog_paths,
+                },
+                Some(PERMANENT_DELETE_BUTTON_ID.clone()),
+            )));
         }
         if !trash_paths.is_empty() {
             tasks.push(self.operation(Operation::Delete { paths: trash_paths }));
@@ -2343,27 +2378,36 @@ impl Application for App {
                     }
 
                     log::warn!("failed to open favorite, path does not exist: {:?}", path);
-                    return self.dialog_pages.push_back(DialogPage::FavoritePathError {
-                        path: path.clone(),
-                        entity,
-                    });
+                    return self.push_dialog(
+                        DialogPage::FavoritePathError {
+                            path: path.clone(),
+                            entity,
+                        },
+                        Some(FAVORITE_PATH_ERROR_REMOVE_BUTTON_ID.clone()),
+                    );
                 }
                 Location::Path(path) | Location::Network(_, _, Some(path)) => {
                     match path.try_exists() {
                         Ok(true) => true,
                         Ok(false) => {
                             log::warn!("failed to open favorite, path does not exist: {:?}", path);
-                            return self.dialog_pages.push_back(DialogPage::FavoritePathError {
-                                path: path.clone(),
-                                entity,
-                            });
+                            return self.push_dialog(
+                                DialogPage::FavoritePathError {
+                                    path: path.clone(),
+                                    entity,
+                                },
+                                Some(FAVORITE_PATH_ERROR_REMOVE_BUTTON_ID.clone()),
+                            );
                         }
                         Err(err) => {
                             log::warn!("failed to open favorite for path: {:?}, {}", path, err);
-                            return self.dialog_pages.push_back(DialogPage::FavoritePathError {
-                                path: path.clone(),
-                                entity,
-                            });
+                            return self.push_dialog(
+                                DialogPage::FavoritePathError {
+                                    path: path.clone(),
+                                    entity,
+                                },
+                                Some(FAVORITE_PATH_ERROR_REMOVE_BUTTON_ID.clone()),
+                            );
                         }
                     }
                 }
@@ -2549,16 +2593,16 @@ impl Application for App {
                         let to = destination.0.to_path_buf();
                         let name = destination.1.to_str().unwrap_or_default().to_string();
                         let archive_type = ArchiveType::default();
-                        return Task::batch([
-                            self.dialog_pages.push_back(DialogPage::Compress {
+                        return self.push_dialog(
+                            DialogPage::Compress {
                                 paths,
                                 to,
                                 name,
                                 archive_type,
                                 password: None,
-                            }),
-                            widget::text_input::focus(self.dialog_text_input.clone()),
-                        ]);
+                            },
+                            Some(self.dialog_text_input.clone()),
+                        );
                     }
                 }
             }
@@ -2853,8 +2897,8 @@ impl Application for App {
                     return Task::batch(tasks);
                 }
             }
-            Message::DialogPush(dialog_page) => {
-                return self.dialog_pages.push_back(dialog_page);
+            Message::DialogPush(dialog_page, focused_id) => {
+                return self.push_dialog(dialog_page, focused_id);
             }
             Message::DialogUpdate(dialog_page) => {
                 self.dialog_pages.update_front(dialog_page);
@@ -3059,23 +3103,26 @@ impl Application for App {
                 }
                 Err(error) => {
                     log::warn!("failed to connect to {:?}: {}", item, error);
-                    return self.dialog_pages.push_back(DialogPage::MountError {
-                        mounter_key,
-                        item,
-                        error,
-                    });
+                    return self.push_dialog(
+                        DialogPage::MountError {
+                            mounter_key,
+                            item,
+                            error,
+                        },
+                        Some(MOUNT_ERROR_TRY_AGAIN_BUTTON_ID.clone()),
+                    );
                 }
             },
             Message::NetworkAuth(mounter_key, uri, auth, auth_tx) => {
-                return Task::batch([
-                    self.dialog_pages.push_back(DialogPage::NetworkAuth {
+                return self.push_dialog(
+                    DialogPage::NetworkAuth {
                         mounter_key,
                         uri,
                         auth,
                         auth_tx,
-                    }),
-                    widget::text_input::focus(self.dialog_text_input.clone()),
-                ]);
+                    },
+                    Some(self.dialog_text_input.clone()),
+                );
             }
             Message::NetworkDriveInput(input) => {
                 self.network_drive_input = input;
@@ -3336,17 +3383,20 @@ impl Application for App {
                             let Some(path) = item.path_opt() else {
                                 continue;
                             };
-                            return self.update(Message::DialogPush(DialogPage::OpenWith {
-                                path: path.to_path_buf(),
-                                mime: item.mime.clone(),
-                                selected: 0,
-                                store_opt: "x-scheme-handler/mime"
-                                    .parse::<mime_guess::Mime>()
-                                    .ok()
-                                    .and_then(|mime| {
-                                        self.mime_app_cache.get(&mime).first().cloned()
-                                    }),
-                            }));
+                            return self.push_dialog(
+                                DialogPage::OpenWith {
+                                    path: path.to_path_buf(),
+                                    mime: item.mime.clone(),
+                                    selected: 0,
+                                    store_opt: "x-scheme-handler/mime"
+                                        .parse::<mime_guess::Mime>()
+                                        .ok()
+                                        .and_then(|mime| {
+                                            self.mime_app_cache.get(&mime).first().cloned()
+                                        }),
+                                },
+                                Some(CONFIRM_OPEN_WITH_BUTTON_ID.clone()),
+                            );
                         }
                     }
                 }
@@ -3486,6 +3536,8 @@ impl Application for App {
                             },
                         }));
                     }
+                    tasks.push(widget::text_input::focus(self.dialog_text_input.clone()));
+
                     // Remove from progress
                     self.progress_operations.remove(&id);
                     self.failed_operations
@@ -3524,9 +3576,10 @@ impl Application for App {
             Message::PermanentlyDelete(entity_opt) => {
                 let paths = self.selected_paths(entity_opt);
                 if !paths.is_empty() {
-                    return self
-                        .dialog_pages
-                        .push_back(DialogPage::PermanentlyDelete { paths });
+                    return self.push_dialog(
+                        DialogPage::PermanentlyDelete { paths },
+                        Some(PERMANENT_DELETE_BUTTON_ID.clone()),
+                    );
                 }
             }
             Message::Preview(entity_opt) => {
@@ -3942,7 +3995,10 @@ impl Application for App {
                             commands.push(self.update(Message::PasteContents(to, from)));
                         }
                         tab::Command::EmptyTrash => {
-                            return self.dialog_pages.push_back(DialogPage::EmptyTrash);
+                            return self.push_dialog(
+                                DialogPage::EmptyTrash,
+                                Some(EMPTY_TRASH_BUTTON_ID.clone()),
+                            );
                         }
                         #[cfg(feature = "desktop")]
                         tab::Command::ExecEntryAction(entry, action) => {
@@ -4398,17 +4454,20 @@ impl Application for App {
                     {
                         match tab::item_from_path(&path, IconSizes::default()) {
                             Ok(item) => {
-                                return self.update(Message::DialogPush(DialogPage::OpenWith {
-                                    path: path.to_path_buf(),
-                                    mime: item.mime.clone(),
-                                    selected: 0,
-                                    store_opt: "x-scheme-handler/mime"
-                                        .parse::<mime_guess::Mime>()
-                                        .ok()
-                                        .and_then(|mime| {
-                                            self.mime_app_cache.get(&mime).first().cloned()
-                                        }),
-                                }));
+                                return self.push_dialog(
+                                    DialogPage::OpenWith {
+                                        path: path.to_path_buf(),
+                                        mime: item.mime.clone(),
+                                        selected: 0,
+                                        store_opt: "x-scheme-handler/mime"
+                                            .parse::<mime_guess::Mime>()
+                                            .ok()
+                                            .and_then(|mime| {
+                                                self.mime_app_cache.get(&mime).first().cloned()
+                                            }),
+                                    },
+                                    None,
+                                );
                             }
                             Err(err) => {
                                 log::warn!("failed to get item for path {:?}: {}", path, err);
@@ -4515,7 +4574,8 @@ impl Application for App {
                 }
 
                 NavMenuAction::EmptyTrash => {
-                    return self.dialog_pages.push_front(DialogPage::EmptyTrash);
+                    return self
+                        .push_dialog(DialogPage::EmptyTrash, Some(EMPTY_TRASH_BUTTON_ID.clone()));
                 }
             },
             Message::Recents => {
@@ -4900,7 +4960,9 @@ impl Application for App {
                 .title(fl!("empty-trash"))
                 .body(fl!("empty-trash-warning"))
                 .primary_action(
-                    widget::button::suggested(fl!("empty-trash")).on_press(Message::DialogComplete),
+                    widget::button::suggested(fl!("empty-trash"))
+                        .on_press(Message::DialogComplete)
+                        .id(EMPTY_TRASH_BUTTON_ID.clone()),
                 )
                 .secondary_action(
                     widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
@@ -4919,23 +4981,24 @@ impl Application for App {
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
                     )
             }
-            DialogPage::ExtractPassword { id, password } => {
-                widget::dialog()
-                    .title(fl!("extract-password-required"))
-                    .icon(icon::from_name("dialog-error").size(64))
-                    .control(widget::text_input("", password).password().on_input(
-                        move |password| {
+            DialogPage::ExtractPassword { id, password } => widget::dialog()
+                .title(fl!("extract-password-required"))
+                .icon(icon::from_name("dialog-error").size(64))
+                .control(
+                    widget::text_input("", password)
+                        .password()
+                        .on_input(move |password| {
                             Message::DialogUpdate(DialogPage::ExtractPassword { id: *id, password })
-                        },
-                    ))
-                    .primary_action(
-                        widget::button::suggested(fl!("extract-here"))
-                            .on_press(Message::DialogComplete),
-                    )
-                    .secondary_action(
-                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
-                    )
-            }
+                        })
+                        .id(self.dialog_text_input.clone()),
+                )
+                .primary_action(
+                    widget::button::suggested(fl!("extract-here"))
+                        .on_press(Message::DialogComplete),
+                )
+                .secondary_action(
+                    widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                ),
             DialogPage::MountError {
                 mounter_key: _,
                 item: _,
@@ -4945,7 +5008,9 @@ impl Application for App {
                 .body(error)
                 .icon(icon::from_name("dialog-error").size(64))
                 .primary_action(
-                    widget::button::standard(fl!("try-again")).on_press(Message::DialogComplete),
+                    widget::button::standard(fl!("try-again"))
+                        .on_press(Message::DialogComplete)
+                        .id(MOUNT_ERROR_TRY_AGAIN_BUTTON_ID.clone()),
                 )
                 .secondary_action(
                     widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
@@ -5231,7 +5296,9 @@ impl Application for App {
                 let mut dialog = widget::dialog()
                     .title(fl!("open-with-title", name = name))
                     .primary_action(
-                        widget::button::suggested(fl!("open")).on_press(Message::DialogComplete),
+                        widget::button::suggested(fl!("open"))
+                            .on_press(Message::DialogComplete)
+                            .id(CONFIRM_OPEN_WITH_BUTTON_ID.clone()),
                     )
                     .secondary_action(
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
@@ -5277,7 +5344,8 @@ impl Application for App {
                     .title(fl!("permanently-delete-question"))
                     .primary_action(
                         widget::button::destructive(fl!("delete"))
-                            .on_press(Message::DialogComplete),
+                            .on_press(Message::DialogComplete)
+                            .id(PERMANENT_DELETE_BUTTON_ID.clone()),
                     )
                     .secondary_action(
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
@@ -5383,9 +5451,13 @@ impl Application for App {
                         from.replace_view(fl!("replace-with"), military_time)
                             .map(|x| Message::TabMessage(None, x)),
                     )
-                    .primary_action(widget::button::suggested(fl!("replace")).on_press(
-                        Message::ReplaceResult(ReplaceResult::Replace(*apply_to_all)),
-                    ));
+                    .primary_action(
+                        widget::button::suggested(fl!("replace"))
+                            .on_press(Message::ReplaceResult(ReplaceResult::Replace(
+                                *apply_to_all,
+                            )))
+                            .id(REPLACE_BUTTON_ID.clone()),
+                    );
                 if *multiple {
                     dialog
                         .control(
@@ -5432,7 +5504,8 @@ impl Application for App {
                     .primary_action(
                         widget::button::text(fl!("set-and-launch"))
                             .class(theme::Button::Suggested)
-                            .on_press(Message::DialogComplete),
+                            .on_press(Message::DialogComplete)
+                            .id(SET_EXECUTABLE_AND_LAUNCH_CONFIRM_BUTTON_ID.clone()),
                     )
                     .secondary_action(
                         widget::button::text(fl!("cancel"))
@@ -5452,7 +5525,9 @@ impl Application for App {
                 ))
                 .icon(icon::from_name("dialog-error").size(64))
                 .primary_action(
-                    widget::button::destructive(fl!("remove")).on_press(Message::DialogComplete),
+                    widget::button::destructive(fl!("remove"))
+                        .on_press(Message::DialogComplete)
+                        .id(FAVORITE_PATH_ERROR_REMOVE_BUTTON_ID.clone()),
                 )
                 .secondary_action(
                     widget::button::standard(fl!("keep")).on_press(Message::DialogCancel),
