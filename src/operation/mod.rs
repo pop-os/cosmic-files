@@ -1,5 +1,5 @@
 use crate::{
-    app::{ArchiveType, DialogPage, Message},
+    app::{ArchiveType, DialogPage, Message, REPLACE_BUTTON_ID},
     config::IconSizes,
     fl,
     spawn_detached::spawn_detached,
@@ -61,7 +61,7 @@ async fn handle_replace(
                 apply_to_all: false,
                 tx,
             },
-            None, // TODO which widget to focus?
+            Some(REPLACE_BUTTON_ID.clone()),
         ))
         .await;
     rx.recv().await.unwrap_or(ReplaceResult::Cancel)

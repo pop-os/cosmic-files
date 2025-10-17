@@ -101,6 +101,12 @@ static CONFIRM_OPEN_WITH_BUTTON_ID: LazyLock<widget::Id> =
 static SET_EXECUTABLE_AND_LAUNCH_CONFIRM_BUTTON_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("set-executable-and-launch-confirm-button"));
 
+static FAVORITE_PATH_ERROR_REMOVE_BUTTON_ID: LazyLock<widget::Id> =
+    LazyLock::new(|| widget::Id::new("favorite-path-error-remove-button"));
+
+pub(crate) static REPLACE_BUTTON_ID: LazyLock<widget::Id> =
+    LazyLock::new(|| widget::Id::new("replace-button"));
+
 #[derive(Clone, Debug)]
 pub enum Mode {
     App,
@@ -2366,27 +2372,36 @@ impl Application for App {
                     }
 
                     log::warn!("failed to open favorite, path does not exist: {:?}", path);
-                    return self.dialog_pages.push_back(DialogPage::FavoritePathError {
-                        path: path.clone(),
-                        entity,
-                    });
+                    return self.push_dialog(
+                        DialogPage::FavoritePathError {
+                            path: path.clone(),
+                            entity,
+                        },
+                        Some(FAVORITE_PATH_ERROR_REMOVE_BUTTON_ID.clone()),
+                    );
                 }
                 Location::Path(path) | Location::Network(_, _, Some(path)) => {
                     match path.try_exists() {
                         Ok(true) => true,
                         Ok(false) => {
                             log::warn!("failed to open favorite, path does not exist: {:?}", path);
-                            return self.dialog_pages.push_back(DialogPage::FavoritePathError {
-                                path: path.clone(),
-                                entity,
-                            });
+                            return self.push_dialog(
+                                DialogPage::FavoritePathError {
+                                    path: path.clone(),
+                                    entity,
+                                },
+                                Some(FAVORITE_PATH_ERROR_REMOVE_BUTTON_ID.clone()),
+                            );
                         }
                         Err(err) => {
                             log::warn!("failed to open favorite for path: {:?}, {}", path, err);
-                            return self.dialog_pages.push_back(DialogPage::FavoritePathError {
-                                path: path.clone(),
-                                entity,
-                            });
+                            return self.push_dialog(
+                                DialogPage::FavoritePathError {
+                                    path: path.clone(),
+                                    entity,
+                                },
+                                Some(FAVORITE_PATH_ERROR_REMOVE_BUTTON_ID.clone()),
+                            );
                         }
                     }
                 }
@@ -2572,16 +2587,16 @@ impl Application for App {
                         let to = destination.0.to_path_buf();
                         let name = destination.1.to_str().unwrap_or_default().to_string();
                         let archive_type = ArchiveType::default();
-                        return Task::batch([
-                            self.dialog_pages.push_back(DialogPage::Compress {
+                        return self.push_dialog(
+                            DialogPage::Compress {
                                 paths,
                                 to,
                                 name,
                                 archive_type,
                                 password: None,
-                            }),
-                            widget::text_input::focus(self.dialog_text_input.clone()),
-                        ]);
+                            },
+                            Some(self.dialog_text_input.clone()),
+                        );
                     }
                 }
             }
@@ -5416,9 +5431,13 @@ impl Application for App {
                         from.replace_view(fl!("replace-with"), military_time)
                             .map(|x| Message::TabMessage(None, x)),
                     )
-                    .primary_action(widget::button::suggested(fl!("replace")).on_press(
-                        Message::ReplaceResult(ReplaceResult::Replace(*apply_to_all)),
-                    ));
+                    .primary_action(
+                        widget::button::suggested(fl!("replace"))
+                            .on_press(Message::ReplaceResult(ReplaceResult::Replace(
+                                *apply_to_all,
+                            )))
+                            .id(REPLACE_BUTTON_ID.clone()),
+                    );
                 if *multiple {
                     dialog
                         .control(
@@ -5486,7 +5505,9 @@ impl Application for App {
                 ))
                 .icon(icon::from_name("dialog-error").size(64))
                 .primary_action(
-                    widget::button::destructive(fl!("remove")).on_press(Message::DialogComplete),
+                    widget::button::destructive(fl!("remove"))
+                        .on_press(Message::DialogComplete)
+                        .id(FAVORITE_PATH_ERROR_REMOVE_BUTTON_ID.clone()),
                 )
                 .secondary_action(
                     widget::button::standard(fl!("keep")).on_press(Message::DialogCancel),
