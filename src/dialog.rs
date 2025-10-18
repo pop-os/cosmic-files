@@ -25,9 +25,10 @@ use notify_debouncer_full::{
     notify::{self, RecommendedWatcher},
 };
 use recently_used_xbel::update_recently_used;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::{
     any::TypeId,
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashMap, VecDeque},
     env, fmt, fs,
     num::NonZeroU16,
     path::PathBuf,
@@ -509,7 +510,7 @@ struct App {
     filter_selected: Option<usize>,
     filename_id: widget::Id,
     modifiers: Modifiers,
-    mounter_items: HashMap<MounterKey, MounterItems>,
+    mounter_items: FxHashMap<MounterKey, MounterItems>,
     nav_model: segmented_button::SingleSelectModel,
     result_opt: Option<DialogResult>,
     search_id: widget::Id,
@@ -517,7 +518,7 @@ struct App {
     key_binds: HashMap<KeyBind, Action>,
     watcher_opt: Option<(
         Debouncer<RecommendedWatcher, RecommendedCache>,
-        HashSet<PathBuf>,
+        FxHashSet<PathBuf>,
     )>,
     auto_scroll_speed: Option<i16>,
 }
@@ -871,7 +872,7 @@ impl App {
 
     fn update_watcher(&mut self) -> Task<Message> {
         if let Some((mut watcher, old_paths)) = self.watcher_opt.take() {
-            let mut new_paths = HashSet::new();
+            let mut new_paths = FxHashSet::default();
             if let Some(path) = &self.tab.location.path_opt() {
                 new_paths.insert(path.to_path_buf());
             }
@@ -981,7 +982,7 @@ impl Application for App {
             filter_selected: None,
             filename_id: widget::Id::unique(),
             modifiers: Modifiers::empty(),
-            mounter_items: HashMap::new(),
+            mounter_items: FxHashMap::default(),
             nav_model: segmented_button::ModelBuilder::default().build(),
             result_opt: None,
             search_id: widget::Id::unique(),
@@ -1519,7 +1520,7 @@ impl Application for App {
             Message::NotifyWatcher(mut watcher_wrapper) => match watcher_wrapper.watcher_opt.take()
             {
                 Some(watcher) => {
-                    self.watcher_opt = Some((watcher, HashSet::new()));
+                    self.watcher_opt = Some((watcher, FxHashSet::default()));
                     return self.update_watcher();
                 }
                 None => {
