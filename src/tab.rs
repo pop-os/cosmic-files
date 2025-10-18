@@ -5614,7 +5614,7 @@ impl Tab {
             };
 
             for item in items.iter() {
-                if item.thumbnail_opt.is_some() {
+                if item.thumbnail_opt.is_some() || !self.thumb_config.enabled {
                     // Skip items that already have a mime type and thumbnail
                     continue;
                 }
