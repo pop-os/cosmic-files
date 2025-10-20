@@ -2913,7 +2913,11 @@ impl Application for App {
                 }
             }
             Message::Key(window_id, modifiers, key, text) => {
-                if self.core.main_window_id() == Some(window_id) {
+                #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
+                let in_surface_ids = self.surface_ids.values().any(|id| *id == window_id);
+                #[cfg(not(all(feature = "wayland", feature = "desktop-applet")))]
+                let in_surface_ids = false;
+                if self.core.main_window_id() == Some(window_id) || in_surface_ids {
                     let entity = self.tab_model.active();
                     for (key_bind, action) in self.key_binds.iter() {
                         if key_bind.matches(modifiers, &key) {
