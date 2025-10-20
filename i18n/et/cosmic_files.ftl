@@ -163,3 +163,54 @@ read-only = Ainult loetav
 read-execute = Loetav ja käivitatav
 read-write = Loetav ja kirjutatav
 read-write-execute = Loetav, kirjutatav ja käivitatav
+favorite-path-error-description =
+    „{ $path }“ asukoha avamine ei õnnestu.
+    Teda kas pole olemas või sul pole õigusi tema avamiseks.
+
+    Kas sooviksid ta külgribalt eemaldada?
+keep = Säilita
+network-drive-description =
+    Serveri aadressides peab olema protokolli eesliide ja aadress ise.
+    Näited: ssh://192.168.0.1, ftp://[2001:db8::1]
+network-drive-schemes =
+    Kasutatavad protokollid,eesliide
+    AppleTalk,afp://
+    File Transfer Protocol,ftp:// või ftps://
+    Network File System,nfs://
+    Server Message Block,smb://
+    SSH File Transfer Protocol,sftp:// või ssh://
+    WebDAV,dav:// või davs://
+network-drive-error = Puudub ligipääs võrgus asuvale andmekandjale
+type-to-search = Otsimiseks kirjuta
+type-to-search-recursive = Otsing sellest kaustast ja alamkaustadest
+type-to-search-enter-path = Sisestab kausta või faili asukoha
+add-to-sidebar = Lisa külgribale
+remove-from-sidebar = Eemalda külgribalt
+copy_noun = Kopeeri
+creating = Loon: „{ $name }“ asukohas „{ $parent }“
+created = „{ $name }“ on loodud asukohta „{ $parent }“
+compress = Paki kokku
+delete-permanently = Kustuta jäädavalt
+eject = Väljasta
+extract-here = Paki lahti
+new-file = Uus fail...
+new-folder = Uus kaust...
+open-in-terminal = Ava terminalis
+move-to-trash = Viska prügikasti
+restore-from-trash = Taasta prügikastist
+sort-by-name = Järjesta nime alusel
+sort-by-modified = Järjesta muutmise alusel
+sort-by-size = Järjesta suuruse alusel
+sort-by-trashed = Järjesta kustutamise aja alusel
+remove-from-recents = Eemalda hiljutiste failide loendist
+change-wallpaper = Muuda taustapilti...
+desktop-appearance = Töölaua välimus...
+display-settings = Ekraani seadistused...
+menu-about = Rakenduse teave: COSMICu failid...
+sort = Järjesta
+sort-a-z = A-Z
+sort-z-a = Z-A
+sort-newest-first = Esmalt uuemad
+sort-oldest-first = Esmalt vanemad
+sort-smallest-to-largest = Väiksemast suuremani
+sort-largest-to-smallest = Suuremast väiksemani
