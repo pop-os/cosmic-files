@@ -2158,7 +2158,7 @@ impl Application for App {
             compio_tx,
             context_page: ContextPage::Preview(None, PreviewKind::Selected),
             dialog_pages: DialogPages::new(),
-            dialog_text_input: widget::Id::unique(),
+            dialog_text_input: widget::Id::new("Dialog Text Input"),
             key_binds,
             margin: HashMap::new(),
             mime_app_cache: MimeAppCache::new(),
@@ -2176,8 +2176,8 @@ impl Application for App {
             progress_operations: BTreeSet::new(),
             complete_operations: BTreeMap::new(),
             failed_operations: BTreeMap::new(),
-            scrollable_id: widget::Id::unique(),
-            search_id: widget::Id::unique(),
+            scrollable_id: widget::Id::new("File Scrollable"),
+            search_id: widget::Id::new("File Search"),
             size: None,
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             surface_ids: HashMap::new(),
@@ -4636,7 +4636,7 @@ impl Application for App {
                                 id: surface_id,
                                 layer: Layer::Bottom,
                                 keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                                pointer_interactivity: true,
+                                input_zone: None,
                                 anchor: Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT,
                                 output: IcedOutput::Output(output),
                                 namespace: "cosmic-files-applet".into(),
@@ -5895,7 +5895,7 @@ impl Application for App {
                             Some(Message::OutputEvent(output_event, output))
                         }
                         #[cfg(feature = "desktop")]
-                        WaylandEvent::OverlapNotify(event) => {
+                        WaylandEvent::OverlapNotify(event, _, _) => {
                             Some(Message::Overlap(window_id, event))
                         }
                         _ => None,
