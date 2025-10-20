@@ -3,7 +3,7 @@
 
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use cosmic::iced::{
-    Limits,
+    Limits, Point,
     event::wayland::{Event as WaylandEvent, OutputEvent, OverlapNotifyEvent},
     platform_specific::runtime::wayland::layer_surface::{
         IcedMargin, IcedOutput, SctkLayerSurfaceSettings,
@@ -20,7 +20,7 @@ use cosmic::{
     cosmic_config::{self, ConfigSet},
     cosmic_theme, executor,
     iced::{
-        self, Alignment, Event, Length, Point, Rectangle, Size, Subscription,
+        self, Alignment, Event, Length, Rectangle, Size, Subscription,
         clipboard::dnd::DndAction,
         core::SmolStr,
         event,
@@ -663,6 +663,7 @@ pub struct App {
     network_drive_input: String,
     #[cfg(feature = "notify")]
     notification_opt: Option<Arc<Mutex<notify_rust::NotificationHandle>>>,
+    #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     overlap: HashMap<String, (window::Id, Rectangle)>,
     pending_operation_id: u64,
     pending_operations: BTreeMap<u64, (Operation, Controller)>,
@@ -2133,6 +2134,7 @@ impl Application for App {
             network_drive_input: String::new(),
             #[cfg(feature = "notify")]
             notification_opt: None,
+            #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             overlap: HashMap::new(),
             pending_operation_id: 0,
             pending_operations: BTreeMap::new(),
