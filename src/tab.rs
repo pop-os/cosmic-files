@@ -1586,7 +1586,6 @@ pub enum Message {
     SetSort(HeadingOptions, bool),
     TabComplete(PathBuf, Vec<(String, PathBuf)>),
     Thumbnail(PathBuf, ItemThumbnail),
-    View(View),
     ToggleSort(HeadingOptions),
     Drop(Option<(Location, ClipboardPaste)>),
     DndHover(Location),
@@ -3124,6 +3123,12 @@ impl Tab {
                         ));
                     }
                 }
+                // Unhighlight all items when config changes
+                if let Some(ref mut items) = self.items_opt {
+                    for item in items.iter_mut() {
+                        item.highlighted = false;
+                    }
+                }
             }
             Message::ContextAction(action) => {
                 // Close context menu
@@ -3809,9 +3814,6 @@ impl Tab {
                         }
                     }
                 }
-            }
-            Message::View(view) => {
-                self.config.view = view;
             }
             Message::ToggleSort(heading_option) => {
                 if !matches!(self.location, Location::Search(..)) {
