@@ -258,7 +258,7 @@ network-drive-schemes =
     WebDAV,dav:// nebo davs://
 network-drive-error = Nelze přistoupit k síťovému disku
 remember-password = Zapamatovat heslo
-try-again = Zkuste to znovu
+try-again = Zkusit znovu
 cancelled = Zrušené
 edit-history = Historie úprav
 history = Historie
