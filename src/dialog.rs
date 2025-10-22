@@ -10,15 +10,15 @@ use cosmic::{
         core::SmolStr,
         event,
         futures::{self, SinkExt},
-        keyboard::{Event as KeyEvent, Key, Modifiers},
+        keyboard::{Event as KeyEvent, Key, Modifiers, key::Named},
         stream, window,
     },
     iced_core::widget::operation,
     theme,
     widget::{
-        self,
-        menu::{key_bind::Modifier, Action as MenuAction, KeyBind},
-        segmented_button, Operation,
+        self, Operation,
+        menu::{Action as MenuAction, KeyBind, key_bind::Modifier},
+        segmented_button,
     },
 };
 use notify_debouncer_full::{
@@ -416,6 +416,7 @@ enum Message {
     DialogCancel,
     DialogComplete,
     DialogUpdate(DialogPage),
+    Escape,
     Filename(String),
     Filter(usize),
     Key(Modifiers, Key, Option<SmolStr>),
@@ -1346,6 +1347,7 @@ impl Application for App {
                     self.dialog_pages[0] = dialog_page;
                 }
             }
+            Message::Escape => return self.on_escape(),
             Message::Filename(new_filename) => {
                 // Select based on filename
                 self.tab.select_name(&new_filename);
@@ -1977,7 +1979,13 @@ impl Application for App {
                     ..
                 }) => match status {
                     event::Status::Ignored => Some(Message::Key(modifiers, key, text)),
-                    event::Status::Captured => None,
+                    event::Status::Captured => {
+                        if key == Key::Named(Named::Escape) {
+                            Some(Message::Escape)
+                        } else {
+                            None
+                        }
+                    }
                 },
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
                     Some(Message::ModifiersChanged(modifiers))
