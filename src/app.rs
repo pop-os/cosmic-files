@@ -48,10 +48,11 @@ use notify_debouncer_full::{
     DebouncedEvent, Debouncer, RecommendedCache, new_debouncer,
     notify::{self, RecommendedWatcher},
 };
+use rustc_hash::{FxHashMap, FxHashSet};
 use slotmap::Key as SlotMapKey;
 use std::{
     any::TypeId,
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
     env, fmt, fs,
     future::Future,
     io,
@@ -68,6 +69,7 @@ use trash::TrashItem;
 use wayland_client::{Proxy, protocol::wl_output::WlOutput};
 
 use crate::{
+    FxOrderMap,
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{
         AppTheme, Config, DesktopConfig, Favorite, IconSizes, TIME_CONFIG_ID, TabConfig,
@@ -676,17 +678,17 @@ pub struct App {
     dialog_pages: DialogPages,
     dialog_text_input: widget::Id,
     key_binds: HashMap<KeyBind, Action>,
-    margin: HashMap<window::Id, (f32, f32, f32, f32)>,
+    margin: FxHashMap<window::Id, (f32, f32, f32, f32)>,
     mime_app_cache: MimeAppCache,
     modifiers: Modifiers,
-    mounter_items: HashMap<MounterKey, MounterItems>,
+    mounter_items: FxHashMap<MounterKey, MounterItems>,
     must_save_sort_names: bool,
     network_drive_connecting: Option<(MounterKey, String)>,
     network_drive_input: String,
     #[cfg(feature = "notify")]
     notification_opt: Option<Arc<Mutex<notify_rust::NotificationHandle>>>,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
-    overlap: HashMap<String, (window::Id, Rectangle)>,
+    overlap: FxHashMap<String, (window::Id, Rectangle)>,
     pending_operation_id: u64,
     pending_operations: BTreeMap<u64, (Operation, Controller)>,
     progress_operations: BTreeSet<u64>,
@@ -696,17 +698,17 @@ pub struct App {
     search_id: widget::Id,
     size: Option<Size>,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
-    layer_sizes: HashMap<window::Id, Size>,
+    layer_sizes: FxHashMap<window::Id, Size>,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
-    surface_ids: HashMap<WlOutput, WindowId>,
+    surface_ids: FxHashMap<WlOutput, WindowId>,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
-    surface_names: HashMap<WindowId, String>,
+    surface_names: FxHashMap<WindowId, String>,
     toasts: widget::toaster::Toasts<Message>,
     watcher_opt: Option<(
         Debouncer<RecommendedWatcher, RecommendedCache>,
-        HashSet<PathBuf>,
+        FxHashSet<PathBuf>,
     )>,
-    windows: HashMap<window::Id, WindowKind>,
+    windows: FxHashMap<window::Id, WindowKind>,
     nav_dnd_hover: Option<(Location, Instant)>,
     tab_dnd_hover: Option<(Entity, Instant)>,
     nav_drag_id: DragId,
@@ -731,7 +733,7 @@ impl App {
         // Associate all paths to its MIME type
         // This allows handling paths as groups if possible, such as launching a single video
         // player that is passed every path.
-        let mut groups: HashMap<Mime, Vec<PathBuf>> = HashMap::new();
+        let mut groups: FxHashMap<Mime, Vec<PathBuf>> = FxHashMap::default();
         let mut all_archives = true;
         let supported_archive_types = crate::archive::SUPPORTED_ARCHIVE_TYPES
             .iter()
@@ -948,7 +950,7 @@ impl App {
 
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     fn handle_overlap(&mut self) {
-        let mut overlaps: HashMap<_, _> = self
+        let mut overlaps: FxHashMap<_, _> = self
             .windows
             .keys()
             .map(|k| (*k, (0., 0., 0., 0.)))
@@ -1609,7 +1611,7 @@ impl App {
 
     fn update_watcher(&mut self) -> Task<Message> {
         if let Some((mut watcher, old_paths)) = self.watcher_opt.take() {
-            let mut new_paths = HashSet::new();
+            let mut new_paths = FxHashSet::default();
             for entity in self.tab_model.iter() {
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
                     if let Some(path) = tab.location.path_opt() {
@@ -1978,7 +1980,7 @@ impl App {
     fn get_apps_for_mime(&self, mime_type: &Mime) -> Vec<(&MimeApp, MimeAppMatch)> {
         let mut results = Vec::new();
 
-        let mut dedupe = HashSet::new();
+        let mut dedupe = FxHashSet::default();
 
         // start with exact matches
         for mime_app in self.mime_app_cache.get(mime_type) {
@@ -2160,17 +2162,17 @@ impl Application for App {
             dialog_pages: DialogPages::new(),
             dialog_text_input: widget::Id::new("Dialog Text Input"),
             key_binds,
-            margin: HashMap::new(),
+            margin: FxHashMap::default(),
             mime_app_cache: MimeAppCache::new(),
             modifiers: Modifiers::empty(),
-            mounter_items: HashMap::new(),
+            mounter_items: FxHashMap::default(),
             must_save_sort_names: false,
             network_drive_connecting: None,
             network_drive_input: String::new(),
             #[cfg(feature = "notify")]
             notification_opt: None,
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
-            overlap: HashMap::new(),
+            overlap: FxHashMap::default(),
             pending_operation_id: 0,
             pending_operations: BTreeMap::new(),
             progress_operations: BTreeSet::new(),
@@ -2180,12 +2182,12 @@ impl Application for App {
             search_id: widget::Id::new("File Search"),
             size: None,
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
-            surface_ids: HashMap::new(),
+            surface_ids: FxHashMap::default(),
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
-            surface_names: HashMap::new(),
+            surface_names: FxHashMap::default(),
             toasts: widget::toaster::Toasts::new(Message::CloseToast),
             watcher_opt: None,
-            windows: HashMap::new(),
+            windows: FxHashMap::default(),
             nav_dnd_hover: None,
             tab_dnd_hover: None,
             nav_drag_id: DragId::new(),
@@ -2193,7 +2195,7 @@ impl Application for App {
             auto_scroll_speed: None,
             file_dialog_opt: None,
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
-            layer_sizes: HashMap::new(),
+            layer_sizes: FxHashMap::default(),
         };
 
         let mut commands = vec![app.update_config()];
@@ -3264,7 +3266,7 @@ impl Application for App {
             Message::NotifyWatcher(mut watcher_wrapper) => match watcher_wrapper.watcher_opt.take()
             {
                 Some(watcher) => {
-                    self.watcher_opt = Some((watcher, HashSet::new()));
+                    self.watcher_opt = Some((watcher, FxHashSet::default()));
                     return self.update_watcher();
                 }
                 None => {
@@ -4744,8 +4746,8 @@ impl Application for App {
             Message::SaveSortNames => {
                 self.must_save_sort_names = false;
                 if let Some(state_handler) = self.state_handler.as_ref() {
-                    if let Err(err) =
-                        state_handler.set::<ordermap::OrderMap<String, (HeadingOptions, bool)>>(
+                    if let Err(err) = state_handler
+                        .set::<FxOrderMap<String, (HeadingOptions, bool)>>(
                             "sort_names",
                             self.state.sort_names.clone(),
                         )

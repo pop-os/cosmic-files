@@ -5,9 +5,9 @@
 use cosmic::desktop;
 use cosmic::widget;
 pub use mime_guess::Mime;
+use rustc_hash::FxHashMap;
 use std::{
     cmp::Ordering,
-    collections::HashMap,
     env,
     ffi::OsStr,
     fs, io,
@@ -221,8 +221,8 @@ fn filename_eq(path_opt: &Option<PathBuf>, filename: &str) -> bool {
 
 pub struct MimeAppCache {
     apps: Vec<MimeApp>,
-    cache: HashMap<Mime, Vec<MimeApp>>,
-    icons: HashMap<Mime, Vec<widget::icon::Handle>>,
+    cache: FxHashMap<Mime, Vec<MimeApp>>,
+    icons: FxHashMap<Mime, Vec<widget::icon::Handle>>,
     terminals: Vec<MimeApp>,
 }
 
@@ -230,8 +230,8 @@ impl MimeAppCache {
     pub fn new() -> Self {
         let mut mime_app_cache = Self {
             apps: Vec::new(),
-            cache: HashMap::new(),
-            icons: HashMap::new(),
+            cache: FxHashMap::default(),
+            icons: FxHashMap::default(),
             terminals: Vec::new(),
         };
         mime_app_cache.reload();

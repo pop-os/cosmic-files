@@ -49,7 +49,7 @@ use icu::{
 use image::ImageDecoder;
 use jxl_oxide::integration::JxlDecoder;
 use mime_guess::{Mime, mime};
-use ordermap::OrderMap;
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
@@ -73,6 +73,7 @@ use trash::TrashItemSize;
 use walkdir::WalkDir;
 
 use crate::{
+    FxOrderMap,
     app::{Action, PreviewItem, PreviewKind},
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{DesktopConfig, ICON_SCALE_MAX, ICON_SIZE_GRID, IconSizes, TabConfig, ThumbCfg},
@@ -100,9 +101,9 @@ const THUMBNAIL_SIZE: u32 = (ICON_SIZE_GRID as u32) * (ICON_SCALE_MAX as u32);
 pub static THUMB_SEMAPHORE: LazyLock<tokio::sync::Semaphore> =
     LazyLock::new(|| tokio::sync::Semaphore::const_new(num_cpus::get()));
 
-pub(crate) static SORT_OPTION_FALLBACK: LazyLock<HashMap<String, (HeadingOptions, bool)>> =
+pub(crate) static SORT_OPTION_FALLBACK: LazyLock<FxHashMap<String, (HeadingOptions, bool)>> =
     LazyLock::new(|| {
-        HashMap::from_iter(dirs::download_dir().into_iter().map(|dir| {
+        FxHashMap::from_iter(dirs::download_dir().into_iter().map(|dir| {
             (
                 Location::Path(dir).normalize().to_string(),
                 (HeadingOptions::Modified, false),
@@ -131,8 +132,8 @@ static MODE_NAMES: LazyLock<Vec<String>> = LazyLock::new(|| {
     ]
 });
 
-static SPECIAL_DIRS: LazyLock<HashMap<PathBuf, &'static str>> = LazyLock::new(|| {
-    let mut special_dirs = HashMap::new();
+static SPECIAL_DIRS: LazyLock<FxHashMap<PathBuf, &'static str>> = LazyLock::new(|| {
+    let mut special_dirs = FxHashMap::default();
     if let Some(dir) = dirs::document_dir() {
         special_dirs.insert(dir, "folder-documents");
     }
@@ -534,25 +535,17 @@ pub enum FsKind {
 pub fn fs_kind(metadata: &Metadata) -> FsKind {
     //TODO: method to reload remote filesystems dynamically
     //TODO: fix for https://github.com/eminence/procfs/issues/262
-    static DEVICES: LazyLock<HashMap<u64, FsKind>> = LazyLock::new(|| {
-        let mut devices = HashMap::new();
+    static DEVICES: LazyLock<FxHashMap<u64, FsKind>> = LazyLock::new(|| {
+        let mut devices = FxHashMap::default();
         match procfs::process::Process::myself() {
             Ok(process) => match process.mountinfo() {
                 Ok(mount_infos) => {
-                    for mount_info in mount_infos.iter() {
+                    devices = FxHashMap::from_iter(mount_infos.iter().filter_map(|mount_info| {
                         let mut parts = mount_info.majmin.split(':');
-                        let Some(major_str) = parts.next() else {
-                            continue;
-                        };
-                        let Some(minor_str) = parts.next() else {
-                            continue;
-                        };
-                        let Ok(major) = major_str.parse::<libc::c_uint>() else {
-                            continue;
-                        };
-                        let Ok(minor) = minor_str.parse::<libc::c_uint>() else {
-                            continue;
-                        };
+                        let major_str = parts.next()?;
+                        let minor_str = parts.next()?;
+                        let major = major_str.parse::<libc::c_uint>().ok()?;
+                        let minor = minor_str.parse::<libc::c_uint>().ok()?;
                         let dev = libc::makedev(major, minor);
                         //TODO: make sure this list is exhaustive
                         let kind = match mount_info.fs_type.as_str() {
@@ -561,8 +554,8 @@ pub fn fs_kind(metadata: &Metadata) -> FsKind {
                             "fuse.gvfsd-fuse" => FsKind::Gvfs,
                             _ => FsKind::Local,
                         };
-                        devices.insert(dev, kind);
-                    }
+                        Some((dev, kind))
+                    }));
                 }
                 Err(err) => {
                     log::warn!("failed to get mount info: {err}");
@@ -2524,7 +2517,7 @@ impl Tab {
         location: Location,
         config: TabConfig,
         thumb_config: ThumbCfg,
-        sorting_options: Option<&OrderMap<String, (HeadingOptions, bool)>>,
+        sorting_options: Option<&FxOrderMap<String, (HeadingOptions, bool)>>,
         scrollable_id: widget::Id,
         window_id: Option<window::Id>,
     ) -> Self {

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use mime_guess::Mime;
+use rustc_hash::FxHashMap;
 use std::{
-    collections::HashMap,
     fs,
     path::Path,
     process,
@@ -56,13 +56,13 @@ impl Thumbnailer {
 }
 
 pub struct ThumbnailerCache {
-    cache: HashMap<Mime, Vec<Thumbnailer>>,
+    cache: FxHashMap<Mime, Vec<Thumbnailer>>,
 }
 
 impl ThumbnailerCache {
     pub fn new() -> Self {
         let mut thumbnailer_cache = Self {
-            cache: HashMap::new(),
+            cache: FxHashMap::default(),
         };
         thumbnailer_cache.reload();
         thumbnailer_cache
