@@ -258,7 +258,7 @@ network-drive-schemes =
     WebDAV,dav:// nebo davs://
 network-drive-error = Nelze přistoupit k síťovému disku
 remember-password = Zapamatovat heslo
-try-again = Zkuste to znovu
+try-again = Zkusit znovu
 cancelled = Zrušené
 edit-history = Historie úprav
 history = Historie
@@ -359,7 +359,7 @@ items = Položky: { $items }
 item-size = Velikost: { $size }
 item-created = Vytvořeno: { $created }
 item-modified = Změněno: { $modified }
-item-accessed = Přístup: { $accessed }
+item-accessed = Poslední přístup: { $accessed }
 calculating = Vypočítávání...
 single-click = Otevřít jedním kliknutím
 type-to-search = Vyhledávání psaním

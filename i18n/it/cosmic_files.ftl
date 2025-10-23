@@ -364,7 +364,7 @@ new-window = Nuova finestra
 reload-folder = Aggiorna cartella
 rename = Rinomina...
 close-tab = Chiudi scheda
-quit = Chiudi
+quit = Esci
 
 ## Edit
 

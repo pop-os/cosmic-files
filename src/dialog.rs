@@ -37,7 +37,9 @@ use std::{
 };
 
 use crate::{
-    app::{Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind},
+    app::{
+        Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind, REPLACE_BUTTON_ID,
+    },
     config::{Config, DialogConfig, Favorite, TIME_CONFIG_ID, ThumbCfg, TimeConfig, TypeToSearch},
     fl, home_dir,
     key_bind::key_binds,
@@ -977,15 +979,15 @@ impl Application for App {
             context_menu_window: None,
             context_page: ContextPage::Preview(None, PreviewKind::Selected),
             dialog_pages: VecDeque::new(),
-            dialog_text_input: widget::Id::unique(),
+            dialog_text_input: widget::Id::new("Dialog Text Input"),
             filters: Vec::new(),
             filter_selected: None,
-            filename_id: widget::Id::unique(),
+            filename_id: widget::Id::new("Dialog Filename"),
             modifiers: Modifiers::empty(),
             mounter_items: FxHashMap::default(),
             nav_model: segmented_button::ModelBuilder::default().build(),
             result_opt: None,
-            search_id: widget::Id::unique(),
+            search_id: widget::Id::new("Dialog File Search"),
             tab,
             key_binds,
             watcher_opt: None,
@@ -1598,6 +1600,7 @@ impl Application for App {
                                 self.dialog_pages.push_back(DialogPage::Replace {
                                     filename: filename.clone(),
                                 });
+                                return widget::button::focus(REPLACE_BUTTON_ID.clone());
                             } else {
                                 self.result_opt = Some(DialogResult::Open(vec![path]));
                                 return window::close(self.flags.window_id);
