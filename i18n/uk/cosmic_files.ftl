@@ -130,7 +130,7 @@ settings = Налаштування
 
 appearance = Зовнішній вигляд
 theme = Тема
-match-desktop = Системна
+match-desktop = Відповідно системі
 dark = Темна
 light = Світла
 # Context menu
@@ -159,7 +159,7 @@ quit = Вийти
 
 ## Edit
 
-edit = Зміни
+edit = Редагувати
 cut = Вирізати
 copy = Копіювати
 paste = Вставити
@@ -167,9 +167,9 @@ select-all = Вибрати все
 
 ## View
 
-zoom-in = Збільшити шрифт
-default-size = Типовий розмір
-zoom-out = Зменшити шрифт
+zoom-in = Збільшити
+default-size = Стандартний розмір
+zoom-out = Зменшити
 view = Вигляд
 grid-view = Перегляд ґраткою
 list-view = Перегляд списком
@@ -180,7 +180,7 @@ menu-about = Про Файли COSMIC...
 repository = Репозиторій
 support = Підтримка
 details = Деталі
-dismiss = Сховати повідомлення
+dismiss = Закрити повідомлення
 remove = Видалити
 cancelled = Скасовані
 no-results = Нічого не знайдено
@@ -195,7 +195,7 @@ trash-folder-icon = Піктограма теки Смітник
 icon-size-and-spacing = Розмір піктограм та відстань між ними
 icon-size = Розмір піктограм
 grid-spacing = Відстань між піктограмами
-trashed-on = В смітнику
+trashed-on = У смітнику
 operations-running =
     Виконується { $running } { $running ->
         [zero] операцій
