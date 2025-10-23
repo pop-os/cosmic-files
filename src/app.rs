@@ -5895,7 +5895,7 @@ impl Application for App {
                             Some(Message::OutputEvent(output_event, output))
                         }
                         #[cfg(feature = "desktop")]
-                        WaylandEvent::OverlapNotify(event, _, _) => {
+                        WaylandEvent::OverlapNotify(event, ..) => {
                             Some(Message::Overlap(window_id, event))
                         }
                         _ => None,
