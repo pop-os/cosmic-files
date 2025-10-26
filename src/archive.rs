@@ -55,7 +55,7 @@ pub fn extract(
                 .map(flate2::read::GzDecoder::new)
                 .map(tar::Archive::new)
                 .and_then(|mut archive| archive.unpack(new_dir))
-                .map_err(|e| OperationError::from_err(e, controller))?
+                .map_err(|e| OperationError::from_err(e, controller))?;
         }
         "application/x-tar" => OpReader::new(path, controller.clone())
             .map(io::BufReader::new)
@@ -93,10 +93,10 @@ pub fn extract(
                 .map(|reader| lzma_rust2::XzReader::new(reader, true))
                 .map(tar::Archive::new)
                 .and_then(|mut archive| archive.unpack(new_dir))
-                .map_err(|e| OperationError::from_err(e, controller))?
+                .map_err(|e| OperationError::from_err(e, controller))?;
         }
         _ => Err(OperationError::from_err(
-            format!("unsupported mime type {:?}", mime),
+            format!("unsupported mime type {mime:?}"),
             controller,
         ))?,
     }
@@ -262,7 +262,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
             // Ensure we update children's permissions before making a parent unwritable
             files_by_unix_mode.sort_by_key(|(path, _)| Reverse(path.clone()));
         }
-        for (path, mode) in files_by_unix_mode.into_iter() {
+        for (path, mode) in files_by_unix_mode {
             fs::set_permissions(&path, fs::Permissions::from_mode(mode))?;
         }
     }

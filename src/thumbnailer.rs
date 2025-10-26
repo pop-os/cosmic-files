@@ -36,7 +36,7 @@ impl Thumbnailer {
                         command.arg(output);
                     }
                     "%s" => {
-                        command.arg(format!("{}", thumbnail_size));
+                        command.arg(format!("{thumbnail_size}"));
                     }
                     _ => {
                         log::warn!(
@@ -89,20 +89,24 @@ impl ThumbnailerCache {
 
         let mut thumbnailer_paths = Vec::new();
         for dir in search_dirs {
-            log::trace!("looking for thumbnailers in {:?}", dir);
+            log::trace!("looking for thumbnailers in {}", dir.display());
             match fs::read_dir(&dir) {
                 Ok(entries) => {
                     for entry_res in entries {
                         match entry_res {
                             Ok(entry) => thumbnailer_paths.push(entry.path()),
                             Err(err) => {
-                                log::warn!("failed to read entry in directory {:?}: {}", dir, err);
+                                log::warn!(
+                                    "failed to read entry in directory {}: {}",
+                                    dir.display(),
+                                    err
+                                );
                             }
                         }
                     }
                 }
                 Err(err) => {
-                    log::warn!("failed to read directory {:?}: {}", dir, err);
+                    log::warn!("failed to read directory {}: {}", dir.display(), err);
                 }
             }
         }
@@ -112,7 +116,7 @@ impl ThumbnailerCache {
             let entry = match freedesktop_entry_parser::parse_entry(&path) {
                 Ok(ok) => ok,
                 Err(err) => {
-                    log::warn!("failed to parse {:?}: {}", path, err);
+                    log::warn!("failed to parse {}: {}", path.display(), err);
                     continue;
                 }
             };
@@ -120,20 +124,23 @@ impl ThumbnailerCache {
             //TODO: use TryExec?
             let section = entry.section("Thumbnailer Entry");
             let Some(exec) = section.attr("Exec") else {
-                log::warn!("missing Exec attribute for thumbnailer {:?}", path);
+                log::warn!("missing Exec attribute for thumbnailer {}", path.display());
                 continue;
             };
             let Some(mime_types) = section.attr("MimeType") else {
-                log::warn!("missing MimeType attribute for thumbnailer {:?}", path);
+                log::warn!(
+                    "missing MimeType attribute for thumbnailer {}",
+                    path.display()
+                );
                 continue;
             };
 
             for mime_type in mime_types.split_terminator(';') {
                 if let Ok(mime) = mime_type.parse::<Mime>() {
-                    log::trace!("thumbnailer {}={:?}", mime, path);
+                    log::trace!("thumbnailer {}={}", mime, path.display());
                     let apps = self
                         .cache
-                        .entry(mime.clone())
+                        .entry(mime)
                         .or_insert_with(|| Vec::with_capacity(1));
                     apps.push(Thumbnailer {
                         exec: exec.to_string(),
@@ -143,11 +150,11 @@ impl ThumbnailerCache {
         }
 
         let elapsed = start.elapsed();
-        log::info!("loaded thumbnailer cache in {:?}", elapsed);
+        log::info!("loaded thumbnailer cache in {elapsed:?}");
     }
 
     pub fn get(&self, key: &Mime) -> Vec<Thumbnailer> {
-        self.cache.get(key).map_or_else(Vec::new, |x| x.clone())
+        self.cache.get(key).map_or_else(Vec::new, Vec::clone)
     }
 }
 

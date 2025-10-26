@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 use tokio::sync::Notify;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ControllerState {
     Cancelled,
     Failed,

@@ -135,18 +135,18 @@ impl State {
     pub fn load() -> (Option<cosmic_config::Config>, Self) {
         match cosmic_config::Config::new_state(App::APP_ID, CONFIG_VERSION) {
             Ok(config_handler) => {
-                let config = match State::get_entry(&config_handler) {
+                let config = match Self::get_entry(&config_handler) {
                     Ok(ok) => ok,
                     Err((errs, config)) => {
-                        log::info!("errors loading config: {:?}", errs);
+                        log::info!("errors loading config: {errs:?}");
                         config
                     }
                 };
                 (Some(config_handler), config)
             }
             Err(err) => {
-                log::error!("failed to create config handler: {}", err);
-                (None, State::default())
+                log::error!("failed to create config handler: {err}");
+                (None, Self::default())
             }
         }
     }
@@ -178,18 +178,18 @@ impl Config {
     pub fn load() -> (Option<cosmic_config::Config>, Self) {
         match cosmic_config::Config::new(App::APP_ID, CONFIG_VERSION) {
             Ok(config_handler) => {
-                let config = match Config::get_entry(&config_handler) {
+                let config = match Self::get_entry(&config_handler) {
                     Ok(ok) => ok,
                     Err((errs, config)) => {
-                        log::info!("errors loading config: {:?}", errs);
+                        log::info!("errors loading config: {errs:?}");
                         config
                     }
                 };
                 (Some(config_handler), config)
             }
             Err(err) => {
-                log::error!("failed to create config handler: {}", err);
-                (None, Config::default())
+                log::error!("failed to create config handler: {err}");
+                (None, Self::default())
             }
         }
     }
@@ -204,7 +204,7 @@ impl Config {
     }
 
     /// Construct tab config for dialog
-    pub fn dialog_tab(&self) -> TabConfig {
+    pub const fn dialog_tab(&self) -> TabConfig {
         TabConfig {
             folders_first: self.dialog.folders_first,
             icon_sizes: self.dialog.icon_sizes,
