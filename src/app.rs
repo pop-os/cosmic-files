@@ -70,7 +70,7 @@ use wayland_client::{Proxy, protocol::wl_output::WlOutput};
 use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{
-        AppTheme, Config, DesktopConfig, Favorite, IconSizes, TIME_CONFIG_ID, TabConfig,
+        AppTheme, Config, DesktopConfig, Favorite, IconSizes, TIME_CONFIG_ID, TabConfig, ThumbCfg,
         TimeConfig, TypeToSearch,
     },
     dialog::{Dialog, DialogKind, DialogMessage, DialogResult},
@@ -409,6 +409,7 @@ pub enum Message {
     TabPrev,
     TabClose(Option<Entity>),
     TabConfig(TabConfig),
+    ThumbConfig(ThumbCfg),
     TabMessage(Option<Entity>, tab::Message),
     TabNew,
     TabRescan(
@@ -1940,6 +1941,18 @@ impl App {
                             })
                         },
                     ))
+                })
+                .add({
+                    let thumb_cfg = self.config.thumb_cfg;
+                    widget::settings::item::builder(fl!("enable-thumbnails")).toggler(
+                        thumb_cfg.enabled,
+                        move |enabled| {
+                            Message::ThumbConfig(ThumbCfg {
+                                enabled,
+                                ..thumb_cfg
+                            })
+                        },
+                    )
                 })
                 .into(),
             widget::settings::section()
@@ -3859,6 +3872,12 @@ impl Application for App {
             Message::TabConfig(config) => {
                 if config != self.config.tab {
                     config_set!(tab, config);
+                    return self.update_config();
+                }
+            }
+            Message::ThumbConfig(config) => {
+                if config != self.config.thumb_cfg {
+                    config_set!(thumb_cfg, config);
                     return self.update_config();
                 }
             }
