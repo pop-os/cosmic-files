@@ -16,20 +16,20 @@ size = Розмір
 
 ## Empty Trash Dialog
 
-empty-trash = Спорожнити смітник
-empty-trash-warning = Ви впевнені, що хочете вилучити назавжди всі обʼєкти зі смітника?
+empty-trash = Спорожнити Смітник
+empty-trash-warning = Ви впевнені, що хочете остаточно видалити всі обʼєкти зі Смітника?
 
 ## New File/Folder Dialog
 
 create-new-file = Створити новий файл
 create-new-folder = Створити нову теку
-file-name = Назву файлу
+file-name = Назва файлу
 folder-name = Назва теки
 file-already-exists = Файл з такою назвою вже існує.
 folder-already-exists = Тека з такою назвою вже існує.
 name-hidden = Назви, що починаються з ".", будуть приховані.
-name-invalid = Назва "{ $filename }" є неприйнятною.
-name-no-slashes = Назва не може містити слеш.
+name-invalid = Назва не може бути "{ $filename }".
+name-no-slashes = Назва не може містити скісні риски.
 
 ## Open/Save Dialog
 
@@ -52,9 +52,9 @@ rename-folder = Перейменувати теку
 ## Replace Dialog
 
 replace = Замінити
-replace-title = Файл із назвою { $filename } вже існує.
-replace-warning = Замінити його на той, що ви зберігаєте зараз? Заміна призведе до перезапису його вмісту.
-replace-warning-operation = Ви хочете замінити його? Заміна призведе до перезапису його вмісту.
+replace-title = " { $filename }" вже існує в цьому місці.
+replace-warning = Бажаєте замінити його на той, що ви зберігаєте зараз? Заміна призведе до перезапису його вмісту.
+replace-warning-operation = Ви бажаєте замінити його? Заміна призведе до перезапису його вмісту.
 original-file = Початковий файл
 replace-with = Замінити на
 apply-to-all = Застосувати до всіх
@@ -71,53 +71,53 @@ skip = Пропустити
 
 edit-history = Редагувати історію
 history = Історія
-no-history = В історії нічого не знайдено.
-pending = Очікують
-failed = Невдалі
-complete = Завершені
+no-history = Немає елементів у історії.
+pending = В очікуванні
+failed = Не вдалося
+complete = Завершено
 copy_noun = Копіювати
-creating = Створення { $name } в { $parent }
-created = Створено { $name } в { $parent }
+creating = Створення "{ $name }" в " { $parent }"
+created = Створено "{ $name }" в "{ $parent }"
 copying =
     Копіювання { $items } { $items ->
         [one] обʼєкта
        *[other] обʼєктів
-    } з "{ $from }" до "{ $to }" ({ $progress })...
+    } з "{ $from }" в "{ $to }" ({ $progress })...
 copied =
-    Завершено копіювання { $items } { $items ->
-        [one] обʼєкту
+    Скопійовано { $items } { $items ->
+        [one] обʼєкт
        *[other] обʼєктів
-    } з "{ $from }" до "{ $to }"
+    } з "{ $from }" в "{ $to }"
 emptying-trash = Спорожнення { trash } ({ $progress })...
 emptied-trash = Спорожнено { trash }
 moving =
     Переміщення { $items } { $items ->
         [one] обʼєкта
        *[other] обʼєктів
-    } з { $from } до "{ $to }" ({ $progress })...
+    } з { $from } в "{ $to }" ({ $progress })...
 moved =
-    Завершено переміщення { $items } { $items ->
-        [one] обʼєкту
-       *[other] обʼєктів
-    } з "{ $from }" до "{ $to }"
-renaming = Перейменування { $from } на { $to }
-renamed = Перейменовано { $from } на { $to }
+    Переміщено { $items } { $items ->
+        [one] обʼєкт
+       *[other] обʼєкти
+    } з "{ $from }" в "{ $to }"
+renaming = Перейменування "{ $from }" на "{ $to }"
+renamed = Перейменовано "{ $from }" на "{ $to }"
 restoring =
     Відновлення { $items } { $items ->
         [one] обʼєкта
        *[other] обʼєктів
-    } зі { trash } ({ $progress })...
+    } з { trash } ({ $progress })...
 restored =
-    Завершено відновлення { $items } { $items ->
-        [one] обʼєкту
-       *[other] обʼєктів
-    } зі { trash }
+    Відновлено { $items } { $items ->
+        [one] обʼєкт
+       *[other] обʼєкти
+    } з { trash }
 unknown-folder = невідома тека
 
 ## Open with
 
 menu-open-with = Відкрити за допомогою...
-default-app = { $name } (типово)
+default-app = { $name } (за замовчуванням)
 
 ## Properties
 
@@ -130,7 +130,7 @@ settings = Налаштування
 
 appearance = Зовнішній вигляд
 theme = Тема
-match-desktop = Системна
+match-desktop = Відповідно системі
 dark = Темна
 light = Світла
 # Context menu
@@ -138,12 +138,12 @@ add-to-sidebar = Додати до бічної панелі
 new-file = Новий файл...
 new-folder = Нова тека...
 open-in-terminal = Відкрити у терміналі
-move-to-trash = Перемістити до смітника
+move-to-trash = Пересунути до смітника
 restore-from-trash = Відновити зі смітника
 remove-from-sidebar = Вилучити з бічної панелі
-sort-by-name = Сортувати за назвою
-sort-by-modified = Сортувати за зміною
-sort-by-size = Сортувати за розміром
+sort-by-name = Упорядкувати за назвою
+sort-by-modified = Упорядкувати за зміною
+sort-by-size = Упорядкувати за розміром
 
 # Menu
 
@@ -159,7 +159,7 @@ quit = Вийти
 
 ## Edit
 
-edit = Зміни
+edit = Редагувати
 cut = Вирізати
 copy = Копіювати
 paste = Вставити
@@ -167,20 +167,20 @@ select-all = Вибрати все
 
 ## View
 
-zoom-in = Збільшити шрифт
-default-size = Типовий розмір
-zoom-out = Зменшити шрифт
+zoom-in = Збільшити
+default-size = Стандартний розмір
+zoom-out = Зменшити
 view = Вигляд
-grid-view = Перегляд ґраткою
+grid-view = Перегляд таблицею
 list-view = Перегляд списком
-show-hidden-files = Показувати приховані файли
-list-directories-first = Спершу показувати теки
+show-hidden-files = Показати приховані файли
+list-directories-first = Теки спочатку
 menu-settings = Налаштування...
 menu-about = Про Файли COSMIC...
 repository = Репозиторій
 support = Підтримка
 details = Деталі
-dismiss = Сховати повідомлення
+dismiss = Закрити повідомлення
 remove = Видалити
 cancelled = Скасовані
 no-results = Нічого не знайдено
@@ -195,7 +195,7 @@ trash-folder-icon = Піктограма теки Смітник
 icon-size-and-spacing = Розмір піктограм та відстань між ними
 icon-size = Розмір піктограм
 grid-spacing = Відстань між піктограмами
-trashed-on = В смітнику
+trashed-on = У смітнику
 operations-running =
     Виконується { $running } { $running ->
         [zero] операцій
@@ -212,62 +212,62 @@ operations-running-finished =
         [many] операцій
        *[other] операцій
     } ({ $percent }%), з них { $finished } вже виконано...
-pause = Пауза
+pause = Зупинити
 resume = Відновити
 create-archive = Створити архів
 extract-password-required = Потрібен пароль
 extract-to = Видобути до...
 extract-to-title = Видобути до теки
-mount-error = Неможливо отримати доступ до диску
+mount-error = Неможливо отримати доступ до диска
 create = Створити
 open-item-location = Відкрити розташування файлу
-open-with-title = Чим ви бажаєте відкрити "{ $name }"?
-browse-store = Пошукати в { $store }
+open-with-title = Як ви бажаєте відкрити "{ $name }"?
+browse-store = Переглянути { $store }
 other-apps = Інші застосунки
 related-apps = Пов'язані застосунки
-permanently-delete-question = Видалити назавжди
+permanently-delete-question = Вилучити остаточно
 delete = Вилучити
-permanently-delete-warning = Ви впевнені, що бажаєте назавжди видалити { $target }? Цю дію відмінити неможливо.
-set-executable-and-launch = Дозволити виконання та запустити
-set-executable-and-launch-description = Ви впевнені, що бажаєте дозволити виконання файлу "{ $name }" та запустити його?
-set-and-launch = Дозволити та запустити
+permanently-delete-warning = Ви справді бажаєте остаточно видалити { $target }? Це неможливо скасувати.
+set-executable-and-launch = Зробити виконуваним та запустити
+set-executable-and-launch-description = Ви справді бажаєте зробити "{ $name }" виконуваним та запустити його?
+set-and-launch = Встановити та запустити
 open-with = Відкрити за допомогою
 owner = Власник
 group = Група
 other = Інші
-none = Нічого
+none = Немає прав
 execute-only = Тільки виконання
 write-only = Тільки запис
 write-execute = Запис та виконання
-read-only = Тільки читання
-read-execute = Читання та виконання
-read-write = Читання та запис
-read-write-execute = Читання, запис та виконання
-favorite-path-error = Помилка при доступу до теки
+read-only = Тільки перегляд
+read-execute = Перегляд та виконання
+read-write = Перегляд та запис
+read-write-execute = Перегляд, запис та виконання
+favorite-path-error = Помилка відкриття каталогу
 favorite-path-error-description =
     Неможливо відкрити "{ $path }".
-    Можливо за цим шляхом нічого немає, або у вас немає прав, щоб відкрити це.
+    Можливо його не існує або у вас немає прав, щоб відкрити його.
 
-    Бажаєте видалити це з бічної панелі?
+    Бажаєте вилучити його з бічної панелі?
 keep = Залишити
 add-network-drive = Додати мережевий диск
-connect = Під'єднатися
+connect = Під'єднати
 connect-anonymously = Під'єднатися анонімно
 connecting = З'єднання...
 domain = Домен
-enter-server-address = Введіть адресу серверу
+enter-server-address = Введіть адресу сервера
 network-drive-description =
-    Адреси сервера включають в себе префікс з протоколом та саму адресу.
+    Серверні адреси містять префікс протоколу і саму адресу.
     Наприклад: ssh://192.168.0.1, ftp://[2001:db8::1]
 network-drive-schemes =
-    Доступні протоколи,префікс
+    Доступні протоколи,Префікс
     AppleTalk,afp://
-    File Transfer Protocol,ftp:// або ftps://
-    Network File System,nfs://
-    Server Message Block,smb://
-    SSH File Transfer Protocol,sftp:// або ssh://
+    Протокол Передавання Файлів,ftp:// або ftps://
+    Мережева Файлова Система,nfs://
+    Серверний Блок Повідомлень,smb://
+    Протокол Передавання Файлів SSH,sftp:// або ssh://
     WebDAV,dav:// або davs://
-network-drive-error = Неможливо отримати доступ до мережевого диску
+network-drive-error = Неможливо отримати доступ до мережевого диска
 password = Пароль
 remember-password = Запам'ятати пароль
 try-again = Спробувати знову
@@ -278,63 +278,63 @@ progress-failed = { $percent }%, невдало
 progress-paused = { $percent }%, призупинено
 compressing =
     Стиснення { $items } { $items ->
-        [one] об'єкту
+        [one] об'єкта
        *[other] об'єктів
-    } з "{ $from }" у "{ $to }" ({ $progress })...
+    } з "{ $from }" в "{ $to }" ({ $progress })...
 compressed =
-    Завершено стиснення { $items } { $items ->
-        [one] об'єкту
+    Стиснуто { $items } { $items ->
+        [one] об'єкт
        *[other] об'єктів
-    } з "{ $from }" у "{ $to }"
+    } з "{ $from }" в "{ $to }"
 deleting =
     Видалення { $items } { $items ->
-        [one] об'єкту
+        [one] об'єкта
        *[other] об'єктів
     } з { trash } ({ $progress })...
 deleted =
-    Завершено видалення { $items } { $items ->
-        [one] об'єкту
+    Видалено { $items } { $items ->
+        [one] об'єкт
        *[other] об'єктів
     } з { trash }
 extracting =
     Видобування { $items } { $items ->
         [one] об'єкта
        *[other] об'єктів
-    } з "{ $from }" у "{ $to }" ({ $progress })...
+    } з "{ $from }" в "{ $to }" ({ $progress })...
 extracted =
-    Завершено видобування { $items } { $items ->
-        [one] об'єкту
+    Видобуто { $items } { $items ->
+        [one] об'єкт
        *[other] об'єктів
-    } з "{ $from }" у "{ $to }"
-setting-executable-and-launching = Надання дозволу на виконання "{ $name }" та запуск
-set-executable-and-launched = Надано дозвіл на виконання та запущено "{ $name }"
+    } з "{ $from }" в "{ $to }"
+setting-executable-and-launching = Встановлення "{ $name }" як виконуваного та запуск
+set-executable-and-launched = Встановлено "{ $name }" як виконуваний та запущено
 selected-items = { $items } обраних елементів
-setting-permissions = Встановлення дозволів для "{ $name }" на { $mode }
-set-permissions = Встановлено дозволи { $mode } для "{ $name }"
+setting-permissions = Встановлення дозволів { $mode } для "{ $name }"
+set-permissions = Встановити дозволи { $mode } для "{ $name }"
 show-details = Показати деталі
 type = Тип: { $mime }
 items = Об'єктів: { $items }
-item-size = Об'єм: { $size }
+item-size = Розмір: { $size }
 item-created = Створено: { $created }
 item-modified = Змінено: { $modified }
-item-accessed = Доступ: { $accessed }
+item-accessed = Останній доступ: { $accessed }
 calculating = Обчислення...
-single-click = Одне натискання миші для відкриття
-type-to-search = Пошуковий рядок
+single-click = Відкривати одним клацанням
+type-to-search = Введіть для пошуку
 type-to-search-recursive = Шукає поточну теку та усі підтеки
 type-to-search-enter-path = Вводить шлях до теки або файлу
 compress = Стиснути
-delete-permanently = Видалити назавжди
-eject = Витягнути
+delete-permanently = Остаточно вилучити
+eject = Безпечно вилучити
 extract-here = Видобути
-sort-by-trashed = Відсортувати за часом видалення
-remove-from-recents = Видалити з нещодавніх
-change-wallpaper = Змінити шпалери...
+sort-by-trashed = Упорядкувати за часом видалення
+remove-from-recents = Вилучити з нещодавніх
+change-wallpaper = Змінити зображення тла...
 desktop-appearance = Вигляд стільниці...
-display-settings = Налаштування дисплею...
+display-settings = Налаштування дисплея...
 reload-folder = Перезавантажити теку
-gallery-preview = Попередній перегляд
-sort = Сортування
+gallery-preview = Попередній перегляд галереї
+sort = Упорядкувати
 sort-a-z = А-Я
 sort-z-a = Я-А
 sort-newest-first = Спочатку найновіші
@@ -342,22 +342,22 @@ sort-oldest-first = Спочатку найстаріші
 sort-smallest-to-largest = Від найменшого до найбільшого
 sort-largest-to-smallest = Від найбільшого до найменшого
 permanently-deleting =
-    Остаточне видалення { $items } { $items ->
+    Остаточне вилучення { $items } { $items ->
         [one] об'єкта
        *[other] об'єктів
     }
 permanently-deleted =
-    Завершено остаточне видалення { $items } { $items ->
-        [one] об'єкту
-       *[other] об'єктів
+    Остаточно вилучено { $items } { $items ->
+        [one] об'єкт
+       *[other] об'єкти
     }
 removing-from-recents =
-    Видалення { $items } { $items ->
+    Вилучення { $items } { $items ->
         [one] об'єкта
        *[other] об'єктів
     } з { recents }
 removed-from-recents =
-    Завершено видалення { $items } { $items ->
-        [one] об'єкту
-       *[other] об'єктів
+    Вилучено { $items } { $items ->
+        [one] об'єкт
+       *[other] об'єкти
     } з { recents }

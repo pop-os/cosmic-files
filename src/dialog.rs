@@ -10,12 +10,13 @@ use cosmic::{
         core::SmolStr,
         event,
         futures::{self, SinkExt},
-        keyboard::{Event as KeyEvent, Key, Modifiers},
+        keyboard::{Event as KeyEvent, Key, Modifiers, key::Named},
         stream, window,
     },
+    iced_core::widget::operation,
     theme,
     widget::{
-        self,
+        self, Operation,
         menu::{Action as MenuAction, KeyBind, key_bind::Modifier},
         segmented_button,
     },
@@ -416,6 +417,7 @@ enum Message {
     DialogCancel,
     DialogComplete,
     DialogUpdate(DialogPage),
+    Escape,
     Filename(String),
     Filter(usize),
     Key(Modifiers, Key, Option<SmolStr>),
@@ -1272,6 +1274,14 @@ impl Application for App {
             return Task::none();
         }
 
+        // Close the dialog if the focused widget is the dialog's main text input instead of
+        // unfocussing the widget.
+        if let operation::Outcome::Some(focused) = operation::focusable::find_focused().finish() {
+            if self.dialog_text_input == focused {
+                return self.update(Message::Cancel);
+            }
+        }
+
         self.update(Message::Cancel)
     }
 
@@ -1338,6 +1348,7 @@ impl Application for App {
                     self.dialog_pages[0] = dialog_page;
                 }
             }
+            Message::Escape => return self.on_escape(),
             Message::Filename(new_filename) => {
                 // Select based on filename
                 self.tab.select_name(&new_filename);
@@ -1969,7 +1980,13 @@ impl Application for App {
                     ..
                 }) => match status {
                     event::Status::Ignored => Some(Message::Key(modifiers, key, text)),
-                    event::Status::Captured => None,
+                    event::Status::Captured => {
+                        if key == Key::Named(Named::Escape) {
+                            Some(Message::Escape)
+                        } else {
+                            None
+                        }
+                    }
                 },
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
                     Some(Message::ModifiersChanged(modifiers))
