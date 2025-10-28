@@ -220,8 +220,9 @@ fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
             let file_name = file_name.to_string();
             COMPOUND_EXTENSIONS
                 .iter()
-                .find(|&&ext| file_name.ends_with(ext))
-                .map(|&ext| {
+                .copied()
+                .find(|&ext| file_name.ends_with(ext))
+                .map(|ext| {
                     (
                         file_name.strip_suffix(ext).unwrap().to_string(),
                         Some(ext[1..].to_string()),
@@ -251,7 +252,7 @@ fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
                 }
             };
 
-            to = to.join(&new_name);
+            to.push(&new_name);
 
             if !matches!(to.try_exists(), Ok(true)) {
                 break;
@@ -329,7 +330,7 @@ pub enum Operation {
     EmptyTrash,
     /// Uncompress files
     Extract {
-        paths: Vec<PathBuf>,
+        paths: Box<[PathBuf]>,
         to: PathBuf,
         password: Option<String>,
     },
@@ -347,10 +348,10 @@ pub enum Operation {
     },
     /// Permanently delete items, skipping the trash
     PermanentlyDelete {
-        paths: Vec<PathBuf>,
+        paths: Box<[PathBuf]>,
     },
     RemoveFromRecents {
-        paths: Vec<PathBuf>,
+        paths: Box<[PathBuf]>,
     },
     Rename {
         from: PathBuf,
@@ -1013,7 +1014,7 @@ impl Operation {
             }
             Self::RemoveFromRecents { paths } => {
                 tokio::task::spawn_blocking(move || {
-                    let path_refs = paths.iter().map(PathBuf::as_path).collect::<Vec<&Path>>();
+                    let path_refs = paths.iter().map(PathBuf::as_path).collect::<Box<[_]>>();
                     recently_used_xbel::remove_recently_used(&path_refs)
                 })
                 .await

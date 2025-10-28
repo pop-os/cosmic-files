@@ -31,9 +31,7 @@ use std::{
     any::TypeId,
     collections::{HashMap, VecDeque},
     env, fmt, fs,
-    num::NonZeroU16,
     path::PathBuf,
-    str::FromStr,
     time::{self, Instant},
 };
 
@@ -48,6 +46,7 @@ use crate::{
     menu,
     mounter::{MOUNTERS, MounterItem, MounterItems, MounterKey, MounterMessage},
     tab::{self, ItemMetadata, Location, Tab},
+    zoom::{zoom_in_view, zoom_out_view, zoom_to_default},
 };
 
 #[derive(Clone, Debug)]
@@ -372,7 +371,7 @@ impl<M: Send + 'static> Dialog<M> {
             let on_result_message = (self.on_result)(result);
             Task::batch([
                 command,
-                Task::perform(async move { cosmic::action::app(on_result_message) }, |x| x),
+                Task::future(async move { cosmic::action::app(on_result_message) }),
             ])
         } else {
             command
@@ -606,7 +605,7 @@ impl App {
         row = row.push(
             //TODO: easier way to create buttons with rich text
             widget::button::custom(
-                widget::row::with_children(vec![Element::from(&self.accept_label)])
+                widget::row::with_children([Element::from(&self.accept_label)])
                     .padding([0, space_s])
                     .width(Length::Shrink)
                     .height(space_l)
@@ -677,40 +676,37 @@ impl App {
         let location = self.tab.location.clone();
         let icon_sizes = self.tab.config.icon_sizes;
         let mounter_items = self.mounter_items.clone();
-        Task::perform(
-            async move {
-                let location2 = location.clone();
-                match tokio::task::spawn_blocking(move || location2.scan(icon_sizes)).await {
-                    Ok((parent_item_opt, mut items)) => {
-                        #[cfg(feature = "gvfs")]
-                        {
-                            let mounter_paths: Vec<_> = mounter_items
-                                .iter()
-                                .flat_map(|item| item.1.iter())
-                                .filter_map(MounterItem::path)
-                                .collect();
-                            if !mounter_paths.is_empty() {
-                                for item in &mut items {
-                                    item.is_mount_point =
-                                        item.path_opt().is_some_and(|p| mounter_paths.contains(p));
-                                }
+        Task::future(async move {
+            let location2 = location.clone();
+            match tokio::task::spawn_blocking(move || location2.scan(icon_sizes)).await {
+                Ok((parent_item_opt, mut items)) => {
+                    #[cfg(feature = "gvfs")]
+                    {
+                        let mounter_paths: Box<[_]> = mounter_items
+                            .values()
+                            .flatten()
+                            .filter_map(MounterItem::path)
+                            .collect();
+                        if !mounter_paths.is_empty() {
+                            for item in &mut items {
+                                item.is_mount_point =
+                                    item.path_opt().is_some_and(|p| mounter_paths.contains(p));
                             }
                         }
-                        cosmic::action::app(Message::TabRescan(
-                            location,
-                            parent_item_opt,
-                            items,
-                            selection_paths,
-                        ))
                     }
-                    Err(err) => {
-                        log::warn!("failed to rescan: {err}");
-                        cosmic::action::none()
-                    }
+                    cosmic::action::app(Message::TabRescan(
+                        location,
+                        parent_item_opt,
+                        items,
+                        selection_paths,
+                    ))
                 }
-            },
-            |x| x,
-        )
+                Err(err) => {
+                    log::warn!("failed to rescan: {err}");
+                    cosmic::action::none()
+                }
+            }
+        })
     }
 
     fn search_get(&self) -> Option<&str> {
@@ -835,12 +831,10 @@ impl App {
         // Collect all mounter items
         let mut nav_items = Vec::new();
         for (key, items) in &self.mounter_items {
-            for item in items {
-                nav_items.push((*key, item));
-            }
+            nav_items.extend(items.iter().map(|item| (*key, item)));
         }
         // Sort by name lexically
-        nav_items.sort_by(|a, b| LANGUAGE_SORTER.compare(&a.1.name(), &b.1.name()));
+        nav_items.sort_unstable_by(|a, b| LANGUAGE_SORTER.compare(&a.1.name(), &b.1.name()));
         // Add items to nav model
         for (i, (key, item)) in nav_items.into_iter().enumerate() {
             nav_model = nav_model.insert(|mut b| {
@@ -1040,7 +1034,7 @@ impl Application for App {
         //TODO: should gallery view just be a dialog?
         if self.tab.gallery {
             return Some(
-                widget::column::with_children(vec![
+                widget::column::with_children([
                     self.tab.gallery_view().map(Message::TabMessage),
                     // Draw button row as part of the overlay
                     widget::container(self.button_view())
@@ -1098,7 +1092,7 @@ impl Application for App {
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
                     )
                     .control(
-                        widget::column::with_children(vec![
+                        widget::column::with_children([
                             widget::text::body(fl!("folder-name")).into(),
                             widget::text_input("", name.as_str())
                                 .id(self.dialog_text_input.clone())
@@ -1392,10 +1386,9 @@ impl Application for App {
                                 return self.search_set(Some(term));
                             }
                             TypeToSearch::EnterPath => {
-                                let location = self.tab.edit_location.as_ref().map_or_else(
-                                    || self.tab.location.clone(),
-                                    |x| x.location.clone(),
-                                );
+                                let location = (self.tab.edit_location)
+                                    .as_ref()
+                                    .map_or_else(|| &self.tab.location, |x| &x.location);
                                 // Try to add text to end of location
                                 if let Some(path) = location.path_opt() {
                                     let mut path_string = path.to_string_lossy().to_string();
@@ -1538,7 +1531,7 @@ impl Application for App {
                             if let Some(path) = item.path_opt() {
                                 paths.push(path.clone());
                                 let _ = update_recently_used(
-                                    &path.clone(),
+                                    path,
                                     Self::APP_ID.to_string(),
                                     "cosmic-files".to_string(),
                                     None,
@@ -1775,9 +1768,9 @@ impl Application for App {
                     // Filter
                     if let Some(filter_i) = self.filter_selected {
                         if let Some(filter) = self.filters.get(filter_i) {
-                            // Parse filters
+                            // Parse globs (Mime implements PartialEq with &str, so no need to parse)
                             let mut parsed_globs = Vec::new();
-                            let mut parsed_mimes = Vec::new();
+                            let mut mimes = Vec::new();
                             for pattern in &filter.patterns {
                                 match pattern {
                                     DialogFilterPattern::Glob(value) => {
@@ -1788,39 +1781,17 @@ impl Application for App {
                                             }
                                         }
                                     }
-                                    DialogFilterPattern::Mime(value) => {
-                                        match mime_guess::Mime::from_str(value) {
-                                            Ok(mime) => parsed_mimes.push(mime),
-                                            Err(err) => {
-                                                log::warn!("failed to parse mime {value:?}: {err}");
-                                            }
-                                        }
-                                    }
+                                    DialogFilterPattern::Mime(value) => mimes.push(value.as_str()),
                                 }
                             }
 
                             items.retain(|item| {
-                                if item.metadata.is_dir() {
-                                    // Directories are always shown
-                                    return true;
-                                }
-
+                                // Directories are always shown
+                                item.metadata.is_dir()
                                 // Check for mime type match (first because it is faster)
-                                for mime in &parsed_mimes {
-                                    if mime == &item.mime {
-                                        return true;
-                                    }
-                                }
-
+                                    || mimes.iter().copied().any(|mime| mime == item.mime)
                                 // Check for glob match (last because it is slower)
-                                for glob in &parsed_globs {
-                                    if glob.matches(&item.name) {
-                                        return true;
-                                    }
-                                }
-
-                                // No filters matched
-                                false
+                                    || parsed_globs.iter().any(|glob| glob.matches(&item.name))
                             });
                         }
                     }
@@ -1869,47 +1840,18 @@ impl Application for App {
                 });
             }
             Message::ZoomDefault => {
-                return self.with_dialog_config(|config| match config.view {
-                    tab::View::List => config.icon_sizes.list = 100.try_into().unwrap(),
-                    tab::View::Grid => config.icon_sizes.grid = 100.try_into().unwrap(),
+                return self.with_dialog_config(|config| {
+                    zoom_to_default(config.view, &mut config.icon_sizes);
                 });
             }
             Message::ZoomIn => {
-                let zoom_in = |size: &mut NonZeroU16, min: u16, max: u16| {
-                    let mut step = min;
-                    while step <= max {
-                        if size.get() < step {
-                            *size = step.try_into().unwrap();
-                            break;
-                        }
-                        step += 25;
-                    }
-                    if size.get() > step {
-                        *size = step.try_into().unwrap();
-                    }
-                };
-                return self.with_dialog_config(|config| match config.view {
-                    tab::View::List => zoom_in(&mut config.icon_sizes.list, 50, 500),
-                    tab::View::Grid => zoom_in(&mut config.icon_sizes.grid, 50, 500),
+                return self.with_dialog_config(|config| {
+                    zoom_in_view(config.view, &mut config.icon_sizes);
                 });
             }
             Message::ZoomOut => {
-                let zoom_out = |size: &mut NonZeroU16, min: u16, max: u16| {
-                    let mut step = max;
-                    while step >= min {
-                        if size.get() > step {
-                            *size = step.try_into().unwrap();
-                            break;
-                        }
-                        step -= 25;
-                    }
-                    if size.get() < step {
-                        *size = step.try_into().unwrap();
-                    }
-                };
-                return self.with_dialog_config(|config| match config.view {
-                    tab::View::List => zoom_out(&mut config.icon_sizes.list, 50, 500),
-                    tab::View::Grid => zoom_out(&mut config.icon_sizes.grid, 50, 500),
+                return self.with_dialog_config(|config| {
+                    zoom_out_view(config.view, &mut config.icon_sizes);
                 });
             }
             Message::Surface(action) => {
@@ -2090,21 +2032,19 @@ impl Application for App {
             );
         }
 
-        for (key, mounter) in MOUNTERS.iter() {
-            subscriptions.push(
-                mounter
-                    .subscription()
-                    .with(*key)
-                    .map(|(key, mounter_message)| {
-                        if let MounterMessage::Items(items) = mounter_message {
-                            Message::MounterItems(key, items)
-                        } else {
-                            log::warn!("{mounter_message:?} not supported in dialog mode");
-                            Message::None
-                        }
-                    }),
-            );
-        }
+        subscriptions.extend(MOUNTERS.iter().map(|(key, mounter)| {
+            mounter
+                .subscription()
+                .with(*key)
+                .map(|(key, mounter_message)| {
+                    if let MounterMessage::Items(items) = mounter_message {
+                        Message::MounterItems(key, items)
+                    } else {
+                        log::warn!("{mounter_message:?} not supported in dialog mode");
+                        Message::None
+                    }
+                })
+        }));
 
         Subscription::batch(subscriptions)
     }

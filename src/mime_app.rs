@@ -83,7 +83,7 @@ pub fn exec_to_command(
             for invalid in path_opt
                 .iter()
                 .map(AsRef::as_ref)
-                .filter(|path| from_file_or_dir(path).is_none())
+                .filter(|&path| from_file_or_dir(path).is_none())
             {
                 log::warn!("Desktop file expects a file path instead of a URL: {invalid:?}");
             }
@@ -221,7 +221,7 @@ fn filename_eq(path_opt: &Option<PathBuf>, filename: &str) -> bool {
 pub struct MimeAppCache {
     apps: Vec<MimeApp>,
     cache: FxHashMap<Mime, Vec<MimeApp>>,
-    icons: FxHashMap<Mime, Vec<widget::icon::Handle>>,
+    icons: FxHashMap<Mime, Box<[widget::icon::Handle]>>,
     terminals: Vec<MimeApp>,
 }
 
@@ -257,7 +257,7 @@ impl MimeAppCache {
 
         // Load desktop applications by supported mime types
         //TODO: hashmap for all apps by id?
-        let all_apps: Vec<_> = desktop::load_applications(locale, false, None).collect();
+        let all_apps: Box<[_]> = desktop::load_applications(locale, false, None).collect();
         for app in &all_apps {
             //TODO: just collect apps that can be executed with a file argument?
             if !app.mime_types.is_empty() {
@@ -292,21 +292,17 @@ impl MimeAppCache {
         let mut mimeapps_paths = Vec::new();
         let xdg_dirs = xdg::BaseDirectories::new();
 
-        for path in xdg_dirs.find_data_files("applications/mimeapps.list") {
-            mimeapps_paths.push(path);
-        }
+        mimeapps_paths.extend(xdg_dirs.find_data_files("applications/mimeapps.list"));
+
         for desktop in desktops.iter().rev() {
-            for path in xdg_dirs.find_data_files(format!("applications/{desktop}-mimeapps.list")) {
-                mimeapps_paths.push(path);
-            }
+            mimeapps_paths
+                .extend(xdg_dirs.find_data_files(format!("applications/{desktop}-mimeapps.list")));
         }
-        for path in xdg_dirs.find_config_files("mimeapps.list") {
-            mimeapps_paths.push(path);
-        }
+
+        mimeapps_paths.extend(xdg_dirs.find_config_files("mimeapps.list"));
+
         for desktop in desktops.iter().rev() {
-            for path in xdg_dirs.find_config_files(format!("{desktop}-mimeapps.list")) {
-                mimeapps_paths.push(path);
-            }
+            mimeapps_paths.extend(xdg_dirs.find_config_files(format!("{desktop}-mimeapps.list")));
         }
 
         //TODO: handle directory specific behavior
@@ -334,7 +330,7 @@ impl MimeAppCache {
                                 .or_insert_with(|| Vec::with_capacity(1));
                             if !apps.iter().any(|x| filename_eq(&x.path, filename)) {
                                 if let Some(app) =
-                                    all_apps.iter().find(|x| filename_eq(&x.path, filename))
+                                    all_apps.iter().find(|&x| filename_eq(&x.path, filename))
                                 {
                                     apps.push(MimeApp::from(app));
                                 } else {
@@ -406,12 +402,12 @@ impl MimeAppCache {
 
         // Copy icons to special cache
         //TODO: adjust dropdown API so this is no longer needed
-        for (mime, apps) in &self.cache {
-            self.icons.insert(
+        self.icons.extend(self.cache.iter().map(|(mime, apps)| {
+            (
                 mime.clone(),
                 apps.iter().map(|app| app.icon.clone()).collect(),
-            );
-        }
+            )
+        }));
 
         let elapsed = start.elapsed();
         log::info!("loaded mime app cache in {elapsed:?}");
@@ -426,7 +422,7 @@ impl MimeAppCache {
     }
 
     pub fn icons(&self, key: &Mime) -> &[widget::icon::Handle] {
-        self.icons.get(key).map_or(&[], Vec::as_slice)
+        self.icons.get(key).map_or(&[], Box::as_ref)
     }
 
     fn get_default_terminal(&self) -> Option<String> {

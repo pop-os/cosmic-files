@@ -32,7 +32,7 @@ macro_rules! menu_button {
     ($($x:expr),+ $(,)?) => (
         button::custom(
             Row::with_children(
-                vec![$(Element::from($x)),+]
+                [$(Element::from($x)),+]
             )
             .height(Length::Fixed(24.0))
             .align_y(Alignment::Center)
@@ -167,9 +167,9 @@ pub fn context_menu<'a>(
                 children.push(menu_item(fl!("open"), Action::Open).into());
                 #[cfg(feature = "desktop")]
                 {
-                    for (i, action) in entry.desktop_actions.into_iter().enumerate() {
-                        children.push(menu_item(action.name, Action::ExecEntryAction(i)).into());
-                    }
+                    children.extend(entry.desktop_actions.into_iter().enumerate().map(
+                        |(i, action)| menu_item(action.name, Action::ExecEntryAction(i)).into(),
+                    ));
                 }
                 children.push(divider::horizontal::light().into());
                 children.push(menu_item(fl!("rename"), Action::Rename).into());
@@ -207,11 +207,8 @@ pub fn context_menu<'a>(
                 children.push(menu_item(fl!("copy"), Action::Copy).into());
 
                 children.push(divider::horizontal::light().into());
-                let supported_archive_types = crate::archive::SUPPORTED_ARCHIVE_TYPES
-                    .iter()
-                    .filter_map(|mime_type| mime_type.parse::<Mime>().ok())
-                    .collect::<Vec<_>>();
-                selected_types.retain(|t| !supported_archive_types.contains(t));
+                let supported_archive_types = crate::archive::SUPPORTED_ARCHIVE_TYPES;
+                selected_types.retain(|t| supported_archive_types.iter().copied().all(|m| *t != m));
                 if selected_types.is_empty() {
                     children.push(menu_item(fl!("extract-here"), Action::ExtractHere).into());
                     children.push(menu_item(fl!("extract-to"), Action::ExtractTo).into());
@@ -719,7 +716,7 @@ pub fn menu_bar<'a>(
 
 pub fn location_context_menu<'a>(ancestor_index: usize) -> Element<'a, tab::Message> {
     //TODO: only add some of these when in App mode
-    let children = vec![
+    let children = [
         menu_button!(text::body(fl!("open-in-new-tab")))
             .on_press(tab::Message::LocationMenuAction(
                 LocationMenuAction::OpenInNewTab(ancestor_index),

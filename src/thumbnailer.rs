@@ -80,30 +80,32 @@ impl ThumbnailerCache {
         let mut search_dirs = Vec::new();
         let xdg_dirs = xdg::BaseDirectories::new();
 
-        if let Some(data_home) = xdg_dirs.get_data_home() {
-            search_dirs.push(data_home.join("thumbnailers"));
+        if let Some(mut data_home) = xdg_dirs.get_data_home() {
+            data_home.push("thumbnailers");
+            search_dirs.push(data_home);
         }
-        for data_dir in xdg_dirs.get_data_dirs() {
-            search_dirs.push(data_dir.join("thumbnailers"));
-        }
+        search_dirs.extend(xdg_dirs.get_data_dirs().into_iter().map(|mut data_dir| {
+            data_dir.push("thumbnailers");
+            data_dir
+        }));
 
         let mut thumbnailer_paths = Vec::new();
         for dir in search_dirs {
             log::trace!("looking for thumbnailers in {}", dir.display());
             match fs::read_dir(&dir) {
                 Ok(entries) => {
-                    for entry_res in entries {
-                        match entry_res {
-                            Ok(entry) => thumbnailer_paths.push(entry.path()),
-                            Err(err) => {
+                    thumbnailer_paths.extend(entries.filter_map(|entry_res| {
+                        entry_res
+                            .inspect_err(|err| {
                                 log::warn!(
                                     "failed to read entry in directory {}: {}",
                                     dir.display(),
                                     err
-                                );
-                            }
-                        }
-                    }
+                                )
+                            })
+                            .ok()
+                            .map(|entry| entry.path())
+                    }));
                 }
                 Err(err) => {
                     log::warn!("failed to read directory {}: {}", dir.display(), err);

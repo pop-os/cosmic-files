@@ -25,7 +25,7 @@ pub struct ClipboardCopy {
 }
 
 impl ClipboardCopy {
-    pub fn new<P: AsRef<Path>>(kind: ClipboardKind, paths: &[P]) -> Self {
+    pub fn new<P: AsRef<Path>>(kind: ClipboardKind, paths: impl IntoIterator<Item = P>) -> Self {
         let available = vec![
             "text/plain".to_string(),
             "text/plain;charset=utf-8".to_string(),

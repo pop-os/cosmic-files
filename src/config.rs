@@ -75,21 +75,17 @@ pub enum Favorite {
 impl Favorite {
     pub fn from_path(path: PathBuf) -> Self {
         // Ensure that special folders are handled properly
-        for favorite in &[
+        [
             Self::Home,
             Self::Documents,
             Self::Downloads,
             Self::Music,
             Self::Pictures,
             Self::Videos,
-        ] {
-            if let Some(favorite_path) = favorite.path_opt() {
-                if favorite_path == path {
-                    return favorite.clone();
-                }
-            }
-        }
-        Self::Path(path)
+        ]
+        .into_iter()
+        .find(|fav| fav.path_opt().as_ref() == Some(&path))
+        .unwrap_or(Self::Path(path))
     }
 
     pub fn path_opt(&self) -> Option<PathBuf> {

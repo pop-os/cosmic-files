@@ -149,9 +149,8 @@ impl ThumbnailCacher {
             let info = reader.info();
             let text_chunks: FxHashMap<String, String> = info
                 .uncompressed_latin1_text
-                .clone()
-                .into_iter()
-                .map(|chunk| (chunk.keyword, chunk.text))
+                .iter()
+                .map(|chunk| (chunk.keyword.clone(), chunk.text.clone()))
                 .collect();
             (
                 info.width,
@@ -222,7 +221,7 @@ impl ThumbnailCacher {
         // Thumb::URI is required and must match.
         let thumb_uri = texts
             .iter()
-            .find(|text| text.keyword == "Thumb::URI")
+            .find(|&text| text.keyword == "Thumb::URI")
             .map(|t| &t.text);
         if let Some(thumb_uri) = thumb_uri {
             if *thumb_uri != self.file_uri {
@@ -247,7 +246,7 @@ impl ThumbnailCacher {
         // Thumb::MTime is required and must match.
         let thumb_mtime = texts
             .iter()
-            .find(|text| text.keyword == "Thumb::MTime")
+            .find(|&text| text.keyword == "Thumb::MTime")
             .map(|t| &t.text);
         if let Some(thumb_mtime) = thumb_mtime {
             let modified = match metadata.modified() {
@@ -276,7 +275,7 @@ impl ThumbnailCacher {
         // Thumb::Size isn't required, but it should be verified if present.
         let thumb_size = texts
             .iter()
-            .find(|text| text.keyword == "Thumb::Size")
+            .find(|&text| text.keyword == "Thumb::Size")
             .map(|t| &t.text);
         if let Some(thumb_size) = thumb_size {
             let size = metadata.len();
@@ -301,7 +300,7 @@ fn thumbnail_uri(path: &Path) -> io::Result<String> {
     // and they aren't by the url crate, but the thumbnailer used by
     // Gnome Files does. In order to share thumbnails and not get duplicates
     // we should do the same.
-    let url = url.to_string().replace('[', "%5B").replace(']', "%5D");
+    let url = url.as_str().replace('[', "%5B").replace(']', "%5D");
     Ok(url)
 }
 

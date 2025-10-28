@@ -47,7 +47,7 @@ pub fn extract(
     controller: &Controller,
 ) -> Result<(), OperationError> {
     let mime = mime_for_path(path, None, false);
-    let password = password.clone();
+    let password = password.as_deref();
     match mime.essence_str() {
         "application/gzip" | "application/x-compressed-tar" => {
             OpReader::new(path, controller.clone())
@@ -107,7 +107,7 @@ pub fn extract(
 fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
     archive: &mut zip::ZipArchive<R>,
     directory: P,
-    password: Option<String>,
+    password: Option<&str>,
     controller: Controller,
 ) -> zip::result::ZipResult<()> {
     use std::{ffi::OsString, fs};
@@ -145,7 +145,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
 
         controller.set_progress((i as f32) / total_files as f32);
 
-        let mut file = match &password {
+        let mut file = match password {
             None => archive.by_index(i),
             Some(pwd) => archive.by_index_decrypt(i, pwd.as_bytes()),
         }?;
@@ -207,7 +207,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
             }
             continue;
         }
-        let mut file = match &password {
+        let mut file = match password {
             None => archive.by_index(i),
             Some(pwd) => archive.by_index_decrypt(i, pwd.as_bytes()),
         }?;

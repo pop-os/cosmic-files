@@ -21,6 +21,7 @@ mod mouse_area;
 pub mod operation;
 mod spawn_detached;
 use tab::Location;
+mod zoom;
 
 use crate::config::State;
 pub mod tab;

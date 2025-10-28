@@ -30,45 +30,48 @@ fn gio_icon_to_path(icon: &gio::Icon, size: u16) -> Option<PathBuf> {
 }
 
 fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
-    let mut items = MounterItems::new();
-    for (i, mount) in monitor.mounts().into_iter().enumerate() {
-        items.push(MounterItem::Gvfs(Item {
-            uri: MountExt::root(&mount).uri().to_string(),
-            kind: ItemKind::Mount,
-            index: i,
-            name: MountExt::name(&mount).to_string(),
-            is_mounted: true,
-            icon_opt: gio_icon_to_path(&MountExt::icon(&mount), sizes.grid()),
-            icon_symbolic_opt: gio_icon_to_path(&MountExt::symbolic_icon(&mount), 16),
-            path_opt: MountExt::root(&mount).path(),
-        }));
-    }
-    for (i, volume) in monitor.volumes().into_iter().enumerate() {
-        if volume.get_mount().is_some() {
+    let mut items: MounterItems = (monitor.mounts().into_iter())
+        .enumerate()
+        .map(|(i, mount)| {
+            MounterItem::Gvfs(Item {
+                uri: mount.root().uri().into(),
+                kind: ItemKind::Mount,
+                index: i,
+                name: mount.name().into(),
+                is_mounted: true,
+                icon_opt: gio_icon_to_path(&MountExt::icon(&mount), sizes.grid()),
+                icon_symbolic_opt: gio_icon_to_path(&MountExt::symbolic_icon(&mount), 16),
+                path_opt: MountExt::root(&mount).path(),
+            })
+        })
+        .collect();
+    items.extend(
+        (monitor.volumes().into_iter())
+            .enumerate()
             // Volumes with mounts are already listed by mount
-            continue;
-        }
-        let uri = VolumeExt::activation_root(&volume)
-            .map(|f| f.uri().to_string())
-            .unwrap_or_default();
-        items.push(MounterItem::Gvfs(Item {
-            // TODO can we get URI for volumes with no mount?
-            uri,
-            kind: ItemKind::Volume,
-            index: i,
-            name: VolumeExt::name(&volume).to_string(),
-            is_mounted: false,
-            icon_opt: gio_icon_to_path(&VolumeExt::icon(&volume), sizes.grid()),
-            icon_symbolic_opt: gio_icon_to_path(&VolumeExt::symbolic_icon(&volume), 16),
-            path_opt: None,
-        }));
-    }
+            .filter(|(_, volume)| volume.get_mount().is_none())
+            .map(|(i, volume)| {
+                let uri = VolumeExt::activation_root(&volume)
+                    .map(|f| f.uri().into())
+                    .unwrap_or_default();
+                MounterItem::Gvfs(Item {
+                    // TODO can we get URI for volumes with no mount?
+                    uri,
+                    kind: ItemKind::Volume,
+                    index: i,
+                    name: volume.name().into(),
+                    is_mounted: false,
+                    icon_opt: gio_icon_to_path(&VolumeExt::icon(&volume), sizes.grid()),
+                    icon_symbolic_opt: gio_icon_to_path(&VolumeExt::symbolic_icon(&volume), 16),
+                    path_opt: None,
+                })
+            }),
+    );
     items
 }
 
 fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
-    let mut uri = uri.to_string();
-    let mut file = gio::File::for_uri(&uri);
+    let mut file = gio::File::for_uri(uri);
     let force_dir = uri.starts_with("network:///");
 
     // Resolve the target-uri if it exists
@@ -78,8 +81,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
         gio::Cancellable::NONE,
     ) {
         if let Some(resolved_uri) = file_info.attribute_as_string(TARGET_URI_ATTRIBUTE) {
-            uri = resolved_uri.to_string();
-            file = gio::File::for_uri(&uri);
+            file = gio::File::for_uri(resolved_uri.as_str());
         }
     }
 
@@ -89,10 +91,10 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
         .map_err(err_str)?
     {
         let info = info_res.map_err(err_str)?;
-        let name = info.name().to_string_lossy().to_string();
-        let display_name = info.display_name().to_string();
+        let name = info.name().to_string_lossy().into_owned();
+        let display_name = String::from(info.display_name());
 
-        let uri = file.child(info.name()).uri().to_string();
+        let uri = String::from(file.child(info.name()).uri());
 
         //TODO: what is the best way to resolve shortcuts?
         let location = Location::Network(uri, display_name.clone(), file.child(&name).path());
@@ -100,11 +102,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
         let metadata = if !force_dir && !info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE) {
             let mtime = info.attribute_uint64(gio::FILE_ATTRIBUTE_TIME_MODIFIED);
             let is_dir = matches!(info.file_type(), gio::FileType::Directory);
-            let size_opt = if is_dir {
-                None
-            } else {
-                Some(info.size() as u64)
-            };
+            let size_opt = (!is_dir).then_some(info.size() as u64);
             let mut children_opt = None;
 
             if is_dir {
@@ -189,31 +187,21 @@ fn mount_op(uri: String, event_tx: mpsc::UnboundedSender<Event>) -> gio::MountOp
         move |mount_op, message, default_user, default_domain, flags| {
             let auth = MounterAuth {
                 message: message.to_string(),
-                username_opt: if flags.contains(gio::AskPasswordFlags::NEED_USERNAME) {
-                    Some(default_user.to_string())
-                } else {
-                    None
-                },
-                domain_opt: if flags.contains(gio::AskPasswordFlags::NEED_DOMAIN) {
-                    Some(default_domain.to_string())
-                } else {
-                    None
-                },
-                password_opt: if flags.contains(gio::AskPasswordFlags::NEED_PASSWORD) {
-                    Some(String::new())
-                } else {
-                    None
-                },
-                remember_opt: if flags.contains(gio::AskPasswordFlags::SAVING_SUPPORTED) {
-                    Some(false)
-                } else {
-                    None
-                },
-                anonymous_opt: if flags.contains(gio::AskPasswordFlags::ANONYMOUS_SUPPORTED) {
-                    Some(false)
-                } else {
-                    None
-                },
+                username_opt: flags
+                    .contains(gio::AskPasswordFlags::NEED_USERNAME)
+                    .then(|| default_user.to_string()),
+                domain_opt: flags
+                    .contains(gio::AskPasswordFlags::NEED_DOMAIN)
+                    .then(|| default_domain.to_string()),
+                password_opt: flags
+                    .contains(gio::AskPasswordFlags::NEED_PASSWORD)
+                    .then(String::new),
+                remember_opt: flags
+                    .contains(gio::AskPasswordFlags::SAVING_SUPPORTED)
+                    .then_some(false),
+                anonymous_opt: flags
+                    .contains(gio::AskPasswordFlags::ANONYMOUS_SUPPORTED)
+                    .then_some(false),
             };
             let (auth_tx, mut auth_rx) = mpsc::channel(1);
             event_tx
@@ -458,7 +446,7 @@ impl Gvfs {
                                 gio::Cancellable::NONE,
                             ) {
                                 if let Some(resolved_uri) = file_info.attribute_as_string(TARGET_URI_ATTRIBUTE) {
-                                    uri = resolved_uri.to_string();
+                                    uri = resolved_uri.into();
                                     file = gio::File::for_uri(&uri);
                                 }
                             }
@@ -597,12 +585,9 @@ impl Mounter for Gvfs {
 
     fn unmount(&self, item: MounterItem) -> Task<()> {
         let command_tx = self.command_tx.clone();
-        Task::perform(
-            async move {
-                command_tx.send(Cmd::Unmount(item)).unwrap();
-            },
-            |x| x,
-        )
+        Task::future(async move {
+            command_tx.send(Cmd::Unmount(item)).unwrap();
+        })
     }
 
     fn subscription(&self) -> Subscription<MounterMessage> {

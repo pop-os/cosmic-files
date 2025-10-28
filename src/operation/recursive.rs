@@ -52,7 +52,7 @@ impl Context {
 
     pub async fn recursive_copy_or_move(
         &mut self,
-        from_to_pairs: Vec<(PathBuf, PathBuf)>,
+        from_to_pairs: impl IntoIterator<Item = (PathBuf, PathBuf)>,
         method: Method,
     ) -> Result<bool, OperationError> {
         let mut ops = Vec::new();
@@ -148,9 +148,8 @@ impl Context {
         }
 
         // Add cleanup ops after standard ops, in reverse
-        for cleanup_op in cleanup_ops.into_iter().rev() {
-            ops.push(cleanup_op);
-        }
+        cleanup_ops.reverse();
+        ops.append(&mut cleanup_ops);
 
         let total_ops = ops.len();
         for (current_ops, mut op) in ops.into_iter().enumerate() {
