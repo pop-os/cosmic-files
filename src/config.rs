@@ -8,10 +8,10 @@ use cosmic::{
     iced::Subscription,
     theme,
 };
-use ordermap::OrderMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    FxOrderMap,
     app::App,
     tab::{HeadingOptions, Location, View},
 };
@@ -115,13 +115,13 @@ pub enum TypeToSearch {
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(default)]
 pub struct State {
-    pub sort_names: ordermap::OrderMap<String, (HeadingOptions, bool)>,
+    pub sort_names: FxOrderMap<String, (HeadingOptions, bool)>,
 }
 
 impl Default for State {
     fn default() -> Self {
         Self {
-            sort_names: OrderMap::from_iter(dirs::download_dir().into_iter().map(|dir| {
+            sort_names: FxOrderMap::from_iter(dirs::download_dir().into_iter().map(|dir| {
                 (
                     Location::Path(dir).normalize().to_string(),
                     (HeadingOptions::Modified, false),

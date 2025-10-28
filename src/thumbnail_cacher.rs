@@ -1,7 +1,7 @@
 use image::DynamicImage;
 use md5::{Digest, Md5};
+use rustc_hash::FxHashMap;
 use std::{
-    collections::HashMap,
     error::Error,
     fs::{self, File},
     io::{self, BufReader, BufWriter},
@@ -143,7 +143,7 @@ impl ThumbnailCacher {
         let mut reader = decoder.read_info()?;
         let (width, height, color_type, bit_depth, mut text_chunks) = {
             let info = reader.info();
-            let text_chunks: HashMap<String, String> = info
+            let text_chunks: FxHashMap<String, String> = info
                 .uncompressed_latin1_text
                 .clone()
                 .into_iter()

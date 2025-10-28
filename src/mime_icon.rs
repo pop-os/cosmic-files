@@ -2,8 +2,8 @@
 
 use cosmic::widget::icon;
 use mime_guess::Mime;
+use rustc_hash::FxHashMap;
 use std::{
-    collections::HashMap,
     fs,
     path::Path,
     sync::{LazyLock, Mutex},
@@ -18,14 +18,14 @@ struct MimeIconKey {
 }
 
 struct MimeIconCache {
-    cache: HashMap<MimeIconKey, Option<icon::Handle>>,
+    cache: FxHashMap<MimeIconKey, Option<icon::Handle>>,
     shared_mime_info: xdg_mime::SharedMimeInfo,
 }
 
 impl MimeIconCache {
     pub fn new() -> Self {
         Self {
-            cache: HashMap::new(),
+            cache: FxHashMap::default(),
             shared_mime_info: xdg_mime::SharedMimeInfo::new(),
         }
     }
