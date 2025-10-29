@@ -36,7 +36,7 @@ async fn handle_replace(
     let item_from = match tab::item_from_path(file_from, IconSizes::default()) {
         Ok(ok) => ok,
         Err(err) => {
-            log::warn!("{}", err);
+            log::warn!("{err}");
             return ReplaceResult::Cancel;
         }
     };
@@ -44,7 +44,7 @@ async fn handle_replace(
     let item_to = match tab::item_from_path(file_to, IconSizes::default()) {
         Ok(ok) => ok,
         Err(err) => {
-            log::warn!("{}", err);
+            log::warn!("{err}");
             return ReplaceResult::Cancel;
         }
     };
@@ -98,13 +98,13 @@ async fn copy_or_move(
     compio::runtime::spawn(async move {
         let controller = controller_c;
         log::info!(
-            "{} {:?} to {:?}",
+            "{} {:?} to {}",
             match method {
                 Method::Copy => "Copy",
                 Method::Move { .. } => "Move",
             },
             paths,
-            to
+            to.display()
         );
 
         // Handle duplicate file names by renaming paths
@@ -141,12 +141,15 @@ async fn copy_or_move(
                 //TODO: use compio::fs::rename?
                 match fs::rename(from, to) {
                     Ok(()) => {
-                        log::info!("renamed {from:?} to {to:?}");
+                        log::info!("renamed {} to {}", from.display(), to.display());
                         false
                     }
                     Err(err) => {
                         log::info!(
-                            "failed to rename {from:?} to {to:?}, fallback to recursive move: {err}"
+                            "failed to rename {} to {}, fallback to recursive move: {}",
+                            from.display(),
+                            to.display(),
+                            err
                         );
                         true
                     }
@@ -217,8 +220,9 @@ fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
             let file_name = file_name.to_string();
             COMPOUND_EXTENSIONS
                 .iter()
-                .find(|&&ext| file_name.ends_with(ext))
-                .map(|&ext| {
+                .copied()
+                .find(|&ext| file_name.ends_with(ext))
+                .map(|ext| {
                     (
                         file_name.strip_suffix(ext).unwrap().to_string(),
                         Some(ext[1..].to_string()),
@@ -227,15 +231,14 @@ fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
                 .unwrap_or_else(|| {
                     from.file_stem()
                         .and_then(|s| s.to_str())
-                        .map(|stem| {
+                        .map_or((file_name, None), |stem| {
                             (
                                 stem.to_string(),
                                 from.extension()
                                     .and_then(|e| e.to_str())
-                                    .map(|e| e.to_string()),
+                                    .map(str::to_string),
                             )
                         })
-                        .unwrap_or((file_name, None))
                 })
         };
 
@@ -249,7 +252,7 @@ fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
                 }
             };
 
-            to = to.join(&new_name);
+            to.push(&new_name);
 
             if !matches!(to.try_exists(), Ok(true)) {
                 break;
@@ -283,7 +286,7 @@ fn paths_parent_name(paths: &[PathBuf]) -> Cow<'_, str> {
         return fl!("unknown-folder").into();
     };
 
-    for path in paths.iter() {
+    for path in paths {
         //TODO: is it possible to have different parents, and what should be returned?
         if path.parent() != Some(parent) {
             return fl!("unknown-folder").into();
@@ -327,7 +330,7 @@ pub enum Operation {
     EmptyTrash,
     /// Uncompress files
     Extract {
-        paths: Vec<PathBuf>,
+        paths: Box<[PathBuf]>,
         to: PathBuf,
         password: Option<String>,
     },
@@ -345,10 +348,10 @@ pub enum Operation {
     },
     /// Permanently delete items, skipping the trash
     PermanentlyDelete {
-        paths: Vec<PathBuf>,
+        paths: Box<[PathBuf]>,
     },
     RemoveFromRecents {
-        paths: Vec<PathBuf>,
+        paths: Box<[PathBuf]>,
     },
     Rename {
         from: PathBuf,
@@ -397,18 +400,18 @@ impl OperationError {
     pub fn from_err<T: ToString>(err: T, controller: &Controller) -> Self {
         controller.set_state(ControllerState::Failed);
 
-        OperationError {
+        Self {
             kind: OperationErrorType::Generic(err.to_string()),
         }
     }
 
     pub fn from_kind(kind: OperationErrorType, controller: &Controller) -> Self {
         controller.set_state(ControllerState::Failed);
-        OperationError { kind }
+        Self { kind }
     }
 
     pub fn from_msg(m: impl Into<String>) -> Self {
-        OperationError {
+        Self {
             kind: OperationErrorType::Generic(m.into()),
         }
     }
@@ -572,7 +575,7 @@ impl Operation {
         }
     }
 
-    pub fn show_progress_notification(&self) -> bool {
+    pub const fn show_progress_notification(&self) -> bool {
         // Long running operations show a progress notification
         match self {
             Self::Compress { .. }
@@ -625,7 +628,7 @@ impl Operation {
                         let controller = controller_c;
                         let Some(relative_root) = to.parent() else {
                             return Err(OperationError::from_err(
-                                format!("path {:?} has no parent directory", to),
+                                format!("path {} has no parent directory", to.display()),
                                 &controller,
                             ));
                         };
@@ -636,7 +639,7 @@ impl Operation {
                         };
 
                         let mut paths = paths;
-                        for path in paths.clone().iter() {
+                        for path in &paths.clone() {
                             if path.is_dir() {
                                 let new_paths_it = WalkDir::new(path).into_iter();
                                 for entry in new_paths_it.skip(1) {
@@ -1011,7 +1014,7 @@ impl Operation {
             }
             Self::RemoveFromRecents { paths } => {
                 tokio::task::spawn_blocking(move || {
-                    let path_refs = paths.iter().map(|p| p.as_ref()).collect::<Vec<&Path>>();
+                    let path_refs = paths.iter().map(PathBuf::as_path).collect::<Box<[_]>>();
                     recently_used_xbel::remove_recently_used(&path_refs)
                 })
                 .await
@@ -1205,7 +1208,7 @@ mod tests {
                         debug!("[{id}] Replace request");
                         tx.send(ReplaceResult::Cancel)
                             .await
-                            .expect("Sending a response to a replace request should succeed")
+                            .expect("Sending a response to a replace request should succeed");
                     }
                     _ => unreachable!(
                         "Only [ `Message::PendingProgress`, `Message::DialogPush(DialogPage::Replace)` ] are sent from operation"

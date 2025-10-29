@@ -47,7 +47,7 @@ pub fn extract(
     controller: &Controller,
 ) -> Result<(), OperationError> {
     let mime = mime_for_path(path, None, false);
-    let password = password.clone();
+    let password = password.as_deref();
     match mime.essence_str() {
         "application/gzip" | "application/x-compressed-tar" => {
             OpReader::new(path, controller.clone())
@@ -55,7 +55,7 @@ pub fn extract(
                 .map(flate2::read::GzDecoder::new)
                 .map(tar::Archive::new)
                 .and_then(|mut archive| archive.unpack(new_dir))
-                .map_err(|e| OperationError::from_err(e, controller))?
+                .map_err(|e| OperationError::from_err(e, controller))?;
         }
         "application/x-tar" => OpReader::new(path, controller.clone())
             .map(io::BufReader::new)
@@ -93,10 +93,10 @@ pub fn extract(
                 .map(|reader| lzma_rust2::XzReader::new(reader, true))
                 .map(tar::Archive::new)
                 .and_then(|mut archive| archive.unpack(new_dir))
-                .map_err(|e| OperationError::from_err(e, controller))?
+                .map_err(|e| OperationError::from_err(e, controller))?;
         }
         _ => Err(OperationError::from_err(
-            format!("unsupported mime type {:?}", mime),
+            format!("unsupported mime type {mime:?}"),
             controller,
         ))?,
     }
@@ -107,7 +107,7 @@ pub fn extract(
 fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
     archive: &mut zip::ZipArchive<R>,
     directory: P,
-    password: Option<String>,
+    password: Option<&str>,
     controller: Controller,
 ) -> zip::result::ZipResult<()> {
     use std::{ffi::OsString, fs};
@@ -145,7 +145,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
 
         controller.set_progress((i as f32) / total_files as f32);
 
-        let mut file = match &password {
+        let mut file = match password {
             None => archive.by_index(i),
             Some(pwd) => archive.by_index_decrypt(i, pwd.as_bytes()),
         }?;
@@ -207,7 +207,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
             }
             continue;
         }
-        let mut file = match &password {
+        let mut file = match password {
             None => archive.by_index(i),
             Some(pwd) => archive.by_index_decrypt(i, pwd.as_bytes()),
         }?;
@@ -262,7 +262,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
             // Ensure we update children's permissions before making a parent unwritable
             files_by_unix_mode.sort_by_key(|(path, _)| Reverse(path.clone()));
         }
-        for (path, mode) in files_by_unix_mode.into_iter() {
+        for (path, mode) in files_by_unix_mode {
             fs::set_permissions(&path, fs::Permissions::from_mode(mode))?;
         }
     }

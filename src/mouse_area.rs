@@ -199,7 +199,7 @@ impl<'a, Message> MouseArea<'a, Message> {
     }
 
     #[must_use]
-    pub fn show_drag_rect(mut self, show_drag_rect: bool) -> Self {
+    pub const fn show_drag_rect(mut self, show_drag_rect: bool) -> Self {
         self.show_drag_rect = show_drag_rect;
         self
     }
@@ -379,7 +379,7 @@ where
         shell: &mut Shell<'_, Message>,
         viewport: &Rectangle,
     ) -> event::Status {
-        if let event::Status::Captured = self.content.as_widget_mut().on_event(
+        if self.content.as_widget_mut().on_event(
             &mut tree.children[0],
             event.clone(),
             layout,
@@ -388,7 +388,8 @@ where
             clipboard,
             shell,
             viewport,
-        ) {
+        ) == event::Status::Captured
+        {
             return event::Status::Captured;
         }
 
@@ -507,7 +508,7 @@ where
     Renderer: 'a + renderer::Renderer,
     Theme: 'a,
 {
-    fn from(area: MouseArea<'a, Message>) -> Element<'a, Message> {
+    fn from(area: MouseArea<'a, Message>) -> Self {
         Element::new(area)
     }
 }
@@ -538,12 +539,12 @@ fn update<Message: Clone>(
         match (position_in, state.last_position) {
             (None, Some(_)) => {
                 if let Some(message) = widget.on_exit.as_ref() {
-                    shell.publish(message())
+                    shell.publish(message());
                 }
             }
             (Some(_), None) => {
                 if let Some(message) = widget.on_enter.as_ref() {
-                    shell.publish(message())
+                    shell.publish(message());
                 }
             }
             _ => {}
@@ -632,8 +633,7 @@ fn update<Message: Clone>(
     let recent_click = state
         .prev_click
         .as_ref()
-        .map(|(_, i)| Instant::now().duration_since(*i) <= DOUBLE_CLICK_DURATION)
-        .unwrap_or_default();
+        .is_some_and(|(_, i)| Instant::now().duration_since(*i) <= DOUBLE_CLICK_DURATION);
     if matches!(
         event,
         Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
@@ -653,7 +653,10 @@ fn update<Message: Clone>(
     }
 
     if let Some(message) = widget.on_right_press.as_ref() {
-        if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)) = event {
+        if matches!(
+            event,
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right))
+        ) {
             let point_opt = if widget.on_right_press_window_position {
                 cursor.position_over(layout_bounds).map(|mut p| {
                     p.x -= offset.x;
@@ -667,14 +670,16 @@ fn update<Message: Clone>(
 
             if widget.on_right_press_no_capture {
                 return event::Status::Ignored;
-            } else {
-                return event::Status::Captured;
             }
+            return event::Status::Captured;
         }
     }
 
     if let Some(message) = widget.on_right_release.as_ref() {
-        if let Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Right)) = event {
+        if matches!(
+            event,
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Right))
+        ) {
             shell.publish(message(cursor.position_in(layout_bounds)));
 
             return event::Status::Captured;
@@ -682,7 +687,10 @@ fn update<Message: Clone>(
     }
 
     if let Some(message) = widget.on_middle_press.as_ref() {
-        if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Middle)) = event {
+        if matches!(
+            event,
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Middle))
+        ) {
             shell.publish(message(cursor.position_in(layout_bounds)));
 
             return event::Status::Captured;
@@ -690,7 +698,10 @@ fn update<Message: Clone>(
     }
 
     if let Some(message) = widget.on_middle_release.as_ref() {
-        if let Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Middle)) = event {
+        if matches!(
+            event,
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Middle))
+        ) {
             shell.publish(message(cursor.position_in(layout_bounds)));
 
             return event::Status::Captured;
@@ -698,7 +709,10 @@ fn update<Message: Clone>(
     }
 
     if let Some(message) = widget.on_back_press.as_ref() {
-        if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Back)) = event {
+        if matches!(
+            event,
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Back))
+        ) {
             shell.publish(message(cursor.position_in(layout_bounds)));
 
             return event::Status::Captured;
@@ -706,7 +720,10 @@ fn update<Message: Clone>(
     }
 
     if let Some(message) = widget.on_back_release.as_ref() {
-        if let Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Back)) = event {
+        if matches!(
+            event,
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Back))
+        ) {
             shell.publish(message(cursor.position_in(layout_bounds)));
 
             return event::Status::Captured;
@@ -714,7 +731,10 @@ fn update<Message: Clone>(
     }
 
     if let Some(message) = widget.on_forward_press.as_ref() {
-        if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Forward)) = event {
+        if matches!(
+            event,
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Forward))
+        ) {
             shell.publish(message(cursor.position_in(layout_bounds)));
 
             return event::Status::Captured;
@@ -722,7 +742,10 @@ fn update<Message: Clone>(
     }
 
     if let Some(message) = widget.on_forward_release.as_ref() {
-        if let Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Forward)) = event {
+        if matches!(
+            event,
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Forward))
+        ) {
             shell.publish(message(cursor.position_in(layout_bounds)));
 
             return event::Status::Captured;
