@@ -25,7 +25,7 @@ pub struct ClipboardCopy {
 }
 
 impl ClipboardCopy {
-    pub fn new<P: AsRef<Path>>(kind: ClipboardKind, paths: &[P]) -> Self {
+    pub fn new<P: AsRef<Path>>(kind: ClipboardKind, paths: impl IntoIterator<Item = P>) -> Self {
         let available = vec![
             "text/plain".to_string(),
             "text/plain;charset=utf-8".to_string(),
@@ -42,7 +42,7 @@ impl ClipboardCopy {
         .to_string();
         //TODO: do we have to use \r\n?
         let cr_nl = "\r\n";
-        for path in paths.iter() {
+        for path in paths {
             let path = path.as_ref();
 
             match path.to_str() {
@@ -56,8 +56,8 @@ impl ClipboardCopy {
                 None => {
                     //TODO: allow non-UTF-8?
                     log::warn!(
-                        "{:?} is not valid UTF-8, not adding to text/plain clipboard",
-                        path
+                        "{} is not valid UTF-8, not adding to text/plain clipboard",
+                        path.display()
                     );
                 }
             }
@@ -74,8 +74,8 @@ impl ClipboardCopy {
                 }
                 Err(()) => {
                     log::warn!(
-                        "{:?} cannot be turned into a URL, not adding to text/uri-list clipboard",
-                        path
+                        "{} cannot be turned into a URL, not adding to text/uri-list clipboard",
+                        path.display()
                     );
                 }
             }
@@ -135,7 +135,7 @@ impl TryFrom<(Vec<u8>, String)> for ClipboardPaste {
                     let url = Url::parse(line)?;
                     match url.to_file_path() {
                         Ok(path) => paths.push(path),
-                        Err(()) => Err(format!("invalid file URL {:?}", url))?,
+                        Err(()) => Err(format!("invalid file URL {url:?}"))?,
                     }
                 }
             }
@@ -146,18 +146,18 @@ impl TryFrom<(Vec<u8>, String)> for ClipboardPaste {
                         kind = match line {
                             "copy" => ClipboardKind::Copy,
                             "cut" => ClipboardKind::Cut { is_dnd: false },
-                            _ => Err(format!("unsupported clipboard operation {:?}", line))?,
+                            _ => Err(format!("unsupported clipboard operation {line:?}"))?,
                         };
                     } else {
                         let url = Url::parse(line)?;
                         match url.to_file_path() {
                             Ok(path) => paths.push(path),
-                            Err(()) => Err(format!("invalid file URL {:?}", url))?,
+                            Err(()) => Err(format!("invalid file URL {url:?}"))?,
                         }
                     }
                 }
             }
-            _ => Err(format!("unsupported mime type {:?}", mime))?,
+            _ => Err(format!("unsupported mime type {mime:?}"))?,
         }
         Ok(Self { kind, paths })
     }

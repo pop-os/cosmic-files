@@ -2,8 +2,8 @@
 
 use cosmic::widget::icon;
 use mime_guess::Mime;
+use rustc_hash::FxHashMap;
 use std::{
-    collections::HashMap,
     fs,
     path::Path,
     sync::{LazyLock, Mutex},
@@ -18,14 +18,14 @@ struct MimeIconKey {
 }
 
 struct MimeIconCache {
-    cache: HashMap<MimeIconKey, Option<icon::Handle>>,
+    cache: FxHashMap<MimeIconKey, Option<icon::Handle>>,
     shared_mime_info: xdg_mime::SharedMimeInfo,
 }
 
 impl MimeIconCache {
     pub fn new() -> Self {
         Self {
-            cache: HashMap::new(),
+            cache: FxHashMap::default(),
             shared_mime_info: xdg_mime::SharedMimeInfo::new(),
         }
     }
@@ -41,10 +41,8 @@ impl MimeIconCache {
                 let icon_name = icon_names.remove(0);
                 let mut named = icon::from_name(icon_name).size(key.size);
                 if !icon_names.is_empty() {
-                    let mut fallback_names = Vec::with_capacity(icon_names.len());
-                    for fallback_name in icon_names {
-                        fallback_names.push(fallback_name.into());
-                    }
+                    let fallback_names =
+                        icon_names.into_iter().map(std::borrow::Cow::from).collect();
                     named = named.fallback(Some(icon::IconFallback::Names(fallback_names)));
                 }
                 Some(named.handle())
@@ -55,8 +53,8 @@ impl MimeIconCache {
 static MIME_ICON_CACHE: LazyLock<Mutex<MimeIconCache>> =
     LazyLock::new(|| Mutex::new(MimeIconCache::new()));
 
-pub fn mime_for_path<P: AsRef<Path>>(
-    path: P,
+pub fn mime_for_path(
+    path: impl AsRef<Path>,
     metadata_opt: Option<&fs::Metadata>,
     remote: bool,
 ) -> Mime {
@@ -65,7 +63,7 @@ pub fn mime_for_path<P: AsRef<Path>>(
     // Try the shared mime info cache first
     let mut gb = mime_icon_cache.shared_mime_info.guess_mime_type();
     if remote {
-        if let Some(file_name) = path.file_name().and_then(|x| x.to_str()) {
+        if let Some(file_name) = path.file_name().and_then(std::ffi::OsStr::to_str) {
             gb.file_name(file_name);
         }
     } else {
@@ -75,11 +73,22 @@ pub fn mime_for_path<P: AsRef<Path>>(
         gb.metadata(metadata.clone());
     }
     let guess = gb.guess();
-    if guess.uncertain() {
+    let guessed_mime = guess.mime_type();
+
+    /// Checks if the `Mime` is a special variant returned by `xdg-mime`.
+    /// This includes directories, symlinks and zerosize files, which are returned as uncertain.
+    fn is_special_mime(mime: &Mime) -> bool {
+        *mime == "inode/directory" || *mime == "inode/symlink" || *mime == "application/x-zerosize"
+    }
+
+    // `xdg-mime-rs` sets the guess to uncertain if it returns special mime types.
+    // The guess could also be uncertain on platforms without shared-mime-info.
+    // Try mime_guess, but only if it is not one of the special mime types.
+    if guess.uncertain() && (remote || !is_special_mime(guessed_mime)) {
         // If uncertain, try mime_guess. This could happen on platforms without shared-mime-info
         mime_guess::from_path(path).first_or_octet_stream()
     } else {
-        guess.mime_type().clone()
+        guessed_mime.clone()
     }
 }
 

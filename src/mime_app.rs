@@ -5,9 +5,9 @@
 use cosmic::desktop;
 use cosmic::widget;
 pub use mime_guess::Mime;
+use rustc_hash::FxHashMap;
 use std::{
     cmp::Ordering,
-    collections::HashMap,
     env,
     ffi::OsStr,
     fs, io,
@@ -54,7 +54,7 @@ pub fn exec_to_command(
     // Number of args before the field code.
     // This won't be an off by one err below because take is not zero indexed.
     let field_code_pos = field_code_pos.unwrap_or_default();
-    let mut processes = match args_handler.map(|s| s.as_str()) {
+    let mut processes = match args_handler.map(String::as_str) {
         Some("%f") => {
             let mut processes = Vec::with_capacity(path_opt.len());
 
@@ -83,7 +83,7 @@ pub fn exec_to_command(
             for invalid in path_opt
                 .iter()
                 .map(AsRef::as_ref)
-                .filter(|path| from_file_or_dir(path).is_none())
+                .filter(|&path| from_file_or_dir(path).is_none())
             {
                 log::warn!("Desktop file expects a file path instead of a URL: {invalid:?}");
             }
@@ -137,7 +137,7 @@ pub fn exec_to_command(
                 if !EXEC_HANDLERS.contains(&field_code)
                     && !DEPRECATED_HANDLERS.contains(&field_code)
                 {
-                    log::warn!("unsupported Exec code {:?} in {:?}", field_code, exec);
+                    log::warn!("unsupported Exec code {field_code:?} in {exec:?}");
                     return None;
                 }
             }
@@ -215,14 +215,13 @@ fn filename_eq(path_opt: &Option<PathBuf>, filename: &str) -> bool {
     path_opt
         .as_ref()
         .and_then(|path| path.file_name())
-        .map(|x| x == filename)
-        .unwrap_or(false)
+        .is_some_and(|x| x == filename)
 }
 
 pub struct MimeAppCache {
     apps: Vec<MimeApp>,
-    cache: HashMap<Mime, Vec<MimeApp>>,
-    icons: HashMap<Mime, Vec<widget::icon::Handle>>,
+    cache: FxHashMap<Mime, Vec<MimeApp>>,
+    icons: FxHashMap<Mime, Box<[widget::icon::Handle]>>,
     terminals: Vec<MimeApp>,
 }
 
@@ -230,8 +229,8 @@ impl MimeAppCache {
     pub fn new() -> Self {
         let mut mime_app_cache = Self {
             apps: Vec::new(),
-            cache: HashMap::new(),
-            icons: HashMap::new(),
+            cache: FxHashMap::default(),
+            icons: FxHashMap::default(),
             terminals: Vec::new(),
         };
         mime_app_cache.reload();
@@ -258,13 +257,13 @@ impl MimeAppCache {
 
         // Load desktop applications by supported mime types
         //TODO: hashmap for all apps by id?
-        let all_apps: Vec<_> = desktop::load_applications(locale, false, None).collect();
-        for app in all_apps.iter() {
+        let all_apps: Box<[_]> = desktop::load_applications(locale, false, None).collect();
+        for app in &all_apps {
             //TODO: just collect apps that can be executed with a file argument?
             if !app.mime_types.is_empty() {
                 self.apps.push(MimeApp::from(app));
             }
-            for mime in app.mime_types.iter() {
+            for mime in &app.mime_types {
                 let apps = self
                     .cache
                     .entry(mime.clone())
@@ -273,7 +272,7 @@ impl MimeAppCache {
                     apps.push(MimeApp::from(app));
                 }
             }
-            for category in app.categories.iter() {
+            for category in &app.categories {
                 if category == "TerminalEmulator" {
                     self.terminals.push(MimeApp::from(app));
                     break;
@@ -284,7 +283,7 @@ impl MimeAppCache {
         let desktops: Vec<String> = env::var("XDG_CURRENT_DESKTOP")
             .unwrap_or_default()
             .split(':')
-            .map(|x| x.to_ascii_lowercase())
+            .map(str::to_ascii_lowercase)
             .collect();
 
         // Load mimeapps.list files
@@ -293,21 +292,17 @@ impl MimeAppCache {
         let mut mimeapps_paths = Vec::new();
         let xdg_dirs = xdg::BaseDirectories::new();
 
-        for path in xdg_dirs.find_data_files("applications/mimeapps.list") {
-            mimeapps_paths.push(path);
-        }
+        mimeapps_paths.extend(xdg_dirs.find_data_files("applications/mimeapps.list"));
+
         for desktop in desktops.iter().rev() {
-            for path in xdg_dirs.find_data_files(format!("applications/{desktop}-mimeapps.list")) {
-                mimeapps_paths.push(path);
-            }
+            mimeapps_paths
+                .extend(xdg_dirs.find_data_files(format!("applications/{desktop}-mimeapps.list")));
         }
-        for path in xdg_dirs.find_config_files("mimeapps.list") {
-            mimeapps_paths.push(path);
-        }
+
+        mimeapps_paths.extend(xdg_dirs.find_config_files("mimeapps.list"));
+
         for desktop in desktops.iter().rev() {
-            for path in xdg_dirs.find_config_files(format!("{desktop}-mimeapps.list")) {
-                mimeapps_paths.push(path);
-            }
+            mimeapps_paths.extend(xdg_dirs.find_config_files(format!("{desktop}-mimeapps.list")));
         }
 
         //TODO: handle directory specific behavior
@@ -315,7 +310,7 @@ impl MimeAppCache {
             let entry = match freedesktop_entry_parser::parse_entry(&path) {
                 Ok(ok) => ok,
                 Err(err) => {
-                    log::warn!("failed to parse {:?}: {}", path, err);
+                    log::warn!("failed to parse {}: {}", path.display(), err);
                     continue;
                 }
             };
@@ -328,21 +323,19 @@ impl MimeAppCache {
                 if let Ok(mime) = attr.name.parse::<Mime>() {
                     if let Some(filenames) = attr.value {
                         for filename in filenames.split_terminator(';') {
-                            log::trace!("add {}={}", mime, filename);
+                            log::trace!("add {mime}={filename}");
                             let apps = self
                                 .cache
                                 .entry(mime.clone())
                                 .or_insert_with(|| Vec::with_capacity(1));
                             if !apps.iter().any(|x| filename_eq(&x.path, filename)) {
                                 if let Some(app) =
-                                    all_apps.iter().find(|x| filename_eq(&x.path, filename))
+                                    all_apps.iter().find(|&x| filename_eq(&x.path, filename))
                                 {
                                     apps.push(MimeApp::from(app));
                                 } else {
                                     log::info!(
-                                        "failed to add association for {:?}: application {:?} not found",
-                                        mime,
-                                        filename
+                                        "failed to add association for {mime:?}: application {filename:?} not found"
                                     );
                                 }
                             }
@@ -355,7 +348,7 @@ impl MimeAppCache {
                 if let Ok(mime) = attr.name.parse::<Mime>() {
                     if let Some(filenames) = attr.value {
                         for filename in filenames.split_terminator(';') {
-                            log::trace!("remove {}={}", mime, filename);
+                            log::trace!("remove {mime}={filename}");
                             if let Some(apps) = self.cache.get_mut(&mime) {
                                 apps.retain(|x| !filename_eq(&x.path, filename));
                             }
@@ -368,7 +361,7 @@ impl MimeAppCache {
                 if let Ok(mime) = attr.name.parse::<Mime>() {
                     if let Some(filenames) = attr.value {
                         for filename in filenames.split_terminator(';') {
-                            log::trace!("default {}={}", mime, filename);
+                            log::trace!("default {mime}={filename}");
                             if let Some(apps) = self.cache.get_mut(&mime) {
                                 let mut found = false;
                                 for app in apps.iter_mut() {
@@ -381,13 +374,10 @@ impl MimeAppCache {
                                 }
                                 if found {
                                     break;
-                                } else {
-                                    log::debug!(
-                                        "failed to set default for {:?}: application {:?} not found",
-                                        mime,
-                                        filename
-                                    );
                                 }
+                                log::debug!(
+                                    "failed to set default for {mime:?}: application {filename:?} not found"
+                                );
                             }
                         }
                     }
@@ -412,15 +402,15 @@ impl MimeAppCache {
 
         // Copy icons to special cache
         //TODO: adjust dropdown API so this is no longer needed
-        for (mime, apps) in self.cache.iter() {
-            self.icons.insert(
+        self.icons.extend(self.cache.iter().map(|(mime, apps)| {
+            (
                 mime.clone(),
                 apps.iter().map(|app| app.icon.clone()).collect(),
-            );
-        }
+            )
+        }));
 
         let elapsed = start.elapsed();
-        log::info!("loaded mime app cache in {:?}", elapsed);
+        log::info!("loaded mime app cache in {elapsed:?}");
     }
 
     pub fn apps(&self) -> &[MimeApp] {
@@ -428,13 +418,11 @@ impl MimeAppCache {
     }
 
     pub fn get(&self, key: &Mime) -> &[MimeApp] {
-        static EMPTY: Vec<MimeApp> = Vec::new();
-        self.cache.get(key).unwrap_or(&EMPTY)
+        self.cache.get(key).map_or(&[], Vec::as_slice)
     }
 
     pub fn icons(&self, key: &Mime) -> &[widget::icon::Handle] {
-        static EMPTY: Vec<widget::icon::Handle> = Vec::new();
-        self.icons.get(key).unwrap_or(&EMPTY)
+        self.icons.get(key).map_or(&[], Box::as_ref)
     }
 
     fn get_default_terminal(&self) -> Option<String> {
@@ -466,7 +454,7 @@ impl MimeAppCache {
         }
 
         for id in &preference_order {
-            for terminal in self.terminals.iter() {
+            for terminal in &self.terminals {
                 if &terminal.id == id {
                     return Some(terminal);
                 }
@@ -498,7 +486,7 @@ impl MimeAppCache {
             }
             Err(err) => {
                 if err.kind() != io::ErrorKind::NotFound {
-                    log::warn!("failed to read {path:?}: {err}");
+                    log::warn!("failed to read {}: {}", path.display(), err);
                     return;
                 }
             }
@@ -517,7 +505,7 @@ impl MimeAppCache {
                 self.reload();
             }
             Err(err) => {
-                log::warn!("failed to write {path:?}: {err}");
+                log::warn!("failed to write {}: {}", path.display(), err);
             }
         }
     }

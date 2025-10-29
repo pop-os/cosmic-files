@@ -1496,6 +1496,7 @@ dependencies = [
  "recently-used-xbel",
  "regex",
  "rust-embed",
+ "rustc-hash 2.1.1",
  "serde",
  "shlex",
  "slotmap",
