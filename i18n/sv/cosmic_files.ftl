@@ -202,7 +202,7 @@ extracted =
        *[other] flera objekt
     } från "{ $from }" till "{ $to }"
 setting-executable-and-launching = Gör "{ $name }" körbar och startar
-set-executable-and-launched = Gör "{ $name }" körbar och startade
+set-executable-and-launched = Gjorde "{ $name }" körbar och startade
 moving =
     Flyttar { $items } { $items ->
         [one] objekt
