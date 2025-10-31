@@ -17,7 +17,7 @@ size = Розмір
 ## Empty Trash Dialog
 
 empty-trash = Спорожнити Смітник
-empty-trash-warning = Ви впевнені, що хочете остаточно видалити всі обʼєкти зі Смітника?
+empty-trash-warning = Ви впевнені, що хочете остаточно видалити всі елементи зі Смітника?
 
 ## New File/Folder Dialog
 
@@ -53,8 +53,8 @@ rename-folder = Перейменувати теку
 
 replace = Замінити
 replace-title = " { $filename }" вже існує в цьому місці.
-replace-warning = Бажаєте замінити його на той, що ви зберігаєте зараз? Заміна призведе до перезапису його вмісту.
-replace-warning-operation = Ви бажаєте замінити його? Заміна призведе до перезапису його вмісту.
+replace-warning = Бажаєте замінити його тим, що зберігаєте? Замінювання перезапише його вміст.
+replace-warning-operation = Бажаєте замінити його? Замінювання перезапише його вміст.
 original-file = Початковий файл
 replace-with = Замінити на
 apply-to-all = Застосувати до всіх
@@ -76,18 +76,18 @@ pending = В очікуванні
 failed = Не вдалося
 complete = Завершено
 copy_noun = Копіювати
-creating = Створення "{ $name }" в " { $parent }"
-created = Створено "{ $name }" в "{ $parent }"
+creating = Створення "{ $name }" у " { $parent }"
+created = Створено "{ $name }" у "{ $parent }"
 copying =
     Копіювання { $items } { $items ->
         [one] обʼєкта
        *[other] обʼєктів
-    } з "{ $from }" в "{ $to }" ({ $progress })...
+    } з "{ $from }" до "{ $to }" ({ $progress })...
 copied =
     Скопійовано { $items } { $items ->
         [one] обʼєкт
-       *[other] обʼєктів
-    } з "{ $from }" в "{ $to }"
+       *[other] обʼєкти
+    } з "{ $from }" до "{ $to }"
 emptying-trash = Спорожнення { trash } ({ $progress })...
 emptied-trash = Спорожнено { trash }
 moving =
@@ -197,23 +197,17 @@ icon-size = Розмір піктограм
 grid-spacing = Відстань між піктограмами
 trashed-on = У смітнику
 operations-running =
-    Виконується { $running } { $running ->
-        [zero] операцій
+    { $running } { $running ->
         [one] операція
-        [few] операції
-        [many] операцій
-       *[other] операцій
-    } ({ $percent }%)...
+       *[other] операції
+    } виконується ({ $percent }%)...
 operations-running-finished =
-    Виконується { $running } { $running ->
-        [zero] операцій
+    { $running } { $running ->
         [one] операція
-        [few] операції
-        [many] операцій
-       *[other] операцій
-    } ({ $percent }%), з них { $finished } вже виконано...
-pause = Зупинити
-resume = Відновити
+       *[other] операціі
+    } виконується ({ $percent }%), { $finished } завершено...
+pause = Призупинити
+resume = Продовжити
 create-archive = Створити архів
 extract-password-required = Потрібен пароль
 extract-to = Видобути до...
@@ -227,7 +221,7 @@ other-apps = Інші застосунки
 related-apps = Пов'язані застосунки
 permanently-delete-question = Вилучити остаточно
 delete = Вилучити
-permanently-delete-warning = Ви справді бажаєте остаточно видалити { $target }? Це неможливо скасувати.
+permanently-delete-warning = Ви справді бажаєте остаточно вилучити { $target }? Дію неможливо скасувати.
 set-executable-and-launch = Зробити виконуваним та запустити
 set-executable-and-launch-description = Ви справді бажаєте зробити "{ $name }" виконуваним та запустити його?
 set-and-launch = Встановити та запустити
@@ -243,17 +237,17 @@ read-only = Тільки перегляд
 read-execute = Перегляд та виконання
 read-write = Перегляд та запис
 read-write-execute = Перегляд, запис та виконання
-favorite-path-error = Помилка відкриття каталогу
+favorite-path-error = Помилка при відкритті каталогу
 favorite-path-error-description =
     Неможливо відкрити "{ $path }".
-    Можливо його не існує або у вас немає прав, щоб відкрити його.
+    Можливо, він не існує або у вас немає прав на відкриття.
 
-    Бажаєте вилучити його з бічної панелі?
+    Вилучити його з бічної панелі?
 keep = Залишити
 add-network-drive = Додати мережевий диск
 connect = Під'єднати
 connect-anonymously = Під'єднатися анонімно
-connecting = З'єднання...
+connecting = Під’єднання…
 domain = Домен
 enter-server-address = Введіть адресу сервера
 network-drive-description =
@@ -274,18 +268,18 @@ try-again = Спробувати знову
 username = Ім'я користувача
 progress = { $percent }%
 progress-cancelled = { $percent }%, скасовано
-progress-failed = { $percent }%, невдало
+progress-failed = { $percent }%, не вдалося
 progress-paused = { $percent }%, призупинено
 compressing =
     Стиснення { $items } { $items ->
         [one] об'єкта
        *[other] об'єктів
-    } з "{ $from }" в "{ $to }" ({ $progress })...
+    } з "{ $from }" до "{ $to }" ({ $progress })...
 compressed =
     Стиснуто { $items } { $items ->
         [one] об'єкт
-       *[other] об'єктів
-    } з "{ $from }" в "{ $to }"
+       *[other] об'єкти
+    } з "{ $from }" до "{ $to }"
 deleting =
     Видалення { $items } { $items ->
         [one] об'єкта
@@ -294,18 +288,18 @@ deleting =
 deleted =
     Видалено { $items } { $items ->
         [one] об'єкт
-       *[other] об'єктів
+       *[other] об'єкти
     } з { trash }
 extracting =
     Видобування { $items } { $items ->
         [one] об'єкта
        *[other] об'єктів
-    } з "{ $from }" в "{ $to }" ({ $progress })...
+    } з "{ $from }" до "{ $to }" ({ $progress })...
 extracted =
     Видобуто { $items } { $items ->
         [one] об'єкт
-       *[other] об'єктів
-    } з "{ $from }" в "{ $to }"
+       *[other] об'єкти
+    } з "{ $from }" до "{ $to }"
 setting-executable-and-launching = Встановлення "{ $name }" як виконуваного та запуск
 set-executable-and-launched = Встановлено "{ $name }" як виконуваний та запущено
 selected-items = { $items } обраних елементів
