@@ -214,17 +214,17 @@ extract-to = Видобути до...
 extract-to-title = Видобути до теки
 mount-error = Неможливо отримати доступ до диска
 create = Створити
-open-item-location = Відкрити розташування об'єкта
+open-item-location = Відкрити розташування елемента
 open-with-title = Як ви бажаєте відкрити "{ $name }"?
 browse-store = Переглянути { $store }
 other-apps = Інші застосунки
 related-apps = Пов'язані застосунки
 permanently-delete-question = Вилучити остаточно
 delete = Вилучити
-permanently-delete-warning = Ви справді бажаєте остаточно вилучити { $target }? Дію неможливо скасувати.
-set-executable-and-launch = Зробити виконуваним та запустити
-set-executable-and-launch-description = Ви справді бажаєте зробити "{ $name }" виконуваним та запустити його?
-set-and-launch = Встановити та запустити
+permanently-delete-warning = Ви впевнені, що хочете остаточно вилучити { $target }? Дію неможливо скасувати.
+set-executable-and-launch = Зробити виконуваним і запустити
+set-executable-and-launch-description = Бажаєте встановити "{ $name }" виконуваним та запустити його?
+set-and-launch = Встановити і запустити
 open-with = Відкрити за допомогою
 owner = Власник
 group = Група
@@ -272,33 +272,33 @@ progress-failed = { $percent }%, не вдалося
 progress-paused = { $percent }%, призупинено
 compressing =
     Стиснення { $items } { $items ->
-        [one] об'єкта
-       *[other] об'єктів
+        [one] елемента
+       *[other] елементів
     } з "{ $from }" до "{ $to }" ({ $progress })...
 compressed =
     Стиснуто { $items } { $items ->
-        [one] об'єкт
-       *[other] об'єкти
+        [one] елемент
+       *[other] елементи
     } з "{ $from }" до "{ $to }"
 deleting =
     Видалення { $items } { $items ->
-        [one] об'єкта
-       *[other] об'єктів
+        [one] елемента
+       *[other] елементів
     } з { trash } ({ $progress })...
 deleted =
     Видалено { $items } { $items ->
-        [one] об'єкт
-       *[other] об'єкти
+        [one] елемент
+       *[other] елементи
     } з { trash }
 extracting =
     Видобування { $items } { $items ->
-        [one] об'єкта
-       *[other] об'єктів
+        [one] елемента
+       *[other] елементів
     } з "{ $from }" до "{ $to }" ({ $progress })...
 extracted =
     Видобуто { $items } { $items ->
-        [one] об'єкт
-       *[other] об'єкти
+        [one] елемент
+       *[other] елементи
     } з "{ $from }" до "{ $to }"
 setting-executable-and-launching = Встановлення "{ $name }" виконуваним і запуск
 set-executable-and-launched = Встановлено "{ $name }" виконуваним та запущено
@@ -307,7 +307,7 @@ setting-permissions = Встановлення дозволів { $mode } для
 set-permissions = Встановлено дозволи { $mode } для "{ $name }"
 show-details = Показати деталі
 type = Тип: { $mime }
-items = Об'єктів: { $items }
+items = Елементів: { $items }
 item-size = Розмір: { $size }
 item-created = Створено: { $created }
 item-modified = Змінено: { $modified }
@@ -337,21 +337,21 @@ sort-smallest-to-largest = Від найменшого до найбільшог
 sort-largest-to-smallest = Від найбільшого до найменшого
 permanently-deleting =
     Остаточне вилучення { $items } { $items ->
-        [one] об'єкта
-       *[other] об'єктів
+        [one] елемента
+       *[other] елементів
     }
 permanently-deleted =
     Остаточно вилучено { $items } { $items ->
-        [one] об'єкт
-       *[other] об'єкти
+        [one] елемент
+       *[other] елементи
     }
 removing-from-recents =
     Вилучення { $items } { $items ->
-        [one] об'єкта
-       *[other] об'єктів
+        [one] елемента
+       *[other] елементів
     } з { recents }
 removed-from-recents =
     Вилучено { $items } { $items ->
-        [one] об'єкт
-       *[other] об'єкти
+        [one] елемент
+       *[other] елементи
     } з { recents }
