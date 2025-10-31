@@ -301,7 +301,7 @@ extracted =
        *[other] елементи
     } з "{ $from }" до "{ $to }"
 setting-executable-and-launching = Встановлення "{ $name }" виконуваним і запуск
-set-executable-and-launched = Встановлено "{ $name }" виконуваним та запущено
+set-executable-and-launched = Встановлено "{ $name }" виконуваним і запущено
 selected-items = { $items } обраних елементів
 setting-permissions = Встановлення дозволів { $mode } для "{ $name }"
 set-permissions = Встановлено дозволи { $mode } для "{ $name }"
