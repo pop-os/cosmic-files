@@ -211,7 +211,7 @@ show-details = विवरण दिखाएँ
 
 ## Settings
 
-settings = सेटिंग्स
+settings = सेटिंग
 
 ### Appearance
 
