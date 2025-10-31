@@ -70,7 +70,7 @@ file-name = Nome do arquivo
 folder-name = Nome da pasta
 file-already-exists = Já existe um arquivo com esse nome.
 folder-already-exists = Já existe uma pasta com esse nome.
-name-hidden = Os nomes que começam com “.” serão ocultados.
+name-hidden = Os nomes que começam com "." serão ocultados.
 name-invalid = O nome não pode ser "{ $filename }".
 name-no-slashes = O nome não pode conter barras.
 
@@ -113,7 +113,7 @@ rename-folder = Renomear pasta
 replace = Substituir
 replace-title = "{ $filename }" já existe neste local.
 replace-warning = Deseja substituí-lo por aquele que está salvando? Ao substituí-lo, seu conteúdo será sobrescrito.
-replace-warning-operation = Deseja substituir o arquivo? Substituí-lo irá sobrescrever seu conteúdo.
+replace-warning-operation = Deseja substituí-lo? Ao substituí-lo, seu conteúdo será sobrescrito.
 original-file = Arquivo original
 replace-with = Substituir por
 apply-to-all = Aplicar a todos
