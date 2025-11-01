@@ -1544,6 +1544,7 @@ pub enum Message {
     DoubleClick(Option<usize>),
     ClickRelease(Option<usize>),
     Config(TabConfig),
+    ThumbConfig(ThumbCfg),
     ContextAction(Action),
     ContextMenu(Option<Point>, Option<window::Id>),
     LocationContextMenuPoint(Option<Point>),
@@ -3184,6 +3185,27 @@ impl Tab {
                     for item in items.iter_mut() {
                         item.highlighted = false;
                     }
+                }
+            }
+            Message::ThumbConfig(thumb_config) => {
+                let thumbnail_mode_changed =
+                    self.thumb_config.thumbnail_mode != thumb_config.thumbnail_mode;
+                self.thumb_config = thumb_config;
+                if thumbnail_mode_changed {
+                    // Reloads the tab if thumbnail mode was changed, so that when thumbnails are
+                    // disabled the tab immediately updates to hide them.
+                    let selected_paths = self
+                        .selected_locations()
+                        .into_iter()
+                        .filter_map(Location::into_path_opt)
+                        .collect();
+                    let location = self.location.clone();
+                    self.change_location(&location, None);
+                    commands.push(Command::ChangeLocation(
+                        self.title(),
+                        location,
+                        Some(selected_paths),
+                    ));
                 }
             }
             Message::ContextAction(action) => {

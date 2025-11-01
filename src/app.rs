@@ -1419,11 +1419,17 @@ impl App {
         let tabs: Box<[_]> = self.tab_model.iter().collect();
         // Update main conf and each tab with the new config
         let commands = std::iter::once(cosmic::command::set_theme(self.config.app_theme.theme()))
-            .chain(tabs.into_iter().map(|entity| {
-                self.update(Message::TabMessage(
-                    Some(entity),
-                    tab::Message::Config(self.config.tab),
-                ))
+            .chain(tabs.into_iter().flat_map(|entity| {
+                [
+                    self.update(Message::TabMessage(
+                        Some(entity),
+                        tab::Message::Config(self.config.tab),
+                    )),
+                    self.update(Message::TabMessage(
+                        Some(entity),
+                        tab::Message::ThumbConfig(self.config.thumb_cfg),
+                    )),
+                ]
             }));
         Task::batch(commands)
     }
