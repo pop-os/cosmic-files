@@ -72,7 +72,7 @@ use crate::{
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{
         AppTheme, Config, DesktopConfig, Favorite, IconSizes, TIME_CONFIG_ID, TabConfig,
-        TimeConfig, TypeToSearch,
+        ThumbnailMode, TimeConfig, TypeToSearch,
     },
     dialog::{Dialog, DialogKind, DialogMessage, DialogResult},
     fl, home_dir,
@@ -404,6 +404,7 @@ pub enum Message {
     SearchClear,
     SearchInput(String),
     SetShowDetails(bool),
+    SetThumbnailMode(ThumbnailMode),
     SetTypeToSearch(TypeToSearch),
     SystemThemeModeChange,
     Size(window::Id, Size),
@@ -1951,6 +1952,36 @@ impl App {
                     Some(self.config.type_to_search),
                     Message::SetTypeToSearch,
                 ))
+                .into(),
+            widget::settings::section()
+                .title(fl!("thumbnail-mode"))
+                .add(widget::settings::item_row(vec![
+                    widget::radio(
+                        widget::text::body(fl!("thumbnail-mode-local")),
+                        ThumbnailMode::Local,
+                        Some(self.config.thumb_cfg.thumbnail_mode),
+                        Message::SetThumbnailMode,
+                    )
+                    .into(),
+                ]))
+                .add(widget::settings::item_row(vec![
+                    widget::radio(
+                        widget::text::body(fl!("thumbnail-mode-all")),
+                        ThumbnailMode::All,
+                        Some(self.config.thumb_cfg.thumbnail_mode),
+                        Message::SetThumbnailMode,
+                    )
+                    .into(),
+                ]))
+                .add(widget::settings::item_row(vec![
+                    widget::radio(
+                        widget::text::body(fl!("thumbnail-mode-never")),
+                        ThumbnailMode::Never,
+                        Some(self.config.thumb_cfg.thumbnail_mode),
+                        Message::SetThumbnailMode,
+                    )
+                    .into(),
+                ]))
                 .into(),
             widget::settings::section()
                 .title(fl!("other"))
@@ -3726,6 +3757,12 @@ impl Application for App {
             }
             Message::SetShowDetails(show_details) => {
                 config_set!(show_details, show_details);
+                return self.update_config();
+            }
+            Message::SetThumbnailMode(thumbnail_mode) => {
+                let mut new_thumb_cfg = self.config.thumb_cfg.clone();
+                new_thumb_cfg.thumbnail_mode = thumbnail_mode;
+                config_set!(thumb_cfg, new_thumb_cfg);
                 return self.update_config();
             }
             Message::SetTypeToSearch(type_to_search) => {
