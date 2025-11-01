@@ -11,7 +11,7 @@ use super::{Mounter, MounterAuth, MounterItem, MounterItems, MounterMessage};
 use crate::{
     config::IconSizes,
     err_str,
-    tab::{self, DirSize, ItemMetadata, ItemThumbnail, Location},
+    tab::{self, DirSize, ItemLocation, ItemMetadata, Location},
 };
 
 const TARGET_URI_ATTRIBUTE: &str = "standard::target-uri";
@@ -166,7 +166,8 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
             icon_handle_grid,
             icon_handle_list,
             icon_handle_list_condensed,
-            thumbnail_opt: Some(ItemThumbnail::NotImage),
+            thumbnail_opt: None,
+            item_location: ItemLocation::Remote,
             button_id: widget::Id::unique(),
             pos_opt: Cell::new(None),
             rect_opt: Cell::new(None),
