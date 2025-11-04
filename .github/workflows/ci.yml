@@ -15,8 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update; sudo apt-get install desktop-file-utils libclang-dev libglib2.0-dev libxkbcommon-dev
-      # Disable until GitHub Actions uses Ubuntu 26.04.
-      # - run: desktop-file-validate --no-hints ./res/com.system76.CosmicFiles.desktop
+      - run: sudo apt-get update; sudo apt-get install libclang-dev libglib2.0-dev libxkbcommon-dev
       - run: rustup update stable && rustup default stable
       - run: cargo test --verbose
