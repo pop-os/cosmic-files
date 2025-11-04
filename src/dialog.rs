@@ -1004,24 +1004,22 @@ impl Application for App {
 
         match &self.context_page {
             ContextPage::Preview(_, kind) => {
-                let mut actions = Vec::with_capacity(3);
-                if let Some(items) = self.tab.items_opt() {
-                    for item in items {
-                        if item.selected {
-                            actions.extend(
-                                item.preview_header()
-                                    .into_iter()
-                                    .map(|element| element.map(Message::TabMessage)),
-                            );
-                        }
-                    }
-                }
+                let actions = self
+                    .tab
+                    .items_opt()
+                    .and_then(|items| {
+                        items
+                            .iter()
+                            .find(|item| item.selected)
+                            .map(|item| item.preview_actions().map(Message::TabMessage))
+                    })
+                    .unwrap_or_else(|| widget::horizontal_space().into());
                 Some(
                     context_drawer::context_drawer(
                         self.preview(kind).map(Message::TabMessage),
                         Message::Preview,
                     )
-                    .header_actions(actions),
+                    .actions(actions),
                 )
             }
             _ => None,
