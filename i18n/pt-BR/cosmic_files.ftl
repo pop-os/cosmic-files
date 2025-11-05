@@ -2,7 +2,7 @@ cosmic-files = Gestor de Arquivos COSMIC
 empty-folder = Pasta vazia
 empty-folder-hidden = Pasta vazia (contém itens ocultos)
 no-results = Nenhum item encontrado
-filesystem = Sistema de Arquivos
+filesystem = Sistema de arquivos
 home = Pasta pessoal
 networks = Redes
 notification-in-progress = Há operações de arquivo em andamento.
@@ -12,7 +12,7 @@ undo = Desfazer
 today = Hoje
 # Desktop view options
 desktop-view-options = Opções de visualização da área de trabalho...
-show-on-desktop = Mostrar na área de trabalho
+show-on-desktop = Mostrar na Área de trabalho
 desktop-folder-content = Conteúdo da pasta da área de trabalho
 mounted-drives = Dispositivos montados
 trash-folder-icon = Ícone da lixeira
@@ -21,7 +21,7 @@ icon-size = Tamanho do ícone
 grid-spacing = Espaçamento entre ícones
 # List view
 name = Nome
-modified = Modificação
+modified = Modificado
 trashed-on = Enviado à lixeira
 size = Tamanho
 # Progress footer
@@ -56,11 +56,11 @@ extract-to-title = Extrair para pasta
 ## Empty Trash Dialog
 
 empty-trash = Esvaziar a lixeira
-empty-trash-warning = Tem certeza de que deseja apagar permanentemente todos os itens da lixeira?
+empty-trash-warning = Tem certeza de que deseja excluir permanentemente todos os itens da lixeira?
 
 ## Mount Error Dialog
 
-mount-error = Não foi possível acessar o dispositivo
+mount-error = Não é possível acessar a unidade
 
 ## New File/Folder Dialog
 
@@ -68,16 +68,16 @@ create-new-file = Criar novo arquivo
 create-new-folder = Criar nova pasta
 file-name = Nome do arquivo
 folder-name = Nome da pasta
-file-already-exists = Já existe um arquivo com este nome.
-folder-already-exists = Já existe uma pasta com este nome.
-name-hidden = Nomes iniciando com "." serão ocultados.
+file-already-exists = Já existe um arquivo com esse nome.
+folder-already-exists = Já existe uma pasta com esse nome.
+name-hidden = Os nomes que começam com "." serão ocultados.
 name-invalid = O nome não pode ser "{ $filename }".
 name-no-slashes = O nome não pode conter barras.
 
 ## Open/Save Dialog
 
 cancel = Cancelar
-create = Confirmar
+create = Criar
 open = Abrir
 open-file = Abrir arquivo
 open-folder = Abrir pasta
@@ -112,8 +112,8 @@ rename-folder = Renomear pasta
 
 replace = Substituir
 replace-title = "{ $filename }" já existe neste local.
-replace-warning = Deseja substituir o arquivo com o que você está salvando? Substituí-lo irá sobrescrever seu conteúdo.
-replace-warning-operation = Deseja substituir o arquivo? Substituí-lo irá sobrescrever seu conteúdo.
+replace-warning = Deseja substituí-lo por aquele que está salvando? Ao substituí-lo, seu conteúdo será sobrescrito.
+replace-warning-operation = Deseja substituí-lo? Ao substituí-lo, seu conteúdo será sobrescrito.
 original-file = Arquivo original
 replace-with = Substituir por
 apply-to-all = Aplicar a todos
@@ -122,8 +122,8 @@ skip = Ignorar
 
 ## Set as Executable and Launch Dialog
 
-set-executable-and-launch = Marcar como executável e iniciar
-set-executable-and-launch-description = Deseja marcar "{ $name }" como executável e iniciá-lo?
+set-executable-and-launch = Definir como executável e iniciar
+set-executable-and-launch-description = Deseja definir "{ $name }" como executável e iniciá-lo?
 set-and-launch = Marcar e iniciar
 
 ## Metadata Dialog

@@ -184,11 +184,14 @@ deleting =
     } z { trash } ({ $progress })...
 sort-by-trashed = Seřadit podle času smazání
 deleted =
-    { $items } { $items ->
-        [one] položka smazána
-        [few] položky smazány
-        [many] položek smazáno
-       *[other] položek smazáno
+    { $items ->
+        [one] Smazána
+        [few] Smazány
+       *[other] Smazáno
+    } { $items } { $items ->
+        [one] položka
+        [few] položky
+       *[other] položek
     } z { trash }
 emptying-trash = Vysypávám { trash } ({ $progress })...
 emptied-trash = { trash } byl vysypán
@@ -198,18 +201,24 @@ restoring =
        *[other] položek
     } z { trash } ({ $progress })...
 restored =
-    { $items } { $items ->
-        [one] položka obnovena
-        [few] položky obnoveny
-        [many] položek obnoveno
-       *[other] položek obnoveno
+    { $items ->
+        [one] Obnovena
+        [few] Obnoveny
+       *[other] Obnoveno
+    } { $items } { $items ->
+        [one] položka
+        [few] položky
+       *[other] položek
     } z { trash }
 permanently-deleted =
-    { $items } { $items ->
-        [one] položka trvale smazána
-        [few] položky trvale smazány
-        [many] položek trvale smazáno
-       *[other] položek trvale smazáno
+    Trvale { $items ->
+        [one] smazána
+        [few] smazány
+       *[other] smazáno
+    } { $items } { $items ->
+        [one] položka
+        [few] položky
+       *[other] položek
     }
 delete-permanently = Smazat trvale
 trashed-on = Smazáno
@@ -218,19 +227,16 @@ operations-running =
     Běží { $running } { $running ->
         [one] operace
         [few] operace
-        [many] operací
        *[other] operací
     } ({ $percent }%)...
 operations-running-finished =
     Běží { $running } { $running ->
         [one] operace
         [few] operace
-        [many] operací
        *[other] operací
     } ({ $percent }%), { $finished } { $finished ->
         [one] dokončena...
         [few] dokončeny...
-        [many] dokončeno...
        *[other] dokončeno...
     }
 apply-to-all = Použít na vše
@@ -274,11 +280,14 @@ compressing =
        *[other] položek
     } z "{ $from }" do "{ $to }" ({ $progress })...
 compressed =
-    { $items } { $items ->
-        [one] položka zkomprimována
-        [few] položky zkomprimovány
-        [many] položek zkomprimováno
-       *[other] položek zkomprimováno
+    { $items ->
+        [one] Zkomprimována
+        [few] Zkomprimovány
+       *[other] Zkomprimováno
+    } { $items } { $items ->
+        [one] položka
+        [few] položky
+       *[other] položek
     } z "{ $from }" do "{ $to }"
 creating = Vytváření "{ $name }" v "{ $parent }"
 created = Vytvořen "{ $name }" v "{ $parent }"
@@ -288,11 +297,14 @@ copying =
        *[other] položek
     } z "{ $from }" do "{ $to }" ({ $progress })...
 copied =
-    { $items } { $items ->
-        [one] položka zkopírována
-        [few] položky zkopírovány
-        [many] položek zkopírováno
-       *[other] položek zkopírováno
+    { $items ->
+        [one] Zkopírována
+        [few] Zkopírovány
+       *[other] Zkopírováno
+    } { $items } { $items ->
+        [one] položka
+        [few] položky
+       *[other] položek
     } z "{ $from }" do "{ $to }"
 extracting =
     Extrahování { $items } { $items ->
@@ -310,11 +322,14 @@ read-write-execute = Čtení, zápis a spouštění
 read-write = Čtení a zápis
 favorite-path-error = Chyba otevírání složky
 extracted =
-    { $items } { $items ->
-        [one] položka extrahována
-        [few] položky extrahovány
-        [many] položek extrahováno
-       *[other] položek extrahováno
+    { $items ->
+        [one] Extrahována
+        [few] Extrahovány
+       *[other] Extrahováno
+    } { $items } { $items ->
+        [one] položka
+        [few] položky
+       *[other] položek
     } z "{ $from }" do "{ $to }"
 setting-executable-and-launching = Nastavování "{ $name }" jako spustitelného souboru a spouštění
 set-executable-and-launched = "{ $name }" nastaven jako spustitelný soubor a spuštěn
@@ -326,11 +341,14 @@ moving =
        *[other] položek
     } z "{ $from }" do "{ $to }" ({ $progress })...
 moved =
-    { $items } { $items ->
-        [one] položka přesunuta
-        [few] položky přesunuty
-        [many] položek přesunuto
-       *[other] položek přesunuto
+    { $items ->
+        [one] Přesunuta
+        [few] Přesunuty
+       *[other] Přesunuto
+    } { $items } { $items ->
+        [one] položka
+        [few] položky
+       *[other] položek
     } z "{ $from }" do "{ $to }"
 permanently-deleting =
     Trvalé mazání { $items } { $items ->
@@ -343,11 +361,14 @@ removing-from-recents =
        *[other] položek
     } z { recents }
 removed-from-recents =
-    { $items } { $items ->
-        [one] položka odstraněna
-        [few] položky odstraněny
-        [many] položek odstraněno
-       *[other] položek odstraněno
+    { $items ->
+        [one] Odstraněna
+        [few] Odstraněny
+       *[other] Odstraněno
+    } { $items } { $items ->
+        [one] položka
+        [few] položky
+       *[other] položek
     } z { recents }
 remove-from-recents = Odstranit z nedávných
 renaming = Přejmenování "{ $from }" na "{ $to }"
