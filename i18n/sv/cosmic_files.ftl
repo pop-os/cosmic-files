@@ -5,7 +5,7 @@ no-results = Inga resultat hittades
 filesystem = Filsystem
 home = Hem
 networks = Nätverk
-notification-in-progress = Filoperationer pågår.
+notification-in-progress = Filåtgärder pågår.
 trash = Papperskorg
 recents = Senaste
 undo = Ångra
@@ -47,7 +47,7 @@ folder-name = Mappnamn
 file-already-exists = En fil med det namnet finns redan.
 folder-already-exists = En mapp med det namnet finns redan.
 name-hidden = Namn som börjar med "." kommer att vara dolda.
-name-invalid = Namnet kan inte vara "{ $filename }".
+name-invalid = Namnet får inte vara "{ $filename }".
 name-no-slashes = Namnet får inte innehålla snedstreck.
 
 ## Öppna/Spara dialogruta
@@ -77,9 +77,9 @@ rename-folder = Byt namn på mapp
 
 ## Ersätt dialogruta
 
-replace = Ersätt
-replace-title = "{ $filename }" existerar redan på den här platsen.
-replace-warning = Vill du ersätta den med den du sparar? Om du ersätter den kommer dess innehåll att skrivas över.
+replace = Byt ut
+replace-title = "{ $filename }" finns redan på den här platsen.
+replace-warning = Vill du ersätta filen med den du sparar? Om du ersätter den kommer dess innehåll att skrivas över.
 replace-warning-operation = Vill du ersätta den? Om du ersätter den kommer dess innehåll att skrivas över.
 original-file = Originalfil
 replace-with = Ersätt med
@@ -109,15 +109,15 @@ details = Detaljer
 dismiss = Avfärda meddelande
 operations-running =
     { $running } { $running ->
-        [one] operation
-       *[other] operationer
+        [one] åtgärd
+       *[other] åtgärder
     } kör ({ $percent }%)...
 operations-running-finished =
     { $running } { $running ->
-        [one] operation
-       *[other] operationer
+        [one] åtgärd
+       *[other] åtgärder
     } kör ({ $percent }%), { $finished } slutförda...
-pause = Paus
+pause = Pausa
 resume = Återuppta
 
 # Kontextsidor
@@ -168,15 +168,15 @@ failed = Misslyckad
 complete = Färdig
 compressing =
     Komprimerar { $items } { $items ->
-        [one] item
-       *[other] items
-    } from "{ $from }" to "{ $to }" ({ $progress })...
+        [one] objekt
+       *[other] objekt
+    } från "{ $from }" till "{ $to }" ({ $progress })...
 compressed =
     Komprimerade { $items } { $items ->
-        [one] item
-       *[other] items
-    } from "{ $from }" to "{ $to }"
-copy_noun = Koperia
+        [one] objekt
+       *[other] objekt
+    } från "{ $from }" till "{ $to }"
+copy_noun = Kopiera
 creating = Skapar "{ $name }" i "{ $parent }"
 created = Skapade "{ $name }" i "{ $parent }"
 copying =
@@ -202,7 +202,7 @@ extracted =
        *[other] flera objekt
     } från "{ $from }" till "{ $to }"
 setting-executable-and-launching = Gör "{ $name }" körbar och startar
-set-executable-and-launched = Gör "{ $name }" körbar och startar
+set-executable-and-launched = Gjorde "{ $name }" körbar och startade
 moving =
     Flyttar { $items } { $items ->
         [one] objekt
@@ -213,8 +213,8 @@ moved =
         [one] objekt
        *[other] flera objekt
     } från "{ $from }" till "{ $to }"
-renaming = Byter namn "{ $from }" till "{ $to }"
-renamed = Bytt namn "{ $from }" till "{ $to }"
+renaming = Byter namn på "{ $from }" till "{ $to }"
+renamed = Bytt namn på "{ $from }" till "{ $to }"
 restoring =
     Återställer { $items } { $items ->
         [one] objekt
@@ -256,8 +256,8 @@ single-click = Ett enkelklick för att öppna
 appearance = Utseende
 theme = Tema
 match-desktop = Matcha skrivbordet
-dark = Mörk
-light = Ljus
+dark = Mörkt
+light = Ljust
 
 ### Skriv för att söka
 
@@ -316,14 +316,14 @@ list-view = Listvy
 show-hidden-files = Visa dolda filer
 list-directories-first = Lista mappar först
 gallery-preview = Galleri förhandsvisning
-menu-settings = Inställningar...
+menu-settings = Inställningar…
 menu-about = Om COSMIC Filer...
 
 ## Sortera
 
 sort = Sortera
-sort-a-z = A-Z
-sort-z-a = Z-A
+sort-a-z = A-Ö
+sort-z-a = Ö-A
 sort-newest-first = Nyaste först
 sort-oldest-first = Äldst först
 sort-smallest-to-largest = Minsta till största
@@ -362,7 +362,7 @@ deleting =
        *[other] objekt
     } från { trash } ({ $progress })...
 deleted =
-    Raderade { $items } { $items ->
+    Borttagna { $items } { $items ->
         [one] objekt
        *[other] objekt
     } från { trash }
@@ -374,10 +374,10 @@ permanently-deleting =
        *[other] objekt
     } permanent
 permanently-deleted =
-    Raderade { $items } { $items ->
+    Permanent borttagna { $items } { $items ->
         [one] objekt
        *[other] objekt
-    } permanent
+    }
 removing-from-recents =
     Tar bort { $items } { $items ->
         [one] objekt
@@ -388,7 +388,7 @@ removed-from-recents =
         [one] objekt
        *[other] objekt
     } från { recents }
-delete-permanently = Radera permanent
+delete-permanently = Ta bort permanent
 eject = Mata ut
 remove-from-recents = Ta bort från senaste
 reload-folder = Ladda om mapp

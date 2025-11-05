@@ -4732,26 +4732,26 @@ impl Application for App {
                 ]))
             }
             ContextPage::Preview(entity_opt, kind) => {
-                let mut actions = Vec::with_capacity(3);
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
-                if let Some(tab) = self.tab_model.data::<Tab>(entity) {
-                    if let Some(items) = tab.items_opt() {
-                        for item in items {
-                            if item.selected {
-                                actions.extend(item.preview_header().into_iter().map(|element| {
-                                    element.map(move |x| Message::TabMessage(Some(entity), x))
-                                }));
-                                break;
-                            }
-                        }
-                    }
-                }
+                let actions = self
+                    .tab_model
+                    .data::<Tab>(entity)
+                    .and_then(|tab| {
+                        tab.items_opt()?
+                            .iter()
+                            .find(|item| item.selected)
+                            .map(|item| {
+                                item.preview_actions()
+                                    .map(move |x| Message::TabMessage(Some(entity), x))
+                            })
+                    })
+                    .unwrap_or_else(|| widget::horizontal_space().into());
                 context_drawer::context_drawer(
                     self.preview(entity_opt, kind, true)
                         .map(move |x| Message::TabMessage(Some(entity), x)),
                     Message::ToggleContextPage(ContextPage::Preview(Some(entity), kind.clone())),
                 )
-                .header_actions(actions)
+                .actions(actions)
             }
             ContextPage::Settings => context_drawer::context_drawer(
                 self.settings(),

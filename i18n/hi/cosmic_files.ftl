@@ -211,7 +211,7 @@ show-details = विवरण दिखाएँ
 
 ## Settings
 
-settings = सेटिंग्स
+settings = सेटिंग
 
 ### Appearance
 
@@ -283,5 +283,5 @@ sort-newest-first = नए से पुराने
 sort-oldest-first = पुराने से नए
 sort-smallest-to-largest = छोटे से बड़े
 sort-largest-to-smallest = बड़े से छोटे
-repository = रिपाॅज़िटरी
+repository = रिपॉजिटरी
 support = सहायता

@@ -2094,28 +2094,27 @@ impl Item {
         }
     }
 
-    pub fn preview_header(&self) -> Vec<Element<'_, Message>> {
-        let mut row = Vec::with_capacity(3);
-        row.push(
-            widget::button::icon(widget::icon::from_name("go-previous-symbolic"))
-                .on_press(Message::ItemLeft)
-                .into(),
-        );
-        row.push(
-            widget::button::icon(widget::icon::from_name("go-next-symbolic"))
-                .on_press(Message::ItemRight)
-                .into(),
-        );
+    pub fn preview_actions(&self) -> Element<'_, Message> {
+        let mut row = widget::row::with_capacity(3)
+            .align_y(Alignment::Center)
+            .spacing(theme::spacing().space_xxs)
+            .push(
+                widget::button::icon(widget::icon::from_name("go-previous-symbolic"))
+                    .on_press(Message::ItemLeft),
+            )
+            .push(
+                widget::button::icon(widget::icon::from_name("go-next-symbolic"))
+                    .on_press(Message::ItemRight),
+            );
         if self.can_gallery() {
             if let Some(_path) = self.path_opt() {
-                row.push(
+                row = row.push(
                     widget::button::icon(widget::icon::from_name("view-fullscreen-symbolic"))
-                        .on_press(Message::Gallery(true))
-                        .into(),
+                        .on_press(Message::Gallery(true)),
                 );
             }
         }
-        row
+        row.into()
     }
 
     pub fn preview_view<'a>(
