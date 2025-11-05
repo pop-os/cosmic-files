@@ -123,13 +123,21 @@ impl ThumbnailerCache {
                 }
             };
 
+            let Some(section) = entry.section("Thumbnailer Entry") else {
+                log::warn!(
+                    "missing Thumbnailer Entry section for thumbnailer {}",
+                    path.display()
+                );
+                continue;
+            };
+
             //TODO: use TryExec?
-            let section = entry.section("Thumbnailer Entry");
-            let Some(exec) = section.attr("Exec") else {
+            let Some(exec) = section.attr("Exec").first() else {
                 log::warn!("missing Exec attribute for thumbnailer {}", path.display());
                 continue;
             };
-            let Some(mime_types) = section.attr("MimeType") else {
+
+            let Some(mime_types) = section.attr("MimeType").first() else {
                 log::warn!(
                     "missing MimeType attribute for thumbnailer {}",
                     path.display()
@@ -140,13 +148,8 @@ impl ThumbnailerCache {
             for mime_type in mime_types.split_terminator(';') {
                 if let Ok(mime) = mime_type.parse::<Mime>() {
                     log::trace!("thumbnailer {}={}", mime, path.display());
-                    let apps = self
-                        .cache
-                        .entry(mime)
-                        .or_insert_with(|| Vec::with_capacity(1));
-                    apps.push(Thumbnailer {
-                        exec: exec.to_string(),
-                    });
+                    let apps = self.cache.entry(mime).or_default();
+                    apps.push(Thumbnailer { exec: exec.clone() });
                 }
             }
         }
