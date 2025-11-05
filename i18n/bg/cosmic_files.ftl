@@ -110,7 +110,7 @@ rename-folder = Преименуване на папката
 
 ## Replace Dialog
 
-replace = Замяна
+replace = Заменяне
 replace-title = „{ $filename }“ вече съществува на това местоположение.
 replace-warning = Искате ли да го замените с този, който запазвате? Ако го замените, ще презапишете съдържанието му.
 replace-warning-operation = Искате ли да го замените? Ако го замените, ще презапишете съдържанието му.
@@ -342,7 +342,7 @@ single-click = Отваряне с едно натискане
 ### Appearance
 
 appearance = Външен вид
-theme = Стил
+theme = Тема
 match-desktop = Системен
 dark = Тъмен
 light = Светъл

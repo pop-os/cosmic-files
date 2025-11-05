@@ -74,7 +74,7 @@ history = Історія
 no-history = Немає елементів у історії.
 pending = В очікуванні
 failed = Не вдалося
-complete = Завершено
+complete = Завершити
 copy_noun = Копіювати
 creating = Створення "{ $name }" у " { $parent }"
 created = Створено "{ $name }" у "{ $parent }"
@@ -94,12 +94,12 @@ moving =
     Переміщення { $items } { $items ->
         [one] обʼєкта
        *[other] обʼєктів
-    } з { $from } в "{ $to }" ({ $progress })...
+    } з { $from } до "{ $to }" ({ $progress })...
 moved =
     Переміщено { $items } { $items ->
         [one] обʼєкт
        *[other] обʼєкти
-    } з "{ $from }" в "{ $to }"
+    } з "{ $from }" до "{ $to }"
 renaming = Перейменування "{ $from }" на "{ $to }"
 renamed = Перейменовано "{ $from }" на "{ $to }"
 restoring =
@@ -181,7 +181,7 @@ repository = Репозиторій
 support = Підтримка
 details = Деталі
 dismiss = Закрити повідомлення
-remove = Видалити
+remove = Вилучити
 cancelled = Скасовані
 no-results = Нічого не знайдено
 networks = Мережі
@@ -192,7 +192,7 @@ show-on-desktop = Показувати на стільниці
 desktop-folder-content = Вміст теки Стільниця
 mounted-drives = Змонтовані диски
 trash-folder-icon = Піктограма теки Смітник
-icon-size-and-spacing = Розмір піктограм та відстань між ними
+icon-size-and-spacing = Розмір піктограм і відстань між ними
 icon-size = Розмір піктограм
 grid-spacing = Відстань між піктограмами
 trashed-on = У смітнику
@@ -214,17 +214,17 @@ extract-to = Видобути до...
 extract-to-title = Видобути до теки
 mount-error = Неможливо отримати доступ до диска
 create = Створити
-open-item-location = Відкрити розташування файлу
+open-item-location = Відкрити розташування елемента
 open-with-title = Як ви бажаєте відкрити "{ $name }"?
 browse-store = Переглянути { $store }
 other-apps = Інші застосунки
 related-apps = Пов'язані застосунки
 permanently-delete-question = Вилучити остаточно
 delete = Вилучити
-permanently-delete-warning = Ви справді бажаєте остаточно вилучити { $target }? Дію неможливо скасувати.
-set-executable-and-launch = Зробити виконуваним та запустити
-set-executable-and-launch-description = Ви справді бажаєте зробити "{ $name }" виконуваним та запустити його?
-set-and-launch = Встановити та запустити
+permanently-delete-warning = Ви впевнені, що хочете остаточно вилучити { $target }? Дію неможливо скасувати.
+set-executable-and-launch = Зробити виконуваним і запустити
+set-executable-and-launch-description = Бажаєте зробити "{ $name }" виконуваним і запустити його?
+set-and-launch = Зробити і запустити
 open-with = Відкрити за допомогою
 owner = Власник
 group = Група
@@ -232,17 +232,17 @@ other = Інші
 none = Немає прав
 execute-only = Тільки виконання
 write-only = Тільки запис
-write-execute = Запис та виконання
+write-execute = Запис і виконання
 read-only = Тільки перегляд
-read-execute = Перегляд та виконання
-read-write = Перегляд та запис
-read-write-execute = Перегляд, запис та виконання
+read-execute = Перегляд і виконання
+read-write = Перегляд і запис
+read-write-execute = Перегляд, запис і виконання
 favorite-path-error = Помилка при відкритті каталогу
 favorite-path-error-description =
     Неможливо відкрити "{ $path }".
-    Можливо, він не існує або у вас немає прав на відкриття.
+    Можливо, його не існує або у вас немає прав на відкриття.
 
-    Вилучити його з бічної панелі?
+    Вилучити з бічної панелі?
 keep = Залишити
 add-network-drive = Додати мережевий диск
 connect = Під'єднати
@@ -272,51 +272,51 @@ progress-failed = { $percent }%, не вдалося
 progress-paused = { $percent }%, призупинено
 compressing =
     Стиснення { $items } { $items ->
-        [one] об'єкта
-       *[other] об'єктів
+        [one] елемента
+       *[other] елементів
     } з "{ $from }" до "{ $to }" ({ $progress })...
 compressed =
     Стиснуто { $items } { $items ->
-        [one] об'єкт
-       *[other] об'єкти
+        [one] елемент
+       *[other] елементи
     } з "{ $from }" до "{ $to }"
 deleting =
     Видалення { $items } { $items ->
-        [one] об'єкта
-       *[other] об'єктів
+        [one] елемента
+       *[other] елементів
     } з { trash } ({ $progress })...
 deleted =
     Видалено { $items } { $items ->
-        [one] об'єкт
-       *[other] об'єкти
+        [one] елемент
+       *[other] елементи
     } з { trash }
 extracting =
     Видобування { $items } { $items ->
-        [one] об'єкта
-       *[other] об'єктів
+        [one] елемента
+       *[other] елементів
     } з "{ $from }" до "{ $to }" ({ $progress })...
 extracted =
     Видобуто { $items } { $items ->
-        [one] об'єкт
-       *[other] об'єкти
+        [one] елемент
+       *[other] елементи
     } з "{ $from }" до "{ $to }"
-setting-executable-and-launching = Встановлення "{ $name }" як виконуваного та запуск
-set-executable-and-launched = Встановлено "{ $name }" як виконуваний та запущено
+setting-executable-and-launching = Встановлення "{ $name }" виконуваним і запуск
+set-executable-and-launched = Встановлено "{ $name }" виконуваним і запущено
 selected-items = { $items } обраних елементів
 setting-permissions = Встановлення дозволів { $mode } для "{ $name }"
-set-permissions = Встановити дозволи { $mode } для "{ $name }"
+set-permissions = Встановлено дозволи { $mode } для "{ $name }"
 show-details = Показати деталі
 type = Тип: { $mime }
-items = Об'єктів: { $items }
+items = Елементів: { $items }
 item-size = Розмір: { $size }
 item-created = Створено: { $created }
 item-modified = Змінено: { $modified }
-item-accessed = Останній доступ: { $accessed }
+item-accessed = Доступ: { $accessed }
 calculating = Обчислення...
 single-click = Відкривати одним клацанням
 type-to-search = Введіть для пошуку
-type-to-search-recursive = Шукає поточну теку та усі підтеки
-type-to-search-enter-path = Вводить шлях до теки або файлу
+type-to-search-recursive = Шукає у поточній теці та всіх підтеках
+type-to-search-enter-path = Вводить шлях до каталогу або файлу
 compress = Стиснути
 delete-permanently = Остаточно вилучити
 eject = Безпечно вилучити
@@ -337,21 +337,21 @@ sort-smallest-to-largest = Від найменшого до найбільшог
 sort-largest-to-smallest = Від найбільшого до найменшого
 permanently-deleting =
     Остаточне вилучення { $items } { $items ->
-        [one] об'єкта
-       *[other] об'єктів
+        [one] елемента
+       *[other] елементів
     }
 permanently-deleted =
     Остаточно вилучено { $items } { $items ->
-        [one] об'єкт
-       *[other] об'єкти
+        [one] елемент
+       *[other] елементи
     }
 removing-from-recents =
     Вилучення { $items } { $items ->
-        [one] об'єкта
-       *[other] об'єктів
+        [one] елемента
+       *[other] елементів
     } з { recents }
 removed-from-recents =
     Вилучено { $items } { $items ->
-        [one] об'єкт
-       *[other] об'єкти
+        [one] елемент
+       *[other] елементи
     } з { recents }

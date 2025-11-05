@@ -397,3 +397,4 @@ sort-newest-first = Neueste zuerst
 sort-oldest-first = Älteste zuerst
 sort-smallest-to-largest = Kleinste bis größte
 sort-largest-to-smallest = Größte bis kleinste
+repository = Repository
