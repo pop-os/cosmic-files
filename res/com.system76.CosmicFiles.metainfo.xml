@@ -40,6 +40,7 @@
     <p xml:lang="pt">Gerenciador de arquivos do COSMIC</p>
     <p xml:lang="sk">Správca súborov pre prostredie COSMIC</p>
     <p xml:lang="es">Gestor de archivos de COSMIC</p>
+    <p xml:lang="sv">Filhanterare för skrivbordsmiljön COSMIC</p>
   </description>
   <launchable type="desktop-id">com.system76.CosmicFiles.desktop</launchable>
   <icon type="remote" height="256" width="256">https://raw.githubusercontent.com/pop-os/cosmic-files/master/res/icons/hicolor/256x256/apps/com.system76.CosmicFiles.svg</icon>
