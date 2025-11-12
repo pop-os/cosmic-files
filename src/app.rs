@@ -3841,12 +3841,6 @@ impl Application for App {
             Message::TabMessage(entity_opt, tab_message) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
 
-                //TODO: move to Task?
-                if let tab::Message::ContextMenu(_point_opt, _) = tab_message {
-                    // Disable side context page
-                    self.set_show_context(false);
-                }
-
                 let tab_commands = match self.tab_model.data_mut::<Tab>(entity) {
                     Some(tab) => tab.update(tab_message, self.modifiers),
                     _ => Vec::new(),
