@@ -5,7 +5,7 @@ no-results = Inga resultat hittades
 filesystem = Filsystem
 home = Hem
 networks = Nätverk
-notification-in-progress = Filåtgärder pågår.
+notification-in-progress = Filåtgärder pågår
 trash = Papperskorg
 recents = Senaste
 undo = Ångra
@@ -31,8 +31,8 @@ create-archive = Skapa arkiv
 
 ## Töm papperskorgen dialogruta
 
-empty-trash = Töm papperskorgen
-empty-trash-warning = Är du säker på att du vill ta bort alla objekt i papperskorgen permanent?
+empty-trash = Töm papperskorgen?
+empty-trash-warning = Objekt i papperskorgen kommer att tas bort permanent
 
 ## Monteringsfel dialogruta
 
@@ -44,11 +44,11 @@ create-new-file = Skapa ny fil
 create-new-folder = Skapa ny mapp
 file-name = Filnamn
 folder-name = Mappnamn
-file-already-exists = En fil med det namnet finns redan.
-folder-already-exists = En mapp med det namnet finns redan.
-name-hidden = Namn som börjar med "." kommer att vara dolda.
-name-invalid = Namnet får inte vara "{ $filename }".
-name-no-slashes = Namnet får inte innehålla snedstreck.
+file-already-exists = En fil med det namnet finns redan
+folder-already-exists = En mapp med det namnet finns redan
+name-hidden = Namn som börjar med "." kommer att vara dolda
+name-invalid = Namnet får inte vara "{ $filename }"
+name-no-slashes = Namnet får inte innehålla snedstreck
 
 ## Öppna/Spara dialogruta
 
@@ -78,7 +78,7 @@ rename-folder = Byt namn på mapp
 ## Ersätt dialogruta
 
 replace = Byt ut
-replace-title = "{ $filename }" finns redan på den här platsen.
+replace-title = "{ $filename }" finns redan på den här platsen
 replace-warning = Vill du ersätta filen med den du sparar? Om du ersätter den kommer dess innehåll att skrivas över.
 replace-warning-operation = Vill du ersätta den? Om du ersätter den kommer dess innehåll att skrivas över.
 original-file = Originalfil
@@ -337,9 +337,9 @@ extract-to = Packa upp till...
 extract-to-title = Packa upp till mapp
 other-apps = Andra program
 related-apps = Relaterade program
-permanently-delete-question = Ta bort permanent
+permanently-delete-question = Ta bort permanent?
 delete = Ta bort
-permanently-delete-warning = Är du säker att du vill ta bort { $target } permanent? Detta kan inte göras ogjort.
+permanently-delete-warning = { $target } kommer att tas bort permanent. Detta kan inte göras ogjort.
 none = Ingen
 execute-only = Endast exekvera
 write-only = Endast skriva
@@ -350,8 +350,8 @@ read-write = Läsa och skriva
 read-write-execute = Läsa, skriva och exekvera
 favorite-path-error = Fel vid öppning av mapp
 favorite-path-error-description =
-    Kunde inte öppna "{ $path }".
-    Den finns inte eller så har du inte behörighet att öppna den.
+    Kunde inte öppna "{ $path }"
+    "{ $path }" finns kanske inte eller så har du inte behörighet att öppna den
 
     Vill du ta bort den från sidolisten?
 keep = Behåll
