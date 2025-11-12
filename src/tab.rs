@@ -2531,7 +2531,7 @@ fn folder_name<P: AsRef<Path>>(path: P) -> (String, bool) {
 }
 
 // parse .hidden file and return files path
-fn parse_hidden_file(path: &PathBuf) -> Box<[String]> {
+pub fn parse_hidden_file(path: &PathBuf) -> Box<[String]> {
     let Ok(file) = File::open(path) else {
         return Default::default();
     };
