@@ -46,7 +46,7 @@ use icu::{
     },
     locale::preferences::extensions::unicode::keywords::HourCycle,
 };
-use image::ImageDecoder;
+use image::{DynamicImage, ImageDecoder, ImageReader};
 use jxl_oxide::integration::JxlDecoder;
 use mime_guess::{Mime, mime};
 use rustc_hash::FxHashMap;
@@ -1948,10 +1948,9 @@ impl ItemThumbnail {
                 Ok(status) => {
                     if status.success() {
                         match image::ImageReader::open(file.path())
-                            .and_then(image::ImageReader::with_guessed_format)
+                            .and_then(ImageReader::with_guessed_format)
                         {
-                            Ok(reader) => match reader.decode().map(image::DynamicImage::into_rgb8)
-                            {
+                            Ok(reader) => match reader.decode().map(DynamicImage::into_rgba8) {
                                 Ok(image) => {
                                     return Some((
                                         Self::Image(
