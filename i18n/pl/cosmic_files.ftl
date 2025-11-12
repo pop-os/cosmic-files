@@ -5,7 +5,7 @@ no-results = Brak wyników
 filesystem = System plików
 home = Katalog domowy
 networks = Sieci
-notification-in-progress = Operacje na plikach w toku.
+notification-in-progress = Operacje na plikach w toku
 trash = Kosz
 recents = Poprzednie
 undo = Cofnij
@@ -55,8 +55,8 @@ extract-to-title = Wypakuj do katalogu
 
 ## Empty Trash Dialog
 
-empty-trash = Opróżnij kosz
-empty-trash-warning = Czy chcesz bezpowrotnie usunąć zawartość Kosza?
+empty-trash = Opróżnić kosz?
+empty-trash-warning = Elementy z kosza zostaną bezpowrotnie usunięte
 
 ## Mount Error Dialog
 
@@ -66,11 +66,11 @@ create-new-file = Utwórz nowy plik
 create-new-folder = Utwórz nowy katalog
 file-name = Nazwa pliku
 folder-name = Nazwa katalogu
-file-already-exists = Plik z taką nazwą już istnieje.
-folder-already-exists = Katalog z taką nazwą już istnieje.
-name-hidden = Nazwy zaczynające się od „.” będą ukryte.
-name-invalid = Musisz zmienić nazwę na inną z „{ $filename }”.
-name-no-slashes = Nazwa nie może zawierać ukośników.
+file-already-exists = Plik z taką nazwą już istnieje
+folder-already-exists = Katalog z taką nazwą już istnieje
+name-hidden = Nazwy zaczynające się od „.” będą ukryte
+name-invalid = Musisz zmienić nazwę na inną z „{ $filename }”
+name-no-slashes = Nazwa nie może zawierać ukośników
 # Open/Save Dialog
 cancel = Anuluj
 open = Otwórz
@@ -95,15 +95,15 @@ related-apps = Pokrewne aplikacje
 ## Permanently delete Dialog
 
 selected-items = { $items } zaznaczonych elementów
-permanently-delete-question = Usuń definitywnie
+permanently-delete-question = Definitywnie usunąć?
 delete = Usuń
-permanently-delete-warning = Jesteś pewien, że chcesz definitywnie usunąć { $target }? Nie można tego cofnąć.
+permanently-delete-warning = { $target } będzie bezpowrotnie usunięte. Nie będzie można tego przywrócić.
 # Rename Dialog
 rename-file = Zmień nazwę pliku
 rename-folder = Zmień nazwę katalogu
 # Replace Dialog
 replace = Zastąp
-replace-title = „{ $filename }” już istnieje w tym miejscu.
+replace-title = „{ $filename }” już istnieje w tym miejscu
 replace-warning = Czy chcesz by został on zastąpiony przez wybrany element? To nadpisze jego zawartość.
 replace-warning-operation = Czy chcesz by został on zastąpiony? To nadpisze jego zawartość.
 original-file = Oryginalny plik
@@ -161,10 +161,10 @@ read-write-execute = Odczyt, zapis i wykonywanie
 
 favorite-path-error = Błąd podczas otwierania katalogu
 favorite-path-error-description =
-    Nie można otworzyć „{ $path }”.
-    Może on nie istnieć lub możesz nie mieć uprawnień do otwierania go.
+    Nie można otworzyć „{ $path }”
+    Może nie istnieć lub możesz nie mieć uprawnień do jego otwierania
 
-    Czy chcesz usunąć go z bocznego panelu?
+    Czy chcesz go usunąć z panelu bocznego?
 remove = Usuń
 keep = Zachowaj
 

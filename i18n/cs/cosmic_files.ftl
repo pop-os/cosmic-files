@@ -15,8 +15,8 @@ size = Velikost
 
 ## Empty Trash Dialog
 
-empty-trash = Vysypat koš
-empty-trash-warning = Opravdu chcete smazat všechny položky z koše?
+empty-trash = Vysypat koš?
+empty-trash-warning = Položky v koši budou trvale smazány
 
 ## New File/Folder Dialog
 
@@ -24,11 +24,11 @@ create-new-file = Vytvořit nový soubor
 create-new-folder = Vytvořit novou složku
 file-name = Název souboru
 folder-name = Název složky
-file-already-exists = Soubor s daným názvem již existuje.
-folder-already-exists = Složka s daným názvem již existuje.
-name-hidden = Položky s názvem začínajícím na "." budou skryty.
-name-invalid = Název nemůže být "{ $filename }".
-name-no-slashes = Název nesmí obsahovat lomítka.
+file-already-exists = Soubor s daným názvem již existuje
+folder-already-exists = Složka s daným názvem již existuje
+name-hidden = Položky s názvem začínajícím na "." budou skryty
+name-invalid = Název nemůže být "{ $filename }"
+name-no-slashes = Název nesmí obsahovat lomítka
 
 ## Open/Save Dialog
 
@@ -51,7 +51,7 @@ rename-folder = Přejmenovat složku
 ## Replace Dialog
 
 replace = Nahradit
-replace-title = "{ $filename }" již na daném místě existuje.
+replace-title = "{ $filename }" již na daném místě existuje
 replace-warning = Chcete nahradit soubor tím, který ukládáte? Nahrazení přepíše veškerý jeho obsah.
 
 # Context Pages
@@ -134,7 +134,7 @@ no-results = Nenalezeny žádné výsledky
 repository = Repozitář
 support = Podpora
 networks = Sítě
-notification-in-progress = Probíhají operace se soubory.
+notification-in-progress = Probíhají operace se soubory
 undo = Vrátit
 connect = Připojit
 today = Dnes
@@ -161,9 +161,9 @@ open-with-title = Jak chcete otevřít "{ $name }"?
 browse-store = Procházet { $store }
 other-apps = Ostatní aplikace
 related-apps = Související aplikace
-permanently-delete-question = Trvale smazat
+permanently-delete-question = Trvale smazat?
 delete = Smazat
-permanently-delete-warning = Opravdu chcete trvale smazat { $target }? Tuto operaci nelze vrátit.
+permanently-delete-warning = { $target } bude trvale smazán. Tuto operaci nelze vrátit.
 replace-warning-operation = Chcete soubor nahradit? Nahrazení přepíše veškerý jeho obsah.
 original-file = Původní soubor
 replace-with = Nahradit za
@@ -312,8 +312,8 @@ extracting =
        *[other] položek
     } z "{ $from }" do "{ $to }" ({ $progress })...
 favorite-path-error-description =
-    Nelze otevřít "{ $path }".
-    Cesta buď neexistuje nebo nemáte dostatečná práva pro otevření.
+    Nelze otevřít "{ $path }"
+    "{ $path }" buď neexistuje nebo nemáte dostatečná práva pro otevření
 
     Chcete položku odstranit z bočního panelu?
 selected-items = { $items } vybraných položek
