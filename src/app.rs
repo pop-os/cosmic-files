@@ -3765,12 +3765,13 @@ impl Application for App {
             }
             Message::TabNext => {
                 let len = self.tab_model.len();
-                let pos = self
+                let pos = (self
                     .tab_model
                     .position(self.tab_model.active())
                     .expect("should always be at least one tab open")
+                    + 1)
                     // Wraparound to 0 if i + 1 > num of tabs
-                    + 1 % len as u16;
+                    % len as u16;
 
                 let entity = self.tab_model.entity_at(pos);
                 if let Some(entity) = entity {
