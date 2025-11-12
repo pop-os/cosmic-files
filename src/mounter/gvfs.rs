@@ -85,6 +85,18 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
         }
     }
 
+    // Read .hidden file if present
+    let hidden_files: Box<[String]> = if let Some(path) = file.path() {
+        let hidden_file_path = path.join(".hidden");
+        if hidden_file_path.is_file() {
+            tab::parse_hidden_file(&hidden_file_path)
+        } else {
+            Box::from([])
+        }
+    } else {
+        Box::from([])
+    };
+
     let mut items = Vec::new();
     for info_res in file
         .enumerate_children("*", gio::FileQueryInfoFlags::NONE, gio::Cancellable::NONE)
@@ -155,12 +167,17 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
             )
         };
 
+        // Check if item is hidden
+        let hidden = name.starts_with('.')
+            || info.boolean(gio::FILE_ATTRIBUTE_STANDARD_IS_HIDDEN)
+            || hidden_files.contains(&name);
+
         items.push(tab::Item {
             name,
             is_mount_point: false,
             display_name,
             metadata,
-            hidden: false,
+            hidden,
             location_opt: Some(location),
             mime,
             icon_handle_grid,
