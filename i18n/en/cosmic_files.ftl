@@ -5,7 +5,7 @@ no-results = No results found
 filesystem = Filesystem
 home = Home
 networks = Networks
-notification-in-progress = File operations are in progress.
+notification-in-progress = File operations are in progress
 trash = Trash
 recents = Recents
 undo = Undo
@@ -52,8 +52,8 @@ extract-to = Extract To...
 extract-to-title = Extract to folder
 
 ## Empty Trash Dialog
-empty-trash = Empty trash
-empty-trash-warning = Are you sure you want to permanently delete all the items in Trash?
+empty-trash = Empty trash?
+empty-trash-warning = Items in the Trash folder will be permanently deleted
 
 ## Mount Error Dialog
 mount-error = Unable to access drive
@@ -63,11 +63,11 @@ create-new-file = Create new file
 create-new-folder = Create new folder
 file-name = File name
 folder-name = Folder name
-file-already-exists = A file with that name already exists.
-folder-already-exists = A folder with that name already exists.
-name-hidden = Names starting with "." will be hidden.
-name-invalid = Name cannot be "{$filename}".
-name-no-slashes = Name cannot contain slashes.
+file-already-exists = A file with that name already exists
+folder-already-exists = A folder with that name already exists
+name-hidden = Names starting with "." will be hidden
+name-invalid = Name cannot be "{$filename}"
+name-no-slashes = Name cannot contain slashes
 
 ## Open/Save Dialog
 cancel = Cancel
@@ -91,9 +91,9 @@ related-apps = Related applications
 
 ## Permanently delete Dialog
 selected-items = the {$items} selected items
-permanently-delete-question = Permanently delete
+permanently-delete-question = Permanently delete?
 delete = Delete
-permanently-delete-warning = Are you sure you want to permanently delete {$target}? This cannot be undone.
+permanently-delete-warning = {$target} will be permanently deleted. This action can't be undone.
 
 ## Rename Dialog
 rename-file = Rename file
@@ -101,7 +101,7 @@ rename-folder = Rename folder
 
 ## Replace Dialog
 replace = Replace
-replace-title = "{$filename}" already exists in this location.
+replace-title = "{$filename}" already exists in this location
 replace-warning = Do you want to replace it with the one you are saving? Replacing it will overwrite its content.
 replace-warning-operation = Do you want to replace it? Replacing it will overwrite its content.
 original-file = Original file
@@ -140,8 +140,8 @@ read-write-execute = Read, write, and execute
 ## Favorite Path Error Dialog
 favorite-path-error = Error opening directory
 favorite-path-error-description =
-    Unable to open "{$path}".
-    It may not exist or you don't have permission to open it.
+    Unable to open "{$path}"
+    "{$path}" might not exist or you might not have permission to open it
 
     Would you like to remove it from the sidebar?
 remove = Remove
@@ -292,8 +292,8 @@ match-desktop = Match desktop
 dark = Dark
 light = Light
 
-### Type to Search
-type-to-search = Type to Search
+### Type to search
+type-to-search = Type to search
 type-to-search-recursive = Searches the current folder and all subfolders
 type-to-search-enter-path = Enters the path to the directory or file
 
