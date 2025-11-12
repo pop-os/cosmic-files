@@ -616,15 +616,15 @@ pub fn parse_desktop_file(path: &Path) -> (Option<String>, Option<String>) {
 
 fn display_name_for_file(path: &Path, name: &str, get_from_gvfs: bool, is_desktop: bool) -> String {
     if is_desktop {
-        get_desktop_file_display_name(path).map_or_else(
+        return get_desktop_file_display_name(path).map_or_else(
             || Item::display_name(name),
             |desktop_name| Item::display_name(desktop_name.as_str()),
-        )
+        );
     } else if get_from_gvfs {
-        Item::display_name(glib::filename_display_name(path).as_str())
-    } else {
-        Item::display_name(name)
+        #[cfg(feature = "gvfs")]
+        return Item::display_name(glib::filename_display_name(path).as_str())
     }
+    Item::display_name(name)
 }
 
 #[cfg(feature = "gvfs")]
