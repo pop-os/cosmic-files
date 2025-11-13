@@ -4884,7 +4884,7 @@ impl Application for App {
                 dialog
             }
             DialogPage::EmptyTrash => widget::dialog()
-                .title(fl!("empty-trash"))
+                .title(fl!("empty-trash-title"))
                 .body(fl!("empty-trash-warning"))
                 .primary_action(
                     widget::button::suggested(fl!("empty-trash"))

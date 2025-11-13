@@ -52,7 +52,8 @@ extract-to = Extract To...
 extract-to-title = Extract to folder
 
 ## Empty Trash Dialog
-empty-trash = Empty trash?
+empty-trash = Empty trash
+empty-trash-title = Empty trash?
 empty-trash-warning = Items in the Trash folder will be permanently deleted
 
 ## Mount Error Dialog
