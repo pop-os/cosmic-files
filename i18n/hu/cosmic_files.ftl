@@ -5,7 +5,7 @@ no-results = Nincs találat
 filesystem = Fájlrendszer
 home = Saját mappa
 networks = Hálózatok
-notification-in-progress = A fájlműveletek még folyamatban vannak.
+notification-in-progress = A fájlműveletek folyamatban vannak
 trash = Kuka
 recents = Legutóbbiak
 undo = Visszavonás
@@ -55,8 +55,8 @@ extract-to-title = Kibontás mappába
 
 ## Empty Trash Dialog
 
-empty-trash = Kuka ürítése
-empty-trash-warning = Biztosan véglegesen törölni szeretnéd a kukában lévő összes elemet?
+empty-trash = Kuka ürítése?
+empty-trash-warning = A kukában lévő összes elem véglegesen törölve lesz
 
 ## Mount Error Dialog
 
@@ -68,16 +68,16 @@ create-new-file = Új fájl létrehozása
 create-new-folder = Új mappa létrehozása
 file-name = Fájlnév
 folder-name = Mappanév
-file-already-exists = Már létezik ilyen nevű fájl.
-folder-already-exists = Már létezik ilyen nevű mappa.
-name-hidden = A ponttal kezdődő nevek rejtve lesznek.
-name-invalid = A név nem lehet „{ $filename }”.
-name-no-slashes = A név nem tartalmazhat „/” jelet.
+file-already-exists = Már létezik ilyen nevű fájl
+folder-already-exists = Már létezik ilyen nevű mappa
+name-hidden = A ponttal kezdődő nevek rejtve lesznek
+name-invalid = A név nem lehet „{ $filename }”
+name-no-slashes = A név nem tartalmazhat „/” jelet
 
 ## Open/Save Dialog
 
 cancel = Mégse
-create = Létrehozás
+create = Alkotás
 open = Megnyitás
 open-file = Fájl megnyitása
 open-folder = Mappa megnyitása
@@ -99,9 +99,9 @@ related-apps = Hasonló alkalmazások
 ## Permanently delete Dialog
 
 selected-items = a(z) { $items } kijelölt elemet
-permanently-delete-question = Végleges törlés
+permanently-delete-question = Végleges törlés?
 delete = Törlés
-permanently-delete-warning = Biztosan véglegesen törölni szeretnéd ezt: { $target }? A művelet nem visszavonható.
+permanently-delete-warning = { $target } véglegesen törölve lesz. A művelet nem visszavonható.
 
 ## Rename Dialog
 
@@ -111,7 +111,7 @@ rename-folder = Mappa átnevezése
 ## Replace Dialog
 
 replace = Csere
-replace-title = „{ $filename }” már létezik.
+replace-title = „{ $filename }” már létezik
 replace-warning = Szeretnéd lecserélni a meglévő fájlt a menteni kívánt fájllal? A cseréje felülírja annak tartalmát.
 replace-warning-operation = Szeretnéd lecserélni? A csere felülírja annak tartalmát.
 original-file = Eredeti fájl
@@ -169,11 +169,11 @@ read-write-execute = Olvasás, írás és végrehajtás
 
 favorite-path-error = Hiba a könyvtár megnyitásakor
 favorite-path-error-description =
-    Nem sikerült megnyitni: „{ $path }”.
-    Lehet, hogy nem létezik, vagy nincs megfelelő jogosultságod a megnyitásához.
+    Nem sikerült megnyitni ezt: „{ $path }”
+    „{ $path }” lehet nem létezik, vagy nincs jogosultságod a megnyitásához
 
     Szeretnéd eltávolítani az oldalsávról?
-remove = Eltávolítás
+remove = Törlés
 keep = Megtartás
 
 # Context Pages
@@ -221,7 +221,7 @@ progress = { $percent }%
 progress-cancelled = { $percent }%, megszakítva
 progress-paused = { $percent }%, szüneteltetve
 failed = Sikertelen
-complete = Befejeződött
+complete = Befejezett
 compressing =
     { $items } { $items ->
         [one] elem
