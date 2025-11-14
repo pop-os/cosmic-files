@@ -823,29 +823,28 @@ impl App {
     fn launch_desktop_entries(paths: &[impl AsRef<Path>]) {
         for path in paths.iter().map(AsRef::as_ref) {
             match freedesktop_entry_parser::parse_entry(path) {
-                Ok(entry) => match entry.section("Desktop Entry").attr("Exec") {
-                    Some(exec) => match mime_app::exec_to_command(exec, &[] as &[&str; 0]) {
-                        Some(commands) => {
-                            for mut command in commands {
-                                if let Err(err) = spawn_detached(&mut command) {
-                                    log::warn!("failed to execute {}: {}", path.display(), err);
-                                }
-                            }
+                Ok(entry) => {
+                    let Some(exec_attr) = entry.get("Desktop Entry", "Exec") else {
+                        log::warn!("failed to parse {}: missing Desktop Entry", path.display());
+                        continue;
+                    };
+
+                    let Some(exec) = exec_attr.first() else {
+                        log::warn!("failed to parse {}: missing Exec", path.display());
+                        continue;
+                    };
+
+                    let Some(commands) = mime_app::exec_to_command(exec, &[] as &[&str]) else {
+                        log::warn!("failed to parse {}: invalid Exec", path.display());
+                        continue;
+                    };
+
+                    for mut command in commands {
+                        if let Err(err) = spawn_detached(&mut command) {
+                            log::warn!("failed to execute {}: {}", path.display(), err);
                         }
-                        None => {
-                            log::warn!(
-                                "failed to parse {}: invalid Desktop Entry/Exec",
-                                path.display()
-                            );
-                        }
-                    },
-                    None => {
-                        log::warn!(
-                            "failed to parse {}: missing Desktop Entry/Exec",
-                            path.display()
-                        );
                     }
-                },
+                }
                 Err(err) => {
                     log::warn!("failed to parse {}: {}", path.display(), err);
                 }

@@ -4,6 +4,7 @@
 #[cfg(feature = "desktop")]
 use cosmic::desktop;
 use cosmic::widget;
+use freedesktop_entry_parser::Section;
 pub use mime_guess::Mime;
 use rustc_hash::FxHashMap;
 use std::{
@@ -48,35 +49,29 @@ pub fn exec_to_command(
     let field_code_pos = args_vec
         .iter()
         .position(|arg| EXEC_HANDLERS.contains(&arg.as_str()));
-    let args_handler = field_code_pos.and_then(|i| args_vec.get(i));
-    // msrv
-    // .inspect(|handler| log::trace!("Found paths handler: {handler} for exec: {exec}"));
+    let args_handler = field_code_pos
+        .and_then(|i| args_vec.get(i))
+        .inspect(|&handler| log::trace!("Found paths handler: {handler} for exec: {exec}"));
     // Number of args before the field code.
     // This won't be an off by one err below because take is not zero indexed.
     let field_code_pos = field_code_pos.unwrap_or_default();
     let mut processes = match args_handler.map(String::as_str) {
         Some("%f") => {
-            let mut processes = Vec::with_capacity(path_opt.len());
+            path_opt
+                .iter()
+                .map(|path| {
+                    let path = path.as_ref();
+                    // TODO: %f and %F need to handle non-file URLs (see spec)
+                    if from_file_or_dir(path).is_none() {
+                        log::warn!("Desktop file expects a file path instead of a URL: {path:?}");
+                    }
 
-            for path in path_opt.iter().map(AsRef::as_ref) {
-                // TODO: %f and %F need to handle non-file URLs (see spec)
-                if from_file_or_dir(path).is_none() {
-                    log::warn!("Desktop file expects a file path instead of a URL: {path:?}");
-                }
-
-                // Passing multiple paths to %f should open an instance per path
-                let mut process = process::Command::new(program);
-                process.args(
-                    args_vec
-                        .iter()
-                        .map(AsRef::as_ref)
-                        .take(field_code_pos)
-                        .chain(std::iter::once(path)),
-                );
-                processes.push(process);
-            }
-
-            processes
+                    // Passing multiple paths to %f should open an instance per path
+                    let mut process = process::Command::new(program);
+                    process.args(args_vec.iter().take(field_code_pos)).arg(path);
+                    process
+                })
+                .collect()
         }
         Some("%F") => {
             // TODO: %f and %F need to handle non-file URLs (see spec)
@@ -90,13 +85,9 @@ pub fn exec_to_command(
 
             // Launch one instance with all args
             let mut process = process::Command::new(program);
-            process.args(
-                args_vec
-                    .iter()
-                    .map(OsStr::new)
-                    .take(field_code_pos)
-                    .chain(path_opt.iter().map(AsRef::as_ref)),
-            );
+            process
+                .args(args_vec.iter().take(field_code_pos))
+                .args(path_opt);
 
             vec![process]
         }
@@ -104,25 +95,15 @@ pub fn exec_to_command(
             .iter()
             .map(|path| {
                 let mut process = process::Command::new(program);
-                process.args(
-                    args_vec
-                        .iter()
-                        .map(OsStr::new)
-                        .take(field_code_pos)
-                        .chain(std::iter::once(path.as_ref())),
-                );
+                process.args(args_vec.iter().take(field_code_pos)).arg(path);
                 process
             })
             .collect(),
         Some("%U") => {
             let mut process = process::Command::new(program);
-            process.args(
-                args_vec
-                    .iter()
-                    .map(OsStr::new)
-                    .take(field_code_pos)
-                    .chain(path_opt.iter().map(AsRef::as_ref)),
-            );
+            process
+                .args(args_vec.iter().take(field_code_pos))
+                .args(path_opt);
             vec![process]
         }
         Some(invalid) => unreachable!("All valid variants were checked; got: {invalid}"),
@@ -315,39 +296,42 @@ impl MimeAppCache {
                 }
             };
 
-            for attr in entry
-                .section("Added Associations")
-                .attrs()
-                .chain(entry.section("Default Applications").attrs())
+            let added_iter = entry.section("Added Associations").map(Section::attrs);
+            let default_iter = entry.section("Default Applications").map(Section::attrs);
+            // TODO: replace with Option::into_flat_iter when stable and within MSRV
+            // https://github.com/rust-lang/rust/issues/148441
+            for attr in added_iter
+                .into_iter()
+                .flatten()
+                .chain(default_iter.into_iter().flatten())
             {
-                if let Ok(mime) = attr.name.parse::<Mime>() {
-                    if let Some(filenames) = attr.value {
-                        for filename in filenames.split_terminator(';') {
-                            log::trace!("add {mime}={filename}");
-                            let apps = self
-                                .cache
-                                .entry(mime.clone())
-                                .or_insert_with(|| Vec::with_capacity(1));
-                            if !apps.iter().any(|x| filename_eq(&x.path, filename)) {
-                                if let Some(app) =
-                                    all_apps.iter().find(|&x| filename_eq(&x.path, filename))
-                                {
-                                    apps.push(MimeApp::from(app));
-                                } else {
-                                    log::info!(
-                                        "failed to add association for {mime:?}: application {filename:?} not found"
-                                    );
-                                }
+                if let Ok(mime) = attr.0.key.parse::<Mime>() {
+                    let mime_str = mime.as_ref();
+                    for filename in attr.1 {
+                        log::trace!("add {mime_str}={filename}");
+                        let apps = self
+                            .cache
+                            .entry(mime.clone())
+                            .or_insert_with(|| Vec::with_capacity(1));
+                        if !apps.iter().any(|x| filename_eq(&x.path, filename)) {
+                            if let Some(app) =
+                                all_apps.iter().find(|&x| filename_eq(&x.path, filename))
+                            {
+                                apps.push(MimeApp::from(app));
+                            } else {
+                                log::info!(
+                                    "failed to add association for {mime_str}: application {filename} not found"
+                                );
                             }
                         }
                     }
                 }
             }
 
-            for attr in entry.section("Removed Associations").attrs() {
-                if let Ok(mime) = attr.name.parse::<Mime>() {
-                    if let Some(filenames) = attr.value {
-                        for filename in filenames.split_terminator(';') {
+            if let Some(removed_associations) = entry.section("Removed Associations") {
+                for attr in removed_associations.attrs() {
+                    if let Ok(mime) = attr.0.key.parse::<Mime>() {
+                        for filename in attr.1 {
                             log::trace!("remove {mime}={filename}");
                             if let Some(apps) = self.cache.get_mut(&mime) {
                                 apps.retain(|x| !filename_eq(&x.path, filename));
@@ -357,14 +341,14 @@ impl MimeAppCache {
                 }
             }
 
-            for attr in entry.section("Default Applications").attrs() {
-                if let Ok(mime) = attr.name.parse::<Mime>() {
-                    if let Some(filenames) = attr.value {
-                        for filename in filenames.split_terminator(';') {
+            if let Some(default_applications) = entry.section("Default Applications") {
+                for attr in default_applications.attrs() {
+                    if let Ok(mime) = attr.0.key.parse::<Mime>() {
+                        for filename in attr.1 {
                             log::trace!("default {mime}={filename}");
                             if let Some(apps) = self.cache.get_mut(&mime) {
                                 let mut found = false;
-                                for app in apps.iter_mut() {
+                                for app in apps {
                                     if filename_eq(&app.path, filename) {
                                         app.is_default = true;
                                         found = true;
@@ -376,7 +360,7 @@ impl MimeAppCache {
                                     break;
                                 }
                                 log::debug!(
-                                    "failed to set default for {mime:?}: application {filename:?} not found"
+                                    "failed to set default for {mime}: application {filename} not found"
                                 );
                             }
                         }
