@@ -622,7 +622,7 @@ fn display_name_for_file(path: &Path, name: &str, get_from_gvfs: bool, is_deskto
         );
     } else if get_from_gvfs {
         #[cfg(feature = "gvfs")]
-        return Item::display_name(glib::filename_display_name(path).as_str())
+        return Item::display_name(glib::filename_display_name(path).as_str());
     }
     Item::display_name(name)
 }
