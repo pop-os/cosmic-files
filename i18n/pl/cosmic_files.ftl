@@ -55,7 +55,7 @@ extract-to-title = Wypakuj do katalogu
 
 ## Empty Trash Dialog
 
-empty-trash = Opróżnić kosz?
+empty-trash = Opróżnienie kosza
 empty-trash-warning = Elementy z kosza zostaną bezpowrotnie usunięte
 
 ## Mount Error Dialog
@@ -421,3 +421,4 @@ sort-newest-first = Najpierw najnowsze
 sort-oldest-first = Najpierw najstarsze
 sort-smallest-to-largest = Najpierw najmniejsze
 sort-largest-to-smallest = Najpierw największe
+empty-trash-title = Opróżnić kosz?
