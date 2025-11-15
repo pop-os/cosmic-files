@@ -1509,7 +1509,6 @@ dependencies = [
  "tokio",
  "trash",
  "url",
- "uzers",
  "walkdir",
  "wayland-client",
  "xdg 3.0.0",
@@ -7705,16 +7704,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "uzers"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4df81ff504e7d82ad53e95ed1ad5b72103c11253f39238bcc0235b90768a97dd"
-dependencies = [
- "libc",
- "log",
-]
-
-[[package]]
 name = "v_frame"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8927,7 +8916,6 @@ dependencies = [
 [[package]]
 name = "xdg-mime"
 version = "0.4.0"
-source = "git+https://github.com/ebassi/xdg-mime-rs#f8efb3fb1fad582539e2af7d1e9fbc9613dcc7d9"
 dependencies = [
  "dirs-next",
  "glob",

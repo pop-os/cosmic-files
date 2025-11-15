@@ -61,7 +61,6 @@ use std::{
     fs::{self, File, Metadata},
     hash::Hash,
     io::{BufRead, BufReader},
-    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     rc::Rc,
     sync::{Arc, LazyLock, RwLock, atomic},
@@ -88,6 +87,7 @@ use crate::{
     thumbnail_cacher::{CachedThumbnail, ThumbnailCacher, ThumbnailSize},
     thumbnailer::thumbnailer,
 };
+#[cfg(unix)]
 use uzers::{get_group_by_gid, get_user_by_uid};
 
 pub const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
