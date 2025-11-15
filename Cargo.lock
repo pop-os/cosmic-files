@@ -1345,6 +1345,7 @@ dependencies = [
 name = "cosmic-files"
 version = "1.0.11"
 dependencies = [
+ "aho-corasick",
  "anyhow",
  "atomic_float",
  "bzip2",

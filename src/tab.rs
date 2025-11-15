@@ -2185,7 +2185,12 @@ pub struct Item {
 impl Item {
     fn display_name(name: &str) -> String {
         // In order to wrap at periods and underscores, add a zero width space after each one
-        name.replace('.', ".\u{200B}").replace('_', "_\u{200B}")
+        static PERIOD_UNDERSCORE_AC: LazyLock<aho_corasick::AhoCorasick> = LazyLock::new(|| {
+            aho_corasick::AhoCorasick::new([".", "_"])
+                .expect("Expected AhoCorasick searcher to be built successfully")
+        });
+
+        PERIOD_UNDERSCORE_AC.replace_all(name, &[".\u{200B}", "_\u{200B}"])
     }
 
     /// Text widget for a filename in grid/icon view: word-or-glyph wrapping, middle-ellipsized to 3 lines.

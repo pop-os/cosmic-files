@@ -7,6 +7,7 @@ license = "GPL-3.0-only"
 rust-version = "1.90"
 
 [dependencies]
+aho-corasick = "1"
 anyhow = "1"
 jiff = "0.2"
 jiff-icu = "0.2"

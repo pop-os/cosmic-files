@@ -292,11 +292,16 @@ fn thumbnail_uri(path: &Path) -> io::Result<String> {
             absolute_path.display()
         ))
     })?;
-    // Technically square brackets don't need to be percent encoded,
+    // Technically braces don't need to be percent encoded,
     // and they aren't by the url crate, but the thumbnailer used by
     // Gnome Files does. In order to share thumbnails and not get duplicates
     // we should do the same.
-    let url = url.as_str().replace('[', "%5B").replace(']', "%5D");
+    static BRACES_AC: LazyLock<aho_corasick::AhoCorasick> = LazyLock::new(|| {
+        aho_corasick::AhoCorasick::new(["[", "]"])
+            .expect("Expected AhoCorasick searcher to be built successfully")
+    });
+
+    let url = BRACES_AC.replace_all(url.as_str(), &["%5B", "%5D"]);
     Ok(url)
 }
 
