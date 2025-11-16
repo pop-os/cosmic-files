@@ -2979,101 +2979,122 @@ impl Tab {
     }
 
     fn trigger_async_decode(&mut self) -> Vec<Command> {
-        let mut commands = Vec::new();
-
         // Only trigger decode in gallery mode for the currently selected image
         if !self.gallery {
-            return commands;
+            return Vec::new();
         }
 
-        if let Some(index) = self.select_focus {
-            if let Some(items) = &self.items_opt {
-                if let Some(item) = items.get(index) {
-                    if let Some(ItemThumbnail::Image(_, _, _full_handle_opt)) = &item.thumbnail_opt
-                    {
-                        if let Some(path) = item.path_opt() {
-                            self.large_image_manager.clear_error(path);
+        let Some(index) = self.select_focus else {
+            return Vec::new();
+        };
 
-                            // Only decode if not already decoded or decoding
-                            if self.large_image_manager.get_decoded(path).is_none()
-                                && !self.large_image_manager.is_decoding(path)
-                            {
-                                if let Some((width, height)) = get_image_dimensions(path) {
-                                    let (has_memory, error_opt) =
-                                        check_memory_available(width, height);
+        let Some(items) = &self.items_opt else {
+            return Vec::new();
+        };
 
-                                    if !has_memory {
-                                        // Insufficient memory --> try clearing cache
-                                        if !self.large_image_manager.cache_is_empty() {
-                                            log::info!(
-                                                "Insufficient memory, clearing {} cached images",
-                                                self.large_image_manager.cache_size()
-                                            );
-                                            self.large_image_manager.clear_cache();
+        let Some(item) = items.get(index) else {
+            return Vec::new();
+        };
 
-                                            // Check again after clearing cache
-                                            let (has_memory_after_clear, error_opt_after) =
-                                                check_memory_available(width, height);
-                                            if !has_memory_after_clear {
-                                                if let Some(error_msg) = error_opt_after {
-                                                    self.large_image_manager
-                                                        .store_error(path.clone(), error_msg);
-                                                    log::warn!(
-                                                        "Cannot load {}: insufficient memory even after cache clear",
-                                                        path.display()
-                                                    );
-                                                }
-                                                return commands;
-                                            }
-                                            log::info!(
-                                                "Memory available after cache clear, proceeding with decode"
-                                            );
-                                        } else {
-                                            if let Some(error_msg) = error_opt {
-                                                self.large_image_manager
-                                                    .store_error(path.clone(), error_msg);
-                                                log::warn!(
-                                                    "Cannot load {}: insufficient memory and cache is empty",
-                                                    path.display()
-                                                );
-                                            }
-                                            return commands;
-                                        }
-                                    }
+        let Some(ItemThumbnail::Image(_, _, _)) = &item.thumbnail_opt else {
+            return Vec::new();
+        };
 
-                                    self.large_image_manager.mark_decoding(path.clone());
+        let Some(path) = item.path_opt() else {
+            return Vec::new();
+        };
 
-                                    let path_clone = path.clone();
-                                    commands.push(Command::Iced(
-                                        cosmic::iced::Task::perform(
-                                            decode_large_image(path_clone),
-                                            |result| {
-                                                if let Some((path, width, height, pixels)) = result
-                                                {
-                                                    Message::ImageDecoded(
-                                                        path, width, height, pixels,
-                                                    )
-                                                } else {
-                                                    Message::AutoScroll(None)
-                                                }
-                                            },
-                                        )
-                                        .into(),
-                                    ));
-                                } else {
-                                    self.large_image_manager.store_error(
-                                        path.clone(),
-                                        "Failed to read image dimensions".to_string(),
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
+        // Clone path to avoid borrow checker issues
+        let path = path.to_path_buf();
+
+        // Clear any previous errors for this image
+        self.large_image_manager.clear_error(&path);
+
+        // Check if image is already decoded or currently decoding
+        if self.large_image_manager.get_decoded(&path).is_some()
+            || self.large_image_manager.is_decoding(&path)
+        {
+            return Vec::new();
+        }
+
+        // Try to decode the image
+        self.try_decode_image(&path)
+    }
+
+    /// Attempt to decode a large image, handling memory constraints
+    fn try_decode_image(&mut self, path: &PathBuf) -> Vec<Command> {
+        let Some((width, height)) = get_image_dimensions(path) else {
+            self.large_image_manager.store_error(
+                path.clone(),
+                "Failed to read image dimensions".to_string(),
+            );
+            return Vec::new();
+        };
+
+        if !self.ensure_memory_available(path, width, height) {
+            return Vec::new();
+        }
+
+        // Mark image as decoding and create the decode task
+        self.large_image_manager.mark_decoding(path.clone());
+        vec![self.create_decode_command(path.clone())]
+    }
+
+    fn ensure_memory_available(&mut self, path: &PathBuf, width: u32, height: u32) -> bool {
+        let (has_memory, error_opt) = check_memory_available(width, height);
+
+        if has_memory {
+            return true;
+        }
+
+        // Try clearing cache
+        if self.large_image_manager.cache_is_empty() {
+            if let Some(error_msg) = error_opt {
+                self.large_image_manager
+                    .store_error(path.clone(), error_msg);
+                log::warn!(
+                    "Cannot load {}: insufficient memory and cache is empty",
+                    path.display()
+                );
             }
+            return false;
         }
 
-        commands
+        log::info!(
+            "Insufficient memory, clearing {} cached images",
+            self.large_image_manager.cache_size()
+        );
+        self.large_image_manager.clear_cache();
+
+        let (has_memory_after_clear, error_opt_after) = check_memory_available(width, height);
+
+        if has_memory_after_clear {
+            log::info!("Memory available after cache clear, proceeding with decode");
+            return true;
+        }
+
+        if let Some(error_msg) = error_opt_after {
+            self.large_image_manager
+                .store_error(path.clone(), error_msg);
+            log::warn!(
+                "Cannot load {}: insufficient memory even after cache clear",
+                path.display()
+            );
+        }
+        false
+    }
+
+    fn create_decode_command(&self, path: PathBuf) -> Command {
+        Command::Iced(
+            cosmic::iced::Task::perform(decode_large_image(path), |result| {
+                result
+                    .map(|(path, width, height, pixels)| {
+                        Message::ImageDecoded(path, width, height, pixels)
+                    })
+                    .unwrap_or_else(|| Message::AutoScroll(None))
+            })
+            .into(),
+        )
     }
 
     pub fn change_location(&mut self, location: &Location, history_i_opt: Option<usize>) {
