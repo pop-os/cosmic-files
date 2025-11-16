@@ -80,9 +80,8 @@ use crate::{
     dialog::DialogKind,
     fl,
     large_image::{
-        DECIMAL_MB_TO_BYTES, LargeImageManager, MAX_DIMENSION_FOR_DECODE, ATLAS_FRAGMENT_SIZE,
-        MB_TO_BYTES, RGBA_BYTES_PER_PIXEL, check_memory_available, decode_large_image,
-        get_image_dimensions,
+        LargeImageManager, decode_large_image, exceeds_memory_limit, should_use_dedicated_worker,
+        should_use_tiling,
     },
     localize::{LANGUAGE_SORTER, LOCALE},
     menu, mime_app,
@@ -103,13 +102,10 @@ const MAX_SEARCH_RESULTS: usize = 200;
 //TODO: configurable thumbnail size?
 const THUMBNAIL_SIZE: u32 = (ICON_SIZE_GRID as u32) * (ICON_SCALE_MAX as u32);
 
-// Semaphore for normal-sized images (4 parallel workers)
-pub static THUMB_SEMAPHORE_NORMAL: LazyLock<tokio::sync::Semaphore> =
+// Thumbnail generation semaphore - limits parallel thumbnail workers
+// Uses 4 workers for balanced throughput and memory usage
+pub static THUMB_SEMAPHORE: LazyLock<tokio::sync::Semaphore> =
     LazyLock::new(|| tokio::sync::Semaphore::const_new(4));
-
-// Semaphore for large images that would exceed per-worker memory limit (1 worker with full budget)
-pub static THUMB_SEMAPHORE_LARGE: LazyLock<tokio::sync::Semaphore> =
-    LazyLock::new(|| tokio::sync::Semaphore::const_new(1));
 
 pub(crate) static SORT_OPTION_FALLBACK: LazyLock<FxHashMap<String, (HeadingOptions, bool)>> =
     LazyLock::new(|| {
@@ -1722,11 +1718,7 @@ impl ItemMetadata {
 #[derive(Debug)]
 pub enum ItemThumbnail {
     NotImage,
-    Image(
-        widget::image::Handle,
-        Option<(u32, u32)>,
-        Option<widget::image::Handle>,
-    ),
+    Image(widget::image::Handle, Option<(u32, u32)>),
     Svg(widget::svg::Handle),
     Text(widget::text_editor::Content),
 }
@@ -1735,9 +1727,7 @@ impl Clone for ItemThumbnail {
     fn clone(&self) -> Self {
         match self {
             Self::NotImage => Self::NotImage,
-            Self::Image(handle, size_opt, full_handle_opt) => {
-                Self::Image(handle.clone(), *size_opt, full_handle_opt.clone())
-            }
+            Self::Image(handle, size_opt) => Self::Image(handle.clone(), *size_opt),
             Self::Svg(handle) => Self::Svg(handle.clone()),
             // Content cannot be cloned simply
             Self::Text(content) => {
@@ -1769,16 +1759,9 @@ impl ItemThumbnail {
                         Err(_) => size.map(|s| (s.pixel_size(), s.pixel_size())),
                     };
 
-                    // Create and cache the full-size handle for large images that need GPU tiling
-                    // Images >4096 pixels get fragmented into multiple tiles for GPU upload
-                    let full_handle = original_dims
-                        .filter(|(w, h)| *w > ATLAS_FRAGMENT_SIZE || *h > ATLAS_FRAGMENT_SIZE)
-                        .map(|_| widget::image::Handle::from_path(path));
-
                     return Self::Image(
                         widget::image::Handle::from_path(thumbnail_path),
                         original_dims,
-                        full_handle,
                     );
                 }
                 CachedThumbnail::Failed => {
@@ -1818,22 +1801,21 @@ impl ItemThumbnail {
         let mut tried_supported_file = false;
         // First try built-in image thumbnailer
         if mime.type_() == mime::IMAGE && check_size("image", max_size_mb * 1000 * 1000) {
-            // Check for extremely large dimensions that would cause memory issues during decoding
+            // Check if image dimensions would exceed available memory budget
             // The GPU tiling system can handle large images, but we still need to decode them first
-            // Set a reasonable limit to prevent OOM during image decoding
             let dimensions_ok = match image::image_dimensions(path) {
                 Ok((width, height)) => {
-                    if width > MAX_DIMENSION_FOR_DECODE || height > MAX_DIMENSION_FOR_DECODE {
+                    if exceeds_memory_limit(width, height, max_mem) {
                         log::warn!(
-                            "skipping thumbnail generation for {}: dimensions {}x{} exceed decode limit of {}",
+                            "skipping thumbnail generation for {}: {}x{} image would exceed {}MB memory budget",
                             path.display(),
                             width,
                             height,
-                            MAX_DIMENSION_FOR_DECODE
+                            max_mem
                         );
                         false
                     } else {
-                        if width > ATLAS_FRAGMENT_SIZE || height > ATLAS_FRAGMENT_SIZE {
+                        if should_use_tiling(width, height) {
                             log::info!(
                                 "Large image {}x{} detected, will use GPU tiling for display",
                                 width,
@@ -1912,12 +1894,6 @@ impl ItemThumbnail {
 
             if let Some(dyn_img) = dyn_img {
                 let (img_width, img_height) = (dyn_img.width(), dyn_img.height());
-                let full_handle =
-                    if img_width > ATLAS_FRAGMENT_SIZE || img_height > ATLAS_FRAGMENT_SIZE {
-                        Some(widget::image::Handle::from_path(path))
-                    } else {
-                        None
-                    };
 
                 if let Ok(cacher) = thumbnail_cacher.as_ref() {
                     match cacher.update_with_image(dyn_img) {
@@ -1925,7 +1901,6 @@ impl ItemThumbnail {
                             return Self::Image(
                                 widget::image::Handle::from_path(thumb_path),
                                 Some((img_width, img_height)),
-                                full_handle,
                             );
                         }
                         Err(err) => {
@@ -1944,7 +1919,6 @@ impl ItemThumbnail {
                             thumbnail.into_raw(),
                         ),
                         Some((img_width, img_height)),
-                        full_handle,
                     );
                 }
             }
@@ -2072,7 +2046,6 @@ impl ItemThumbnail {
                                                 image.into_raw(),
                                             ),
                                             None,
-                                            None,
                                         ),
                                         file,
                                     ));
@@ -2158,7 +2131,7 @@ impl Item {
             .unwrap_or(&ItemThumbnail::NotImage)
         {
             ItemThumbnail::NotImage => icon,
-            ItemThumbnail::Image(handle, _original_dims, _full_handle_opt) => {
+            ItemThumbnail::Image(handle, _original_dims) => {
                 // Preview pane: ALWAYS show thumbnail for instant, responsive UI
                 // Full resolution loading happens in gallery mode
                 widget::image(handle.clone()).into()
@@ -2996,9 +2969,15 @@ impl Tab {
             return Vec::new();
         };
 
-        let Some(ItemThumbnail::Image(_, _, _)) = &item.thumbnail_opt else {
+        let Some(ItemThumbnail::Image(_, original_dims)) = &item.thumbnail_opt else {
             return Vec::new();
         };
+
+        if let Some((w, h)) = original_dims {
+            if !should_use_tiling(*w, *h) {
+                return Vec::new();
+            }
+        }
 
         let Some(path) = item.path_opt() else {
             return Vec::new();
@@ -3007,94 +2986,21 @@ impl Tab {
         // Clone path to avoid borrow checker issues
         let path = path.to_path_buf();
 
-        // Clear any previous errors for this image
-        self.large_image_manager.clear_error(&path);
-
-        // Check if image is already decoded or currently decoding
-        if self.large_image_manager.get_decoded(&path).is_some()
-            || self.large_image_manager.is_decoding(&path)
-        {
-            return Vec::new();
+        // Try to decode the image using LargeImageManager
+        if self.large_image_manager.try_decode(&path) {
+            vec![Command::Iced(
+                cosmic::iced::Task::perform(decode_large_image(path), |result| {
+                    result
+                        .map(|(path, width, height, pixels)| {
+                            Message::ImageDecoded(path, width, height, pixels)
+                        })
+                        .unwrap_or_else(|| Message::AutoScroll(None))
+                })
+                .into(),
+            )]
+        } else {
+            Vec::new()
         }
-
-        // Try to decode the image
-        self.try_decode_image(&path)
-    }
-
-    /// Attempt to decode a large image, handling memory constraints
-    fn try_decode_image(&mut self, path: &PathBuf) -> Vec<Command> {
-        let Some((width, height)) = get_image_dimensions(path) else {
-            self.large_image_manager.store_error(
-                path.clone(),
-                "Failed to read image dimensions".to_string(),
-            );
-            return Vec::new();
-        };
-
-        if !self.ensure_memory_available(path, width, height) {
-            return Vec::new();
-        }
-
-        // Mark image as decoding and create the decode task
-        self.large_image_manager.mark_decoding(path.clone());
-        vec![self.create_decode_command(path.clone())]
-    }
-
-    fn ensure_memory_available(&mut self, path: &PathBuf, width: u32, height: u32) -> bool {
-        let (has_memory, error_opt) = check_memory_available(width, height);
-
-        if has_memory {
-            return true;
-        }
-
-        // Try clearing cache
-        if self.large_image_manager.cache_is_empty() {
-            if let Some(error_msg) = error_opt {
-                self.large_image_manager
-                    .store_error(path.clone(), error_msg);
-                log::warn!(
-                    "Cannot load {}: insufficient memory and cache is empty",
-                    path.display()
-                );
-            }
-            return false;
-        }
-
-        log::info!(
-            "Insufficient memory, clearing {} cached images",
-            self.large_image_manager.cache_size()
-        );
-        self.large_image_manager.clear_cache();
-
-        let (has_memory_after_clear, error_opt_after) = check_memory_available(width, height);
-
-        if has_memory_after_clear {
-            log::info!("Memory available after cache clear, proceeding with decode");
-            return true;
-        }
-
-        if let Some(error_msg) = error_opt_after {
-            self.large_image_manager
-                .store_error(path.clone(), error_msg);
-            log::warn!(
-                "Cannot load {}: insufficient memory even after cache clear",
-                path.display()
-            );
-        }
-        false
-    }
-
-    fn create_decode_command(&self, path: PathBuf) -> Command {
-        Command::Iced(
-            cosmic::iced::Task::perform(decode_large_image(path), |result| {
-                result
-                    .map(|(path, width, height, pixels)| {
-                        Message::ImageDecoded(path, width, height, pixels)
-                    })
-                    .unwrap_or_else(|| Message::AutoScroll(None))
-            })
-            .into(),
-        )
     }
 
     pub fn change_location(&mut self, location: &Location, history_i_opt: Option<usize>) {
@@ -3556,6 +3462,10 @@ impl Tab {
                     for (_, item) in &indices {
                         if item.selected && item.can_gallery() {
                             self.gallery = !self.gallery;
+
+                            if self.gallery {
+                                commands.extend(self.trigger_async_decode());
+                            }
                             break;
                         }
                     }
@@ -4023,7 +3933,7 @@ impl Tab {
                         if item.location_opt.as_ref() == Some(&location) {
                             let handle_opt = match &thumbnail {
                                 ItemThumbnail::NotImage => None,
-                                ItemThumbnail::Image(handle, _, _) => Some(widget::icon::Handle {
+                                ItemThumbnail::Image(handle, _) => Some(widget::icon::Handle {
                                     symbolic: false,
                                     data: widget::icon::Data::Image(handle.clone()),
                                 }),
@@ -4406,50 +4316,58 @@ impl Tab {
                         .unwrap_or(&ItemThumbnail::NotImage)
                     {
                         ItemThumbnail::NotImage => {}
-                        ItemThumbnail::Image(handle, _original_dims, full_handle_opt) => {
+                        ItemThumbnail::Image(handle, original_dims) => {
                             // Determine which image to show based on async decode state
-                            let (image_handle, is_loading, error_msg_opt) = if let Some(path) =
-                                item.path_opt()
-                            {
+                            let mut is_loading = false;
+                            let mut error_msg_opt = None;
+                            let image_handle = if let Some(path) = item.path_opt() {
                                 if let Some(error_msg) = self.large_image_manager.get_error(path) {
-                                    (handle, false, Some(error_msg.clone()))
+                                    error_msg_opt = Some(error_msg.clone());
+                                    handle.clone()
                                 } else if let Some(decoded_handle) =
                                     self.large_image_manager.get_decoded(path)
                                 {
                                     // Full resolution ready --> use it
-                                    (decoded_handle, false, None)
+                                    decoded_handle.clone()
                                 } else if self.large_image_manager.is_decoding(path) {
                                     // Currently decoding --> show thumbnail with loading indicator
-                                    (handle, true, None)
-                                } else if let Some(full_handle) = full_handle_opt {
-                                    // Large image with tiled handle --> use it
-                                    (full_handle, false, None)
+                                    is_loading = true;
+                                    handle.clone()
+                                } else if let Some((w, h)) = original_dims {
+                                    // Check if image needs tiling
+                                    if should_use_tiling(*w, *h) {
+                                        // Large image --> show thumbnail only
+                                        handle.clone()
+                                    } else {
+                                        // Normal-sized image --> load full resolution directly
+                                        widget::image::Handle::from_path(path)
+                                    }
                                 } else {
-                                    // Not decoded yet --> show thumbnail
-                                    (handle, false, None)
+                                    // No dimensions available --> show thumbnail
+                                    handle.clone()
                                 }
                             } else {
-                                (handle, false, None)
+                                handle.clone()
                             };
 
                             let content: cosmic::Element<'_, Message> =
                                 if let Some(error_msg) = error_msg_opt {
                                     widget::column()
-                                        .push(widget::image(image_handle.clone()))
+                                        .push(widget::image(image_handle))
                                         .push(widget::text(format!("⚠ {}", error_msg)).size(13))
                                         .padding(space_xs)
                                         .align_x(cosmic::iced::Alignment::Center)
                                         .into()
                                 } else if is_loading {
                                     widget::column()
-                                        .push(widget::image(image_handle.clone()))
+                                        .push(widget::image(image_handle))
                                         .push(widget::text("Loading full resolution...").size(14))
                                         .padding(space_xs)
                                         .align_x(cosmic::iced::Alignment::Center)
                                         .into()
                                 } else {
                                     //TODO: use widget::image::viewer, when its zoom can be reset
-                                    widget::image(image_handle.clone()).into()
+                                    widget::image(image_handle).into()
                                 };
 
                             element_opt =
@@ -5884,85 +5802,18 @@ impl Tab {
                     let max_mb = u64::from(self.thumb_config.max_mem_mb.get());
                     let max_size = u64::from(self.thumb_config.max_size_mb.get());
 
-                    // Determine which queue to use based on image memory requirements.
-                    // This routing ensures large images get dedicated worker with full memory budget,
-                    // while normal images share 4-worker parallel queue for better throughput.
-                    let (use_large_queue, effective_max_mb, effective_jobs) = if mime.type_()
-                        == mime::IMAGE
-                    {
-                        log::debug!("Checking dimensions for image: {}", path.display());
+                    // Determine effective memory budget based on image size
+                    let (effective_max_mb, effective_jobs) = if mime.type_() == mime::IMAGE {
                         match image::image_dimensions(&path) {
                             Ok((width, height)) => {
-                                if width == 0 || height == 0 {
-                                    log::warn!(
-                                        "Invalid image dimensions {}x{} for {}, using normal queue",
-                                        width,
-                                        height,
-                                        path.display()
-                                    );
-                                    (false, max_mb, max_jobs)
-                                } else if max_jobs == 0 {
-                                    log::error!(
-                                        "Configuration error: max_jobs is 0, using fallback (1 job)"
-                                    );
-                                    (true, max_mb, 1)
-                                } else {
-                                    let pixels = (width as u64).saturating_mul(height as u64);
-                                    let bytes_needed = pixels.saturating_mul(RGBA_BYTES_PER_PIXEL);
-                                    let mb_needed = bytes_needed / MB_TO_BYTES;
-
-                                    // Calculate per-job limit with normal queue (shared memory budget)
-                                    // Use decimal MB conversion to match image crate's limit calculation
-                                    let total_bytes = max_mb.saturating_mul(DECIMAL_MB_TO_BYTES);
-                                    let per_job_limit = total_bytes / max_jobs as u64;
-                                    let per_job_limit_mb = per_job_limit / MB_TO_BYTES;
-
-                                    log::debug!(
-                                        "Image {}x{} needs {}MB, per-job limit is {}MB (normal queue)",
-                                        width,
-                                        height,
-                                        mb_needed,
-                                        per_job_limit_mb
-                                    );
-
-                                    if bytes_needed > per_job_limit {
-                                        // Image exceeds per-job limit --> route to dedicated large image queue
-                                        log::info!(
-                                            "Image {}x{} needs {}MB (exceeds per-job limit of {}MB), \
-                                                 using large image queue (1 worker, {}MB full budget)",
-                                            width,
-                                            height,
-                                            mb_needed,
-                                            per_job_limit_mb,
-                                            max_mb
-                                        );
-                                        (true, max_mb, 1)
-                                    } else {
-                                        // Image fits in per-job limit --> use normal parallel queue
-                                        log::debug!(
-                                            "Image {}x{} fits in normal queue ({}MB < {}MB limit)",
-                                            width,
-                                            height,
-                                            mb_needed,
-                                            per_job_limit_mb
-                                        );
-                                        (false, max_mb, max_jobs)
-                                    }
-                                }
+                                let (_use_dedicated, eff_mb, eff_jobs) =
+                                    should_use_dedicated_worker(width, height, max_mb, max_jobs);
+                                (eff_mb, eff_jobs)
                             }
-                            Err(e) => {
-                                // Cannot determine size, use normal queue
-                                log::debug!(
-                                    "Failed to get dimensions for {}: {}, using normal queue",
-                                    path.display(),
-                                    e
-                                );
-                                (false, max_mb, max_jobs)
-                            }
+                            Err(_) => (max_mb, max_jobs),
                         }
                     } else {
-                        // Non-image, use normal queue
-                        (false, max_mb, max_jobs)
+                        (max_mb, max_jobs)
                     };
 
                     subscriptions.push(Subscription::run_with_id(
@@ -5971,12 +5822,8 @@ impl Tab {
                             let message = {
                                 let path = path.clone();
 
-                                // Acquire from appropriate semaphore based on image size
-                                if use_large_queue {
-                                    _ = THUMB_SEMAPHORE_LARGE.acquire().await;
-                                } else {
-                                    _ = THUMB_SEMAPHORE_NORMAL.acquire().await;
-                                }
+                                // Acquire semaphore permit
+                                _ = THUMB_SEMAPHORE.acquire().await;
 
                                 tokio::task::spawn_blocking(move || {
                                     let start = Instant::now();
@@ -5990,10 +5837,9 @@ impl Tab {
                                         max_size,
                                     );
                                     log::debug!(
-                                        "thumbnailed {} in {:?} (queue: {})",
+                                        "thumbnailed {} in {:?}",
                                         path.display(),
-                                        start.elapsed(),
-                                        if use_large_queue { "large" } else { "normal" }
+                                        start.elapsed()
                                     );
                                     Message::Thumbnail(path, thumbnail)
                                 })

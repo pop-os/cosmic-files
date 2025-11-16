@@ -8,10 +8,6 @@ use std::{
 /// Bytes per pixel in RGBA format (Red, Green, Blue, Alpha = 4 bytes)
 pub const RGBA_BYTES_PER_PIXEL: u64 = 4;
 
-/// Overhead factor for image decoding operations (30% additional memory for decode buffers,
-/// fragment allocations, and intermediate representations during image decoding)
-const DECODE_OVERHEAD_FACTOR: f64 = 1.3;
-
 /// System memory reserve in MB to maintain for system stability (prevents thrashing)
 /// Note: RAM checking is currently only available on Linux via procfs.
 /// On Windows and macOS, only GPU buffer limits are enforced.
@@ -27,11 +23,6 @@ const GALLERY_MEMORY_LIMIT_MB: u64 = 2000;
 /// Must match the atlas SIZE constant in libcosmic/iced/wgpu/src/image/atlas.rs
 pub const ATLAS_FRAGMENT_SIZE: u32 = 4096;
 
-/// Conservative GPU buffer size limit in MB. Each atlas fragment can be up to this size.
-/// Based on wgpu device limits - most GPUs support at least 256MB buffers.
-/// Reference: https://docs.rs/wgpu/latest/wgpu/struct.Limits.html#structfield.max_buffer_size
-const MAX_GPU_BUFFER_MB: u64 = 256;
-
 /// Conversion factor: 1 MB = 1024 * 1024 bytes (binary megabyte, used for RAM calculations)
 pub const MB_TO_BYTES: u64 = 1024 * 1024;
 
@@ -39,8 +30,78 @@ pub const MB_TO_BYTES: u64 = 1024 * 1024;
 /// The image crate's memory limits use decimal MB, not binary MB.
 pub const DECIMAL_MB_TO_BYTES: u64 = 1000 * 1000;
 
-/// Maximum dimension for image decoding
-pub const MAX_DIMENSION_FOR_DECODE: u32 = 65536;
+/// Check if an image's dimensions would exceed the available memory budget.
+/// Returns true if the image is too large to decode.
+pub fn exceeds_memory_limit(width: u32, height: u32, memory_limit_mb: u64) -> bool {
+    let Some(bytes_needed) = calculate_image_memory(width, height) else {
+        // Overflow in calculation means it definitely exceeds any reasonable limit
+        return true;
+    };
+
+    let max_bytes = memory_limit_mb * MB_TO_BYTES;
+    bytes_needed > max_bytes
+}
+
+/// Check if an image should use GPU tiling for display.
+/// Images larger than the atlas fragment size need to be split into tiles for GPU upload.
+pub fn should_use_tiling(width: u32, height: u32) -> bool {
+    width > ATLAS_FRAGMENT_SIZE || height > ATLAS_FRAGMENT_SIZE
+}
+
+/// Determine if an image should use the dedicated worker for thumbnail generation.
+/// Returns (use_dedicated_worker, effective_max_mb, effective_jobs).
+///
+/// Large images that exceed per-worker memory budget get routed to a dedicated worker
+/// with full memory budget. Smaller images use the normal parallel worker pool.
+pub fn should_use_dedicated_worker(
+    width: u32,
+    height: u32,
+    total_budget_mb: u64,
+    parallel_workers: usize,
+) -> (bool, u64, usize) {
+    if width == 0 || height == 0 {
+        log::warn!(
+            "Invalid image dimensions {}x{}, using normal queue",
+            width,
+            height
+        );
+        return (false, total_budget_mb, parallel_workers);
+    }
+
+    let Some(bytes_needed) = calculate_image_memory(width, height) else {
+        log::warn!(
+            "Image dimensions {}x{} overflow memory calculation, using normal queue",
+            width,
+            height
+        );
+        return (false, total_budget_mb, parallel_workers);
+    };
+
+    let mb_needed = bytes_needed / MB_TO_BYTES;
+    let per_worker_budget_mb = total_budget_mb / parallel_workers as u64;
+
+    if mb_needed > per_worker_budget_mb {
+        log::info!(
+            "Large image {}x{} needs {}MB (exceeds per-worker {}MB), using dedicated worker",
+            width,
+            height,
+            mb_needed,
+            per_worker_budget_mb
+        );
+        // Use dedicated worker with full budget
+        (true, total_budget_mb, 1)
+    } else {
+        log::debug!(
+            "Normal image {}x{} needs {}MB (within per-worker {}MB), using parallel workers",
+            width,
+            height,
+            mb_needed,
+            per_worker_budget_mb
+        );
+        // Use parallel worker pool with shared budget
+        (false, total_budget_mb, parallel_workers)
+    }
+}
 
 /// Get the dimensions of an image without fully decoding it
 pub fn get_image_dimensions(path: &Path) -> Option<(u32, u32)> {
@@ -67,17 +128,67 @@ pub fn get_image_dimensions(path: &Path) -> Option<(u32, u32)> {
     }
 }
 
-/// Check if there's sufficient memory to decode an image.
-///
-/// This function performs two types of checks:
-/// 1. System RAM availability (Linux only via procfs)
-/// 2. GPU buffer limits (all platforms)
-///
-/// Platform-specific behavior:
-/// - Linux: Full RAM checking via /proc/meminfo + GPU checks
-/// - Windows/macOS: GPU buffer checks only (RAM checking not yet implemented)
-///
+/// Calculate the memory required to decode an image in bytes.
+/// Returns None if the calculation overflows.
+fn calculate_image_memory(width: u32, height: u32) -> Option<u64> {
+    let pixels = (width as u64).checked_mul(height as u64)?;
+    pixels.checked_mul(RGBA_BYTES_PER_PIXEL)
+}
+
+/// Check if there's sufficient system RAM to decode an image (Linux only).
 /// Returns: (has_memory, error_message)
+#[cfg(target_os = "linux")]
+fn check_ram_available(width: u32, height: u32) -> (bool, Option<String>) {
+    use procfs::Current;
+
+    let Some(bytes_needed) = calculate_image_memory(width, height) else {
+        let error_msg = format!(
+            "Image dimensions too large: {}x{} causes overflow in memory calculation",
+            width, height
+        );
+        log::error!("{}", error_msg);
+        return (false, Some(error_msg));
+    };
+
+    let mb_needed = bytes_needed / MB_TO_BYTES;
+
+    match procfs::Meminfo::current() {
+        Ok(meminfo) => {
+            // MemAvailable includes reclaimable cache and is the best estimate of
+            // actually available memory for new allocations
+            let available_kb = meminfo.mem_available.unwrap_or(0);
+            let available_bytes = available_kb * 1024;
+
+            // Maintain system reserve to prevent thrashing and OOM killer
+            let min_reserve_bytes = SYSTEM_MEMORY_RESERVE_MB * MB_TO_BYTES;
+            let usable_bytes = available_bytes.saturating_sub(min_reserve_bytes);
+
+            if bytes_needed > usable_bytes {
+                let available_mb = available_bytes / MB_TO_BYTES;
+                let error_msg = format!(
+                    "Insufficient memory: need {}MB, available {}MB. Try closing other applications.",
+                    mb_needed, available_mb
+                );
+                log::warn!("{}", error_msg);
+                return (false, Some(error_msg));
+            }
+
+            (true, None)
+        }
+        Err(e) => {
+            log::warn!("Failed to read /proc/meminfo: {}. Skipping RAM check.", e);
+            // Graceful fallback: assume RAM is available
+            (true, None)
+        }
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn check_ram_available(_width: u32, _height: u32) -> (bool, Option<String>) {
+    // RAM checking not implemented for this platform
+    (true, None)
+}
+
 pub fn check_memory_available(width: u32, height: u32) -> (bool, Option<String>) {
     if width == 0 || height == 0 {
         let error_msg = format!(
@@ -88,113 +199,8 @@ pub fn check_memory_available(width: u32, height: u32) -> (bool, Option<String>)
         return (false, Some(error_msg));
     }
 
-    let pixels = match (width as u64).checked_mul(height as u64) {
-        Some(p) => p,
-        None => {
-            let error_msg = format!(
-                "Image dimensions too large: {}x{} causes overflow in pixel calculation",
-                width, height
-            );
-            log::error!("{}", error_msg);
-            return (false, Some(error_msg));
-        }
-    };
-
-    let bytes_needed = match pixels.checked_mul(RGBA_BYTES_PER_PIXEL) {
-        Some(b) => b,
-        None => {
-            let error_msg = format!(
-                "Image memory requirements overflow: {}x{} pixels requires more than {} bytes",
-                width,
-                height,
-                u64::MAX
-            );
-            log::error!("{}", error_msg);
-            return (false, Some(error_msg));
-        }
-    };
-
-    // Add overhead for decode buffers, fragment allocations, and intermediate representations
-    let bytes_with_overhead = (bytes_needed as f64 * DECODE_OVERHEAD_FACTOR) as u64;
-    let mb_needed = bytes_with_overhead / MB_TO_BYTES;
-
-    // Check system RAM availability (Linux only)
-    #[cfg(target_os = "linux")]
-    {
-        use procfs::Current;
-        match procfs::Meminfo::current() {
-            Ok(meminfo) => {
-                // MemAvailable includes reclaimable cache and is the best estimate of
-                // actually available memory for new allocations
-                let available_kb = meminfo.mem_available.unwrap_or(0);
-                let available_bytes = available_kb * 1024;
-
-                // Maintain system reserve to prevent thrashing and OOM killer
-                let min_reserve_bytes = SYSTEM_MEMORY_RESERVE_MB * MB_TO_BYTES;
-                let usable_bytes = available_bytes.saturating_sub(min_reserve_bytes);
-
-                if bytes_with_overhead > usable_bytes {
-                    let available_mb = available_bytes / MB_TO_BYTES;
-                    let error_msg = format!(
-                        "Insufficient memory: need {}MB, available {}MB. Try closing other applications.",
-                        mb_needed, available_mb
-                    );
-                    log::warn!("{}", error_msg);
-                    return (false, Some(error_msg));
-                }
-            }
-            Err(e) => {
-                log::warn!("Failed to read /proc/meminfo: {}. Skipping RAM check.", e);
-                // Graceful fallback: continue to GPU checks
-            }
-        }
-    }
-
-    // Note: RAM checking not implemented for Windows/macOS
-    // These platforms will only validate against GPU buffer limits below
-    #[cfg(not(target_os = "linux"))]
-    {
-        log::debug!(
-            "RAM checking not available on this platform. Only GPU limits will be enforced."
-        );
-    }
-
-    // Check GPU fragment/atlas tile limits
-    // Large images are split into atlas fragments for GPU upload.
-    // Each fragment must fit within GPU buffer size limits.
-    let fragment_bytes =
-        (ATLAS_FRAGMENT_SIZE as u64) * (ATLAS_FRAGMENT_SIZE as u64) * RGBA_BYTES_PER_PIXEL;
-    let max_gpu_buffer_bytes = MAX_GPU_BUFFER_MB * MB_TO_BYTES;
-
-    let fragments_x = (width + ATLAS_FRAGMENT_SIZE - 1) / ATLAS_FRAGMENT_SIZE;
-    let fragments_y = (height + ATLAS_FRAGMENT_SIZE - 1) / ATLAS_FRAGMENT_SIZE;
-    let fragment_count = fragments_x as u64 * fragments_y as u64;
-
-    // Fragments are uploaded sequentially, so we only need one fragment buffer at a time.
-    // However, each individual fragment must fit within GPU buffer size limits.
-    if fragment_bytes > max_gpu_buffer_bytes {
-        let max_dimension = (MAX_GPU_BUFFER_MB * MB_TO_BYTES / RGBA_BYTES_PER_PIXEL) as f64;
-        let max_dimension = (max_dimension.sqrt() as u32).saturating_sub(100); // Add safety margin
-
-        let error_msg = format!(
-            "Image too large for GPU: {}x{} pixels exceeds GPU buffer limits. \
-             Maximum supported dimension is approximately {}x{} pixels.",
-            width, height, max_dimension, max_dimension
-        );
-        log::error!("{}", error_msg);
-        return (false, Some(error_msg));
-    }
-
-    log::debug!(
-        "Memory check passed: {}x{} image needs {}MB RAM, will use {} GPU fragment(s) of {}MB each",
-        width,
-        height,
-        mb_needed,
-        fragment_count,
-        fragment_bytes / MB_TO_BYTES
-    );
-
-    (true, None)
+    // Check system RAM availability
+    check_ram_available(width, height)
 }
 
 /// Decode a large image asynchronously in a blocking thread pool.
@@ -256,7 +262,6 @@ pub async fn decode_large_image(path: PathBuf) -> Option<(PathBuf, u32, u32, Vec
     .flatten()
 }
 
-
 /// Manages state and operations for large image decoding in gallery mode
 #[derive(Debug, Default)]
 pub struct LargeImageManager {
@@ -285,17 +290,14 @@ impl LargeImageManager {
         self.decode_errors.get(path)
     }
 
-    pub fn mark_decoding(&mut self, path: PathBuf) {
-        self.decoding_images.insert(path);
-    }
-
     pub fn store_decoded(&mut self, path: PathBuf, handle: widget::image::Handle) {
         self.decoded_images.insert(path.clone(), handle);
         self.decoding_images.remove(&path);
     }
 
     pub fn store_error(&mut self, path: PathBuf, error: String) {
-        self.decode_errors.insert(path, error);
+        self.decode_errors.insert(path.clone(), error);
+        self.decoding_images.remove(&path);
     }
 
     pub fn clear_error(&mut self, path: &Path) {
@@ -316,5 +318,72 @@ impl LargeImageManager {
 
     pub fn cache_is_empty(&self) -> bool {
         self.decoded_images.is_empty()
+    }
+
+    /// Attempt to decode a large image, checking memory availability first.
+    /// Returns true if decode was initiated, false if skipped due to insufficient memory.
+    pub fn try_decode(&mut self, path: &PathBuf) -> bool {
+        self.clear_error(path);
+
+        // Check if already decoded or decoding
+        if self.get_decoded(path).is_some() || self.is_decoding(path) {
+            return false;
+        }
+
+        let Some((width, height)) = get_image_dimensions(path) else {
+            self.store_error(path.clone(), "Failed to read image dimensions".to_string());
+            return false;
+        };
+
+        if !self.ensure_memory_available(path, width, height) {
+            return false;
+        }
+
+        // Mark as decoding
+        self.decoding_images.insert(path.clone());
+        true
+    }
+
+    /// Check if sufficient memory is available, clearing cache if needed.
+    /// Returns true if memory is available, false otherwise.
+    fn ensure_memory_available(&mut self, path: &PathBuf, width: u32, height: u32) -> bool {
+        let (has_memory, error_opt) = check_memory_available(width, height);
+
+        if has_memory {
+            return true;
+        }
+
+        if self.cache_is_empty() {
+            if let Some(error_msg) = error_opt {
+                self.store_error(path.clone(), error_msg);
+                log::warn!(
+                    "Cannot load {}: insufficient memory and cache is empty",
+                    path.display()
+                );
+            }
+            return false;
+        }
+
+        log::info!(
+            "Insufficient memory, clearing {} cached images",
+            self.cache_size()
+        );
+        self.clear_cache();
+
+        let (has_memory_after_clear, error_opt_after) = check_memory_available(width, height);
+
+        if has_memory_after_clear {
+            log::info!("Memory available after cache clear, proceeding with decode");
+            return true;
+        }
+
+        if let Some(error_msg) = error_opt_after {
+            self.store_error(path.clone(), error_msg);
+            log::warn!(
+                "Cannot load {}: insufficient memory even after cache clear",
+                path.display()
+            );
+        }
+        false
     }
 }
