@@ -1624,7 +1624,7 @@ pub enum Message {
     HighlightDeactivate(usize),
     HighlightActivate(usize),
     DirectorySize(PathBuf, DirSize),
-    ImageDecoded(PathBuf, u32, u32, Vec<u8>),
+    ImageDecoded(PathBuf, u32, u32, Vec<u8>, Option<(u32, u32)>, u64), // path, width, height, pixels, display_size, generation
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -2986,16 +2986,35 @@ impl Tab {
         // Clone path to avoid borrow checker issues
         let path = path.to_path_buf();
 
-        // Try to decode the image using LargeImageManager
-        if self.large_image_manager.try_decode(&path) {
+        // Get display size for adaptive resolution
+        let display_dimensions = self
+            .size_opt
+            .get()
+            .map(|size| (size.width as u32, size.height as u32));
+
+        // Try to decode the image using LargeImageManager with adaptive resolution
+        let (should_decode, target_dimensions, generation) = self
+            .large_image_manager
+            .try_decode(&path, display_dimensions);
+        if should_decode {
             vec![Command::Iced(
-                cosmic::iced::Task::perform(decode_large_image(path), |result| {
-                    result
-                        .map(|(path, width, height, pixels)| {
-                            Message::ImageDecoded(path, width, height, pixels)
-                        })
-                        .unwrap_or_else(|| Message::AutoScroll(None))
-                })
+                cosmic::iced::Task::perform(
+                    decode_large_image(path, target_dimensions),
+                    move |result| {
+                        result
+                            .map(|(path, width, height, pixels)| {
+                                Message::ImageDecoded(
+                                    path,
+                                    width,
+                                    height,
+                                    pixels,
+                                    display_dimensions,
+                                    generation,
+                                )
+                            })
+                            .unwrap_or_else(|| Message::AutoScroll(None))
+                    },
+                )
                 .into(),
             )]
         } else {
@@ -3955,12 +3974,17 @@ impl Tab {
                     }
                 }
             }
-            Message::ImageDecoded(path, width, height, pixels) => {
+            Message::ImageDecoded(path, width, height, pixels, display_size, generation) => {
                 // Create handle from pre-decoded RGBA data (fast!)
                 let handle = widget::image::Handle::from_rgba(width, height, pixels);
 
-                // Store decoded image handle and remove from decoding set
-                self.large_image_manager.store_decoded(path, handle);
+                // Store decoded image handle if generation still matches (not superseded)
+                self.large_image_manager.store_decoded_with_generation(
+                    path,
+                    handle,
+                    display_size,
+                    generation,
+                );
             }
             Message::ToggleSort(heading_option) => {
                 if !matches!(self.location, Location::Search(..)) {
@@ -4324,15 +4348,19 @@ impl Tab {
                                 if let Some(error_msg) = self.large_image_manager.get_error(path) {
                                     error_msg_opt = Some(error_msg.clone());
                                     handle.clone()
+                                } else if self.large_image_manager.is_decoding(path) {
+                                    // Currently decoding (initial or re-decode) --> show cached/thumbnail with loading indicator
+                                    is_loading = true;
+                                    // Use decoded handle if available (re-decode), otherwise thumbnail (initial decode)
+                                    self.large_image_manager
+                                        .get_decoded(path)
+                                        .cloned()
+                                        .unwrap_or_else(|| handle.clone())
                                 } else if let Some(decoded_handle) =
                                     self.large_image_manager.get_decoded(path)
                                 {
-                                    // Full resolution ready --> use it
+                                    // Decoded and not currently decoding --> use it
                                     decoded_handle.clone()
-                                } else if self.large_image_manager.is_decoding(path) {
-                                    // Currently decoding --> show thumbnail with loading indicator
-                                    is_loading = true;
-                                    handle.clone()
                                 } else if let Some((w, h)) = original_dims {
                                     // Check if image needs tiling
                                     if should_use_tiling(*w, *h) {
@@ -4361,7 +4389,7 @@ impl Tab {
                                 } else if is_loading {
                                     widget::column()
                                         .push(widget::image(image_handle))
-                                        .push(widget::text("Loading full resolution...").size(14))
+                                        .push(widget::text("Loading higher resolution...").size(14))
                                         .padding(space_xs)
                                         .align_x(cosmic::iced::Alignment::Center)
                                         .into()

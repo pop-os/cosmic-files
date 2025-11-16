@@ -30,6 +30,59 @@ pub const MB_TO_BYTES: u64 = 1024 * 1024;
 /// The image crate's memory limits use decimal MB, not binary MB.
 pub const DECIMAL_MB_TO_BYTES: u64 = 1000 * 1000;
 
+/// Scale factor for HiDPI displays - decode at higher resolution than display size
+/// for better quality on high-DPI screens. 1.5x provides good balance between
+/// quality and memory usage and also prevets re-decoding on small windows size adjustments.
+const DISPLAY_SCALE_FACTOR: f32 = 1.5;
+
+/// Calculate optimal target dimensions for decoding based on display size.
+/// Returns None if no resizing is needed (image is smaller than display).
+///
+/// This helps reduce memory usage by decoding large images at a resolution
+/// appropriate for the display, rather than always using full resolution.
+pub fn calculate_target_dimensions(
+    image_width: u32,
+    image_height: u32,
+    display_width: u32,
+    display_height: u32,
+) -> Option<(u32, u32)> {
+    let target_width = (display_width as f32 * DISPLAY_SCALE_FACTOR) as u32;
+    let target_height = (display_height as f32 * DISPLAY_SCALE_FACTOR) as u32;
+
+    if image_width <= target_width && image_height <= target_height {
+        return None;
+    }
+
+    let image_aspect = image_width as f32 / image_height as f32;
+    let target_aspect = target_width as f32 / target_height as f32;
+
+    let (new_width, new_height) = if image_aspect > target_aspect {
+        let w = target_width;
+        let h = (target_width as f32 / image_aspect) as u32;
+        (w, h)
+    } else {
+        let h = target_height;
+        let w = (target_height as f32 * image_aspect) as u32;
+        (w, h)
+    };
+
+    let new_width = new_width.max(1);
+    let new_height = new_height.max(1);
+
+    log::info!(
+        "Calculated target dimensions: {}x{} -> {}x{} (display: {}x{}, scale: {}x)",
+        image_width,
+        image_height,
+        new_width,
+        new_height,
+        display_width,
+        display_height,
+        DISPLAY_SCALE_FACTOR
+    );
+
+    Some((new_width, new_height))
+}
+
 /// Check if an image's dimensions would exceed the available memory budget.
 /// Returns true if the image is too large to decode.
 pub fn exceeds_memory_limit(width: u32, height: u32, memory_limit_mb: u64) -> bool {
@@ -208,7 +261,10 @@ pub fn check_memory_available(width: u32, height: u32) -> (bool, Option<String>)
 /// This function is used for gallery mode where full-resolution images need to be loaded.
 /// It uses the full memory budget (GALLERY_MEMORY_LIMIT_MB) since only one image
 /// decodes at a time in gallery mode.
-pub async fn decode_large_image(path: PathBuf) -> Option<(PathBuf, u32, u32, Vec<u8>)> {
+pub async fn decode_large_image(
+    path: PathBuf,
+    target_dimensions: Option<(u32, u32)>,
+) -> Option<(PathBuf, u32, u32, Vec<u8>)> {
     // Decode image in blocking thread pool (CPU-intensive work should not block)
     tokio::task::spawn_blocking(move || {
         log::info!("Starting async decode of {}", path.display());
@@ -227,16 +283,46 @@ pub async fn decode_large_image(path: PathBuf) -> Option<(PathBuf, u32, u32, Vec
                         match reader.decode() {
                             Ok(img) => {
                                 let rgba = img.into_rgba8();
-                                let width = rgba.width();
-                                let height = rgba.height();
-                                let pixels = rgba.into_raw();
+                                let orig_width = rgba.width();
+                                let orig_height = rgba.height();
 
-                                log::info!(
-                                    "Decoded {}x{} image: {}",
-                                    width,
-                                    height,
-                                    path.display()
-                                );
+                                // Resize if target dimensions provided
+                                let (final_img, width, height) = if let Some((target_w, target_h)) = target_dimensions {
+                                    log::info!(
+                                        "Resizing {}x{} -> {}x{} for memory optimization: {}",
+                                        orig_width, orig_height, target_w, target_h,
+                                        path.display()
+                                    );
+
+                                    // Use Lanczos3 for high-quality downsampling
+                                    let resized = image::imageops::resize(
+                                        &rgba,
+                                        target_w,
+                                        target_h,
+                                        image::imageops::FilterType::Lanczos3,
+                                    );
+
+                                    let resized_w = resized.width();
+                                    let resized_h = resized.height();
+
+                                    log::info!(
+                                        "Resize complete: {}x{} image now uses ~{} MB instead of ~{} MB",
+                                        resized_w, resized_h,
+                                        (resized_w as u64 * resized_h as u64 * 4) / MB_TO_BYTES,
+                                        (orig_width as u64 * orig_height as u64 * 4) / MB_TO_BYTES
+                                    );
+
+                                    (resized, resized_w, resized_h)
+                                } else {
+                                    log::info!(
+                                        "Decoded {}x{} image at full resolution: {}",
+                                        orig_width, orig_height,
+                                        path.display()
+                                    );
+                                    (rgba, orig_width, orig_height)
+                                };
+
+                                let pixels = final_img.into_raw();
                                 Some((path, width, height, pixels))
                             }
                             Err(e) => {
@@ -269,8 +355,14 @@ pub struct LargeImageManager {
     decoding_images: HashSet<PathBuf>,
     /// Cache of decoded image handles
     decoded_images: HashMap<PathBuf, widget::image::Handle>,
+    /// Display dimensions used for each decoded image (for resize detection)
+    decoded_display_sizes: HashMap<PathBuf, (u32, u32)>,
     /// Errors encountered during decoding
     decode_errors: HashMap<PathBuf, String>,
+    /// Generation counter for each decode to support cancellation.
+    /// When a new decode is started for the same path, the generation is incremented.
+    /// Only decodes matching the current generation are accepted when they complete.
+    decode_generations: HashMap<PathBuf, u64>,
 }
 
 impl LargeImageManager {
@@ -290,9 +382,40 @@ impl LargeImageManager {
         self.decode_errors.get(path)
     }
 
-    pub fn store_decoded(&mut self, path: PathBuf, handle: widget::image::Handle) {
+    /// Store a decoded image if the generation matches (not superseded by newer decode).
+    /// Returns true if stored, false if rejected due to generation mismatch.
+    pub fn store_decoded_with_generation(
+        &mut self,
+        path: PathBuf,
+        handle: widget::image::Handle,
+        display_size: Option<(u32, u32)>,
+        generation: u64,
+    ) -> bool {
+        // Check if this decode is still current (not superseded by a newer one)
+        if let Some(&current_gen) = self.decode_generations.get(&path) {
+            if generation != current_gen {
+                log::info!(
+                    "Discarding outdated decode for {} (generation {} != current {})",
+                    path.display(),
+                    generation,
+                    current_gen
+                );
+                return false;
+            }
+        }
+
+        log::info!(
+            "Storing decoded image for {} (generation {})",
+            path.display(),
+            generation
+        );
+
         self.decoded_images.insert(path.clone(), handle);
+        if let Some(size) = display_size {
+            self.decoded_display_sizes.insert(path.clone(), size);
+        }
         self.decoding_images.remove(&path);
+        true
     }
 
     pub fn store_error(&mut self, path: PathBuf, error: String) {
@@ -320,28 +443,115 @@ impl LargeImageManager {
         self.decoded_images.is_empty()
     }
 
-    /// Attempt to decode a large image, checking memory availability first.
-    /// Returns true if decode was initiated, false if skipped due to insufficient memory.
-    pub fn try_decode(&mut self, path: &PathBuf) -> bool {
-        self.clear_error(path);
-
-        // Check if already decoded or decoding
-        if self.get_decoded(path).is_some() || self.is_decoding(path) {
+    /// Check if an image should be re-decoded due to display size increase.
+    /// Returns true only if the display size has INCREASED by more than 20% in either dimension.
+    /// Does NOT re-decode for smaller sizes (GPU can efficiently downscale).
+    pub fn needs_redecode_for_size(
+        &self,
+        path: &Path,
+        new_display_size: Option<(u32, u32)>,
+    ) -> bool {
+        let Some(new_size) = new_display_size else {
             return false;
+        };
+
+        let Some(&old_size) = self.decoded_display_sizes.get(path) else {
+            return false;
+        };
+
+        const REDECODE_THRESHOLD: f32 = 0.2;
+
+        let width_increase = (new_size.0 as f32 / old_size.0 as f32) - 1.0;
+        let height_increase = (new_size.1 as f32 / old_size.1 as f32) - 1.0;
+
+        let needs_redecode =
+            width_increase > REDECODE_THRESHOLD || height_increase > REDECODE_THRESHOLD;
+
+        if needs_redecode {
+            log::info!(
+                "Display size increased significantly for {}: {}x{} -> {}x{} (increase: {:.1}% width, {:.1}% height) - re-decoding at higher resolution",
+                path.display(),
+                old_size.0,
+                old_size.1,
+                new_size.0,
+                new_size.1,
+                width_increase * 100.0,
+                height_increase * 100.0
+            );
+        } else if width_increase < -REDECODE_THRESHOLD || height_increase < -REDECODE_THRESHOLD {
+            log::debug!(
+                "Display size decreased for {}: {}x{} -> {}x{} (decrease: {:.1}% width, {:.1}% height) - keeping existing higher resolution",
+                path.display(),
+                old_size.0,
+                old_size.1,
+                new_size.0,
+                new_size.1,
+                width_increase * 100.0,
+                height_increase * 100.0
+            );
+        }
+
+        needs_redecode
+    }
+
+    /// Attempt to decode a large image, checking memory availability first.
+    /// Returns (should_decode, target_dimensions, generation) tuple.
+    pub fn try_decode(
+        &mut self,
+        path: &PathBuf,
+        display_dimensions: Option<(u32, u32)>,
+    ) -> (bool, Option<(u32, u32)>, u64) {
+        self.clear_error(path);
+        let is_currently_decoding = self.is_decoding(path);
+        let needs_redecode = self.needs_redecode_for_size(path, display_dimensions);
+
+        if is_currently_decoding && !needs_redecode {
+            // Get current generation for the ongoing decode
+            let generation = self.decode_generations.get(path).copied().unwrap_or(0);
+            return (false, None, generation);
+        }
+
+        if self.get_decoded(path).is_some() && !needs_redecode && !is_currently_decoding {
+            let generation = self.decode_generations.get(path).copied().unwrap_or(0);
+            return (false, None, generation);
         }
 
         let Some((width, height)) = get_image_dimensions(path) else {
             self.store_error(path.clone(), "Failed to read image dimensions".to_string());
-            return false;
+            return (false, None, 0);
         };
 
-        if !self.ensure_memory_available(path, width, height) {
-            return false;
+        let target_dimensions = if let Some((display_w, display_h)) = display_dimensions {
+            calculate_target_dimensions(width, height, display_w, display_h)
+        } else {
+            None
+        };
+
+        // Check memory for target size (if resizing) or full size
+        let (check_w, check_h) = target_dimensions.unwrap_or((width, height));
+        if !self.ensure_memory_available(path, check_w, check_h) {
+            return (false, None, 0);
+        }
+
+        // Increment generation counter (cancels any previous decode)
+        let generation = self
+            .decode_generations
+            .entry(path.clone())
+            .and_modify(|g| *g += 1)
+            .or_insert(1);
+        let generation = *generation;
+
+        if is_currently_decoding {
+            log::info!(
+                "Cancelling previous decode for {} and starting new one (generation {})",
+                path.display(),
+                generation
+            );
         }
 
         // Mark as decoding
         self.decoding_images.insert(path.clone());
-        true
+        (true, target_dimensions, generation)
     }
 
     /// Check if sufficient memory is available, clearing cache if needed.
