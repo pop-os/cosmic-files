@@ -408,6 +408,7 @@ impl Gvfs {
                                 let mount_op = mount_op(name.to_string(), event_tx.clone());
                                 let event_tx = event_tx.clone();
                                 let mounter_item = mounter_item.clone();
+                                let volume_for_callback = volume.clone();
                                 VolumeExt::mount(
                                     &volume,
                                     gio::MountMountFlags::NONE,
@@ -415,7 +416,29 @@ impl Gvfs {
                                     gio::Cancellable::NONE,
                                     move |res| {
                                         log::info!("mount {name}: result {res:?}");
-                                        event_tx.send(Event::MountResult(mounter_item, match res {
+                                        // Update the mounter_item with mount information after successful mount
+                                        let mut updated_item = mounter_item.clone();
+                                        if res.is_ok() {
+                                            if let MounterItem::Gvfs(ref mut item) = updated_item {
+                                                if let Some(mount) = volume_for_callback.get_mount() {
+                                                    let root = MountExt::root(&mount);
+                                                    item.path_opt = root.path();
+                                                    item.is_mounted = true;
+                                                    // Query if remote
+                                                    item.is_remote = root
+                                                        .query_filesystem_info(
+                                                            gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE,
+                                                            gio::Cancellable::NONE,
+                                                        )
+                                                        .ok()
+                                                        .and_then(|info| {
+                                                            Some(info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE))
+                                                        })
+                                                        .unwrap_or(true);
+                                                }
+                                            }
+                                        }
+                                        event_tx.send(Event::MountResult(updated_item, match res {
                                             Ok(()) => {
                                                 _ = complete_tx.send(Ok(()));
                                                 Ok(true)

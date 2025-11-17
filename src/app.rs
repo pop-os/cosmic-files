@@ -3092,6 +3092,16 @@ impl Application for App {
             Message::MountResult(mounter_key, item, res) => match res {
                 Ok(true) => {
                     log::info!("connected to {item:?}");
+                    // Automatically navigate to the mounted location
+                    if let Some(path) = item.path() {
+                        let location = if item.is_remote() {
+                            Location::Network(item.uri(), item.name(), Some(path))
+                        } else {
+                            Location::Path(path)
+                        };
+                        let message = Message::TabMessage(None, tab::Message::Location(location));
+                        return self.update(message);
+                    }
                 }
                 Ok(false) => {
                     log::info!("cancelled connection to {item:?}");
