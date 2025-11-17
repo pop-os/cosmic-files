@@ -5,33 +5,33 @@ no-results = Geen resultaten gevonden
 filesystem = Bestandssysteem
 home = Home
 networks = Netwerk
-notification-in-progress = Sommige bestanden worden nog bewerkt.
+notification-in-progress = Bestanden worden nog bewerkt
 trash = Prullenbak
 recents = Recente bestanden
-undo = Ontdoen
+undo = Herstel
 today = Vandaag
 # Desktop view options
-desktop-view-options = Opties voor bureaubladweergave...
+desktop-view-options = Opties voor bureaubladweergave…
 show-on-desktop = Op bureaublad weergeven
-desktop-folder-content = Bestanden in de map Bureaublad
-mounted-drives = Gekoppelde schijven
-trash-folder-icon = Prullenbakicoon
-icon-size-and-spacing = Grootte en ruimte tussen iconen
-icon-size = Icoongrootte
+desktop-folder-content = Bestanden in de Bureablad map
+mounted-drives = Aangekoppelde schijven
+trash-folder-icon = Pictogram van de map “Prullenbak”
+icon-size-and-spacing = Pictogram grootte en tussenruimte
+icon-size = Pictogramgrootte
 grid-spacing = Rastergrootte
 # List view
 name = Naam
-modified = Bewerkt
-trashed-on = Tijd van verwijderen
+modified = Gewijzigd
+trashed-on = Verwijderd op
 size = Grootte
 # Progress footer
 details = Details
-dismiss = Bericht negeren
+dismiss = Negeer bericht
 operations-running =
     { $running } { $running ->
         [one] bewerking
        *[other] bewerkingen
-    } uitvoeren ({ $percent }%)...
+    } uitvoeren ({ $percent }%)…
 operations-running-finished =
     { $running } { $running ->
         [one] bewerking
@@ -55,7 +55,7 @@ extract-to-title = Uitpakken naar map
 
 ## Empty Trash Dialog
 
-empty-trash = Prullenbak legen
+empty-trash = Leeg prullenbak
 empty-trash-warning = Weet u zeker dat u alles in de prullenbak permanent wilt verwijderen?
 
 ## Mount Error Dialog

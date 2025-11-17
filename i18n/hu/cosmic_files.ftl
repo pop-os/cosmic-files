@@ -55,7 +55,7 @@ extract-to-title = Kibontás mappába
 
 ## Empty Trash Dialog
 
-empty-trash = Kuka ürítése?
+empty-trash = Kuka ürítése
 empty-trash-warning = A kukában lévő összes elem véglegesen törölve lesz
 
 ## Mount Error Dialog
@@ -77,7 +77,7 @@ name-no-slashes = A név nem tartalmazhat „/” jelet
 ## Open/Save Dialog
 
 cancel = Mégse
-create = Alkotás
+create = Létrehozás
 open = Megnyitás
 open-file = Fájl megnyitása
 open-folder = Mappa megnyitása
@@ -173,7 +173,7 @@ favorite-path-error-description =
     „{ $path }” lehet nem létezik, vagy nincs jogosultságod a megnyitásához
 
     Szeretnéd eltávolítani az oldalsávról?
-remove = Törlés
+remove = Eltávolítás
 keep = Megtartás
 
 # Context Pages
@@ -420,3 +420,4 @@ sort-largest-to-smallest = Legnagyobbtól a legkisebbig
 repository = Tároló
 support = Támogatás
 progress-failed = { $percent }%, sikertelen
+empty-trash-title = Kuka ürítése?

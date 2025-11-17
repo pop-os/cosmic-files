@@ -5,7 +5,7 @@ no-results = Aucun résultat trouvé
 filesystem = Système de fichiers
 home = Dossier personnel
 networks = Réseaux
-notification-in-progress = Des opérations sur des fichiers sont en cours.
+notification-in-progress = Des opérations sur des fichiers sont en cours
 trash = Corbeille
 recents = Récents
 undo = Annuler
@@ -27,8 +27,16 @@ size = Taille
 # Progress footer
 details = Détails
 dismiss = Ignorer le message
-operations-running = { $running } opération en cours ({ $percent }%)...
-operations-running-finished = { $running } opération en cours ({ $percent }%), { $finished } Terminé...
+operations-running =
+    { $running } { $running ->
+        [one] opération
+       *[other] opérations
+    } en cours ({ $percent }%)...
+operations-running-finished =
+    { $running } { $running ->
+        [one] opération
+       *[other] opérations
+    } en cours ({ $percent }%), { $finished } terminé...
 pause = Pause
 resume = Reprendre
 
@@ -48,7 +56,7 @@ extract-to-title = Extraire vers le dossier
 ## Empty Trash Dialog
 
 empty-trash = Vider la corbeille
-empty-trash-warning = Êtes-vous sûr de vouloir supprimer définitivement tous les éléments de la corbeille ?
+empty-trash-warning = Les éléments de la corbeille seront définitivement supprimés
 
 ## Mount Error Dialog
 
@@ -60,19 +68,19 @@ create-new-file = Créer un nouveau fichier
 create-new-folder = Créer un nouveau dossier
 file-name = Nom du fichier
 folder-name = Nom du dossier
-file-already-exists = Un fichier portant ce nom existe déjà.
-folder-already-exists = Un dossier portant ce nom existe déjà.
-name-hidden = Les noms commençant par "." seront cachés.
-name-invalid = Le nom ne peut pas être "{ $filename }".
-name-no-slashes = Le nom ne peut pas contenir de slashs.
+file-already-exists = Un fichier portant ce nom existe déjà
+folder-already-exists = Un dossier portant ce nom existe déjà
+name-hidden = Les noms commençant par "." seront cachés
+name-invalid = Le nom ne peut pas être "{ $filename }"
+name-no-slashes = Le nom ne peut pas contenir de slashs
 
 ## Open/Save Dialog
 
 cancel = Annuler
-create = Créer
+create = Création
 open = Ouvrir
 open-file = Ouvrir le fichier
-open-folder = Ouvrir le dossier
+open-folder = Ouvrir dossier
 open-in-new-tab = Ouvrir dans un nouvel onglet
 open-in-new-window = Ouvrir dans une nouvelle fenêtre
 open-item-location = Ouvrir l'emplacement de l'élément
@@ -83,19 +91,15 @@ save-file = Enregistrer fichier
 
 ## Open With Dialog
 
-open-with-title = Comment souhaitez-vous ouvrir "{ $name }" ?
+open-with-title = Comment souhaitez-vous ouvrir "{ $name }" ?
 browse-store = Parcourir { $store }
 
 ## Permanently delete Dialog
 
 selected-items = les { $items } éléments sélectionnés
-permanently-delete-question = Supprimer définitivement ?
+permanently-delete-question = Supprimer définitivement ?
 delete = Supprimer
-permanently-delete-warning =
-    Supprimer définitivement { $target }, { $nb_items ->
-        [one] il ne pourras pas être restauré.
-       *[other] ils ne pourront pas être restaurés.
-    }
+permanently-delete-warning = { $target } sera définitivement supprimé. Cette action ne peut pas être annulée.
 
 ## Rename Dialog
 
@@ -105,9 +109,9 @@ rename-folder = Renommer le dossier
 ## Replace Dialog
 
 replace = Remplacer
-replace-title = { $filename } existe déjà à cet endroit.
-replace-warning = Voulez-vous remplacer ce fichier par celui que vous enregistrez ? Cela écrasera son contenu.
-replace-warning-operation = Voulez-vous remplacer ce fichier ? Cela écrasera son contenu.
+replace-title = "{ $filename }" existe déjà à cet endroit
+replace-warning = Voulez-vous remplacer ce fichier par celui que vous enregistrez ? Cela écrasera son contenu.
+replace-warning-operation = Voulez-vous remplacer ce fichier ? Cela écrasera son contenu.
 original-file = Fichier d'origine
 replace-with = Remplacer par
 apply-to-all = Appliquer à tous
@@ -117,7 +121,7 @@ skip = Ignorer
 ## Set as Executable and Launch Dialog
 
 set-executable-and-launch = Définir comme exécutable et lancer
-set-executable-and-launch-description = Voulez-vous définir "{ $name }" comme exécutable et le lancer ?
+set-executable-and-launch-description = Voulez-vous définir "{ $name }" comme exécutable et le lancer ?
 set-and-launch = Définir et lancer
 
 ## Metadata Dialog
@@ -133,11 +137,11 @@ none = Aucun
 
 ### Mode 1 (unusual)
 
-execute-only = Exécution seulement
+execute-only = Exécution seule
 
 ### Mode 2 (unusual)
 
-write-only = Écriture seulement
+write-only = Écriture seule
 
 ### Mode 3 (unusual)
 
@@ -145,7 +149,7 @@ write-execute = Écriture et exécution
 
 ### Mode 4
 
-read-only = Lecture seulement
+read-only = Lecture seule
 
 ### Mode 5
 
@@ -157,18 +161,18 @@ read-write = Lecture et écriture
 
 ### Mode 7
 
-read-write-execute = Lecture, Écriture et Exécution
+read-write-execute = Lecture, écriture et exécution
 
 ## Favorite Path Error Dialog
 
-favorite-path-error = Error opening directory
+favorite-path-error = Erreur lors de l'ouverture du répertoire
 favorite-path-error-description =
-    Impossible d'ouvrir "{ $path }".
-    Il se peut qu'il n'existe pas ou que vous n'ayez pas la permission de l'ouvrir.
+    Impossible d'ouvrir "{ $path }"
+    "{ $path }" n'existe peut-être pas ou vous n'avez pas la permission de l'ouvrir
 
-    Voulez-vous le retirer de la barre latérale ?
-remove = Retirer
-keep = Garder
+    Voulez-vous le retirer de la barre latérale ?
+remove = Supprimer
+keep = Conserver
 
 # Context Pages
 
@@ -180,13 +184,13 @@ keep = Garder
 
 add-network-drive = Ajouter un lecteur réseau
 connect = Connecter
-connect-anonymously = Connecter anonymement
-connecting = Connection en cours...
+connect-anonymously = Se connecter anonymement
+connecting = Connexion...
 domain = Domaine
 enter-server-address = Entrez l'adresse du serveur
 network-drive-description =
     Les adresses de serveur incluent un préfixe de protocole et une adresse.
-    Exemples: ssh://192.168.0.1, ftp://[2001:db8::1]
+    Exemples : ssh://192.168.0.1, ftp://[2001:db8::1]
 
 ### Make sure to keep the comma which separates the columns
 
@@ -212,84 +216,84 @@ history = Historique
 no-history = Aucun élément dans l'historique.
 pending = En attente
 progress = { $percent }%
-progress-cancelled = { $percent }%, Annulation
-progress-paused = { $percent }%, En pause
+progress-cancelled = { $percent }%, annulation
+progress-paused = { $percent }%, en pause
 failed = Échoué
 complete = Terminé
 compressing =
     Compression de { $items } { $items ->
         [one] élément
        *[other] éléments
-    } depuis { $from } vers { $to }
+    } depuis "{ $from }" vers "{ $to }" ({ $progress })...
 compressed =
     { $items } { $items ->
         [one] élément compressé
        *[other] éléments compressés
-    } depuis { $from } vers { $to }
+    } depuis "{ $from }" vers "{ $to }"
 copy_noun = Copier
-creating = Création de { $name } dans { $parent }
-created = { $name } créé dans { $parent }
+creating = Création de "{ $name }" dans "{ $parent }"
+created = "{ $name }" créé dans "{ $parent }"
 copying =
     Copie de { $items } { $items ->
         [one] élément
        *[other] éléments
-    } depuis { $from } vers { $to }
+    } depuis "{ $from }" vers "{ $to }" ({ $progress })...
 copied =
     { $items } { $items ->
         [one] élément copié
        *[other] éléments copiés
-    } depuis { $from } vers { $to }
+    } depuis "{ $from }" vers "{ $to }"
 deleting =
     Suppression de { $items } { $items ->
         [one] élément
        *[other] éléments
     } depuis { trash } ({ $progress })...
 deleted =
-    Supression de { $items } { $items ->
-        [one] élément
-       *[other] éléments
+    { $items } { $items ->
+        [one] élément supprimé
+       *[other] éléments supprimés
     } depuis { trash }
-emptying-trash = { trash } en cours de nettoyage
+emptying-trash = { trash } en cours de nettoyage ({ $progress })...
 emptied-trash = { trash } vidée
 extracting =
     Extraction de { $items } { $items ->
         [one] élément
        *[other] éléments
-    } depuis { $from } vers { $to }
+    } depuis "{ $from }" vers "{ $to }" ({ $progress })...
 extracted =
     { $items } { $items ->
         [one] élément extrait
        *[other] éléments extraits
-    } depuis { $from } vers { $to }
+    } depuis "{ $from }" vers "{ $to }"
 setting-executable-and-launching = Paramétrage de "{ $name }" comme exécutable et prêt à être lancé
-set-executable-and-launched = Définir "{ $name }" comme exécutable et le lancer
+set-executable-and-launched = Défini "{ $name }" comme exécutable et lancé
 moving =
     Déplacement de { $items } { $items ->
         [one] élément
        *[other] éléments
-    } depuis { $from } vers { $to }
+    } depuis "{ $from }" vers "{ $to }" ({ $progress })...
 moved =
     { $items } { $items ->
         [one] élément déplacé
        *[other] éléments déplacés
-    } depuis { $from } vers { $to }
+    } depuis "{ $from }" vers "{ $to }"
 permanently-deleting =
-    Suppression définitive de "{ $items }" "{ $items ->
-        [one] item
-       *[other] items
-    }"
+    Suppression définitive de { $items } { $items ->
+        [one] élément
+       *[other] éléments
+    }
 permanently-deleted =
-    Supprimés définitivement "{ $items }" "{ $items ->
-        [one] item
-       *[other] items
-    }"
-renaming = Renommage de { $from } en { $to }
-renamed = { $from } renommé en { $to }
+    { $items } { $items ->
+        [one] élément supprimé
+       *[other] éléments supprimés
+    } définitivement
+renaming = Renommage de "{ $from }" en "{ $to }"
+renamed = "{ $from }" renommé en "{ $to }"
 restoring =
     Restauration de { $items } { $items ->
         [one] élément
        *[other] éléments
-    } depuis la { trash }
+    } depuis la { trash } ({ $progress })...
 restored =
     { $items } { $items ->
         [one] élément restauré
@@ -299,18 +303,18 @@ unknown-folder = Dossier inconnu
 
 ## Open with
 
-menu-open-with = Ouvrir avec
+menu-open-with = Ouvrir avec...
 default-app = { $name } (défaut)
 
 ## Show details
 
 show-details = Afficher les détails
-type = Type: { $mime }
-items = Éléments: { $items }
-item-size = Taille: { $size }
-item-created = Créé: { $created }
-item-modified = Modifié: { $modified }
-item-accessed = Consulté: { $accessed }
+type = Type : { $mime }
+items = Éléments : { $items }
+item-size = Taille : { $size }
+item-created = Créé : { $created }
+item-modified = Modifié : { $modified }
+item-accessed = Consulté : { $accessed }
 calculating = Calcul en cours...
 
 ## Settings
@@ -336,16 +340,16 @@ add-to-sidebar = Ajouter à la barre latérale
 compress = Compresser
 delete-permanently = Supprimer définitivement
 extract-here = Extraire
-new-file = Nouveau fichier
-new-folder = Nouveau dossier
+new-file = Nouveau fichier...
+new-folder = Nouveau dossier...
 open-in-terminal = Ouvrir dans le terminal
 move-to-trash = Déplacer vers la corbeille
 restore-from-trash = Restaurer depuis la corbeille
 remove-from-sidebar = Supprimer de la barre latérale
 sort-by-name = Trier par nom
-sort-by-modified = Trier par modification
+sort-by-modified = Trier par date de modification
 sort-by-size = Trier par taille
-sort-by-trashed = Trier par éléments supprimés
+sort-by-trashed = Trier par date de suppression
 
 ## Desktop
 
@@ -378,7 +382,7 @@ select-all = Sélectionner tout
 zoom-in = Zoomer
 default-size = Taille par défaut
 zoom-out = Dézoomer
-view = Vue
+view = Affichage
 grid-view = Vue en grille
 list-view = Vue en liste
 show-hidden-files = Afficher les fichiers cachés
@@ -396,3 +400,24 @@ sort-newest-first = Le plus récent en premier
 sort-oldest-first = Le plus ancien en premier
 sort-smallest-to-largest = Du plus petit au plus grand
 sort-largest-to-smallest = Du plus grand au plus petit
+reload-folder = Recharger le dossier
+related-apps = Applications associées
+removing-from-recents =
+    Suppression de { $items } { $items ->
+        [one] élément
+       *[other] éléments
+    } de { recents }
+other-apps = Autres applications
+set-permissions = Définir les permissions pour "{ $name }" à { $mode }
+repository = Dépôt
+support = Support
+eject = Éjecter
+remove-from-recents = Supprimer des récents
+empty-trash-title = Vider la corbeille ?
+setting-permissions = Définition des permissions pour "{ $name }" à { $mode }
+removed-from-recents =
+    { $items } { $items ->
+        [one] élément supprimé
+       *[other] éléments supprimés
+    } de { recents }
+progress-failed = { $percent }%, échec
