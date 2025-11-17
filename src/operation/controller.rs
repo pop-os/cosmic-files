@@ -1,11 +1,8 @@
-use atomic_float::AtomicF32;
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+use crossbeam_utils::atomic::AtomicCell;
 use std::sync::Arc;
-use std::sync::atomic::{self, AtomicU16};
 use tokio::sync::Notify;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, IntoPrimitive, TryFromPrimitive, Default)]
-#[repr(u16)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ControllerState {
     Cancelled,
     Failed,
@@ -16,8 +13,8 @@ pub enum ControllerState {
 
 #[derive(Debug, Default)]
 struct ControllerInner {
-    state: AtomicU16,
-    progress: AtomicF32,
+    state: AtomicCell<ControllerState>,
+    progress: AtomicCell<f32>,
     notify: Notify,
 }
 
@@ -51,24 +48,19 @@ impl Controller {
     }
 
     pub fn progress(&self) -> f32 {
-        self.inner.progress.load(atomic::Ordering::Relaxed)
+        self.inner.progress.load()
     }
 
     pub fn set_progress(&self, progress: f32) {
-        self.inner
-            .progress
-            .swap(progress, atomic::Ordering::Relaxed);
+        self.inner.progress.store(progress);
     }
 
     pub fn state(&self) -> ControllerState {
-        ControllerState::try_from(self.inner.state.load(atomic::Ordering::Relaxed))
-            .unwrap_or(ControllerState::Failed)
+        self.inner.state.load()
     }
 
     pub fn set_state(&self, state: ControllerState) {
-        self.inner
-            .state
-            .store(state.into(), atomic::Ordering::Relaxed);
+        self.inner.state.store(state);
         self.inner.notify.notify_waiters();
     }
 

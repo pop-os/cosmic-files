@@ -29,6 +29,7 @@ use cosmic::{
         space,
     },
 };
+use crossbeam_utils::atomic::AtomicCell;
 use i18n_embed::LanguageLoader;
 use icu::{
     datetime::{
@@ -54,7 +55,7 @@ use std::{
     hash::Hash,
     io::{BufRead, BufReader},
     path::{self, Path, PathBuf},
-    sync::{Arc, LazyLock, RwLock, atomic},
+    sync::{Arc, LazyLock, atomic},
     time::{Duration, Instant, SystemTime},
 };
 use tempfile::NamedTempFile;
@@ -2557,7 +2558,7 @@ impl Mode {
 struct SearchContext {
     results_rx: mpsc::Receiver<SearchItem>,
     ready: Arc<atomic::AtomicBool>,
-    last_modified_opt: Arc<RwLock<Option<SystemTime>>>,
+    last_modified_opt: Arc<AtomicCell<Option<SystemTime>>>,
 }
 
 pub struct SearchContextWrapper(Option<SearchContext>);
@@ -4154,7 +4155,7 @@ impl Tab {
                             if let Some(last_modified) =
                                 items.last().and_then(|item| item.metadata.modified())
                             {
-                                *context.last_modified_opt.write().unwrap() = Some(last_modified);
+                                context.last_modified_opt.store(Some(last_modified));
                             }
                         }
                     } else {
@@ -6708,7 +6709,7 @@ impl Tab {
                         let (results_tx, results_rx) = mpsc::channel(65536);
 
                         let ready = Arc::new(atomic::AtomicBool::new(false));
-                        let last_modified_opt = Arc::new(RwLock::new(None));
+                        let last_modified_opt = Arc::new(AtomicCell::new(None));
                         output
                             .send(Message::SearchContext(
                                 location.clone(),
@@ -6730,8 +6731,7 @@ impl Tab {
                                     show_hidden,
                                     move |search_item| -> bool {
                                         // Don't send if the result is too old
-                                        if let Some(last_modified) =
-                                            *last_modified_opt.read().unwrap()
+                                        if let Some(last_modified) = last_modified_opt.load()
                                             && let SearchItem::Path(_, _, ref metadata) =
                                                 search_item
                                         {

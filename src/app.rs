@@ -65,7 +65,7 @@ use std::{
     pin::Pin,
     process,
     str::FromStr,
-    sync::{Arc, LazyLock, Mutex},
+    sync::{Arc, LazyLock},
     time::{self, Duration, Instant},
 };
 use tokio::sync::mpsc;
@@ -401,7 +401,7 @@ pub enum Message {
     NetworkResult(MounterKey, String, Result<bool, String>),
     NewItem(Option<Entity>, bool),
     #[cfg(feature = "notify")]
-    Notification(Arc<Mutex<notify_rust::NotificationHandle>>),
+    Notification(Arc<notify_rust::NotificationHandle>),
     NotifyEvents(Vec<notify_debouncer_full::DebouncedEvent>),
     NotifyWatcher(WatcherWrapper),
     OpenTerminal(Option<Entity>),
@@ -753,7 +753,7 @@ pub struct App {
     network_drive_connecting: Option<(MounterKey, String)>,
     network_drive_input: String,
     #[cfg(feature = "notify")]
-    notification_opt: Option<Arc<Mutex<notify_rust::NotificationHandle>>>,
+    notification_opt: Option<Arc<notify_rust::NotificationHandle>>,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     overlap: FxHashMap<String, (window::Id, Rectangle)>,
     pending_operation_id: u64,
@@ -1257,16 +1257,14 @@ impl App {
             .insert(id, (operation.clone(), controller.clone()));
 
         // Use a task to send operations to the compio runtime thread.
-        cosmic::Task::stream(cosmic::iced::stream::channel(4, async move |msg_tx| {
+        cosmic::Task::stream(cosmic::iced::stream::channel(4, async move |mut msg_tx| {
             let (tx, rx) = tokio::sync::oneshot::channel();
-
-            let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
 
             let msg_tx_clone = msg_tx.clone();
 
             _ = compio_tx
                 .send(Box::pin(async move {
-                    let msg = match operation.perform(&msg_tx_clone, controller).await {
+                    let msg = match operation.perform(msg_tx_clone, controller).await {
                         Ok(result_paths) => Message::PendingComplete(id, result_paths),
                         Err(err) => Message::PendingError(id, err),
                     };
@@ -1276,7 +1274,7 @@ impl App {
                 .await;
 
             if let Ok(msg) = rx.await {
-                _ = msg_tx.lock().await.send(msg).await;
+                _ = msg_tx.send(msg).await;
             }
         }))
         .map(cosmic::Action::App)
@@ -1848,8 +1846,7 @@ impl App {
                 return Task::perform(
                     tokio::task::spawn_blocking(move || {
                         //TODO: this is nasty
-                        let notification_mutex = Arc::into_inner(notification_arc).unwrap();
-                        let notification = notification_mutex.into_inner().unwrap();
+                        let notification = Arc::into_inner(notification_arc).unwrap();
                         notification.close();
                     }),
                     |_| cosmic::action::app(Message::MaybeExit),
@@ -6855,8 +6852,7 @@ impl Application for App {
                     subscriptions.push(Subscription::run_with(
                         TypeId::of::<NotificationSubscription>(),
                         |_| {
-                            stream::channel(1, async move |msg_tx| {
-                                let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
+                            stream::channel(1, async move |mut msg_tx| {
                                 tokio::task::spawn_blocking(move || {
                                     match notify_rust::Notification::new()
                                         .summary(&fl!("notification-in-progress"))
@@ -6864,15 +6860,9 @@ impl Application for App {
                                         .show()
                                     {
                                         Ok(notification) => {
-                                            _ = futures::executor::block_on(async {
-                                                msg_tx
-                                                    .lock()
-                                                    .await
-                                                    .send(Message::Notification(Arc::new(
-                                                        Mutex::new(notification),
-                                                    )))
-                                                    .await
-                                            });
+                                            _ = futures::executor::block_on(msg_tx.send(
+                                                Message::Notification(Arc::new(notification)),
+                                            ));
                                         }
                                         Err(err) => {
                                             log::warn!("failed to create notification: {err}");

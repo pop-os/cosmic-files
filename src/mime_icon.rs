@@ -19,7 +19,7 @@ struct MimeIconKey {
 
 #[derive(Default)]
 struct MimeIconCache {
-    cache: FxHashMap<MimeIconKey, Option<icon::Handle>>,
+    cache: Mutex<FxHashMap<MimeIconKey, Option<icon::Handle>>>,
     #[cfg(unix)]
     shared_mime_info: xdg_mime::SharedMimeInfo,
 }
@@ -30,13 +30,15 @@ impl MimeIconCache {
     }
 
     #[cfg(not(unix))]
-    pub fn get(&mut self, _key: MimeIconKey) -> Option<icon::Handle> {
+    pub fn get(&self, _key: MimeIconKey) -> Option<icon::Handle> {
         None
     }
 
     #[cfg(unix)]
-    pub fn get(&mut self, key: MimeIconKey) -> Option<icon::Handle> {
+    pub fn get(&self, key: MimeIconKey) -> Option<icon::Handle> {
         self.cache
+            .lock()
+            .unwrap()
             .entry(key)
             .or_insert_with_key(|key| {
                 let mut icon_names = self.shared_mime_info.lookup_icon_names(&key.mime);
@@ -55,8 +57,7 @@ impl MimeIconCache {
             .clone()
     }
 }
-static MIME_ICON_CACHE: LazyLock<Mutex<MimeIconCache>> =
-    LazyLock::new(|| Mutex::new(MimeIconCache::new()));
+static MIME_ICON_CACHE: LazyLock<MimeIconCache> = LazyLock::new(MimeIconCache::new);
 
 #[cfg(not(unix))]
 pub fn mime_for_path(
@@ -74,9 +75,8 @@ pub fn mime_for_path(
     remote: bool,
 ) -> Mime {
     let path = path.as_ref();
-    let mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
     // Try the shared mime info cache first
-    let mut gb = mime_icon_cache.shared_mime_info.guess_mime_type();
+    let mut gb = MIME_ICON_CACHE.shared_mime_info.guess_mime_type();
     if remote {
         if let Some(file_name) = path.file_name().and_then(std::ffi::OsStr::to_str) {
             gb.file_name(file_name);
@@ -107,8 +107,7 @@ pub fn mime_for_path(
 }
 
 pub fn mime_icon(mime: Mime, size: u16) -> icon::Handle {
-    let mut mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
-    mime_icon_cache
+    MIME_ICON_CACHE
         .get(MimeIconKey { mime, size })
         .unwrap_or_else(|| icon::from_name(FALLBACK_MIME_ICON).size(size).handle())
 }
@@ -120,6 +119,5 @@ pub fn parent_mime_types(_mime: &Mime) -> Option<Vec<Mime>> {
 
 #[cfg(unix)]
 pub fn parent_mime_types(mime: &Mime) -> Option<Vec<Mime>> {
-    let mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
-    mime_icon_cache.shared_mime_info.get_parents_aliased(mime)
+    MIME_ICON_CACHE.shared_mime_info.get_parents_aliased(mime)
 }

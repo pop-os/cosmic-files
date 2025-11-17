@@ -5,13 +5,7 @@
 use cosmic::desktop::fde::GenericEntry;
 use mime_guess::Mime;
 use rustc_hash::FxHashMap;
-use std::{
-    fs,
-    path::Path,
-    process,
-    sync::{LazyLock, Mutex},
-    time::Instant,
-};
+use std::{fs, path::Path, process, sync::LazyLock, time::Instant};
 
 #[derive(Clone, Debug)]
 pub struct Thumbnailer {
@@ -159,10 +153,8 @@ impl ThumbnailerCache {
     }
 }
 
-static THUMBNAILER_CACHE: LazyLock<Mutex<ThumbnailerCache>> =
-    LazyLock::new(|| Mutex::new(ThumbnailerCache::new()));
+static THUMBNAILER_CACHE: LazyLock<ThumbnailerCache> = LazyLock::new(ThumbnailerCache::new);
 
 pub fn thumbnailer(mime: &Mime) -> Vec<Thumbnailer> {
-    let thumbnailer_cache = THUMBNAILER_CACHE.lock().unwrap();
-    thumbnailer_cache.get(mime)
+    THUMBNAILER_CACHE.get(mime)
 }
