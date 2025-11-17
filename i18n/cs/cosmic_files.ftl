@@ -15,7 +15,7 @@ size = Velikost
 
 ## Empty Trash Dialog
 
-empty-trash = Vysypat koš?
+empty-trash = Vysypat koš
 empty-trash-warning = Položky v koši budou trvale smazány
 
 ## New File/Folder Dialog
@@ -401,3 +401,4 @@ sort-largest-to-smallest = Od největšího po nejmenší
 gallery-preview = Náhled galerie
 sort = Řazení
 sort-a-z = A-Z
+empty-trash-title = Vysypat koš?

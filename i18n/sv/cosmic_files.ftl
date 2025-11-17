@@ -31,7 +31,7 @@ create-archive = Skapa arkiv
 
 ## Töm papperskorgen dialogruta
 
-empty-trash = Töm papperskorgen?
+empty-trash = Töm papperskorgen
 empty-trash-warning = Objekt i papperskorgen kommer att tas bort permanent
 
 ## Monteringsfel dialogruta
@@ -393,3 +393,4 @@ eject = Mata ut
 remove-from-recents = Ta bort från senaste
 reload-folder = Ladda om mapp
 selected-items = de { $items } valda objekten
+empty-trash-title = Töm papperskorgen?
