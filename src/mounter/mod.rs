@@ -90,6 +90,14 @@ impl MounterItem {
             Self::None => unreachable!(),
         }
     }
+
+    pub fn is_remote(&self) -> bool {
+        match self {
+            #[cfg(feature = "gvfs")]
+            Self::Gvfs(item) => item.is_remote(),
+            Self::None => unreachable!(),
+        }
+    }
 }
 
 pub type MounterItems = Vec<MounterItem>;

@@ -1543,7 +1543,11 @@ impl App {
                 b = b.text(item.name()).data(MounterData(key, item.clone()));
                 let uri = item.uri();
                 if let Some(path) = item.path() {
-                    b = b.data(Location::Network(uri, item.name(), Some(path)));
+                    if item.is_remote() {
+                        b = b.data(Location::Network(uri, item.name(), Some(path)));
+                    } else {
+                        b = b.data(Location::Path(path));
+                    }
                 } else if !uri.is_empty() {
                     b = b.data(Location::Network(uri, item.name(), None));
                 }

@@ -33,15 +33,28 @@ fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
     let mut items: MounterItems = (monitor.mounts().into_iter())
         .enumerate()
         .map(|(i, mount)| {
+            let root = MountExt::root(&mount);
+            let is_remote = root
+                .query_filesystem_info(
+                    gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE,
+                    gio::Cancellable::NONE,
+                )
+                .ok()
+                .and_then(|info| {
+                    Some(info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE))
+                })
+                .unwrap_or(true); // Default to remote if query fails
+
             MounterItem::Gvfs(Item {
                 uri: mount.root().uri().into(),
                 kind: ItemKind::Mount,
                 index: i,
                 name: mount.name().into(),
                 is_mounted: true,
+                is_remote,
                 icon_opt: gio_icon_to_path(&MountExt::icon(&mount), sizes.grid()),
                 icon_symbolic_opt: gio_icon_to_path(&MountExt::symbolic_icon(&mount), 16),
-                path_opt: MountExt::root(&mount).path(),
+                path_opt: root.path(),
             })
         })
         .collect();
@@ -61,6 +74,7 @@ fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
                     index: i,
                     name: volume.name().into(),
                     is_mounted: false,
+                    is_remote: false,
                     icon_opt: gio_icon_to_path(&VolumeExt::icon(&volume), sizes.grid()),
                     icon_symbolic_opt: gio_icon_to_path(&VolumeExt::symbolic_icon(&volume), 16),
                     path_opt: None,
@@ -266,6 +280,7 @@ pub struct Item {
     index: usize,
     name: String,
     is_mounted: bool,
+    is_remote: bool,
     icon_opt: Option<PathBuf>,
     icon_symbolic_opt: Option<PathBuf>,
     path_opt: Option<PathBuf>,
@@ -278,6 +293,10 @@ impl Item {
 
     pub const fn is_mounted(&self) -> bool {
         self.is_mounted
+    }
+
+    pub const fn is_remote(&self) -> bool {
+        self.is_remote
     }
 
     pub fn uri(&self) -> String {
