@@ -540,11 +540,34 @@ pub fn fs_kind(metadata: &Metadata) -> FsKind {
                         let major = major_str.parse::<libc::c_uint>().ok()?;
                         let minor = minor_str.parse::<libc::c_uint>().ok()?;
                         let dev = libc::makedev(major, minor);
-                        //TODO: make sure this list is exhaustive
+                        // Network and distributed filesystem types
+                        // Based on common remote filesystem types found in /proc/mounts
                         let kind = match mount_info.fs_type.as_str() {
-                            "cifs" | "fuse.rclone" | "fuse.sshfs" | "nfs" | "nfs4" | "smb"
-                            | "smb2" => FsKind::Remote,
+                            // SMB/CIFS variants
+                            "cifs" | "smb" | "smb2" | "smbfs" => FsKind::Remote,
+
+                            // NFS variants
+                            "nfs" | "nfs4" => FsKind::Remote,
+
+                            // FUSE-based remote filesystems
+                            "fuse.rclone" | "fuse.sshfs" | "fuse.davfs2" | "fuse.ceph"
+                            | "fuse.glusterfs" | "fuse.s3fs" | "fuse.goofys" | "fuse.gcsfuse"
+                            | "fuse.afp" | "fuse.afpfs" => FsKind::Remote,
+
+                            // Other network protocols
+                            "afs" | "coda" | "ncpfs" | "davfs" | "davfs2" | "shfs" => {
+                                FsKind::Remote
+                            }
+
+                            // Cluster/distributed filesystems
+                            "ceph" | "glusterfs" | "lustre" | "gfs" | "gfs2" | "ocfs2" => {
+                                FsKind::Remote
+                            }
+
+                            // GVFS (GNOME Virtual File System)
                             "fuse.gvfsd-fuse" => FsKind::Gvfs,
+
+                            // Everything else is local
                             _ => FsKind::Local,
                         };
                         Some((dev, kind))
@@ -622,7 +645,7 @@ fn display_name_for_file(path: &Path, name: &str, get_from_gvfs: bool, is_deskto
         );
     } else if get_from_gvfs {
         #[cfg(feature = "gvfs")]
-        return Item::display_name(glib::filename_display_name(path).as_str())
+        return Item::display_name(glib::filename_display_name(path).as_str());
     }
     Item::display_name(name)
 }

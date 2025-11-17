@@ -40,9 +40,7 @@ fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
                     gio::Cancellable::NONE,
                 )
                 .ok()
-                .and_then(|info| {
-                    Some(info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE))
-                })
+                .and_then(|info| Some(info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE)))
                 .unwrap_or(true); // Default to remote if query fails
 
             MounterItem::Gvfs(Item {
