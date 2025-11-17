@@ -388,6 +388,10 @@ impl<M: Send + 'static> Dialog<M> {
     pub const fn window_id(&self) -> window::Id {
         self.cosmic.app.flags.window_id
     }
+
+    pub fn contains_surface(&self, id: &window::Id) -> bool {
+        self.cosmic.surface_views.contains_key(id)
+    }
 }
 
 #[derive(Clone, Debug)]
