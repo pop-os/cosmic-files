@@ -1543,7 +1543,11 @@ impl App {
                 b = b.text(item.name()).data(MounterData(key, item.clone()));
                 let uri = item.uri();
                 if let Some(path) = item.path() {
-                    b = b.data(Location::Network(uri, item.name(), Some(path)));
+                    if item.is_remote() {
+                        b = b.data(Location::Network(uri, item.name(), Some(path)));
+                    } else {
+                        b = b.data(Location::Path(path));
+                    }
                 } else if !uri.is_empty() {
                     b = b.data(Location::Network(uri, item.name(), None));
                 }
@@ -3088,6 +3092,16 @@ impl Application for App {
             Message::MountResult(mounter_key, item, res) => match res {
                 Ok(true) => {
                     log::info!("connected to {item:?}");
+                    // Automatically navigate to the mounted location
+                    if let Some(path) = item.path() {
+                        let location = if item.is_remote() {
+                            Location::Network(item.uri(), item.name(), Some(path))
+                        } else {
+                            Location::Path(path)
+                        };
+                        let message = Message::TabMessage(None, tab::Message::Location(location));
+                        return self.update(message);
+                    }
                 }
                 Ok(false) => {
                     log::info!("cancelled connection to {item:?}");
