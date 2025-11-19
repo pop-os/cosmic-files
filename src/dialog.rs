@@ -369,6 +369,7 @@ impl<M: Send + 'static> Dialog<M> {
             .map(DialogMessage)
             .map(move |message| cosmic::action::app(mapper(message)));
         if let Some(result) = self.cosmic.app.result_opt.take() {
+            #[cfg(feature = "wayland")]
             if !self.cosmic.surface_views.is_empty() {
                 log::debug!("waiting for surfaces to close...");
                 let mut tasks = Vec::new();
@@ -426,6 +427,7 @@ impl<M: Send + 'static> Dialog<M> {
         self.cosmic.app.flags.window_id
     }
 
+    #[cfg(feature = "wayland")]
     pub fn contains_surface(&self, id: &window::Id) -> bool {
         self.cosmic.surface_views.contains_key(id)
     }
