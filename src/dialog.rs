@@ -34,17 +34,16 @@ use recently_used_xbel::update_recently_used;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::{
     any::TypeId,
+    borrow::Cow,
     collections::{HashMap, VecDeque},
     env, fmt, fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{self, Instant},
 };
 
 use crate::{
     Debouncer,
-    app::{
-        Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind, REPLACE_BUTTON_ID,
-    },
+    app::{Action, ContextPage, Message as AppMessage, PreviewKind, REPLACE_BUTTON_ID},
     config::{Config, DialogConfig, Favorite, TIME_CONFIG_ID, ThumbCfg, TimeConfig, TypeToSearch},
     fl, home_dir,
     key_bind::key_binds,
@@ -61,7 +60,7 @@ pub struct DialogMessage(cosmic::Action<Message>);
 #[derive(Clone, Debug)]
 pub enum DialogResult {
     Cancel,
-    Open(Vec<PathBuf>),
+    Open(Box<[Box<Path>]>),
 }
 
 #[derive(Clone, Debug)]
@@ -106,8 +105,8 @@ impl DialogKind {
 
 #[derive(Clone, Debug)]
 pub struct DialogChoiceOption {
-    pub id: String,
-    pub label: String,
+    pub id: Cow<'static, str>,
+    pub label: Cow<'static, str>,
 }
 
 impl AsRef<str> for DialogChoiceOption {
@@ -119,13 +118,13 @@ impl AsRef<str> for DialogChoiceOption {
 #[derive(Clone, Debug)]
 pub enum DialogChoice {
     CheckBox {
-        id: String,
-        label: String,
+        id: Cow<'static, str>,
+        label: Cow<'static, str>,
         value: bool,
     },
     ComboBox {
-        id: String,
-        label: String,
+        id: Cow<'static, str>,
+        label: Cow<'static, str>,
         options: Vec<DialogChoiceOption>,
         selected: Option<usize>,
     },
@@ -318,9 +317,9 @@ impl<M: Send + 'static> Dialog<M> {
         )
     }
 
-    pub fn set_title(&mut self, title: impl Into<String>) -> Task<M> {
+    pub fn set_title(&mut self, title: impl AsRef<str>) -> Task<M> {
         let mapper = self.mapper;
-        self.cosmic.app.title = title.into();
+        title.as_ref().clone_into(&mut self.cosmic.app.title);
         self.cosmic
             .app
             .update_title()
@@ -442,8 +441,8 @@ impl<M: Send + 'static> Dialog<M> {
 
 #[derive(Clone, Debug)]
 enum DialogPage {
-    NewFolder { parent: PathBuf, name: String },
-    Replace { filename: String },
+    NewFolder { parent: PathBuf, name: Box<str> },
+    Replace { filename: Box<str> },
 }
 
 #[derive(Clone, Debug)]
@@ -488,9 +487,9 @@ enum Message {
     TabMessage(tab::Message),
     TabRescan(
         Location,
-        Option<tab::Item>,
+        Box<Option<tab::Item>>,
         Vec<tab::Item>,
-        Option<Vec<PathBuf>>,
+        Option<Box<[PathBuf]>>,
     ),
     TabView(tab::View),
     TimeConfigChange(TimeConfig),
@@ -570,7 +569,7 @@ struct App {
     search_id: widget::Id,
     tab: Tab,
     key_binds: HashMap<KeyBind, Action>,
-    watcher_opt: Option<(Debouncer, FxHashSet<PathBuf>)>,
+    watcher_opt: Option<(Debouncer, FxHashSet<Box<Path>>)>,
     auto_scroll_speed: Option<i16>,
     type_select_prefix: String,
     type_select_last_key: Option<Instant>,
@@ -631,7 +630,7 @@ impl App {
                     ..
                 } => {
                     row = row
-                        .push(widget::text::heading(label))
+                        .push(widget::text::heading(label.clone()))
                         .push(widget::dropdown(options, *selected, move |option_i| {
                             Message::Choice(choice_i, option_i)
                         }));
@@ -691,8 +690,8 @@ impl App {
         let military_time = self.tab.config.military_time;
         let mut children = Vec::with_capacity(1);
         match kind {
-            PreviewKind::Custom(PreviewItem(item)) => {
-                children.push(item.preview_view(None, military_time));
+            PreviewKind::Custom(item) => {
+                children.push(item.0.preview_view(None, military_time));
             }
             PreviewKind::Location(location) => {
                 if let Some(items) = self.tab.items_opt() {
@@ -726,7 +725,7 @@ impl App {
                     }
 
                     if children.is_empty()
-                        && let Some(item) = &self.tab.parent_item_opt
+                        && let Some(item) = self.tab.parent_item_opt.as_ref()
                     {
                         children.push(item.preview_view(None, military_time));
                     }
@@ -736,7 +735,7 @@ impl App {
         widget::column::with_children(children).into()
     }
 
-    fn rescan_tab(&self, selection_paths: Option<Vec<PathBuf>>) -> Task<Message> {
+    fn rescan_tab(&self, selection_paths: Option<Box<[PathBuf]>>) -> Task<Message> {
         let location = self.tab.location.clone();
         let icon_sizes = self.tab.config.icon_sizes;
         let mounter_items = self.mounter_items.clone();
@@ -753,14 +752,15 @@ impl App {
                             .collect();
                         if !mounter_paths.is_empty() {
                             for item in &mut items {
-                                item.is_mount_point =
-                                    item.path_opt().is_some_and(|p| mounter_paths.contains(p));
+                                item.is_mount_point = item
+                                    .path_opt()
+                                    .is_some_and(|p| mounter_paths.contains(&p.as_path()));
                             }
                         }
                     }
                     cosmic::action::app(Message::TabRescan(
                         location,
-                        parent_item_opt,
+                        Box::new(parent_item_opt),
                         items,
                         selection_paths,
                     ))
@@ -925,14 +925,16 @@ impl App {
         }
         // Sort by name lexically
         nav_items.sort_unstable_by(|&(_, item_a), &(_, item_b)| {
-            LANGUAGE_SORTER.compare(&item_a.name(), &item_b.name())
+            LANGUAGE_SORTER.compare(item_a.name(), item_b.name())
         });
         // Add items to nav model
         for (i, (key, item)) in nav_items.into_iter().enumerate() {
             nav_model = nav_model.insert(|mut b| {
-                b = b.text(item.name()).data(MounterData(key, item.clone()));
+                b = b
+                    .text(item.name().to_string())
+                    .data(MounterData(key, item.clone()));
                 if let Some(path) = item.path() {
-                    b = b.data(Location::Path(path));
+                    b = b.data(Location::Path(path.to_path_buf()));
                 }
                 if let Some(icon) = item.icon(true) {
                     b = b.icon(widget::icon::icon(icon).size(16));
@@ -961,7 +963,7 @@ impl App {
         if let Some((mut watcher, old_paths)) = self.watcher_opt.take() {
             let mut new_paths = FxHashSet::default();
             if let Some(path) = self.tab.location.path_opt() {
-                new_paths.insert(path.clone());
+                new_paths.insert(path.as_path().into());
             }
 
             // Unwatch paths no longer used
@@ -1142,17 +1144,17 @@ impl Application for App {
 
                 let complete_maybe = if name.is_empty() {
                     None
-                } else if name == "." || name == ".." {
+                } else if **name == *"." || **name == *".." {
                     dialog = dialog.tertiary_action(widget::text::body(fl!(
                         "name-invalid",
-                        filename = name.as_str()
+                        filename = name.as_ref()
                     )));
                     None
                 } else if name.contains('/') {
                     dialog = dialog.tertiary_action(widget::text::body(fl!("name-no-slashes")));
                     None
                 } else {
-                    let path = parent.join(name);
+                    let path = parent.join(name.as_ref());
                     if path.exists() {
                         if path.is_dir() {
                             dialog = dialog
@@ -1181,12 +1183,12 @@ impl Application for App {
                     .control(
                         widget::column::with_children([
                             widget::text::body(fl!("folder-name")).into(),
-                            widget::text_input("", name.as_str())
+                            widget::text_input("", name.as_ref())
                                 .id(self.dialog_text_input.clone())
                                 .on_input(move |name| {
                                     Message::DialogUpdate(DialogPage::NewFolder {
                                         parent: parent.clone(),
-                                        name,
+                                        name: name.into_boxed_str(),
                                     })
                                 })
                                 .on_submit_maybe(complete_maybe.map(|maybe| move |_| maybe.clone()))
@@ -1196,7 +1198,7 @@ impl Application for App {
                     )
             }
             DialogPage::Replace { filename } => widget::dialog()
-                .title(fl!("replace-title", filename = filename.as_str()))
+                .title(fl!("replace-title", filename = filename.as_ref()))
                 .icon(widget::icon::from_name("dialog-question").size(64))
                 .body(fl!("replace-warning"))
                 .primary_action(
@@ -1404,8 +1406,9 @@ impl Application for App {
             Message::DialogComplete => {
                 if let Some(dialog_page) = self.dialog_pages.pop_front() {
                     match dialog_page {
-                        DialogPage::NewFolder { parent, name } => {
-                            let path = parent.join(name);
+                        DialogPage::NewFolder { mut parent, name } => {
+                            parent.push(name.as_ref());
+                            let path = parent;
                             match fs::create_dir(&path) {
                                 Ok(()) => {
                                     // cd to directory
@@ -1527,12 +1530,11 @@ impl Application for App {
                         if let Some(old_path) = old_item.path()
                             && old_item.is_mounted()
                         {
-                            let still_mounted = mounter_items.iter().any(|item| {
-                                item.is_mounted()
-                                    && item.path().is_some_and(|path| path == old_path)
-                            });
+                            let still_mounted = mounter_items
+                                .iter()
+                                .any(|item| item.is_mounted() && item.path() == Some(old_path));
                             if !still_mounted {
-                                unmounted.push(Location::Path(old_path));
+                                unmounted.push(Location::Path(old_path.to_path_buf()));
                             }
                         }
                     }
@@ -1568,7 +1570,7 @@ impl Application for App {
                 if let Some(path) = self.tab.location.path_opt() {
                     self.dialog_pages.push_back(DialogPage::NewFolder {
                         parent: path.clone(),
-                        name: String::new(),
+                        name: Box::default(),
                     });
                     return widget::text_input::focus(self.dialog_text_input.clone());
                 }
@@ -1638,24 +1640,25 @@ impl Application for App {
                 }
             },
             Message::Open => {
-                let paths: Vec<PathBuf> = self.tab.items_opt().map_or_else(Vec::new, |items| {
-                    items
-                        .iter()
-                        .filter(|&item| item.selected)
-                        .filter_map(Item::path_opt)
-                        .map(|path| {
-                            if self.flags.config.show_recents {
-                                _ = update_recently_used(
-                                    path,
-                                    Self::APP_ID.to_string(),
-                                    "cosmic-files".to_string(),
-                                    None,
-                                );
-                            }
-                            path.clone()
-                        })
-                        .collect()
-                });
+                let paths: Box<[Box<Path>]> =
+                    self.tab.items_opt().map_or_else(Box::default, |items| {
+                        items
+                            .iter()
+                            .filter(|&item| item.selected)
+                            .filter_map(Item::path_opt)
+                            .map(|path| {
+                                if self.flags.config.show_recents {
+                                    _ = update_recently_used(
+                                        path,
+                                        Self::APP_ID.to_string(),
+                                        "cosmic-files".to_string(),
+                                        None,
+                                    );
+                                }
+                                path.as_path().into()
+                            })
+                            .collect()
+                    });
 
                 // Ensure selection is allowed
                 //TODO: improve tab logic so this doesn't block the open button so often
@@ -1665,7 +1668,7 @@ impl Application for App {
                         if path_is_dir && paths.len() == 1 {
                             // If the only selected item is a directory and we are selecting files, cd to it
                             let message = Message::TabMessage(tab::Message::Location(
-                                Location::Path(path.clone()),
+                                Location::Path(path.to_path_buf()),
                             ));
                             return self.update(message);
                         }
@@ -1685,7 +1688,7 @@ impl Application for App {
                 if self.flags.kind.is_dir()
                     && let Location::Path(tab_path) = &self.tab.location
                 {
-                    self.result_opt = Some(DialogResult::Open(vec![tab_path.clone()]));
+                    self.result_opt = Some(DialogResult::Open([tab_path.as_path().into()].into()));
                     return window::close(self.flags.window_id);
                 }
             }
@@ -1708,11 +1711,11 @@ impl Application for App {
                         return self.update(message);
                     } else if !replace && path.exists() {
                         self.dialog_pages.push_back(DialogPage::Replace {
-                            filename: filename.clone(),
+                            filename: filename.as_str().into(),
                         });
                         return widget::button::focus(REPLACE_BUTTON_ID.clone());
                     }
-                    self.result_opt = Some(DialogResult::Open(vec![path]));
+                    self.result_opt = Some(DialogResult::Open([tab_path.as_path().into()].into()));
                     return window::close(self.flags.window_id);
                 }
             }

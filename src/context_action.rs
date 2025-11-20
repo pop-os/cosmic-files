@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::path::PathBuf;
-
 use serde::{Deserialize, Serialize};
 
 use crate::{mime_app, spawn_detached::spawn_detached};
@@ -39,7 +37,7 @@ impl ContextActionPreset {
         }
     }
 
-    pub fn run(&self, paths: &[PathBuf]) {
+    pub fn run<O: AsRef<std::ffi::OsStr>>(&self, paths: &[O]) {
         if self.steps.is_empty() {
             log::warn!("context action {:?} has no steps", self.name);
             return;
@@ -70,7 +68,7 @@ impl ContextActionPreset {
     }
 }
 
-pub fn run(actions: &[ContextActionPreset], action: usize, paths: &[PathBuf]) {
+pub fn run<O: AsRef<std::ffi::OsStr>>(actions: &[ContextActionPreset], action: usize, paths: &[O]) {
     if let Some(preset) = actions.get(action) {
         preset.run(paths);
     } else {

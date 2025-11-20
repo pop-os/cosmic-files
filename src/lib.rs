@@ -41,8 +41,8 @@ pub(crate) type Debouncer = notify_debouncer_full::Debouncer<
     notify_debouncer_full::RecommendedCache,
 >;
 
-pub(crate) fn err_str<T>(err: anyhow::Result<T>) -> Result<T, String> {
-    err.map_err(|e| format!("{e:#}"))
+pub(crate) fn err_str<T>(res: anyhow::Result<T>) -> Result<T, Box<str>> {
+    res.map_err(|e| format!("{e:#}").into_boxed_str())
 }
 
 pub fn desktop_dir() -> PathBuf {
@@ -171,7 +171,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 log::warn!("recents feature is disabled in config");
                 continue;
             },
-            "--network" => Location::Network("network:///".to_string(), fl!("networks"), None),
+            "--network" => Location::Network("network:///".to_string(), fl!("networks").into_boxed_str(), None),
             _ => {
                 //TODO: support more URLs
                 let path = if let Ok(url) = url::Url::parse(&arg) {

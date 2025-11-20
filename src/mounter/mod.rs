@@ -2,7 +2,7 @@ use cosmic::{Task, iced::Subscription, widget};
 use std::{
     collections::BTreeMap,
     fmt,
-    path::PathBuf,
+    path::Path,
     sync::{Arc, LazyLock},
 };
 use tokio::sync::mpsc;
@@ -14,10 +14,10 @@ mod gvfs;
 
 #[derive(Clone)]
 pub struct MounterAuth {
-    pub message: String,
-    pub username_opt: Option<String>,
-    pub domain_opt: Option<String>,
-    pub password_opt: Option<String>,
+    pub message: Arc<str>,
+    pub username_opt: Option<Arc<str>>,
+    pub domain_opt: Option<Arc<str>>,
+    pub password_opt: Option<Arc<str>>,
     pub remember_opt: Option<bool>,
     pub anonymous_opt: Option<bool>,
 }
@@ -51,7 +51,7 @@ pub enum MounterItem {
 }
 
 impl MounterItem {
-    pub fn name(&self) -> String {
+    pub fn name(&self) -> &str {
         match self {
             #[cfg(feature = "gvfs")]
             Self::Gvfs(item) => item.name(),
@@ -59,7 +59,7 @@ impl MounterItem {
         }
     }
 
-    pub fn uri(&self) -> String {
+    pub fn uri(&self) -> &str {
         match self {
             #[cfg(feature = "gvfs")]
             Self::Gvfs(item) => item.uri(),
@@ -83,7 +83,7 @@ impl MounterItem {
         }
     }
 
-    pub fn path(&self) -> Option<PathBuf> {
+    pub fn path(&self) -> Option<&Path> {
         match self {
             #[cfg(feature = "gvfs")]
             Self::Gvfs(item) => item.path(),
@@ -106,8 +106,8 @@ pub type MounterItems = Vec<MounterItem>;
 pub enum MounterMessage {
     Items(MounterItems),
     MountResult(MounterItem, anyhow::Result<bool>),
-    NetworkAuth(String, MounterAuth, mpsc::Sender<MounterAuth>),
-    NetworkResult(String, anyhow::Result<bool>),
+    NetworkAuth(Arc<str>, MounterAuth, mpsc::Sender<MounterAuth>),
+    NetworkResult(Arc<str>, anyhow::Result<bool>),
 }
 
 pub trait Mounter: Send + Sync {

@@ -321,7 +321,7 @@ impl Eq for PreviewItem {}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PreviewKind {
-    Custom(PreviewItem),
+    Custom(Box<PreviewItem>),
     Location(Location),
     Selected,
 }
@@ -382,14 +382,14 @@ pub enum Message {
     MaybeExit,
     ModifiersChanged(window::Id, Modifiers),
     MounterItems(MounterKey, MounterItems),
-    MountResult(MounterKey, MounterItem, Result<bool, String>),
+    MountResult(MounterKey, MounterItem, Result<bool, Box<str>>),
     Mouse(window::Id, mouse::Button),
     MoveTo(Option<Entity>),
     MoveToResult(DialogResult),
     NavBarClose(Entity),
     NavBarContext(Entity),
     NavMenuAction(NavMenuAction),
-    NetworkAuth(MounterKey, String, MounterAuth, mpsc::Sender<MounterAuth>),
+    NetworkAuth(MounterKey, Arc<str>, MounterAuth, mpsc::Sender<MounterAuth>),
     NetworkDriveInput(String),
     NetworkDriveOpenEntityAfterMount {
         entity: Entity,
@@ -398,7 +398,7 @@ pub enum Message {
         location: Location,
     },
     NetworkDriveSubmit,
-    NetworkResult(MounterKey, String, Result<bool, String>),
+    NetworkResult(MounterKey, Arc<str>, Result<bool, Box<str>>),
     NewItem(Option<Entity>, bool),
     #[cfg(feature = "notify")]
     Notification(Arc<notify_rust::NotificationHandle>),
@@ -464,9 +464,9 @@ pub enum Message {
     TabRescan(
         Entity,
         Location,
-        Option<tab::Item>,
+        Box<Option<tab::Item>>,
         Vec<tab::Item>,
-        Option<Vec<PathBuf>>,
+        Option<Box<[PathBuf]>>,
     ),
     TabView(Option<Entity>, tab::View),
     TimeConfigChange(TimeConfig),
@@ -474,7 +474,7 @@ pub enum Message {
     ToggleFoldersFirst,
     ToggleShowHidden,
     Undo(usize),
-    UndoTrash(widget::ToastId, Arc<[PathBuf]>),
+    UndoTrash(widget::ToastId, Arc<[Box<Path>]>),
     UndoTrashStart(Vec<TrashItem>),
     WindowClose,
     WindowCloseRequested(window::Id),
@@ -538,38 +538,38 @@ impl AsRef<str> for ArchiveType {
 #[derive(Clone, Debug)]
 pub enum DialogPage {
     Compress {
-        paths: Box<[PathBuf]>,
-        to: PathBuf,
-        name: String,
+        paths: Arc<[PathBuf]>,
+        to: Arc<Path>,
+        name: Arc<str>,
         archive_type: ArchiveType,
-        password: Option<String>,
+        password: Option<Arc<str>>,
     },
     EmptyTrash,
     FailedOperation(u64),
     FailedOperations(Vec<u64>),
     ExtractPassword {
         id: u64,
-        password: String,
+        password: Arc<str>,
     },
     MountError {
         mounter_key: MounterKey,
         item: MounterItem,
-        error: String,
+        error: Box<str>,
     },
     NetworkAuth {
         mounter_key: MounterKey,
-        uri: String,
+        uri: Arc<str>,
         auth: MounterAuth,
         auth_tx: mpsc::Sender<MounterAuth>,
     },
     NetworkError {
         mounter_key: MounterKey,
-        uri: String,
-        error: String,
+        uri: Arc<str>,
+        error: Box<str>,
     },
     NewItem {
-        parent: PathBuf,
-        name: String,
+        parent: Arc<Path>,
+        name: Arc<str>,
         dir: bool,
     },
     RunContextAction {
@@ -583,20 +583,20 @@ pub enum DialogPage {
         store_opt: Option<MimeApp>,
     },
     PermanentlyDelete {
-        paths: Box<[PathBuf]>,
+        paths: Box<[Box<Path>]>,
     },
     DeleteTrash {
         items: Vec<TrashItem>,
     },
     RenameItem {
-        from: PathBuf,
-        parent: PathBuf,
-        name: String,
+        from: Arc<Path>,
+        parent: Arc<Path>,
+        name: Arc<str>,
         dir: bool,
     },
     Replace {
-        from: tab::Item,
-        to: tab::Item,
+        from: Box<tab::Item>,
+        to: Box<tab::Item>,
         multiple: bool,
         apply_to_all: bool,
         conflict_count: usize,
@@ -739,7 +739,7 @@ pub struct App {
     config: Config,
     state: State,
     mode: Mode,
-    app_themes: Vec<String>,
+    app_themes: [Box<str>; 3],
     compio_tx: mpsc::Sender<Pin<Box<dyn Future<Output = ()> + Send>>>,
     context_page: ContextPage,
     dialog_pages: DialogPages,
@@ -750,17 +750,17 @@ pub struct App {
     modifiers: Modifiers,
     mounter_items: FxHashMap<MounterKey, MounterItems>,
     must_save_sort_names: bool,
-    network_drive_connecting: Option<(MounterKey, String)>,
-    network_drive_input: String,
+    network_drive_connecting: Option<(MounterKey, Box<str>)>,
+    network_drive_input: Box<str>,
     #[cfg(feature = "notify")]
     notification_opt: Option<Arc<notify_rust::NotificationHandle>>,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
-    overlap: FxHashMap<String, (window::Id, Rectangle)>,
+    overlap: FxHashMap<Box<str>, (window::Id, Rectangle)>,
     pending_operation_id: u64,
     pending_operations: BTreeMap<u64, (Operation, Controller)>,
     progress_operations: BTreeSet<u64>,
     complete_operations: BTreeMap<u64, Operation>,
-    failed_operations: BTreeMap<u64, (Operation, Controller, String)>,
+    failed_operations: BTreeMap<u64, (Operation, Controller, Box<str>)>,
     scrollable_id: widget::Id,
     search_id: widget::Id,
     size: Option<Size>,
@@ -769,9 +769,9 @@ pub struct App {
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     surface_ids: FxHashMap<WlOutput, WindowId>,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
-    surface_names: FxHashMap<WindowId, String>,
+    surface_names: FxHashMap<WindowId, Box<str>>,
     toasts: widget::toaster::Toasts<Message>,
-    watcher_opt: Option<(Debouncer, FxHashSet<PathBuf>)>,
+    watcher_opt: Option<(Debouncer, FxHashSet<Box<Path>>)>,
     windows: FxHashMap<window::Id, Window>,
     nav_dnd_hover: Option<(Location, Instant)>,
     tab_dnd_hover: Option<(Entity, Instant)>,
@@ -799,21 +799,19 @@ impl App {
         }
     }
 
-    fn open_file(&mut self, paths: &[impl AsRef<Path>]) -> Task<Message> {
+    fn open_file(&mut self, paths: Box<[PathBuf]>) -> Task<Message> {
         let mut tasks = Vec::new();
 
         // Associate all paths to its MIME type
         // This allows handling paths as groups if possible, such as launching a single video
         // player that is passed every path.
-        let mut groups: FxHashMap<Mime, Vec<PathBuf>> = FxHashMap::default();
+        let mut groups: FxHashMap<Mime, Vec<&PathBuf>> = FxHashMap::default();
         let mut all_archives = true;
         let supported_archive_types = crate::archive::SUPPORTED_ARCHIVE_TYPES;
-        for (mime, path) in paths.iter().map(|path| {
-            (
-                mime_icon::mime_for_path(path, None, false),
-                path.as_ref().to_path_buf(),
-            )
-        }) {
+        for (mime, path) in paths
+            .iter()
+            .map(|path| (mime_icon::mime_for_path(path, None, false), path))
+        {
             if all_archives && !supported_archive_types.iter().any(|&t| mime == t) {
                 all_archives = false;
             }
@@ -839,11 +837,12 @@ impl App {
             } else if mime == "application/x-executable" || mime == "application/vnd.appimage" {
                 // Try opening executable
                 for path in paths {
-                    let mut command = std::process::Command::new(&path);
+                    let mut command = std::process::Command::new(path);
                     match spawn_detached(&mut command) {
                         Ok(()) => {}
                         Err(err) => match err.kind() {
                             io::ErrorKind::PermissionDenied => {
+                                let path = path.clone();
                                 // If permission is denied, try marking as executable, then running
                                 tasks.push(self.push_dialog(
                                     DialogPage::SetExecutableAndLaunch { path },
@@ -875,11 +874,11 @@ impl App {
 
             // Fall back to using open crate
             for path in paths {
-                match open::that_detached(&path) {
+                match open::that_detached(path) {
                     Ok(()) => {
                         if self.config.show_recents {
                             _ = recently_used_xbel::update_recently_used(
-                                &path,
+                                path,
                                 Self::APP_ID.to_string(),
                                 "cosmic-files".to_string(),
                                 None,
@@ -938,7 +937,7 @@ impl App {
         }
     }
 
-    fn launch_from_mime_cache(&self, mime: &Mime, paths: &[PathBuf]) -> bool {
+    fn launch_from_mime_cache(&self, mime: &Mime, paths: &[&PathBuf]) -> bool {
         for app in self.mime_app_cache.get(mime) {
             let Some(commands) = app.command(paths) else {
                 continue;
@@ -949,7 +948,7 @@ impl App {
                 match spawn_detached(&mut command) {
                     Ok(()) => {
                         if self.config.show_recents {
-                            for path in paths {
+                            for &path in paths {
                                 _ = recently_used_xbel::update_recently_used(
                                     path,
                                     Self::APP_ID.to_string(),
@@ -1003,14 +1002,14 @@ impl App {
 
     fn destination_selection_dialog(
         &mut self,
-        paths: &[impl AsRef<Path>],
+        paths: Box<[PathBuf]>,
         on_result: impl Fn(DialogResult) -> Message + 'static,
-        title: impl Into<String>,
+        title: impl AsRef<str>,
         accept_label: impl AsRef<str>,
     ) -> Task<Message> {
         if let Some(destination) = paths
             .first()
-            .and_then(|first| first.as_ref().parent())
+            .and_then(|first| first.parent())
             .map(Path::to_path_buf)
         {
             let (mut dialog, dialog_task) = Dialog::new(
@@ -1024,9 +1023,7 @@ impl App {
             dialog.set_accept_label(accept_label);
             self.windows.insert(
                 dialog.window_id(),
-                Window::new(WindowKind::FileDialog(Some(
-                    paths.iter().map(|x| x.as_ref().to_path_buf()).collect(),
-                ))),
+                Window::new(WindowKind::FileDialog(Some(paths))),
             );
             self.file_dialog_opt = Some(dialog);
             Task::batch([set_title_task, dialog_task])
@@ -1035,7 +1032,7 @@ impl App {
         }
     }
 
-    fn extract_to(&mut self, paths: &[impl AsRef<Path>]) -> Task<Message> {
+    fn extract_to(&mut self, paths: Box<[PathBuf]>) -> Task<Message> {
         self.destination_selection_dialog(
             paths,
             Message::ExtractToResult,
@@ -1044,7 +1041,7 @@ impl App {
         )
     }
 
-    fn move_to(&mut self, paths: &[impl AsRef<Path>]) -> Task<Message> {
+    fn move_to(&mut self, paths: Box<[PathBuf]>) -> Task<Message> {
         self.destination_selection_dialog(
             paths,
             Message::MoveToResult,
@@ -1053,7 +1050,7 @@ impl App {
         )
     }
 
-    fn copy_to(&mut self, paths: &[impl AsRef<Path>]) -> Task<Message> {
+    fn copy_to(&mut self, paths: Box<[PathBuf]>) -> Task<Message> {
         self.destination_selection_dialog(
             paths,
             Message::CopyToResult,
@@ -1149,7 +1146,7 @@ impl App {
         &mut self,
         location: Location,
         activate: bool,
-        selection_paths: Option<Vec<PathBuf>>,
+        selection_paths: Option<Box<[PathBuf]>>,
         scrollable_id: widget::Id,
         window_id: Option<window::Id>,
     ) -> (Entity, Task<Message>) {
@@ -1172,7 +1169,7 @@ impl App {
         let entity = self
             .tab_model
             .insert()
-            .text(tab.title())
+            .text(tab.title().to_string())
             .data(tab)
             .closable();
 
@@ -1196,7 +1193,7 @@ impl App {
         &mut self,
         location: Location,
         activate: bool,
-        selection_paths: Option<Vec<PathBuf>>,
+        selection_paths: Option<Box<[PathBuf]>>,
     ) -> Task<Message> {
         self.open_tab_entity(
             location,
@@ -1223,23 +1220,23 @@ impl App {
                 }
             };
             if can_trash {
-                trash_paths.push(path);
+                trash_paths.push(path.into_boxed_path());
             } else {
-                dialog_paths.push(path);
+                dialog_paths.push(path.into_boxed_path());
             }
         }
 
         let mut tasks = Vec::new();
         if !dialog_paths.is_empty() {
+            let paths = dialog_paths.into_boxed_slice();
             tasks.push(self.update(Message::DialogPush(
-                DialogPage::PermanentlyDelete {
-                    paths: dialog_paths.into_boxed_slice(),
-                },
+                DialogPage::PermanentlyDelete { paths },
                 Some(PERMANENT_DELETE_BUTTON_ID.clone()),
             )));
         }
         if !trash_paths.is_empty() {
-            tasks.push(self.operation(Operation::Delete { paths: trash_paths }));
+            let paths = trash_paths.into_boxed_slice();
+            tasks.push(self.operation(Operation::Delete { paths }));
         }
         Task::batch(tasks)
     }
@@ -1324,7 +1321,7 @@ impl App {
                 // Show toast for some operations
                 if let Some(description) = op.toast() {
                     if let Operation::Delete { ref paths } = op {
-                        let paths: Arc<[PathBuf]> = Arc::from(paths.as_slice());
+                        let paths: Arc<[_]> = Arc::from(paths.as_ref());
                         commands.push(
                             self.toasts
                                 .push(
@@ -1399,7 +1396,7 @@ impl App {
                         OperationErrorType::PasswordRequired => {
                             tasks.push(self.dialog_pages.push_back(DialogPage::ExtractPassword {
                                 id,
-                                password: String::new(),
+                                password: Arc::default(),
                             }));
                         }
                     }
@@ -1408,7 +1405,7 @@ impl App {
                 // Remove from progress
                 self.progress_operations.remove(&id);
                 self.failed_operations
-                    .insert(id, (op, controller, err.to_string()));
+                    .insert(id, (op, controller, err.to_string().into_boxed_str()));
             }
         }
         if !failed.is_empty() {
@@ -1468,14 +1465,14 @@ impl App {
         }) {
             return Task::none();
         }
-        self.update_tab(entity, tab.location.clone(), Some(op_sel.selected))
+        self.update_tab(entity, tab.location.clone(), Some(op_sel.selected.into()))
     }
 
     fn update_tab(
         &mut self,
         entity: Entity,
         location: Location,
-        selection_paths: Option<Vec<PathBuf>>,
+        selection_paths: Option<Box<[PathBuf]>>,
     ) -> Task<Message> {
         if let Location::Search(_, term, ..) = location {
             self.search_set(entity, Some(term), selection_paths)
@@ -1488,7 +1485,7 @@ impl App {
         &self,
         entity: Entity,
         location: Location,
-        selection_paths: Option<Vec<PathBuf>>,
+        selection_paths: Option<Box<[PathBuf]>>,
     ) -> Task<Message> {
         log::info!("rescan_tab {entity:?} {location:?} {selection_paths:?}");
         let icon_sizes = self.config.tab.icon_sizes;
@@ -1507,8 +1504,9 @@ impl App {
                             .collect();
                         if !mounter_paths.is_empty() {
                             for item in &mut items {
-                                item.is_mount_point =
-                                    item.path_opt().is_some_and(|p| mounter_paths.contains(p));
+                                item.is_mount_point = item
+                                    .path_opt()
+                                    .is_some_and(|p| mounter_paths.contains(&p.as_path()));
                             }
                         }
                     }
@@ -1516,7 +1514,7 @@ impl App {
                     cosmic::action::app(Message::TabRescan(
                         entity,
                         location,
-                        parent_item_opt,
+                        Box::new(parent_item_opt),
                         items,
                         selection_paths,
                     ))
@@ -1585,7 +1583,7 @@ impl App {
         &mut self,
         tab: Entity,
         term_opt: Option<String>,
-        selection_paths: Option<Vec<PathBuf>>,
+        selection_paths: Option<Box<[PathBuf]>>,
     ) -> Task<Message> {
         let mut title_location_opt = None;
         if let Some(tab) = self.tab_model.data_mut::<Tab>(tab) {
@@ -1624,7 +1622,8 @@ impl App {
             };
             if let Some((location, focus_search)) = location_opt {
                 tab.change_location(&location, None);
-                title_location_opt = Some((tab.title(), tab.location.clone(), focus_search));
+                title_location_opt =
+                    Some((tab.title().to_string(), tab.location.clone(), focus_search));
             }
         }
         if let Some((title, location, focus_search)) = title_location_opt {
@@ -1643,14 +1642,14 @@ impl App {
         Task::none()
     }
 
-    fn selected_paths(&self, entity_opt: Option<Entity>) -> impl Iterator<Item = PathBuf> {
+    fn selected_paths(&self, entity_opt: Option<Entity>) -> impl Iterator<Item = &PathBuf> {
         let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
         // TODO: Replace with Option::into_flat_iter when stable and within MSRV
         self.tab_model
             .data::<Tab>(entity)
             .map(Tab::selected_locations_iter)
             .into_iter()
-            .flat_map(|i| i.filter_map(Location::path_opt).cloned())
+            .flat_map(|i| i.filter_map(Location::path_opt))
     }
 
     fn set_cut(&mut self, entity_opt: Option<Entity>) {
@@ -1750,7 +1749,7 @@ impl App {
                     fl!("filesystem")
                 };
                 nav_model = nav_model.insert(move |b| {
-                    b.text(name.clone())
+                    b.text(name)
                         .icon(
                             icon::icon(if path.is_dir() {
                                 tab::folder_icon_symbolic(&path, 16)
@@ -1761,7 +1760,7 @@ impl App {
                         )
                         .data(match favorite {
                             Favorite::Network { uri, name, path } => {
-                                Location::Network(uri.clone(), name.clone(), Some(path.clone()))
+                                Location::Network(uri.to_string(), name.clone(), Some(path.clone()))
                             }
                             _ => Location::Path(path),
                         })
@@ -1787,7 +1786,7 @@ impl App {
                     ))
                     .data(Location::Network(
                         "network:///".to_string(),
-                        fl!("networks"),
+                        fl!("networks").into_boxed_str(),
                         None,
                     ))
                     .divider_above()
@@ -1801,21 +1800,27 @@ impl App {
         }
         // Sort by name lexically
         nav_items.sort_by(|&(_, item_a), &(_, item_b)| {
-            LANGUAGE_SORTER.compare(&item_a.name(), &item_b.name())
+            LANGUAGE_SORTER.compare(item_a.name(), item_b.name())
         });
         // Add items to nav model
         for (i, (key, item)) in nav_items.into_iter().enumerate() {
             nav_model = nav_model.insert(|mut b| {
-                b = b.text(item.name()).data(MounterData(key, item.clone()));
-                let uri = item.uri();
+                b = b
+                    .text(item.name().to_owned())
+                    .data(MounterData(key, item.clone()));
+                let uri = item.uri().into();
                 if let Some(path) = item.path() {
                     if item.is_remote() {
-                        b = b.data(Location::Network(uri, item.name(), Some(path)));
+                        b = b.data(Location::Network(
+                            uri,
+                            item.name().into(),
+                            Some(path.into()),
+                        ));
                     } else {
-                        b = b.data(Location::Path(path));
+                        b = b.data(Location::Path(path.to_path_buf()));
                     }
                 } else if !uri.is_empty() {
-                    b = b.data(Location::Network(uri, item.name(), None));
+                    b = b.data(Location::Network(uri, item.name().into(), None));
                 }
                 if let Some(icon) = item.icon(true) {
                     b = b.icon(icon::icon(icon).size(16));
@@ -1876,7 +1881,7 @@ impl App {
                 .iter()
                 .filter_map(|entity| {
                     let tab = self.tab_model.data::<Tab>(entity)?;
-                    tab.location.path_opt().cloned()
+                    tab.location.path_opt().map(PathBuf::as_path).map(Box::from)
                 })
                 .collect();
 
@@ -2088,7 +2093,7 @@ impl App {
                 let progress = controller.progress();
                 section = section.add(widget::column::with_children([
                     widget::text::body(op.pending_text(progress, controller.state())).into(),
-                    widget::text::body(error).into(),
+                    widget::text::body(error.as_ref()).into(),
                 ]));
             }
             children.push(section.into());
@@ -2125,7 +2130,8 @@ impl App {
         let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
         let military_time = self.config.tab.military_time;
         match kind {
-            PreviewKind::Custom(PreviewItem(item)) => {
+            PreviewKind::Custom(item) => {
+                let item = &item.0;
                 column = column.push(item.preview_view(Some(&self.mime_app_cache), military_time));
             }
             PreviewKind::Location(location) => {
@@ -2161,7 +2167,7 @@ impl App {
 
                     if let Some(preview) = preview_opt {
                         column = column.push(preview);
-                    } else if let Some(item) = &tab.parent_item_opt {
+                    } else if let Some(item) = tab.parent_item_opt.as_ref() {
                         column = column
                             .push(item.preview_view(Some(&self.mime_app_cache), military_time));
                     }
@@ -2371,7 +2377,11 @@ impl Application for App {
             }
         }
 
-        let app_themes = vec![fl!("match-desktop"), fl!("dark"), fl!("light")];
+        let app_themes = [
+            fl!("match-desktop").into_boxed_str(),
+            fl!("dark").into_boxed_str(),
+            fl!("light").into_boxed_str(),
+        ];
 
         let key_binds = key_binds(&match flags.mode {
             Mode::App => tab::Mode::App,
@@ -2434,7 +2444,7 @@ impl Application for App {
             mounter_items: FxHashMap::default(),
             must_save_sort_names: false,
             network_drive_connecting: None,
-            network_drive_input: String::new(),
+            network_drive_input: Box::default(),
             #[cfg(feature = "notify")]
             notification_opt: None,
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
@@ -2477,7 +2487,7 @@ impl Application for App {
                 commands.push(app.open_tab(
                     Location::Path(parent.to_path_buf()),
                     true,
-                    Some(vec![path.clone()]),
+                    Some([path.as_path().into()].into()),
                 ));
                 continue;
             }
@@ -2653,8 +2663,8 @@ impl Application for App {
                         .iter()
                         .find_map(|(&k, items)| {
                             items.iter().find_map(|item| {
-                                found |= item.path().is_some_and(|p| path.starts_with(&p))
-                                    || item.name() == *name
+                                found |= item.path().is_some_and(|p| path.starts_with(p))
+                                    || *item.name() == **name
                                     || item.uri() == *uri;
                                 (!item.is_mounted() && found).then_some(k)
                             })
@@ -2855,7 +2865,7 @@ impl Application for App {
                 // else just use the selected entity and check its location
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
 
-                for path in self.selected_paths(entity_opt) {
+                for path in self.selected_paths(entity_opt).cloned() {
                     let network_uri_opt = self.tab_model.data::<Tab>(entity).and_then(|tab| {
                         let in_current_tab = tab
                             .location
@@ -2877,7 +2887,7 @@ impl Application for App {
                             .and_then(|item| item.location_opt.as_ref())
                             .unwrap()
                         {
-                            Some(uri.clone())
+                            Some(uri.as_str().into())
                         } else {
                             None
                         }
@@ -2900,12 +2910,12 @@ impl Application for App {
                 return self.update_config();
             }
             Message::Compress(entity_opt) => {
-                let paths: Box<[_]> = self.selected_paths(entity_opt).collect();
+                let paths: Arc<[_]> = self.selected_paths(entity_opt).cloned().collect();
                 if let Some((to, name)) = paths
                     .first()
                     .and_then(|current_path| current_path.parent().zip(current_path.file_stem()))
                 {
-                    let to = to.to_path_buf();
+                    let to = to.into();
                     let name = name.to_str().unwrap_or_default().into();
                     let archive_type = ArchiveType::default();
                     return self.push_dialog(
@@ -2936,9 +2946,9 @@ impl Application for App {
                 {
                     tab.refresh_cut(&[]);
                 }
-                let paths = self.selected_paths(entity_opt);
+                let paths = self.selected_paths(entity_opt).cloned().collect();
                 self.clipboard_cache = ClipboardCache::Files(ClipboardPaste {
-                    paths: paths.collect(),
+                    paths,
                     kind: ClipboardKind::Copy,
                 });
                 let contents =
@@ -2947,14 +2957,13 @@ impl Application for App {
             }
             Message::CopyPath(entity_opt) => {
                 let paths = self.selected_paths(entity_opt);
-                let path_strings: Vec<String> =
-                    paths.into_iter().map(|p| p.display().to_string()).collect();
+                let path_strings: Vec<String> = paths.map(|p| p.display().to_string()).collect();
                 let text = path_strings.join("\n");
                 return clipboard::write(text);
             }
             Message::CopyTo(entity_opt) => {
-                let selected_paths: Box<[_]> = self.selected_paths(entity_opt).collect();
-                return self.copy_to(&selected_paths);
+                let selected_paths: Box<[_]> = self.selected_paths(entity_opt).cloned().collect();
+                return self.copy_to(selected_paths);
             }
             Message::CopyToResult(result) => {
                 match result {
@@ -2969,12 +2978,12 @@ impl Application for App {
                             None
                         };
                         if let Some(file_paths) = file_paths
-                            && !selected_paths.is_empty()
+                            && let Some(first_selected_path) = selected_paths.into_iter().next()
                         {
                             self.file_dialog_opt = None;
                             return self.operation(Operation::Copy {
-                                paths: file_paths.to_vec(),
-                                to: selected_paths[0].clone(),
+                                paths: file_paths,
+                                to: first_selected_path.into_path_buf(),
                             });
                         }
                     }
@@ -2983,9 +2992,9 @@ impl Application for App {
             }
             Message::Cut(entity_opt) => {
                 self.set_cut(entity_opt);
-                let paths = self.selected_paths(entity_opt);
+                let paths = self.selected_paths(entity_opt).cloned().collect();
                 self.clipboard_cache = ClipboardCache::Files(ClipboardPaste {
-                    paths: paths.collect(),
+                    paths,
                     kind: ClipboardKind::Cut { is_dnd: false },
                 });
                 let contents = ClipboardCopy::new(
@@ -3030,7 +3039,7 @@ impl Application for App {
                             }
                         }
                     } else {
-                        let paths: Vec<_> = self.selected_paths(entity_opt).collect();
+                        let paths: Vec<_> = self.selected_paths(entity_opt).cloned().collect();
                         if !paths.is_empty() {
                             return self.delete(paths);
                         }
@@ -3122,8 +3131,8 @@ impl Application for App {
                             let name = format!("{name}{extension}");
                             let to = to.join(name);
                             tasks.push(self.operation(Operation::Compress {
-                                paths: paths.into_vec(),
-                                to,
+                                paths: paths.to_vec(),
+                                to: to.into(),
                                 archive_type,
                                 password,
                             }));
@@ -3164,11 +3173,11 @@ impl Application for App {
                         }
                         DialogPage::NetworkError { uri, .. } => {
                             //TODO: re-use mounter_key?
-                            tasks.push(self.update(Message::NetworkDriveInput(uri)));
+                            tasks.push(self.update(Message::NetworkDriveInput(uri.to_string())));
                             tasks.push(self.update(Message::NetworkDriveSubmit));
                         }
                         DialogPage::NewItem { parent, name, dir } => {
-                            let path = parent.join(name);
+                            let path = parent.join(name.as_ref());
                             tasks.push(self.operation(if dir {
                                 Operation::NewFolder { path }
                             } else {
@@ -3228,7 +3237,8 @@ impl Application for App {
                         DialogPage::RenameItem {
                             from, parent, name, ..
                         } => {
-                            let to = parent.join(name);
+                            let to = parent.join(name.as_ref());
+                            let from = from.to_path_buf();
                             tasks.push(self.operation(Operation::Rename { from, to }));
                         }
                         DialogPage::Replace { .. } => {
@@ -3264,22 +3274,18 @@ impl Application for App {
                 ]);
             }
             Message::ExtractHere(entity_opt) => {
-                let paths: Box<[_]> = self.selected_paths(entity_opt).collect();
-                if let Some(destination) = paths
-                    .first()
-                    .and_then(|first| first.parent())
-                    .map(Path::to_path_buf)
-                {
+                let paths: Arc<[_]> = self.selected_paths(entity_opt).cloned().collect();
+                if let Some(destination) = paths.first().and_then(|first| first.parent()) {
                     return self.operation(Operation::Extract {
+                        to: destination.into(),
                         paths,
-                        to: destination,
                         password: None,
                     });
                 }
             }
             Message::ExtractTo(entity_opt) => {
-                let selected_paths: Box<[_]> = self.selected_paths(entity_opt).collect();
-                return self.extract_to(&selected_paths);
+                let selected_paths: Box<[_]> = self.selected_paths(entity_opt).cloned().collect();
+                return self.extract_to(selected_paths);
             }
             Message::ExtractToResult(result) => {
                 match result {
@@ -3298,8 +3304,8 @@ impl Application for App {
                         {
                             self.file_dialog_opt = None;
                             return self.operation(Operation::Extract {
-                                paths: archive_paths,
-                                to: first_selected_path,
+                                paths: archive_paths.into(),
+                                to: first_selected_path.into(),
                                 password: None,
                             });
                         }
@@ -3419,12 +3425,11 @@ impl Application for App {
                         if let Some(old_path) = old_item.path()
                             && old_item.is_mounted()
                         {
-                            let still_mounted = mounter_items.iter().any(|item| {
-                                item.is_mounted()
-                                    && item.path().is_some_and(|path| path == old_path)
-                            });
+                            let still_mounted = mounter_items
+                                .iter()
+                                .any(|item| item.is_mounted() && item.path() == Some(old_path));
                             if !still_mounted {
-                                unmounted.push(old_path);
+                                unmounted.push(old_path.to_path_buf());
                             }
                         }
                     }
@@ -3446,7 +3451,7 @@ impl Application for App {
                                 })
                                 .then(|| {
                                     tab.change_location(&home_location, None);
-                                    tab.title()
+                                    tab.title().to_string()
                                 })
                         });
                         if let Some(title) = title_opt {
@@ -3478,9 +3483,13 @@ impl Application for App {
                     // Automatically navigate to the mounted location
                     if let Some(path) = item.path() {
                         let location = if item.is_remote() {
-                            Location::Network(item.uri(), item.name(), Some(path))
+                            Location::Network(
+                                item.uri().into(),
+                                item.name().into(),
+                                Some(path.into()),
+                            )
                         } else {
-                            Location::Path(path)
+                            Location::Path(path.to_path_buf())
                         };
                         let message = Message::TabMessage(None, tab::Message::Location(location));
                         return self.update(message);
@@ -3508,8 +3517,8 @@ impl Application for App {
                 }
             }
             Message::MoveTo(entity_opt) => {
-                let selected_paths: Box<[_]> = self.selected_paths(entity_opt).collect();
-                return self.move_to(&selected_paths);
+                let selected_paths: Box<[_]> = self.selected_paths(entity_opt).cloned().collect();
+                return self.move_to(selected_paths);
             }
             Message::MoveToResult(result) => {
                 match result {
@@ -3528,8 +3537,8 @@ impl Application for App {
                         {
                             self.file_dialog_opt = None;
                             return self.operation(Operation::Move {
-                                paths: file_paths.to_vec(),
-                                to,
+                                paths: file_paths,
+                                to: to.into_path_buf(),
                                 cross_device_copy: false,
                             });
                         }
@@ -3549,7 +3558,7 @@ impl Application for App {
                 );
             }
             Message::NetworkDriveInput(input) => {
-                self.network_drive_input = input;
+                self.network_drive_input = input.into_boxed_str();
             }
             Message::NetworkDriveSubmit => {
                 //TODO: know which mounter to use for network drives
@@ -3569,7 +3578,7 @@ impl Application for App {
                 if self
                     .network_drive_connecting
                     .as_ref()
-                    .is_some_and(|(m, u)| *m == mounter_key && *u == uri)
+                    .is_some_and(|(m, u)| *m == mounter_key && **u == *uri)
                 {
                     self.network_drive_connecting = None;
                 }
@@ -3600,8 +3609,8 @@ impl Application for App {
                 {
                     return Task::batch([
                         self.dialog_pages.push_back(DialogPage::NewItem {
-                            parent: path.clone(),
-                            name: String::new(),
+                            parent: path.as_path().into(),
+                            name: Arc::default(),
                             dir,
                         }),
                         widget::text_input::focus(self.dialog_text_input.clone()),
@@ -3733,7 +3742,8 @@ impl Application for App {
             Message::OpenInNewTab(entity_opt) => {
                 let selected_paths: Vec<_> = self
                     .selected_paths(entity_opt)
-                    .filter(|p| p.is_dir())
+                    .filter(|&p| p.is_dir())
+                    .cloned()
                     .collect();
                 return Task::batch(
                     selected_paths
@@ -3744,7 +3754,7 @@ impl Application for App {
             Message::OpenInNewWindow(entity_opt) => match env::current_exe() {
                 Ok(exe) => self
                     .selected_paths(entity_opt)
-                    .filter(|p| p.is_dir())
+                    .filter(|&p| p.is_dir())
                     .for_each(|path| match process::Command::new(&exe).arg(path).spawn() {
                         Ok(_child) => {}
                         Err(err) => {
@@ -3756,11 +3766,15 @@ impl Application for App {
                 }
             },
             Message::OpenItemLocation(entity_opt) => {
-                let selected_paths: Vec<_> = self.selected_paths(entity_opt).collect();
+                let selected_paths: Vec<Box<Path>> = self
+                    .selected_paths(entity_opt)
+                    .map(PathBuf::as_path)
+                    .map(Box::from)
+                    .collect();
                 return Task::batch(selected_paths.into_iter().filter_map(|path| {
-                    path.parent()
-                        .map(Path::to_path_buf)
-                        .map(|parent| self.open_tab(Location::Path(parent), true, Some(vec![path])))
+                    path.parent().map(Path::to_path_buf).map(|parent| {
+                        self.open_tab(Location::Path(parent), true, Some([path.into()].into()))
+                    })
                 }));
             }
             Message::OpenWithBrowse => match self.dialog_pages.pop_front() {
@@ -3883,15 +3897,13 @@ impl Application for App {
                 }
             }
             Message::PasteContents(to, mut contents) => {
-                contents.paths.retain(|p| *p != to);
+                contents.paths.retain(|p| *p != *to);
                 if !contents.paths.is_empty() {
+                    let paths = contents.paths.into_boxed_slice();
                     return match contents.kind {
-                        ClipboardKind::Copy => self.operation(Operation::Copy {
-                            paths: contents.paths,
-                            to,
-                        }),
+                        ClipboardKind::Copy => self.operation(Operation::Copy { paths, to }),
                         ClipboardKind::Cut { is_dnd } => self.operation(Operation::Move {
-                            paths: contents.paths,
+                            paths,
                             to,
                             cross_device_copy: is_dnd,
                         }),
@@ -3908,7 +3920,7 @@ impl Application for App {
                     )
                 });
             }
-            Message::PasteImageContents(to, contents) => {
+            Message::PasteImageContents(mut to, contents) => {
                 let Some(extension) = contents.extension() else {
                     log::warn!(
                         "Ignoring paste: unknown image MIME type {:?}",
@@ -3918,9 +3930,9 @@ impl Application for App {
                 };
 
                 // Generate unique filename for the pasted image
-                let base_name = format!("{}.{}", fl!("pasted-image"), extension);
-                let base_path = to.join(&base_name);
-                let final_path = copy_unique_path(&base_path, &to);
+                to.set_file_name(fl!("pasted-image"));
+                to.set_extension(extension);
+                let final_path = copy_unique_path(&to, to.parent().unwrap());
 
                 // Write image data to file
                 match fs::write(&final_path, &contents.data) {
@@ -3942,7 +3954,7 @@ impl Application for App {
                     )
                 });
             }
-            Message::PasteVideoContents(to, contents) => {
+            Message::PasteVideoContents(mut to, contents) => {
                 let Some(extension) = contents.extension() else {
                     log::warn!(
                         "Ignoring paste: unknown video MIME type {:?}",
@@ -3952,9 +3964,9 @@ impl Application for App {
                 };
 
                 // Generate unique filename for the pasted video
-                let base_name = format!("{}.{}", fl!("pasted-video"), extension);
-                let base_path = to.join(&base_name);
-                let final_path = copy_unique_path(&base_path, &to);
+                to.set_file_name(fl!("pasted-video"));
+                to.set_extension(extension);
+                let final_path = copy_unique_path(&to, to.parent().unwrap());
 
                 // Write video data to file
                 match fs::write(&final_path, &contents.data) {
@@ -3973,11 +3985,11 @@ impl Application for App {
                     })
                 });
             }
-            Message::PasteTextContents(to, contents) => {
+            Message::PasteTextContents(mut to, contents) => {
                 // Generate unique filename for the pasted text
-                let base_name = format!("{}.txt", fl!("pasted-text"));
-                let base_path = to.join(&base_name);
-                let final_path = copy_unique_path(&base_path, &to);
+                to.set_file_name(fl!("pasted-text"));
+                to.set_extension("txt");
+                let final_path = copy_unique_path(&to, to.parent().unwrap());
 
                 // Write text data to file
                 match fs::write(&final_path, &contents.data) {
@@ -4075,7 +4087,7 @@ impl Application for App {
                 return self.handle_operation_errors(vec![(id, err)]);
             }
             Message::PendingResults(completed, errors) => {
-                return Task::batch(vec![
+                return Task::batch([
                     self.handle_completed_operations(completed),
                     self.handle_operation_errors(errors),
                 ]);
@@ -4099,7 +4111,11 @@ impl Application for App {
                 }
             }
             Message::PermanentlyDelete(entity_opt) => {
-                let paths: Box<[_]> = self.selected_paths(entity_opt).collect();
+                let paths: Box<[_]> = self
+                    .selected_paths(entity_opt)
+                    .map(PathBuf::as_path)
+                    .map(Box::from)
+                    .collect();
                 if !paths.is_empty() {
                     return self.push_dialog(
                         DialogPage::PermanentlyDelete { paths },
@@ -4121,7 +4137,7 @@ impl Application for App {
                             match (selected_paths.next(), selected_paths.next()) {
                                 (Some(_), Some(_)) => Some(PreviewKind::Selected),
                                 (Some(path), None) => {
-                                    Some(PreviewKind::Location(Location::Path(path)))
+                                    Some(PreviewKind::Location(Location::Path(path.clone())))
                                 }
                                 _ => None,
                             }
@@ -4158,7 +4174,11 @@ impl Application for App {
                 }
             }
             Message::RemoveFromRecents(entity_opt) => {
-                let paths: Box<[_]> = self.selected_paths(entity_opt).collect();
+                let paths: Box<[_]> = self
+                    .selected_paths(entity_opt)
+                    .map(PathBuf::as_path)
+                    .map(Box::from)
+                    .collect();
                 return self.operation(Operation::RemoveFromRecents { paths });
             }
             Message::RescanRecents => {
@@ -4195,16 +4215,16 @@ impl Application for App {
                         .collect();
                     if !selected.is_empty() {
                         //TODO: batch rename
-                        let mut last_name = String::new();
+                        let mut last_name = Arc::default();
                         let tasks: Vec<_> = selected
                             .into_iter()
                             .filter_map(|path| {
-                                let parent = path.parent()?.to_path_buf();
-                                let name = path.file_name()?.to_str()?.to_string();
+                                let parent = path.parent()?.into();
+                                let name: Arc<str> = path.file_name()?.to_str()?.into();
                                 let dir = path.is_dir();
                                 last_name = name.clone();
                                 Some(self.dialog_pages.push_back(DialogPage::RenameItem {
-                                    from: path,
+                                    from: path.into(),
                                     parent,
                                     name,
                                     dir,
@@ -4431,7 +4451,7 @@ impl Application for App {
                         tab::Command::ChangeLocation(tab_title, tab_path, selection_paths) => {
                             self.activate_nav_model_location(&tab_path);
 
-                            self.tab_model.text_set(entity, tab_title);
+                            self.tab_model.text_set(entity, tab_title.into_string());
                             // clear the prefix selection buffer when changing location
                             self.type_select_prefix.clear();
                             commands.push(Task::batch([
@@ -4527,14 +4547,17 @@ impl Application for App {
                             Self::exec_entry_action(&entry, action);
                         }
                         tab::Command::RunContextAction(action) => {
-                            let paths: Box<[_]> = self.selected_paths(Some(entity)).collect();
                             if let Some(preset) = self.config.context_actions.get(action) {
                                 if preset.confirm {
+                                    let paths =
+                                        self.selected_paths(Some(entity)).cloned().collect();
                                     commands.push(self.push_dialog(
                                         DialogPage::RunContextAction { action, paths },
                                         Some(CONFIRM_CONTEXT_ACTION_BUTTON_ID.clone()),
                                     ));
                                 } else {
+                                    let paths: Box<[_]> =
+                                        self.selected_paths(Some(entity)).collect();
                                     context_action::run(
                                         &self.config.context_actions,
                                         action,
@@ -4550,7 +4573,7 @@ impl Application for App {
                                 cosmic::action::app(Message::TabMessage(Some(entity), x))
                             }));
                         }
-                        tab::Command::OpenFile(paths) => commands.push(self.open_file(&paths)),
+                        tab::Command::OpenFile(paths) => commands.push(self.open_file(paths)),
                         tab::Command::OpenInNewTab(path) => {
                             commands.push(self.close_context_menus());
                             commands.push(self.open_tab(Location::Path(path), false, None));
@@ -4583,7 +4606,7 @@ impl Application for App {
                         }
                         tab::Command::SetOpenWith(mime, id) => {
                             //TODO: this will block for a few ms, run in background?
-                            self.mime_app_cache.set_default(mime, id);
+                            self.mime_app_cache.set_default(mime, id.into_string());
                         }
                         tab::Command::SetPermissions(path, mode) => {
                             commands.push(self.operation(Operation::SetPermissions { path, mode }));
@@ -4661,13 +4684,13 @@ impl Application for App {
                 return self.open_tab(location, true, None);
             }
             Message::TabRescan(entity, mut location, parent_item_opt, items, selection_paths) => {
-                location = location.normalize();
+                location.normalize_in_place();
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-                    tab.location = tab.location.normalize();
+                    tab.location.normalize_in_place();
                     if location == tab.location {
                         tab.parent_item_opt = parent_item_opt;
                         tab.set_items(items);
-                        let location_str = location.to_string();
+                        let location_str = location.to_string().into_boxed_str();
                         let sort = self
                             .state
                             .sort_names
@@ -4761,7 +4784,7 @@ impl Application for App {
                                 for item in &items {
                                     if let ItemMetadata::Trash { ref entry, .. } = item.metadata {
                                         let original_path = entry.original_path();
-                                        if &original_path == path {
+                                        if *original_path == **path {
                                             paths.push(entry.clone());
                                         }
                                     }
@@ -4881,7 +4904,7 @@ impl Application for App {
                     };
                     let ret = match location {
                         Location::Path(p) => self.update(Message::PasteContents(
-                            p.clone(),
+                            p.as_path().into(),
                             ClipboardPaste {
                                 kind,
                                 paths: data.paths,
@@ -4908,7 +4931,7 @@ impl Application for App {
                     let entity = self.tab_model.active();
                     let title_opt = self.tab_model.data_mut::<Tab>(entity).map(|tab| {
                         tab.change_location(&location, None);
-                        tab.title()
+                        tab.title().to_string()
                     });
                     if let Some(title) = title_opt {
                         self.tab_model.text_set(entity, title);
@@ -4945,7 +4968,7 @@ impl Application for App {
                         _ => {
                             if let Some(path) = tab.location.path_opt() {
                                 self.update(Message::PasteContents(
-                                    path.clone(),
+                                    path.as_path().into(),
                                     ClipboardPaste {
                                         kind,
                                         paths: data.paths,
@@ -5012,7 +5035,7 @@ impl Application for App {
                         .and_then(Location::path_opt)
                         .cloned()
                     {
-                        return self.open_file(&[path]);
+                        return self.open_file([path].into());
                     }
                 }
                 NavMenuAction::OpenWith(entity) => {
@@ -5144,7 +5167,7 @@ impl Application for App {
                             Ok(item) => {
                                 self.context_page = ContextPage::Preview(
                                     None,
-                                    PreviewKind::Custom(PreviewItem(item)),
+                                    PreviewKind::Custom(Box::new(PreviewItem(item))),
                                 );
                                 self.set_show_context(true);
                             }
@@ -5203,7 +5226,8 @@ impl Application for App {
                                 break 'display String::new();
                             };
 
-                            self.surface_names.insert(surface_id, output_name.clone());
+                            self.surface_names
+                                .insert(surface_id, output_name.as_str().into());
                             output_name
                         };
 
@@ -5273,12 +5297,13 @@ impl Application for App {
                     ..
                 } => {
                     if exclusive > 0 || namespace == "Dock" || namespace == "Panel" {
-                        self.overlap.insert(identifier, (w_id, logical_rect));
+                        self.overlap
+                            .insert(identifier.into_boxed_str(), (w_id, logical_rect));
                         self.handle_overlap();
                     }
                 }
                 OverlapNotifyEvent::OverlapLayerRemove { identifier } => {
-                    self.overlap.remove(&identifier);
+                    self.overlap.remove(identifier.as_str());
                     self.handle_overlap();
                 }
                 _ => {}
@@ -5299,9 +5324,8 @@ impl Application for App {
                         {
                             for (k, mounter_items) in &self.mounter_items {
                                 if let Some(mounter) = MOUNTERS.get(k)
-                                    && let Some(item) = mounter_items
-                                        .iter()
-                                        .find(|&item| item.path().is_some_and(|path| path == p))
+                                    && let Some(item) =
+                                        mounter_items.iter().find(|&item| item.path() == Some(p))
                                 {
                                     return mounter
                                         .unmount(item.clone())
@@ -5335,7 +5359,7 @@ impl Application for App {
                 self.must_save_sort_names = false;
                 if let Some(state_handler) = self.state_handler.as_ref()
                     && let Err(err) = state_handler
-                        .set::<&FxOrderMap<String, (HeadingOptions, bool)>>(
+                        .set::<&FxOrderMap<Box<str>, (HeadingOptions, bool)>>(
                             "sort_names",
                             &self.state.sort_names,
                         )
@@ -5378,8 +5402,10 @@ impl Application for App {
             )
             .title(fl!("edit-history")),
             ContextPage::NetworkDrive => {
-                let mut text_input =
-                    widget::text_input(fl!("enter-server-address"), &self.network_drive_input);
+                let mut text_input = widget::text_input(
+                    fl!("enter-server-address"),
+                    self.network_drive_input.as_ref(),
+                );
                 let button = if self.network_drive_connecting.is_some() {
                     widget::button::standard(fl!("connecting"))
                 } else {
@@ -5462,10 +5488,10 @@ impl Application for App {
 
                 let complete_maybe = if name.is_empty() {
                     None
-                } else if name == "." || name == ".." {
+                } else if **name == *"." || **name == *".." {
                     dialog = dialog.tertiary_action(widget::text::body(fl!(
                         "name-invalid",
-                        filename = name.as_str()
+                        filename = name.as_ref()
                     )));
                     None
                 } else if name.contains('/') {
@@ -5473,7 +5499,7 @@ impl Application for App {
                     None
                 } else {
                     let extension = archive_type.extension();
-                    let mut name = name.clone();
+                    let mut name = name.to_string();
                     name.push_str(extension);
                     let path = to.join(&name);
                     if path.exists() {
@@ -5502,13 +5528,13 @@ impl Application for App {
                         widget::column::with_children([
                             widget::text::body(fl!("file-name")).into(),
                             widget::row::with_children([
-                                widget::text_input("", name.as_str())
+                                widget::text_input("", name.as_ref())
                                     .id(self.dialog_text_input.clone())
                                     .on_input(move |name| {
                                         Message::DialogUpdate(DialogPage::Compress {
                                             paths: paths.clone(),
                                             to: to.clone(),
-                                            name,
+                                            name: name.into(),
                                             archive_type: *archive_type,
                                             password: password.clone(),
                                         })
@@ -5540,7 +5566,7 @@ impl Application for App {
                     );
 
                 if *archive_type == ArchiveType::Zip {
-                    let password_unwrapped = password.clone().unwrap_or_default();
+                    let password_unwrapped = password.as_deref().unwrap_or_default();
                     dialog = dialog.control(widget::column::with_children([
                         widget::text::body(fl!("password")).into(),
                         widget::text_input("", password_unwrapped)
@@ -5551,7 +5577,7 @@ impl Application for App {
                                     to: to.clone(),
                                     name: name.clone(),
                                     archive_type: *archive_type,
-                                    password: Some(password_unwrapped),
+                                    password: Some(password_unwrapped.into()),
                                 })
                             })
                             .on_submit_maybe(complete_maybe.map(|maybe| move |_| maybe.clone()))
@@ -5607,9 +5633,10 @@ impl Application for App {
                 .title(fl!("extract-password-required"))
                 .icon(icon::from_name("dialog-error").size(64))
                 .control(
-                    widget::text_input("", password)
+                    widget::text_input("", password.as_ref())
                         .password()
                         .on_input(move |password| {
+                            let password = password.into();
                             Message::DialogUpdate(DialogPage::ExtractPassword { id: *id, password })
                         })
                         .on_submit(|_| Message::DialogComplete)
@@ -5624,7 +5651,7 @@ impl Application for App {
                 ),
             DialogPage::MountError { error, .. } => widget::dialog()
                 .title(fl!("mount-error"))
-                .body(error)
+                .body(error.as_ref())
                 .icon(icon::from_name("dialog-error").size(64))
                 .primary_action(
                     widget::button::standard(fl!("try-again"))
@@ -5646,13 +5673,13 @@ impl Application for App {
 
                 if let Some(username) = &auth.username_opt {
                     //TODO: what should submit do?
-                    let mut input = widget::text_input(fl!("username"), username)
+                    let mut input = widget::text_input(fl!("username"), username.as_ref())
                         .on_input(move |value| {
                             Message::DialogUpdate(DialogPage::NetworkAuth {
                                 mounter_key: *mounter_key,
                                 uri: uri.clone(),
                                 auth: MounterAuth {
-                                    username_opt: Some(value),
+                                    username_opt: Some(value.into()),
                                     ..auth.clone()
                                 },
                                 auth_tx: auth_tx.clone(),
@@ -5668,13 +5695,13 @@ impl Application for App {
 
                 if let Some(domain) = &auth.domain_opt {
                     //TODO: what should submit do?
-                    let mut input = widget::text_input(fl!("domain"), domain)
+                    let mut input = widget::text_input(fl!("domain"), domain.as_ref())
                         .on_input(move |value| {
                             Message::DialogUpdate(DialogPage::NetworkAuth {
                                 mounter_key: *mounter_key,
                                 uri: uri.clone(),
                                 auth: MounterAuth {
-                                    domain_opt: Some(value),
+                                    domain_opt: Some(value.into()),
                                     ..auth.clone()
                                 },
                                 auth_tx: auth_tx.clone(),
@@ -5691,19 +5718,20 @@ impl Application for App {
                 if let Some(password) = &auth.password_opt {
                     //TODO: what should submit do?
                     //TODO: button for showing password
-                    let mut input = widget::secure_input(fl!("password"), password, None, true)
-                        .on_input(move |value| {
-                            Message::DialogUpdate(DialogPage::NetworkAuth {
-                                mounter_key: *mounter_key,
-                                uri: uri.clone(),
-                                auth: MounterAuth {
-                                    password_opt: Some(value),
-                                    ..auth.clone()
-                                },
-                                auth_tx: auth_tx.clone(),
+                    let mut input =
+                        widget::secure_input(fl!("password"), password.as_ref(), None, true)
+                            .on_input(move |value| {
+                                Message::DialogUpdate(DialogPage::NetworkAuth {
+                                    mounter_key: *mounter_key,
+                                    uri: uri.clone(),
+                                    auth: MounterAuth {
+                                        password_opt: Some(value.into()),
+                                        ..auth.clone()
+                                    },
+                                    auth_tx: auth_tx.clone(),
+                                })
                             })
-                        })
-                        .on_submit(|_| Message::DialogComplete);
+                            .on_submit(|_| Message::DialogComplete);
                     if !id_assigned {
                         input = input.id(self.dialog_text_input.clone());
                     }
@@ -5765,7 +5793,7 @@ impl Application for App {
             }
             DialogPage::NetworkError { error, .. } => widget::dialog()
                 .title(fl!("network-drive-error"))
-                .body(error)
+                .body(error.as_ref())
                 .icon(icon::from_name("dialog-error").size(64))
                 .primary_action(
                     widget::button::standard(fl!("try-again")).on_press(Message::DialogComplete),
@@ -5782,17 +5810,17 @@ impl Application for App {
 
                 let complete_maybe = if name.is_empty() {
                     None
-                } else if name == "." || name == ".." {
+                } else if **name == *"." || **name == *".." {
                     dialog = dialog.tertiary_action(widget::text::body(fl!(
                         "name-invalid",
-                        filename = name.as_str()
+                        filename = name.as_ref()
                     )));
                     None
                 } else if name.contains('/') {
                     dialog = dialog.tertiary_action(widget::text::body(fl!("name-no-slashes")));
                     None
                 } else {
-                    let path = parent.join(name);
+                    let path = parent.join(name.as_ref());
                     if path.exists() {
                         if path.is_dir() {
                             dialog = dialog
@@ -5826,12 +5854,12 @@ impl Application for App {
                                 fl!("file-name")
                             })
                             .into(),
-                            widget::text_input("", name.as_str())
+                            widget::text_input("", name.as_ref())
                                 .id(self.dialog_text_input.clone())
                                 .on_input(move |name| {
                                     Message::DialogUpdate(DialogPage::NewItem {
                                         parent: parent.clone(),
-                                        name,
+                                        name: name.into(),
                                         dir: *dir,
                                     })
                                 })
@@ -5897,11 +5925,11 @@ impl Application for App {
                                         displayed_default = true;
                                         widget::text::body(fl!(
                                             "default-app",
-                                            name = Some(app.name.as_str())
+                                            name = Some(app.name.as_ref())
                                         ))
                                         .into()
                                     } else {
-                                        widget::text::body(app.name.clone()).into()
+                                        widget::text::body(app.name.as_ref()).into()
                                     },
                                     widget::space::horizontal().into(),
                                     if *selected == i {
@@ -5950,7 +5978,7 @@ impl Application for App {
 
                 if let Some(app) = store_opt {
                     dialog = dialog.tertiary_action(
-                        widget::button::text(fl!("browse-store", store = app.name.as_str()))
+                        widget::button::text(fl!("browse-store", store = app.name.as_ref()))
                             .on_press(Message::OpenWithBrowse),
                     );
                 }
@@ -6022,18 +6050,18 @@ impl Application for App {
 
                 let complete_maybe = if name.is_empty() {
                     None
-                } else if name == "." || name == ".." {
+                } else if **name == *"." || **name == *".." {
                     dialog = dialog.tertiary_action(widget::text::body(fl!(
                         "name-invalid",
-                        filename = name.as_str()
+                        filename = name.as_ref()
                     )));
                     None
                 } else if name.contains('/') {
                     dialog = dialog.tertiary_action(widget::text::body(fl!("name-no-slashes")));
                     None
                 } else {
-                    let path = parent.join(name);
-                    if *from != path && path.exists() {
+                    let path = parent.join(name.as_ref());
+                    if from.as_ref() != path && path.exists() {
                         if path.is_dir() {
                             dialog = dialog
                                 .tertiary_action(widget::text::body(fl!("folder-already-exists")));
@@ -6066,14 +6094,14 @@ impl Application for App {
                                 fl!("file-name")
                             })
                             .into(),
-                            widget::text_input("", name.as_str())
+                            widget::text_input("", name.as_ref())
                                 .id(self.dialog_text_input.clone())
                                 .double_click_select_delimiter('.')
                                 .on_input(move |name| {
                                     Message::DialogUpdate(DialogPage::RenameItem {
                                         from: from.clone(),
                                         parent: parent.clone(),
-                                        name,
+                                        name: name.into(),
                                         dir: *dir,
                                     })
                                 })
@@ -7114,7 +7142,7 @@ pub(crate) mod test_utils {
             widget::Id::unique(),
             None,
         );
-        tab.parent_item_opt = parent_item_opt;
+        *tab.parent_item_opt = parent_item_opt;
         tab.set_items(items);
 
         // Ensure correct number of directories as a sanity check

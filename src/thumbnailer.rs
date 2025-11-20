@@ -9,7 +9,7 @@ use std::{fs, path::Path, process, sync::LazyLock, time::Instant};
 
 #[derive(Clone, Debug)]
 pub struct Thumbnailer {
-    pub exec: String,
+    pub exec: Box<str>,
 }
 
 impl Thumbnailer {
@@ -19,8 +19,7 @@ impl Thumbnailer {
         output: &Path,
         thumbnail_size: u32,
     ) -> Option<process::Command> {
-        let args_vec: Vec<String> = shlex::split(&self.exec)?;
-        let mut args = args_vec.iter();
+        let mut args = shlex::Shlex::new(&self.exec);
         let mut command = process::Command::new(args.next()?);
         for arg in args {
             if arg.starts_with('%') {
@@ -148,13 +147,13 @@ impl ThumbnailerCache {
         log::info!("loaded thumbnailer cache in {elapsed:?}");
     }
 
-    pub fn get(&self, key: &Mime) -> Vec<Thumbnailer> {
-        self.cache.get(key).map_or_else(Vec::new, Vec::clone)
+    pub fn get(&self, key: &Mime) -> Option<&Vec<Thumbnailer>> {
+        self.cache.get(key)
     }
 }
 
 static THUMBNAILER_CACHE: LazyLock<ThumbnailerCache> = LazyLock::new(ThumbnailerCache::new);
 
-pub fn thumbnailer(mime: &Mime) -> Vec<Thumbnailer> {
+pub fn thumbnailer(mime: &Mime) -> Option<&'static Vec<Thumbnailer>> {
     THUMBNAILER_CACHE.get(mime)
 }

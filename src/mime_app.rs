@@ -6,14 +6,7 @@ use cosmic::desktop;
 use cosmic::widget;
 pub use mime_guess::Mime;
 use rustc_hash::FxHashMap;
-use std::{
-    cmp::Ordering,
-    ffi::OsStr,
-    fs, io,
-    path::{Path, PathBuf},
-    process,
-    time::Instant,
-};
+use std::{cmp::Ordering, ffi::OsStr, fs, io, path::Path, process, time::Instant};
 
 // Supported exec key field codes
 const EXEC_HANDLERS: [&str; 4] = ["%f", "%F", "%u", "%U"];
@@ -151,10 +144,10 @@ fn from_file_or_dir(path: impl AsRef<Path>) -> Option<url::Url> {
 
 #[derive(Clone, Debug)]
 pub struct MimeApp {
-    pub id: String,
-    pub path: Option<PathBuf>,
-    pub name: String,
-    pub exec: Option<String>,
+    pub id: Box<str>,
+    pub path: Option<Box<Path>>,
+    pub name: Box<str>,
+    pub exec: Option<Box<str>>,
     pub icon: widget::icon::Handle,
     pub is_default: bool,
 }
@@ -177,10 +170,10 @@ impl AsRef<str> for MimeApp {
 impl From<&desktop::DesktopEntryData> for MimeApp {
     fn from(app: &desktop::DesktopEntryData) -> Self {
         Self {
-            id: app.id.clone(),
-            path: app.path.clone(),
-            name: app.name.clone(),
-            exec: app.exec.clone(),
+            id: app.id.as_str().into(),
+            path: app.path.as_deref().map(Box::from),
+            name: app.name.as_str().into(),
+            exec: app.exec.as_deref().map(Box::from),
             icon: match &app.icon {
                 desktop::fde::IconSource::Name(name) => {
                     widget::icon::from_name(name.as_str()).size(32).handle()
@@ -193,11 +186,8 @@ impl From<&desktop::DesktopEntryData> for MimeApp {
 }
 
 #[cfg(feature = "desktop")]
-fn filename_eq(path_opt: &Option<PathBuf>, filename: &str) -> bool {
-    path_opt
-        .as_ref()
-        .and_then(|path| path.file_name())
-        .is_some_and(|x| x == filename)
+fn filename_eq(path_opt: Option<&Path>, filename: &str) -> bool {
+    path_opt.and_then(Path::file_name) == Some(filename.as_ref())
 }
 
 pub struct MimeAppCache {
@@ -247,7 +237,7 @@ impl MimeAppCache {
             }
             for mime in &app.mime_types {
                 let apps = self.cache.entry(mime.clone()).or_default();
-                if apps.iter().all(|x| x.id != app.id) {
+                if apps.iter().all(|x| *x.id != app.id) {
                     apps.push(MimeApp::from(app));
                 }
             }
@@ -272,8 +262,14 @@ impl MimeAppCache {
             for filename in filenames {
                 log::trace!("add {mime}={filename}");
                 let apps = self.cache.entry(mime.clone()).or_default();
-                if apps.iter().all(|x| !filename_eq(&x.path, filename)) {
-                    if let Some(app) = all_apps.iter().find(|&x| filename_eq(&x.path, filename)) {
+                if apps
+                    .iter()
+                    .all(|x| !filename_eq(x.path.as_deref(), filename))
+                {
+                    if let Some(app) = all_apps
+                        .iter()
+                        .find(|&x| filename_eq(x.path.as_deref(), filename))
+                    {
                         apps.push(MimeApp::from(app));
                     } else {
                         log::info!(
@@ -288,7 +284,7 @@ impl MimeAppCache {
             for filename in filenames {
                 log::trace!("remove {mime}={filename}");
                 if let Some(apps) = self.cache.get_mut(mime) {
-                    apps.retain(|x| !filename_eq(&x.path, filename));
+                    apps.retain(|x| !filename_eq(x.path.as_deref(), filename));
                 }
             }
         }
@@ -299,7 +295,7 @@ impl MimeAppCache {
                 if let Some(apps) = self.cache.get_mut(mime) {
                     let mut found = false;
                     for app in apps {
-                        if filename_eq(&app.path, filename) {
+                        if filename_eq(app.path.as_deref(), filename) {
                             app.is_default = true;
                             found = true;
                         } else {
@@ -386,7 +382,7 @@ impl MimeAppCache {
 
         for id in &preference_order {
             for terminal in &self.terminals {
-                if &terminal.id == id {
+                if *terminal.id == *id {
                     return Some(terminal);
                 }
             }

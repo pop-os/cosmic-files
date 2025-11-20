@@ -4,7 +4,7 @@ use cosmic::{
     widget,
 };
 use gio::{glib, prelude::*};
-use std::{any::TypeId, cell::Cell, future::pending, hash::Hash, path::PathBuf, sync::Arc};
+use std::{any::TypeId, cell::Cell, future::pending, hash::Hash, path::Path, sync::Arc};
 use tokio::sync::{mpsc, oneshot};
 
 use super::{Mounter, MounterAuth, MounterItem, MounterItems, MounterMessage};
@@ -32,12 +32,12 @@ fn resolve_uri(uri: &str) -> (String, gio::File) {
     (uri.to_string(), file)
 }
 
-fn gio_icon_to_path(icon: &gio::Icon, size: u16) -> Option<PathBuf> {
+fn gio_icon_to_path(icon: &gio::Icon, size: u16) -> Option<Box<Path>> {
     if let Some(themed_icon) = icon.downcast_ref::<gio::ThemedIcon>() {
         for name in themed_icon.names() {
-            let named = widget::icon::from_name(name.as_str()).size(size);
+            let named = widget::icon::from_name(String::from(name)).size(size);
             if let Some(path) = named.path() {
-                return Some(path);
+                return Some(path.into_boxed_path());
             }
         }
     }
@@ -70,7 +70,7 @@ fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
                 is_remote,
                 icon_opt: gio_icon_to_path(&mount.icon(), sizes.grid()),
                 icon_symbolic_opt: gio_icon_to_path(&mount.symbolic_icon(), 16),
-                path_opt: root.path(),
+                path_opt: root.path().map(Box::from),
             })
         })
         .collect();
@@ -122,13 +122,14 @@ fn network_scan(uri: &str, sizes: IconSizes) -> anyhow::Result<Vec<tab::Item>> {
         file.enumerate_children("*", gio::FileQueryInfoFlags::NONE, gio::Cancellable::NONE)?
     {
         let info = info_res?;
-        let name = info.name().to_string_lossy().into_owned();
-        let display_name = String::from(info.display_name());
+        let name = info.name();
+        let display_name: Box<str> = info.display_name().into();
+        let file_child = file.child(&name);
 
-        let uri = String::from(file.child(info.name()).uri());
+        let uri = String::from(file_child.uri());
 
         //TODO: what is the best way to resolve shortcuts?
-        let location = Location::Network(uri, display_name.clone(), file.child(&name).path());
+        let location = Location::Network(uri, display_name.clone(), file_child.path());
 
         let metadata = if !force_dir && !info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE) {
             let mtime = info.attribute_uint64(gio::FILE_ATTRIBUTE_TIME_MODIFIED);
@@ -137,7 +138,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> anyhow::Result<Vec<tab::Item>> {
             let mut children_opt = None;
 
             if is_dir {
-                if let Some(path) = file.child(&name).path() {
+                if let Some(path) = file_child.path() {
                     //TODO: calculate children in the background (and make it cancellable?)
                     match std::fs::read_dir(&path) {
                         Ok(entries) => {
@@ -166,6 +167,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> anyhow::Result<Vec<tab::Item>> {
                 info.icon()
                     .as_ref()
                     .and_then(|icon| gio_icon_to_path(icon, size))
+                    .map(Path::into_path_buf)
                     .map(widget::icon::from_path)
                     .unwrap_or(
                         widget::icon::from_name(if metadata.is_dir() {
@@ -185,6 +187,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> anyhow::Result<Vec<tab::Item>> {
                 file_icon(sizes.list_condensed()),
             )
         };
+        let name = name.to_string_lossy().into_owned();
 
         // Check if item is hidden
         let hidden = name.starts_with('.')
@@ -234,23 +237,23 @@ fn dir_info(uri: &str) -> Result<Location, glib::Error> {
 }
 
 fn mount_op(
-    uri: String,
+    uri: Arc<str>,
     event_tx: std::sync::Weak<crate::channel::Sender<Event>>,
 ) -> gio::MountOperation {
     let mount_op = gio::MountOperation::new();
     mount_op.connect_ask_password(
         move |mount_op, message, default_user, default_domain, flags| {
             let auth = MounterAuth {
-                message: message.to_string(),
+                message: message.into(),
                 username_opt: flags
                     .contains(gio::AskPasswordFlags::NEED_USERNAME)
-                    .then(|| default_user.to_string()),
+                    .then(|| default_user.into()),
                 domain_opt: flags
                     .contains(gio::AskPasswordFlags::NEED_DOMAIN)
-                    .then(|| default_domain.to_string()),
+                    .then(|| default_domain.into()),
                 password_opt: flags
                     .contains(gio::AskPasswordFlags::NEED_PASSWORD)
-                    .then(String::new),
+                    .then(Arc::default),
                 remember_opt: flags
                     .contains(gio::AskPasswordFlags::SAVING_SUPPORTED)
                     .then_some(false),
@@ -301,8 +304,8 @@ enum Event {
     Changed,
     Items(MounterItems),
     MountResult(MounterItem, anyhow::Result<bool>),
-    NetworkAuth(String, MounterAuth, mpsc::Sender<MounterAuth>),
-    NetworkResult(String, anyhow::Result<bool>),
+    NetworkAuth(Arc<str>, MounterAuth, mpsc::Sender<MounterAuth>),
+    NetworkResult(Arc<str>, anyhow::Result<bool>),
 }
 
 #[derive(Clone, Debug)]
@@ -314,20 +317,20 @@ enum ItemKind {
 //TODO: better method of matching items
 #[derive(Clone, Debug)]
 pub struct Item {
-    uri: String,
+    uri: Box<str>,
     kind: ItemKind,
     index: usize,
-    name: String,
+    name: Box<str>,
     is_mounted: bool,
     is_remote: bool,
-    icon_opt: Option<PathBuf>,
-    icon_symbolic_opt: Option<PathBuf>,
-    path_opt: Option<PathBuf>,
+    icon_opt: Option<Box<Path>>,
+    icon_symbolic_opt: Option<Box<Path>>,
+    path_opt: Option<Box<Path>>,
 }
 
 impl Item {
-    pub fn name(&self) -> String {
-        self.name.clone()
+    pub fn name(&self) -> &str {
+        self.name.as_ref()
     }
 
     pub const fn is_mounted(&self) -> bool {
@@ -338,8 +341,8 @@ impl Item {
         self.is_remote
     }
 
-    pub fn uri(&self) -> String {
-        self.uri.clone()
+    pub fn uri(&self) -> &str {
+        self.uri.as_ref()
     }
 
     pub fn icon(&self, symbolic: bool) -> Option<widget::icon::Handle> {
@@ -348,11 +351,11 @@ impl Item {
         } else {
             self.icon_opt.as_ref()
         }
-        .map(|icon| widget::icon::from_path(icon.clone()))
+        .map(|icon| widget::icon::from_path(icon.to_path_buf()))
     }
 
-    pub fn path(&self) -> Option<PathBuf> {
-        self.path_opt.clone()
+    pub fn path(&self) -> Option<&Path> {
+        self.path_opt.as_deref()
     }
 }
 
@@ -454,15 +457,16 @@ impl Gvfs {
                                     continue;
                                 }
 
-                                let name = volume.name();
-                                if item.name != name {
+                                let name: String = volume.name().into();
+                                let name: Arc<str> = name.into();
+                                if *item.name != *name {
                                     log::warn!("trying to mount volume {} failed: name is {} when {} was expected", i, name, item.name);
                                     continue;
                                 }
 
                                 log::info!("mount {name}");
                                 //TODO: do not use name as a URI for mount_op
-                                let mount_op = mount_op(name.to_string(), event_tx.clone());
+                                let mount_op = mount_op(name.clone(), event_tx.clone());
                                 let event_tx = event_tx.clone();
                                 let mounter_item = mounter_item.clone();
                                 let volume_for_callback = volume.clone();
@@ -479,7 +483,7 @@ impl Gvfs {
                                             && let Some(mount) = volume_for_callback.get_mount()
                                         {
                                             let root = mount.root();
-                                            item.path_opt = root.path();
+                                            item.path_opt = root.path().map(Box::from);
                                             item.is_mounted = true;
                                             // Query if remote
                                             item.is_remote = root
@@ -517,6 +521,7 @@ impl Gvfs {
                         }
                         Cmd::NetworkDrive(uri, result_tx) => {
                             let file = gio::File::for_uri(&uri);
+                            let uri: Arc<str> = uri.into();
                             let mount_op = mount_op(uri.clone(), event_tx.clone());
                             let event_tx = event_tx.clone();
                             file.mount_enclosing_volume(
@@ -553,6 +558,7 @@ impl Gvfs {
                                     .is_err_and(|err| err.matches(gio::IOErrorEnum::NotMounted));
 
                             if needs_mount {
+                                let resolved_uri: Arc<str> = resolved_uri.into();
                                 let mount_op = mount_op(resolved_uri.clone(), event_tx.clone());
                                 let event_tx = event_tx.clone();
                                 file.mount_enclosing_volume(
@@ -594,7 +600,7 @@ impl Gvfs {
                                     continue;
                                 }
 
-                                let name = mount.name();
+                                let name: Box<str> = mount.name().into();
                                 if item.name != name {
                                     log::warn!("trying to unmount mount {} failed: name is {} when {} was expected", i, name, item.name);
                                     continue;
