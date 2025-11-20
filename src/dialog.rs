@@ -1444,9 +1444,6 @@ impl Application for App {
             }
             Message::ModifiersChanged(modifiers) => {
                 self.modifiers = modifiers;
-                return self.update(Message::TabMessage(tab::Message::ModifiersChanged(
-                    modifiers,
-                )));
             }
             Message::MounterItems(mounter_key, mounter_items) => {
                 // Check for unmounted folders
@@ -1926,7 +1923,11 @@ impl Application for App {
             }
         }
 
-        col = col.push(self.tab.view(&self.key_binds).map(Message::TabMessage));
+        col = col.push(
+            self.tab
+                .view(&self.key_binds, &self.modifiers)
+                .map(Message::TabMessage),
+        );
 
         col.into()
     }

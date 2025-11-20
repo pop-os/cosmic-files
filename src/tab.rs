@@ -1611,7 +1611,6 @@ pub enum Message {
     ItemUp,
     Location(Location),
     LocationUp,
-    ModifiersChanged(Modifiers),
     Open(Option<PathBuf>),
     Reload,
     RightClick(Option<Point>, Option<usize>),
@@ -2496,7 +2495,6 @@ pub struct Tab {
     select_range: Option<(usize, usize)>,
     clicked: Option<usize>,
     selected_clicked: bool,
-    modifiers: Modifiers,
     last_right_click: Option<usize>,
     search_context: Option<SearchContext>,
     date_time_formatter: DateTimeFormatter<fieldsets::YMDT>,
@@ -2617,7 +2615,6 @@ impl Tab {
             clicked: None,
             dnd_hovered: None,
             selected_clicked: false,
-            modifiers: Modifiers::default(),
             last_right_click: None,
             search_context: None,
             date_time_formatter: date_time_formatter(config.military_time),
@@ -3572,9 +3569,6 @@ impl Tab {
                         cd = Some(Location::Path(parent.to_owned()));
                     }
                 }
-            }
-            Message::ModifiersChanged(modifiers) => {
-                self.modifiers = modifiers;
             }
             Message::Open(path_opt) => {
                 match path_opt {
@@ -5417,11 +5411,12 @@ impl Tab {
         (drag_col, mouse_area.into(), true)
     }
 
-    pub fn view_responsive(
-        &self,
-        key_binds: &HashMap<KeyBind, Action>,
+    pub fn view_responsive<'a>(
+        &'a self,
+        key_binds: &'a HashMap<KeyBind, Action>,
+        modifiers: &'a Modifiers,
         size: Size,
-    ) -> Element<'_, Message> {
+    ) -> Element<'a, Message> {
         // Update cached size
         self.size_opt.set(Some(size));
 
@@ -5495,7 +5490,7 @@ impl Tab {
             .on_resize(Message::Resize)
             .on_back_press(move |_point_opt| Message::GoPrevious)
             .on_forward_press(move |_point_opt| Message::GoNext)
-            .on_scroll(|delta| respond_to_scroll_direction(delta, self.modifiers))
+            .on_scroll(|delta| respond_to_scroll_direction(delta, modifiers))
             .on_right_press(move |p| {
                 Message::ContextMenu(
                     if self.context_menu.is_some() { None } else { p },
@@ -5507,7 +5502,7 @@ impl Tab {
         let mut popover = widget::popover(mouse_area);
         if let Some(point) = self.context_menu {
             if !cfg!(feature = "wayland") || !crate::is_wayland() {
-                let context_menu = menu::context_menu(self, key_binds, &self.modifiers);
+                let context_menu = menu::context_menu(self, key_binds, &modifiers);
                 popover = popover
                     .popup(context_menu)
                     .position(widget::popover::Position::Point(point));
@@ -5607,8 +5602,12 @@ impl Tab {
         dnd_dest.into()
     }
 
-    pub fn view<'a>(&'a self, key_binds: &'a HashMap<KeyBind, Action>) -> Element<'a, Message> {
-        widget::responsive(|size| self.view_responsive(key_binds, size)).into()
+    pub fn view<'a>(
+        &'a self,
+        key_binds: &'a HashMap<KeyBind, Action>,
+        modifiers: &'a Modifiers,
+    ) -> Element<'a, Message> {
+        widget::responsive(|size| self.view_responsive(key_binds, modifiers, size)).into()
     }
 
     pub fn subscription(&self, preview: bool) -> Subscription<Message> {
@@ -5926,7 +5925,7 @@ impl Tab {
     }
 }
 
-pub fn respond_to_scroll_direction(delta: ScrollDelta, modifiers: Modifiers) -> Option<Message> {
+pub fn respond_to_scroll_direction(delta: ScrollDelta, modifiers: &Modifiers) -> Option<Message> {
     if !modifiers.control() {
         return None;
     }
@@ -6401,7 +6400,7 @@ mod tests {
     #[test]
     fn tab_scroll_up_with_ctrl_modifier_zooms() -> io::Result<()> {
         let message_maybe =
-            respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, Modifiers::CTRL);
+            respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, &Modifiers::CTRL);
         assert!(message_maybe.is_some());
         assert!(matches!(message_maybe.unwrap(), Message::ZoomIn));
         Ok(())
@@ -6409,8 +6408,10 @@ mod tests {
 
     #[test]
     fn tab_scroll_up_without_ctrl_modifier_does_not_zoom() -> io::Result<()> {
-        let message_maybe =
-            respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, Modifiers::empty());
+        let message_maybe = respond_to_scroll_direction(
+            ScrollDelta::Pixels { x: 0.0, y: 1.0 },
+            &Modifiers::empty(),
+        );
         assert!(message_maybe.is_none());
         Ok(())
     }
@@ -6418,7 +6419,7 @@ mod tests {
     #[test]
     fn tab_scroll_down_with_ctrl_modifier_zooms() -> io::Result<()> {
         let message_maybe =
-            respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: -1.0 }, Modifiers::CTRL);
+            respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: -1.0 }, &Modifiers::CTRL);
         assert!(message_maybe.is_some());
         assert!(matches!(message_maybe.unwrap(), Message::ZoomOut));
         Ok(())
@@ -6428,7 +6429,7 @@ mod tests {
     fn tab_scroll_down_without_ctrl_modifier_does_not_zoom() -> io::Result<()> {
         let message_maybe = respond_to_scroll_direction(
             ScrollDelta::Pixels { x: 0.0, y: -1.0 },
-            Modifiers::empty(),
+            &Modifiers::empty(),
         );
         assert!(message_maybe.is_none());
         Ok(())

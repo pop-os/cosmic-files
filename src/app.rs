@@ -3014,13 +3014,12 @@ impl Application for App {
                 }
             },
             Message::ModifiersChanged(window_id, modifiers) => {
-                self.modifiers = modifiers;
-                if self.core.main_window_id() == Some(window_id) {
-                    let entity = self.tab_model.active();
-                    return self.update(Message::TabMessage(
-                        Some(entity),
-                        tab::Message::ModifiersChanged(modifiers),
-                    ));
+                #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
+                let in_surface_ids = self.surface_ids.values().any(|id| *id == window_id);
+                #[cfg(not(all(feature = "wayland", feature = "desktop-applet")))]
+                let in_surface_ids = false;
+                if self.core.main_window_id() == Some(window_id) || in_surface_ids {
+                    self.modifiers = modifiers;
                 }
             }
             Message::MounterItems(mounter_key, mounter_items) => {
@@ -5678,7 +5677,7 @@ impl Application for App {
         let entity = self.tab_model.active();
         if let Some(tab) = self.tab_model.data::<Tab>(entity) {
             let tab_view = tab
-                .view(&self.key_binds)
+                .view(&self.key_binds, &self.modifiers)
                 .map(move |message| Message::TabMessage(Some(entity), message));
             tab_column = tab_column.push(tab_view);
         } else {
@@ -5715,7 +5714,7 @@ impl Application for App {
 
                 let tab_view = match self.tab_model.data::<Tab>(*entity) {
                     Some(tab) => tab
-                        .view(&self.key_binds)
+                        .view(&self.key_binds, &self.modifiers)
                         .map(move |message| Message::TabMessage(Some(*entity), message)),
                     None => widget::vertical_space().into(),
                 };
