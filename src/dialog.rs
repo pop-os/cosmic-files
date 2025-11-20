@@ -373,7 +373,7 @@ impl<M: Send + 'static> Dialog<M> {
             if !self.cosmic.surface_views.is_empty() {
                 log::debug!("waiting for surfaces to close...");
                 let mut tasks = Vec::new();
-                for id in self.cosmic.surface_views.drain() {
+                for id in self.cosmic.surface_views.iter() {
                     match id.1.1 {
                         SurfaceIdWrapper::Window(id) => {
                             tasks.push(window::close::<M>(id).discard());
@@ -403,6 +403,7 @@ impl<M: Send + 'static> Dialog<M> {
                 tasks.push(Task::future(async move {
                     cosmic::action::app(on_result_message)
                 }));
+                tasks.push(command);
                 return Task::batch(tasks);
             }
             let on_result_message = (self.on_result)(result);
