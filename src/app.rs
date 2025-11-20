@@ -661,6 +661,20 @@ impl PartialEq for WatcherWrapper {
     }
 }
 
+struct Window {
+    kind: WindowKind,
+    modifiers: Modifiers,
+}
+
+impl Window {
+    fn new(kind: WindowKind) -> Self {
+        Self {
+            kind,
+            modifiers: Modifiers::empty(),
+        }
+    }
+}
+
 // The [`App`] stores application-specific state.
 pub struct App {
     core: Core,
@@ -709,7 +723,7 @@ pub struct App {
         Debouncer<RecommendedWatcher, RecommendedCache>,
         FxHashSet<PathBuf>,
     )>,
-    windows: FxHashMap<window::Id, WindowKind>,
+    windows: FxHashMap<window::Id, Window>,
     nav_dnd_hover: Option<(Location, Instant)>,
     tab_dnd_hover: Option<(Entity, Instant)>,
     nav_drag_id: DragId,
@@ -935,9 +949,9 @@ impl App {
             dialog.set_accept_label(fl!("extract-here"));
             self.windows.insert(
                 dialog.window_id(),
-                WindowKind::FileDialog(Some(
+                Window::new(WindowKind::FileDialog(Some(
                     paths.iter().map(|x| x.as_ref().to_path_buf()).collect(),
-                )),
+                ))),
             );
             self.file_dialog_opt = Some(dialog);
             Task::batch([set_title_task, dialog_task])
@@ -1178,8 +1192,8 @@ impl App {
     }
 
     fn remove_window(&mut self, id: &window::Id) {
-        if let Some(window_kind) = self.windows.remove(id) {
-            match window_kind {
+        if let Some(window) = self.windows.remove(id) {
+            match window.kind {
                 WindowKind::ContextMenu(entity, _) => {
                     // Close context menu
                     if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
@@ -2704,7 +2718,8 @@ impl Application for App {
                 }
 
                 let (id, command) = window::open(settings);
-                self.windows.insert(id, WindowKind::DesktopViewOptions);
+                self.windows
+                    .insert(id, Window::new(WindowKind::DesktopViewOptions));
                 return command.map(|_id| cosmic::action::none());
             }
             Message::DesktopDialogs(show) => {
@@ -2732,14 +2747,14 @@ impl Application for App {
 
                         let (id, command) = window::open(settings);
                         self.windows
-                            .insert(id, WindowKind::Dialogs(widget::Id::unique()));
+                            .insert(id, Window::new(WindowKind::Dialogs(widget::Id::unique())));
                         return command.map(|_id| cosmic::Action::None);
                     }
 
                     let tasks = self
                         .windows
                         .iter()
-                        .filter(|(_, kind)| matches!(*kind, WindowKind::Dialogs(_)))
+                        .filter(|(_, window)| matches!(window.kind, WindowKind::Dialogs(_)))
                         .map(|(id, _)| window::close(*id));
                     return Task::batch(tasks);
                 }
@@ -2929,9 +2944,10 @@ impl Application for App {
                     DialogResult::Open(selected_paths) => {
                         let mut archive_paths = None;
                         if let Some(file_dialog) = &self.file_dialog_opt {
-                            let window = self.windows.remove(&file_dialog.window_id());
-                            if let Some(WindowKind::FileDialog(paths)) = window {
-                                archive_paths = paths;
+                            if let Some(window) = self.windows.remove(&file_dialog.window_id()) {
+                                if let WindowKind::FileDialog(paths) = window.kind {
+                                    archive_paths = paths;
+                                }
                             }
                         }
                         if let Some(archive_paths) = archive_paths {
@@ -3020,6 +3036,9 @@ impl Application for App {
                 let in_surface_ids = false;
                 if self.core.main_window_id() == Some(window_id) || in_surface_ids {
                     self.modifiers = modifiers;
+                }
+                if let Some(window) = self.windows.get_mut(&window_id) {
+                    window.modifiers = modifiers;
                 }
             }
             Message::MounterItems(mounter_key, mounter_items) => {
@@ -3612,10 +3631,10 @@ impl Application for App {
                             let (id, command) = window::open(settings);
                             self.windows.insert(
                                 id,
-                                WindowKind::Preview(
+                                Window::new(WindowKind::Preview(
                                     entity_opt,
                                     PreviewKind::Location(Location::Path(path)),
-                                ),
+                                )),
                             );
                             commands.push(command.map(|_id| cosmic::action::none()));
                         }
@@ -3912,7 +3931,10 @@ impl Application for App {
                                     let window_id = WindowId::unique();
                                     self.windows.insert(
                                         window_id,
-                                        WindowKind::ContextMenu(entity, widget::Id::unique()),
+                                        Window::new(WindowKind::ContextMenu(
+                                            entity,
+                                            widget::Id::unique(),
+                                        )),
                                     );
                                     commands.push(self.update(Message::Surface(
                                         cosmic::surface::action::app_popup(
@@ -3952,8 +3974,8 @@ impl Application for App {
                             } else {
                                 // Destroy previous popup
                                 let mut window_ids = Vec::new();
-                                for (window_id, window_kind) in &self.windows {
-                                    if let WindowKind::ContextMenu(e, _) = window_kind {
+                                for (window_id, window) in &self.windows {
+                                    if let WindowKind::ContextMenu(e, _) = &window.kind {
                                         if *e == entity {
                                             window_ids.push(*window_id);
                                         }
@@ -4565,7 +4587,8 @@ impl Application for App {
                             widget::Id::unique(),
                             Some(surface_id),
                         );
-                        self.windows.insert(surface_id, WindowKind::Desktop(entity));
+                        self.windows
+                            .insert(surface_id, Window::new(WindowKind::Desktop(entity)));
                         return Task::batch([
                             command,
                             get_layer_surface(SctkLayerSurfaceSettings {
@@ -4666,7 +4689,7 @@ impl Application for App {
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             Message::Focused(id) => {
                 if let Some(w) = self.windows.get(&id) {
-                    match w {
+                    match w.kind {
                         WindowKind::Desktop(entity) => self.tab_model.activate(*entity),
                         _ => {}
                     };
@@ -5696,66 +5719,66 @@ impl Application for App {
 
     fn view_window(&self, id: WindowId) -> Element<'_, Self::Message> {
         let content = match self.windows.get(&id) {
-            Some(WindowKind::ContextMenu(entity, id)) => {
-                match self.tab_model.data::<Tab>(*entity) {
+            Some(window) => match &window.kind {
+                WindowKind::ContextMenu(entity, id) => match self.tab_model.data::<Tab>(*entity) {
                     Some(tab) => {
                         return widget::autosize::autosize(
-                            menu::context_menu(tab, &self.key_binds, &self.modifiers)
+                            menu::context_menu(tab, &self.key_binds, &window.modifiers)
                                 .map(|x| Message::TabMessage(Some(*entity), x)),
                             id.clone(),
                         )
                         .into();
                     }
                     None => widget::text("Unknown tab ID").into(),
-                }
-            }
-            Some(WindowKind::Desktop(entity)) => {
-                let mut tab_column = widget::column::with_capacity(3);
+                },
+                WindowKind::Desktop(entity) => {
+                    let mut tab_column = widget::column::with_capacity(3);
 
-                let tab_view = match self.tab_model.data::<Tab>(*entity) {
-                    Some(tab) => tab
-                        .view(&self.key_binds, &self.modifiers)
-                        .map(move |message| Message::TabMessage(Some(*entity), message)),
-                    None => widget::vertical_space().into(),
-                };
+                    let tab_view = match self.tab_model.data::<Tab>(*entity) {
+                        Some(tab) => tab
+                            .view(&self.key_binds, &window.modifiers)
+                            .map(move |message| Message::TabMessage(Some(*entity), message)),
+                        None => widget::vertical_space().into(),
+                    };
 
-                tab_column = tab_column.push(tab_view);
+                    tab_column = tab_column.push(tab_view);
 
-                // The toaster is added on top of an empty element to ensure that it does not override context menus
-                tab_column =
-                    tab_column.push(widget::toaster(&self.toasts, widget::horizontal_space()));
-                return if let Some(margin) = self.margin.get(&id) {
-                    if margin.0 >= 0. || margin.2 >= 0. {
-                        tab_column = widget::column::with_children([
-                            vertical_space().height(margin.0).into(),
-                            tab_column.into(),
-                            vertical_space().height(margin.2).into(),
-                        ]);
-                    }
-                    if margin.1 >= 0. || margin.3 >= 0. {
-                        Element::from(widget::row::with_children([
-                            horizontal_space().width(margin.1).into(),
-                            tab_column.into(),
-                            horizontal_space().width(margin.3).into(),
-                        ]))
+                    // The toaster is added on top of an empty element to ensure that it does not override context menus
+                    tab_column =
+                        tab_column.push(widget::toaster(&self.toasts, widget::horizontal_space()));
+                    return if let Some(margin) = self.margin.get(&id) {
+                        if margin.0 >= 0. || margin.2 >= 0. {
+                            tab_column = widget::column::with_children([
+                                vertical_space().height(margin.0).into(),
+                                tab_column.into(),
+                                vertical_space().height(margin.2).into(),
+                            ]);
+                        }
+                        if margin.1 >= 0. || margin.3 >= 0. {
+                            Element::from(widget::row::with_children([
+                                horizontal_space().width(margin.1).into(),
+                                tab_column.into(),
+                                horizontal_space().width(margin.3).into(),
+                            ]))
+                        } else {
+                            tab_column.into()
+                        }
                     } else {
                         tab_column.into()
-                    }
-                } else {
-                    tab_column.into()
-                };
-            }
-            Some(WindowKind::DesktopViewOptions) => self.desktop_view_options(),
-            Some(WindowKind::Dialogs(id)) => match self.dialog() {
-                Some(element) => return widget::autosize::autosize(element, id.clone()).into(),
-                None => widget::horizontal_space().into(),
-            },
-            Some(WindowKind::Preview(entity_opt, kind)) => self
-                .preview(entity_opt, kind, false)
-                .map(|x| Message::TabMessage(*entity_opt, x)),
-            Some(WindowKind::FileDialog(..)) => match &self.file_dialog_opt {
-                Some(dialog) => return dialog.view(id),
-                None => widget::text("Unknown window ID").into(),
+                    };
+                }
+                WindowKind::DesktopViewOptions => self.desktop_view_options(),
+                WindowKind::Dialogs(id) => match self.dialog() {
+                    Some(element) => return widget::autosize::autosize(element, id.clone()).into(),
+                    None => widget::horizontal_space().into(),
+                },
+                WindowKind::Preview(entity_opt, kind) => self
+                    .preview(entity_opt, kind, false)
+                    .map(|x| Message::TabMessage(*entity_opt, x)),
+                WindowKind::FileDialog(..) => match &self.file_dialog_opt {
+                    Some(dialog) => return dialog.view(id),
+                    None => widget::text("Unknown window ID").into(),
+                },
             },
             None => {
                 //TODO: distinct views per monitor in desktop mode
