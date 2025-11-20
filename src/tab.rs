@@ -79,6 +79,10 @@ use crate::{
     config::{DesktopConfig, ICON_SCALE_MAX, ICON_SIZE_GRID, IconSizes, TabConfig, ThumbCfg},
     dialog::DialogKind,
     fl,
+    large_image::{
+        LargeImageManager, decode_large_image, exceeds_memory_limit, should_use_dedicated_worker,
+        should_use_tiling,
+    },
     localize::{LANGUAGE_SORTER, LOCALE},
     menu, mime_app,
     mime_icon::{mime_for_path, mime_icon},
@@ -98,8 +102,10 @@ const MAX_SEARCH_RESULTS: usize = 200;
 //TODO: configurable thumbnail size?
 const THUMBNAIL_SIZE: u32 = (ICON_SIZE_GRID as u32) * (ICON_SCALE_MAX as u32);
 
+// Thumbnail generation semaphore - limits parallel thumbnail workers
+// Uses 4 workers for balanced throughput and memory usage
 pub static THUMB_SEMAPHORE: LazyLock<tokio::sync::Semaphore> =
-    LazyLock::new(|| tokio::sync::Semaphore::const_new(num_cpus::get()));
+    LazyLock::new(|| tokio::sync::Semaphore::const_new(num_cpus::get().min(4)));
 
 pub(crate) static SORT_OPTION_FALLBACK: LazyLock<FxHashMap<String, (HeadingOptions, bool)>> =
     LazyLock::new(|| {
@@ -1640,6 +1646,7 @@ pub enum Message {
     HighlightDeactivate(usize),
     HighlightActivate(usize),
     DirectorySize(PathBuf, DirSize),
+    ImageDecoded(PathBuf, u32, u32, Vec<u8>, Option<(u32, u32)>, u64), // path, width, height, pixels, display_size, generation
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -1766,10 +1773,17 @@ impl ItemThumbnail {
             ThumbnailCacher::new(path, ThumbnailSize::from_pixel_size(thumbnail_size));
         match thumbnail_cacher.as_ref() {
             Ok(cache) => match cache.get_cached_thumbnail() {
-                CachedThumbnail::Valid((path, size)) => {
+                CachedThumbnail::Valid((thumbnail_path, size)) => {
+                    // Check original image dimensions even when loading cached thumbnail
+                    // This prevents trying to load huge images in preview mode
+                    let original_dims = match image::image_dimensions(path) {
+                        Ok((width, height)) => Some((width, height)),
+                        Err(_) => size.map(|s| (s.pixel_size(), s.pixel_size())),
+                    };
+
                     return Self::Image(
-                        widget::image::Handle::from_path(path),
-                        size.map(|s| (s.pixel_size(), s.pixel_size())),
+                        widget::image::Handle::from_path(thumbnail_path),
+                        original_dims,
                     );
                 }
                 CachedThumbnail::Failed => {
@@ -1809,6 +1823,45 @@ impl ItemThumbnail {
         let mut tried_supported_file = false;
         // First try built-in image thumbnailer
         if mime.type_() == mime::IMAGE && check_size("image", max_size_mb * 1000 * 1000) {
+            // Check if image dimensions would exceed available memory budget
+            // The GPU tiling system can handle large images, but we still need to decode them first
+            let dimensions_ok = match image::image_dimensions(path) {
+                Ok((width, height)) => {
+                    if exceeds_memory_limit(width, height, max_mem) {
+                        log::warn!(
+                            "skipping thumbnail generation for {}: {}x{} image would exceed {}MB memory budget",
+                            path.display(),
+                            width,
+                            height,
+                            max_mem
+                        );
+                        false
+                    } else {
+                        if should_use_tiling(width, height) {
+                            log::info!(
+                                "Large image {}x{} detected, will use GPU tiling for display",
+                                width,
+                                height
+                            );
+                        }
+                        true
+                    }
+                }
+                Err(err) => {
+                    log::debug!(
+                        "failed to read dimensions for {}: {}, will try decoding",
+                        path.display(),
+                        err
+                    );
+                    true // If we can't read dimensions, try anyway
+                }
+            };
+
+            if !dimensions_ok {
+                // Skip this image entirely since it is too large to safely decode
+                return Self::NotImage;
+            }
+
             tried_supported_file = true;
             let dyn_img: Option<image::DynamicImage> = match mime.subtype().as_str() {
                 "jxl" => match File::open(path) {
@@ -1862,10 +1915,15 @@ impl ItemThumbnail {
             };
 
             if let Some(dyn_img) = dyn_img {
+                let (img_width, img_height) = (dyn_img.width(), dyn_img.height());
+
                 if let Ok(cacher) = thumbnail_cacher.as_ref() {
                     match cacher.update_with_image(dyn_img) {
-                        Ok(path) => {
-                            return Self::Image(widget::image::Handle::from_path(path), None);
+                        Ok(thumb_path) => {
+                            return Self::Image(
+                                widget::image::Handle::from_path(thumb_path),
+                                Some((img_width, img_height)),
+                            );
                         }
                         Err(err) => {
                             log::warn!("cacher failed to decode {}: {}", path.display(), err);
@@ -1882,7 +1940,7 @@ impl ItemThumbnail {
                             thumbnail.height(),
                             thumbnail.into_raw(),
                         ),
-                        Some((dyn_img.width(), dyn_img.height())),
+                        Some((img_width, img_height)),
                     );
                 }
             }
@@ -2095,12 +2153,9 @@ impl Item {
             .unwrap_or(&ItemThumbnail::NotImage)
         {
             ItemThumbnail::NotImage => icon,
-            ItemThumbnail::Image(handle, _) => {
-                if let Some(path) = self.path_opt() {
-                    if self.mime.type_() == mime::IMAGE {
-                        return widget::image(widget::image::Handle::from_path(path)).into();
-                    }
-                }
+            ItemThumbnail::Image(handle, _original_dims) => {
+                // Preview pane: ALWAYS show thumbnail for instant, responsive UI
+                // Full resolution loading happens in gallery mode
                 widget::image(handle.clone()).into()
             }
             ItemThumbnail::Svg(handle) => widget::svg(handle.clone()).into(),
@@ -2501,6 +2556,7 @@ pub struct Tab {
     time_formatter: DateTimeFormatter<fieldsets::T>,
     watch_drag: bool,
     window_id: Option<window::Id>,
+    large_image_manager: LargeImageManager,
 }
 
 async fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, OperationError> {
@@ -2621,6 +2677,7 @@ impl Tab {
             time_formatter: time_formatter(config.military_time),
             watch_drag: true,
             window_id,
+            large_image_manager: LargeImageManager::new(),
         }
     }
 
@@ -2912,6 +2969,77 @@ impl Tab {
             });
         }
         last
+    }
+
+    fn trigger_async_decode(&mut self) -> Vec<Command> {
+        // Only trigger decode in gallery mode for the currently selected image
+        if !self.gallery {
+            return Vec::new();
+        }
+
+        let Some(index) = self.select_focus else {
+            return Vec::new();
+        };
+
+        let Some(items) = &self.items_opt else {
+            return Vec::new();
+        };
+
+        let Some(item) = items.get(index) else {
+            return Vec::new();
+        };
+
+        let Some(ItemThumbnail::Image(_, original_dims)) = &item.thumbnail_opt else {
+            return Vec::new();
+        };
+
+        if let Some((w, h)) = original_dims {
+            if !should_use_tiling(*w, *h) {
+                return Vec::new();
+            }
+        }
+
+        let Some(path) = item.path_opt() else {
+            return Vec::new();
+        };
+
+        // Clone path to avoid borrow checker issues
+        let path = path.to_path_buf();
+
+        // Get display size for adaptive resolution
+        let display_dimensions = self
+            .size_opt
+            .get()
+            .map(|size| (size.width as u32, size.height as u32));
+
+        // Try to decode the image using LargeImageManager with adaptive resolution
+        let (should_decode, target_dimensions, generation) = self
+            .large_image_manager
+            .try_decode(&path, display_dimensions);
+        if should_decode {
+            vec![Command::Iced(
+                cosmic::iced::Task::perform(
+                    decode_large_image(path, target_dimensions),
+                    move |result| {
+                        result
+                            .map(|(path, width, height, pixels)| {
+                                Message::ImageDecoded(
+                                    path,
+                                    width,
+                                    height,
+                                    pixels,
+                                    display_dimensions,
+                                    generation,
+                                )
+                            })
+                            .unwrap_or_else(|| Message::AutoScroll(None))
+                    },
+                )
+                .into(),
+            )]
+        } else {
+            Vec::new()
+        }
     }
 
     pub fn change_location(&mut self, location: &Location, history_i_opt: Option<usize>) {
@@ -3325,6 +3453,10 @@ impl Tab {
             }
             Message::Gallery(gallery) => {
                 self.gallery = gallery;
+
+                if gallery {
+                    commands.extend(self.trigger_async_decode());
+                }
             }
             Message::GalleryPrevious | Message::GalleryNext => {
                 let mut pos_opt = None;
@@ -3352,6 +3484,8 @@ impl Tab {
                 if let Some((row, col)) = pos_opt {
                     // Should mod_shift be available?
                     self.select_position(row, col, mod_shift);
+
+                    commands.extend(self.trigger_async_decode());
                 }
                 if let Some(offset) = self.select_focus_scroll() {
                     commands.push(Command::Iced(
@@ -3367,6 +3501,10 @@ impl Tab {
                     for (_, item) in &indices {
                         if item.selected && item.can_gallery() {
                             self.gallery = !self.gallery;
+
+                            if self.gallery {
+                                commands.extend(self.trigger_async_decode());
+                            }
                             break;
                         }
                     }
@@ -3853,6 +3991,18 @@ impl Tab {
                     }
                 }
             }
+            Message::ImageDecoded(path, width, height, pixels, display_size, generation) => {
+                // Create handle from pre-decoded RGBA data (fast!)
+                let handle = widget::image::Handle::from_rgba(width, height, pixels);
+
+                // Store decoded image handle if generation still matches (not superseded)
+                self.large_image_manager.store_decoded_with_generation(
+                    path,
+                    handle,
+                    display_size,
+                    generation,
+                );
+            }
             Message::ToggleSort(heading_option) => {
                 if !matches!(self.location, Location::Search(..)) {
                     let heading_sort = if self.sort_name == heading_option {
@@ -4207,26 +4357,66 @@ impl Tab {
                         .unwrap_or(&ItemThumbnail::NotImage)
                     {
                         ItemThumbnail::NotImage => {}
-                        ItemThumbnail::Image(handle, _) => {
-                            if let Some(path) = item.path_opt() {
-                                element_opt = Some(
-                                    widget::container(
-                                        //TODO: use widget::image::viewer, when its zoom can be reset
-                                        widget::image(widget::image::Handle::from_path(path)),
-                                    )
-                                    .center(Length::Fill)
-                                    .into(),
-                                );
+                        ItemThumbnail::Image(handle, original_dims) => {
+                            // Determine which image to show based on async decode state
+                            let mut is_loading = false;
+                            let mut error_msg_opt = None;
+                            let image_handle = if let Some(path) = item.path_opt() {
+                                if let Some(error_msg) = self.large_image_manager.get_error(path) {
+                                    error_msg_opt = Some(error_msg.clone());
+                                    handle.clone()
+                                } else if self.large_image_manager.is_decoding(path) {
+                                    // Currently decoding (initial or re-decode) --> show cached/thumbnail with loading indicator
+                                    is_loading = true;
+                                    // Use decoded handle if available (re-decode), otherwise thumbnail (initial decode)
+                                    self.large_image_manager
+                                        .get_decoded(path)
+                                        .cloned()
+                                        .unwrap_or_else(|| handle.clone())
+                                } else if let Some(decoded_handle) =
+                                    self.large_image_manager.get_decoded(path)
+                                {
+                                    // Decoded and not currently decoding --> use it
+                                    decoded_handle.clone()
+                                } else if let Some((w, h)) = original_dims {
+                                    // Check if image needs tiling
+                                    if should_use_tiling(*w, *h) {
+                                        // Large image --> show thumbnail only
+                                        handle.clone()
+                                    } else {
+                                        // Normal-sized image --> load full resolution directly
+                                        widget::image::Handle::from_path(path)
+                                    }
+                                } else {
+                                    // No dimensions available --> show thumbnail
+                                    handle.clone()
+                                }
                             } else {
-                                element_opt = Some(
-                                    widget::container(
-                                        //TODO: use widget::image::viewer, when its zoom can be reset
-                                        widget::image(handle.clone()),
-                                    )
-                                    .center(Length::Fill)
-                                    .into(),
-                                );
-                            }
+                                handle.clone()
+                            };
+
+                            let content: cosmic::Element<'_, Message> =
+                                if let Some(error_msg) = error_msg_opt {
+                                    widget::column()
+                                        .push(widget::image(image_handle))
+                                        .push(widget::text(format!("⚠ {}", error_msg)).size(13))
+                                        .padding(space_xs)
+                                        .align_x(cosmic::iced::Alignment::Center)
+                                        .into()
+                                } else if is_loading {
+                                    widget::column()
+                                        .push(widget::image(image_handle))
+                                        .push(widget::text("Loading higher resolution...").size(14))
+                                        .padding(space_xs)
+                                        .align_x(cosmic::iced::Alignment::Center)
+                                        .into()
+                                } else {
+                                    //TODO: use widget::image::viewer, when its zoom can be reset
+                                    widget::image(image_handle).into()
+                                };
+
+                            element_opt =
+                                Some(widget::container(content).center(Length::Fill).into());
                         }
                         ItemThumbnail::Svg(handle) => {
                             element_opt = Some(
@@ -5661,13 +5851,30 @@ impl Tab {
                     let max_jobs = jobs;
                     let max_mb = u64::from(self.thumb_config.max_mem_mb.get());
                     let max_size = u64::from(self.thumb_config.max_size_mb.get());
+
+                    // Determine effective memory budget based on image size
+                    let (effective_max_mb, effective_jobs) = if mime.type_() == mime::IMAGE {
+                        match image::image_dimensions(&path) {
+                            Ok((width, height)) => {
+                                let (_use_dedicated, eff_mb, eff_jobs) =
+                                    should_use_dedicated_worker(width, height, max_mb, max_jobs);
+                                (eff_mb, eff_jobs)
+                            }
+                            Err(_) => (max_mb, max_jobs),
+                        }
+                    } else {
+                        (max_mb, max_jobs)
+                    };
+
                     subscriptions.push(Subscription::run_with_id(
                         ("thumbnail", path.clone()),
                         stream::channel(1, move |mut output| async move {
                             let message = {
                                 let path = path.clone();
 
+                                // Acquire semaphore permit
                                 _ = THUMB_SEMAPHORE.acquire().await;
+
                                 tokio::task::spawn_blocking(move || {
                                     let start = Instant::now();
                                     let thumbnail = ItemThumbnail::new(
@@ -5675,8 +5882,8 @@ impl Tab {
                                         metadata,
                                         mime,
                                         THUMBNAIL_SIZE,
-                                        max_mb,
-                                        max_jobs,
+                                        effective_max_mb,
+                                        effective_jobs,
                                         max_size,
                                     );
                                     log::debug!(
