@@ -80,6 +80,18 @@ default-features = false
 #TODO: a11y feature crashes
 features = ["about", "autosize", "multi-window", "tokio", "winit", "surface-message"]
 
+[[example]]
+name = "gio-list"
+required-features = ["gvfs"]
+
+[[example]]
+name = "gio-mount"
+required-features = ["gvfs"]
+
+[[example]]
+name = "gvfs"
+required-features = ["gvfs"]
+
 [features]
 default = [
     "bzip2",
