@@ -26,8 +26,8 @@ file-name = Název souboru
 folder-name = Název složky
 file-already-exists = Soubor s daným názvem již existuje
 folder-already-exists = Složka s daným názvem již existuje
-name-hidden = Položky s názvem začínajícím na "." budou skryty
-name-invalid = Název nemůže být "{ $filename }"
+name-hidden = Položky s názvem začínajícím tečkou budou skryty
+name-invalid = Název nemůže být „{ $filename }“
 name-no-slashes = Název nesmí obsahovat lomítka
 
 ## Open/Save Dialog
@@ -51,7 +51,7 @@ rename-folder = Přejmenovat složku
 ## Replace Dialog
 
 replace = Nahradit
-replace-title = "{ $filename }" již na daném místě existuje
+replace-title = „{ $filename }“ již na daném místě existuje
 replace-warning = Chcete nahradit soubor tím, který ukládáte? Nahrazení přepíše veškerý jeho obsah.
 
 # Context Pages
@@ -157,7 +157,7 @@ extract-to-title = Rozbalit do složky
 mount-error = Nelze přistoupit k disku
 create = Tvorba
 open-item-location = Otevřít umístění položky
-open-with-title = Jak chcete otevřít "{ $name }"?
+open-with-title = Jak chcete otevřít „{ $name }“?
 browse-store = Procházet { $store }
 other-apps = Ostatní aplikace
 related-apps = Související aplikace
@@ -170,7 +170,7 @@ replace-with = Nahradit za
 keep-both = Ponechat oba
 skip = Přeskočit
 set-executable-and-launch = Umožnit spouštění a spustit
-set-executable-and-launch-description = Chcete umožnit spouštění pro "{ $name }" a následně ho spustit?
+set-executable-and-launch-description = Chcete umožnit spouštění pro „{ $name }“ a následně ho spustit?
 set-and-launch = Nastavit a spustit
 open-with = Otevřít pomocí
 other = Ostatní
@@ -278,7 +278,7 @@ compressing =
     Komprimování { $items } { $items ->
         [one] položky
        *[other] položek
-    } z "{ $from }" do "{ $to }" ({ $progress })...
+    } z „{ $from }“ do „{ $to }“ ({ $progress })...
 compressed =
     { $items ->
         [one] Zkomprimována
@@ -288,14 +288,14 @@ compressed =
         [one] položka
         [few] položky
        *[other] položek
-    } z "{ $from }" do "{ $to }"
-creating = Vytváření "{ $name }" v "{ $parent }"
-created = Vytvořen "{ $name }" v "{ $parent }"
+    } z „{ $from }“ do „{ $to }“
+creating = Vytváření „{ $name }“ v „{ $parent }“
+created = Vytvořen „{ $name }“ v „{ $parent }“
 copying =
     Kopírování { $items } { $items ->
         [one] položky
        *[other] položek
-    } z "{ $from }" do "{ $to }" ({ $progress })...
+    } z „{ $from }“ do „{ $to }“ ({ $progress })...
 copied =
     { $items ->
         [one] Zkopírována
@@ -305,15 +305,15 @@ copied =
         [one] položka
         [few] položky
        *[other] položek
-    } z "{ $from }" do "{ $to }"
+    } z „{ $from }“ do „{ $to }“
 extracting =
     Extrahování { $items } { $items ->
         [one] položky
        *[other] položek
-    } z "{ $from }" do "{ $to }" ({ $progress })...
+    } z „{ $from }“ do „{ $to }“ ({ $progress })...
 favorite-path-error-description =
-    Nelze otevřít "{ $path }"
-    "{ $path }" buď neexistuje nebo nemáte dostatečná práva pro otevření
+    Nelze otevřít „{ $path }“
+    „{ $path }“ buď neexistuje nebo nemáte dostatečná práva pro otevření
 
     Chcete položku odstranit z bočního panelu?
 selected-items = { $items } vybraných položek
@@ -330,16 +330,16 @@ extracted =
         [one] položka
         [few] položky
        *[other] položek
-    } z "{ $from }" do "{ $to }"
-setting-executable-and-launching = Nastavování "{ $name }" jako spustitelného souboru a spouštění
-set-executable-and-launched = "{ $name }" nastaven jako spustitelný soubor a spuštěn
-setting-permissions = Nastavování práv pro "{ $name }" na { $mode }
-set-permissions = Práva pro "{ $name }" nastavena na { $mode }
+    } z „{ $from }“ do „{ $to }“
+setting-executable-and-launching = Nastavování „{ $name }“ jako spustitelného souboru a spouštění
+set-executable-and-launched = „{ $name }“ nastaven jako spustitelný soubor a spuštěn
+setting-permissions = Nastavování práv pro „{ $name }“ na { $mode }
+set-permissions = Práva pro „{ $name }“ nastavena na { $mode }
 moving =
     Přesouvání { $items } { $items ->
         [one] položky
        *[other] položek
-    } z "{ $from }" do "{ $to }" ({ $progress })...
+    } z „{ $from }“ do „{ $to }“ ({ $progress })...
 moved =
     { $items ->
         [one] Přesunuta
@@ -349,7 +349,7 @@ moved =
         [one] položka
         [few] položky
        *[other] položek
-    } z "{ $from }" do "{ $to }"
+    } z „{ $from }“ do „{ $to }“
 permanently-deleting =
     Trvalé mazání { $items } { $items ->
         [one] položky
@@ -371,8 +371,8 @@ removed-from-recents =
        *[other] položek
     } z { recents }
 remove-from-recents = Odstranit z nedávných
-renaming = Přejmenování "{ $from }" na "{ $to }"
-renamed = Přejmenováno "{ $from }" na "{ $to }"
+renaming = Přejmenování „{ $from }“ na „{ $to }“
+renamed = Přejmenováno „{ $from }“ na „{ $to }“
 unknown-folder = neznámá složka
 show-details = Zobrazit detaily
 type = Typ: { $mime }
