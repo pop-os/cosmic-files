@@ -56,6 +56,7 @@ use std::{
     env, fmt, fs,
     future::Future,
     io,
+    num::NonZeroU16,
     path::{Path, PathBuf},
     pin::Pin,
     process,
@@ -1733,9 +1734,9 @@ impl App {
             widget::settings::item::builder(fl!("icon-size"))
                 .description(format!("{icon_size}%"))
                 .control(
-                    widget::slider(50..=500, icon_size.get(), move |_| {
+                    widget::slider(50..=500, icon_size.get(), move |new_value| {
                         Message::DesktopConfig(DesktopConfig {
-                            icon_size,
+                            icon_size: NonZeroU16::new(new_value).unwrap_or(icon_size),
                             ..config
                         })
                     })
@@ -1748,9 +1749,9 @@ impl App {
             widget::settings::item::builder(fl!("grid-spacing"))
                 .description(format!("{grid_spacing}%"))
                 .control(
-                    widget::slider(50..=500, grid_spacing.get(), move |_| {
+                    widget::slider(50..=500, grid_spacing.get(), move |new_value| {
                         Message::DesktopConfig(DesktopConfig {
-                            grid_spacing,
+                            grid_spacing: NonZeroU16::new(new_value).unwrap_or(grid_spacing),
                             ..config
                         })
                     })
