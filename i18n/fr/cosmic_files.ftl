@@ -77,7 +77,7 @@ name-no-slashes = Le nom ne peut pas contenir de slashs
 ## Open/Save Dialog
 
 cancel = Annuler
-create = Création
+create = Créer
 open = Ouvrir
 open-file = Ouvrir le fichier
 open-folder = Ouvrir dossier
