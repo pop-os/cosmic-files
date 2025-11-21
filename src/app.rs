@@ -4689,7 +4689,7 @@ impl Application for App {
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             Message::Focused(id) => {
                 if let Some(w) = self.windows.get(&id) {
-                    match w.kind {
+                    match &w.kind {
                         WindowKind::Desktop(entity) => self.tab_model.activate(*entity),
                         _ => {}
                     };
