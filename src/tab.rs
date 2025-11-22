@@ -3312,16 +3312,14 @@ impl Tab {
             }
             Message::ContextMenu(point_opt, _) => {
                 self.edit_location = None;
-                if point_opt.is_none() || !mod_shift {
-                    self.context_menu = point_opt;
-                    self.location_context_menu_index = None;
+                self.context_menu = point_opt;
+                self.location_context_menu_index = None;
 
-                    //TODO: hack for clearing selecting when right clicking empty space
-                    if self.context_menu.is_some() && self.last_right_click.take().is_none() {
-                        if let Some(ref mut items) = self.items_opt {
-                            for item in items.iter_mut() {
-                                item.selected = false;
-                            }
+                //TODO: hack for clearing selecting when right clicking empty space
+                if self.context_menu.is_some() && self.last_right_click.take().is_none() {
+                    if let Some(ref mut items) = self.items_opt {
+                        for item in items.iter_mut() {
+                            item.selected = false;
                         }
                     }
                 }
