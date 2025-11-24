@@ -64,13 +64,13 @@ replace-warning = أتريد استبداله بالملف الذي تحفظه؟
 
 pending = قيد الانتظار
 failed = فشل
-complete = انتهى بنجاح
+complete = اكتمل
 copy_noun = نسخ
 
 ## Open with
 
-menu-open-with = فتح ب‍استخدام...
-default-app = { $name } (الافتراضي)
+menu-open-with = افتح ب‍استخدام
+default-app = { $name } (المبدئي)
 
 ## Properties
 
@@ -83,20 +83,20 @@ settings = الإعدادات
 
 appearance = المظهر
 theme = الثيم
-match-desktop = مطابقة مع سطح المكتب
+match-desktop = طابق سطح المكتب
 dark = داكن
 light = فاتح
 # Context menu
-add-to-sidebar = اضف إلى الشريط الجانبي
+add-to-sidebar = أضِف إلى الشريط الجانبي
 new-file = ملف جديد...
 new-folder = مجلد جديد...
-open-in-terminal = فتح في الطرفية
-move-to-trash = نقل إلى سلة المهملات
-restore-from-trash = استعادة من سلة المهملات
+open-in-terminal = افتح في الطرفية
+move-to-trash = انقل إلى المهملات
+restore-from-trash = استعِد من المهملات
 remove-from-sidebar = إزالة من الشريط الجانبي
-sort-by-name = ترتيب حسب الاسم
-sort-by-modified = ترتيب حسب التعديل
-sort-by-size = ترتيب حسب الحجم
+sort-by-name = رتّب حسب الاسم
+sort-by-modified = رتّب حسب التعديل
+sort-by-size = رتّب حسب الحجم
 
 # Menu
 
@@ -104,32 +104,32 @@ sort-by-size = ترتيب حسب الحجم
 ## File
 
 file = ملف
-new-tab = علامة تبويب جديدة
+new-tab = لسان جديد
 new-window = نافذة جديدة
-rename = إعادة تسمية...
-close-tab = إغلاق علامة التبويب
-quit = خروج
+rename = غيِّر الاسم...
+close-tab = أغلق اللسان
+quit = أنهِ
 
 ## Edit
 
-edit = تعديل
-cut = قص
-copy = نسخ
-paste = لصق
-select-all = تحديد الكل
+edit = عدِّل
+cut = قصّ
+copy = انسخ
+paste = ألصِق
+select-all = حدّد الكل
 
 ## View
 
-zoom-in = تقريب
-default-size = الحجم الافتراضي
+zoom-in = قرِّب
+default-size = الحجم المبدئي
 zoom-out = إبعاد
 view = عرض
-grid-view = عرض علي شكل شبكة
-list-view = عرض علي شكل لائحة
-show-hidden-files = إظهار الملفات المخفية
+grid-view = عرض الشبكة
+list-view = عرض اللائحة
+show-hidden-files = أظهر الملفات المخفية
 list-directories-first = ترتيب المجلدات اولاً
 menu-settings = الإعدادات...
-menu-about = حول مدير ملفات COSMIC...
+menu-about = عن مدير ملفات COSMIC...
 dismiss = أهمل الرسالة
 no-results = لم يتم العثور على نتائج
 networks = الشبكات
@@ -190,51 +190,51 @@ network-drive-schemes =
 network-drive-error = تعذر الوصول القرص الشبكي
 password = كلمة السر
 remember-password = تذكر كلمة السر
-try-again = أعد المحاولة
+try-again = حاول مجددًا
 username = اسم المستخدم
 cancelled = أُلغِيَ
 edit-history = عدِّل التأريخ
 history = التأريخ
 no-history = لا توجد عناصر في التأريخ.
 progress = { $percent }٪
-progress-cancelled = { $percent }٪، ملغى
+progress-cancelled = { $percent }٪، أُلغِيَ
 progress-failed = { $percent }٪، فشل
-progress-paused = { $percent }٪، متوقف مؤقتًا
-creating = جاري إنشاء ”{ $name }“ في ”{ $parent }“
-created = تم إنشاء ”{ $name }“ في ”{ $parent }“
+progress-paused = { $percent }٪، أُلبِث
+creating = ينشئ «{ $name }» في «{ $parent }»
+created = أُنشئ «{ $name }» في «{ $parent }»
 emptying-trash = جاري تفريغ { trash } ({ $progress })...
 emptied-trash = تم تفريغ { trash }
-setting-executable-and-launching = جاري تعيين ”{ $name }“ كملف قابل للتنفيذ وتشغيله
-set-executable-and-launched = تعيين ”{ $name }“ كملف قابل للتنفيذ وتشغيله
-setting-permissions = جاري تعيين أذونات ”{ $name }“ إلى { $mode }
-set-permissions = تم تعيين أذونات ”{ $name }“ إلى { $mode }
-renaming = جاري إعادة تسمية ”{ $from }“ إلى ”{ $to }“
-renamed = تم إعادة تسمية ”{ $from }“ إلى ”{ $to }“
+setting-executable-and-launching = يعيِّن «{ $name }» كقابل للتنفيذ ويُشغِّل
+set-executable-and-launched = عيِّن «{ $name }» كقابل للتنفيذ وشُغَّل
+setting-permissions = يعيِّن الأذونات لـ«{ $name }» إلى «{ $mode }»
+set-permissions = عيِّن أذونات «{ $name }» إلى «{ $mode }»
+renaming = تُعاد تسمية «{ $from }» إلى «{ $to }»
+renamed = غُيِّرت تسمية «{ $from }» إلى «{ $to }»
 unknown-folder = مجلد مجهول
-show-details = عرض التفاصيل
+show-details = أظهِر التفاصيل
 type = النوع: { $mime }
 items = العناصر: { $items }
 item-size = الحجم: { $size }
-item-created = تم إنشاء: { $created }
-item-modified = تم تعديل: { $modified }
-item-accessed = تم الوصول إلي: { $accessed }
-calculating = جاري الحساب...
+item-created = أُنشئ في: { $created }
+item-modified = عُدّل في: { $modified }
+item-accessed = آخر وصول: { $accessed }
+calculating = يحسب...
 single-click = نقرة واحدة للفتح
 type-to-search = اكتب للبحث
-type-to-search-recursive = يبحث في المجلد الحالي وجميع المجلدات الفرعية
-type-to-search-enter-path = يدخل المسار إلي المجلد أو الملف
-compress = ضغط
-delete-permanently = حذف نهائيًا
-eject = إخراج
-extract-here = إستخراج
-sort-by-trashed = ترتيب حسب وقت الحذف
-remove-from-recents = إزالة من الحديثة
-change-wallpaper = تغيير الخلفية...
+type-to-search-recursive = يبحث في المجلّد الحالي وجميع المجلّدات الفرعية
+type-to-search-enter-path = يدخل المسار إلي المجلّد أو الملف
+compress = اضغط
+delete-permanently = احذف نهائيًا
+eject = أخرِج
+extract-here = استخرِج
+sort-by-trashed = رتّب حسب وقت الحذف
+remove-from-recents = أزِل من الحديثة
+change-wallpaper = غيِّر خلفية الشاشة...
 desktop-appearance = مظهر سطح المكتب...
 display-settings = إعدادات العرض...
-reload-folder = إعادة تحميل المجلد
+reload-folder = أعد تحميل المجلّد
 gallery-preview = معاينة المعرض
-sort = ترتيب
+sort = رتّب
 sort-a-z = أ-ي
 sort-z-a = ي-أ
 sort-newest-first = الأحدث أولاً
@@ -276,10 +276,10 @@ write-only = كتابة فقط
 write-execute = كتابة وتنفيذ
 read-only = قراءة فقط
 compressing =
-    جاري ضغط { $items } { $items ->
+    جارِ ضغط { $items } { $items ->
         [one] عنصر
        *[other] عناصر
-    } من ”{ $from }“ إلى ”{ $to }“ ({ $progress })...
+    } من «{ $from }» إلى «{ $to }» ({ $progress })...
 compressed =
     تم ضغط { $items } { $items ->
         [one] عنصر
