@@ -3004,7 +3004,12 @@ impl Application for App {
                                             .as_ref()
                                             .map_or_else(|| &tab.location, |x| &x.location);
                                         // Try to add text to end of location
-                                        if let Some(path) = location.path_opt() {
+                                        if let Location::Network(uri, ..) = location {
+                                            let mut uri_string = uri.clone();
+                                            uri_string.push_str(&text);
+                                            tab.edit_location =
+                                                Some(location.with_uri(uri_string).into());
+                                        } else if let Some(path) = location.path_opt() {
                                             let mut path_string =
                                                 path.to_string_lossy().into_owned();
                                             path_string.push_str(&text);
