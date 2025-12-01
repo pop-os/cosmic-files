@@ -1362,12 +1362,19 @@ pub struct EditLocation {
 
 impl EditLocation {
     pub fn resolve(&self) -> Option<Location> {
-        let Some(selected) = self.selected else {
-            return Some(self.location.clone());
-        };
-        let completions = self.completions.as_ref()?;
-        let completion = completions.get(selected)?;
-        Some(self.location.with_path(completion.1.clone()))
+        if let Location::Network(uri, _, path) = &self.location {
+            MOUNTERS
+                .values()
+                .find_map(|mounter| mounter.dir_info(uri))
+                .map(|(uri, display_name)| Location::Network(uri, display_name, path.clone()))
+        } else {
+            let Some(selected) = self.selected else {
+                return Some(self.location.clone());
+            };
+            let completions = self.completions.as_ref()?;
+            let completion = completions.get(selected)?;
+            Some(self.location.with_path(completion.1.clone()))
+        }
     }
 
     pub fn select(&mut self, forwards: bool) {
@@ -1430,7 +1437,15 @@ impl std::fmt::Display for Location {
 
 impl Location {
     pub fn normalize(&self) -> Self {
-        if let Some(mut path) = self.path_opt().cloned() {
+        if let Location::Network(uri, ..) = self {
+            if !uri.ends_with('/') {
+                let mut uri = uri.clone();
+                uri.push('/');
+                self.with_uri(uri)
+            } else {
+                self.clone()
+            }
+        } else if let Some(mut path) = self.path_opt().cloned() {
             // Add trailing slash if location is a path
             path.push("");
             self.with_path(path)
@@ -1482,9 +1497,16 @@ impl Location {
             Self::Search(_, term, show_hidden, time) => {
                 Self::Search(path, term.clone(), *show_hidden, *time)
             }
-            Self::Network(id, name, path) => Self::Network(id.clone(), name.clone(), path.clone()),
 
             other => other.clone(),
+        }
+    }
+
+    pub fn with_uri(&self, uri: String) -> Self {
+        if let Self::Network(_, name, path) = self {
+            Self::Network(uri, name.clone(), path.clone())
+        } else {
+            self.clone()
         }
     }
 
@@ -3064,10 +3086,14 @@ impl Tab {
             {
                 let mut remove = false;
                 if let Some(last_location) = self.history.last() {
-                    if let Some(last_path) = last_location.path_opt() {
-                        if let Some(path) = location.path_opt() {
-                            remove = last_path == path;
-                        }
+                    if let Location::Network(last_uri, ..) = last_location
+                        && let Location::Network(uri, ..) = location
+                    {
+                        remove = last_uri == uri;
+                    } else if let Some(last_path) = last_location.path_opt()
+                        && let Some(path) = location.path_opt()
+                    {
+                        remove = last_path == path;
                     }
                 }
                 if remove {
@@ -3409,8 +3435,10 @@ impl Tab {
             }
             Message::EditLocationComplete(selected) => {
                 if let Some(mut edit_location) = self.edit_location.take() {
-                    edit_location.selected = Some(selected);
-                    cd = edit_location.resolve();
+                    if !matches!(edit_location.location, Location::Network(..)) {
+                        edit_location.selected = Some(selected);
+                        cd = edit_location.resolve();
+                    }
                 }
             }
             Message::EditLocationEnable => {
@@ -4634,65 +4662,82 @@ impl Tab {
             .padding([0, theme::active().cosmic().corner_radii.radius_xs[0] as u16]);
 
         if let Some(edit_location) = &self.edit_location {
-            if let Some(location) = edit_location.resolve() {
-                //TODO: allow editing other locations
-                if let Some(path) = location.path_opt() {
-                    row = row.push(
-                        widget::button::custom(
-                            widget::icon::from_name("window-close-symbolic").size(16),
-                        )
-                        .on_press(Message::EditLocation(None))
-                        .padding(space_xxs)
-                        .class(theme::Button::Icon),
-                    );
-                    let text_input = widget::text_input("", path.to_string_lossy().into_owned())
+            let mut text_input = None;
+
+            //TODO: allow editing other locations
+            if let Location::Network(ref uri, ..) = edit_location.location {
+                let location = edit_location.location.clone();
+                text_input = Some(
+                    widget::text_input("", uri.clone())
+                        .id(self.edit_location_id.clone())
+                        .on_input(move |input| {
+                            Message::EditLocation(Some(location.with_uri(input).into()))
+                        })
+                        .on_submit(|_| Message::EditLocationSubmit)
+                        .line_height(1.0),
+                );
+            } else if let Some(resolved_location) = edit_location.resolve()
+                && let Some(path) = resolved_location.path_opt().cloned()
+            {
+                text_input = Some(
+                    widget::text_input("", path.to_string_lossy().into_owned())
                         .id(self.edit_location_id.clone())
                         .on_input(move |input| {
                             Message::EditLocation(Some(
-                                location.with_path(PathBuf::from(input)).into(),
+                                resolved_location.with_path(PathBuf::from(input)).into(),
                             ))
                         })
                         .on_submit(|_| Message::EditLocationSubmit)
-                        .line_height(1.0);
-                    let mut popover =
-                        widget::popover(text_input).position(widget::popover::Position::Bottom);
-                    if let Some(completions) = &edit_location.completions {
-                        if !completions.is_empty() {
-                            let mut column =
-                                widget::column::with_capacity(completions.len()).padding(space_xxs);
-                            for (i, (name, _path)) in completions.iter().enumerate() {
-                                let selected = edit_location.selected == Some(i);
-                                column = column.push(
-                                    widget::button::custom(widget::text::body(name))
-                                        //TODO: match to design
-                                        .class(if selected {
-                                            theme::Button::Standard
-                                        } else {
-                                            theme::Button::HeaderBar
-                                        })
-                                        .on_press(Message::EditLocationComplete(i))
-                                        .padding(space_xxs)
-                                        .width(Length::Fill),
-                                );
-                            }
-                            popover = popover.popup(
-                                widget::container(column)
-                                    .class(theme::Container::Dropdown)
-                                    //TODO: This is a hack to get the popover to be the right width
-                                    .max_width(size.width - 140.0),
+                        .line_height(1.0),
+                );
+            }
+            if let Some(text_input) = text_input {
+                row = row.push(
+                    widget::button::custom(
+                        widget::icon::from_name("window-close-symbolic").size(16),
+                    )
+                    .on_press(Message::EditLocation(None))
+                    .padding(space_xxs)
+                    .class(theme::Button::Icon),
+                );
+                let mut popover =
+                    widget::popover(text_input).position(widget::popover::Position::Bottom);
+                if let Some(completions) = &edit_location.completions {
+                    if !completions.is_empty() {
+                        let mut column =
+                            widget::column::with_capacity(completions.len()).padding(space_xxs);
+                        for (i, (name, _path)) in completions.iter().enumerate() {
+                            let selected = edit_location.selected == Some(i);
+                            column = column.push(
+                                widget::button::custom(widget::text::body(name))
+                                    //TODO: match to design
+                                    .class(if selected {
+                                        theme::Button::Standard
+                                    } else {
+                                        theme::Button::HeaderBar
+                                    })
+                                    .on_press(Message::EditLocationComplete(i))
+                                    .padding(space_xxs)
+                                    .width(Length::Fill),
                             );
                         }
+                        popover = popover.popup(
+                            widget::container(column)
+                                .class(theme::Container::Dropdown)
+                                //TODO: This is a hack to get the popover to be the right width
+                                .max_width(size.width - 140.0),
+                        );
                     }
-                    row = row.push(popover);
-                    let mut column = widget::column::with_capacity(4).padding([0, space_s]);
-                    column = column.push(row);
-                    column = column.push(accent_rule);
-                    if self.config.view == View::List && !condensed {
-                        column = column.push(heading_row);
-                        column = column.push(heading_rule);
-                    }
-                    return column.into();
                 }
+                row = row.push(popover);
+                let mut column = widget::column::with_capacity(4).padding([0, space_s]);
+                column = column.push(row);
+                column = column.push(accent_rule);
+                if self.config.view == View::List && !condensed {
+                    column = column.push(heading_row);
+                    column = column.push(heading_rule);
+                }
+                return column.into();
             }
         } else if let Some(path) = self.location.path_opt() {
             row = row.push(
