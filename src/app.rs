@@ -2984,7 +2984,8 @@ impl Application for App {
                     }
 
                     // Uncaptured keys with only shift modifiers go to the search or location box
-                    if !modifiers.logo()
+                    if matches!(self.mode, Mode::App)
+                        && !modifiers.logo()
                         && !modifiers.control()
                         && !modifiers.alt()
                         && matches!(key, Key::Character(_))
