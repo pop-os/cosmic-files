@@ -1,3 +1,4 @@
+use anyhow::Context;
 #[cfg(feature = "desktop")]
 use cosmic::desktop::fde::{DesktopEntry, get_languages_from_env};
 use cosmic::{
@@ -48,7 +49,6 @@ use std::{
     cell::Cell,
     cmp::{Ordering, Reverse},
     collections::{BTreeMap, BTreeSet, HashMap},
-    error::Error,
     fmt::{self, Display},
     fs::{self, File, Metadata},
     hash::Hash,
@@ -309,19 +309,20 @@ fn has_trailing_sep(path: &Path) -> bool {
         .is_some_and(|b| path::is_separator(b as char))
 }
 
-fn tab_complete(path: &Path) -> Result<Vec<(String, PathBuf)>, Box<dyn Error>> {
+fn tab_complete(path: &Path) -> anyhow::Result<Vec<(String, PathBuf)>> {
     let parent = if has_trailing_sep(path) && path.is_dir() {
         // Show completions inside existing child directory instead of parent
         path
+    } else if let Some(parent) = path.parent() {
+        parent
     } else {
-        path.parent()
-            .ok_or_else(|| format!("path has no parent {}", path.display()))?
+        anyhow::bail!("path has no parent {}", path.display());
     };
 
     let child_os = path.strip_prefix(parent)?;
-    let child = child_os
-        .to_str()
-        .ok_or_else(|| format!("invalid UTF-8 {}", child_os.display()))?;
+    let Some(child) = child_os.to_str() else {
+        anyhow::bail!("invalid UTF-8 {}", child_os.display());
+    };
 
     let pattern = format!("^{}", regex::escape(child));
     let regex = regex::RegexBuilder::new(&pattern)
@@ -923,27 +924,26 @@ pub fn item_from_trash_entry(
     }
 }
 
-fn get_filename_from_path(path: &Path) -> Result<String, String> {
-    Ok(match path.file_name() {
-        Some(name_os) => name_os
-            .to_str()
-            .ok_or_else(|| {
-                format!(
-                    "failed to parse file name for {}: {} is not valid UTF-8",
-                    path.display(),
-                    name_os.display()
-                )
-            })?
-            .to_string(),
-        None => fl!("filesystem"),
-    })
+fn get_filename_from_path(path: &Path) -> anyhow::Result<String> {
+    let Some(name_os) = path.file_name() else {
+        return Ok(fl!("filesystem"));
+    };
+
+    let Some(file_name) = name_os.to_str() else {
+        anyhow::bail!(
+            "failed to parse file name for {}: {} is not valid UTF-8",
+            path.display(),
+            name_os.display()
+        )
+    };
+
+    Ok(file_name.to_string())
 }
 
-pub fn item_from_path<P: Into<PathBuf>>(path: P, sizes: IconSizes) -> Result<Item, String> {
+pub fn item_from_path<P: Into<PathBuf>>(path: P, sizes: IconSizes) -> anyhow::Result<Item> {
     let path = path.into();
     let name = get_filename_from_path(&path)?;
-    let metadata = fs::metadata(&path)
-        .map_err(|err| format!("failed to read metadata for {}: {}", path.display(), err))?;
+    let metadata = fs::metadata(&path).context("Error while attempting to get item from path")?;
     Ok(item_from_entry(path, name, metadata, sizes))
 }
 
@@ -1074,7 +1074,7 @@ pub fn scan_search<F: Fn(SearchItem) -> bool + Sync>(
     {
         Ok(ok) => ok,
         Err(err) => {
-            log::warn!("failed to parse regex {pattern:?}: {err}");
+            log::warn!("failed to parse regex {pattern}: {err}");
             return;
         }
     };
@@ -1189,7 +1189,7 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
     let recent_files = match recently_used_xbel::parse_file() {
         Ok(recent_files) => recent_files,
         Err(err) => {
-            log::warn!("Error reading recent files: {err:?}");
+            log::warn!("Error reading recent files: {err}");
             return Vec::new();
         }
     };
@@ -1231,7 +1231,7 @@ pub fn scan_network(uri: &str, sizes: IconSizes) -> Vec<Item> {
         match mounter.network_scan(uri, sizes) {
             Some(Ok(items)) => return items,
             Some(Err(err)) => {
-                log::warn!("failed to scan {uri:?}: {err}");
+                log::warn!("failed to scan {uri}: {err}");
             }
             None => {}
         }
@@ -2146,7 +2146,8 @@ impl ItemThumbnail {
                 }
                 Err(err) => {
                     log::warn!(
-                        "failed to run {thumbnailer:?} for {}: {}",
+                        "failed to run {:?} for {}: {}",
+                        thumbnailer,
                         path.display(),
                         err
                     );
@@ -4674,12 +4675,12 @@ impl Tab {
                 Some(ItemThumbnail::Image(ref handle, original_dims)) => {
                     // Determine which image to show based on async decode state
                     let mut is_loading = false;
-                    let mut error_msg_opt = None;
+                    let mut error_opt = None;
                     let image_handle = item.path_opt().map_or_else(
                         || handle.clone(),
                         |path| {
-                            if let Some(error_msg) = self.large_image_manager.get_error(path) {
-                                error_msg_opt = Some(error_msg.clone());
+                            if let Some(error) = self.large_image_manager.get_error(path) {
+                                error_opt = Some(error);
                                 handle.clone()
                             } else if self.large_image_manager.is_decoding(path) {
                                 // Currently decoding (initial or re-decode) --> show cached/thumbnail with loading indicator
@@ -4710,25 +4711,24 @@ impl Tab {
                         },
                     );
 
-                    let content: cosmic::Element<'_, Message> =
-                        if let Some(error_msg) = error_msg_opt {
-                            widget::column::with_capacity(2)
-                                .push(widget::image(image_handle))
-                                .push(widget::text(format!("⚠ {error_msg}")).size(13))
-                                .padding(space_xs)
-                                .align_x(cosmic::iced::Alignment::Center)
-                                .into()
-                        } else if is_loading {
-                            widget::column::with_capacity(2)
-                                .push(widget::image(image_handle))
-                                .push(widget::text("Loading higher resolution...").size(14))
-                                .padding(space_xs)
-                                .align_x(cosmic::iced::Alignment::Center)
-                                .into()
-                        } else {
-                            //TODO: use widget::image::viewer, when its zoom can be reset
-                            crate::load_image::loaded_image(image_handle).into()
-                        };
+                    let content: cosmic::Element<'_, Message> = if let Some(error) = error_opt {
+                        widget::column::with_capacity(2)
+                            .push(widget::image(image_handle))
+                            .push(widget::text(format!("⚠ {error}")).size(13))
+                            .padding(space_xs)
+                            .align_x(cosmic::iced::Alignment::Center)
+                            .into()
+                    } else if is_loading {
+                        widget::column::with_capacity(2)
+                            .push(widget::image(image_handle))
+                            .push(widget::text("Loading higher resolution...").size(14))
+                            .padding(space_xs)
+                            .align_x(cosmic::iced::Alignment::Center)
+                            .into()
+                    } else {
+                        //TODO: use widget::image::viewer, when its zoom can be reset
+                        crate::load_image::loaded_image(image_handle).into()
+                    };
 
                     element_opt = Some(widget::container(content).center(Length::Fill).into());
                 }

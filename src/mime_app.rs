@@ -119,7 +119,7 @@ pub fn exec_to_command<O: AsRef<OsStr>>(
                 if !EXEC_HANDLERS.contains(&field_code)
                     && !DEPRECATED_HANDLERS.contains(&field_code)
                 {
-                    log::warn!("unsupported Exec code {field_code:?} in {exec:?}");
+                    log::warn!("unsupported Exec code {field_code} in {exec}");
                     return None;
                 }
             }

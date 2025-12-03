@@ -41,11 +41,7 @@ impl Thumbnailer {
                         command.arg(thumbnail_size.to_string());
                     }
                     _ => {
-                        log::warn!(
-                            "unsupported thumbnailer Exec code {:?} in {:?}",
-                            arg,
-                            self.exec
-                        );
+                        log::warn!("unsupported thumbnailer Exec code {} in {}", arg, self.exec);
                         return None;
                     }
                 }

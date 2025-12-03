@@ -4,7 +4,6 @@
 use cosmic::iced::clipboard::mime::{AllowedMimeTypes, AsMimeTypes};
 use std::{
     borrow::Cow,
-    error::Error,
     path::{Path, PathBuf},
     str,
 };
@@ -122,7 +121,7 @@ impl AllowedMimeTypes for ClipboardPaste {
 }
 
 impl TryFrom<(Vec<u8>, String)> for ClipboardPaste {
-    type Error = Box<dyn Error>;
+    type Error = anyhow::Error;
     fn try_from(value: (Vec<u8>, String)) -> Result<Self, Self::Error> {
         let (data, mime) = value;
         // Assume the kind is Copy if not provided by the mime type
@@ -136,7 +135,7 @@ impl TryFrom<(Vec<u8>, String)> for ClipboardPaste {
                 for line in text.lines() {
                     let url = Url::parse(line)?;
                     let Ok(path) = url.to_file_path() else {
-                        return Err(format!("invalid file URL {url:?}").into());
+                        anyhow::bail!("invalid file URL {url}");
                     };
                     paths.push(path);
                 }
@@ -149,18 +148,18 @@ impl TryFrom<(Vec<u8>, String)> for ClipboardPaste {
                         kind = match line {
                             "copy" => ClipboardKind::Copy,
                             "cut" => ClipboardKind::Cut { is_dnd: false },
-                            _ => Err(format!("unsupported clipboard operation {line:?}"))?,
+                            _ => anyhow::bail!("unsupported clipboard operation {line}"),
                         };
                     } else {
                         let url = Url::parse(line)?;
                         let Ok(path) = url.to_file_path() else {
-                            return Err(format!("invalid file URL {url:?}").into());
+                            anyhow::bail!("invalid file URL {url}");
                         };
                         paths.push(path);
                     }
                 }
             }
-            _ => Err(format!("unsupported mime type {mime:?}"))?,
+            _ => anyhow::bail!("unsupported mime type {mime}"),
         }
         Ok(Self { kind, paths })
     }
@@ -199,11 +198,11 @@ impl AllowedMimeTypes for ClipboardPasteImage {
 }
 
 impl TryFrom<(Vec<u8>, String)> for ClipboardPasteImage {
-    type Error = Box<dyn Error>;
+    type Error = anyhow::Error;
     fn try_from(value: (Vec<u8>, String)) -> Result<Self, Self::Error> {
         let (data, mime) = value;
         if data.is_empty() {
-            return Err("Empty image data".into());
+            anyhow::bail!("Empty image data");
         }
         Ok(Self {
             data,
@@ -261,11 +260,11 @@ impl AllowedMimeTypes for ClipboardPasteVideo {
 }
 
 impl TryFrom<(Vec<u8>, String)> for ClipboardPasteVideo {
-    type Error = Box<dyn Error>;
+    type Error = anyhow::Error;
     fn try_from(value: (Vec<u8>, String)) -> Result<Self, Self::Error> {
         let (data, mime) = value;
         if data.is_empty() {
-            return Err("Empty video data".into());
+            anyhow::bail!("Empty video data");
         }
         Ok(Self {
             data,
@@ -314,11 +313,11 @@ impl AllowedMimeTypes for ClipboardPasteText {
 }
 
 impl TryFrom<(Vec<u8>, String)> for ClipboardPasteText {
-    type Error = Box<dyn Error>;
+    type Error = anyhow::Error;
     fn try_from(value: (Vec<u8>, String)) -> Result<Self, Self::Error> {
         let (data, _mime) = value;
         if data.is_empty() {
-            return Err("Empty text data".into());
+            anyhow::bail!("Empty text data");
         }
         // Use lossy conversion to handle clipboard data that may contain
         // invalid UTF-8 (e.g., Latin-1 encoded special characters from browsers)

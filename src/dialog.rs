@@ -1315,7 +1315,7 @@ impl Application for App {
         {
             return mounter
                 .mount(data.1.clone())
-                .map(|()| cosmic::action::none());
+                .map(|_res| cosmic::action::none());
         }
         Task::none()
     }
@@ -1890,7 +1890,7 @@ impl Application for App {
                                     match glob::Pattern::new(value) {
                                         Ok(glob) => parsed_globs.push(glob),
                                         Err(err) => {
-                                            log::warn!("failed to parse glob {value:?}: {err}");
+                                            log::warn!("failed to parse glob {value}: {err}");
                                         }
                                     }
                                 }
@@ -2119,7 +2119,7 @@ impl Application for App {
                                                 Ok(()) => {}
                                                 Err(err) => {
                                                     log::warn!(
-                                                        "failed to send notify events: {err:?}"
+                                                        "failed to send notify events: {err}"
                                                     );
                                                 }
                                             }

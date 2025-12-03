@@ -95,7 +95,7 @@ pub fn extract(
                 .map_err(|e| OperationError::from_err(e, controller))
         }
         _ => Err(OperationError::from_err(
-            format!("unsupported mime type {mime:?}"),
+            format_args!("unsupported mime type {mime}"),
             controller,
         )),
     }

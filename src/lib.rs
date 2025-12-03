@@ -41,8 +41,8 @@ pub(crate) type Debouncer = notify_debouncer_full::Debouncer<
     notify_debouncer_full::RecommendedCache,
 >;
 
-pub(crate) fn err_str<T: ToString>(err: T) -> String {
-    err.to_string()
+pub(crate) fn err_str<T>(err: anyhow::Result<T>) -> Result<T, String> {
+    err.map_err(|e| format!("{e:#}"))
 }
 
 pub fn desktop_dir() -> PathBuf {
@@ -178,7 +178,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                     match url.scheme() {
                         "file" => {
                             let Ok(path) = url.to_file_path() else {
-                                log::warn!("invalid argument {arg:?}");
+                                log::warn!("invalid argument {arg}");
                                 continue;
                             };
                             path
@@ -209,7 +209,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(fork::Fork::Child) => (),
             Ok(fork::Fork::Parent(_child_pid)) => process::exit(0),
             Err(err) => {
-                eprintln!("failed to daemonize: {err:?}");
+                eprintln!("failed to daemonize: {err}");
                 process::exit(1);
             }
         }

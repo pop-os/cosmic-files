@@ -10,7 +10,6 @@ use tokio::sync::{mpsc, oneshot};
 use super::{Mounter, MounterAuth, MounterItem, MounterItems, MounterMessage};
 use crate::{
     config::IconSizes,
-    err_str,
     tab::{self, DirSize, ItemMetadata, ItemThumbnail, Location},
 };
 
@@ -102,7 +101,7 @@ fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
     items
 }
 
-fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
+fn network_scan(uri: &str, sizes: IconSizes) -> anyhow::Result<Vec<tab::Item>> {
     let force_dir = uri.starts_with("network:///");
     let (_, file) = resolve_uri(uri);
 
@@ -119,11 +118,10 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
     };
 
     let mut items = Vec::new();
-    for info_res in file
-        .enumerate_children("*", gio::FileQueryInfoFlags::NONE, gio::Cancellable::NONE)
-        .map_err(err_str)?
+    for info_res in
+        file.enumerate_children("*", gio::FileQueryInfoFlags::NONE, gio::Cancellable::NONE)?
     {
-        let info = info_res.map_err(err_str)?;
+        let info = info_res?;
         let name = info.name().to_string_lossy().into_owned();
         let display_name = String::from(info.display_name());
 
@@ -293,7 +291,7 @@ enum Cmd {
     NetworkScan(
         String,
         IconSizes,
-        mpsc::Sender<Result<Vec<tab::Item>, String>>,
+        mpsc::Sender<anyhow::Result<Vec<tab::Item>>>,
     ),
     DirInfo(String, mpsc::Sender<Result<tab::Location, glib::Error>>),
     Unmount(MounterItem),
@@ -302,9 +300,9 @@ enum Cmd {
 enum Event {
     Changed,
     Items(MounterItems),
-    MountResult(MounterItem, Result<bool, String>),
+    MountResult(MounterItem, anyhow::Result<bool>),
     NetworkAuth(String, MounterAuth, mpsc::Sender<MounterAuth>),
-    NetworkResult(String, Result<bool, String>),
+    NetworkResult(String, anyhow::Result<bool>),
 }
 
 #[derive(Clone, Debug)]
@@ -458,7 +456,7 @@ impl Gvfs {
 
                                 let name = volume.name();
                                 if item.name != name {
-                                    log::warn!("trying to mount volume {} failed: name is {:?} when {:?} was expected", i, name, item.name);
+                                    log::warn!("trying to mount volume {} failed: name is {} when {} was expected", i, name, item.name);
                                     continue;
                                 }
 
@@ -507,9 +505,8 @@ impl Gvfs {
                                                     _ = complete_tx.send(Err(err.into()));
                                                     Ok(false)
                                                 } else {
-                                                    let err_str = err.to_string();
-                                                    _ = complete_tx.send(Err(err.into()));
-                                                    Err(err_str)
+                                                    _ = complete_tx.send(Err(err.clone().into()));
+                                                    Err(err.into())
                                                 }
                                             }
                                         }));
@@ -540,9 +537,8 @@ impl Gvfs {
                                                 _ = result_tx.send(Err(err.into()));
                                                 Ok(false)
                                             } else {
-                                                let err_str = err.to_string();
-                                                _ = result_tx.send(Err(err.into()));
-                                                Err(err_str)
+                                                _ = result_tx.send(Err(err.clone().into()));
+                                                Err(err.into())
                                             }
                                         }
                                     }));
@@ -578,7 +574,7 @@ impl Gvfs {
                                             Err(err) => if err.matches(gio::IOErrorEnum::FailedHandled) {
                                                 Ok(false)
                                             } else {
-                                                Err(err.to_string())
+                                                Err(err.into())
                                             }
                                         }));
                                     }
@@ -600,7 +596,7 @@ impl Gvfs {
 
                                 let name = mount.name();
                                 if item.name != name {
-                                    log::warn!("trying to unmount mount {} failed: name is {:?} when {:?} was expected", i, name, item.name);
+                                    log::warn!("trying to unmount mount {} failed: name is {} when {} was expected", i, name, item.name);
                                     continue;
                                 }
 
@@ -646,29 +642,21 @@ impl Mounter for Gvfs {
         items_rx.blocking_recv()
     }
 
-    fn mount(&self, item: MounterItem) -> Task<()> {
+    fn mount(&self, item: MounterItem) -> Task<anyhow::Result<()>> {
         let command_tx = self.command_tx.clone();
         let (res_tx, res_rx) = oneshot::channel();
         command_tx.send(Cmd::Mount(item, res_tx)).unwrap();
-        Task::perform(res_rx, |x| {
-            if let Err(err) = x {
-                log::error!("{err:?}");
-            }
-        })
+        Task::perform(res_rx, |x| x.unwrap())
     }
 
-    fn network_drive(&self, uri: String) -> Task<()> {
+    fn network_drive(&self, uri: String) -> Task<anyhow::Result<()>> {
         let command_tx = self.command_tx.clone();
         let (res_tx, res_rx) = oneshot::channel();
         command_tx.send(Cmd::NetworkDrive(uri, res_tx)).unwrap();
-        Task::perform(res_rx, |x| {
-            if let Err(err) = x {
-                log::error!("{err:?}");
-            }
-        })
+        Task::perform(res_rx, |x| x.unwrap())
     }
 
-    fn network_scan(&self, uri: &str, sizes: IconSizes) -> Option<Result<Vec<tab::Item>, String>> {
+    fn network_scan(&self, uri: &str, sizes: IconSizes) -> Option<anyhow::Result<Vec<tab::Item>>> {
         let (items_tx, mut items_rx) = mpsc::channel(1);
         self.command_tx
             .send(Cmd::NetworkScan(uri.to_string(), sizes, items_tx))
