@@ -174,7 +174,11 @@ pub fn context_menu<'a>(
                 children.push(divider::horizontal::light().into());
                 children.push(menu_item(fl!("rename"), Action::Rename).into());
                 children.push(menu_item(fl!("cut"), Action::Cut).into());
-                children.push(menu_item(fl!("copy"), Action::Copy).into());
+                if modifiers.shift() && !modifiers.control() {
+                    children.push(menu_item(fl!("copy-path"), Action::CopyPath).into());
+                } else {
+                    children.push(menu_item(fl!("copy"), Action::Copy).into());
+                }
                 // Should this simply bypass trash and remove the shortcut?
                 children.push(menu_item(fl!("move-to-trash"), Action::Delete).into());
             } else if selected > 0 {
@@ -204,7 +208,11 @@ pub fn context_menu<'a>(
                     children.push(menu_item(fl!("rename"), Action::Rename).into());
                     children.push(menu_item(fl!("cut"), Action::Cut).into());
                 }
-                children.push(menu_item(fl!("copy"), Action::Copy).into());
+                if modifiers.shift() && !modifiers.control() {
+                    children.push(menu_item(fl!("copy-path"), Action::CopyPath).into());
+                } else {
+                    children.push(menu_item(fl!("copy"), Action::Copy).into());
+                }
 
                 children.push(divider::horizontal::light().into());
                 let supported_archive_types = crate::archive::SUPPORTED_ARCHIVE_TYPES;
