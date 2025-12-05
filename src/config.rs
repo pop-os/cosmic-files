@@ -102,6 +102,23 @@ impl Favorite {
     }
 }
 
+/// Stores configuration for when thumbnails should be generated.
+#[derive(Clone, Copy, Debug, Deserialize, Hash, Eq, PartialEq, Serialize)]
+pub enum ThumbnailMode {
+    /// Generate thumbnails for local images only
+    Local,
+    /// Generate thumbnails for local and remote images
+    All,
+    /// Never generate thumbnails
+    Never,
+}
+
+impl Default for ThumbnailMode {
+    fn default() -> Self {
+        ThumbnailMode::Local
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum TypeToSearch {
     Recursive,
@@ -294,6 +311,7 @@ pub struct ThumbCfg {
     pub jobs: NonZeroU16,
     pub max_mem_mb: NonZeroU16,
     pub max_size_mb: NonZeroU16,
+    pub thumbnail_mode: ThumbnailMode,
 }
 
 impl Default for ThumbCfg {
@@ -302,6 +320,7 @@ impl Default for ThumbCfg {
             jobs: 4.try_into().unwrap(),
             max_mem_mb: 2000.try_into().unwrap(),
             max_size_mb: 64.try_into().unwrap(),
+            thumbnail_mode: ThumbnailMode::default(),
         }
     }
 }
