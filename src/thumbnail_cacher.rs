@@ -5,7 +5,7 @@ use std::{
     error::Error,
     fs::{self, File},
     io::{self, BufReader, BufWriter},
-    os::unix::fs::PermissionsExt,
+    //os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     sync::LazyLock,
     time::UNIX_EPOCH,
@@ -93,8 +93,10 @@ impl ThumbnailCacher {
     }
 
     pub fn update_with_temp_file(&self, temp_file: NamedTempFile) -> Result<&Path, Box<dyn Error>> {
+        #[cfg(unix)]
         fs::set_permissions(temp_file.path(), fs::Permissions::from_mode(0o600))?;
         self.update_thumbnail_text_metadata(temp_file.path())?;
+        #[cfg(unix)]
         fs::rename(temp_file.path(), &self.thumbnail_path)?;
 
         Ok(&self.thumbnail_path)
@@ -127,6 +129,7 @@ impl ThumbnailCacher {
     pub fn create_fail_marker(&self) -> Result<(), Box<dyn Error>> {
         if let Some(dir) = self.thumbnail_fail_marker_path.parent() {
             fs::create_dir_all(dir)?;
+            #[cfg(unix)]
             fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
         }
 
