@@ -276,7 +276,7 @@ moved =
     { $items } { $items ->
         [one] élément déplacé
        *[other] éléments déplacés
-    } depuis "{ $from }" vers "{ $to }"
+    } de "{ $from }" à "{ $to }"
 permanently-deleting =
     Suppression définitive de { $items } { $items ->
         [one] élément
