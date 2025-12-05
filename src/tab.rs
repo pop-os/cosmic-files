@@ -608,9 +608,10 @@ fn get_desktop_file_display_name(path: &Path) -> Option<String> {
     };
 
     entry
-        .section("Desktop Entry")
+        .section("Desktop Entry")?
         .attr("Name")
-        .map(str::to_string)
+        .first()
+        .cloned()
 }
 
 fn get_desktop_file_icon(path: &Path) -> Option<String> {
@@ -623,9 +624,10 @@ fn get_desktop_file_icon(path: &Path) -> Option<String> {
     };
 
     entry
-        .section("Desktop Entry")
+        .section("Desktop Entry")?
         .attr("Icon")
-        .map(str::to_string)
+        .first()
+        .cloned()
 }
 
 pub fn parse_desktop_file(path: &Path) -> (Option<String>, Option<String>) {
@@ -636,10 +638,14 @@ pub fn parse_desktop_file(path: &Path) -> (Option<String>, Option<String>) {
             return (None, None);
         }
     };
-    let section = entry.section("Desktop Entry");
+
+    let Some(section) = entry.section("Desktop Entry") else {
+        return (None, None);
+    };
+
     (
-        section.attr("Name").map(str::to_string),
-        section.attr("Icon").map(str::to_string),
+        section.attr("Name").first().cloned(),
+        section.attr("Icon").first().cloned(),
     )
 }
 
