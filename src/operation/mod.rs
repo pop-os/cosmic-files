@@ -866,6 +866,8 @@ impl Operation {
                         let items = trash::os_limited::list()
                             .map_err(|e| OperationError::from_err(e, &controller))?;
                         let count = items.len();
+                        let mut errors: Vec<trash::Error> = Vec::new();
+
                         for (i, item) in items.into_iter().enumerate() {
                             futures::executor::block_on(async {
                                 controller
@@ -874,11 +876,31 @@ impl Operation {
                                     .map_err(|s| OperationError::from_state(s, &controller))
                             })?;
 
-                            controller.set_progress(i as f32 / count as f32);
+                            if let Err(e) = trash::os_limited::purge_all([item]) {
+                                errors.push(e);
+                            }
 
-                            trash::os_limited::purge_all([item])
-                                .map_err(|e| OperationError::from_err(e, &controller))?;
+                            controller.set_progress(i as f32 / count as f32);
                         }
+
+                        // Report errors at the end
+                        if !errors.is_empty() {
+                            log::warn!("Failed to purge {} items:", errors.len());
+                            for e in &errors {
+                                log::warn!("  - {e}");
+                            }
+
+                            // Return an error to signal partial failure
+                            return Err(OperationError::from_err(
+                                format!(
+                                    "Failed to delete {} of {} items. Check log for details.",
+                                    errors.len(),
+                                    count
+                                ),
+                                &controller,
+                            ));
+                        }
+
                         Ok(())
                     })
                     .await
