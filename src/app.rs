@@ -731,6 +731,8 @@ pub struct App {
     tab_drag_id: DragId,
     auto_scroll_speed: Option<i16>,
     file_dialog_opt: Option<Dialog<Message>>,
+    #[cfg(feature = "xdg-portal")]
+    pub inhibit: tokio::sync::watch::Sender<bool>,
 }
 
 impl App {
@@ -2153,6 +2155,15 @@ impl Application for App {
                 ),
             ]);
 
+        // The inhibit task must be created here since we need a runtime and libcosmic spawns
+        // the runtime - not main!
+        #[cfg(feature = "xdg-portal")]
+        let inhibit = {
+            let (tx, rx) = tokio::sync::watch::channel(false);
+            std::mem::drop(tokio::spawn(crate::xdg_portals::inhibit(rx)));
+            tx
+        };
+
         let mut app = Self {
             core,
             about,
@@ -2204,6 +2215,8 @@ impl Application for App {
             file_dialog_opt: None,
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             layer_sizes: FxHashMap::default(),
+            #[cfg(feature = "xdg-portal")]
+            inhibit,
         };
 
         let mut commands = vec![app.update_config()];
