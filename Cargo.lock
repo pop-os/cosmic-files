@@ -1459,6 +1459,7 @@ name = "cosmic-files"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "ashpd 0.12.0",
  "bzip2",
  "chrono",
  "compio",
