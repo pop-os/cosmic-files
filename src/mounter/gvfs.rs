@@ -217,7 +217,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
     Ok(items)
 }
 
-fn dir_info(uri: &str) -> Result<(String, String), glib::Error> {
+fn dir_info(uri: &str) -> Result<(String, String, Option<PathBuf>), glib::Error> {
     let (resolved_uri, file) = resolve_uri(uri);
     let info = file.query_info(
         gio::FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME,
@@ -225,7 +225,7 @@ fn dir_info(uri: &str) -> Result<(String, String), glib::Error> {
         gio::Cancellable::NONE,
     )?;
 
-    Ok((resolved_uri, info.display_name().into()))
+    Ok((resolved_uri, info.display_name().into(), file.path()))
 }
 
 fn mount_op(uri: String, event_tx: mpsc::UnboundedSender<Event>) -> gio::MountOperation {
@@ -288,7 +288,10 @@ enum Cmd {
         IconSizes,
         mpsc::Sender<Result<Vec<tab::Item>, String>>,
     ),
-    DirInfo(String, mpsc::Sender<Result<(String, String), glib::Error>>),
+    DirInfo(
+        String,
+        mpsc::Sender<Result<(String, String, Option<PathBuf>), glib::Error>>,
+    ),
     Unmount(MounterItem),
 }
 
@@ -651,7 +654,7 @@ impl Mounter for Gvfs {
         items_rx.blocking_recv()
     }
 
-    fn dir_info(&self, uri: &str) -> Option<(String, String)> {
+    fn dir_info(&self, uri: &str) -> Option<(String, String, Option<PathBuf>)> {
         let (result_tx, mut result_rx) = mpsc::channel(1);
         self.command_tx
             .send(Cmd::DirInfo(uri.to_string(), result_tx))
