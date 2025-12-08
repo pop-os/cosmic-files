@@ -2,10 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::iced::clipboard::mime::{AllowedMimeTypes, AsMimeTypes};
-use std::borrow::Cow;
-use std::error::Error;
-use std::path::{Path, PathBuf};
-use std::str;
+use std::{
+    borrow::Cow,
+    error::Error,
+    path::{Path, PathBuf},
+    str,
+    sync::LazyLock,
+};
 use url::Url;
 
 #[derive(Clone, Copy, Debug)]
@@ -16,7 +19,6 @@ pub enum ClipboardKind {
 
 #[derive(Clone, Debug)]
 pub struct ClipboardCopy {
-    pub available: Cow<'static, [String]>,
     pub text_plain: Cow<'static, [u8]>,
     pub text_uri_list: Cow<'static, [u8]>,
     pub x_special_gnome_copied_files: Cow<'static, [u8]>,
@@ -24,13 +26,6 @@ pub struct ClipboardCopy {
 
 impl ClipboardCopy {
     pub fn new<P: AsRef<Path>>(kind: ClipboardKind, paths: impl IntoIterator<Item = P>) -> Self {
-        let available = vec![
-            "text/plain".to_string(),
-            "text/plain;charset=utf-8".to_string(),
-            "UTF8_STRING".to_string(),
-            "text/uri-list".to_string(),
-            "x-special/gnome-copied-files".to_string(),
-        ];
         let mut text_plain = String::new();
         let mut text_uri_list = String::new();
         let mut x_special_gnome_copied_files = match kind {
@@ -79,7 +74,6 @@ impl ClipboardCopy {
             }
         }
         Self {
-            available: Cow::from(available),
             text_plain: Cow::from(text_plain.into_bytes()),
             text_uri_list: Cow::from(text_uri_list.into_bytes()),
             x_special_gnome_copied_files: Cow::from(x_special_gnome_copied_files.into_bytes()),
@@ -89,7 +83,16 @@ impl ClipboardCopy {
 
 impl AsMimeTypes for ClipboardCopy {
     fn available(&self) -> Cow<'static, [String]> {
-        self.available.clone()
+        static AVAILABLE: LazyLock<Vec<String>> = LazyLock::new(|| {
+            vec![
+                "text/plain".to_string(),
+                "text/plain;charset=utf-8".to_string(),
+                "UTF8_STRING".to_string(),
+                "text/uri-list".to_string(),
+                "x-special/gnome-copied-files".to_string(),
+            ]
+        });
+        Cow::Borrowed(&AVAILABLE)
     }
 
     fn as_bytes(&self, mime_type: &str) -> Option<Cow<'static, [u8]>> {
