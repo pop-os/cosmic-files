@@ -181,7 +181,7 @@ deleting =
     Mazání { $items } { $items ->
         [one] položky
        *[other] položek
-    } z { trash } ({ $progress })...
+    } z koše ({ $progress })...
 sort-by-trashed = Seřadit podle času smazání
 deleted =
     { $items ->
@@ -192,14 +192,14 @@ deleted =
         [one] položka
         [few] položky
        *[other] položek
-    } z { trash }
-emptying-trash = Vysypávám { trash } ({ $progress })...
-emptied-trash = { trash } byl vysypán
+    } z koše
+emptying-trash = Vysypávání koše ({ $progress })...
+emptied-trash = Koš vysypán
 restoring =
     Obnovování { $items } { $items ->
         [one] položky
        *[other] položek
-    } z { trash } ({ $progress })...
+    } z koše ({ $progress })...
 restored =
     { $items ->
         [one] Obnovena
@@ -209,7 +209,7 @@ restored =
         [one] položka
         [few] položky
        *[other] položek
-    } z { trash }
+    } z koše
 permanently-deleted =
     Trvale { $items ->
         [one] smazána
@@ -316,7 +316,12 @@ favorite-path-error-description =
     „{ $path }“ buď neexistuje nebo nemáte dostatečná práva pro otevření
 
     Chcete položku odstranit z bočního panelu?
-selected-items = { $items } vybraných položek
+selected-items =
+    { $items } { $items ->
+        [one] vybranou položku
+        [few] vybrané položky
+       *[other] vybraných položek
+    }
 read-execute = Čtení a spouštění
 read-write-execute = Čtení, zápis a spouštění
 read-write = Čtení a zápis
