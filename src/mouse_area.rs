@@ -527,14 +527,24 @@ fn update<Message: Clone>(
     let offset = layout.virtual_offset();
     let layout_bounds = layout.bounds();
 
+    let viewport_changed = state.viewport.map_or(true, |v| v != *viewport);
+
     if let Some(message) = widget.on_resize.as_ref() {
-        if state.viewport != Some(*viewport) {
-            state.viewport = Some(*viewport);
+        if viewport_changed {
             shell.publish(message(*viewport));
         }
     }
 
-    if let Event::Mouse(mouse::Event::CursorMoved { position }) = event {
+    state.viewport = Some(*viewport);
+
+    let should_check_hover = viewport_changed
+        || matches!(
+            event,
+            Event::Mouse(mouse::Event::CursorMoved { .. })
+                | Event::Mouse(mouse::Event::WheelScrolled { .. })
+        );
+
+    if should_check_hover {
         let position_in = cursor.position_in(layout_bounds);
         match (position_in, state.last_position) {
             (None, Some(_)) => {
@@ -550,7 +560,9 @@ fn update<Message: Clone>(
             _ => {}
         }
         state.last_position = position_in;
+    }
 
+    if let Event::Mouse(mouse::Event::CursorMoved { position }) = event {
         let virtual_position = Point::new(
             viewport.x - layout_bounds.x + position.x,
             viewport.y - layout_bounds.y + position.y,
