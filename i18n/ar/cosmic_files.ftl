@@ -51,7 +51,7 @@ rename-folder = غيِّر اسم المجلّد
 ## Replace Dialog
 
 replace = استبدال
-replace-title = «{ $filename }» موجود بالفعل في هذا المكان.
+replace-title = «{ $filename }» موجود بالفعل في هذا المكان
 replace-warning = أتريد استبداله بالملف الذي تحفظه؟ سيكتب هذا فوق محتوى الملف.
 
 # Context Pages
@@ -130,8 +130,8 @@ show-hidden-files = أظهر الملفات المخفية
 list-directories-first = ترتيب المجلدات اولاً
 menu-settings = الإعدادات...
 menu-about = عن مدير ملفات COSMIC...
-dismiss = أهمل الرسالة
-no-results = لم يتم العثور على نتائج
+dismiss = أهمِل الرسالة
+no-results = لم يُعثر على نتائج
 networks = الشبكات
 notification-in-progress = عمليات الملفات قيد التقدم.
 undo = تراجع
@@ -209,7 +209,7 @@ set-executable-and-launched = عيِّن «{ $name }» كقابل للتنفيذ
 setting-permissions = يعيِّن الأذونات لـ«{ $name }» إلى «{ $mode }»
 set-permissions = عيِّن أذونات «{ $name }» إلى «{ $mode }»
 renaming = تُعاد تسمية «{ $from }» إلى «{ $to }»
-renamed = غُيِّرت تسمية «{ $from }» إلى «{ $to }»
+renamed = غُيِّر اسم «{ $from }» إلى «{ $to }»
 unknown-folder = مجلد مجهول
 show-details = أظهِر التفاصيل
 type = النوع: { $mime }
@@ -281,10 +281,10 @@ compressing =
        *[other] عناصر
     } من «{ $from }» إلى «{ $to }» ({ $progress })...
 compressed =
-    تم ضغط { $items } { $items ->
+    ضُغط { $items } { $items ->
         [one] عنصر
-       *[other] عناصر
-    } من ”{ $from }“ إلى ”{ $to }“
+       *[other] عنصر
+    } من «{ $from }» إلى «{ $to }»
 copied =
     تم نسخ { $items } { $items ->
         [one] عنصر
