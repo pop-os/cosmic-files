@@ -67,6 +67,7 @@ pub fn key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
     // App and desktop only keys
     if matches!(mode, tab::Mode::App | tab::Mode::Desktop) {
         bind!([Ctrl], Key::Character("c".into()), Copy);
+        bind!([Ctrl, Shift], Key::Character("c".into()), CopyPath);
         bind!([Ctrl], Key::Character("x".into()), Cut);
         bind!([], Key::Named(Named::Delete), Delete);
         bind!([Shift], Key::Named(Named::Delete), PermanentlyDelete);
