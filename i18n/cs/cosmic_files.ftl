@@ -315,7 +315,7 @@ favorite-path-error-description =
     Nelze otevřít „{ $path }“
     „{ $path }“ buď neexistuje nebo nemáte dostatečná práva pro otevření
 
-    Chcete položku odstranit z bočního panelu?
+    Chcete položku odstranit z postranního panelu?
 selected-items =
     { $items } { $items ->
         [one] vybranou položku
