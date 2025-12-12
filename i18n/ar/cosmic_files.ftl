@@ -3,7 +3,7 @@ empty-folder = مجلد فارغ
 empty-folder-hidden = مجلد فارغ (يحتوي على عناصر مخفية)
 filesystem = نظام الملفات
 home = منزل
-trash = سلة المهملات
+trash = المهملات
 recents = الأحدث
 # List view
 name = الاسم
@@ -16,7 +16,7 @@ size = حجم
 ## Empty Trash Dialog
 
 empty-trash = أفرغ المهملات
-empty-trash-warning = هل تريد حذف جميع العناصر الموجودة في سلة المهملات نهائياً؟
+empty-trash-warning = سيتم حذف العناصر الموجودة في مجلد المهملات نهائيًا
 
 ## New File/Folder Dialog
 
@@ -24,11 +24,11 @@ create-new-file = إنشاء ملف جديد
 create-new-folder = إنشاء مجلد جديد
 file-name = اسم الملف
 folder-name = اسم المجلد
-file-already-exists = يوجد ملف بهذا الاسم بالفعل.
-folder-already-exists = يوجد مجلد بهذا الاسم بالفعل.
+file-already-exists = يوجد ملف بهذا الاسم بالفعل
+folder-already-exists = يوجد مجلد بهذا الاسم بالفعل
 name-hidden = الاسماء التي تبدأ بنقطة «.» ستكون مخفية
 name-invalid = لا يمكن أن يكون الاسم «{ $filename }»
-name-no-slashes = لا يمكن أن يحتوي الاسم على شرطات مائلة.
+name-no-slashes = لا يمكن أن يحتوي الاسم على شرطات مائلة (/)
 
 ## Open/Save Dialog
 
@@ -50,7 +50,7 @@ rename-folder = غيِّر اسم المجلّد
 
 ## Replace Dialog
 
-replace = استبدال
+replace = استبدل
 replace-title = «{ $filename }» موجود بالفعل في هذا المكان
 replace-warning = أتريد استبداله بالملف الذي تحفظه؟ سيكتب هذا فوق محتوى الملف.
 
@@ -63,13 +63,13 @@ replace-warning = أتريد استبداله بالملف الذي تحفظه؟
 ## Operations
 
 pending = قيد الانتظار
-failed = فشل
+failed = فشِل
 complete = اكتمل
 copy_noun = نسخ
 
 ## Open with
 
-menu-open-with = افتح ب‍استخدام
+menu-open-with = افتح ب‍استخدام...
 default-app = { $name } (المبدئي)
 
 ## Properties
@@ -82,7 +82,7 @@ settings = الإعدادات
 ### Appearance
 
 appearance = المظهر
-theme = الثيم
+theme = النسق
 match-desktop = طابق سطح المكتب
 dark = داكن
 light = فاتح
@@ -93,7 +93,7 @@ new-folder = مجلد جديد...
 open-in-terminal = افتح في الطرفية
 move-to-trash = انقل إلى المهملات
 restore-from-trash = استعِد من المهملات
-remove-from-sidebar = إزالة من الشريط الجانبي
+remove-from-sidebar = أزِل من الشريط الجانبي
 sort-by-name = رتّب حسب الاسم
 sort-by-modified = رتّب حسب التعديل
 sort-by-size = رتّب حسب الحجم
@@ -116,31 +116,31 @@ edit = عدِّل
 cut = قصّ
 copy = انسخ
 paste = ألصِق
-select-all = حدّد الكل
+select-all = حدِّد الكل
 
 ## View
 
 zoom-in = قرِّب
 default-size = الحجم المبدئي
-zoom-out = إبعاد
+zoom-out = بعِّد
 view = عرض
 grid-view = عرض الشبكة
 list-view = عرض اللائحة
 show-hidden-files = أظهر الملفات المخفية
-list-directories-first = ترتيب المجلدات اولاً
+list-directories-first = اسرد المجلدات اولاً
 menu-settings = الإعدادات...
 menu-about = عن مدير ملفات COSMIC...
 dismiss = أهمِل الرسالة
 no-results = لم يُعثر على نتائج
 networks = الشبكات
-notification-in-progress = عمليات الملفات قيد التقدم.
+notification-in-progress = عمليات الملفات جارية
 undo = تراجع
 today = اليوم
 desktop-view-options = خيارات عرض سطح المكتب...
-show-on-desktop = عرض على سطح المكتب
+show-on-desktop = أظهِر على سطح المكتب
 desktop-folder-content = محتوى مجلد سطح المكتب
 mounted-drives = محركات الأقراص المثبتة
-trash-folder-icon = أيقونة مجلد سلة المهملات
+trash-folder-icon = أيقونة مجلد المهملات
 icon-size-and-spacing = حجم الأيقونة والتباعد
 icon-size = حجم الأيقونة
 grid-spacing = تباعد شبكي
@@ -202,8 +202,8 @@ progress-failed = { $percent }٪، فشل
 progress-paused = { $percent }٪، أُلبِث
 creating = ينشئ «{ $name }» في «{ $parent }»
 created = أُنشئ «{ $name }» في «{ $parent }»
-emptying-trash = جاري تفريغ { trash } ({ $progress })...
-emptied-trash = تم تفريغ { trash }
+emptying-trash = جارِ تفريغ { trash } ({ $progress })...
+emptied-trash = أُفرِغت { trash }
 setting-executable-and-launching = يعيِّن «{ $name }» كقابل للتنفيذ ويُشغِّل
 set-executable-and-launched = عيِّن «{ $name }» كقابل للتنفيذ وشُغَّل
 setting-permissions = يعيِّن الأذونات لـ«{ $name }» إلى «{ $mode }»
@@ -255,13 +255,13 @@ browse-store = تصفح { $store }
 other-apps = تطبيقات أخرى
 related-apps = تطبيقات ذات صلة
 selected-items = العناصر { $items } المحدّدة
-permanently-delete-question = حذف نهائي
+permanently-delete-question = احذف نهائيًا؟
 delete = احذف
 permanently-delete-warning = هل أنت متأكد من أنك تريد حذف { $target } نهائيًا؟ لا يمكن التراجع عن هذا الإجراء.
 replace-warning-operation = أتريد استبداله؟ استبداله سيكتب فوق محتواه.
 original-file = الملف الأصلي
-replace-with = ابدل بـ
-apply-to-all = طبّق على الكلّ
+replace-with = استبدل بـ
+apply-to-all = طبِّق على الكلّ
 keep-both = احتفظ بكليهما
 skip = تخطَّ
 set-executable-and-launch = عيِّن كقابل للتنفيذ وشغِّل
@@ -286,72 +286,73 @@ compressed =
        *[other] عنصر
     } من «{ $from }» إلى «{ $to }»
 copied =
-    تم نسخ { $items } { $items ->
+    نُسِخ { $items } { $items ->
         [one] عنصر
        *[other] عناصر
-    } من ”{ $from }“ إلى ”{ $to }“
+    } من «{ $from }» إلى «{ $to }»
 deleting =
-    جاري حذف { $items } { $items ->
+    يحذف { $items } { $items ->
         [one] عنصر
        *[other] عناصر
     } من { trash } ({ $progress })...
 deleted =
-    تم حذف { $items } { $items ->
+    حُذف { $items } { $items ->
         [one] عنصر
        *[other] عناصر
     } من { trash }
 copying =
-    جاري نسخ { $items } { $items ->
+    ينسخ { $items } { $items ->
         [one] عنصر
        *[other] عناصر
-    } من ”{ $from }“ إلى ”{ $to }“ ({ $progress })...
+    } من «{ $from }» إلى «{ $to }» ({ $progress })...
 extracting =
-    جاري استخراج { $items } { $items ->
-        [one] item
-       *[other] items
-    } من ”{ $from }“ إلى ”{ $to }“ ({ $progress })...
+    يستخرِج { $items } { $items ->
+        [one] عنصر
+       *[other] عنصار
+    } من «{ $from }» إلى «{ $to }» ({ $progress })...
 extracted =
-    تم إستخراج { $items } { $items ->
+    استُخرِج { $items } { $items ->
         [one] عنصر
        *[other] عناصر
-    } من ”{ $from }“ إلى ”{ $to }“
+    } من «{ $from }» إلى «{ $to }»
 moving =
-    جاري نقل { $items } { $items ->
+    ينقل { $items } { $items ->
         [one] عنصر
        *[other] عناصر
-    } من ”{ $from }“ إلى ”{ $to }“ ({ $progress })...
+    } من «{ $from }» إلى «{ $to }» ({ $progress })...
 moved =
-    تم نقل { $items } { $items ->
+    نُقل { $items } { $items ->
         [one] item
        *[other] items
-    } من ”{ $from }“ إلى ”{ $to }“
+    } من «{ $from }» إلى «{ $to }»
 permanently-deleting =
-    جاري حذف { $items } بشكل نهائي { $items ->
+    يحذف { $items } بشكل نهائي { $items ->
         [one] عنصر
        *[other] عناصر
     }
 permanently-deleted =
-    تم حذف { $items } بشكل نهائي { $items ->
+    حُذف { $items } بشكل نهائي { $items ->
         [one] عنصر
        *[other] عناصر
     }
 removing-from-recents =
-    جاري إزالة { $items } { $items ->
+    يُزيل { $items } { $items ->
         [one] عنصر
        *[other] عناصر
     } من { recents }
 removed-from-recents =
-    تمت إزالة { $items } { $items ->
+    أُزيل { $items } { $items ->
         [one] عنصر
        *[other] عناصر
     } من { recents }
 restoring =
-    جاري استعادة { $items } { $items ->
+    يستعيد { $items } { $items ->
         [one] عنصر
        *[other] عناصر
     } من { trash } ({ $progress })...
 restored =
-    تم إستعادة { $items } { $items ->
+    استُعيد { $items } { $items ->
         [one] عنصر
        *[other] عناصر
     } من { trash }
+empty-trash-title = أفرغ المهملات؟

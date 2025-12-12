@@ -5,7 +5,7 @@ no-results = Nenhum item encontrado
 filesystem = Sistema de arquivos
 home = Pasta pessoal
 networks = Redes
-notification-in-progress = Há operações de arquivo em andamento.
+notification-in-progress = Há operações de arquivo em andamento
 trash = Lixeira
 recents = Recentes
 undo = Desfazer
@@ -56,7 +56,7 @@ extract-to-title = Extrair para pasta
 ## Empty Trash Dialog
 
 empty-trash = Esvaziar a lixeira
-empty-trash-warning = Tem certeza de que deseja excluir permanentemente todos os itens da lixeira?
+empty-trash-warning = Todos os itens da Lixeira serão permanentemente excluídos
 
 ## Mount Error Dialog
 
@@ -68,11 +68,11 @@ create-new-file = Criar novo arquivo
 create-new-folder = Criar nova pasta
 file-name = Nome do arquivo
 folder-name = Nome da pasta
-file-already-exists = Já existe um arquivo com esse nome.
-folder-already-exists = Já existe uma pasta com esse nome.
-name-hidden = Os nomes que começam com "." serão ocultados.
-name-invalid = O nome não pode ser "{ $filename }".
-name-no-slashes = O nome não pode conter barras.
+file-already-exists = Já existe um arquivo com esse nome
+folder-already-exists = Já existe uma pasta com esse nome
+name-hidden = Os nomes que começam com "." serão ocultados
+name-invalid = O nome não pode ser "{ $filename }"
+name-no-slashes = O nome não pode conter barras
 
 ## Open/Save Dialog
 
@@ -99,7 +99,7 @@ related-apps = Aplicativos relacionados
 ## Permanently delete Dialog
 
 selected-items = os { $items } itens selecionados
-permanently-delete-question = Excluir permanentemente
+permanently-delete-question = Excluir permanentemente?
 delete = Excluir
 permanently-delete-warning = Deseja realmente excluir permanentemente { $target }? Esta operação não poderá ser desfeita.
 
@@ -111,7 +111,7 @@ rename-folder = Renomear pasta
 ## Replace Dialog
 
 replace = Substituir
-replace-title = "{ $filename }" já existe neste local.
+replace-title = "{ $filename }" já existe neste local
 replace-warning = Deseja substituí-lo por aquele que está salvando? Ao substituí-lo, seu conteúdo será sobrescrito.
 replace-warning-operation = Deseja substituí-lo? Ao substituí-lo, seu conteúdo será sobrescrito.
 original-file = Arquivo original
@@ -169,8 +169,8 @@ read-write-execute = Leitura, escrita e execução
 
 favorite-path-error = Erro ao abrir diretório
 favorite-path-error-description =
-    Não foi possível abrir "{ $path }".
-    O item pode não existir ou você não tem permissão para abri-lo.
+    Não foi possível abrir "{ $path }"
+    "{ $path }" pode não existir ou você não tem permissão para abri-lo
 
     Deseja removê-lo da barra lateral?
 remove = Remover
@@ -226,16 +226,16 @@ progress-paused = { $percent }%, pausado
 failed = Com falha
 complete = Concluído
 compressing =
-    Comprimindo { $items } { $items ->
+    Compactando { $items } { $items ->
         [one] item
        *[other] itens
     } de "{ $from }" para "{ $to }" ({ $progress })...
 compressed =
     { $items } { $items ->
-        [one] item comprimido
-       *[other] itens comprimidos
+        [one] item compactado
+       *[other] itens compactados
     } de "{ $from }" para "{ $to }"
-copy_noun = Copiado
+copy_noun = Copiar
 creating = Criando "{ $name }" em "{ $parent }"
 created = "{ $name }" criado em "{ $parent }"
 copying =
@@ -354,7 +354,7 @@ type-to-search-recursive = Pesquisa na pasta atual e em todas as subpastas
 type-to-search-enter-path = Insere o caminho do diretório ou arquivo
 # Context menu
 add-to-sidebar = Adicionar à barra lateral
-compress = Comprimir
+compress = Compactar
 delete-permanently = Excluir permanentemente
 eject = Desmontar
 extract-here = Extrair
@@ -420,3 +420,4 @@ sort-newest-first = Mais novos primeiro
 sort-oldest-first = Mais antigos primeiro
 sort-smallest-to-largest = Do menor para o maior
 sort-largest-to-smallest = Do maior para o menor
+empty-trash-title = Esvaziar a lixeira?
