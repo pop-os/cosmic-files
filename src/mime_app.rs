@@ -8,7 +8,6 @@ pub use mime_guess::Mime;
 use rustc_hash::FxHashMap;
 use std::{
     cmp::Ordering,
-    env,
     ffi::OsStr,
     fs, io,
     path::{Path, PathBuf},
@@ -280,107 +279,62 @@ impl MimeAppCache {
             }
         }
 
-        let desktops: Vec<String> = env::var("XDG_CURRENT_DESKTOP")
-            .unwrap_or_default()
-            .split(':')
-            .map(str::to_ascii_lowercase)
-            .collect();
+        let mut list = cosmic_mime_apps::List::default();
 
-        // Load mimeapps.list files
-        // https://specifications.freedesktop.org/mime-apps-spec/mime-apps-spec-latest.html
-        //TODO: ensure correct lookup order
-        let mut mimeapps_paths = Vec::new();
-        let xdg_dirs = xdg::BaseDirectories::new();
+        let paths = cosmic_mime_apps::list_paths();
+        list.load_from_paths(&paths);
 
-        mimeapps_paths.extend(xdg_dirs.find_data_files("applications/mimeapps.list"));
-
-        for desktop in desktops.iter().rev() {
-            mimeapps_paths
-                .extend(xdg_dirs.find_data_files(format!("applications/{desktop}-mimeapps.list")));
-        }
-
-        mimeapps_paths.extend(xdg_dirs.find_config_files("mimeapps.list"));
-
-        for desktop in desktops.iter().rev() {
-            mimeapps_paths.extend(xdg_dirs.find_config_files(format!("{desktop}-mimeapps.list")));
-        }
-
-        //TODO: handle directory specific behavior
-        for path in mimeapps_paths {
-            let entry = match freedesktop_entry_parser::parse_entry(&path) {
-                Ok(ok) => ok,
-                Err(err) => {
-                    log::warn!("failed to parse {}: {}", path.display(), err);
-                    continue;
-                }
-            };
-
-            for attr in entry
-                .section("Added Associations")
-                .attrs()
-                .chain(entry.section("Default Applications").attrs())
-            {
-                if let Ok(mime) = attr.name.parse::<Mime>() {
-                    if let Some(filenames) = attr.value {
-                        for filename in filenames.split_terminator(';') {
-                            log::trace!("add {mime}={filename}");
-                            let apps = self
-                                .cache
-                                .entry(mime.clone())
-                                .or_insert_with(|| Vec::with_capacity(1));
-                            if !apps.iter().any(|x| filename_eq(&x.path, filename)) {
-                                if let Some(app) =
-                                    all_apps.iter().find(|&x| filename_eq(&x.path, filename))
-                                {
-                                    apps.push(MimeApp::from(app));
-                                } else {
-                                    log::info!(
-                                        "failed to add association for {mime:?}: application {filename:?} not found"
-                                    );
-                                }
-                            }
-                        }
+        for (mime, filenames) in list
+            .added_associations
+            .iter()
+            .chain(list.default_apps.iter())
+        {
+            for filename in filenames {
+                log::trace!("add {mime}={filename}");
+                let apps = self
+                    .cache
+                    .entry(mime.clone())
+                    .or_insert_with(|| Vec::with_capacity(1));
+                if !apps.iter().any(|x| filename_eq(&x.path, filename)) {
+                    if let Some(app) = all_apps.iter().find(|&x| filename_eq(&x.path, filename)) {
+                        apps.push(MimeApp::from(app));
+                    } else {
+                        log::info!(
+                            "failed to add association for {mime:?}: application {filename:?} not found"
+                        );
                     }
                 }
             }
+        }
 
-            for attr in entry.section("Removed Associations").attrs() {
-                if let Ok(mime) = attr.name.parse::<Mime>() {
-                    if let Some(filenames) = attr.value {
-                        for filename in filenames.split_terminator(';') {
-                            log::trace!("remove {mime}={filename}");
-                            if let Some(apps) = self.cache.get_mut(&mime) {
-                                apps.retain(|x| !filename_eq(&x.path, filename));
-                            }
-                        }
-                    }
+        for (mime, filenames) in list.removed_associations.iter() {
+            for filename in filenames {
+                log::trace!("remove {mime}={filename}");
+                if let Some(apps) = self.cache.get_mut(&mime) {
+                    apps.retain(|x| !filename_eq(&x.path, filename));
                 }
             }
+        }
 
-            for attr in entry.section("Default Applications").attrs() {
-                if let Ok(mime) = attr.name.parse::<Mime>() {
-                    if let Some(filenames) = attr.value {
-                        for filename in filenames.split_terminator(';') {
-                            log::trace!("default {mime}={filename}");
-                            if let Some(apps) = self.cache.get_mut(&mime) {
-                                let mut found = false;
-                                for app in apps.iter_mut() {
-                                    if filename_eq(&app.path, filename) {
-                                        app.is_default = true;
-                                        found = true;
-                                    } else {
-                                        app.is_default = false;
-                                    }
-                                }
-                                if found {
-                                    break;
-                                }
-                                log::debug!(
-                                    "failed to set default for {mime:?}: application {filename:?} not found"
-                                );
-                            }
+        for (mime, filenames) in list.default_apps.iter() {
+            for filename in filenames {
+                log::trace!("default {mime}={filename}");
+                if let Some(apps) = self.cache.get_mut(&mime) {
+                    let mut found = false;
+                    for app in apps.iter_mut() {
+                        if filename_eq(&app.path, filename) {
+                            app.is_default = true;
+                            found = true;
+                        } else {
+                            app.is_default = false;
                         }
                     }
+                    if found {
+                        break;
+                    }
+                    log::debug!(
+                        "failed to set default for {mime:?}: application {filename:?} not found"
+                    );
                 }
             }
         }
