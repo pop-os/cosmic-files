@@ -101,6 +101,9 @@ use crate::{
 static PERMANENT_DELETE_BUTTON_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("permanent-delete-button"));
 
+static DELETE_TRASH_BUTTON_ID: LazyLock<widget::Id> =
+    LazyLock::new(|| widget::Id::new("delete-trash-button"));
+
 static CONFIRM_OPEN_WITH_BUTTON_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("confirm-open-with-button"));
 
@@ -533,6 +536,9 @@ pub enum DialogPage {
     },
     PermanentlyDelete {
         paths: Box<[PathBuf]>,
+    },
+    DeleteTrash {
+        items: Vec<TrashItem>,
     },
     RenameItem {
         from: PathBuf,
@@ -2683,8 +2689,10 @@ impl Application for App {
                                 }
                             }
                             if !trash_items.is_empty() {
-                                return self
-                                    .operation(Operation::DeleteTrash { items: trash_items });
+                                return self.update(Message::DialogPush(
+                                    DialogPage::DeleteTrash { items: trash_items },
+                                    Some(DELETE_TRASH_BUTTON_ID.clone()),
+                                ));
                             }
                         }
                     } else {
@@ -2882,6 +2890,9 @@ impl Application for App {
                         }
                         DialogPage::PermanentlyDelete { paths } => {
                             tasks.push(self.operation(Operation::PermanentlyDelete { paths }));
+                        }
+                        DialogPage::DeleteTrash { items } => {
+                            tasks.push(self.operation(Operation::DeleteTrash { items }));
                         }
                         DialogPage::RenameItem {
                             from, parent, name, ..
@@ -5314,6 +5325,28 @@ impl Application for App {
                         widget::button::destructive(fl!("delete"))
                             .on_press(Message::DialogComplete)
                             .id(PERMANENT_DELETE_BUTTON_ID.clone()),
+                    )
+                    .secondary_action(
+                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                    )
+                    .control(widget::text(fl!(
+                        "permanently-delete-warning",
+                        target = target
+                    )))
+            }
+            DialogPage::DeleteTrash { items } => {
+                let target = if items.len() == 1 {
+                    format!("\"{}\"", items[0].name.to_string_lossy())
+                } else {
+                    fl!("selected-items", items = items.len())
+                };
+
+                widget::dialog()
+                    .title(fl!("permanently-delete-question"))
+                    .primary_action(
+                        widget::button::destructive(fl!("delete"))
+                            .on_press(Message::DialogComplete)
+                            .id(DELETE_TRASH_BUTTON_ID.clone()),
                     )
                     .secondary_action(
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
