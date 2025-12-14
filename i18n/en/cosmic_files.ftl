@@ -91,7 +91,7 @@ other-apps = Other applications
 related-apps = Related applications
 
 ## Permanently delete Dialog
-selected-items = the {$items} selected items
+selected-items = The {$items} selected items
 permanently-delete-question = Permanently delete?
 delete = Delete
 permanently-delete-warning = {$target} will be permanently deleted. This action can't be undone.
