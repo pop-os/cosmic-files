@@ -1489,6 +1489,7 @@ impl Location {
     }
 
     pub fn with_path(&self, path: PathBuf) -> Self {
+        let path = Self::expand_tilde(path);
         match self {
             Self::Desktop(_, display, desktop_config) => {
                 Self::Desktop(path, display.clone(), *desktop_config)
@@ -1560,6 +1561,22 @@ impl Location {
                 fl!("recents")
             }
             Self::Network(display_name, ..) => display_name.clone(),
+        }
+    }
+
+    /// Expand a path that starts with "~" with the
+    /// user's home directory
+    pub fn expand_tilde(path: PathBuf) -> PathBuf {
+        let mut components = path.components();
+        match components.next() {
+            Some(std::path::Component::Normal(os_str)) if os_str == "~" => {
+                if let Some(home) = dirs::home_dir() {
+                    home.join(components.as_path())
+                } else {
+                    path
+                }
+            }
+            _ => path,
         }
     }
 }
