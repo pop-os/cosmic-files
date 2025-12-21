@@ -697,14 +697,23 @@ impl App {
             }
             PreviewKind::Selected => {
                 if let Some(items) = self.tab.items_opt() {
-                    for item in items {
-                        if item.selected {
-                            children.push(item.preview_view(None, military_time));
-                            // Only show one property view to avoid issues like hangs when generating
-                            // preview images on thousands of files
-                            break;
+                    let preview_opt = {
+                        let mut selected = items.iter().filter(|item| item.selected);
+
+                        match (selected.next(), selected.next()) {
+                            // At least two selected items
+                            (Some(_), Some(_)) => Some(self.tab.multi_preview_view()),
+                            // Exactly one selected item
+                            (Some(item), None) => Some(item.preview_view(None, military_time)),
+                            // No selected items
+                            _ => None,
                         }
+                    };
+
+                    if let Some(preview) = preview_opt {
+                        children.push(preview);
                     }
+
                     if children.is_empty() {
                         if let Some(item) = &self.tab.parent_item_opt {
                             children.push(item.preview_view(None, military_time));

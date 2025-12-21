@@ -1906,16 +1906,25 @@ impl App {
             PreviewKind::Selected => {
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
                     if let Some(items) = tab.items_opt() {
-                        for item in items {
-                            if item.selected {
-                                children.push(
+                        let preview_opt = {
+                            let mut selected = items.iter().filter(|item| item.selected);
+
+                            match (selected.next(), selected.next()) {
+                                // At least two selected items
+                                (Some(_), Some(_)) => Some(tab.multi_preview_view()),
+                                // Exactly one selected item
+                                (Some(item), None) => Some(
                                     item.preview_view(Some(&self.mime_app_cache), military_time),
-                                );
-                                // Only show one property view to avoid issues like hangs when generating
-                                // preview images on thousands of files
-                                break;
+                                ),
+                                // No selected items
+                                _ => None,
                             }
+                        };
+
+                        if let Some(preview) = preview_opt {
+                            children.push(preview);
                         }
+
                         if children.is_empty() {
                             if let Some(item) = &tab.parent_item_opt {
                                 children.push(
@@ -3627,9 +3636,18 @@ impl Application for App {
                         return cosmic::task::message(Message::SetShowDetails(show_details));
                     }
                     Mode::Desktop => {
-                        let selected_paths: Box<[_]> = self.selected_paths(entity_opt).collect();
-                        let mut commands = Vec::with_capacity(selected_paths.len());
-                        for path in selected_paths {
+                        let preview_kind = {
+                            let mut selected_paths = self.selected_paths(entity_opt);
+                            match (selected_paths.next(), selected_paths.next()) {
+                                (Some(_), Some(_)) => Some(PreviewKind::Selected),
+                                (Some(path), None) => {
+                                    Some(PreviewKind::Location(Location::Path(path)))
+                                }
+                                _ => None,
+                            }
+                        };
+
+                        if let Some(preview_kind) = preview_kind {
                             let mut settings = window::Settings {
                                 decorations: true,
                                 min_size: Some(Size::new(360.0, 180.0)),
@@ -3649,14 +3667,10 @@ impl Application for App {
                             let (id, command) = window::open(settings);
                             self.windows.insert(
                                 id,
-                                Window::new(WindowKind::Preview(
-                                    entity_opt,
-                                    PreviewKind::Location(Location::Path(path)),
-                                )),
+                                Window::new(WindowKind::Preview(entity_opt, preview_kind)),
                             );
-                            commands.push(command.map(|_id| cosmic::action::none()));
+                            return command.map(|_id| cosmic::action::none());
                         }
-                        return Task::batch(commands);
                     }
                 }
             }
@@ -4786,13 +4800,17 @@ impl Application for App {
                     .tab_model
                     .data::<Tab>(entity)
                     .and_then(|tab| {
-                        tab.items_opt()?
-                            .iter()
-                            .find(|item| item.selected)
-                            .map(|item| {
+                        let mut selected = tab.items_opt()?.iter().filter(|item| item.selected);
+
+                        match (selected.next(), selected.next()) {
+                            // Exactly one item
+                            (Some(item), None) => Some(
                                 item.preview_actions()
-                                    .map(move |x| Message::TabMessage(Some(entity), x))
-                            })
+                                    .map(move |x| Message::TabMessage(Some(entity), x)),
+                            ),
+                            // Zero or more than one item
+                            _ => None,
+                        }
                     })
                     .unwrap_or_else(|| widget::horizontal_space().into());
                 context_drawer::context_drawer(
