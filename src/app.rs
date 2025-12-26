@@ -5589,7 +5589,7 @@ impl Application for App {
         }
         let finished = count - running;
         total_progress /= count as f32;
-        if running > 1 || finished > 0 {
+        if running >= 1 && (running > 1 || finished > 0) {
             if finished > 0 {
                 title = fl!(
                     "operations-running-finished",
