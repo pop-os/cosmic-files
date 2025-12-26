@@ -2190,6 +2190,18 @@ impl Item {
         self.mime.type_() == mime::IMAGE || self.mime.type_() == mime::TEXT
     }
 
+    pub fn file_metadata(&self) -> Option<Metadata> {
+        match &self.metadata {
+            ItemMetadata::Path { metadata, .. } => Some(metadata.clone()),
+            #[cfg(feature = "gvfs")]
+            ItemMetadata::GvfsPath { .. } => self.path_opt().and_then(|p| fs::metadata(p).ok()),
+            _ => {
+                //TODO: other metadata types
+                None
+            }
+        }
+    }
+
     fn preview(&self) -> Element<'_, Message> {
         let spacing = cosmic::theme::active().cosmic().spacing;
         // This loads the image only if thumbnailing worked
@@ -2291,25 +2303,7 @@ impl Item {
             }
         }
 
-        let mut file_metadata = None;
-
-        match &self.metadata {
-            ItemMetadata::Path { metadata, .. } => {
-                file_metadata = Some(metadata.clone());
-            }
-            #[cfg(feature = "gvfs")]
-            ItemMetadata::GvfsPath { .. } => {
-                // grab the fs::metadata object for gvfs paths since this is run on-demand
-                if let Some(path) = self.path_opt() {
-                    file_metadata = fs::metadata(path).ok();
-                }
-            }
-            _ => {
-                //TODO: other metadata types
-            }
-        }
-
-        if let Some(metadata) = file_metadata {
+        if let Some(metadata) = self.file_metadata() {
             if metadata.is_dir() {
                 if let Some(children) = self.metadata.children_count() {
                     details = details.push(widget::text::body(fl!("items", items = children)));
@@ -5902,25 +5896,7 @@ impl Tab {
         for item in selected_items.iter() {
             *mime_type_counts.entry(item.mime.to_string()).or_insert(0) += 1;
 
-            let mut file_metadata = None;
-
-            match &item.metadata {
-                ItemMetadata::Path { metadata, .. } => {
-                    file_metadata = Some(metadata.clone());
-                }
-                #[cfg(feature = "gvfs")]
-                ItemMetadata::GvfsPath { .. } => {
-                    // grab the fs::metadata object for gvfs paths since this is run on-demand
-                    if let Some(path) = item.path_opt() {
-                        file_metadata = fs::metadata(path).ok();
-                    }
-                }
-                _ => {
-                    //TODO: other metadata types
-                }
-            }
-
-            if let Some(metadata) = file_metadata {
+            if let Some(metadata) = item.file_metadata() {
                 if metadata.is_dir() {
                     match &item.dir_size {
                         DirSize::Calculating(_) => {
