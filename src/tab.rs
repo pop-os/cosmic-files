@@ -5941,29 +5941,20 @@ impl Tab {
         mime_types.sort_by(|(_, v1), (_, v2)| v2.cmp(v1));
 
         // Limit the number of displayed mime types
-        mime_types.truncate(10);
+        let limit = usize::min(10, mime_types.len());
 
-        let mut mime_types_total: u64 = 0;
-
-        let mut mime_types: Vec<String> = mime_types
-            .into_iter()
-            .map(|(mime, count)| {
-                mime_types_total += count;
-                format!("{} ({})", mime, count)
-            })
+        let mut mime_type_strings: Vec<String> = mime_types[..limit]
+            .iter()
+            .map(|(mime, count)| format!("{} ({})", mime, count))
             .collect();
 
-        if selected_items
-            .len()
-            .saturating_sub(mime_types_total as usize)
-            > 0
-        {
-            mime_types.push(format!("..."));
+        if mime_types.len() > limit {
+            mime_type_strings.push("...".to_string());
         }
 
         details = details.push(widget::text::body(fl!(
             "type",
-            mime = mime_types.join(", ")
+            mime = mime_type_strings.join(", ")
         )));
 
         let size = {
