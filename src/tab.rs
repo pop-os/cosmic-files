@@ -1776,6 +1776,15 @@ impl ItemMetadata {
             _ => None,
         }
     }
+
+    pub fn children_count(&self) -> Option<&usize> {
+        match &self {
+            ItemMetadata::Path { children_opt, .. } => children_opt.as_ref(),
+            #[cfg(feature = "gvfs")]
+            ItemMetadata::GvfsPath { children_opt, .. } => children_opt.as_ref(),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -2283,24 +2292,17 @@ impl Item {
         }
 
         let mut file_metadata = None;
-        let mut dir_children_count = None;
 
         match &self.metadata {
-            ItemMetadata::Path {
-                metadata,
-                children_opt,
-            } => {
+            ItemMetadata::Path { metadata, .. } => {
                 file_metadata = Some(metadata.clone());
-                dir_children_count = *children_opt;
             }
             #[cfg(feature = "gvfs")]
-            ItemMetadata::GvfsPath { children_opt, .. } => {
+            ItemMetadata::GvfsPath { .. } => {
                 // grab the fs::metadata object for gvfs paths since this is run on-demand
                 if let Some(path) = self.path_opt() {
                     file_metadata = fs::metadata(path).ok();
                 }
-
-                dir_children_count = *children_opt;
             }
             _ => {
                 //TODO: other metadata types
@@ -2309,7 +2311,7 @@ impl Item {
 
         if let Some(metadata) = file_metadata {
             if metadata.is_dir() {
-                if let Some(children) = dir_children_count {
+                if let Some(children) = self.metadata.children_count() {
                     details = details.push(widget::text::body(fl!("items", items = children)));
                 }
                 let size = match &self.dir_size {
