@@ -568,6 +568,8 @@ struct App {
         FxHashSet<PathBuf>,
     )>,
     auto_scroll_speed: Option<i16>,
+    type_select_prefix: String,
+    type_select_last_key: Option<Instant>,
 }
 
 impl App {
@@ -1038,6 +1040,8 @@ impl Application for App {
             key_binds,
             watcher_opt: None,
             auto_scroll_speed: None,
+            type_select_prefix: String::new(),
+            type_select_last_key: None,
         };
 
         let commands = Task::batch([
@@ -1447,6 +1451,20 @@ impl Application for App {
                                     self.tab.edit_location =
                                         Some(location.with_path(PathBuf::from(path_string)).into());
                                 }
+                            }
+                            TypeToSearch::SelectByPrefix => {
+                                // Reset buffer if timeout elapsed
+                                if let Some(last_key) = self.type_select_last_key {
+                                    if last_key.elapsed() >= tab::TYPE_SELECT_TIMEOUT {
+                                        self.type_select_prefix.clear();
+                                    }
+                                }
+
+                                // Accumulate character and select
+                                self.type_select_prefix.push_str(&text.to_lowercase());
+                                self.type_select_last_key = Some(Instant::now());
+
+                                self.tab.select_by_prefix(&self.type_select_prefix);
                             }
                         }
                     }
