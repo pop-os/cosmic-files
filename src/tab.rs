@@ -98,6 +98,7 @@ use uzers::{get_group_by_gid, get_user_by_uid};
 
 pub const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 pub const HOVER_DURATION: Duration = Duration::from_millis(1600);
+pub const TYPE_SELECT_TIMEOUT: Duration = Duration::from_millis(1000);
 //TODO: best limit for search items
 const MAX_SEARCH_LATENCY: Duration = Duration::from_millis(20);
 const MAX_SEARCH_RESULTS: usize = 200;
@@ -2819,6 +2820,30 @@ impl Tab {
                 }
             }
         }
+    }
+
+    /// Selects the first item whose name starts with the given prefix (case-insensitive).
+    /// Returns true if an item was selected.
+    pub fn select_by_prefix(&mut self, prefix: &str) -> bool {
+        let prefix_lower = prefix.to_lowercase();
+        self.select_focus = None;
+
+        if let Some(ref mut items) = self.items_opt {
+            // First, deselect all items
+            for item in items.iter_mut() {
+                item.selected = false;
+            }
+
+            // Find first matching item
+            for (i, item) in items.iter_mut().enumerate() {
+                if item.name.to_lowercase().starts_with(&prefix_lower) {
+                    item.selected = true;
+                    self.select_focus = Some(i);
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     pub fn select_paths(&mut self, paths: Vec<PathBuf>) {
