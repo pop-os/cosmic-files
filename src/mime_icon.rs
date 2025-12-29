@@ -20,6 +20,7 @@ struct MimeIconKey {
 struct MimeIconCache {
     cache: FxHashMap<MimeIconKey, Option<icon::Handle>>,
     shared_mime_info: xdg_mime::SharedMimeInfo,
+    //shared_mime_info: todo!(),
 }
 
 impl MimeIconCache {
@@ -27,6 +28,7 @@ impl MimeIconCache {
         Self {
             cache: FxHashMap::default(),
             shared_mime_info: xdg_mime::SharedMimeInfo::new(),
+            //shared_mime_info: todo!(),
         }
     }
 
