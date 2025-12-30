@@ -2916,10 +2916,62 @@ impl Tab {
         item.pos_opt.get()
     }
 
-    fn select_focus_scroll(&mut self) -> Option<AbsoluteOffset> {
+    fn item_rect_grid(&self, i: usize) -> Rectangle {
+        let cosmic_theme::Spacing { space_xxs, space_xxxs, .. } = theme::active().cosmic().spacing;
+        let icon_size = self.config.icon_sizes.grid();
+
+        let item_width = (6 * space_xxs + icon_size) as usize;
+        let item_height = (3 * space_xxxs + icon_size + 60) as usize; // 60 = 3 lines of 20px text
+        let grid_spacing = space_xxs as usize;
+
+        let width = self.size_opt.get()
+            .map(|s| (s.width.floor() as usize).saturating_sub(2 * grid_spacing).max(item_width))
+            .unwrap_or(item_width);
+
+        let width_m1 = width.saturating_sub(item_width);
+        let cols_m1 = width_m1 / (item_width + grid_spacing);
+        let cols = cols_m1 + 1;
+        let col_spacing = width_m1.checked_div(cols_m1).unwrap_or(0).saturating_sub(item_width);
+
+        let (row, col) = (i / cols, i % cols);
+
+        Rectangle::new(
+            Point::new(
+                (col * (item_width + col_spacing) + grid_spacing) as f32,
+                (row * (item_height + grid_spacing) + grid_spacing) as f32,
+            ),
+            Size::new(item_width as f32, item_height as f32),
+        )
+    }
+
+    fn item_rect_list(&self, i: usize) -> Rectangle {
+        let spacing = theme::active().cosmic().spacing;
+        let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
+
+        let condensed = size.width < 600.0;
+        let is_search = matches!(self.location, Location::Search(..));
+        let icon_size = if condensed || is_search {
+            self.config.icon_sizes.list_condensed()
+        } else {
+            self.config.icon_sizes.list()
+        };
+        let row_height = f32::from(icon_size + 2 * spacing.space_xxs);
+        let y = i as f32 * (row_height + 1.0);
+
+        Rectangle::new(
+                Point::new(f32::from(spacing.space_s), y),
+                Size::new(size.width - f32::from(2 * spacing.space_s), row_height),
+        )
+    }
+
+    pub fn select_focus_scroll(&mut self) -> Option<AbsoluteOffset> {
         let items = self.items_opt.as_ref()?;
-        let item = items.get(self.select_focus?)?;
-        let rect = item.rect_opt.get()?;
+        let select_focus = self.select_focus?;
+        let item = items.get(select_focus)?;
+        let rect = item.rect_opt.get().unwrap_or_else(|| match self.config.view {
+            View::Grid => self.item_rect_grid(select_focus),
+            View::List => self.item_rect_list(select_focus),
+        });
 
         //TODO: move to function
         let visible_rect = {

@@ -424,6 +424,7 @@ pub enum Message {
         Option<tab::Item>,
         Vec<tab::Item>,
         Option<Vec<PathBuf>>,
+        bool,
     ),
     TabView(Option<Entity>, tab::View),
     TimeConfigChange(TimeConfig),
@@ -1071,7 +1072,7 @@ impl App {
             self.config.tab,
             self.config.thumb_cfg,
             Some(&self.state.sort_names),
-            scrollable_id,
+            scrollable_id.clone(),
             window_id,
         );
         tab.mode = match self.mode {
@@ -1100,7 +1101,7 @@ impl App {
             Task::batch([
                 self.update_title(),
                 self.update_watcher(),
-                self.update_tab(entity, location, selection_paths),
+                self.update_tab(entity, location, selection_paths.clone(), true),
             ]),
         )
     }
@@ -1238,7 +1239,7 @@ impl App {
                 return Task::none();
             }
         }
-        self.update_tab(entity, tab.location.clone(), Some(op_sel.selected))
+        self.update_tab(entity, tab.location.clone(), Some(op_sel.selected), false)
     }
 
     fn update_tab(
@@ -1246,11 +1247,12 @@ impl App {
         entity: Entity,
         location: Location,
         selection_paths: Option<Vec<PathBuf>>,
+        should_scroll: bool,
     ) -> Task<Message> {
         if let Location::Search(_, term, ..) = location {
             self.search_set(entity, Some(term), selection_paths)
         } else {
-            self.rescan_tab(entity, location, selection_paths)
+            self.rescan_tab(entity, location, selection_paths, should_scroll)
         }
     }
 
@@ -1259,6 +1261,7 @@ impl App {
         entity: Entity,
         location: Location,
         selection_paths: Option<Vec<PathBuf>>,
+        should_scroll: bool,
     ) -> Task<Message> {
         log::info!("rescan_tab {entity:?} {location:?} {selection_paths:?}");
         let icon_sizes = self.config.tab.icon_sizes;
@@ -1289,6 +1292,7 @@ impl App {
                         parent_item_opt,
                         items,
                         selection_paths,
+                        should_scroll
                     ))
                 }
                 Err(err) => {
@@ -1311,7 +1315,7 @@ impl App {
 
         let commands = needs_reload
             .into_iter()
-            .map(|(entity, location)| self.update_tab(entity, location, None));
+            .map(|(entity, location)| self.update_tab(entity, location, None, false));
 
         Task::batch(commands)
     }
@@ -1329,7 +1333,7 @@ impl App {
 
         let commands = commands
             .into_iter()
-            .map(|entity| self.update_tab(entity, Location::Recents, None));
+            .map(|entity| self.update_tab(entity, Location::Recents, None, false));
 
         Task::batch(commands)
     }
@@ -1346,7 +1350,7 @@ impl App {
 
         let commands = needs_reload
             .into_iter()
-            .map(|(entity, location)| self.update_tab(entity, location, None));
+            .map(|(entity, location)| self.update_tab(entity, location, None, false));
 
         Task::batch(commands)
     }
@@ -1400,7 +1404,7 @@ impl App {
             return Task::batch([
                 self.update_title(),
                 self.update_watcher(),
-                self.rescan_tab(tab, location, selection_paths),
+                self.rescan_tab(tab, location, selection_paths, false),
                 if focus_search {
                     widget::text_input::focus(self.search_id.clone())
                 } else {
@@ -1468,7 +1472,7 @@ impl App {
             if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
                 tab.location = location.clone();
             }
-            commands.push(self.update_tab(entity, location, None));
+            commands.push(self.update_tab(entity, location, None, false));
         }
         Task::batch(commands)
     }
@@ -3113,7 +3117,7 @@ impl Application for App {
                         });
                         if let Some(title) = title_opt {
                             self.tab_model.text_set(entity, title);
-                            commands.push(self.update_tab(entity, home_location.clone(), None));
+                            commands.push(self.update_tab(entity, home_location.clone(), None, false));
                         }
                     }
                     if !commands.is_empty() {
@@ -3301,7 +3305,7 @@ impl Application for App {
 
                 let commands = needs_reload
                     .into_iter()
-                    .map(|(entity, location)| self.update_tab(entity, location, None));
+                    .map(|(entity, location)| self.update_tab(entity, location, None, false));
                 return Task::batch(commands);
             }
             Message::NotifyWatcher(mut watcher_wrapper) => match watcher_wrapper.watcher_opt.take()
@@ -3946,7 +3950,7 @@ impl Application for App {
                             commands.push(Task::batch([
                                 self.update_title(),
                                 self.update_watcher(),
-                                self.update_tab(entity, tab_path, selection_paths),
+                                self.update_tab(entity, tab_path, selection_paths, false),
                             ]));
                         }
                         tab::Command::ContextMenu(point_opt, parent_id) => {
@@ -4125,6 +4129,7 @@ impl Application for App {
                         }
                     }
                 }
+
                 return Task::batch(commands);
             }
             Message::TabNew => {
@@ -4135,8 +4140,10 @@ impl Application for App {
                 };
                 return self.open_tab(location, true, None);
             }
-            Message::TabRescan(entity, mut location, parent_item_opt, items, selection_paths) => {
+            Message::TabRescan(entity, mut location, parent_item_opt, items, selection_paths, should_scroll) => {
                 location = location.normalize();
+                let mut tasks = Vec::new();
+
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
                     tab.location = tab.location.normalize();
                     if location == tab.location {
@@ -4155,16 +4162,24 @@ impl Application for App {
 
                         if let Some(selection_paths) = selection_paths {
                             tab.select_paths(selection_paths);
+                            if should_scroll {
+                                let scroll = tab.select_focus_scroll().unwrap_or_default();
+                                tasks.push(scrollable::scroll_to(tab.scrollable_id.clone(), scroll));
+                            }
                         }
-                        return clipboard::read_data::<ClipboardPaste>().map(|p| {
-                            cosmic::action::app(Message::CutPaths(match p {
-                                Some(s) => match s.kind {
-                                    ClipboardKind::Copy => Vec::new(),
-                                    ClipboardKind::Cut { .. } => s.paths,
-                                },
-                                None => Vec::new(),
-                            }))
-                        });
+
+                        tasks.push(
+                            clipboard::read_data::<ClipboardPaste>().map(|p| {
+                                cosmic::action::app(Message::CutPaths(match p {
+                                    Some(s) => match s.kind {
+                                        ClipboardKind::Copy => Vec::new(),
+                                        ClipboardKind::Cut { .. } => s.paths,
+                                    },
+                                    None => Vec::new(),
+                                }))
+                            })
+                        );
+                        return Task::batch(tasks);
                     }
                 }
             }
@@ -4347,7 +4362,7 @@ impl Application for App {
                         return Task::batch([
                             self.update_title(),
                             self.update_watcher(),
-                            self.update_tab(entity, location, None),
+                            self.update_tab(entity, location, None, false),
                         ]);
                     }
                 }
