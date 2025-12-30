@@ -1664,6 +1664,7 @@ pub enum Message {
     Resize(Rectangle),
     Scroll(Viewport),
     ScrollTab(f32),
+    ScrollToFocused,
     SearchContext(Location, SearchContextWrapper),
     SearchReady(bool),
     SelectAll,
@@ -3879,6 +3880,13 @@ impl Tab {
                     )
                     .into(),
                 ));
+            }
+            Message::ScrollToFocused => {
+                if let Some(offset) = self.select_focus_scroll() {
+                    commands.push(Command::Iced(
+                        scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                    ));
+                }
             }
             Message::SearchContext(location, context) => {
                 if location == self.location {

@@ -50,6 +50,8 @@ fn gio_icon_to_path(icon: &gio::Icon, size: u16) -> Option<PathBuf> {
 fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
     let mut items: MounterItems = (monitor.mounts().into_iter())
         .enumerate()
+        // Hide shadowed mounts
+        .filter(|(_, mount)| !mount.is_shadowed())
         .map(|(i, mount)| {
             let root = MountExt::root(&mount);
             let is_remote = root

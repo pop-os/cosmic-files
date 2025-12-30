@@ -4153,10 +4153,19 @@ impl Application for App {
                         tab.sort_name = sort.0;
                         tab.sort_direction = sort.1;
 
+                        let mut tasks = Vec::with_capacity(2);
+
                         if let Some(selection_paths) = selection_paths {
                             tab.select_paths(selection_paths);
+
+                            // Ensure selected path is scrolled to after redraw
+                            tasks.push(Task::done(cosmic::action::app(Message::TabMessage(
+                                Some(entity),
+                                tab::Message::ScrollToFocused,
+                            ))));
                         }
-                        return clipboard::read_data::<ClipboardPaste>().map(|p| {
+
+                        tasks.push(clipboard::read_data::<ClipboardPaste>().map(|p| {
                             cosmic::action::app(Message::CutPaths(match p {
                                 Some(s) => match s.kind {
                                     ClipboardKind::Copy => Vec::new(),
@@ -4164,7 +4173,9 @@ impl Application for App {
                                 },
                                 None => Vec::new(),
                             }))
-                        });
+                        }));
+
+                        return Task::batch(tasks);
                     }
                 }
             }
