@@ -631,6 +631,17 @@ fn get_desktop_file_icon(path: &Path) -> Option<String> {
         .map(str::to_string)
 }
 
+/// Creates an icon handle from a desktop file's Icon field value.
+/// Supports both icon names (looked up in theme) and absolute paths (used directly).
+fn desktop_icon_handle(icon: &str, size: u16) -> widget::icon::Handle {
+    let icon_path = Path::new(icon);
+    if icon_path.is_absolute() && icon_path.exists() {
+        widget::icon::from_path(icon_path.to_path_buf())
+    } else {
+        widget::icon::from_name(icon).size(size).handle()
+    }
+}
+
 pub fn parse_desktop_file(path: &Path) -> (Option<String>, Option<String>) {
     let entry = match freedesktop_entry_parser::parse_entry(path) {
         Ok(ok) => ok,
@@ -694,15 +705,9 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
         if let Some(icon_name) = icon_name_opt {
             (
                 mime,
-                widget::icon::from_name(&*icon_name)
-                    .size(sizes.grid())
-                    .handle(),
-                widget::icon::from_name(&*icon_name)
-                    .size(sizes.list())
-                    .handle(),
-                widget::icon::from_name(&*icon_name)
-                    .size(sizes.list_condensed())
-                    .handle(),
+                desktop_icon_handle(&icon_name, sizes.grid()),
+                desktop_icon_handle(&icon_name, sizes.list()),
+                desktop_icon_handle(&icon_name, sizes.list_condensed()),
             )
         } else {
             (
@@ -829,15 +834,9 @@ pub fn item_from_entry(
             if let Some(icon_name) = icon_name_opt {
                 (
                     mime,
-                    widget::icon::from_name(&*icon_name)
-                        .size(sizes.grid())
-                        .handle(),
-                    widget::icon::from_name(&*icon_name)
-                        .size(sizes.list())
-                        .handle(),
-                    widget::icon::from_name(icon_name)
-                        .size(sizes.list_condensed())
-                        .handle(),
+                    desktop_icon_handle(&icon_name, sizes.grid()),
+                    desktop_icon_handle(&icon_name, sizes.list()),
+                    desktop_icon_handle(&icon_name, sizes.list_condensed()),
                 )
             } else {
                 (
@@ -1666,6 +1665,7 @@ pub enum Message {
     Resize(Rectangle),
     Scroll(Viewport),
     ScrollTab(f32),
+    ScrollToFocused,
     SearchContext(Location, SearchContextWrapper),
     SearchReady(bool),
     SelectAll,
@@ -3905,6 +3905,13 @@ impl Tab {
                     )
                     .into(),
                 ));
+            }
+            Message::ScrollToFocused => {
+                if let Some(offset) = self.select_focus_scroll() {
+                    commands.push(Command::Iced(
+                        scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                    ));
+                }
             }
             Message::SearchContext(location, context) => {
                 if location == self.location {
