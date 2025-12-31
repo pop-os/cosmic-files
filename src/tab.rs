@@ -20,11 +20,13 @@ use cosmic::{
         event,
         futures::{self, SinkExt},
         keyboard::Modifiers,
+        padding,
         stream,
         //TODO: export in cosmic::widget
         widget::{
             horizontal_rule, rule,
             scrollable::{self, AbsoluteOffset, Viewport},
+            stack,
         },
         window,
     },
@@ -55,7 +57,7 @@ use std::{
     borrow::Cow,
     cell::{Cell, RefCell},
     cmp::{Ordering, Reverse},
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     error::Error,
     fmt::{self, Display},
     fs::{self, File, Metadata},
@@ -628,6 +630,17 @@ fn get_desktop_file_icon(path: &Path) -> Option<String> {
         .map(str::to_string)
 }
 
+/// Creates an icon handle from a desktop file's Icon field value.
+/// Supports both icon names (looked up in theme) and absolute paths (used directly).
+fn desktop_icon_handle(icon: &str, size: u16) -> widget::icon::Handle {
+    let icon_path = Path::new(icon);
+    if icon_path.is_absolute() && icon_path.exists() {
+        widget::icon::from_path(icon_path.to_path_buf())
+    } else {
+        widget::icon::from_name(icon).size(size).handle()
+    }
+}
+
 pub fn parse_desktop_file(path: &Path) -> (Option<String>, Option<String>) {
     let entry = match freedesktop_entry_parser::parse_entry(path) {
         Ok(ok) => ok,
@@ -691,15 +704,9 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
         if let Some(icon_name) = icon_name_opt {
             (
                 mime,
-                widget::icon::from_name(&*icon_name)
-                    .size(sizes.grid())
-                    .handle(),
-                widget::icon::from_name(&*icon_name)
-                    .size(sizes.list())
-                    .handle(),
-                widget::icon::from_name(&*icon_name)
-                    .size(sizes.list_condensed())
-                    .handle(),
+                desktop_icon_handle(&icon_name, sizes.grid()),
+                desktop_icon_handle(&icon_name, sizes.list()),
+                desktop_icon_handle(&icon_name, sizes.list_condensed()),
             )
         } else {
             (
@@ -826,15 +833,9 @@ pub fn item_from_entry(
             if let Some(icon_name) = icon_name_opt {
                 (
                     mime,
-                    widget::icon::from_name(&*icon_name)
-                        .size(sizes.grid())
-                        .handle(),
-                    widget::icon::from_name(&*icon_name)
-                        .size(sizes.list())
-                        .handle(),
-                    widget::icon::from_name(icon_name)
-                        .size(sizes.list_condensed())
-                        .handle(),
+                    desktop_icon_handle(&icon_name, sizes.grid()),
+                    desktop_icon_handle(&icon_name, sizes.list()),
+                    desktop_icon_handle(&icon_name, sizes.list_condensed()),
                 )
             } else {
                 (
@@ -1663,6 +1664,7 @@ pub enum Message {
     Resize(Rectangle),
     Scroll(Viewport),
     ScrollTab(f32),
+    ScrollToFocused,
     SearchContext(Location, SearchContextWrapper),
     SearchReady(bool),
     SelectAll,
@@ -1771,6 +1773,15 @@ impl ItemMetadata {
             },
             #[cfg(feature = "gvfs")]
             Self::GvfsPath { size_opt, .. } => *size_opt,
+            _ => None,
+        }
+    }
+
+    pub fn children_count(&self) -> Option<&usize> {
+        match &self {
+            ItemMetadata::Path { children_opt, .. } => children_opt.as_ref(),
+            #[cfg(feature = "gvfs")]
+            ItemMetadata::GvfsPath { children_opt, .. } => children_opt.as_ref(),
             _ => None,
         }
     }
@@ -2179,6 +2190,18 @@ impl Item {
         self.mime.type_() == mime::IMAGE || self.mime.type_() == mime::TEXT
     }
 
+    pub fn file_metadata(&self) -> Option<Metadata> {
+        match &self.metadata {
+            ItemMetadata::Path { metadata, .. } => Some(metadata.clone()),
+            #[cfg(feature = "gvfs")]
+            ItemMetadata::GvfsPath { .. } => self.path_opt().and_then(|p| fs::metadata(p).ok()),
+            _ => {
+                //TODO: other metadata types
+                None
+            }
+        }
+    }
+
     fn preview(&self) -> Element<'_, Message> {
         let spacing = cosmic::theme::active().cosmic().spacing;
         // This loads the image only if thumbnailing worked
@@ -2280,34 +2303,9 @@ impl Item {
             }
         }
 
-        let mut file_metadata = None;
-        let mut dir_children_count = None;
-
-        match &self.metadata {
-            ItemMetadata::Path {
-                metadata,
-                children_opt,
-            } => {
-                file_metadata = Some(metadata.clone());
-                dir_children_count = *children_opt;
-            }
-            #[cfg(feature = "gvfs")]
-            ItemMetadata::GvfsPath { children_opt, .. } => {
-                // grab the fs::metadata object for gvfs paths since this is run on-demand
-                if let Some(path) = self.path_opt() {
-                    file_metadata = fs::metadata(path).ok();
-                }
-
-                dir_children_count = *children_opt;
-            }
-            _ => {
-                //TODO: other metadata types
-            }
-        }
-
-        if let Some(metadata) = file_metadata {
+        if let Some(metadata) = self.file_metadata() {
             if metadata.is_dir() {
-                if let Some(children) = dir_children_count {
+                if let Some(children) = self.metadata.children_count() {
                     details = details.push(widget::text::body(fl!("items", items = children)));
                 }
                 let size = match &self.dir_size {
@@ -3882,6 +3880,13 @@ impl Tab {
                     )
                     .into(),
                 ));
+            }
+            Message::ScrollToFocused => {
+                if let Some(offset) = self.select_focus_scroll() {
+                    commands.push(Command::Iced(
+                        scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                    ));
+                }
             }
             Message::SearchContext(location, context) => {
                 if location == self.location {
@@ -5851,7 +5856,108 @@ impl Tab {
 
         dnd_dest.into()
     }
+    pub fn multi_preview_view<'a>(&'a self) -> Element<'a, Message> {
+        let cosmic_theme::Spacing {
+            space_xxxs,
+            space_m,
+            ..
+        } = theme::active().cosmic().spacing;
 
+        let mut column = widget::column().spacing(space_m);
+
+        let handle = widget::icon::from_name("text-x-generic")
+            .size(IconSizes::default().grid())
+            .handle();
+
+        let icon = widget::icon::icon(handle.clone())
+            .content_fit(ContentFit::Contain)
+            .size(IconSizes::default().grid());
+
+        let icon_container1 = widget::container(icon.clone()).padding(padding::bottom(10).left(10));
+        let icon_container2 =
+            widget::container(icon.clone()).padding(padding::top(5).bottom(5).left(5).right(5));
+        let icon_container3 = widget::container(icon).padding(padding::top(10).right(10));
+        let stack = stack![icon_container1, icon_container2, icon_container3];
+
+        column = column.push(
+            widget::container(stack)
+                .center_x(Length::Fill)
+                .max_height(THUMBNAIL_SIZE as f32),
+        );
+
+        let selected_items: Vec<&Item> = self.items_opt().map_or(Vec::new(), |items| {
+            items.iter().filter(|item| item.selected).collect()
+        });
+
+        let mut details = widget::column().spacing(space_xxxs);
+        details = details.push(widget::text::body(fl!(
+            "items",
+            items = selected_items.len()
+        )));
+
+        let mut total_size: u64 = 0;
+        let mut mime_type_counts: BTreeMap<String, u64> = BTreeMap::new();
+        let mut calculating_dir_size = false;
+        let mut dir_size_error: Option<String> = None;
+
+        for item in selected_items.iter() {
+            *mime_type_counts.entry(item.mime.to_string()).or_insert(0) += 1;
+
+            if let Some(metadata) = item.file_metadata() {
+                if metadata.is_dir() {
+                    match &item.dir_size {
+                        DirSize::Calculating(_) => {
+                            calculating_dir_size = true;
+                        }
+                        DirSize::Directory(size) => {
+                            total_size = total_size.saturating_add(*size);
+                        }
+                        DirSize::NotDirectory => (),
+                        DirSize::Error(err) => {
+                            dir_size_error = Some(err.clone());
+                        }
+                    };
+                } else {
+                    total_size = total_size.saturating_add(metadata.len());
+                }
+            }
+        }
+        let mut mime_types: Vec<(String, u64)> = mime_type_counts.into_iter().collect();
+        mime_types.sort_by(|(_, v1), (_, v2)| v2.cmp(v1));
+
+        // Limit the number of displayed mime types
+        let limit = usize::min(10, mime_types.len());
+
+        let mut mime_type_strings: Vec<String> = mime_types[..limit]
+            .iter()
+            .map(|(mime, count)| format!("{} ({})", mime, count))
+            .collect();
+
+        if mime_types.len() > limit {
+            mime_type_strings.push("...".to_string());
+        }
+
+        details = details.push(widget::text::body(fl!(
+            "type",
+            mime = mime_type_strings.join(", ")
+        )));
+
+        let size = {
+            if calculating_dir_size {
+                fl!("calculating")
+            } else if let Some(error) = dir_size_error {
+                error
+            } else {
+                format_size(total_size)
+            }
+        };
+
+        details = details.push(widget::text::body(fl!("item-size", size = size)));
+
+        column = column.push(details);
+
+        column.into()
+    }
     pub fn view<'a>(
         &'a self,
         key_binds: &'a HashMap<KeyBind, Action>,
@@ -5980,11 +6086,16 @@ impl Tab {
 
             if preview {
                 // Load directory size for selected items
-                if let Some(item) = items
-                    .iter()
-                    .find(|&item| item.selected)
-                    .or(self.parent_item_opt.as_ref())
-                {
+
+                let mut selected_items: Vec<&Item> =
+                    items.iter().filter(|item| item.selected).collect();
+
+                if selected_items.is_empty() {
+                    if let Some(p) = self.parent_item_opt.as_ref() {
+                        selected_items.push(p)
+                    }
+                }
+                for item in selected_items {
                     // Item must have a path
                     if let Some(path) = item.path_opt().cloned() {
                         // Item must be calculating directory size

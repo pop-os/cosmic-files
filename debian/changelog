@@ -1,3 +1,9 @@
+cosmic-files (1.0.0) jammy; urgency=medium
+
+  * Stable release.
+
+ -- Jeremy Soller <jeremy@system76.com>  Mon, 29 Dec 2025 15:12:39 -0700
+
 cosmic-files (0.1.0) jammy; urgency=medium
 
   * Initial release.
