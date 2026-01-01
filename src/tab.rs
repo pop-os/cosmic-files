@@ -91,7 +91,7 @@ use crate::{
     mounter::MOUNTERS,
     mouse_area,
     operation::{Controller, OperationError},
-    thumbnail_cacher::{CachedThumbnail, ThumbnailCacher, ThumbnailSize},
+    thumbnail_cacher::{CachedThumbnail, THUMBNAIL_CACHE_BASE_DIR, ThumbnailCacher, ThumbnailSize},
     thumbnailer::thumbnailer,
 };
 use uzers::{get_group_by_gid, get_user_by_uid};
@@ -6011,7 +6011,10 @@ impl Tab {
                     #[cfg(feature = "gvfs")]
                     ItemMetadata::GvfsPath { .. } => true,
                     _ => false,
-                };
+                } && THUMBNAIL_CACHE_BASE_DIR
+                    .as_deref()
+                    .map(|cache| !path.starts_with(cache))
+                    .unwrap_or_default();
                 if can_thumbnail {
                     let mime = item.mime.clone();
                     let max_jobs = jobs;
