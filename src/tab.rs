@@ -6011,7 +6011,7 @@ impl Tab {
                     #[cfg(feature = "gvfs")]
                     ItemMetadata::GvfsPath { .. } => true,
                     _ => false,
-                };
+                } && !path.iter().any(|part| part == "thumbnails");
                 if can_thumbnail {
                     let mime = item.mime.clone();
                     let max_jobs = jobs;
