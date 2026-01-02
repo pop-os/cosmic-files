@@ -27,8 +27,16 @@ size = 大小
 # Progress footer
 details = 详细信息
 dismiss = 清除消息
-operations-running = 正在进行 { $running } 个操作 （{ $percent }%）...
-operations-running-finished = 正在进行 { $running } 个操作 （{ $percent }%）, { $finished } 个操作已完成...
+operations-running =
+    正在进行 { $running } { $running ->
+        [one] 个操作
+       *[other] 个操作
+    }（{ $percent }%）...
+operations-running-finished =
+    正在进行 { $running } { $running ->
+        [one] 个操作
+       *[other] 个操作
+    }（{ $percent }%），{ $finished } 个操作已完成…
 pause = 暂停
 resume = 继续
 
@@ -48,7 +56,7 @@ extract-to-title = 提取到文件夹
 ## Empty Trash Dialog
 
 empty-trash = 清空回收站
-empty-trash-warning = 确定要彻底删除回收站中的所有内容吗？
+empty-trash-warning = 回收站中的所有内容会被永久删除
 
 ## Mount Error Dialog
 
@@ -62,8 +70,8 @@ file-name = 文件名称
 folder-name = 文件夹名称
 file-already-exists = 已存在同名文件。
 folder-already-exists = 已存在同名文件夹。
-name-hidden = 以 “.” 开头的文件将被隐藏。
-name-invalid = 名称不可以为 “{ $filename }”。
+name-hidden = 以 “.” 开头的文件会被隐藏
+name-invalid = 名称不能是 “{ $filename }”
 name-no-slashes = 名称不可以包含斜线。
 
 ## Open/Save Dialog
@@ -210,8 +218,8 @@ history = 历史记录
 no-history = 历史记录为空
 pending = 待处理
 progress = { $percent }%
-progress-cancelled = { $percent }%, 已取消
-progress-paused = { $percent }%, 已暂停
+progress-cancelled = { $percent }%，已取消
+progress-paused = { $percent }%，已暂停
 failed = 失败
 complete = 完成
 compressing =
@@ -411,4 +419,4 @@ sort-smallest-to-largest = 从小到大
 sort-largest-to-smallest = 从大到小
 repository = 仓库
 support = 支持
-progress-failed = { $percent }%, 失败
+progress-failed = { $percent }%，失败
