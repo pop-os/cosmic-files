@@ -11,6 +11,9 @@ use std::{
 };
 use url::Url;
 
+//TODO: do we have to use \r\n?
+const CR_NL: &'static str = "\r\n";
+
 #[derive(Clone, Copy, Debug)]
 pub enum ClipboardKind {
     Copy,
@@ -19,65 +22,14 @@ pub enum ClipboardKind {
 
 #[derive(Clone, Debug)]
 pub struct ClipboardCopy {
-    pub text_plain: Cow<'static, [u8]>,
-    pub text_uri_list: Cow<'static, [u8]>,
-    pub x_special_gnome_copied_files: Cow<'static, [u8]>,
+    kind: ClipboardKind,
+    paths: Vec<PathBuf>,
 }
 
 impl ClipboardCopy {
     pub fn new<P: AsRef<Path>>(kind: ClipboardKind, paths: impl IntoIterator<Item = P>) -> Self {
-        let mut text_plain = String::new();
-        let mut text_uri_list = String::new();
-        let mut x_special_gnome_copied_files = match kind {
-            ClipboardKind::Copy => "copy",
-            ClipboardKind::Cut { .. } => "cut",
-        }
-        .to_string();
-        //TODO: do we have to use \r\n?
-        let cr_nl = "\r\n";
-        for path in paths {
-            let path = path.as_ref();
-
-            match path.to_str() {
-                Some(path_str) => {
-                    if !text_plain.is_empty() {
-                        text_plain.push_str(cr_nl);
-                    }
-                    //TODO: what if the path contains CR or NL?
-                    text_plain.push_str(path_str);
-                }
-                None => {
-                    //TODO: allow non-UTF-8?
-                    log::warn!(
-                        "{} is not valid UTF-8, not adding to text/plain clipboard",
-                        path.display()
-                    );
-                }
-            }
-
-            match Url::from_file_path(path) {
-                Ok(url) => {
-                    let url_str = url.as_ref();
-
-                    text_uri_list.push_str(url_str);
-                    text_uri_list.push_str(cr_nl);
-
-                    x_special_gnome_copied_files.push('\n');
-                    x_special_gnome_copied_files.push_str(url_str);
-                }
-                Err(()) => {
-                    log::warn!(
-                        "{} cannot be turned into a URL, not adding to text/uri-list clipboard",
-                        path.display()
-                    );
-                }
-            }
-        }
-        Self {
-            text_plain: Cow::from(text_plain.into_bytes()),
-            text_uri_list: Cow::from(text_uri_list.into_bytes()),
-            x_special_gnome_copied_files: Cow::from(x_special_gnome_copied_files.into_bytes()),
-        }
+        let paths: Vec<PathBuf> = paths.into_iter().map(|x| x.as_ref().to_owned()).collect();
+        Self { kind, paths }
     }
 }
 
@@ -98,10 +50,67 @@ impl AsMimeTypes for ClipboardCopy {
     fn as_bytes(&self, mime_type: &str) -> Option<Cow<'static, [u8]>> {
         match mime_type {
             "text/plain" | "text/plain;charset=utf-8" | "UTF8_STRING" => {
-                Some(self.text_plain.clone())
+                let mut text_plain = String::new();
+                for path in &self.paths {
+                    match path.to_str() {
+                        Some(path_str) => {
+                            if !text_plain.is_empty() {
+                                text_plain.push_str(CR_NL);
+                            }
+                            //TODO: what if the path contains CR or NL?
+                            text_plain.push_str(path_str);
+                        }
+                        None => {
+                            //TODO: allow non-UTF-8?
+                            log::warn!(
+                                "{} is not valid UTF-8, not adding to text/plain clipboard",
+                                path.display()
+                            );
+                        }
+                    }
+                }
+                Some(Cow::from(text_plain.into_bytes()))
             }
-            "text/uri-list" => Some(self.text_uri_list.clone()),
-            "x-special/gnome-copied-files" => Some(self.x_special_gnome_copied_files.clone()),
+            "text/uri-list" => {
+                let mut text_uri_list = String::new();
+                for path in &self.paths {
+                    match Url::from_file_path(path) {
+                        Ok(url) => {
+                            text_uri_list.push_str(url.as_ref());
+                            text_uri_list.push_str(CR_NL);
+                        }
+                        Err(()) => {
+                            log::warn!(
+                                "{} cannot be turned into a URL, not adding to text/uri-list clipboard",
+                                path.display()
+                            );
+                        }
+                    }
+                }
+                Some(Cow::from(text_uri_list.into_bytes()))
+            }
+            "x-special/gnome-copied-files" => {
+                let mut x_special_gnome_copied_files = match self.kind {
+                    ClipboardKind::Copy => "copy",
+                    ClipboardKind::Cut { .. } => "cut",
+                }
+                .to_string();
+                for path in &self.paths {
+                    match Url::from_file_path(path) {
+                        Ok(url) => {
+                            x_special_gnome_copied_files.push('\n');
+                            x_special_gnome_copied_files.push_str(url.as_ref());
+                        }
+                        Err(()) => {
+                            log::warn!(
+                                "{} cannot be turned into a URL, not adding to text/uri-list clipboard",
+                                path.display()
+                            );
+                        }
+                    }
+                }
+                Some(Cow::from(x_special_gnome_copied_files.into_bytes()))
+            }
             _ => None,
         }
     }
