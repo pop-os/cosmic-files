@@ -1391,6 +1391,7 @@ name = "cosmic-files"
 version = "1.7.0"
 dependencies = [
  "anyhow",
+ "ashpd 0.12.3",
  "atomic_float",
  "bstr",
  "bzip2",
