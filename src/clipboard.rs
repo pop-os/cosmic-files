@@ -5,6 +5,7 @@ use cosmic::iced::clipboard::mime::{AllowedMimeTypes, AsMimeTypes};
 use std::{
     borrow::Cow,
     error::Error,
+    fs,
     path::{Path, PathBuf},
     str,
     sync::LazyLock,
@@ -42,6 +43,8 @@ impl AsMimeTypes for ClipboardCopy {
                 "UTF8_STRING".to_string(),
                 "text/uri-list".to_string(),
                 "x-special/gnome-copied-files".to_string(),
+                "application/vnd.portal.filetransfer".to_string(),
+                "application/vnd.portal.files".to_string(),
             ]
         });
         Cow::Borrowed(&AVAILABLE)
@@ -110,6 +113,32 @@ impl AsMimeTypes for ClipboardCopy {
                     }
                 }
                 Some(Cow::from(x_special_gnome_copied_files.into_bytes()))
+            }
+            "application/vnd.portal.filetransfer" | "application/vnd.portal.files" => {
+                let res: ashpd::Result<String> = futures::executor::block_on(async {
+                    let mut files = Vec::new();
+                    for path in &self.paths {
+                        match fs::File::open(path) {
+                            Ok(file) => files.push(file),
+                            Err(err) => log::warn!(
+                                "{} cannot be opened: {}, not adding to portal file transfer clipboard",
+                                path.display(),
+                                err
+                            ),
+                        }
+                    }
+                    let file_transfer = ashpd::documents::FileTransfer::new().await?;
+                    let key = file_transfer.start_transfer(false, true).await?; // XXX args
+                    file_transfer.add_files(&key, &files).await?;
+                    Ok(key)
+                });
+                match res {
+                    Ok(key) => Some(Cow::from(key.into_bytes())),
+                    Err(err) => {
+                        log::warn!("failed to use file transfer portal: {}", err);
+                        None
+                    }
+                }
             }
             _ => None,
         }
