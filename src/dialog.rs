@@ -12,6 +12,7 @@ use cosmic::{
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers, key::Named},
         stream, window,
+        widget::scrollable,
     },
     iced_core::widget::operation,
     iced_winit::{self, SurfaceIdWrapper},
@@ -1465,6 +1466,12 @@ impl Application for App {
                                 self.type_select_last_key = Some(Instant::now());
 
                                 self.tab.select_by_prefix(&self.type_select_prefix);
+                                if let Some(offset) = self.tab.select_focus_scroll() {
+                                    return scrollable::scroll_to(
+                                        self.tab.scrollable_id.clone(),
+                                        offset,
+                                    );
+                                }
                             }
                         }
                     }

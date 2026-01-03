@@ -3063,6 +3063,12 @@ impl Application for App {
 
                                     if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
                                         tab.select_by_prefix(&self.type_select_prefix);
+                                        if let Some(offset) = tab.select_focus_scroll() {
+                                            return scrollable::scroll_to(
+                                                tab.scrollable_id.clone(),
+                                                offset,
+                                            );
+                                        }
                                     }
                                 }
                             }

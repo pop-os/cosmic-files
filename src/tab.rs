@@ -2942,7 +2942,7 @@ impl Tab {
         item.pos_opt.get()
     }
 
-    fn select_focus_scroll(&mut self) -> Option<AbsoluteOffset> {
+    pub(crate) fn select_focus_scroll(&mut self) -> Option<AbsoluteOffset> {
         let items = self.items_opt.as_ref()?;
         let item = items.get(self.select_focus?)?;
         let rect = item.rect_opt.get()?;
