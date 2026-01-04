@@ -6003,6 +6003,8 @@ impl Tab {
 
         column = column.push(details);
 
+        column = column.push(widget::button::standard(fl!("open")).on_press(Message::Open(None)));
+
         column.into()
     }
     pub fn view<'a>(
