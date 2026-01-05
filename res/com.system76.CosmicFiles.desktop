@@ -28,4 +28,5 @@ Keywords[hu]=mappa;fájl;kezelő
 Keywords[sk]=Priečinok;Správca;Súbory;Manažér;Prehliadač;
 Keywords[sv]=Folder;Katalog;Mapp;Manager;
 Keywords[es]=Archivos;Ficheros;Gestor;Explorador;
+Keywords[it]=File;Archivi;Cartelle;Explorer;
 MimeType=inode/directory;
