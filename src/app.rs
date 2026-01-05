@@ -2007,7 +2007,7 @@ impl App {
 
                         match (selected.next(), selected.next()) {
                             // At least two selected items
-                            (Some(_), Some(_)) => Some(tab.multi_preview_view()),
+                            (Some(_), Some(_)) => Some(tab.multi_preview_view(Some(&self.mime_app_cache))),
                             // Exactly one selected item
                             (Some(item), None) => {
                                 Some(item.preview_view(Some(&self.mime_app_cache), military_time))

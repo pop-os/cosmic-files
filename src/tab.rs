@@ -6055,7 +6055,10 @@ impl Tab {
 
         dnd_dest.into()
     }
-    pub fn multi_preview_view<'a>(&'a self) -> Element<'a, Message> {
+    pub fn multi_preview_view<'a>(
+        &'a self,
+        mime_app_cache_opt: Option<&'a mime_app::MimeAppCache>,
+    ) -> Element<'a, Message> {
         let cosmic_theme::Spacing {
             space_xxxs,
             space_m,
@@ -6156,6 +6159,43 @@ impl Tab {
         column = column.push(details);
 
         column = column.push(widget::button::standard(fl!("open")).on_press(Message::Open(None)));
+
+        let mut settings = Vec::new();
+        if mime_types.len() == 1 {
+            if let Some(mime) = mime_types
+                .get(0)
+                .and_then(|(mime, _)| mime.parse::<Mime>().ok())
+            {
+                if let Some(mime_app_cache) = mime_app_cache_opt {
+                    let mime_apps = mime_app_cache.get(&mime);
+                    if !mime_apps.is_empty() {
+                        let mime_closure = mime.clone();
+                        settings.push(
+                            widget::settings::item::builder(fl!("open-with")).control(
+                                Element::from(
+                                    widget::dropdown(
+                                        mime_apps,
+                                        mime_apps.iter().position(|x| x.is_default),
+                                        move |index| (index, mime_closure.clone()),
+                                    )
+                                    .icons(Cow::Borrowed(mime_app_cache.icons(&mime))),
+                                )
+                                .map(|(index, mime)| {
+                                    let mime_app = &mime_apps[index];
+                                    Message::SetOpenWith(mime, mime_app.id.clone())
+                                }),
+                            ),
+                        );
+                    }
+                }
+            }
+        }
+
+        if !settings.is_empty() {
+            let mut section = widget::settings::section();
+            section = section.extend(settings);
+            column = column.push(section);
+        }
 
         column.into()
     }
