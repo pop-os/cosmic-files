@@ -153,10 +153,13 @@ pub struct ClipboardPaste {
 
 impl AllowedMimeTypes for ClipboardPaste {
     fn allowed() -> Cow<'static, [String]> {
-        Cow::from(vec![
-            "x-special/gnome-copied-files".to_string(),
-            "text/uri-list".to_string(),
-        ])
+        static ALLOWED: LazyLock<Vec<String>> = LazyLock::new(|| {
+            vec![
+                "x-special/gnome-copied-files".to_string(),
+                "text/uri-list".to_string(),
+            ]
+        });
+        Cow::Borrowed(&ALLOWED)
     }
 }
 
