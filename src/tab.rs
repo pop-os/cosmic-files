@@ -3785,24 +3785,77 @@ impl Tab {
                             commands.push(Command::OpenFile(vec![path]));
                         }
                     }
+                    // Open selected items
                     None => {
-                        if let Some(ref mut items) = self.items_opt {
-                            let mut open_files = Vec::new();
-                            for item in items.iter() {
-                                if item.selected {
-                                    if let Some(location) = &item.location_opt {
-                                        if item.metadata.is_dir() {
-                                            //TODO: allow opening multiple tabs?
-                                            cd = Some(location.clone());
-                                        } else if let Some(path) = location.path_opt() {
-                                            open_files.push(path.clone());
-                                        }
-                                    } else {
-                                        //TODO: open properties?
-                                    }
-                                }
+                        enum ResolveResult {
+                            Open(Option<PathBuf>),
+                            OpenInTab(Option<PathBuf>),
+                            OpenTrash,
+                            OpenProperties,
+                            Cd(Location),
+                            Skip,
+                        }
+                        fn resolve_item(
+                            item: &Item,
+                            mode: &Mode,
+                            is_only_one_selected: bool,
+                        ) -> ResolveResult {
+                            if !item.selected {
+                                return ResolveResult::Skip;
                             }
 
+                            let location = match &item.location_opt {
+                                Some(l) => l,
+                                None => return ResolveResult::OpenProperties,
+                            };
+
+                            let path_opt = location.path_opt();
+
+                            if item.metadata.is_dir() {
+                                match mode {
+                                    Mode::App => {
+                                        if is_only_one_selected {
+                                            return ResolveResult::Cd(location.clone());
+                                        } else {
+                                            return ResolveResult::OpenInTab(path_opt.cloned());
+                                        }
+                                    }
+                                    Mode::Desktop => {
+                                        return match location {
+                                            Location::Trash => ResolveResult::OpenTrash,
+                                            _ => ResolveResult::Open(path_opt.cloned()),
+                                        };
+                                    }
+                                    Mode::Dialog(_) => {
+                                        if is_only_one_selected {
+                                            return ResolveResult::Cd(location.clone());
+                                        } else {
+                                            return ResolveResult::Skip;
+                                        }
+                                    }
+                                }
+                            } else {
+                                return ResolveResult::Open(path_opt.cloned());
+                            }
+                        }
+                        let mut open_files = Vec::new();
+                        if let Some(items) = self.items_opt.as_ref() {
+                            let selected_count = items.iter().filter(|i| i.selected).count();
+
+                            for item in items.iter() {
+                                match resolve_item(item, &self.mode, selected_count == 1) {
+                                    ResolveResult::Open(Some(p)) => open_files.push(p),
+                                    ResolveResult::OpenInTab(Some(p)) => {
+                                        commands.push(Command::OpenInNewTab(p))
+                                    }
+                                    ResolveResult::Cd(loc) => cd = Some(loc),
+                                    ResolveResult::OpenTrash => commands.push(Command::OpenTrash),
+                                    ResolveResult::OpenProperties => {} //TODO: open properties?
+                                    _ => {}
+                                }
+                            }
+                        }
+                        if !open_files.is_empty() {
                             commands.push(Command::OpenFile(open_files));
                         }
                     }
