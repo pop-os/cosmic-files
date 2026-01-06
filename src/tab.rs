@@ -2569,6 +2569,7 @@ pub struct Tab {
     pub mode: Mode,
     pub scroll_opt: Option<AbsoluteOffset>,
     pub size_opt: Cell<Option<Size>>,
+    pub content_height_opt: Cell<Option<f32>>,
     pub viewport_opt: Option<Rectangle>,
     pub item_view_size_opt: Cell<Option<Size>>,
     pub edit_location: Option<EditLocation>,
@@ -2690,6 +2691,7 @@ impl Tab {
             mode: Mode::App,
             scroll_opt: None,
             size_opt: Cell::new(None),
+            content_height_opt: Cell::new(None),
             viewport_opt: None,
             item_view_size_opt: Cell::new(None),
             edit_location: None,
@@ -5032,10 +5034,17 @@ impl Tab {
 
         //TODO: move to function
         let visible_rect = {
-            let point = match self.scroll_opt {
-                Some(offset) => Point::new(0.0, offset.y),
-                None => Point::new(0.0, 0.0),
-            };
+            // Use cached content height to clamp scroll offset after resize
+            let max_scroll_y = self
+                .content_height_opt
+                .get()
+                .map(|ch| (ch - height as f32).max(0.0))
+                .unwrap_or(f32::MAX);
+            let scroll_y = self
+                .scroll_opt
+                .map(|o| o.y.min(max_scroll_y).max(0.0))
+                .unwrap_or(0.0);
+            let point = Point::new(0.0, scroll_y);
             let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
             Rectangle::new(point, size)
         };
@@ -5216,6 +5225,9 @@ impl Tab {
                     }
                 }
 
+                // Cache content height for scroll clamping on next frame
+                self.content_height_opt.set(Some(max_bottom as f32));
+
                 let top_deduct = 7 * (space_xxs as usize);
 
                 self.item_view_size_opt
@@ -5347,10 +5359,17 @@ impl Tab {
 
         //TODO: move to function
         let visible_rect = {
-            let point = match self.scroll_opt {
-                Some(offset) => Point::new(0.0, offset.y),
-                None => Point::new(0.0, 0.0),
-            };
+            // Use cached content height to clamp scroll offset after resize
+            let max_scroll_y = self
+                .content_height_opt
+                .get()
+                .map(|ch| (ch - size.height).max(0.0))
+                .unwrap_or(f32::MAX);
+            let scroll_y = self
+                .scroll_opt
+                .map(|o| o.y.min(max_scroll_y).max(0.0))
+                .unwrap_or(0.0);
+            let point = Point::new(0.0, scroll_y);
             let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
             Rectangle::new(point, size)
         };
@@ -5658,6 +5677,9 @@ impl Tab {
             if count == 0 {
                 return (None, self.empty_view(hidden > 0), false);
             }
+
+            // Cache content height for scroll clamping on next frame
+            self.content_height_opt.set(Some(y));
         }
         //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
         {
