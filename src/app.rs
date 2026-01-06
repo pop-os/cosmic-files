@@ -4452,6 +4452,13 @@ impl Application for App {
                         tab::Command::SetPermissions(path, mode) => {
                             commands.push(self.operation(Operation::SetPermissions { path, mode }));
                         }
+                        tab::Command::SetMultiplePermissions(permissions) => {
+                            commands.push(Task::batch(permissions.into_iter().map(
+                                |(path, mode)| {
+                                    self.operation(Operation::SetPermissions { path, mode })
+                                },
+                            )));
+                        }
                         tab::Command::WindowDrag => {
                             if let Some(window_id) = self.core.main_window_id() {
                                 commands.push(window::drag(window_id));
