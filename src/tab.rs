@@ -64,7 +64,7 @@ use std::{
     hash::Hash,
     io::{BufRead, BufReader},
     os::unix::fs::MetadataExt,
-    path::{Path, PathBuf},
+    path::{self, Path, PathBuf},
     rc::Rc,
     sync::{Arc, LazyLock, RwLock, atomic},
     time::{Duration, Instant, SystemTime},
@@ -311,10 +311,19 @@ pub fn folder_icon_symbolic(path: &PathBuf, icon_size: u16) -> widget::icon::Han
     .handle()
 }
 
+//TODO: replace with Path::has_trailing_sep when stable
+fn has_trailing_sep(path: &Path) -> bool {
+    path.as_os_str()
+        .as_encoded_bytes()
+        .last()
+        .copied()
+        .is_some_and(|b| path::is_separator(b as char))
+}
+
 fn tab_complete(path: &Path) -> Result<Vec<(String, PathBuf)>, Box<dyn Error>> {
-    let parent = if path.exists() {
-        // Do not show completion if already on an existing path
-        return Ok(Vec::new());
+    let parent = if has_trailing_sep(path) && path.is_dir() {
+        // Show completions inside existing child directory instead of parent
+        path
     } else {
         path.parent()
             .ok_or_else(|| format!("path has no parent {}", path.display()))?
