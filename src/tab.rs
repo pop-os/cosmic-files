@@ -3299,7 +3299,13 @@ impl Tab {
                                     .take(max_real - min_real + 1)
                                 {
                                     if let Some(item) = items.get_mut(index) {
-                                        item.selected = true;
+                                        if item.hidden {
+                                            if self.config.show_hidden {
+                                                item.selected = true;
+                                            }
+                                        } else {
+                                            item.selected = true;
+                                        }
                                     }
                                 }
                             }
