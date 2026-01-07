@@ -1411,8 +1411,18 @@ impl Application for App {
                 return self.rescan_tab(None);
             }
             Message::Key(modifiers, key, text) => {
+                // Check if location bar is being edited - skip clipboard actions
+                // to allow the text input widget to handle them
+                let edit_location_active = self.tab.edit_location.is_some();
+
                 for (key_bind, action) in &self.key_binds {
                     if key_bind.matches(modifiers, &key) {
+                        // Skip Copy/Cut/Paste actions when editing location bar
+                        if edit_location_active
+                            && matches!(action, Action::Copy | Action::Cut | Action::Paste)
+                        {
+                            continue;
+                        }
                         return self.update(Message::from(action.message()));
                     }
                 }

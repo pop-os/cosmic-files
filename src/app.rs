@@ -3007,8 +3007,22 @@ impl Application for App {
                 let in_surface_ids = false;
                 if self.core.main_window_id() == Some(window_id) || in_surface_ids {
                     let entity = self.tab_model.active();
+
+                    // Check if location bar is being edited - skip clipboard actions
+                    // to allow the text input widget to handle them
+                    let edit_location_active = self
+                        .tab_model
+                        .data::<Tab>(entity)
+                        .is_some_and(|tab| tab.edit_location.is_some());
+
                     for (key_bind, action) in &self.key_binds {
                         if key_bind.matches(modifiers, &key) {
+                            // Skip Copy/Cut/Paste actions when editing location bar
+                            if edit_location_active
+                                && matches!(action, Action::Copy | Action::Cut | Action::Paste)
+                            {
+                                continue;
+                            }
                             return self.update(action.message(Some(entity)));
                         }
                     }
