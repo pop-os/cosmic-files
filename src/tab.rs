@@ -1457,6 +1457,10 @@ impl Location {
                 self.clone()
             }
         } else if let Some(mut path) = self.path_opt().cloned() {
+            // Canonicalize path, if possible
+            if let Ok(canonical) = fs::canonicalize(&path) {
+                path = canonical;
+            }
             // Add trailing slash if location is a path
             path.push("");
             self.with_path(path)
@@ -1580,7 +1584,7 @@ impl Location {
     pub fn expand_tilde(path: PathBuf) -> PathBuf {
         let mut components = path.components();
         match components.next() {
-            Some(std::path::Component::Normal(os_str)) if os_str == "~" => {
+            Some(path::Component::Normal(os_str)) if os_str == "~" => {
                 if let Some(home) = dirs::home_dir() {
                     home.join(components.as_path())
                 } else {
@@ -4210,6 +4214,7 @@ impl Tab {
 
         // Change directory if requested
         if let Some(mut location) = cd {
+            location = location.normalize();
             if matches!(self.mode, Mode::Desktop) {
                 match location {
                     Location::Path(path) => {
