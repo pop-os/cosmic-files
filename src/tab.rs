@@ -1642,6 +1642,7 @@ pub enum Message {
     EditLocationComplete(usize),
     EditLocationEnable,
     EditLocationSubmit,
+    EditLocationTab,
     OpenInNewTab(PathBuf),
     EmptyTrash,
     #[cfg(feature = "desktop")]
@@ -3494,6 +3495,11 @@ impl Tab {
                     cd = edit_location.resolve();
                 }
             }
+            Message::EditLocationTab => {
+                if let Some(edit_location) = &mut self.edit_location {
+                    edit_location.select(!modifiers.contains(Modifiers::SHIFT));
+                }
+            }
             Message::OpenInNewTab(path) => {
                 commands.push(Command::OpenInNewTab(path));
             }
@@ -4737,6 +4743,7 @@ impl Tab {
                             ))
                         })
                         .on_submit(|_| Message::EditLocationSubmit)
+                        .on_tab(Message::EditLocationTab)
                         .line_height(1.0),
                 );
             }
