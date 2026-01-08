@@ -357,7 +357,7 @@ pub enum CachedThumbnail {
     Failed,
 }
 
-static THUMBNAIL_CACHE_BASE_DIR: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
+pub static THUMBNAIL_CACHE_BASE_DIR: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
     if let Some(cache_dir) = dirs::cache_dir() {
         return Some(cache_dir.join("thumbnails"));
     }
