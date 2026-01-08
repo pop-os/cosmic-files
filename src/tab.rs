@@ -3504,7 +3504,21 @@ impl Tab {
                 self.edit_location = Some(self.location.clone().into());
             }
             Message::EditLocationSubmit => {
-                if let Some(edit_location) = self.edit_location.take() {
+                if let Some(mut edit_location) = self.edit_location.take() {
+                    // Select first completion if current location does not exist
+                    if edit_location.selected.is_none()
+                        && edit_location
+                            .completions
+                            .as_ref()
+                            .map_or(false, |completions| !completions.is_empty())
+                        && edit_location
+                            .location
+                            .path_opt()
+                            .map_or(false, |path| !path.exists())
+                    {
+                        edit_location.selected = Some(0);
+                    }
+
                     cd = edit_location.resolve();
                 }
             }
