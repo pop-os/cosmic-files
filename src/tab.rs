@@ -1384,7 +1384,7 @@ impl EditLocation {
             };
             let completions = self.completions.as_ref()?;
             let completion = completions.get(selected)?;
-            Some(self.location.with_path(completion.1.clone()))
+            Some(self.location.with_path(completion.1.clone()).normalize())
         }
     }
 
@@ -4758,6 +4758,7 @@ impl Tab {
                         })
                         .on_submit(|_| Message::EditLocationSubmit)
                         .on_tab(Message::EditLocationTab)
+                        .on_unfocus(Message::EditLocation(None))
                         .line_height(1.0),
                 );
             }
