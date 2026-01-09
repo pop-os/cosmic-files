@@ -4217,6 +4217,10 @@ impl Application for App {
             Message::TabView(entity_opt, view) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                    if matches!(tab.mode, tab::Mode::Desktop) {
+                        return Task::none();
+                    }
+
                     tab.config.view = view;
                 }
                 let mut config = self.config.tab;
