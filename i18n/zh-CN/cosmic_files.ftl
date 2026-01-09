@@ -3,7 +3,7 @@ empty-folder = 空文件夹
 empty-folder-hidden = 空文件夹（包含隐藏项目）
 no-results = 未找到结果
 filesystem = 文件系统
-home = 主目录
+home = 主页
 networks = 网络
 notification-in-progress = 文件操作正在进行中
 trash = 回收站
@@ -14,7 +14,7 @@ today = 今天
 desktop-view-options = 桌面视图选项...
 show-on-desktop = 在桌面显示
 desktop-folder-content = 桌面文件夹内容
-mounted-drives = 已挂载驱动器
+mounted-drives = 已装载驱动器
 trash-folder-icon = 回收站图标
 icon-size-and-spacing = 图标大小与间距
 icon-size = 图标大小
@@ -27,8 +27,16 @@ size = 大小
 # Progress footer
 details = 详细信息
 dismiss = 清除消息
-operations-running = 正在进行 { $running } 个操作 （{ $percent }%）...
-operations-running-finished = 正在进行 { $running } 个操作 （{ $percent }%）, { $finished } 个操作已完成...
+operations-running =
+    正在进行 { $running } { $running ->
+        [one] 个操作
+       *[other] 个操作
+    }（{ $percent }%）...
+operations-running-finished =
+    正在进行 { $running } { $running ->
+        [one] 个操作
+       *[other] 个操作
+    }（{ $percent }%），{ $finished } 个操作已完成…
 pause = 暂停
 resume = 继续
 
@@ -48,7 +56,7 @@ extract-to-title = 提取到文件夹
 ## Empty Trash Dialog
 
 empty-trash = 清空回收站
-empty-trash-warning = 确定要彻底删除回收站中的所有内容吗？
+empty-trash-warning = 回收站中的所有内容会被永久删除
 
 ## Mount Error Dialog
 
@@ -60,11 +68,11 @@ create-new-file = 新建文件
 create-new-folder = 新建文件夹
 file-name = 文件名称
 folder-name = 文件夹名称
-file-already-exists = 已存在同名文件。
-folder-already-exists = 已存在同名文件夹。
-name-hidden = 以 “.” 开头的文件将被隐藏。
-name-invalid = 名称不可以为 “{ $filename }”。
-name-no-slashes = 名称不可以包含斜线。
+file-already-exists = 同名文件已存在
+folder-already-exists = 同名文件夹已存在
+name-hidden = 以 “.” 开头的文件会被隐藏
+name-invalid = 名称不能是 “{ $filename }”
+name-no-slashes = 名称不可以包含斜线
 
 ## Open/Save Dialog
 
@@ -73,7 +81,7 @@ create = 创建
 open = 打开
 open-file = 打开文件
 open-folder = 打开文件夹
-open-in-new-tab = 在新标签页中打开
+open-in-new-tab = 在新标签中打开
 open-in-new-window = 在新窗口中打开
 open-item-location = 打开项目位置
 open-multiple-files = 打开多个文件
@@ -91,9 +99,9 @@ related-apps = 相关应用程序
 ## Permanently delete Dialog
 
 selected-items = 选中的 { $items } 个项目
-permanently-delete-question = 永久删除
+permanently-delete-question = 永久删除？
 delete = 删除
-permanently-delete-warning = 确定要永久删除 { $target } ? 该操作无法撤回。
+permanently-delete-warning = { $target } 将被永久删除。此操作无法撤销。
 
 ## Rename Dialog
 
@@ -103,8 +111,8 @@ rename-folder = 重命名文件夹
 ## Replace Dialog
 
 replace = 替换
-replace-title = “{ $filename }” 已存在于该位置。
-replace-warning = 您想要使用您现在正在存储的文件替换掉它吗？一旦替换将会覆盖其内容。
+replace-title = “{ $filename }” 已存在于该位置
+replace-warning = 您想要使用您现在正在保存的文件替换掉它吗？一旦替换将会覆盖其内容。
 replace-warning-operation = 您想要替换掉它吗？一旦替换将会覆盖其内容。
 original-file = 原始文件
 replace-with = 替换为
@@ -159,10 +167,10 @@ read-write-execute = 读取、写入和执行
 
 ## Favorite Path Error Dialog
 
-favorite-path-error = 打开目录时出错
+favorite-path-error = 打开路径时出错
 favorite-path-error-description =
     无法打开 "{ $path }" 。
-    可能不存在或您没有权限打开它。
+    "{ $path }" 可能不存在或您没有权限打开它。
 
     您想要从侧边栏中移除它吗？
 remove = 移除
@@ -179,12 +187,12 @@ keep = 保留
 add-network-drive = 添加网络驱动器
 connect = 连接
 connect-anonymously = 匿名连接
-connecting = 正在连接...
-domain = 域
+connecting = 正在连接…
+domain = 网络域
 enter-server-address = 输入服务器地址
 network-drive-description =
     服务器地址包含协议前缀和地址。
-    示例: ssh://192.168.0.1, ftp://[2001:db8::1]
+    示例: ssh://192.168.0.1，ftp://[2001:db8::1]
 
 ### Make sure to keep the comma which separates the columns
 
@@ -210,69 +218,69 @@ history = 历史记录
 no-history = 历史记录为空
 pending = 待处理
 progress = { $percent }%
-progress-cancelled = { $percent }%, 已取消
-progress-paused = { $percent }%, 已暂停
+progress-cancelled = { $percent }%，已取消
+progress-paused = { $percent }%，已暂停
 failed = 失败
 complete = 完成
 compressing =
-    正在压缩 { $items } { $items ->
+    正在从“{ $from }”压缩 { $items } { $items ->
         [one] 项目
        *[other] 项目
-    } 从 "{ $from }" 到 "{ $to }" ({ $progress })...
+    }到“{ $to }”（{ $progress }）…
 compressed =
-    已压缩 { $items } { $items ->
+    已从“{ $from }”压缩 { $items } { $items ->
         [one] 项目
        *[other] 项目
-    } 从 "{ $from }" 到 "{ $to }"
+    }到“{ $to }”
 copy_noun = 复制
-creating = 正在创建 "{ $name }" 在 "{ $parent }"
-created = 已创建 "{ $name }" 在 "{ $parent }"
+creating = 正在“{ $parent }”里创建“{ $name }”
+created = 已在“{ $parent }”里创建“{ $name }”
 copying =
-    正在复制 { $items } { $items ->
+    正在从“{ $from }”复制 { $items } { $items ->
         [one] 项目
        *[other] 项目
-    } 从 "{ $from }" 到 "{ $to }" ({ $progress })...
+    }到“{ $to }”（{ $progress }）…
 copied =
-    已复制 { $items } { $items ->
+    已从“{ $from }”复制 { $items } { $items ->
         [one] 项目
        *[other] 项目
-    } 从 "{ $from }" 到 "{ $to }"
+    }到“{ $to }”
 deleting =
-    正在删除 { $items } { $items ->
+    正在从{ trash }删除 { $items } { $items ->
         [one] 项目
        *[other] 项目
-    } 从 { trash } ({ $progress })...
+    }（{ $progress }）…
 deleted =
-    已删除 { $items } { $items ->
+    已从{ trash }删除 { $items } { $items ->
         [one] 项目
        *[other] 项目
-    }从 { trash }
+    }
 emptying-trash = 正在清空{ trash }（{ $progress }）…
 emptied-trash = 已清空{ trash }
 extracting =
-    正在提取 { $items } { $items ->
+    正在从“{ $from }”提取{ $items } { $items ->
         [one] 项目
        *[other] 项目
-    } 从 "{ $from }" 到 "{ $to }" ({ $progress })...
+    }到“{ $to }”（{ $progress }）…
 extracted =
-    已提取 { $items } { $items ->
+    已从“{ $from }”提取 { $items } { $items ->
         [one] 项目
        *[other] 项目
-    } 从 "{ $from }" 到 "{ $to }"
+    }到“{ $to }”
 setting-executable-and-launching = 设置 "{ $name }" 为可执行文件并启动
-set-executable-and-launched = 设置 "{ $name }" 为可执行文件并启动
+set-executable-and-launched = 已设 "{ $name }" 为可执行文件并且启动
 setting-permissions = 正在设置 "{ $name }" 的权限为 { $mode }
 set-permissions = 设置 "{ $name }" 的权限为 { $mode }
 moving =
-    正在移动 { $items } { $items ->
+    正在从“{ $from }”移动 { $items } { $items ->
         [one] 项目
        *[other] 项目
-    } 从 "{ $from }" 到 "{ $to }" ({ $progress })...
+    }到“{ $to }”（{ $progress }）…
 moved =
-    已移动 { $items } { $items ->
+    已从“{ $from }”移动 { $items } { $items ->
         [one] 项目
        *[other] 项目
-    } 从 "{ $from }" 到 "{ $to }"
+    }到“{ $to }”
 permanently-deleting =
     正在永久删除 { $items } { $items ->
         [one] 项目
@@ -289,38 +297,38 @@ removing-from-recents =
        *[other] 项目
     }
 removed-from-recents =
-    已从 { recents } 中移除 { $items } { $items ->
+    已从{ recents }中移除 { $items } { $items ->
         [one] 项目
        *[other] 项目
     }
-renaming = 正在重命名 "{ $from }" 到 "{ $to }"
-renamed = 已重命名 "{ $from }" 到 "{ $to }"
+renaming = 正在将“{ $from }”重命名为“{ $to }”
+renamed = 已重命名"{ $from }"为"{ $to }"
 restoring =
-    正在还原 { $items } { $items ->
+    正在从{ trash }中还原 { $items } { $items ->
         [one] 项目
        *[other] 项目
-    } 从 { trash } ({ $progress })...
+    }（{ $progress }）…
 restored =
-    已还原 { $items } { $items ->
+    已从{ trash }中还原 { $items } { $items ->
         [one] 项目
        *[other] 项目
-    } 从 { trash }
+    }
 unknown-folder = 未知文件夹
 
 ## Open with
 
 menu-open-with = 打开方式...
-default-app = { $name } （默认）
+default-app = { $name }（默认）
 
 ## Show details
 
 show-details = 显示详情
-type = 文件类型: { $mime }
-items = 文件数: { $items }
-item-size = 文件大小: { $size }
-item-created = 创建于: { $created }
-item-modified = 修改于: { $modified }
-item-accessed = 访问于: { $accessed }
+type = 文件类型：{ $mime }
+items = 文件数：{ $items }
+item-size = 文件大小：{ $size }
+item-created = 创建于：{ $created }
+item-modified = 修改于：{ $modified }
+item-accessed = 访问于：{ $accessed }
 calculating = 计算中...
 
 ## Settings
@@ -338,9 +346,9 @@ light = 亮色模式
 
 ### Type to Search
 
-type-to-search = 搜索
+type-to-search = 输入即可搜索
 type-to-search-recursive = 搜索当前文件夹及其所有子文件夹
-type-to-search-enter-path = 输入目录或文件的路径
+type-to-search-enter-path = 输入文件夹或文件路径
 # Context menu
 add-to-sidebar = 加入侧边栏
 compress = 压缩
@@ -371,11 +379,11 @@ display-settings = 显示设置...
 ## File
 
 file = 文件
-new-tab = 新建标签页
+new-tab = 新建标签
 new-window = 新建窗口
 reload-folder = 刷新文件夹
 rename = 重命名...
-close-tab = 关闭标签页
+close-tab = 关闭标签
 quit = 退出
 
 ## Edit
@@ -388,7 +396,7 @@ select-all = 全选
 
 ## View
 
-zoom-in = 放大
+zoom-in = 增大
 default-size = 默认大小
 zoom-out = 缩小
 view = 视图
@@ -398,7 +406,7 @@ show-hidden-files = 显示隐藏文件
 list-directories-first = 优先列出目录
 gallery-preview = 图库预览
 menu-settings = 设置...
-menu-about = 关于 COSMIC 文件...
+menu-about = 关于 COSMIC 文件…
 
 ## Sort
 
@@ -411,4 +419,5 @@ sort-smallest-to-largest = 从小到大
 sort-largest-to-smallest = 从大到小
 repository = 仓库
 support = 支持
-progress-failed = { $percent }%, 失败
+progress-failed = { $percent }%，失败
+empty-trash-title = 确定要清空回收站？
