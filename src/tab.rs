@@ -1404,6 +1404,14 @@ impl EditLocation {
                     selected = 0;
                 }
                 self.selected = Some(selected);
+
+                // Automatically resolve if there is only one completion
+                if completions.len() == 1 {
+                    if let Some(resolved) = self.resolve() {
+                        self.location = resolved;
+                        self.selected = None;
+                    }
+                }
             }
         } else {
             self.selected = None;
