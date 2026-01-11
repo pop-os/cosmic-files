@@ -417,6 +417,7 @@ pub enum Message {
     PendingComplete(u64, OperationSelection),
     PendingDismiss,
     PendingError(u64, OperationError),
+    PendingResults(Vec<(u64, OperationSelection)>, Vec<(u64, OperationError)>),
     PendingPause(u64, bool),
     PendingPauseAll(bool),
     PermanentlyDelete(Option<Entity>),
@@ -530,6 +531,7 @@ pub enum DialogPage {
     },
     EmptyTrash,
     FailedOperation(u64),
+    FailedOperations(Vec<u64>),
     ExtractPassword {
         id: u64,
         password: String,
@@ -1275,6 +1277,158 @@ impl App {
             },
         ))
         .map(cosmic::Action::App)
+    }
+
+    /// Will join operations together into a single task that will return a single
+    /// Message::PendingResults message when all operations are complete.
+    fn join_operations(&mut self, operations: Vec<Operation>) -> Task<Message> {
+        Task::batch(
+            operations
+                .into_iter()
+                .map(|operation| self.operation(operation)),
+        )
+        .collect()
+        .map(|messages| {
+            let results = messages.into_iter().fold(
+                Message::PendingResults(Vec::new(), Vec::new()),
+                |mut acc, message| {
+                    if let Message::PendingResults(completed, errors) = &mut acc {
+                        match message {
+                            cosmic::Action::App(Message::PendingComplete(id, selection)) => {
+                                completed.push((id, selection));
+                            }
+                            cosmic::Action::App(Message::PendingError(id, err)) => {
+                                errors.push((id, err));
+                            }
+                            _ => {}
+                        }
+                    }
+                    acc
+                },
+            );
+            cosmic::Action::App(results)
+        })
+    }
+
+    fn handle_completed_operations(
+        &mut self,
+        completed: Vec<(u64, OperationSelection)>,
+    ) -> Task<Message> {
+        let mut commands = Vec::with_capacity(4 * completed.len());
+        let mut op_sel = OperationSelection::default();
+        for (id, op_sel_pending) in completed {
+            op_sel.ignored.extend(op_sel_pending.ignored);
+            op_sel.selected.extend(op_sel_pending.selected);
+            if let Some((op, _)) = self.pending_operations.remove(&id) {
+                // Show toast for some operations
+                if let Some(description) = op.toast() {
+                    if let Operation::Delete { ref paths } = op {
+                        let paths: Arc<[PathBuf]> = Arc::from(paths.as_slice());
+                        commands.push(
+                            self.toasts
+                                .push(
+                                    widget::toaster::Toast::new(description)
+                                        .action(fl!("undo"), move |tid| {
+                                            Message::UndoTrash(tid, paths.clone())
+                                        }),
+                                )
+                                .map(cosmic::Action::App),
+                        );
+                    } else {
+                        commands.push(
+                            self.toasts
+                                .push(widget::toaster::Toast::new(description))
+                                .map(cosmic::Action::App),
+                        );
+                    }
+                }
+
+                // If a favorite for a path has been renamed or moved, update it.
+                if let Operation::Rename { ref from, ref to } = op {
+                    if self.update_favorites([(from, to)].as_slice()) {
+                        commands.push(self.update_config());
+                    }
+                } else if let Operation::Move {
+                    ref paths, ref to, ..
+                } = op
+                {
+                    let path_changes: Box<[_]> = paths
+                        .iter()
+                        .filter_map(|from| from.file_name().map(|name| (from, to.join(name))))
+                        .collect();
+                    if self.update_favorites(&path_changes) {
+                        commands.push(self.update_config());
+                    }
+                }
+
+                if matches!(op, Operation::RemoveFromRecents { .. }) {
+                    commands.push(self.rescan_recents());
+                }
+
+                self.complete_operations.insert(id, op);
+            }
+        }
+        // Close progress notification if all relevant operations are finished
+        if !self
+            .pending_operations
+            .values()
+            .any(|(op, _)| op.show_progress_notification())
+        {
+            self.progress_operations.clear();
+        }
+        // Potentially show a notification
+        commands.push(self.update_notification());
+        // Rescan and select based on operation
+        commands.push(self.rescan_operation_selection(op_sel));
+        // Manually rescan any trash tabs after any operation is completed
+        commands.push(self.rescan_trash());
+
+        return Task::batch(commands);
+    }
+
+    fn handle_operation_errors(&mut self, errors: Vec<(u64, OperationError)>) -> Task<Message> {
+        let mut tasks = Vec::new();
+        let mut failed = Vec::new();
+        for (id, err) in errors.into_iter() {
+            if let Some((op, controller)) = self.pending_operations.remove(&id) {
+                // Only show dialog if not cancelled
+                if !controller.is_cancelled() {
+                    match err.kind {
+                        OperationErrorType::Generic(_) => failed.push(id),
+                        OperationErrorType::PasswordRequired => {
+                            tasks.push(self.dialog_pages.push_back(DialogPage::ExtractPassword {
+                                id,
+                                password: String::new(),
+                            }));
+                        }
+                    }
+                }
+
+                // Remove from progress
+                self.progress_operations.remove(&id);
+                self.failed_operations
+                    .insert(id, (op, controller, err.to_string()));
+            }
+        }
+        if !failed.is_empty() {
+            tasks.push(
+                self.dialog_pages
+                    .push_back(DialogPage::FailedOperations(failed)),
+            );
+            tasks.push(widget::text_input::focus(self.dialog_text_input.clone()));
+        }
+
+        // Close progress notification if all relevant operations are finished
+        if !self
+            .pending_operations
+            .values()
+            .any(|(op, _)| op.show_progress_notification())
+        {
+            self.progress_operations.clear();
+        }
+        // Manually rescan any trash tabs after any operation is completed
+        tasks.push(self.rescan_trash());
+        return Task::batch(tasks);
     }
 
     fn remove_window(&mut self, id: &window::Id) {
@@ -2964,6 +3118,9 @@ impl Application for App {
                         DialogPage::FailedOperation(id) => {
                             log::warn!("TODO: retry operation {id}");
                         }
+                        DialogPage::FailedOperations(_ids) => {
+                            log::warn!("TODO: retry operations");
+                        }
                         DialogPage::ExtractPassword { id, password } => {
                             let (operation, _, _err) = self.failed_operations.get(&id).unwrap();
                             let new_op = match &operation {
@@ -3873,106 +4030,19 @@ impl Application for App {
                 }
             }
             Message::PendingComplete(id, op_sel) => {
-                let mut commands = Vec::with_capacity(4);
-                if let Some((op, _)) = self.pending_operations.remove(&id) {
-                    // Show toast for some operations
-                    if let Some(description) = op.toast() {
-                        if let Operation::Delete { ref paths } = op {
-                            let paths: Arc<[PathBuf]> = Arc::from(paths.as_slice());
-                            commands.push(
-                                self.toasts
-                                    .push(
-                                        widget::toaster::Toast::new(description)
-                                            .action(fl!("undo"), move |tid| {
-                                                Message::UndoTrash(tid, paths.clone())
-                                            }),
-                                    )
-                                    .map(cosmic::Action::App),
-                            );
-                        } else {
-                            commands.push(
-                                self.toasts
-                                    .push(widget::toaster::Toast::new(description))
-                                    .map(cosmic::Action::App),
-                            );
-                        }
-                    }
-
-                    // If a favorite for a path has been renamed or moved, update it.
-                    if let Operation::Rename { ref from, ref to } = op {
-                        if self.update_favorites([(from, to)].as_slice()) {
-                            commands.push(self.update_config());
-                        }
-                    } else if let Operation::Move {
-                        ref paths, ref to, ..
-                    } = op
-                    {
-                        let path_changes: Box<[_]> = paths
-                            .iter()
-                            .filter_map(|from| from.file_name().map(|name| (from, to.join(name))))
-                            .collect();
-                        if self.update_favorites(&path_changes) {
-                            commands.push(self.update_config());
-                        }
-                    }
-
-                    if matches!(op, Operation::RemoveFromRecents { .. }) {
-                        commands.push(self.rescan_recents());
-                    }
-
-                    self.complete_operations.insert(id, op);
-                }
-                // Close progress notification if all relevant operations are finished
-                if !self
-                    .pending_operations
-                    .values()
-                    .any(|(op, _)| op.show_progress_notification())
-                {
-                    self.progress_operations.clear();
-                }
-                // Potentially show a notification
-                commands.push(self.update_notification());
-                // Rescan and select based on operation
-                commands.push(self.rescan_operation_selection(op_sel));
-                // Manually rescan any trash tabs after any operation is completed
-                commands.push(self.rescan_trash());
-
-                return Task::batch(commands);
+                return self.handle_completed_operations(vec![(id, op_sel)]);
             }
             Message::PendingDismiss => {
                 self.progress_operations.clear();
             }
             Message::PendingError(id, err) => {
-                let mut tasks = Vec::new();
-                if let Some((op, controller)) = self.pending_operations.remove(&id) {
-                    // Only show dialog if not cancelled
-                    if !controller.is_cancelled() {
-                        tasks.push(self.dialog_pages.push_back(match err.kind {
-                            OperationErrorType::Generic(_) => DialogPage::FailedOperation(id),
-                            OperationErrorType::PasswordRequired => DialogPage::ExtractPassword {
-                                id,
-                                password: String::new(),
-                            },
-                        }));
-                    }
-                    tasks.push(widget::text_input::focus(self.dialog_text_input.clone()));
-
-                    // Remove from progress
-                    self.progress_operations.remove(&id);
-                    self.failed_operations
-                        .insert(id, (op, controller, err.to_string()));
-                }
-                // Close progress notification if all relevant operations are finished
-                if !self
-                    .pending_operations
-                    .values()
-                    .any(|(op, _)| op.show_progress_notification())
-                {
-                    self.progress_operations.clear();
-                }
-                // Manually rescan any trash tabs after any operation is completed
-                tasks.push(self.rescan_trash());
-                return Task::batch(tasks);
+                return self.handle_operation_errors(vec![(id, err)]);
+            }
+            Message::PendingResults(completed, errors) => {
+                return Task::batch(vec![
+                    self.handle_completed_operations(completed),
+                    self.handle_operation_errors(errors),
+                ]);
             }
             Message::PendingPause(id, pause) => {
                 if let Some((_, controller)) = self.pending_operations.get(&id) {
@@ -4453,11 +4523,17 @@ impl Application for App {
                             commands.push(self.operation(Operation::SetPermissions { path, mode }));
                         }
                         tab::Command::SetMultiplePermissions(permissions) => {
-                            commands.push(Task::batch(permissions.into_iter().map(
-                                |(path, mode)| {
-                                    self.operation(Operation::SetPermissions { path, mode })
-                                },
-                            )));
+                            commands.push(
+                                self.join_operations(
+                                    permissions
+                                        .into_iter()
+                                        .map(|(path, mode)| Operation::SetPermissions {
+                                            path,
+                                            mode,
+                                        })
+                                        .collect(),
+                                ),
+                            );
                         }
                         tab::Command::WindowDrag => {
                             if let Some(window_id) = self.core.main_window_id() {
@@ -5415,6 +5491,25 @@ impl Application for App {
                 widget::dialog()
                     .title("Failed operation")
                     .body(format!("{operation:#?}\n{err}"))
+                    .icon(icon::from_name("dialog-error").size(64))
+                    //TODO: retry action
+                    .primary_action(
+                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                    )
+            }
+            DialogPage::FailedOperations(ids) => {
+                let errors: Vec<String> = ids
+                    .into_iter()
+                    .filter_map(|id| match self.failed_operations.get(id) {
+                        Some((operation, _, err)) => Some(format!("{operation:#?}\n{err}")),
+                        _ => None,
+                    })
+                    .collect();
+
+                //TODO: nice description of error
+                widget::dialog()
+                    .title("Failed operations")
+                    .body(errors.join("\n\n"))
                     .icon(icon::from_name("dialog-error").size(64))
                     //TODO: retry action
                     .primary_action(
