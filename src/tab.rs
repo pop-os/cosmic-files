@@ -1469,8 +1469,10 @@ impl Location {
             if let Ok(canonical) = fs::canonicalize(&path) {
                 path = canonical;
             }
-            // Add trailing slash if location is a path
-            path.push("");
+            // Add trailing slash if location is a directory
+            if path.is_dir() {
+                path.push("");
+            }
             self.with_path(path)
         } else {
             self.clone()
