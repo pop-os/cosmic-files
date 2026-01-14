@@ -64,7 +64,7 @@ use std::{
     hash::Hash,
     io::{BufRead, BufReader},
     os::unix::fs::MetadataExt,
-    path::{Path, PathBuf},
+    path::{self, Path, PathBuf},
     rc::Rc,
     sync::{Arc, LazyLock, RwLock, atomic},
     time::{Duration, Instant, SystemTime},
@@ -98,6 +98,7 @@ use uzers::{get_group_by_gid, get_user_by_uid};
 
 pub const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 pub const HOVER_DURATION: Duration = Duration::from_millis(1600);
+pub const TYPE_SELECT_TIMEOUT: Duration = Duration::from_millis(1000);
 //TODO: best limit for search items
 const MAX_SEARCH_LATENCY: Duration = Duration::from_millis(20);
 const MAX_SEARCH_RESULTS: usize = 200;
@@ -310,10 +311,19 @@ pub fn folder_icon_symbolic(path: &PathBuf, icon_size: u16) -> widget::icon::Han
     .handle()
 }
 
+//TODO: replace with Path::has_trailing_sep when stable
+fn has_trailing_sep(path: &Path) -> bool {
+    path.as_os_str()
+        .as_encoded_bytes()
+        .last()
+        .copied()
+        .is_some_and(|b| path::is_separator(b as char))
+}
+
 fn tab_complete(path: &Path) -> Result<Vec<(String, PathBuf)>, Box<dyn Error>> {
-    let parent = if path.exists() {
-        // Do not show completion if already on an existing path
-        return Ok(Vec::new());
+    let parent = if has_trailing_sep(path) && path.is_dir() {
+        // Show completions inside existing child directory instead of parent
+        path
     } else {
         path.parent()
             .ok_or_else(|| format!("path has no parent {}", path.display()))?
@@ -1374,7 +1384,7 @@ impl EditLocation {
             };
             let completions = self.completions.as_ref()?;
             let completion = completions.get(selected)?;
-            Some(self.location.with_path(completion.1.clone()))
+            Some(self.location.with_path(completion.1.clone()).normalize())
         }
     }
 
@@ -1394,6 +1404,14 @@ impl EditLocation {
                     selected = 0;
                 }
                 self.selected = Some(selected);
+
+                // Automatically resolve if there is only one completion
+                if completions.len() == 1 {
+                    if let Some(resolved) = self.resolve() {
+                        self.location = resolved;
+                        self.selected = None;
+                    }
+                }
             }
         } else {
             self.selected = None;
@@ -1447,8 +1465,14 @@ impl Location {
                 self.clone()
             }
         } else if let Some(mut path) = self.path_opt().cloned() {
-            // Add trailing slash if location is a path
-            path.push("");
+            // Canonicalize path, if possible
+            if let Ok(canonical) = fs::canonicalize(&path) {
+                path = canonical;
+            }
+            // Add trailing slash if location is a directory
+            if path.is_dir() {
+                path.push("");
+            }
             self.with_path(path)
         } else {
             self.clone()
@@ -1570,7 +1594,7 @@ impl Location {
     pub fn expand_tilde(path: PathBuf) -> PathBuf {
         let mut components = path.components();
         match components.next() {
-            Some(std::path::Component::Normal(os_str)) if os_str == "~" => {
+            Some(path::Component::Normal(os_str)) if os_str == "~" => {
                 if let Some(home) = dirs::home_dir() {
                     home.join(components.as_path())
                 } else {
@@ -1641,6 +1665,7 @@ pub enum Message {
     EditLocationComplete(usize),
     EditLocationEnable,
     EditLocationSubmit,
+    EditLocationTab,
     OpenInNewTab(PathBuf),
     EmptyTrash,
     #[cfg(feature = "desktop")]
@@ -2568,6 +2593,7 @@ pub struct Tab {
     pub mode: Mode,
     pub scroll_opt: Option<AbsoluteOffset>,
     pub size_opt: Cell<Option<Size>>,
+    pub content_height_opt: Cell<Option<f32>>,
     pub viewport_opt: Option<Rectangle>,
     pub item_view_size_opt: Cell<Option<Size>>,
     pub edit_location: Option<EditLocation>,
@@ -2689,6 +2715,7 @@ impl Tab {
             mode: Mode::App,
             scroll_opt: None,
             size_opt: Cell::new(None),
+            content_height_opt: Cell::new(None),
             viewport_opt: None,
             item_view_size_opt: Cell::new(None),
             edit_location: None,
@@ -2821,6 +2848,30 @@ impl Tab {
         }
     }
 
+    /// Selects the first item whose name starts with the given prefix (case-insensitive).
+    /// Returns true if an item was selected.
+    pub fn select_by_prefix(&mut self, prefix: &str) -> bool {
+        let prefix_lower = prefix.to_lowercase();
+        self.select_focus = None;
+
+        if let Some(ref mut items) = self.items_opt {
+            // First, deselect all items
+            for item in items.iter_mut() {
+                item.selected = false;
+            }
+
+            // Find first matching item
+            for (i, item) in items.iter_mut().enumerate() {
+                if item.name.to_lowercase().starts_with(&prefix_lower) {
+                    item.selected = true;
+                    self.select_focus = Some(i);
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     pub fn select_paths(&mut self, paths: Vec<PathBuf>) {
         self.select_focus = None;
         if let Some(ref mut items) = self.items_opt {
@@ -2917,7 +2968,7 @@ impl Tab {
         item.pos_opt.get()
     }
 
-    fn select_focus_scroll(&mut self) -> Option<AbsoluteOffset> {
+    pub(crate) fn select_focus_scroll(&mut self) -> Option<AbsoluteOffset> {
         let items = self.items_opt.as_ref()?;
         let item = items.get(self.select_focus?)?;
         let rect = item.rect_opt.get()?;
@@ -3463,8 +3514,27 @@ impl Tab {
                 self.edit_location = Some(self.location.clone().into());
             }
             Message::EditLocationSubmit => {
-                if let Some(edit_location) = self.edit_location.take() {
+                if let Some(mut edit_location) = self.edit_location.take() {
+                    // Select first completion if current location does not exist
+                    if edit_location.selected.is_none()
+                        && edit_location
+                            .completions
+                            .as_ref()
+                            .map_or(false, |completions| !completions.is_empty())
+                        && edit_location
+                            .location
+                            .path_opt()
+                            .map_or(false, |path| !path.exists())
+                    {
+                        edit_location.selected = Some(0);
+                    }
+
                     cd = edit_location.resolve();
+                }
+            }
+            Message::EditLocationTab => {
+                if let Some(edit_location) = &mut self.edit_location {
+                    edit_location.select(!modifiers.contains(Modifiers::SHIFT));
                 }
             }
             Message::OpenInNewTab(path) => {
@@ -4168,6 +4238,7 @@ impl Tab {
 
         // Change directory if requested
         if let Some(mut location) = cd {
+            location = location.normalize();
             if matches!(self.mode, Mode::Desktop) {
                 match location {
                     Location::Path(path) => {
@@ -4710,6 +4781,8 @@ impl Tab {
                             ))
                         })
                         .on_submit(|_| Message::EditLocationSubmit)
+                        .on_tab(Message::EditLocationTab)
+                        .on_unfocus(Message::EditLocation(None))
                         .line_height(1.0),
                 );
             }
@@ -5007,10 +5080,17 @@ impl Tab {
 
         //TODO: move to function
         let visible_rect = {
-            let point = match self.scroll_opt {
-                Some(offset) => Point::new(0.0, offset.y),
-                None => Point::new(0.0, 0.0),
-            };
+            // Use cached content height to clamp scroll offset after resize
+            let max_scroll_y = self
+                .content_height_opt
+                .get()
+                .map(|ch| (ch - height as f32).max(0.0))
+                .unwrap_or(f32::MAX);
+            let scroll_y = self
+                .scroll_opt
+                .map(|o| o.y.min(max_scroll_y).max(0.0))
+                .unwrap_or(0.0);
+            let point = Point::new(0.0, scroll_y);
             let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
             Rectangle::new(point, size)
         };
@@ -5191,6 +5271,9 @@ impl Tab {
                     }
                 }
 
+                // Cache content height for scroll clamping on next frame
+                self.content_height_opt.set(Some(max_bottom as f32));
+
                 let top_deduct = 7 * (space_xxs as usize);
 
                 self.item_view_size_opt
@@ -5322,10 +5405,17 @@ impl Tab {
 
         //TODO: move to function
         let visible_rect = {
-            let point = match self.scroll_opt {
-                Some(offset) => Point::new(0.0, offset.y),
-                None => Point::new(0.0, 0.0),
-            };
+            // Use cached content height to clamp scroll offset after resize
+            let max_scroll_y = self
+                .content_height_opt
+                .get()
+                .map(|ch| (ch - size.height).max(0.0))
+                .unwrap_or(f32::MAX);
+            let scroll_y = self
+                .scroll_opt
+                .map(|o| o.y.min(max_scroll_y).max(0.0))
+                .unwrap_or(0.0);
+            let point = Point::new(0.0, scroll_y);
             let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
             Rectangle::new(point, size)
         };
@@ -5633,6 +5723,9 @@ impl Tab {
             if count == 0 {
                 return (None, self.empty_view(hidden > 0), false);
             }
+
+            // Cache content height for scroll clamping on next frame
+            self.content_height_opt.set(Some(y));
         }
         //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
         {

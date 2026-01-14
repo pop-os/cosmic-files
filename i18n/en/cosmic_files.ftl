@@ -297,6 +297,7 @@ light = Light
 type-to-search = Type to search
 type-to-search-recursive = Searches the current folder and all subfolders
 type-to-search-enter-path = Enters the path to the directory or file
+type-to-search-select = Selects the first matching file or folder
 
 # Context menu
 add-to-sidebar = Add to sidebar

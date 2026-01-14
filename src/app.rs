@@ -737,6 +737,8 @@ pub struct App {
     windows: FxHashMap<window::Id, Window>,
     nav_dnd_hover: Option<(Location, Instant)>,
     tab_dnd_hover: Option<(Entity, Instant)>,
+    type_select_prefix: String,
+    type_select_last_key: Option<Instant>,
     nav_drag_id: DragId,
     tab_drag_id: DragId,
     auto_scroll_speed: Option<i16>,
@@ -1989,6 +1991,12 @@ impl App {
                     Some(self.config.type_to_search),
                     Message::SetTypeToSearch,
                 ))
+                .add(widget::radio(
+                    widget::text::body(fl!("type-to-search-select")),
+                    TypeToSearch::SelectByPrefix,
+                    Some(self.config.type_to_search),
+                    Message::SetTypeToSearch,
+                ))
                 .into(),
             widget::settings::section()
                 .title(fl!("other"))
@@ -2217,6 +2225,8 @@ impl Application for App {
             windows: FxHashMap::default(),
             nav_dnd_hover: None,
             tab_dnd_hover: None,
+            type_select_prefix: String::new(),
+            type_select_last_key: None,
             nav_drag_id: DragId::new(),
             tab_drag_id: DragId::new(),
             auto_scroll_speed: None,
@@ -3123,6 +3133,28 @@ impl Application for App {
                                         }
                                     }
                                 }
+                                TypeToSearch::SelectByPrefix => {
+                                    // Reset buffer if timeout elapsed
+                                    if let Some(last_key) = self.type_select_last_key {
+                                        if last_key.elapsed() >= tab::TYPE_SELECT_TIMEOUT {
+                                            self.type_select_prefix.clear();
+                                        }
+                                    }
+
+                                    // Accumulate character and select
+                                    self.type_select_prefix.push_str(&text.to_lowercase());
+                                    self.type_select_last_key = Some(Instant::now());
+
+                                    if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                                        tab.select_by_prefix(&self.type_select_prefix);
+                                        if let Some(offset) = tab.select_focus_scroll() {
+                                            return scrollable::scroll_to(
+                                                tab.scrollable_id.clone(),
+                                                offset,
+                                            );
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -3753,7 +3785,10 @@ impl Application for App {
                                 id,
                                 Window::new(WindowKind::Preview(entity_opt, preview_kind)),
                             );
-                            return command.map(|_id| cosmic::action::none());
+                            return Task::batch([
+                                self.update_desktop(), // Force re-calculating of directory sizes
+                                command.map(|_id| cosmic::action::none()),
+                            ]);
                         }
                     }
                 }
@@ -4326,6 +4361,10 @@ impl Application for App {
             Message::TabView(entity_opt, view) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                    if matches!(tab.mode, tab::Mode::Desktop) {
+                        return Task::none();
+                    }
+
                     tab.config.view = view;
                 }
                 let mut config = self.config.tab;
@@ -6525,18 +6564,39 @@ impl Application for App {
             }
         }
 
-        let mut selected_preview = None;
-        if self.core.window.show_context {
-            if let ContextPage::Preview(entity_opt, PreviewKind::Selected) = self.context_page {
-                selected_preview = Some(entity_opt.unwrap_or_else(|| self.tab_model.active()));
+        let mut selected_previews = Vec::new();
+        match self.mode {
+            Mode::App => {
+                if self.core.window.show_context {
+                    if let ContextPage::Preview(entity_opt, PreviewKind::Selected) =
+                        self.context_page
+                    {
+                        selected_previews
+                            .push(Some(entity_opt.unwrap_or_else(|| self.tab_model.active())));
+                    }
+                }
+            }
+            Mode::Desktop => {
+                for window_kind in self.windows.iter().map(|(_, window)| &window.kind) {
+                    if let WindowKind::Preview(entity_opt, _) = window_kind {
+                        selected_previews
+                            .push(Some(entity_opt.unwrap_or_else(|| self.tab_model.active())));
+                    }
+                }
             }
         }
+
         subscriptions.extend(self.tab_model.iter().filter_map(|entity| {
             let tab = self.tab_model.data::<Tab>(entity)?;
             Some(
-                tab.subscription(selected_preview == Some(entity))
-                    .with(entity)
-                    .map(|(entity, tab_msg)| Message::TabMessage(Some(entity), tab_msg)),
+                tab.subscription(
+                    selected_previews
+                        .iter()
+                        .find(|preview| preview.as_ref() == Some(entity).as_ref())
+                        .is_some(),
+                )
+                .with(entity)
+                .map(|(entity, tab_msg)| Message::TabMessage(Some(entity), tab_msg)),
             )
         }));
 
