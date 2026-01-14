@@ -411,8 +411,6 @@ impl Op {
                         }
                     }
                 }
-
-                to_file.sync_all().await?;
             }
             OpKind::Move { cross_device_copy } => {
                 // Remove `to` if overwriting and it is an existing file
