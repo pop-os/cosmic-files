@@ -1,6 +1,7 @@
 use compio::BufResult;
 use compio::buf::{IntoInner, IoBuf};
 use compio::io::{AsyncReadAt, AsyncWriteAt};
+use futures::{StreamExt, stream};
 use std::future::Future;
 use std::pin::Pin;
 use std::time::Instant;
@@ -57,6 +58,8 @@ impl Context {
     ) -> Result<bool, OperationError> {
         let mut ops = Vec::new();
         let mut cleanup_ops = Vec::new();
+        let mut written_files = Vec::new();
+        let mut target_dirs = std::collections::HashSet::new();
         for (from_parent, to_parent) in from_to_pairs {
             self.controller
                 .check()
@@ -141,6 +144,9 @@ impl Context {
                         cleanup_ops.push(cleanup_op);
                     }
                 }
+                if let Some(parent) = op.to.parent() {
+                    target_dirs.insert(parent.to_path_buf());
+                }
                 ops.push(op);
             }
 
@@ -177,16 +183,41 @@ impl Context {
                     &self.controller,
                 )
             })? {
+                if matches!(
+                    op.kind,
+                    OpKind::Copy
+                        | OpKind::Move {
+                            cross_device_copy: true
+                        }
+                ) {
+                    written_files.push(op.to.clone());
+                }
                 // The from path is ignored in the operation selection if it is a top level item
                 if self.op_sel.ignored.contains(&op.from) {
                     // So add the to path to the selection
-                    self.op_sel.selected.push(op.to.clone());
+                    self.op_sel.selected.push(op.to);
                 }
             } else {
                 // Cancelled
                 return Ok(false);
             }
         }
+
+        // Sync files to disk
+        let file_stream = stream::iter(written_files.into_iter().map(|path| async move {
+            if let Ok(file) = compio::fs::OpenOptions::new().write(true).open(&path).await {
+                let _ = file.sync_all().await;
+            }
+        }));
+        file_stream.buffer_unordered(32).collect::<Vec<_>>().await;
+
+        // Sync directories to disk
+        let dir_stream = stream::iter(target_dirs.into_iter().map(|path| async move {
+            if let Ok(dir) = compio::fs::OpenOptions::new().read(true).open(&path).await {
+                let _ = dir.sync_all().await;
+            }
+        }));
+        dir_stream.buffer_unordered(16).collect::<Vec<_>>().await;
 
         Ok(true)
     }
@@ -411,8 +442,6 @@ impl Op {
                         }
                     }
                 }
-
-                to_file.sync_all().await?;
             }
             OpKind::Move { cross_device_copy } => {
                 // Remove `to` if overwriting and it is an existing file
