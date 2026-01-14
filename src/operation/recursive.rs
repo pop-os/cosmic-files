@@ -384,6 +384,34 @@ impl Op {
                     buf_in = buf_out;
                 }
 
+                let mut times = fs::FileTimes::new();
+                {
+                    use std::os::unix::prelude::MetadataExt;
+                    log::info!("{}", metadata.mtime());
+                }
+                if let Ok(time) = dbg!(metadata.modified()) {
+                    times = times.set_modified(time);
+                }
+                if let Ok(time) = dbg!(metadata.accessed()) {
+                    times = times.set_accessed(time);
+                }
+                //TODO: upstream set_times implementation to compio?
+                {
+                    use compio::driver::{ToSharedFd, op::AsyncifyFd};
+                    let op =
+                        AsyncifyFd::new(to_file.to_shared_fd(), move |file: &std::fs::File| {
+                            BufResult(file.set_times(times).map(|_| 0), ())
+                        });
+                    match compio::runtime::submit(op).await.0.map(|_| ()) {
+                        Ok(()) => {
+                            log::info!("set times for {} to {:?}", self.to.display(), times);
+                        }
+                        Err(err) => {
+                            log::warn!("failed to set times for {}: {}", self.to.display(), err);
+                        }
+                    }
+                }
+
                 to_file.sync_all().await?;
             }
             OpKind::Move { cross_device_copy } => {

@@ -65,9 +65,11 @@ num_cpus = "1.17.0"
 
 # Completion-based IO runtime to enable io_uring / IOCP file IO support.
 [dependencies.compio]
-version = "0.17.0"
+# Patched to fix mtime: https://github.com/compio-rs/compio/pull/625
+# version = "0.17.0"
+git = "https://github.com/jackpot51/compio.git"
 default-features = false
-features = ["io", "macros", "polling", "runtime"]
+features = ["fs", "io", "macros", "polling", "runtime"]
 
 [dependencies.io-uring]
 version = "0.7.11"
