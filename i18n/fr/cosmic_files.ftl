@@ -400,7 +400,7 @@ sort-newest-first = Le plus récent en premier
 sort-oldest-first = Le plus ancien en premier
 sort-smallest-to-largest = Du plus petit au plus grand
 sort-largest-to-smallest = Du plus grand au plus petit
-reload-folder = Recharger le dossier
+reload-folder = Actualiser le dossier
 related-apps = Applications associées
 removing-from-recents =
     Suppression de { $items } { $items ->
