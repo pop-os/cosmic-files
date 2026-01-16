@@ -162,3 +162,162 @@ impl TryFrom<(Vec<u8>, String)> for ClipboardPaste {
         Ok(Self { kind, paths })
     }
 }
+
+/// Image data from clipboard for pasting as a new file.
+#[derive(Clone, Debug)]
+pub struct ClipboardPasteImage {
+    pub data: Vec<u8>,
+    pub mime_type: String,
+}
+
+impl AllowedMimeTypes for ClipboardPasteImage {
+    fn allowed() -> Cow<'static, [String]> {
+        Cow::from(vec![
+            "image/png".to_string(),
+            "image/jpeg".to_string(),
+            "image/gif".to_string(),
+            "image/bmp".to_string(),
+            "image/webp".to_string(),
+            "image/tiff".to_string(),
+            "image/x-tiff".to_string(),
+            "image/svg+xml".to_string(),
+            "image/x-icon".to_string(),
+            "image/vnd.microsoft.icon".to_string(),
+            "image/x-bmp".to_string(),
+            "image/x-ms-bmp".to_string(),
+            "image/pjpeg".to_string(),
+            "image/x-png".to_string(),
+            "image/avif".to_string(),
+            "image/heic".to_string(),
+            "image/heif".to_string(),
+            "image/jxl".to_string(),
+        ])
+    }
+}
+
+impl TryFrom<(Vec<u8>, String)> for ClipboardPasteImage {
+    type Error = Box<dyn Error>;
+    fn try_from(value: (Vec<u8>, String)) -> Result<Self, Self::Error> {
+        let (data, mime) = value;
+        if data.is_empty() {
+            return Err("Empty image data".into());
+        }
+        Ok(Self {
+            data,
+            mime_type: mime,
+        })
+    }
+}
+
+impl ClipboardPasteImage {
+    /// Get the file extension for the image based on MIME type.
+    pub fn extension(&self) -> &'static str {
+        match self.mime_type.as_str() {
+            "image/png" | "image/x-png" => "png",
+            "image/jpeg" | "image/pjpeg" => "jpg",
+            "image/gif" => "gif",
+            "image/bmp" | "image/x-bmp" | "image/x-ms-bmp" => "bmp",
+            "image/webp" => "webp",
+            "image/tiff" | "image/x-tiff" => "tiff",
+            "image/svg+xml" => "svg",
+            "image/x-icon" | "image/vnd.microsoft.icon" => "ico",
+            "image/avif" => "avif",
+            "image/heic" => "heic",
+            "image/heif" => "heif",
+            "image/jxl" => "jxl",
+            _ => "png", // Default to png
+        }
+    }
+}
+
+/// Video data from clipboard for pasting as a new file.
+#[derive(Clone, Debug)]
+pub struct ClipboardPasteVideo {
+    pub data: Vec<u8>,
+    pub mime_type: String,
+}
+
+impl AllowedMimeTypes for ClipboardPasteVideo {
+    fn allowed() -> Cow<'static, [String]> {
+        Cow::from(vec![
+            "video/mp4".to_string(),
+            "video/webm".to_string(),
+            "video/ogg".to_string(),
+            "video/mpeg".to_string(),
+            "video/quicktime".to_string(),
+            "video/x-msvideo".to_string(),
+            "video/x-matroska".to_string(),
+            "video/x-flv".to_string(),
+            "video/3gpp".to_string(),
+            "video/3gpp2".to_string(),
+            "video/x-ms-wmv".to_string(),
+            "video/avi".to_string(),
+        ])
+    }
+}
+
+impl TryFrom<(Vec<u8>, String)> for ClipboardPasteVideo {
+    type Error = Box<dyn Error>;
+    fn try_from(value: (Vec<u8>, String)) -> Result<Self, Self::Error> {
+        let (data, mime) = value;
+        if data.is_empty() {
+            return Err("Empty video data".into());
+        }
+        Ok(Self {
+            data,
+            mime_type: mime,
+        })
+    }
+}
+
+impl ClipboardPasteVideo {
+    /// Get the file extension for the video based on MIME type.
+    pub fn extension(&self) -> &'static str {
+        match self.mime_type.as_str() {
+            "video/mp4" => "mp4",
+            "video/webm" => "webm",
+            "video/ogg" => "ogv",
+            "video/mpeg" => "mpeg",
+            "video/quicktime" => "mov",
+            "video/x-msvideo" | "video/avi" => "avi",
+            "video/x-matroska" => "mkv",
+            "video/x-flv" => "flv",
+            "video/3gpp" => "3gp",
+            "video/3gpp2" => "3g2",
+            "video/x-ms-wmv" => "wmv",
+            _ => "mp4", // Default to mp4
+        }
+    }
+}
+
+/// Text data from clipboard for pasting as a new text file.
+#[derive(Clone, Debug)]
+pub struct ClipboardPasteText {
+    pub data: String,
+}
+
+impl AllowedMimeTypes for ClipboardPasteText {
+    fn allowed() -> Cow<'static, [String]> {
+        Cow::from(vec![
+            "text/plain".to_string(),
+            "text/plain;charset=utf-8".to_string(),
+            "UTF8_STRING".to_string(),
+            "STRING".to_string(),
+            "TEXT".to_string(),
+        ])
+    }
+}
+
+impl TryFrom<(Vec<u8>, String)> for ClipboardPasteText {
+    type Error = Box<dyn Error>;
+    fn try_from(value: (Vec<u8>, String)) -> Result<Self, Self::Error> {
+        let (data, _mime) = value;
+        if data.is_empty() {
+            return Err("Empty text data".into());
+        }
+        let text = str::from_utf8(&data)?;
+        Ok(Self {
+            data: text.to_string(),
+        })
+    }
+}
