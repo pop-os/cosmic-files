@@ -39,7 +39,7 @@ use cosmic::{
         dnd_destination::DragId,
         horizontal_space, icon,
         menu::{action::MenuAction, key_bind::KeyBind},
-        segmented_button::{self, Entity},
+        segmented_button::{self, Entity, ReorderEvent},
         vertical_space,
     },
 };
@@ -396,6 +396,7 @@ pub enum Message {
     PendingPauseAll(bool),
     PermanentlyDelete(Option<Entity>),
     Preview(Option<Entity>),
+    ReorderTab(ReorderEvent),
     RescanRecents,
     RescanTrash,
     RemoveFromRecents(Option<Entity>),
@@ -3937,7 +3938,6 @@ impl Application for App {
                 config.show_hidden = !config.show_hidden;
                 return self.update(Message::TabConfig(config));
             }
-
             Message::TabMessage(entity_opt, tab_message) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
 
@@ -4800,6 +4800,13 @@ impl Application for App {
             }
             Message::NetworkDriveOpenTabAfterMount { location } => {
                 return self.open_tab(location, false, None);
+            }
+            Message::ReorderTab(ReorderEvent {
+                dragged,
+                target,
+                position,
+            }) => {
+                _ = self.tab_model.reorder(dragged, target, position);
             }
         }
 
@@ -5790,6 +5797,11 @@ impl Application for App {
                     widget::tab_bar::horizontal(&self.tab_model)
                         .button_height(32)
                         .button_spacing(space_xxs)
+                        .enable_tab_drag(|_entity: Entity| {
+                            Some((String::from("text/uri-list"), vec![]))
+                        })
+                        .on_reorder(move |event| Message::ReorderTab(event))
+                        .tab_drag_threshold(25.)
                         .on_activate(Message::TabActivate)
                         .on_close(|entity| Message::TabClose(Some(entity)))
                         .on_dnd_enter(|entity, _| Message::DndEnterTab(entity))
