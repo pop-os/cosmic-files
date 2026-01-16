@@ -163,15 +163,15 @@ other-apps = Ostatní aplikace
 related-apps = Související aplikace
 permanently-delete-question = Trvale smazat?
 delete = Smazat
-permanently-delete-warning = { $target } bude trvale smazán. Tuto operaci nelze vrátit.
+permanently-delete-warning = Dojde k trvalému smazání { $target }. Tuto akci nelze vrátit.
 replace-warning-operation = Chcete soubor nahradit? Nahrazení přepíše veškerý jeho obsah.
 original-file = Původní soubor
 replace-with = Nahradit za
 keep-both = Ponechat oba
 skip = Přeskočit
-set-executable-and-launch = Umožnit spouštění a spustit
-set-executable-and-launch-description = Chcete umožnit spouštění pro „{ $name }“ a následně ho spustit?
-set-and-launch = Nastavit a spustit
+set-executable-and-launch = Povolit spouštění a spustit
+set-executable-and-launch-description = Chcete povolit spouštění souboru „{ $name }“ a následně ho spustit?
+set-and-launch = Povolit a spustit
 open-with = Otevřít pomocí
 other = Ostatní
 none = Žádný
@@ -289,8 +289,8 @@ compressed =
         [few] položky
        *[other] položek
     } z „{ $from }“ do „{ $to }“
-creating = Vytváření „{ $name }“ v „{ $parent }“
-created = Vytvořen „{ $name }“ v „{ $parent }“
+creating = Vytváření položky „{ $name }“ v „{ $parent }“
+created = Vytvořena položka „{ $name }“ v „{ $parent }“
 copying =
     Kopírování { $items } { $items ->
         [one] položky
@@ -316,12 +316,7 @@ favorite-path-error-description =
     „{ $path }“ buď neexistuje nebo nemáte dostatečná práva pro otevření
 
     Chcete položku odstranit z postranního panelu?
-selected-items =
-    { $items } { $items ->
-        [one] vybranou položku
-        [few] vybrané položky
-       *[other] vybraných položek
-    }
+selected-items = { $items } vybraných položek
 read-execute = Čtení a spouštění
 read-write-execute = Čtení, zápis a spouštění
 read-write = Čtení a zápis
@@ -336,10 +331,10 @@ extracted =
         [few] položky
        *[other] položek
     } z „{ $from }“ do „{ $to }“
-setting-executable-and-launching = Nastavování „{ $name }“ jako spustitelného souboru a spouštění
-set-executable-and-launched = „{ $name }“ nastaven jako spustitelný soubor a spuštěn
-setting-permissions = Nastavování práv pro „{ $name }“ na { $mode }
-set-permissions = Práva pro „{ $name }“ nastavena na { $mode }
+setting-executable-and-launching = Nastavování souboru „{ $name }“ jako spustitelného a spouštění
+set-executable-and-launched = Soubor „{ $name }“ nastaven jako spustitelný a spuštěn
+setting-permissions = Nastavování práv položky „{ $name }“ na { $mode }
+set-permissions = Práva položky „{ $name }“ nastavena na { $mode }
 moving =
     Přesouvání { $items } { $items ->
         [one] položky
@@ -407,3 +402,4 @@ gallery-preview = Náhled galerie
 sort = Řazení
 sort-a-z = A-Z
 empty-trash-title = Vysypat koš?
+type-to-search-select = Vybere první shodující se soubor nebo složku
