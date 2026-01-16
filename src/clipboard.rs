@@ -211,21 +211,22 @@ impl TryFrom<(Vec<u8>, String)> for ClipboardPasteImage {
 
 impl ClipboardPasteImage {
     /// Get the file extension for the image based on MIME type.
-    pub fn extension(&self) -> &'static str {
+    /// Returns None if the MIME type is not recognized.
+    pub fn extension(&self) -> Option<&'static str> {
         match self.mime_type.as_str() {
-            "image/png" | "image/x-png" => "png",
-            "image/jpeg" | "image/pjpeg" => "jpg",
-            "image/gif" => "gif",
-            "image/bmp" | "image/x-bmp" | "image/x-ms-bmp" => "bmp",
-            "image/webp" => "webp",
-            "image/tiff" | "image/x-tiff" => "tiff",
-            "image/svg+xml" => "svg",
-            "image/x-icon" | "image/vnd.microsoft.icon" => "ico",
-            "image/avif" => "avif",
-            "image/heic" => "heic",
-            "image/heif" => "heif",
-            "image/jxl" => "jxl",
-            _ => "png", // Default to png
+            "image/png" | "image/x-png" => Some("png"),
+            "image/jpeg" | "image/pjpeg" => Some("jpg"),
+            "image/gif" => Some("gif"),
+            "image/bmp" | "image/x-bmp" | "image/x-ms-bmp" => Some("bmp"),
+            "image/webp" => Some("webp"),
+            "image/tiff" | "image/x-tiff" => Some("tiff"),
+            "image/svg+xml" => Some("svg"),
+            "image/x-icon" | "image/vnd.microsoft.icon" => Some("ico"),
+            "image/avif" => Some("avif"),
+            "image/heic" => Some("heic"),
+            "image/heif" => Some("heif"),
+            "image/jxl" => Some("jxl"),
+            _ => None,
         }
     }
 }
@@ -272,20 +273,21 @@ impl TryFrom<(Vec<u8>, String)> for ClipboardPasteVideo {
 
 impl ClipboardPasteVideo {
     /// Get the file extension for the video based on MIME type.
-    pub fn extension(&self) -> &'static str {
+    /// Returns None if the MIME type is not recognized.
+    pub fn extension(&self) -> Option<&'static str> {
         match self.mime_type.as_str() {
-            "video/mp4" => "mp4",
-            "video/webm" => "webm",
-            "video/ogg" => "ogv",
-            "video/mpeg" => "mpeg",
-            "video/quicktime" => "mov",
-            "video/x-msvideo" | "video/avi" => "avi",
-            "video/x-matroska" => "mkv",
-            "video/x-flv" => "flv",
-            "video/3gpp" => "3gp",
-            "video/3gpp2" => "3g2",
-            "video/x-ms-wmv" => "wmv",
-            _ => "mp4", // Default to mp4
+            "video/mp4" => Some("mp4"),
+            "video/webm" => Some("webm"),
+            "video/ogg" => Some("ogv"),
+            "video/mpeg" => Some("mpeg"),
+            "video/quicktime" => Some("mov"),
+            "video/x-msvideo" | "video/avi" => Some("avi"),
+            "video/x-matroska" => Some("mkv"),
+            "video/x-flv" => Some("flv"),
+            "video/3gpp" => Some("3gp"),
+            "video/3gpp2" => Some("3g2"),
+            "video/x-ms-wmv" => Some("wmv"),
+            _ => None,
         }
     }
 }
