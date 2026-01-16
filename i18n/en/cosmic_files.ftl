@@ -281,6 +281,9 @@ item-created = Created: {$created}
 item-modified = Modified: {$modified}
 item-accessed = Accessed: {$accessed}
 calculating = Calculating...
+checksums = Checksums
+calculate-checksums = Calculate checksums
+error = Error
 
 ## Settings
 settings = Settings
