@@ -25,9 +25,12 @@ use icu::datetime::{DateTimeFormatter, DateTimeFormatterPreferences, fieldsets};
 use icu::locale::preferences::extensions::unicode::keywords::HourCycle;
 use image::{DynamicImage, ImageReader};
 use jiff_icu::ConvertFrom;
+use md5::Md5;
 use mime_guess::{Mime, mime};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
+use sha1::Sha1;
+use sha2::{Digest, Sha256, Sha512};
 use std::borrow::Cow;
 use std::cell::Cell;
 use std::cmp::{Ordering, Reverse};
@@ -731,6 +734,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
         overlaps_drag_rect: false,
         dir_size,
         cut: false,
+        checksums: ChecksumState::default(),
     }
 }
 
@@ -862,6 +866,7 @@ pub fn item_from_entry(
         overlaps_drag_rect: false,
         dir_size,
         cut: false,
+        checksums: ChecksumState::default(),
     }
 }
 
@@ -918,6 +923,7 @@ pub fn item_from_trash_entry(
         overlaps_drag_rect: false,
         dir_size: DirSize::NotDirectory,
         cut: false,
+        checksums: ChecksumState::default(),
     }
 }
 
@@ -1341,6 +1347,7 @@ pub fn scan_desktop(
             overlaps_drag_rect: false,
             dir_size: DirSize::NotDirectory,
             cut: false,
+            checksums: ChecksumState::default(),
         });
     }
 
@@ -1762,6 +1769,8 @@ pub enum Message {
     HighlightDeactivate(usize),
     HighlightActivate(usize),
     DirectorySize(PathBuf, DirSize),
+    Checksums(PathBuf, ChecksumState),
+    CalculateChecksums(PathBuf),
     ImageDecoded(PathBuf, u32, u32, Vec<u8>, Option<(u32, u32)>, u64), // path, width, height, pixels, display_size, generation
 }
 
@@ -1786,6 +1795,25 @@ pub enum DirSize {
     Calculating(Controller),
     Directory(u64),
     NotDirectory,
+    Error(String),
+}
+
+/// Computed file checksums.
+#[derive(Clone, Debug, Default)]
+pub struct FileChecksums {
+    pub md5: String,
+    pub sha1: String,
+    pub sha256: String,
+    pub sha512: String,
+}
+
+/// State of checksum computation for a file.
+#[derive(Clone, Debug, Default)]
+pub enum ChecksumState {
+    #[default]
+    NotCalculated,
+    Calculating,
+    Calculated(FileChecksums),
     Error(String),
 }
 
@@ -2240,6 +2268,7 @@ pub struct Item {
     pub cut: bool,
     pub overlaps_drag_rect: bool,
     pub dir_size: DirSize,
+    pub checksums: ChecksumState,
 }
 
 impl Item {
@@ -2516,6 +2545,56 @@ impl Item {
         }
         column = column.push(details);
 
+        // Checksums section for files (not directories)
+        if let Some(metadata) = self.file_metadata() {
+            if !metadata.is_dir() {
+                if let Some(path) = self.path_opt() {
+                    let mut checksums_section = widget::column::with_capacity(4).spacing(space_xxxs);
+
+                    match &self.checksums {
+                        ChecksumState::NotCalculated => {
+                            checksums_section = checksums_section.push(
+                                widget::button::standard(fl!("calculate-checksums"))
+                                    .on_press(Message::CalculateChecksums(path.clone())),
+                            );
+                        }
+                        ChecksumState::Calculating => {
+                            checksums_section =
+                                checksums_section.push(widget::text::body(fl!("calculating")));
+                        }
+                        ChecksumState::Calculated(checksums) => {
+                            checksums_section =
+                                checksums_section.push(widget::text::heading(fl!("checksums")));
+                            // The full checksums exceed the available width in the
+                            // properties panel, so they are ellipsized for display and
+                            // shown in full on hover. SHA512 is computed but not shown.
+                            for (label, value) in [
+                                ("MD5", &checksums.md5),
+                                ("SHA1", &checksums.sha1),
+                                ("SHA256", &checksums.sha256),
+                            ] {
+                                checksums_section = checksums_section.push(widget::tooltip(
+                                    widget::text::body(format!(
+                                        "{label}: {}",
+                                        ellipsize_checksum(value)
+                                    ))
+                                    .wrapping(text::Wrapping::None),
+                                    widget::text::body(value.clone()),
+                                    widget::tooltip::Position::Bottom,
+                                ));
+                            }
+                        }
+                        ChecksumState::Error(err) => {
+                            checksums_section = checksums_section
+                                .push(widget::text::body(format!("{}: {}", fl!("error"), err)));
+                        }
+                    }
+
+                    column = column.push(checksums_section);
+                }
+            }
+        }
+
         if let Some(path) = self.path_opt()
             && self.selected
         {
@@ -2711,6 +2790,56 @@ async fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, 
         tokio::task::yield_now().await;
     }
     Ok(total)
+}
+
+/// Shorten a checksum for display by keeping its start and end with an ellipsis
+/// in the middle, so it fits within the properties panel width. The full value
+/// is still available on hover. Checksums are hex (ASCII), so byte slicing is safe.
+fn ellipsize_checksum(checksum: &str) -> String {
+    const KEEP: usize = 8;
+    if checksum.len() > KEEP * 2 + 1 {
+        format!(
+            "{}…{}",
+            &checksum[..KEEP],
+            &checksum[checksum.len() - KEEP..]
+        )
+    } else {
+        checksum.to_string()
+    }
+}
+
+/// Calculate file checksums (MD5, SHA1, SHA256, SHA512).
+async fn calculate_checksums(path: &Path) -> Result<FileChecksums, String> {
+    let path = path.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        let mut file = File::open(&path).map_err(|e| e.to_string())?;
+
+        let mut md5_hasher = Md5::new();
+        let mut sha1_hasher = Sha1::new();
+        let mut sha256_hasher = Sha256::new();
+        let mut sha512_hasher = Sha512::new();
+
+        let mut buffer = [0u8; 8192];
+        loop {
+            let bytes_read = file.read(&mut buffer).map_err(|e| e.to_string())?;
+            if bytes_read == 0 {
+                break;
+            }
+            md5_hasher.update(&buffer[..bytes_read]);
+            sha1_hasher.update(&buffer[..bytes_read]);
+            sha256_hasher.update(&buffer[..bytes_read]);
+            sha512_hasher.update(&buffer[..bytes_read]);
+        }
+
+        Ok(FileChecksums {
+            md5: format!("{:x}", md5_hasher.finalize()),
+            sha1: format!("{:x}", sha1_hasher.finalize()),
+            sha256: format!("{:x}", sha256_hasher.finalize()),
+            sha512: format!("{:x}", sha512_hasher.finalize()),
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn folder_name<P: AsRef<Path>>(path: P) -> (String, bool) {
@@ -4661,6 +4790,51 @@ impl Tab {
                         }
                     }
                 }
+            }
+            Message::Checksums(path, checksum_state) => {
+                let location = Location::Path(path);
+                if let Some(ref mut item) = self.parent_item_opt {
+                    if item.location_opt.as_ref() == Some(&location) {
+                        item.checksums = checksum_state.clone();
+                    }
+                }
+                if let Some(ref mut items) = self.items_opt {
+                    for item in items.iter_mut() {
+                        if item.location_opt.as_ref() == Some(&location) {
+                            item.checksums = checksum_state;
+                            break;
+                        }
+                    }
+                }
+            }
+            Message::CalculateChecksums(path) => {
+                // Set state to Calculating and trigger the computation
+                let location = Location::Path(path.clone());
+                if let Some(ref mut item) = self.parent_item_opt {
+                    if item.location_opt.as_ref() == Some(&location) {
+                        item.checksums = ChecksumState::Calculating;
+                    }
+                }
+                if let Some(ref mut items) = self.items_opt {
+                    for item in items.iter_mut() {
+                        if item.location_opt.as_ref() == Some(&location) {
+                            item.checksums = ChecksumState::Calculating;
+                            break;
+                        }
+                    }
+                }
+                // Launch async checksum calculation
+                commands.push(Command::Iced(
+                    cosmic::Task::future(async move {
+                        match calculate_checksums(&path).await {
+                            Ok(checksums) => {
+                                Message::Checksums(path, ChecksumState::Calculated(checksums))
+                            }
+                            Err(err) => Message::Checksums(path, ChecksumState::Error(err)),
+                        }
+                    })
+                    .into(),
+                ));
             }
         }
 
