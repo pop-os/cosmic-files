@@ -2454,9 +2454,11 @@ impl Item {
         column = column.push(details);
 
         if let Some(path) = self.path_opt() {
-            column = column.push(
-                widget::button::standard(fl!("open")).on_press(Message::Open(Some(path.clone()))),
-            );
+            if self.selected {
+                column = column.push(
+                    widget::button::standard(fl!("open")).on_press(Message::Open(Some(path.clone()))),
+                );
+            }
         }
 
         if !settings.is_empty() {
