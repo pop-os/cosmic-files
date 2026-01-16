@@ -22,7 +22,7 @@ use crate::{
     app::{Action, Message},
     config::Config,
     fl,
-    tab::{self, HeadingOptions, Location, LocationMenuAction, Tab},
+    tab::{self, EditLocationContextMenuAction, HeadingOptions, Location, LocationMenuAction, Tab},
 };
 
 static MENU_ID: LazyLock<cosmic::widget::Id> =
@@ -759,5 +759,33 @@ pub fn location_context_menu<'a>(ancestor_index: usize) -> Element<'a, tab::Mess
             }
         })
         .width(Length::Fixed(360.0))
+        .into()
+}
+
+pub fn edit_location_context_menu<'a>() -> Element<'a, tab::Message> {
+    let children = [menu_button!(text::body(fl!("copy-path")))
+        .on_press(tab::Message::EditLocationContextMenuAction(
+            EditLocationContextMenuAction::CopyPath,
+        ))
+        .into()];
+
+    container(column::with_children(children))
+        .padding(1)
+        .style(|theme| {
+            let cosmic = theme.cosmic();
+            let component = &cosmic.background.component;
+            container::Style {
+                icon_color: Some(component.on.into()),
+                text_color: Some(component.on.into()),
+                background: Some(Background::Color(component.base.into())),
+                border: Border {
+                    radius: cosmic.radius_s().map(|x| x + 1.0).into(),
+                    width: 1.0,
+                    color: component.divider.into(),
+                },
+                ..Default::default()
+            }
+        })
+        .width(Length::Fixed(200.0))
         .into()
 }
