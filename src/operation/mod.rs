@@ -196,7 +196,7 @@ async fn copy_or_move(
     .map_err(wrap_compio_spawn_error)?
 }
 
-fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
+pub fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
     // List of compound extensions to check
     const COMPOUND_EXTENSIONS: &[&str] = &[
         ".tar.gz",
