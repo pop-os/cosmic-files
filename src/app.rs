@@ -3531,8 +3531,16 @@ impl Application for App {
                 });
             }
             Message::PasteImageContents(to, contents) => {
+                let Some(extension) = contents.extension() else {
+                    log::warn!(
+                        "Ignoring paste: unknown image MIME type {:?}",
+                        contents.mime_type
+                    );
+                    return Task::none();
+                };
+
                 // Generate unique filename for the pasted image
-                let base_name = format!("{}.{}", fl!("pasted-image"), contents.extension());
+                let base_name = format!("{}.{}", fl!("pasted-image"), extension);
                 let base_path = to.join(&base_name);
                 let final_path = copy_unique_path(&base_path, &to);
 
@@ -3558,8 +3566,16 @@ impl Application for App {
                 });
             }
             Message::PasteVideoContents(to, contents) => {
+                let Some(extension) = contents.extension() else {
+                    log::warn!(
+                        "Ignoring paste: unknown video MIME type {:?}",
+                        contents.mime_type
+                    );
+                    return Task::none();
+                };
+
                 // Generate unique filename for the pasted video
-                let base_name = format!("{}.{}", fl!("pasted-video"), contents.extension());
+                let base_name = format!("{}.{}", fl!("pasted-video"), extension);
                 let base_path = to.join(&base_name);
                 let final_path = copy_unique_path(&base_path, &to);
 
