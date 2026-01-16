@@ -11,7 +11,7 @@ use super::{Mounter, MounterAuth, MounterItem, MounterItems, MounterMessage};
 use crate::{
     config::IconSizes,
     err_str,
-    tab::{self, DirSize, ItemMetadata, ItemThumbnail, Location},
+    tab::{self, ChecksumState, DirSize, ItemMetadata, ItemThumbnail, Location},
 };
 
 const TARGET_URI_ATTRIBUTE: &str = "standard::target-uri";
@@ -214,6 +214,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
             //TODO: scan directory size on gvfs mounts?
             dir_size: DirSize::NotDirectory,
             cut: false,
+            checksums: ChecksumState::default(),
         });
     }
     Ok(items)

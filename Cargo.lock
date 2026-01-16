@@ -1525,6 +1525,8 @@ dependencies = [
  "rust-embed",
  "rustc-hash 2.1.1",
  "serde",
+ "sha1",
+ "sha2",
  "shlex",
  "slotmap",
  "tar",
