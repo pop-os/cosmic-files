@@ -422,3 +422,4 @@ sort-oldest-first = Najpierw najstarsze
 sort-smallest-to-largest = Najpierw najmniejsze
 sort-largest-to-smallest = Najpierw największe
 empty-trash-title = Opróżnić kosz?
+type-to-search-select = Wybierz pierwszy pasujący plik lub katalog

@@ -421,3 +421,4 @@ repository = 仓库
 support = 支持
 progress-failed = { $percent }%，失败
 empty-trash-title = 确定要清空回收站？
+type-to-search-select = 选择第一个匹配的文件或文件夹
