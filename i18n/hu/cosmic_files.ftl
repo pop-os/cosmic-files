@@ -421,3 +421,4 @@ repository = Tároló
 support = Támogatás
 progress-failed = { $percent }%, sikertelen
 empty-trash-title = Kuka ürítése?
+type-to-search-select = Kijelöli az első egyező fájlt vagy mappát
