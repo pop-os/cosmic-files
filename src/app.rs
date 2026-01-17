@@ -52,7 +52,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use slotmap::Key as SlotMapKey;
 use std::{
     any::TypeId,
-    collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     env, fmt, fs,
     future::Future,
     io,
@@ -545,6 +545,10 @@ pub enum DialogPage {
         parent: PathBuf,
         name: String,
         dir: bool,
+    },
+    BulkRename {
+        paths: Box<[PathBuf]>,
+        name: String,
     },
     Replace {
         from: tab::Item,
@@ -2935,6 +2939,86 @@ impl Application for App {
                                 tasks.push(self.update_config());
                             }
                         }
+                        DialogPage::BulkRename { paths, name } => {
+                            let template = name.trim();
+
+                            if template.is_empty() {
+                                // NOTE: If the template is empty, do not enqueue any operations.
+                                log::warn!(
+                                    "Bulk rename completed with empty template, no operations performed."
+                                );
+                            } else {
+                                let mut seen_names: HashSet<String> = HashSet::new();
+                                let mut generated: Vec<(PathBuf, String)> = Vec::new();
+                                let mut has_duplicates = false;
+                                let mut has_invalid = false;
+
+                                for (index, from) in paths.into_vec().into_iter().enumerate() {
+                                    let original_stem = from
+                                        .file_stem()
+                                        .and_then(|n| n.to_str())
+                                        .unwrap_or_default();
+
+                                    let ext = from
+                                        .extension()
+                                        .and_then(|e| e.to_str())
+                                        .unwrap_or_default();
+
+                                    // Apply placeholders:
+                                    // {name}  -> original name without extension
+                                    // {ext}   -> file extension without the dot
+                                    // {index} -> 1-based index of the item
+                                    let mut new_name = template.to_string();
+                                    new_name = new_name.replace("{name}", original_stem);
+                                    new_name = new_name.replace("{ext}", ext);
+                                    new_name = new_name.replace("{index}", &(index + 1).to_string());
+
+                                    let trimmed = new_name.trim();
+
+                                    // NOTE: Validate using the same rules as the single-item rename dialog.
+                                    if trimmed.is_empty()
+                                        || trimmed == "."
+                                        || trimmed == ".."
+                                        || trimmed.contains('/')
+                                    {
+                                        has_invalid = true;
+                                        break;
+                                    }
+
+                                    let final_name = trimmed.to_string();
+
+                                    if !seen_names.insert(final_name.clone()) {
+                                        has_duplicates = true;
+                                        break;
+                                    }
+
+                                    generated.push((from, final_name));
+                                }
+
+                                if has_invalid {
+                                    log::warn!(
+                                        "Bulk rename aborted because the template produced invalid names."
+                                    );
+                                } else if has_duplicates {
+                                    log::warn!(
+                                        "Bulk rename aborted because the template produced duplicate names."
+                                    );
+                                } else {
+                                    for (from, new_name) in generated {
+                                        let parent = match from.parent() {
+                                            Some(p) => p.to_path_buf(),
+                                            None => {
+                                                // NOTE: Skip items that do not have a valid parent directory.
+                                                continue;
+                                            }
+                                        };
+
+                                        let to = parent.join(new_name);
+                                        tasks.push(self.operation(Operation::Rename { from, to }));
+                                    }
+                                }
+                            }
+                        }
                     }
                     return Task::batch(tasks);
                 }
@@ -3734,7 +3818,8 @@ impl Application for App {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
                     if let Some(items) = tab.items_opt() {
-                        let selected: Box<[_]> = items
+                        // Collect all selected item paths into a Vec.
+                        let selected: Vec<_> = items
                             .iter()
                             .filter_map(|item| {
                                 if item.selected {
@@ -3744,29 +3829,88 @@ impl Application for App {
                                 }
                             })
                             .collect();
-                        if !selected.is_empty() {
-                            //TODO: batch rename
-                            let tasks = selected
-                                .into_iter()
-                                .filter_map(|path| {
-                                    let parent = path.parent()?.to_path_buf();
-                                    let name = path.file_name()?.to_str()?.to_string();
-                                    let dir = path.is_dir();
-                                    Some(self.dialog_pages.push_back(DialogPage::RenameItem {
-                                        from: path,
-                                        parent,
-                                        name,
-                                        dir,
-                                    }))
-                                })
-                                .chain(std::iter::once(widget::text_input::focus(
-                                    self.dialog_text_input.clone(),
-                                )));
+
+                        let selection_count = selected.len();
+
+                        if selection_count == 0 {
+                            // NOTE: Nothing selected, nothing to rename.
+                            return Task::none();
+                        }
+
+                        if selection_count == 1 {
+                            // NOTE: Single selection – keep the existing rename behavior for a single item.
+                            let path = selected[0].clone();
+
+                            // Derive parent directory as an owned PathBuf.
+                            let parent = match path.parent() {
+                                Some(p) => p.to_path_buf(),
+                                None => {
+                                    // NOTE: If we cannot derive a parent directory, do nothing.
+                                    return Task::none();
+                                }
+                            };
+
+                            // Derive the file name as an owned OsString.
+                            let name_os = match path.file_name() {
+                                Some(n) => n.to_os_string(),
+                                None => {
+                                    // NOTE: If there is no file name component, do nothing.
+                                    return Task::none();
+                                }
+                            };
+
+                            // Convert the owned OsString into a UTF-8 String if possible.
+                            let name = match name_os.to_str() {
+                                Some(n) => n.to_string(),
+                                None => {
+                                    // NOTE: Non-UTF-8 file names are not supported by the rename dialog.
+                                    return Task::none();
+                                }
+                            };
+
+                            let dir = path.is_dir();
+
+                            let tasks = std::iter::once(
+                                self.dialog_pages.push_back(DialogPage::RenameItem {
+                                    from: path,
+                                    parent,
+                                    name,
+                                    dir,
+                                }),
+                            )
+                            .chain(std::iter::once(widget::text_input::focus(
+                                self.dialog_text_input.clone(),
+                            )));
+
                             return Task::batch(tasks);
                         }
+                        // NOTE: Multiple selection – open a dedicated bulk rename dialog.
+                        log::info!(
+                            "Bulk rename requested for {} selected items",
+                            selection_count
+                        );
+
+                        // NOTE: Default template uses placeholders and preserves the extension.
+                        // {name}  -> original name without extension
+                        // {ext}   -> file extension without the dot
+                        // {index} -> 1-based index of the renamed item
+                        let default_template = "{name}_{index}.{ext}".to_string();
+
+                        let tasks = std::iter::once(
+                            self.dialog_pages.push_back(DialogPage::BulkRename {
+                                paths: selected.into_boxed_slice(),
+                                name: default_template,
+                            }),
+                        )
+                        .chain(std::iter::once(widget::text_input::focus(
+                            self.dialog_text_input.clone(),
+                        )));
+
+                        return Task::batch(tasks);
                     }
                 }
             }
+
             Message::ReplaceResult(replace_result) => {
                 if let Some((dialog_page, task)) = self.dialog_pages.pop_front() {
                     match dialog_page {
@@ -5497,6 +5641,144 @@ impl Application for App {
                                 .into(),
                         ])
                         .spacing(space_xxs),
+                    )
+            }
+            DialogPage::BulkRename { paths, name } => {
+                let count = paths.len();
+                let template = name; // Just for readability.
+
+                // Build preview of the resulting file names using the current template.
+                let mut preview_rows: Vec<Element<_>> = Vec::new();
+                let mut seen_names: HashSet<String> = HashSet::new();
+                let mut has_duplicates = false;
+                let mut has_invalid = false;
+
+                for (index, from) in paths.iter().enumerate() {
+                    let original_stem = from
+                        .file_stem()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or_default();
+
+                    let ext = from
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .unwrap_or_default();
+
+                    // Apply placeholders:
+                    // {name}  -> original name without extension
+                    // {ext}   -> file extension without the dot
+                    // {index} -> 1-based index of the item
+                    let mut new_name = template.clone();
+                    new_name = new_name.replace("{name}", original_stem);
+                    new_name = new_name.replace("{ext}", ext);
+                    new_name = new_name.replace("{index}", &(index + 1).to_string());
+
+                    let trimmed = new_name.trim();
+
+                    // NOTE: Validate using the same rules as the single-item rename dialog.
+                    let mut is_invalid = false;
+                    if trimmed.is_empty()
+                        || trimmed == "."
+                        || trimmed == ".."
+                        || trimmed.contains('/')
+                    {
+                        is_invalid = true;
+                        has_invalid = true;
+                    }
+
+                    if !is_invalid {
+                        if !seen_names.insert(trimmed.to_string()) {
+                            has_duplicates = true;
+                        }
+                    }
+
+                    // Display the new name with an index, and mark invalid entries.
+                    let preview_text = if is_invalid {
+                        format!("{:>3}: {}  (invalid)", index + 1, new_name)
+                    } else {
+                        format!("{:>3}: {}", index + 1, new_name)
+                    };
+
+                    preview_rows.push(widget::text::body(preview_text).into());
+                }
+
+                // NOTE: Template must not be empty, must not produce duplicates and must not produce invalid names.
+                let complete_maybe = if template.trim().is_empty() || has_duplicates || has_invalid {
+                    None
+                } else {
+                    Some(Message::DialogComplete)
+                };
+
+                let mut children: Vec<Element<_>> = Vec::new();
+
+                children.push(
+                    widget::text::body(format!("Bulk rename {} items", count)).into(),
+                );
+
+                children.push(
+                    widget::text::body(
+                        "Template placeholders: {name} (without extension), {ext}, {index}",
+                    )
+                    .into(),
+                );
+
+                if has_invalid {
+                    children.push(
+                        widget::text::body(
+                            "Template produces invalid names. Please adjust it.",
+                        )
+                        .into(),
+                    );
+                } else if has_duplicates {
+                    children.push(
+                        widget::text::body(
+                            "Template produces duplicate names. Please adjust it until all names are unique.",
+                        )
+                        .into(),
+                    );
+                }
+
+                children.push(
+                    widget::text_input("", template.as_str())
+                        .id(self.dialog_text_input.clone())
+                        .on_input(move |new_template| {
+                            // NOTE: Update the dialog page with the new template string.
+                            Message::DialogUpdate(DialogPage::BulkRename {
+                                paths: paths.clone(),
+                                name: new_template,
+                            })
+                        })
+                        .into(),
+                );
+
+                children.push(widget::text::body("Preview:").into());
+
+                // NOTE: Make the preview list fill the available width so the scrollbar is on the right.
+                let preview_column = widget::column::with_children(preview_rows)
+                    .spacing(space_xxs)
+                    .width(Length::Fill);
+
+                // NOTE: Limit the height so the dialog does not grow infinitely and the buttons stay visible.
+                let preview_scroll = widget::scrollable(preview_column)
+                    .height(Length::Fixed(220.0))
+                    .width(Length::Fill);
+
+                children.push(preview_scroll.into());
+
+                widget::dialog()
+                    .title(fl!("rename"))
+                    .primary_action(
+                        widget::button::suggested(fl!("rename"))
+                            .on_press_maybe(complete_maybe.clone()),
+                    )
+                    .secondary_action(
+                        widget::button::standard(fl!("cancel"))
+                            .on_press(Message::DialogCancel),
+                    )
+                    .control(
+                        widget::column::with_children(children)
+                            .spacing(space_xxs)
+                            .width(Length::Fill),
                     )
             }
             DialogPage::Replace {
