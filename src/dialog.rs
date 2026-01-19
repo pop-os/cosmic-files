@@ -11,7 +11,9 @@ use cosmic::{
         event,
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers, key::Named},
-        stream, window,
+        stream,
+        widget::scrollable,
+        window,
     },
     iced_core::widget::operation,
     iced_winit::{self, SurfaceIdWrapper},
@@ -568,6 +570,8 @@ struct App {
         FxHashSet<PathBuf>,
     )>,
     auto_scroll_speed: Option<i16>,
+    type_select_prefix: String,
+    type_select_last_key: Option<Instant>,
 }
 
 impl App {
@@ -697,14 +701,23 @@ impl App {
             }
             PreviewKind::Selected => {
                 if let Some(items) = self.tab.items_opt() {
-                    for item in items {
-                        if item.selected {
-                            children.push(item.preview_view(None, military_time));
-                            // Only show one property view to avoid issues like hangs when generating
-                            // preview images on thousands of files
-                            break;
+                    let preview_opt = {
+                        let mut selected = items.iter().filter(|item| item.selected);
+
+                        match (selected.next(), selected.next()) {
+                            // At least two selected items
+                            (Some(_), Some(_)) => Some(self.tab.multi_preview_view()),
+                            // Exactly one selected item
+                            (Some(item), None) => Some(item.preview_view(None, military_time)),
+                            // No selected items
+                            _ => None,
                         }
+                    };
+
+                    if let Some(preview) = preview_opt {
+                        children.push(preview);
                     }
+
                     if children.is_empty() {
                         if let Some(item) = &self.tab.parent_item_opt {
                             children.push(item.preview_view(None, military_time));
@@ -1029,6 +1042,8 @@ impl Application for App {
             key_binds,
             watcher_opt: None,
             auto_scroll_speed: None,
+            type_select_prefix: String::new(),
+            type_select_last_key: None,
         };
 
         let commands = Task::batch([
@@ -1437,6 +1452,26 @@ impl Application for App {
                                     path_string.push_str(&text);
                                     self.tab.edit_location =
                                         Some(location.with_path(PathBuf::from(path_string)).into());
+                                }
+                            }
+                            TypeToSearch::SelectByPrefix => {
+                                // Reset buffer if timeout elapsed
+                                if let Some(last_key) = self.type_select_last_key {
+                                    if last_key.elapsed() >= tab::TYPE_SELECT_TIMEOUT {
+                                        self.type_select_prefix.clear();
+                                    }
+                                }
+
+                                // Accumulate character and select
+                                self.type_select_prefix.push_str(&text.to_lowercase());
+                                self.type_select_last_key = Some(Instant::now());
+
+                                self.tab.select_by_prefix(&self.type_select_prefix);
+                                if let Some(offset) = self.tab.select_focus_scroll() {
+                                    return scrollable::scroll_to(
+                                        self.tab.scrollable_id.clone(),
+                                        offset,
+                                    );
                                 }
                             }
                         }

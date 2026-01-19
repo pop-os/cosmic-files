@@ -356,3 +356,4 @@ restored =
        *[other] عناصر
     } من { trash }
 empty-trash-title = أفرغ المهملات؟
+type-to-search-select = يختار أول ملف أو مجلد مطابق

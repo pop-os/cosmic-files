@@ -11,7 +11,7 @@ recents = Legutóbbiak
 undo = Visszavonás
 today = Ma
 # Desktop view options
-desktop-view-options = Asztali nézet beállításai...
+desktop-view-options = Asztali nézet beállításai…
 show-on-desktop = Megjelenítés az asztalon
 desktop-folder-content = Asztal mappa tartalma
 mounted-drives = Csatolt meghajtók
@@ -31,12 +31,12 @@ operations-running =
     { $running } { $running ->
         [one] művelet
        *[other] művelet
-    } fut ({ $percent }%)...
+    } fut ({ $percent }%)…
 operations-running-finished =
     { $running } { $running ->
         [one] művelet
        *[other] művelet
-    } fut ({ $percent }%), { $finished } befejeződött...
+    } fut ({ $percent }%), { $finished } befejeződött…
 pause = Szünet
 resume = Folytatás
 
@@ -50,7 +50,7 @@ create-archive = Tömörített fájl létrehozása
 ## Extract Dialog
 
 extract-password-required = Jelszó szükséges
-extract-to = Kibontás ide...
+extract-to = Kibontás ide…
 extract-to-title = Kibontás mappába
 
 ## Empty Trash Dialog
@@ -98,7 +98,7 @@ related-apps = Hasonló alkalmazások
 
 ## Permanently delete Dialog
 
-selected-items = a(z) { $items } kijelölt elemet
+selected-items = A(z) { $items } kijelölt elem
 permanently-delete-question = Végleges törlés?
 delete = Törlés
 permanently-delete-warning = { $target } véglegesen törölve lesz. A művelet nem visszavonható.
@@ -187,7 +187,7 @@ keep = Megtartás
 add-network-drive = Hálózati meghajtó hozzáadása
 connect = Csatlakozás
 connect-anonymously = Csatlakozás névtelenül
-connecting = Csatlakozás...
+connecting = Csatlakozás…
 domain = Tartomány
 enter-server-address = Add meg a szerver címét
 network-drive-description =
@@ -215,7 +215,7 @@ username = Felhasználónév
 cancelled = Megszakítva
 edit-history = Fájlműveleti előzmények
 history = Előzmények
-no-history = Nem találhatók elemek az előzményekben.
+no-history = Nem találhatók elemek az előzményekben
 pending = Függőben
 progress = { $percent }%
 progress-cancelled = { $percent }%, megszakítva
@@ -226,7 +226,7 @@ compressing =
     { $items } { $items ->
         [one] elem
        *[other] elem
-    } tömörítése innen: „{ $from }” ide: „{ $to }” ({ $progress })...
+    } tömörítése innen: „{ $from }” ide: „{ $to }” ({ $progress })…
 compressed =
     { $items } { $items ->
         [one] elem
@@ -239,7 +239,7 @@ copying =
     { $items } { $items ->
         [one] elem
        *[other] elem
-    } másolása innen: „{ $from }” ide: „{ $to }” ({ $progress })...
+    } másolása innen: „{ $from }” ide: „{ $to }” ({ $progress })…
 copied =
     { $items } { $items ->
         [one] elem
@@ -249,33 +249,33 @@ deleting =
     { $items } { $items ->
         [one] elem
        *[other] elem
-    } törlése a kukából ({ $progress })...
+    } törlése a kukából ({ $progress })…
 deleted =
     { $items } { $items ->
         [one] elem
        *[other] elem
     } törölve a kukából
-emptying-trash = { trash } kiürítése ({ $progress })...
+emptying-trash = { trash } kiürítése ({ $progress })…
 emptied-trash = { trash } kiürítve
 extracting =
     { $items } { $items ->
         [one] elem
        *[other] elem
-    } kibontása innen: „{ $from }” ide: „{ $to }” ({ $progress })...
+    } kibontása innen: „{ $from }” ide: „{ $to }” ({ $progress })…
 extracted =
     { $items } { $items ->
         [one] elem
        *[other] elem
     } kibontva innen: „{ $from }” ide: „{ $to }”
 setting-executable-and-launching = „{ $name }” végrehajthatóvá tétele és futtatása
-set-executable-and-launched = ”{ $name }” végrehajthatóvá lett téve és futtatva
+set-executable-and-launched = „{ $name }” végrehajthatóvá lett téve és futtatva
 setting-permissions = „{ $name }” jogosultságainak beállítása: { $mode }
 set-permissions = „{ $name }” jogosultságai beállítva: { $mode }
 moving =
     { $items } { $items ->
         [one] elem
        *[other] elem
-    } áthelyezése innen: „{ $from }” ide: „{ $to }” ({ $progress })...
+    } áthelyezése innen: „{ $from }” ide: „{ $to }” ({ $progress })…
 moved =
     { $items } { $items ->
         [one] elem
@@ -307,7 +307,7 @@ restoring =
     { $items } { $items ->
         [one] elem
        *[other] elem
-    } visszaállítása a kukából ({ $progress })...
+    } visszaállítása a kukából ({ $progress })…
 restored =
     { $items } { $items ->
         [one] elem
@@ -317,7 +317,7 @@ unknown-folder = ismeretlen mappa
 
 ## Open with
 
-menu-open-with = Megnyitás mással...
+menu-open-with = Megnyitás mással…
 default-app = { $name } (alapértelmezett)
 
 ## Show details
@@ -329,7 +329,7 @@ item-size = Méret: { $size }
 item-created = Létrehozva: { $created }
 item-modified = Módosítva: { $modified }
 item-accessed = Hozzáférve: { $accessed }
-calculating = Számolás...
+calculating = Számolás…
 
 ## Settings
 
@@ -355,8 +355,8 @@ compress = Tömörítés
 delete-permanently = Végleges törlés
 eject = Kiadás
 extract-here = Kibontás
-new-file = Új fájl...
-new-folder = Új mappa...
+new-file = Új fájl…
+new-folder = Új mappa…
 open-in-terminal = Megnyitás a terminálban
 move-to-trash = Kukába helyezés
 restore-from-trash = Visszaállítás a kukából
@@ -369,9 +369,9 @@ remove-from-recents = Eltávolítás a legutóbbiak közül
 
 ## Desktop
 
-change-wallpaper = Háttérkép cseréje...
-desktop-appearance = Asztali megjelenés...
-display-settings = Képernyő beállításai...
+change-wallpaper = Háttérkép cseréje…
+desktop-appearance = Asztali megjelenés…
+display-settings = Képernyő beállításai…
 
 # Menu
 
@@ -382,7 +382,7 @@ file = Fájl
 new-tab = Új lap
 new-window = Új ablak
 reload-folder = Mappa újratöltése
-rename = Átnevezés...
+rename = Átnevezés…
 close-tab = Lap bezárása
 quit = Kilépés
 
@@ -405,8 +405,8 @@ list-view = Listanézet
 show-hidden-files = Rejtett fájlok megjelenítése
 list-directories-first = Könyvtárak listázása először
 gallery-preview = Galéria előnézet
-menu-settings = Beállítások...
-menu-about = A COSMIC Fájlok névjegye...
+menu-settings = Beállítások…
+menu-about = A COSMIC Fájlok névjegye…
 
 ## Sort
 

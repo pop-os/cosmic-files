@@ -101,6 +101,9 @@ use crate::{
 static PERMANENT_DELETE_BUTTON_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("permanent-delete-button"));
 
+static DELETE_TRASH_BUTTON_ID: LazyLock<widget::Id> =
+    LazyLock::new(|| widget::Id::new("delete-trash-button"));
+
 static CONFIRM_OPEN_WITH_BUTTON_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("confirm-open-with-button"));
 
@@ -534,6 +537,9 @@ pub enum DialogPage {
     PermanentlyDelete {
         paths: Box<[PathBuf]>,
     },
+    DeleteTrash {
+        items: Vec<TrashItem>,
+    },
     RenameItem {
         from: PathBuf,
         parent: PathBuf,
@@ -727,6 +733,8 @@ pub struct App {
     windows: FxHashMap<window::Id, Window>,
     nav_dnd_hover: Option<(Location, Instant)>,
     tab_dnd_hover: Option<(Entity, Instant)>,
+    type_select_prefix: String,
+    type_select_last_key: Option<Instant>,
     nav_drag_id: DragId,
     tab_drag_id: DragId,
     auto_scroll_speed: Option<i16>,
@@ -1900,16 +1908,25 @@ impl App {
             PreviewKind::Selected => {
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
                     if let Some(items) = tab.items_opt() {
-                        for item in items {
-                            if item.selected {
-                                children.push(
+                        let preview_opt = {
+                            let mut selected = items.iter().filter(|item| item.selected);
+
+                            match (selected.next(), selected.next()) {
+                                // At least two selected items
+                                (Some(_), Some(_)) => Some(tab.multi_preview_view()),
+                                // Exactly one selected item
+                                (Some(item), None) => Some(
                                     item.preview_view(Some(&self.mime_app_cache), military_time),
-                                );
-                                // Only show one property view to avoid issues like hangs when generating
-                                // preview images on thousands of files
-                                break;
+                                ),
+                                // No selected items
+                                _ => None,
                             }
+                        };
+
+                        if let Some(preview) = preview_opt {
+                            children.push(preview);
                         }
+
                         if children.is_empty() {
                             if let Some(item) = &tab.parent_item_opt {
                                 children.push(
@@ -1967,6 +1984,12 @@ impl App {
                 .add(widget::radio(
                     widget::text::body(fl!("type-to-search-enter-path")),
                     TypeToSearch::EnterPath,
+                    Some(self.config.type_to_search),
+                    Message::SetTypeToSearch,
+                ))
+                .add(widget::radio(
+                    widget::text::body(fl!("type-to-search-select")),
+                    TypeToSearch::SelectByPrefix,
                     Some(self.config.type_to_search),
                     Message::SetTypeToSearch,
                 ))
@@ -2198,6 +2221,8 @@ impl Application for App {
             windows: FxHashMap::default(),
             nav_dnd_hover: None,
             tab_dnd_hover: None,
+            type_select_prefix: String::new(),
+            type_select_last_key: None,
             nav_drag_id: DragId::new(),
             tab_drag_id: DragId::new(),
             auto_scroll_speed: None,
@@ -2683,8 +2708,10 @@ impl Application for App {
                                 }
                             }
                             if !trash_items.is_empty() {
-                                return self
-                                    .operation(Operation::DeleteTrash { items: trash_items });
+                                return self.update(Message::DialogPush(
+                                    DialogPage::DeleteTrash { items: trash_items },
+                                    Some(DELETE_TRASH_BUTTON_ID.clone()),
+                                ));
                             }
                         }
                     } else {
@@ -2883,6 +2910,9 @@ impl Application for App {
                         DialogPage::PermanentlyDelete { paths } => {
                             tasks.push(self.operation(Operation::PermanentlyDelete { paths }));
                         }
+                        DialogPage::DeleteTrash { items } => {
+                            tasks.push(self.operation(Operation::DeleteTrash { items }));
+                        }
                         DialogPage::RenameItem {
                             from, parent, name, ..
                         } => {
@@ -3016,6 +3046,28 @@ impl Application for App {
                                             path_string.push_str(&text);
                                             tab.edit_location =
                                                 Some(location.with_path(path_string.into()).into());
+                                        }
+                                    }
+                                }
+                                TypeToSearch::SelectByPrefix => {
+                                    // Reset buffer if timeout elapsed
+                                    if let Some(last_key) = self.type_select_last_key {
+                                        if last_key.elapsed() >= tab::TYPE_SELECT_TIMEOUT {
+                                            self.type_select_prefix.clear();
+                                        }
+                                    }
+
+                                    // Accumulate character and select
+                                    self.type_select_prefix.push_str(&text.to_lowercase());
+                                    self.type_select_last_key = Some(Instant::now());
+
+                                    if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                                        tab.select_by_prefix(&self.type_select_prefix);
+                                        if let Some(offset) = tab.select_focus_scroll() {
+                                            return scrollable::scroll_to(
+                                                tab.scrollable_id.clone(),
+                                                offset,
+                                            );
                                         }
                                     }
                                 }
@@ -3616,9 +3668,18 @@ impl Application for App {
                         return cosmic::task::message(Message::SetShowDetails(show_details));
                     }
                     Mode::Desktop => {
-                        let selected_paths: Box<[_]> = self.selected_paths(entity_opt).collect();
-                        let mut commands = Vec::with_capacity(selected_paths.len());
-                        for path in selected_paths {
+                        let preview_kind = {
+                            let mut selected_paths = self.selected_paths(entity_opt);
+                            match (selected_paths.next(), selected_paths.next()) {
+                                (Some(_), Some(_)) => Some(PreviewKind::Selected),
+                                (Some(path), None) => {
+                                    Some(PreviewKind::Location(Location::Path(path)))
+                                }
+                                _ => None,
+                            }
+                        };
+
+                        if let Some(preview_kind) = preview_kind {
                             let mut settings = window::Settings {
                                 decorations: true,
                                 min_size: Some(Size::new(360.0, 180.0)),
@@ -3638,14 +3699,13 @@ impl Application for App {
                             let (id, command) = window::open(settings);
                             self.windows.insert(
                                 id,
-                                Window::new(WindowKind::Preview(
-                                    entity_opt,
-                                    PreviewKind::Location(Location::Path(path)),
-                                )),
+                                Window::new(WindowKind::Preview(entity_opt, preview_kind)),
                             );
-                            commands.push(command.map(|_id| cosmic::action::none()));
+                            return Task::batch([
+                                self.update_desktop(), // Force re-calculating of directory sizes
+                                command.map(|_id| cosmic::action::none()),
+                            ]);
                         }
-                        return Task::batch(commands);
                     }
                 }
             }
@@ -4128,10 +4188,19 @@ impl Application for App {
                         tab.sort_name = sort.0;
                         tab.sort_direction = sort.1;
 
+                        let mut tasks = Vec::with_capacity(2);
+
                         if let Some(selection_paths) = selection_paths {
                             tab.select_paths(selection_paths);
+
+                            // Ensure selected path is scrolled to after redraw
+                            tasks.push(Task::done(cosmic::action::app(Message::TabMessage(
+                                Some(entity),
+                                tab::Message::ScrollToFocused,
+                            ))));
                         }
-                        return clipboard::read_data::<ClipboardPaste>().map(|p| {
+
+                        tasks.push(clipboard::read_data::<ClipboardPaste>().map(|p| {
                             cosmic::action::app(Message::CutPaths(match p {
                                 Some(s) => match s.kind {
                                     ClipboardKind::Copy => Vec::new(),
@@ -4139,13 +4208,19 @@ impl Application for App {
                                 },
                                 None => Vec::new(),
                             }))
-                        });
+                        }));
+
+                        return Task::batch(tasks);
                     }
                 }
             }
             Message::TabView(entity_opt, view) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                    if matches!(tab.mode, tab::Mode::Desktop) {
+                        return Task::none();
+                    }
+
                     tab.config.view = view;
                 }
                 let mut config = self.config.tab;
@@ -4775,13 +4850,17 @@ impl Application for App {
                     .tab_model
                     .data::<Tab>(entity)
                     .and_then(|tab| {
-                        tab.items_opt()?
-                            .iter()
-                            .find(|item| item.selected)
-                            .map(|item| {
+                        let mut selected = tab.items_opt()?.iter().filter(|item| item.selected);
+
+                        match (selected.next(), selected.next()) {
+                            // Exactly one item
+                            (Some(item), None) => Some(
                                 item.preview_actions()
-                                    .map(move |x| Message::TabMessage(Some(entity), x))
-                            })
+                                    .map(move |x| Message::TabMessage(Some(entity), x)),
+                            ),
+                            // Zero or more than one item
+                            _ => None,
+                        }
                     })
                     .unwrap_or_else(|| widget::horizontal_space().into());
                 context_drawer::context_drawer(
@@ -5323,6 +5402,28 @@ impl Application for App {
                         target = target
                     )))
             }
+            DialogPage::DeleteTrash { items } => {
+                let target = if items.len() == 1 {
+                    format!("\"{}\"", items[0].name.to_string_lossy())
+                } else {
+                    fl!("selected-items", items = items.len())
+                };
+
+                widget::dialog()
+                    .title(fl!("permanently-delete-question"))
+                    .primary_action(
+                        widget::button::destructive(fl!("delete"))
+                            .on_press(Message::DialogComplete)
+                            .id(DELETE_TRASH_BUTTON_ID.clone()),
+                    )
+                    .secondary_action(
+                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                    )
+                    .control(widget::text(fl!(
+                        "permanently-delete-warning",
+                        target = target
+                    )))
+            }
             DialogPage::RenameItem {
                 from,
                 parent,
@@ -5538,7 +5639,7 @@ impl Application for App {
         }
         let finished = count - running;
         total_progress /= count as f32;
-        if running > 1 || finished > 0 {
+        if running >= 1 && (running > 1 || finished > 0) {
             if finished > 0 {
                 title = fl!(
                     "operations-running-finished",
@@ -6181,18 +6282,39 @@ impl Application for App {
             }
         }
 
-        let mut selected_preview = None;
-        if self.core.window.show_context {
-            if let ContextPage::Preview(entity_opt, PreviewKind::Selected) = self.context_page {
-                selected_preview = Some(entity_opt.unwrap_or_else(|| self.tab_model.active()));
+        let mut selected_previews = Vec::new();
+        match self.mode {
+            Mode::App => {
+                if self.core.window.show_context {
+                    if let ContextPage::Preview(entity_opt, PreviewKind::Selected) =
+                        self.context_page
+                    {
+                        selected_previews
+                            .push(Some(entity_opt.unwrap_or_else(|| self.tab_model.active())));
+                    }
+                }
+            }
+            Mode::Desktop => {
+                for window_kind in self.windows.iter().map(|(_, window)| &window.kind) {
+                    if let WindowKind::Preview(entity_opt, _) = window_kind {
+                        selected_previews
+                            .push(Some(entity_opt.unwrap_or_else(|| self.tab_model.active())));
+                    }
+                }
             }
         }
+
         subscriptions.extend(self.tab_model.iter().filter_map(|entity| {
             let tab = self.tab_model.data::<Tab>(entity)?;
             Some(
-                tab.subscription(selected_preview == Some(entity))
-                    .with(entity)
-                    .map(|(entity, tab_msg)| Message::TabMessage(Some(entity), tab_msg)),
+                tab.subscription(
+                    selected_previews
+                        .iter()
+                        .find(|preview| preview.as_ref() == Some(entity).as_ref())
+                        .is_some(),
+                )
+                .with(entity)
+                .map(|(entity, tab_msg)| Message::TabMessage(Some(entity), tab_msg)),
             )
         }));
 

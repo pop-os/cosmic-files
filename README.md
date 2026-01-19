@@ -1,9 +1,6 @@
 # cosmic-files
 File manager for the COSMIC desktop environment
 
-> [!NOTE]
-> This project is still a work in progress
-
 ## Build the project from source
 
 ```sh

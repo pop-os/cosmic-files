@@ -20,11 +20,13 @@ use cosmic::{
         event,
         futures::{self, SinkExt},
         keyboard::Modifiers,
+        padding,
         stream,
         //TODO: export in cosmic::widget
         widget::{
             horizontal_rule, rule,
             scrollable::{self, AbsoluteOffset, Viewport},
+            stack,
         },
         window,
     },
@@ -55,14 +57,14 @@ use std::{
     borrow::Cow,
     cell::{Cell, RefCell},
     cmp::{Ordering, Reverse},
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     error::Error,
     fmt::{self, Display},
     fs::{self, File, Metadata},
     hash::Hash,
     io::{BufRead, BufReader},
     os::unix::fs::MetadataExt,
-    path::{Path, PathBuf},
+    path::{self, Path, PathBuf},
     rc::Rc,
     sync::{Arc, LazyLock, RwLock, atomic},
     time::{Duration, Instant, SystemTime},
@@ -96,6 +98,7 @@ use uzers::{get_group_by_gid, get_user_by_uid};
 
 pub const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 pub const HOVER_DURATION: Duration = Duration::from_millis(1600);
+pub const TYPE_SELECT_TIMEOUT: Duration = Duration::from_millis(1000);
 //TODO: best limit for search items
 const MAX_SEARCH_LATENCY: Duration = Duration::from_millis(20);
 const MAX_SEARCH_RESULTS: usize = 200;
@@ -308,10 +311,19 @@ pub fn folder_icon_symbolic(path: &PathBuf, icon_size: u16) -> widget::icon::Han
     .handle()
 }
 
+//TODO: replace with Path::has_trailing_sep when stable
+fn has_trailing_sep(path: &Path) -> bool {
+    path.as_os_str()
+        .as_encoded_bytes()
+        .last()
+        .copied()
+        .is_some_and(|b| path::is_separator(b as char))
+}
+
 fn tab_complete(path: &Path) -> Result<Vec<(String, PathBuf)>, Box<dyn Error>> {
-    let parent = if path.exists() {
-        // Do not show completion if already on an existing path
-        return Ok(Vec::new());
+    let parent = if has_trailing_sep(path) && path.is_dir() {
+        // Show completions inside existing child directory instead of parent
+        path
     } else {
         path.parent()
             .ok_or_else(|| format!("path has no parent {}", path.display()))?
@@ -628,6 +640,17 @@ fn get_desktop_file_icon(path: &Path) -> Option<String> {
         .map(str::to_string)
 }
 
+/// Creates an icon handle from a desktop file's Icon field value.
+/// Supports both icon names (looked up in theme) and absolute paths (used directly).
+fn desktop_icon_handle(icon: &str, size: u16) -> widget::icon::Handle {
+    let icon_path = Path::new(icon);
+    if icon_path.is_absolute() && icon_path.exists() {
+        widget::icon::from_path(icon_path.to_path_buf())
+    } else {
+        widget::icon::from_name(icon).size(size).handle()
+    }
+}
+
 pub fn parse_desktop_file(path: &Path) -> (Option<String>, Option<String>) {
     let entry = match freedesktop_entry_parser::parse_entry(path) {
         Ok(ok) => ok,
@@ -691,15 +714,9 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
         if let Some(icon_name) = icon_name_opt {
             (
                 mime,
-                widget::icon::from_name(&*icon_name)
-                    .size(sizes.grid())
-                    .handle(),
-                widget::icon::from_name(&*icon_name)
-                    .size(sizes.list())
-                    .handle(),
-                widget::icon::from_name(&*icon_name)
-                    .size(sizes.list_condensed())
-                    .handle(),
+                desktop_icon_handle(&icon_name, sizes.grid()),
+                desktop_icon_handle(&icon_name, sizes.list()),
+                desktop_icon_handle(&icon_name, sizes.list_condensed()),
             )
         } else {
             (
@@ -826,15 +843,9 @@ pub fn item_from_entry(
             if let Some(icon_name) = icon_name_opt {
                 (
                     mime,
-                    widget::icon::from_name(&*icon_name)
-                        .size(sizes.grid())
-                        .handle(),
-                    widget::icon::from_name(&*icon_name)
-                        .size(sizes.list())
-                        .handle(),
-                    widget::icon::from_name(icon_name)
-                        .size(sizes.list_condensed())
-                        .handle(),
+                    desktop_icon_handle(&icon_name, sizes.grid()),
+                    desktop_icon_handle(&icon_name, sizes.list()),
+                    desktop_icon_handle(&icon_name, sizes.list_condensed()),
                 )
             } else {
                 (
@@ -1373,7 +1384,7 @@ impl EditLocation {
             };
             let completions = self.completions.as_ref()?;
             let completion = completions.get(selected)?;
-            Some(self.location.with_path(completion.1.clone()))
+            Some(self.location.with_path(completion.1.clone()).normalize())
         }
     }
 
@@ -1393,6 +1404,14 @@ impl EditLocation {
                     selected = 0;
                 }
                 self.selected = Some(selected);
+
+                // Automatically resolve if there is only one completion
+                if completions.len() == 1 {
+                    if let Some(resolved) = self.resolve() {
+                        self.location = resolved;
+                        self.selected = None;
+                    }
+                }
             }
         } else {
             self.selected = None;
@@ -1446,8 +1465,14 @@ impl Location {
                 self.clone()
             }
         } else if let Some(mut path) = self.path_opt().cloned() {
-            // Add trailing slash if location is a path
-            path.push("");
+            // Canonicalize path, if possible
+            if let Ok(canonical) = fs::canonicalize(&path) {
+                path = canonical;
+            }
+            // Add trailing slash if location is a directory
+            if path.is_dir() {
+                path.push("");
+            }
             self.with_path(path)
         } else {
             self.clone()
@@ -1569,7 +1594,7 @@ impl Location {
     pub fn expand_tilde(path: PathBuf) -> PathBuf {
         let mut components = path.components();
         match components.next() {
-            Some(std::path::Component::Normal(os_str)) if os_str == "~" => {
+            Some(path::Component::Normal(os_str)) if os_str == "~" => {
                 if let Some(home) = dirs::home_dir() {
                     home.join(components.as_path())
                 } else {
@@ -1640,6 +1665,7 @@ pub enum Message {
     EditLocationComplete(usize),
     EditLocationEnable,
     EditLocationSubmit,
+    EditLocationTab,
     OpenInNewTab(PathBuf),
     EmptyTrash,
     #[cfg(feature = "desktop")]
@@ -1663,6 +1689,7 @@ pub enum Message {
     Resize(Rectangle),
     Scroll(Viewport),
     ScrollTab(f32),
+    ScrollToFocused,
     SearchContext(Location, SearchContextWrapper),
     SearchReady(bool),
     SelectAll,
@@ -1771,6 +1798,15 @@ impl ItemMetadata {
             },
             #[cfg(feature = "gvfs")]
             Self::GvfsPath { size_opt, .. } => *size_opt,
+            _ => None,
+        }
+    }
+
+    pub fn children_count(&self) -> Option<&usize> {
+        match &self {
+            ItemMetadata::Path { children_opt, .. } => children_opt.as_ref(),
+            #[cfg(feature = "gvfs")]
+            ItemMetadata::GvfsPath { children_opt, .. } => children_opt.as_ref(),
             _ => None,
         }
     }
@@ -2179,6 +2215,18 @@ impl Item {
         self.mime.type_() == mime::IMAGE || self.mime.type_() == mime::TEXT
     }
 
+    pub fn file_metadata(&self) -> Option<Metadata> {
+        match &self.metadata {
+            ItemMetadata::Path { metadata, .. } => Some(metadata.clone()),
+            #[cfg(feature = "gvfs")]
+            ItemMetadata::GvfsPath { .. } => self.path_opt().and_then(|p| fs::metadata(p).ok()),
+            _ => {
+                //TODO: other metadata types
+                None
+            }
+        }
+    }
+
     fn preview(&self) -> Element<'_, Message> {
         let spacing = cosmic::theme::active().cosmic().spacing;
         // This loads the image only if thumbnailing worked
@@ -2280,34 +2328,9 @@ impl Item {
             }
         }
 
-        let mut file_metadata = None;
-        let mut dir_children_count = None;
-
-        match &self.metadata {
-            ItemMetadata::Path {
-                metadata,
-                children_opt,
-            } => {
-                file_metadata = Some(metadata.clone());
-                dir_children_count = *children_opt;
-            }
-            #[cfg(feature = "gvfs")]
-            ItemMetadata::GvfsPath { children_opt, .. } => {
-                // grab the fs::metadata object for gvfs paths since this is run on-demand
-                if let Some(path) = self.path_opt() {
-                    file_metadata = fs::metadata(path).ok();
-                }
-
-                dir_children_count = *children_opt;
-            }
-            _ => {
-                //TODO: other metadata types
-            }
-        }
-
-        if let Some(metadata) = file_metadata {
+        if let Some(metadata) = self.file_metadata() {
             if metadata.is_dir() {
-                if let Some(children) = dir_children_count {
+                if let Some(children) = self.metadata.children_count() {
                     details = details.push(widget::text::body(fl!("items", items = children)));
                 }
                 let size = match &self.dir_size {
@@ -2570,6 +2593,7 @@ pub struct Tab {
     pub mode: Mode,
     pub scroll_opt: Option<AbsoluteOffset>,
     pub size_opt: Cell<Option<Size>>,
+    pub content_height_opt: Cell<Option<f32>>,
     pub viewport_opt: Option<Rectangle>,
     pub item_view_size_opt: Cell<Option<Size>>,
     pub edit_location: Option<EditLocation>,
@@ -2691,6 +2715,7 @@ impl Tab {
             mode: Mode::App,
             scroll_opt: None,
             size_opt: Cell::new(None),
+            content_height_opt: Cell::new(None),
             viewport_opt: None,
             item_view_size_opt: Cell::new(None),
             edit_location: None,
@@ -2823,6 +2848,30 @@ impl Tab {
         }
     }
 
+    /// Selects the first item whose name starts with the given prefix (case-insensitive).
+    /// Returns true if an item was selected.
+    pub fn select_by_prefix(&mut self, prefix: &str) -> bool {
+        let prefix_lower = prefix.to_lowercase();
+        self.select_focus = None;
+
+        if let Some(ref mut items) = self.items_opt {
+            // First, deselect all items
+            for item in items.iter_mut() {
+                item.selected = false;
+            }
+
+            // Find first matching item
+            for (i, item) in items.iter_mut().enumerate() {
+                if item.name.to_lowercase().starts_with(&prefix_lower) {
+                    item.selected = true;
+                    self.select_focus = Some(i);
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     pub fn select_paths(&mut self, paths: Vec<PathBuf>) {
         self.select_focus = None;
         if let Some(ref mut items) = self.items_opt {
@@ -2919,7 +2968,7 @@ impl Tab {
         item.pos_opt.get()
     }
 
-    fn select_focus_scroll(&mut self) -> Option<AbsoluteOffset> {
+    pub(crate) fn select_focus_scroll(&mut self) -> Option<AbsoluteOffset> {
         let items = self.items_opt.as_ref()?;
         let item = items.get(self.select_focus?)?;
         let rect = item.rect_opt.get()?;
@@ -3274,7 +3323,13 @@ impl Tab {
                                     .take(max_real - min_real + 1)
                                 {
                                     if let Some(item) = items.get_mut(index) {
-                                        item.selected = true;
+                                        if item.hidden {
+                                            if self.config.show_hidden {
+                                                item.selected = true;
+                                            }
+                                        } else {
+                                            item.selected = true;
+                                        }
                                     }
                                 }
                             }
@@ -3465,8 +3520,27 @@ impl Tab {
                 self.edit_location = Some(self.location.clone().into());
             }
             Message::EditLocationSubmit => {
-                if let Some(edit_location) = self.edit_location.take() {
+                if let Some(mut edit_location) = self.edit_location.take() {
+                    // Select first completion if current location does not exist
+                    if edit_location.selected.is_none()
+                        && edit_location
+                            .completions
+                            .as_ref()
+                            .map_or(false, |completions| !completions.is_empty())
+                        && edit_location
+                            .location
+                            .path_opt()
+                            .map_or(false, |path| !path.exists())
+                    {
+                        edit_location.selected = Some(0);
+                    }
+
                     cd = edit_location.resolve();
+                }
+            }
+            Message::EditLocationTab => {
+                if let Some(edit_location) = &mut self.edit_location {
+                    edit_location.select(!modifiers.contains(Modifiers::SHIFT));
                 }
             }
             Message::OpenInNewTab(path) => {
@@ -3760,24 +3834,77 @@ impl Tab {
                             commands.push(Command::OpenFile(vec![path]));
                         }
                     }
+                    // Open selected items
                     None => {
-                        if let Some(ref mut items) = self.items_opt {
-                            let mut open_files = Vec::new();
-                            for item in items.iter() {
-                                if item.selected {
-                                    if let Some(location) = &item.location_opt {
-                                        if item.metadata.is_dir() {
-                                            //TODO: allow opening multiple tabs?
-                                            cd = Some(location.clone());
-                                        } else if let Some(path) = location.path_opt() {
-                                            open_files.push(path.clone());
-                                        }
-                                    } else {
-                                        //TODO: open properties?
-                                    }
-                                }
+                        enum ResolveResult {
+                            Open(Option<PathBuf>),
+                            OpenInTab(Option<PathBuf>),
+                            OpenTrash,
+                            OpenProperties,
+                            Cd(Location),
+                            Skip,
+                        }
+                        fn resolve_item(
+                            item: &Item,
+                            mode: &Mode,
+                            is_only_one_selected: bool,
+                        ) -> ResolveResult {
+                            if !item.selected {
+                                return ResolveResult::Skip;
                             }
 
+                            let location = match &item.location_opt {
+                                Some(l) => l,
+                                None => return ResolveResult::OpenProperties,
+                            };
+
+                            let path_opt = location.path_opt();
+
+                            if item.metadata.is_dir() {
+                                match mode {
+                                    Mode::App => {
+                                        if is_only_one_selected {
+                                            return ResolveResult::Cd(location.clone());
+                                        } else {
+                                            return ResolveResult::OpenInTab(path_opt.cloned());
+                                        }
+                                    }
+                                    Mode::Desktop => {
+                                        return match location {
+                                            Location::Trash => ResolveResult::OpenTrash,
+                                            _ => ResolveResult::Open(path_opt.cloned()),
+                                        };
+                                    }
+                                    Mode::Dialog(_) => {
+                                        if is_only_one_selected {
+                                            return ResolveResult::Cd(location.clone());
+                                        } else {
+                                            return ResolveResult::Skip;
+                                        }
+                                    }
+                                }
+                            } else {
+                                return ResolveResult::Open(path_opt.cloned());
+                            }
+                        }
+                        let mut open_files = Vec::new();
+                        if let Some(items) = self.items_opt.as_ref() {
+                            let selected_count = items.iter().filter(|i| i.selected).count();
+
+                            for item in items.iter() {
+                                match resolve_item(item, &self.mode, selected_count == 1) {
+                                    ResolveResult::Open(Some(p)) => open_files.push(p),
+                                    ResolveResult::OpenInTab(Some(p)) => {
+                                        commands.push(Command::OpenInNewTab(p))
+                                    }
+                                    ResolveResult::Cd(loc) => cd = Some(loc),
+                                    ResolveResult::OpenTrash => commands.push(Command::OpenTrash),
+                                    ResolveResult::OpenProperties => {} //TODO: open properties?
+                                    _ => {}
+                                }
+                            }
+                        }
+                        if !open_files.is_empty() {
                             commands.push(Command::OpenFile(open_files));
                         }
                     }
@@ -3882,6 +4009,13 @@ impl Tab {
                     )
                     .into(),
                 ));
+            }
+            Message::ScrollToFocused => {
+                if let Some(offset) = self.select_focus_scroll() {
+                    commands.push(Command::Iced(
+                        scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                    ));
+                }
             }
             Message::SearchContext(location, context) => {
                 if location == self.location {
@@ -4163,6 +4297,7 @@ impl Tab {
 
         // Change directory if requested
         if let Some(mut location) = cd {
+            location = location.normalize();
             if matches!(self.mode, Mode::Desktop) {
                 match location {
                     Location::Path(path) => {
@@ -4705,6 +4840,8 @@ impl Tab {
                             ))
                         })
                         .on_submit(|_| Message::EditLocationSubmit)
+                        .on_tab(Message::EditLocationTab)
+                        .on_unfocus(Message::EditLocation(None))
                         .line_height(1.0),
                 );
             }
@@ -5002,10 +5139,17 @@ impl Tab {
 
         //TODO: move to function
         let visible_rect = {
-            let point = match self.scroll_opt {
-                Some(offset) => Point::new(0.0, offset.y),
-                None => Point::new(0.0, 0.0),
-            };
+            // Use cached content height to clamp scroll offset after resize
+            let max_scroll_y = self
+                .content_height_opt
+                .get()
+                .map(|ch| (ch - height as f32).max(0.0))
+                .unwrap_or(f32::MAX);
+            let scroll_y = self
+                .scroll_opt
+                .map(|o| o.y.min(max_scroll_y).max(0.0))
+                .unwrap_or(0.0);
+            let point = Point::new(0.0, scroll_y);
             let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
             Rectangle::new(point, size)
         };
@@ -5186,6 +5330,9 @@ impl Tab {
                     }
                 }
 
+                // Cache content height for scroll clamping on next frame
+                self.content_height_opt.set(Some(max_bottom as f32));
+
                 let top_deduct = 7 * (space_xxs as usize);
 
                 self.item_view_size_opt
@@ -5317,10 +5464,17 @@ impl Tab {
 
         //TODO: move to function
         let visible_rect = {
-            let point = match self.scroll_opt {
-                Some(offset) => Point::new(0.0, offset.y),
-                None => Point::new(0.0, 0.0),
-            };
+            // Use cached content height to clamp scroll offset after resize
+            let max_scroll_y = self
+                .content_height_opt
+                .get()
+                .map(|ch| (ch - size.height).max(0.0))
+                .unwrap_or(f32::MAX);
+            let scroll_y = self
+                .scroll_opt
+                .map(|o| o.y.min(max_scroll_y).max(0.0))
+                .unwrap_or(0.0);
+            let point = Point::new(0.0, scroll_y);
             let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
             Rectangle::new(point, size)
         };
@@ -5628,6 +5782,9 @@ impl Tab {
             if count == 0 {
                 return (None, self.empty_view(hidden > 0), false);
             }
+
+            // Cache content height for scroll clamping on next frame
+            self.content_height_opt.set(Some(y));
         }
         //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
         {
@@ -5851,7 +6008,110 @@ impl Tab {
 
         dnd_dest.into()
     }
+    pub fn multi_preview_view<'a>(&'a self) -> Element<'a, Message> {
+        let cosmic_theme::Spacing {
+            space_xxxs,
+            space_m,
+            ..
+        } = theme::active().cosmic().spacing;
 
+        let mut column = widget::column().spacing(space_m);
+
+        let handle = widget::icon::from_name("text-x-generic")
+            .size(IconSizes::default().grid())
+            .handle();
+
+        let icon = widget::icon::icon(handle.clone())
+            .content_fit(ContentFit::Contain)
+            .size(IconSizes::default().grid());
+
+        let icon_container1 = widget::container(icon.clone()).padding(padding::bottom(10).left(10));
+        let icon_container2 =
+            widget::container(icon.clone()).padding(padding::top(5).bottom(5).left(5).right(5));
+        let icon_container3 = widget::container(icon).padding(padding::top(10).right(10));
+        let stack = stack![icon_container1, icon_container2, icon_container3];
+
+        column = column.push(
+            widget::container(stack)
+                .center_x(Length::Fill)
+                .max_height(THUMBNAIL_SIZE as f32),
+        );
+
+        let selected_items: Vec<&Item> = self.items_opt().map_or(Vec::new(), |items| {
+            items.iter().filter(|item| item.selected).collect()
+        });
+
+        let mut details = widget::column().spacing(space_xxxs);
+        details = details.push(widget::text::body(fl!(
+            "items",
+            items = selected_items.len()
+        )));
+
+        let mut total_size: u64 = 0;
+        let mut mime_type_counts: BTreeMap<String, u64> = BTreeMap::new();
+        let mut calculating_dir_size = false;
+        let mut dir_size_error: Option<String> = None;
+
+        for item in selected_items.iter() {
+            *mime_type_counts.entry(item.mime.to_string()).or_insert(0) += 1;
+
+            if let Some(metadata) = item.file_metadata() {
+                if metadata.is_dir() {
+                    match &item.dir_size {
+                        DirSize::Calculating(_) => {
+                            calculating_dir_size = true;
+                        }
+                        DirSize::Directory(size) => {
+                            total_size = total_size.saturating_add(*size);
+                        }
+                        DirSize::NotDirectory => (),
+                        DirSize::Error(err) => {
+                            dir_size_error = Some(err.clone());
+                        }
+                    };
+                } else {
+                    total_size = total_size.saturating_add(metadata.len());
+                }
+            }
+        }
+        let mut mime_types: Vec<(String, u64)> = mime_type_counts.into_iter().collect();
+        mime_types.sort_by(|(_, v1), (_, v2)| v2.cmp(v1));
+
+        // Limit the number of displayed mime types
+        let limit = usize::min(10, mime_types.len());
+
+        let mut mime_type_strings: Vec<String> = mime_types[..limit]
+            .iter()
+            .map(|(mime, count)| format!("{} ({})", mime, count))
+            .collect();
+
+        if mime_types.len() > limit {
+            mime_type_strings.push("...".to_string());
+        }
+
+        details = details.push(widget::text::body(fl!(
+            "type",
+            mime = mime_type_strings.join(", ")
+        )));
+
+        let size = {
+            if calculating_dir_size {
+                fl!("calculating")
+            } else if let Some(error) = dir_size_error {
+                error
+            } else {
+                format_size(total_size)
+            }
+        };
+
+        details = details.push(widget::text::body(fl!("item-size", size = size)));
+
+        column = column.push(details);
+
+        column = column.push(widget::button::standard(fl!("open")).on_press(Message::Open(None)));
+
+        column.into()
+    }
     pub fn view<'a>(
         &'a self,
         key_binds: &'a HashMap<KeyBind, Action>,
@@ -5980,11 +6240,16 @@ impl Tab {
 
             if preview {
                 // Load directory size for selected items
-                if let Some(item) = items
-                    .iter()
-                    .find(|&item| item.selected)
-                    .or(self.parent_item_opt.as_ref())
-                {
+
+                let mut selected_items: Vec<&Item> =
+                    items.iter().filter(|item| item.selected).collect();
+
+                if selected_items.is_empty() {
+                    if let Some(p) = self.parent_item_opt.as_ref() {
+                        selected_items.push(p)
+                    }
+                }
+                for item in selected_items {
                     // Item must have a path
                     if let Some(path) = item.path_opt().cloned() {
                         // Item must be calculating directory size
