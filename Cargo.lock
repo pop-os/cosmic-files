@@ -1488,6 +1488,7 @@ dependencies = [
  "icu",
  "ignore",
  "image",
+ "infer 0.19.0",
  "io-uring",
  "jxl-oxide",
  "libc",
@@ -3916,6 +3917,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "infer"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a588916bfdfd92e71cacef98a63d9b1f0d74d6599980d11894290e7ddefffcf7"
+dependencies = [
+ "cfb",
+]
+
+[[package]]
 name = "inotify"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6225,7 +6235,7 @@ source = "git+https://github.com/pop-os/recently-used-xbel.git#eeba9e08b0446175d
 dependencies = [
  "chrono",
  "dirs 5.0.1",
- "infer",
+ "infer 0.16.0",
  "mime_guess",
  "quick-xml 0.36.2",
  "serde",
