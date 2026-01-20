@@ -392,5 +392,6 @@ delete-permanently = Ta bort permanent
 eject = Mata ut
 remove-from-recents = Ta bort från senaste
 reload-folder = Ladda om mapp
-selected-items = de { $items } valda objekten
+selected-items = De { $items } valda objekten
 empty-trash-title = Töm papperskorgen?
+type-to-search-select = Markerar den första matchande filen eller mappen

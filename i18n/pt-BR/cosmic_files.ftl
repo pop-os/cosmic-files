@@ -98,7 +98,7 @@ related-apps = Aplicativos relacionados
 
 ## Permanently delete Dialog
 
-selected-items = os { $items } itens selecionados
+selected-items = Os { $items } itens selecionados
 permanently-delete-question = Excluir permanentemente?
 delete = Excluir
 permanently-delete-warning = Deseja realmente excluir permanentemente { $target }? Esta operação não poderá ser desfeita.
@@ -421,3 +421,4 @@ sort-oldest-first = Mais antigos primeiro
 sort-smallest-to-largest = Do menor para o maior
 sort-largest-to-smallest = Do maior para o menor
 empty-trash-title = Esvaziar a lixeira?
+type-to-search-select = Seleciona o primeiro arquivo ou pasta correspondente
