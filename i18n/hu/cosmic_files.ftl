@@ -60,14 +60,14 @@ empty-trash-warning = A kukában lévő összes elem véglegesen törölve lesz
 
 ## Mount Error Dialog
 
-mount-error = A meghajtó nem elérhető
+mount-error = Nem érhető el a meghajtó
 
 ## New File/Folder Dialog
 
 create-new-file = Új fájl létrehozása
 create-new-folder = Új mappa létrehozása
 file-name = Fájlnév
-folder-name = Mappanév
+folder-name = Mappa neve
 file-already-exists = Már létezik ilyen nevű fájl
 folder-already-exists = Már létezik ilyen nevű mappa
 name-hidden = A ponttal kezdődő nevek rejtve lesznek
@@ -91,7 +91,7 @@ save-file = Fájl mentése
 
 ## Open With Dialog
 
-open-with-title = Hogyan szeretnéd megnyitni ezt: „{ $name }”?
+open-with-title = Hogyan szeretnéd megnyitni a következőt: „{ $name }”?
 browse-store = { $store } böngészése
 other-apps = Egyéb alkalmazások
 related-apps = Hasonló alkalmazások
@@ -112,7 +112,7 @@ rename-folder = Mappa átnevezése
 
 replace = Csere
 replace-title = „{ $filename }” már létezik
-replace-warning = Szeretnéd lecserélni a meglévő fájlt a menteni kívánt fájllal? A cseréje felülírja annak tartalmát.
+replace-warning = Szeretnéd lecserélni a meglévő fájlt a mentendő fájllal? A cserével felülírod annak tartalmát.
 replace-warning-operation = Szeretnéd lecserélni? A csere felülírja annak tartalmát.
 original-file = Eredeti fájl
 replace-with = Csere erre
@@ -124,7 +124,7 @@ skip = Kihagyás
 
 set-executable-and-launch = Végrehajthatóvá tétel és indítás
 set-executable-and-launch-description = Szeretnéd végrehajthatóvá tenni a(z) „{ $name }” fájlt és elindítani?
-set-and-launch = Alkalmazás és indítás
+set-and-launch = Beállítás és indítás
 
 ## Metadata Dialog
 
@@ -189,10 +189,10 @@ connect = Csatlakozás
 connect-anonymously = Csatlakozás névtelenül
 connecting = Csatlakozás…
 domain = Tartomány
-enter-server-address = Add meg a szerver címét
+enter-server-address = Add meg a kiszolgáló címét
 network-drive-description =
-    A szervercímek tartalmazzák a protokoll előtagot és a címet.
-    Példák: ssh://192.168.0.1, ftp://[2001:db8::1]
+    A kiszolgálócímek tartalmazzák a protokoll előtagját és a címet.
+    Például: ssh://192.168.0.1, ftp://[2001:db8::1]
 
 ### Make sure to keep the comma which separates the columns
 
@@ -204,7 +204,7 @@ network-drive-schemes =
     Server Message Block,smb://
     SSH File Transfer Protocol,sftp:// vagy ssh://
     WebDAV,dav:// vagy davs://
-network-drive-error = A hálózati meghajtó nem elérhető
+network-drive-error = Nem érhető el a hálózati meghajtó
 password = Jelszó
 remember-password = Jelszó megjegyzése
 try-again = Újra
@@ -322,14 +322,14 @@ default-app = { $name } (alapértelmezett)
 
 ## Show details
 
-show-details = Részletek mutatása
+show-details = Részletek megjelenítése
 type = Típus: { $mime }
 items = Elemek: { $items }
 item-size = Méret: { $size }
 item-created = Létrehozva: { $created }
 item-modified = Módosítva: { $modified }
 item-accessed = Hozzáférve: { $accessed }
-calculating = Számolás…
+calculating = Számítás…
 
 ## Settings
 
@@ -347,7 +347,7 @@ light = Világos
 ### Type to Search
 
 type-to-search = Gépeléssel keresés
-type-to-search-recursive = A jelenlegi mappában és almappákban keres
+type-to-search-recursive = Keresés a jelenlegi mappában és almappákban
 type-to-search-enter-path = Elérési út megadása
 # Context menu
 add-to-sidebar = Hozzáadás az oldalsávhoz
@@ -371,7 +371,7 @@ remove-from-recents = Eltávolítás a legutóbbiak közül
 
 change-wallpaper = Háttérkép cseréje…
 desktop-appearance = Asztali megjelenés…
-display-settings = Képernyő beállításai…
+display-settings = Képernyő-beállítások…
 
 # Menu
 
@@ -421,3 +421,4 @@ repository = Tároló
 support = Támogatás
 progress-failed = { $percent }%, sikertelen
 empty-trash-title = Kuka ürítése?
+type-to-search-select = Kijelöli az első egyező fájlt vagy mappát
