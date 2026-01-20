@@ -46,11 +46,8 @@ pub fn extract(
     password: &Option<String>,
     controller: &Controller,
 ) -> Result<(), OperationError> {
-    // Determine MIME type by looking for magic bytes instead of the filename
-    // (i.e. mime_for_path). Technically slower but only invoked when actually
-    // extracting a file and is more accurate in selecting appropriate
-    // decompression. Avoids bad user experience if they have a file with an
-    // incorrect extension, e.g., .tar instead of .tar.gz.
+    // Detect MIME type via magic bytes rather than file extension. Slower,
+    // but ensures accurate decompression even if the file extension is wrong.
     let mime = mime_from_bytes(path);
     let password = password.as_deref();
     match mime.essence_str() {
@@ -111,10 +108,7 @@ pub fn extract(
 fn mime_from_bytes(path: &Path) -> mime_guess::Mime {
     let type_opt = infer::get_from_path(path).ok().flatten();
 
-    // fallback to mime_for_path if:
-    // - infer::get_from_path fails, or
-    // - infer::get_from_path returns an empty Type, or
-    // - infer::get_from_path returns an invalid MIME type string
+    // fallback to mime_for_path on failed, empty, or invalid magic byte detection
     type_opt
         .and_then(|t| t.mime_type().parse::<mime_guess::Mime>().ok())
         .unwrap_or_else(|| mime_for_path(path, None, false))
