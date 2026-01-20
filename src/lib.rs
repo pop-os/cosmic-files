@@ -1,14 +1,9 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
-use cosmic::{app::Settings, iced::Limits};
-use std::{env, fs, path::PathBuf, process};
-
-use app::{App, Flags};
 pub mod app;
 mod archive;
 pub mod clipboard;
-use config::Config;
 pub mod config;
 pub mod dialog;
 mod key_bind;
@@ -21,13 +16,22 @@ mod mounter;
 mod mouse_area;
 pub mod operation;
 mod spawn_detached;
-use tab::Location;
-mod zoom;
-
-use crate::config::State;
 pub mod tab;
 mod thumbnail_cacher;
 mod thumbnailer;
+mod zoom;
+
+#[cfg(feature = "xdg-portal")]
+pub mod xdg_portals;
+
+use cosmic::{app::Settings, iced::Limits};
+use std::{env, fs, path::PathBuf, process};
+
+use crate::{
+    app::{App, Flags},
+    config::{Config, State},
+    tab::Location,
+};
 
 pub(crate) type FxOrderMap<K, V> = ordermap::OrderMap<K, V, rustc_hash::FxBuildHasher>;
 
@@ -96,7 +100,7 @@ pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
         state,
         mode: app::Mode::Desktop,
         locations,
-        uris: Vec::new()
+        uris: Vec::new(),
     };
     cosmic::app::run::<App>(settings, flags)?;
 
