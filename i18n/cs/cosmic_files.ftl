@@ -82,10 +82,10 @@ settings = Nastavení
 ### Appearance
 
 appearance = Vzhled
-theme = Téma
+theme = Motiv
 match-desktop = Podle systému
-dark = Tmavé
-light = Světlé
+dark = Tmavý
+light = Světlý
 # Context menu
 add-to-sidebar = Přidat do postranního panelu
 new-file = Nový soubor...
@@ -384,7 +384,7 @@ item-accessed = Poslední přístup: { $accessed }
 calculating = Vypočítávání...
 single-click = Otevřít jedním kliknutím
 type-to-search = Vyhledávání psaním
-type-to-search-recursive = Prohledává současnou složku a její podsložky
+type-to-search-recursive = Prohledává aktuální složku a její podsložky
 type-to-search-enter-path = Zadává cestu ke složce nebo souboru
 compress = Komprimovat
 eject = Vysunout
