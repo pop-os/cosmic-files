@@ -1,3 +1,9 @@
+cosmic-files (1.0.4) noble; urgency=medium
+
+  * Epoch 1.0.4 version update
+
+ -- Jeremy Soller <jeremy@system76.com>  Wed, 21 Jan 2026 10:16:11 -0700
+
 cosmic-files (1.0.0) jammy; urgency=medium
 
   * Stable release.
