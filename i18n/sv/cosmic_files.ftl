@@ -99,6 +99,7 @@ open-with = Öppna med
 owner = Ägare
 group = Grupp
 other = Andra
+mixed = Blandade
 # Listvy
 name = Namn
 modified = Ändrad
