@@ -267,6 +267,11 @@ restored = Restored {$items} {$items ->
         *[other] items
     } from {trash}
 unknown-folder = unknown folder
+## Failed Operation Dialog
+failed-operation-title = Failed operation
+retry = Retry
+error-occurred-description = An error occurred during the operation:
+    .error = Error: {$err}
 
 ## Open with
 menu-open-with = Open with...
