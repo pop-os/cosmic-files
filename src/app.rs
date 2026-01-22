@@ -791,23 +791,14 @@ impl App {
         // This allows handling paths as groups if possible, such as launching a single video
         // player that is passed every path.
         let mut groups: FxHashMap<Mime, Vec<PathBuf>> = FxHashMap::default();
-        let mut all_archives = true;
-        let supported_archive_types = crate::archive::SUPPORTED_ARCHIVE_TYPES;
+        let _supported_archive_types = crate::archive::SUPPORTED_ARCHIVE_TYPES;
         for (mime, path) in paths.iter().map(|path| {
             (
                 mime_icon::mime_for_path(path, None, false),
                 path.as_ref().to_owned(),
             )
         }) {
-            if all_archives && !supported_archive_types.iter().copied().any(|t| mime == t) {
-                all_archives = false;
-            }
             groups.entry(mime).or_default().push(path);
-        }
-
-        if all_archives {
-            // Use extract to dialog if all selected paths are supported archives
-            return self.extract_to(paths);
         }
 
         'outer: for (mime, paths) in groups {
