@@ -48,6 +48,10 @@ build-debug *args:
 
 # Compiles with release profile
 build-release *args: (build-debug '--release' args)
+ 
+# Compiles applet with release profile
+build-release-applet *args:
+    cargo build --package {{applet-name}} --release {{args}}
 
 # Compiles release profile with vendored dependencies
 build-vendored *args: vendor-extract (build-release '--frozen --offline' args)
@@ -94,6 +98,10 @@ install:
     for size in `ls {{icons-src}}`; do \
         install -Dm0644 "{{icons-src}}/$size/apps/{{APPID}}.svg" "{{icons-dst}}/$size/apps/{{APPID}}.svg"; \
     done
+
+# Installs applet files
+install-applet:
+    install -Dm0755 {{applet-src}} {{applet-dst}}
 
 # Uninstalls installed files
 uninstall:
