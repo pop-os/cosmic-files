@@ -1,6 +1,7 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
+use cosmic::desktop::fde::GenericEntry;
 use mime_guess::Mime;
 use rustc_hash::FxHashMap;
 use std::{
@@ -115,7 +116,7 @@ impl ThumbnailerCache {
 
         //TODO: handle directory specific behavior
         for path in thumbnailer_paths {
-            let entry = match freedesktop_entry_parser::parse_entry(&path) {
+            let entry = match GenericEntry::from_path(&path) {
                 Ok(ok) => ok,
                 Err(err) => {
                     log::warn!("failed to parse {}: {}", path.display(), err);
@@ -124,12 +125,18 @@ impl ThumbnailerCache {
             };
 
             //TODO: use TryExec?
-            let section = entry.section("Thumbnailer Entry");
-            let Some(exec) = section.attr("Exec") else {
+            let Some(section) = entry.group("Thumbnailer Entry") else {
+                log::warn!(
+                    "missing Thumbnailer Entry section for thumbnailer {}",
+                    path.display()
+                );
+                continue;
+            };
+            let Some(exec) = section.entry("Exec") else {
                 log::warn!("missing Exec attribute for thumbnailer {}", path.display());
                 continue;
             };
-            let Some(mime_types) = section.attr("MimeType") else {
+            let Some(mime_types) = section.entry("MimeType") else {
                 log::warn!(
                     "missing MimeType attribute for thumbnailer {}",
                     path.display()

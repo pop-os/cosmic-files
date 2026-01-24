@@ -1,5 +1,8 @@
+use chrono::{Datelike, Timelike, Utc};
 use cosmic::{
-    Apply, Element, cosmic_theme, font,
+    Apply, Element, cosmic_theme,
+    desktop::fde::{DesktopEntry, get_languages_from_env},
+    font,
     iced::{
         Alignment,
         Border,
@@ -37,8 +40,6 @@ use cosmic::{
         menu::{action::MenuAction, key_bind::KeyBind},
     },
 };
-
-use chrono::{Datelike, Timelike, Utc};
 use i18n_embed::LanguageLoader;
 use icu::{
     datetime::{
@@ -615,7 +616,8 @@ pub fn fs_kind(_metadata: &Metadata) -> FsKind {
 }
 
 fn get_desktop_file_display_name(path: &Path) -> Option<String> {
-    let entry = match freedesktop_entry_parser::parse_entry(path) {
+    let locales = get_languages_from_env();
+    let entry = match DesktopEntry::from_path(path, Some(&locales)) {
         Ok(ok) => ok,
         Err(err) => {
             log::warn!("failed to parse {}: {}", path.display(), err);
@@ -623,14 +625,11 @@ fn get_desktop_file_display_name(path: &Path) -> Option<String> {
         }
     };
 
-    entry
-        .section("Desktop Entry")
-        .attr("Name")
-        .map(str::to_string)
+    entry.name(&locales).map(|s| s.into_owned())
 }
 
 fn get_desktop_file_icon(path: &Path) -> Option<String> {
-    let entry = match freedesktop_entry_parser::parse_entry(path) {
+    let entry = match DesktopEntry::from_path::<&str>(path, None) {
         Ok(ok) => ok,
         Err(err) => {
             log::warn!("failed to parse {}: {}", path.display(), err);
@@ -638,10 +637,7 @@ fn get_desktop_file_icon(path: &Path) -> Option<String> {
         }
     };
 
-    entry
-        .section("Desktop Entry")
-        .attr("Icon")
-        .map(str::to_string)
+    entry.icon().map(str::to_string)
 }
 
 /// Creates an icon handle from a desktop file's Icon field value.
@@ -656,17 +652,17 @@ fn desktop_icon_handle(icon: &str, size: u16) -> widget::icon::Handle {
 }
 
 pub fn parse_desktop_file(path: &Path) -> (Option<String>, Option<String>) {
-    let entry = match freedesktop_entry_parser::parse_entry(path) {
+    let locales = get_languages_from_env();
+    let entry = match DesktopEntry::from_path(path, Some(&locales)) {
         Ok(ok) => ok,
         Err(err) => {
             log::warn!("failed to parse {}: {}", path.display(), err);
             return (None, None);
         }
     };
-    let section = entry.section("Desktop Entry");
     (
-        section.attr("Name").map(str::to_string),
-        section.attr("Icon").map(str::to_string),
+        entry.name(&locales).map(|s| s.into_owned()),
+        entry.icon().map(str::to_string),
     )
 }
 
