@@ -322,7 +322,7 @@ impl Op {
                     }
                 }
 
-                let (from_file, metadata, mut to_file) = futures::try_join!(
+                let (from_file, metadata, mut to_file) = cosmic::iced::futures::try_join!(
                     async {
                         compio::fs::OpenOptions::new()
                             .read(true)

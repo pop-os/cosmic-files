@@ -18,7 +18,9 @@ use cosmic::{
     Application, ApplicationExt, Element,
     app::{self, Core, Task, context_drawer},
     cosmic_config::{self, ConfigSet},
-    cosmic_theme, executor,
+    cosmic_theme,
+    desktop::fde::DesktopEntry,
+    executor,
     iced::{
         self, Alignment, Event, Length, Rectangle, Size, Subscription,
         clipboard::dnd::DndAction,
@@ -72,10 +74,10 @@ use crate::{
     FxOrderMap,
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
     config::{
-        AppTheme, Config, DesktopConfig, Favorite, IconSizes, TIME_CONFIG_ID, TabConfig,
+        AppTheme, Config, DesktopConfig, Favorite, IconSizes, State, TIME_CONFIG_ID, TabConfig,
         TimeConfig, TypeToSearch,
     },
-    dialog::{Dialog, DialogKind, DialogMessage, DialogResult},
+    dialog::{Dialog, DialogKind, DialogMessage, DialogResult, DialogSettings},
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
@@ -91,10 +93,6 @@ use crate::{
     tab::{
         self, HOVER_DURATION, HeadingOptions, ItemMetadata, Location, SORT_OPTION_FALLBACK, Tab,
     },
-};
-use crate::{
-    config::State,
-    dialog::DialogSettings,
     zoom::{zoom_in_view, zoom_out_view, zoom_to_default},
 };
 
@@ -846,8 +844,8 @@ impl App {
 
     fn launch_desktop_entries(paths: &[impl AsRef<Path>]) {
         for path in paths.iter().map(AsRef::as_ref) {
-            match freedesktop_entry_parser::parse_entry(path) {
-                Ok(entry) => match entry.section("Desktop Entry").attr("Exec") {
+            match DesktopEntry::from_path::<&str>(path, None) {
+                Ok(entry) => match entry.exec() {
                     Some(exec) => match mime_app::exec_to_command(exec, &[] as &[&str; 0]) {
                         Some(commands) => {
                             for mut command in commands {
