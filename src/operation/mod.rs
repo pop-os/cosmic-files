@@ -196,6 +196,29 @@ async fn copy_or_move(
     .map_err(wrap_compio_spawn_error)?
 }
 
+pub async fn sync_to_disk(
+    written_files: Vec<PathBuf>,
+    target_dirs: std::collections::HashSet<PathBuf>,
+) {
+    use futures::{StreamExt, stream};
+
+    // Sync files to disk
+    let file_stream = stream::iter(written_files.into_iter().map(|path| async move {
+        if let Ok(file) = compio::fs::OpenOptions::new().write(true).open(&path).await {
+            let _ = file.sync_all().await;
+        }
+    }));
+    file_stream.buffer_unordered(32).collect::<Vec<_>>().await;
+
+    // Sync directories to disk
+    let dir_stream = stream::iter(target_dirs.into_iter().map(|path| async move {
+        if let Ok(dir) = compio::fs::OpenOptions::new().read(true).open(&path).await {
+            let _ = dir.sync_all().await;
+        }
+    }));
+    dir_stream.buffer_unordered(16).collect::<Vec<_>>().await;
+}
+
 fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
     // List of compound extensions to check
     const COMPOUND_EXTENSIONS: &[&str] = &[

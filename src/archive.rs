@@ -1,15 +1,14 @@
-use std::{
-    collections::VecDeque,
-    fs,
-    io::{self, Read, Write},
-    path::Path,
-};
-use zip::result::ZipError;
-
 use crate::{
     mime_icon::mime_for_path,
-    operation::{Controller, OpReader, OperationError, OperationErrorType},
+    operation::{Controller, OpReader, OperationError, OperationErrorType, sync_to_disk},
 };
+use std::{
+    collections::HashSet,
+    fs,
+    io::{self, Read, Write},
+    path::{Path, PathBuf},
+};
+use zip::result::ZipError;
 
 pub const SUPPORTED_ARCHIVE_TYPES: &[&str] = &[
     "application/gzip",
@@ -113,27 +112,36 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
     use std::{ffi::OsString, fs};
     use zip::result::ZipError;
 
-    fn make_writable_dir_all<T: AsRef<Path>>(outpath: T) -> Result<(), ZipError> {
-        fs::create_dir_all(outpath.as_ref())?;
+    fn make_writable_dir_all<T: AsRef<Path>>(
+        outpath: T,
+        target_dirs: &mut HashSet<PathBuf>,
+    ) -> Result<(), ZipError> {
+        let path = outpath.as_ref();
+        if !path.exists() {
+            fs::create_dir_all(path)?;
+        }
+        if !target_dirs.contains(path) {
+            target_dirs.insert(path.to_path_buf());
+        }
+
         #[cfg(unix)]
         {
             // Dirs must be writable until all normal files are extracted
             use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(
-                outpath.as_ref(),
-                std::fs::Permissions::from_mode(
-                    0o700 | std::fs::metadata(outpath.as_ref())?.permissions().mode(),
-                ),
+            fs::set_permissions(
+                path,
+                fs::Permissions::from_mode(0o700 | fs::metadata(path)?.permissions().mode()),
             )?;
         }
         Ok(())
     }
 
-    #[cfg(unix)]
-    let mut files_by_unix_mode = Vec::new();
     let mut buffer = vec![0; 4 * 1024 * 1024];
     let total_files = archive.len();
-    let mut pending_directory_creates = VecDeque::new();
+    let mut written_files = Vec::with_capacity(total_files);
+    let mut target_dirs = HashSet::new();
+    #[cfg(unix)]
+    let mut files_by_unix_mode = Vec::with_capacity(total_files);
 
     for i in 0..total_files {
         futures::executor::block_on(async {
@@ -143,7 +151,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
                 .map_err(|s| io::Error::other(OperationError::from_state(s, &controller)))
         })?;
 
-        controller.set_progress((i as f32) / total_files as f32);
+        controller.set_progress(i as f32 / total_files as f32);
 
         let mut file = match password {
             None => archive.by_index(i),
@@ -156,26 +164,22 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
         let outpath = directory.as_ref().join(filepath);
 
         if file.is_dir() {
-            pending_directory_creates.push_back(outpath.clone());
+            make_writable_dir_all(&outpath, &mut target_dirs)?;
+
+            #[cfg(unix)]
+            if let Some(mode) = file.unix_mode() {
+                files_by_unix_mode.push((outpath, mode));
+            }
             continue;
         }
-        let symlink_target = if file.is_symlink() && (cfg!(unix) || cfg!(windows)) {
+
+        if let Some(parent) = outpath.parent() {
+            make_writable_dir_all(parent, &mut target_dirs)?;
+        }
+
+        if file.is_symlink() && (cfg!(unix) || cfg!(windows)) {
             let mut target = Vec::with_capacity(file.size() as usize);
             file.read_to_end(&mut target)?;
-            Some(target)
-        } else {
-            None
-        };
-        drop(file);
-        if let Some(target) = symlink_target {
-            // create all pending dirs
-            while let Some(pending_dir) = pending_directory_creates.pop_front() {
-                make_writable_dir_all(pending_dir)?;
-            }
-
-            if let Some(p) = outpath.parent() {
-                make_writable_dir_all(p)?;
-            }
 
             #[cfg(unix)]
             {
@@ -205,20 +209,9 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
                     std::os::windows::fs::symlink_file(target_path, outpath.as_path())?;
                 }
             }
+
+            written_files.push(outpath);
             continue;
-        }
-        let mut file = match password {
-            None => archive.by_index(i),
-            Some(pwd) => archive.by_index_decrypt(i, pwd.as_bytes()),
-        }?;
-
-        // create all pending dirs
-        while let Some(pending_dir) = pending_directory_creates.pop_front() {
-            make_writable_dir_all(pending_dir)?;
-        }
-
-        if let Some(p) = outpath.parent() {
-            make_writable_dir_all(p)?;
         }
 
         let total = file.size();
@@ -245,13 +238,14 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
                 controller.set_progress(total_progress);
             }
         }
+
+        // Check for real permissions, which we'll set in a second pass
         #[cfg(unix)]
-        {
-            // Check for real permissions, which we'll set in a second pass
-            if let Some(mode) = file.unix_mode() {
-                files_by_unix_mode.push((outpath.clone(), mode));
-            }
+        if let Some(mode) = file.unix_mode() {
+            files_by_unix_mode.push((outpath.clone(), mode));
         }
+
+        written_files.push(outpath);
     }
     #[cfg(unix)]
     {
@@ -260,11 +254,15 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
 
         if files_by_unix_mode.len() > 1 {
             // Ensure we update children's permissions before making a parent unwritable
-            files_by_unix_mode.sort_by_key(|(path, _)| Reverse(path.clone()));
+            files_by_unix_mode.sort_by_key(|(path, _)| Reverse(path.components().count()));
         }
         for (path, mode) in files_by_unix_mode {
             fs::set_permissions(&path, fs::Permissions::from_mode(mode))?;
         }
     }
+
+    // Flush files to disk
+    futures::executor::block_on(async { sync_to_disk(written_files, target_dirs).await });
+
     Ok(())
 }
