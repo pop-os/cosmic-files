@@ -62,10 +62,10 @@ pub static LOCALE: LazyLock<Locale> = LazyLock::new(|| {
             }
 
             // Try language-only fallback (e.g., "en" from "en-US")
-            if let Some(lang) = cleaned_locale.split('-').next() {
-                if let Ok(locale) = Locale::try_from_str(lang) {
-                    return locale;
-                }
+            if let Some(lang) = cleaned_locale.split('-').next()
+                && let Ok(locale) = Locale::try_from_str(lang)
+            {
+                return locale;
             }
         }
     }

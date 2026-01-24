@@ -957,10 +957,10 @@ impl Operation {
                                 let dir_name = get_directory_name(file_name);
                                 let mut new_dir = to.join(dir_name);
 
-                                if new_dir.exists() {
-                                    if let Some(new_dir_parent) = new_dir.parent() {
-                                        new_dir = copy_unique_path(&new_dir, new_dir_parent);
-                                    }
+                                if new_dir.exists()
+                                    && let Some(new_dir_parent) = new_dir.parent()
+                                {
+                                    new_dir = copy_unique_path(&new_dir, new_dir_parent);
                                 }
 
                                 op_sel.ignored.push(path.clone());

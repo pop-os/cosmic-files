@@ -138,10 +138,10 @@ impl Context {
                     }),
                     is_cleanup: false,
                 };
-                if matches!(method, Method::Move { .. }) {
-                    if let Some(cleanup_op) = op.move_cleanup_op() {
-                        cleanup_ops.push(cleanup_op);
-                    }
+                if matches!(method, Method::Move { .. })
+                    && let Some(cleanup_op) = op.move_cleanup_op()
+                {
+                    cleanup_ops.push(cleanup_op);
                 }
                 if let Some(parent) = op.to.parent() {
                     target_dirs.insert(parent.to_path_buf());
