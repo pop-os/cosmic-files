@@ -861,7 +861,9 @@ impl App {
 
         for favorite in &self.flags.config.favorites {
             if let Some(path) = favorite.path_opt() {
-                let name = if matches!(favorite, Favorite::Home) {
+                let name = if let Favorite::Network { display_name, .. } = favorite && !display_name.is_empty() {
+                    display_name.clone()
+                } else if matches!(favorite, Favorite::Home) {
                     fl!("home")
                 } else if let Some(file_name) = path.file_name().and_then(|x| x.to_str()) {
                     file_name.to_string()
