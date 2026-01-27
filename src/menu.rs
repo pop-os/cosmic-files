@@ -107,6 +107,7 @@ pub fn context_menu<'a>(
     let mut selected = 0;
     let mut selected_trash_only = false;
     let mut selected_desktop_entry = None;
+    let mut selected_executable = false;
     let mut selected_types: Vec<Mime> = vec![];
     let mut selected_mount_point = 0;
     if let Some(items) = tab.items_opt() {
@@ -127,6 +128,14 @@ pub fn context_menu<'a>(
                         }
                     }
                     _ => (),
+                }
+                #[cfg(unix)]
+                if selected == 1 && !item.metadata.is_dir() {
+                    if let Some(metadata) = item.file_metadata() {
+                        use std::os::unix::fs::PermissionsExt;
+                        let mode = metadata.permissions().mode();
+                        selected_executable = mode & 0o111 != 0;
+                    }
                 }
                 selected_types.push(item.mime.clone());
             }
@@ -186,6 +195,13 @@ pub fn context_menu<'a>(
                     if selected_dir == 1 {
                         children
                             .push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
+                    }
+                    #[cfg(unix)]
+                    if selected_executable {
+                        children.push(
+                            menu_item(fl!("create-desktop-entry"), Action::CreateDesktopEntry)
+                                .into(),
+                        );
                     }
                 }
                 if matches!(tab.location, Location::Search(..) | Location::Recents) {
