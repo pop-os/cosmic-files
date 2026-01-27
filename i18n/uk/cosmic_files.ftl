@@ -16,8 +16,8 @@ size = Розмір
 
 ## Empty Trash Dialog
 
-empty-trash = Спорожнити Смітник
-empty-trash-warning = Ви впевнені, що хочете остаточно видалити всі елементи зі Смітника?
+empty-trash = Спорожнити смітник
+empty-trash-warning = Елементи зі смітника будуть остаточно видалені
 
 ## New File/Folder Dialog
 
@@ -25,11 +25,11 @@ create-new-file = Створити новий файл
 create-new-folder = Створити нову теку
 file-name = Назва файлу
 folder-name = Назва теки
-file-already-exists = Файл з такою назвою вже існує.
-folder-already-exists = Тека з такою назвою вже існує.
-name-hidden = Назви, що починаються з ".", будуть приховані.
-name-invalid = Назва не може бути "{ $filename }".
-name-no-slashes = Назва не може містити скісні риски.
+file-already-exists = Файл з такою назвою вже існує
+folder-already-exists = Тека з такою назвою вже існує
+name-hidden = Назви, що починаються з ".", будуть приховані
+name-invalid = Назва не може бути "{ $filename }"
+name-no-slashes = Назва не може містити скісні риски
 
 ## Open/Save Dialog
 
@@ -52,7 +52,7 @@ rename-folder = Перейменувати теку
 ## Replace Dialog
 
 replace = Замінити
-replace-title = " { $filename }" вже існує в цьому місці.
+replace-title = " { $filename }" вже існує в цьому місці
 replace-warning = Бажаєте замінити його тим, що зберігаєте? Замінювання перезапише його вміст.
 replace-warning-operation = Бажаєте замінити його? Замінювання перезапише його вміст.
 original-file = Початковий файл
@@ -185,7 +185,7 @@ remove = Вилучити
 cancelled = Скасовані
 no-results = Нічого не знайдено
 networks = Мережі
-notification-in-progress = Виконуються операції з файлами.
+notification-in-progress = Триває обробка файлів
 today = Сьогодні
 desktop-view-options = Параметри вигляду стільниці...
 show-on-desktop = Показувати на стільниці
@@ -219,9 +219,9 @@ open-with-title = Як ви бажаєте відкрити "{ $name }"?
 browse-store = Переглянути { $store }
 other-apps = Інші застосунки
 related-apps = Пов'язані застосунки
-permanently-delete-question = Вилучити остаточно
+permanently-delete-question = Остаточно видалити?
 delete = Вилучити
-permanently-delete-warning = Ви впевнені, що хочете остаточно вилучити { $target }? Дію неможливо скасувати.
+permanently-delete-warning = { $target } буде остаточно видалено. Цю дію не можна скасувати.
 set-executable-and-launch = Зробити виконуваним і запустити
 set-executable-and-launch-description = Бажаєте зробити "{ $name }" виконуваним і запустити його?
 set-and-launch = Зробити і запустити
@@ -239,8 +239,8 @@ read-write = Перегляд і запис
 read-write-execute = Перегляд, запис і виконання
 favorite-path-error = Помилка при відкритті каталогу
 favorite-path-error-description =
-    Неможливо відкрити "{ $path }".
-    Можливо, його не існує або у вас немає прав на відкриття.
+    Неможливо відкрити "{ $path }"
+    "{ $path }" можливо, його не існує або у вас немає прав на відкриття
 
     Вилучити з бічної панелі?
 keep = Залишити
@@ -302,7 +302,7 @@ extracted =
     } з "{ $from }" до "{ $to }"
 setting-executable-and-launching = Встановлення "{ $name }" виконуваним і запуск
 set-executable-and-launched = Встановлено "{ $name }" виконуваним і запущено
-selected-items = { $items } обраних елементів
+selected-items = Вибрані { $items } елементи
 setting-permissions = Встановлення дозволів { $mode } для "{ $name }"
 set-permissions = Встановлено дозволи { $mode } для "{ $name }"
 show-details = Показати деталі
@@ -355,3 +355,5 @@ removed-from-recents =
         [one] елемент
        *[other] елементи
     } з { recents }
+empty-trash-title = Спорожити смітник?
+type-to-search-select = Вибирає перший відповідний файл або папку

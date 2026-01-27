@@ -96,7 +96,7 @@ browse-store = Parcourir { $store }
 
 ## Permanently delete Dialog
 
-selected-items = les { $items } éléments sélectionnés
+selected-items = Les { $items } éléments sélectionnés
 permanently-delete-question = Supprimer définitivement ?
 delete = Supprimer
 permanently-delete-warning = { $target } sera définitivement supprimé. Cette action ne peut pas être annulée.
@@ -421,3 +421,4 @@ removed-from-recents =
        *[other] éléments supprimés
     } de { recents }
 progress-failed = { $percent }%, échec
+type-to-search-select = Sélectionne le premier fichier ou dossier qui convient
