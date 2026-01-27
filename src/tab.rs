@@ -31,6 +31,7 @@ use cosmic::{
         window,
     },
     iced_core::{mouse::ScrollDelta, widget::tree},
+    iced_runtime::clipboard,
     theme,
     widget::{
         self, DndDestination, DndSource, Id, Space, Widget,
@@ -1663,6 +1664,8 @@ pub enum Message {
     LocationContextMenuPoint(Option<Point>),
     LocationContextMenuIndex(Option<Point>, Option<usize>),
     LocationMenuAction(LocationMenuAction),
+    EditLocationContextMenuPoint(Option<Point>),
+    EditLocationContextMenuAction(EditLocationContextMenuAction),
     Drag(Option<Rectangle>),
     DragEnd,
     EditLocation(Option<EditLocation>),
@@ -1732,6 +1735,19 @@ impl MenuAction for LocationMenuAction {
 
     fn message(&self) -> Self::Message {
         Message::LocationMenuAction(*self)
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum EditLocationContextMenuAction {
+    CopyPath,
+}
+
+impl MenuAction for EditLocationContextMenuAction {
+    type Message = Message;
+
+    fn message(&self) -> Self::Message {
+        Message::EditLocationContextMenuAction(*self)
     }
 }
 
@@ -2593,6 +2609,7 @@ pub struct Tab {
     pub location_title: String,
     pub location_context_menu_point: Option<Point>,
     pub location_context_menu_index: Option<usize>,
+    pub edit_location_context_menu_point: Option<Point>,
     pub context_menu: Option<Point>,
     pub mode: Mode,
     pub scroll_opt: Option<AbsoluteOffset>,
@@ -2716,6 +2733,7 @@ impl Tab {
             context_menu: None,
             location_context_menu_point: None,
             location_context_menu_index: None,
+            edit_location_context_menu_point: None,
             mode: Mode::App,
             scroll_opt: None,
             size_opt: Cell::new(None),
@@ -3481,6 +3499,32 @@ impl Tab {
                                 "no ancestor {ancestor_index} for location {:?}",
                                 self.location
                             );
+                        }
+                    }
+                }
+            }
+            Message::EditLocationContextMenuPoint(point_opt) => {
+                self.edit_location_context_menu_point = point_opt;
+            }
+            Message::EditLocationContextMenuAction(action) => {
+                self.edit_location_context_menu_point = None;
+                // Get the current path from edit_location
+                if let Some(edit_location) = &self.edit_location {
+                    let path_string = if let Location::Network(ref uri, ..) = edit_location.location
+                    {
+                        uri.clone()
+                    } else if let Some(path) =
+                        edit_location.resolve().and_then(|l| l.path_opt().cloned())
+                    {
+                        path.to_string_lossy().into_owned()
+                    } else {
+                        String::new()
+                    };
+
+                    match action {
+                        EditLocationContextMenuAction::CopyPath => {
+                            commands
+                                .push(Command::Iced(TaskWrapper(clipboard::write(path_string))));
                         }
                     }
                 }
@@ -4858,8 +4902,13 @@ impl Tab {
                     .padding(space_xxs)
                     .class(theme::Button::Icon),
                 );
-                let mut popover =
-                    widget::popover(text_input).position(widget::popover::Position::Bottom);
+
+                // Wrap text_input with MouseArea for right-click context menu
+                let text_input_with_menu = crate::mouse_area::MouseArea::new(text_input)
+                    .on_right_press(Message::EditLocationContextMenuPoint);
+
+                let mut popover = widget::popover(text_input_with_menu)
+                    .position(widget::popover::Position::Bottom);
                 if let Some(completions) = &edit_location.completions {
                     if !completions.is_empty() {
                         let mut column =
@@ -4887,7 +4936,16 @@ impl Tab {
                         );
                     }
                 }
-                row = row.push(popover);
+
+                // Wrap in another popover for context menu
+                let mut context_popover = widget::popover(popover);
+                if let Some(point) = self.edit_location_context_menu_point {
+                    context_popover = context_popover
+                        .popup(menu::edit_location_context_menu())
+                        .position(widget::popover::Position::Point(point));
+                }
+
+                row = row.push(context_popover);
                 let mut column = widget::column::with_capacity(4).padding([0, space_s]);
                 column = column.push(row);
                 column = column.push(accent_rule);
