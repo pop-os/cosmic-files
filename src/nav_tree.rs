@@ -184,18 +184,113 @@ impl NavTreeState {
             self.load_children(&root_path);
         }
 
-        // Expand each component of the path
+        // Expand each component of the path, including the target itself
         let mut current = root_path;
         for component in relative.components() {
-            current = current.join(component);
-            if current == *target {
-                break;
-            }
+            let next_path = current.join(component);
+
+            // Ensure hidden directories are added to tree if navigating through them
+            self.ensure_child_exists(&current, &next_path);
+
+            current = next_path;
             if !self.expanded_paths.contains(&current) {
                 self.expanded_paths.insert(current.clone());
                 self.load_children(&current);
             }
         }
+    }
+
+    fn ensure_child_exists(&mut self, parent: &PathBuf, child: &PathBuf) {
+        fn ensure_in_nodes(nodes: &mut [TreeNode], parent: &PathBuf, child: &PathBuf) -> bool {
+            for node in nodes.iter_mut() {
+                if node.path == *parent {
+                    // Check if child already exists
+                    if !node.children.iter().any(|c| c.path == *child) {
+                        // Add hidden directory to children
+                        if child.is_dir() {
+                            let depth = node.depth + 1;
+                            let new_node = TreeNode::new(child.clone(), depth);
+                            // Insert in sorted position
+                            let insert_pos = node
+                                .children
+                                .iter()
+                                .position(|c| c.name.to_lowercase() > new_node.name.to_lowercase())
+                                .unwrap_or(node.children.len());
+                            node.children.insert(insert_pos, new_node);
+                        }
+                    }
+                    return true;
+                }
+                if ensure_in_nodes(&mut node.children, parent, child) {
+                    return true;
+                }
+            }
+            false
+        }
+        ensure_in_nodes(&mut self.roots, parent, child);
+    }
+
+    /// Calculate the scroll offset to bring the current path into view.
+    /// Accounts for variable item heights due to text wrapping.
+    pub fn scroll_offset_for_current(&self) -> f32 {
+        let Some(target) = &self.current_path else {
+            return 0.0;
+        };
+
+        let base_item_height = 32.0;
+        let char_width = 8.0; // Approximate character width
+        let pane_width = 260.0; // Approximate usable width for text (280 - indent - icons)
+        let mut total_height = 40.0; // Start with toggle row height
+
+        fn calc_height_before(
+            nodes: &[TreeNode],
+            target: &PathBuf,
+            expanded: &FxHashSet<PathBuf>,
+            total: &mut f32,
+            base_height: f32,
+            char_width: f32,
+            pane_width: f32,
+        ) -> bool {
+            for node in nodes {
+                if node.path == *target {
+                    return true; // Found it
+                }
+                // Calculate height for this item, accounting for text wrap
+                let indent = node.depth as f32 * 16.0;
+                let available_width = (pane_width - indent - 50.0).max(50.0); // 50px for icons
+                let text_width = node.name.len() as f32 * char_width;
+                let lines = (text_width / available_width).ceil().max(1.0);
+                *total += base_height * lines;
+
+                // If this node is expanded, count its children too
+                if expanded.contains(&node.path) {
+                    if calc_height_before(
+                        &node.children,
+                        target,
+                        expanded,
+                        total,
+                        base_height,
+                        char_width,
+                        pane_width,
+                    ) {
+                        return true;
+                    }
+                }
+            }
+            false
+        }
+
+        calc_height_before(
+            &self.roots,
+            target,
+            &self.expanded_paths,
+            &mut total_height,
+            base_item_height,
+            char_width,
+            pane_width,
+        );
+
+        total_height.max(0.0)
     }
 
     pub fn view<'a, Message: Clone + 'static>(

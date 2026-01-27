@@ -662,6 +662,12 @@ pub fn menu_bar<'a>(
                             config.show_details,
                             Action::Preview,
                         ),
+                        menu::Item::CheckBox(
+                            fl!("folder-tree"),
+                            None,
+                            config.show_folder_tree,
+                            Action::ToggleFolderTree,
+                        ),
                         menu::Item::Divider,
                         menu_button_optional(
                             fl!("gallery-preview"),
