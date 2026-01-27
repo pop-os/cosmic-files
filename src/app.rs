@@ -95,6 +95,7 @@ use crate::{
 use crate::{
     config::State,
     dialog::DialogSettings,
+    nav_tree::NavTreeState,
     zoom::{zoom_in_view, zoom_out_view, zoom_to_default},
 };
 
@@ -449,6 +450,9 @@ pub enum Message {
     DndDropTab(Entity, Option<ClipboardPaste>, DndAction),
     DndDropNav(Entity, Option<ClipboardPaste>, DndAction),
     Recents,
+    ToggleShowFolderTree(bool),
+    TreeToggleExpand(PathBuf),
+    TreeNavigate(PathBuf),
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     OutputEvent(OutputEvent, WlOutput),
     Cosmic(app::Action),
@@ -739,6 +743,9 @@ pub struct App {
     tab_drag_id: DragId,
     auto_scroll_speed: Option<i16>,
     file_dialog_opt: Option<Dialog<Message>>,
+    nav_tree: NavTreeState,
+    #[cfg(feature = "xdg-portal")]
+    pub inhibit: tokio::sync::watch::Sender<bool>,
 }
 
 impl App {
@@ -2007,6 +2014,10 @@ impl App {
                         },
                     )
                 })
+                .add({
+                    widget::settings::item::builder(fl!("folder-tree"))
+                        .toggler(self.config.show_folder_tree, Message::ToggleShowFolderTree)
+                })
                 .into(),
         ])
         .into()
@@ -2227,6 +2238,7 @@ impl Application for App {
             tab_drag_id: DragId::new(),
             auto_scroll_speed: None,
             file_dialog_opt: None,
+            nav_tree: NavTreeState::new(),
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             layer_sizes: FxHashMap::default(),
         };
@@ -2277,6 +2289,7 @@ impl Application for App {
         }
 
         let nav_model = self.nav_model()?;
+        let spacing = theme::active().cosmic().spacing;
 
         let mut nav = cosmic::widget::nav_bar(nav_model, |entity| {
             cosmic::Action::Cosmic(cosmic::app::Action::NavBar(entity))
@@ -2300,10 +2313,40 @@ impl Application for App {
             nav = nav.max_width(280);
         }
 
-        Some(Element::from(
-            // XXX both must be shrink to avoid flex layout from ignoring it
-            nav.width(Length::Shrink).height(Length::Shrink),
-        ))
+        if self.config.show_folder_tree {
+            let tree_view = self
+                .nav_tree
+                .view(
+                    |path| cosmic::Action::App(Message::TreeToggleExpand(path)),
+                    |path| cosmic::Action::App(Message::TreeNavigate(path)),
+                )
+                .map(|msg| msg);
+
+            let tree_section = widget::column::with_children(vec![
+                widget::divider::horizontal::default().into(),
+                widget::text::heading(fl!("folder-tree"))
+                    .width(Length::Fill)
+                    .into(),
+                widget::scrollable(tree_view)
+                    .height(Length::Fill)
+                    .width(Length::Fill)
+                    .into(),
+            ])
+            .spacing(spacing.space_xxs)
+            .padding([spacing.space_xxs, spacing.space_xs]);
+
+            let combined = widget::column::with_children(vec![
+                nav.width(Length::Shrink).height(Length::Shrink).into(),
+                tree_section.into(),
+            ]);
+
+            Some(Element::from(combined.width(Length::Shrink)))
+        } else {
+            Some(Element::from(
+                // XXX both must be shrink to avoid flex layout from ignoring it
+                nav.width(Length::Shrink).height(Length::Shrink),
+            ))
+        }
     }
 
     fn nav_context_menu(
@@ -4188,6 +4231,12 @@ impl Application for App {
                         tab.sort_name = sort.0;
                         tab.sort_direction = sort.1;
 
+                        if self.config.show_folder_tree {
+                            if let Some(path) = location.path_opt() {
+                                self.nav_tree.expand_to_path(&path);
+                            }
+                        }
+
                         let mut tasks = Vec::with_capacity(2);
 
                         if let Some(selection_paths) = selection_paths {
@@ -4627,6 +4676,17 @@ impl Application for App {
             },
             Message::Recents => {
                 return self.open_tab(Location::Recents, false, None);
+            }
+            Message::ToggleShowFolderTree(show) => {
+                config_set!(show_folder_tree, show);
+                return self.update_config();
+            }
+            Message::TreeToggleExpand(path) => {
+                self.nav_tree.toggle_expand(&path);
+            }
+            Message::TreeNavigate(path) => {
+                let location = Location::Path(path);
+                return self.update(Message::TabMessage(None, tab::Message::Location(location)));
             }
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             Message::OutputEvent(output_event, output) => {

@@ -1,0 +1,288 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
+use cosmic::{
+    Element,
+    iced::Length,
+    theme,
+    widget::{self, icon},
+};
+use rustc_hash::FxHashSet;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
+
+use crate::{fl, home_dir, tab::folder_icon_symbolic};
+
+#[derive(Clone, Debug)]
+pub struct TreeNode {
+    pub path: PathBuf,
+    pub name: String,
+    pub expanded: bool,
+    pub children: Vec<TreeNode>,
+    pub depth: usize,
+}
+
+impl TreeNode {
+    pub fn new(path: PathBuf, depth: usize) -> Self {
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(String::from)
+            .unwrap_or_else(|| {
+                if path == Path::new("/") {
+                    fl!("filesystem")
+                } else {
+                    path.display().to_string()
+                }
+            });
+
+        Self {
+            path,
+            name,
+            expanded: false,
+            children: Vec::new(),
+            depth,
+        }
+    }
+
+    pub fn new_with_name(path: PathBuf, name: String, depth: usize) -> Self {
+        Self {
+            path,
+            name,
+            expanded: false,
+            children: Vec::new(),
+            depth,
+        }
+    }
+
+    fn has_subdirectories(&self) -> bool {
+        if let Ok(entries) = fs::read_dir(&self.path) {
+            for entry in entries.flatten() {
+                if let Ok(file_type) = entry.file_type() {
+                    if file_type.is_dir() {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct NavTreeState {
+    pub roots: Vec<TreeNode>,
+    pub expanded_paths: FxHashSet<PathBuf>,
+    pub current_path: Option<PathBuf>,
+}
+
+impl NavTreeState {
+    pub fn new() -> Self {
+        let home = home_dir();
+        let root = PathBuf::from("/");
+
+        let mut roots = vec![
+            TreeNode::new_with_name(home, fl!("home"), 0),
+            TreeNode::new_with_name(root, fl!("filesystem"), 0),
+        ];
+
+        // Add mounted volumes
+        if let Ok(entries) = fs::read_dir("/media") {
+            for entry in entries.flatten() {
+                if entry.file_type().is_ok_and(|ft| ft.is_dir()) {
+                    roots.push(TreeNode::new(entry.path(), 0));
+                }
+            }
+        }
+
+        // Add /run/media/$USER mounts
+        if let Some(user) = std::env::var_os("USER") {
+            let user_media = PathBuf::from("/run/media").join(user);
+            if let Ok(entries) = fs::read_dir(&user_media) {
+                for entry in entries.flatten() {
+                    if entry.file_type().is_ok_and(|ft| ft.is_dir()) {
+                        roots.push(TreeNode::new(entry.path(), 0));
+                    }
+                }
+            }
+        }
+
+        Self {
+            roots,
+            expanded_paths: FxHashSet::default(),
+            current_path: None,
+        }
+    }
+
+    pub fn toggle_expand(&mut self, path: &PathBuf) {
+        if self.expanded_paths.contains(path) {
+            self.expanded_paths.remove(path);
+            self.collapse_node(path);
+        } else {
+            self.expanded_paths.insert(path.clone());
+            self.load_children(path);
+        }
+    }
+
+    fn collapse_node(&mut self, path: &PathBuf) {
+        fn collapse_in_nodes(nodes: &mut [TreeNode], path: &PathBuf) {
+            for node in nodes.iter_mut() {
+                if node.path == *path {
+                    node.expanded = false;
+                    node.children.clear();
+                    return;
+                }
+                collapse_in_nodes(&mut node.children, path);
+            }
+        }
+        collapse_in_nodes(&mut self.roots, path);
+    }
+
+    fn load_children(&mut self, path: &PathBuf) {
+        fn load_in_nodes(nodes: &mut [TreeNode], path: &PathBuf) -> bool {
+            for node in nodes.iter_mut() {
+                if node.path == *path {
+                    node.expanded = true;
+                    node.children = scan_children(&node.path, node.depth + 1);
+                    return true;
+                }
+                if load_in_nodes(&mut node.children, path) {
+                    return true;
+                }
+            }
+            false
+        }
+        load_in_nodes(&mut self.roots, path);
+    }
+
+    pub fn expand_to_path(&mut self, target: &PathBuf) {
+        self.current_path = Some(target.clone());
+
+        // Find which root this path belongs to
+        let mut ancestors: Vec<PathBuf> = target.ancestors().map(PathBuf::from).collect();
+        ancestors.reverse();
+
+        // Expand each ancestor
+        for ancestor in &ancestors {
+            if !self.expanded_paths.contains(ancestor) && ancestor != target {
+                self.expanded_paths.insert(ancestor.clone());
+                self.load_children(ancestor);
+            }
+        }
+    }
+
+    pub fn view<'a, Message: Clone + 'static>(
+        &'a self,
+        on_toggle: impl Fn(PathBuf) -> Message + Clone + 'a,
+        on_navigate: impl Fn(PathBuf) -> Message + Clone + 'a,
+    ) -> Element<'a, Message> {
+        let spacing = theme::active().cosmic().spacing;
+
+        let mut items: Vec<Element<'a, Message>> = Vec::new();
+
+        for root in &self.roots {
+            self.render_node(root, &on_toggle, &on_navigate, &mut items);
+        }
+
+        widget::column::with_children(items)
+            .spacing(spacing.space_xxs)
+            .width(Length::Fill)
+            .into()
+    }
+
+    fn render_node<'a, Message: Clone + 'static>(
+        &'a self,
+        node: &'a TreeNode,
+        on_toggle: &(impl Fn(PathBuf) -> Message + Clone + 'a),
+        on_navigate: &(impl Fn(PathBuf) -> Message + Clone + 'a),
+        items: &mut Vec<Element<'a, Message>>,
+    ) {
+        let spacing = theme::active().cosmic().spacing;
+        let is_expanded = self.expanded_paths.contains(&node.path);
+        let is_current = self.current_path.as_ref().is_some_and(|p| *p == node.path);
+        let has_children = node.has_subdirectories();
+        let indent = (node.depth as u16) * 16;
+
+        // Toggle icon (+/-)
+        let toggle_icon = if has_children {
+            let icon_name = if is_expanded {
+                "pan-down-symbolic"
+            } else {
+                "pan-end-symbolic"
+            };
+            let path_clone = node.path.clone();
+            let on_toggle_clone = on_toggle.clone();
+            widget::button::icon(icon::from_name(icon_name).size(16))
+                .padding(0)
+                .on_press(on_toggle_clone(path_clone))
+                .class(theme::Button::Icon)
+                .into()
+        } else {
+            widget::Space::with_width(Length::Fixed(16.0)).into()
+        };
+
+        // Folder icon
+        let folder_icon: Element<'a, Message> =
+            icon::icon(folder_icon_symbolic(&node.path, 16)).into();
+
+        // Name with navigation
+        let path_clone = node.path.clone();
+        let on_navigate_clone = on_navigate.clone();
+        let name_button =
+            widget::button::custom(widget::text::body(&node.name).width(Length::Fill))
+                .padding([spacing.space_xxxs, spacing.space_xs])
+                .on_press(on_navigate_clone(path_clone))
+                .class(if is_current {
+                    theme::Button::Suggested
+                } else {
+                    theme::Button::Text
+                });
+
+        let row = widget::row::with_children(vec![
+            widget::Space::with_width(Length::Fixed(indent as f32)).into(),
+            toggle_icon,
+            folder_icon,
+            name_button.into(),
+        ])
+        .spacing(spacing.space_xxs)
+        .align_y(cosmic::iced::Alignment::Center);
+
+        items.push(row.into());
+
+        // Render children if expanded
+        if is_expanded {
+            for child in &node.children {
+                self.render_node(child, on_toggle, on_navigate, items);
+            }
+        }
+    }
+}
+
+fn scan_children(path: &Path, depth: usize) -> Vec<TreeNode> {
+    let mut children = Vec::new();
+
+    if let Ok(entries) = fs::read_dir(path) {
+        let mut dirs: Vec<_> = entries
+            .flatten()
+            .filter(|e| e.file_type().is_ok_and(|ft| ft.is_dir()))
+            .filter(|e| {
+                e.file_name()
+                    .to_str()
+                    .is_some_and(|name| !name.starts_with('.'))
+            })
+            .collect();
+
+        dirs.sort_by(|a, b| {
+            a.file_name()
+                .to_ascii_lowercase()
+                .cmp(&b.file_name().to_ascii_lowercase())
+        });
+
+        for entry in dirs {
+            children.push(TreeNode::new(entry.path(), depth));
+        }
+    }
+
+    children
+}
