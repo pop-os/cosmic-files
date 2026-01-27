@@ -2,9 +2,9 @@
 
 use cosmic::{
     Element,
-    iced::Length,
+    iced::{Length, clipboard::dnd::DndAction},
     theme,
-    widget::{self, icon},
+    widget::{self, DndDestination, icon},
 };
 use rustc_hash::FxHashSet;
 use std::{
@@ -12,7 +12,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{fl, home_dir, tab::folder_icon_symbolic};
+use crate::{clipboard::ClipboardPaste, fl, home_dir, tab::folder_icon_symbolic};
 
 #[derive(Clone, Debug)]
 pub struct TreeNode {
@@ -160,29 +160,68 @@ impl NavTreeState {
         self.current_path = Some(target.clone());
 
         // Find which root this path belongs to
-        let mut ancestors: Vec<PathBuf> = target.ancestors().map(PathBuf::from).collect();
-        ancestors.reverse();
+        let matching_root = self
+            .roots
+            .iter()
+            .filter(|r| target.starts_with(&r.path))
+            .max_by_key(|r| r.path.components().count());
 
-        // Expand each ancestor
-        for ancestor in &ancestors {
-            if !self.expanded_paths.contains(ancestor) && ancestor != target {
-                self.expanded_paths.insert(ancestor.clone());
-                self.load_children(ancestor);
+        let Some(root) = matching_root else {
+            return;
+        };
+
+        let root_path = root.path.clone();
+
+        // Build the path from root to target
+        let relative = match target.strip_prefix(&root_path) {
+            Ok(rel) => rel,
+            Err(_) => return,
+        };
+
+        // Expand the root first
+        if !self.expanded_paths.contains(&root_path) {
+            self.expanded_paths.insert(root_path.clone());
+            self.load_children(&root_path);
+        }
+
+        // Expand each component of the path
+        let mut current = root_path;
+        for component in relative.components() {
+            current = current.join(component);
+            if current == *target {
+                break;
+            }
+            if !self.expanded_paths.contains(&current) {
+                self.expanded_paths.insert(current.clone());
+                self.load_children(&current);
             }
         }
     }
 
     pub fn view<'a, Message: Clone + 'static>(
         &'a self,
-        on_toggle: impl Fn(PathBuf) -> Message + Clone + 'a,
-        on_navigate: impl Fn(PathBuf) -> Message + Clone + 'a,
+        dnd_hover: Option<&PathBuf>,
+        on_toggle: impl Fn(PathBuf) -> Message + Clone + 'static,
+        on_navigate: impl Fn(PathBuf) -> Message + Clone + 'static,
+        on_dnd_enter: impl Fn(PathBuf) -> Message + Clone + 'static,
+        on_dnd_leave: Message,
+        on_dnd_drop: impl Fn(PathBuf, Option<ClipboardPaste>, DndAction) -> Message + Clone + 'static,
     ) -> Element<'a, Message> {
         let spacing = theme::active().cosmic().spacing;
 
         let mut items: Vec<Element<'a, Message>> = Vec::new();
 
         for root in &self.roots {
-            self.render_node(root, &on_toggle, &on_navigate, &mut items);
+            self.render_node(
+                root,
+                dnd_hover,
+                &on_toggle,
+                &on_navigate,
+                &on_dnd_enter,
+                &on_dnd_leave,
+                &on_dnd_drop,
+                &mut items,
+            );
         }
 
         widget::column::with_children(items)
@@ -191,16 +230,22 @@ impl NavTreeState {
             .into()
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn render_node<'a, Message: Clone + 'static>(
         &'a self,
         node: &'a TreeNode,
-        on_toggle: &(impl Fn(PathBuf) -> Message + Clone + 'a),
-        on_navigate: &(impl Fn(PathBuf) -> Message + Clone + 'a),
+        dnd_hover: Option<&PathBuf>,
+        on_toggle: &(impl Fn(PathBuf) -> Message + Clone + 'static),
+        on_navigate: &(impl Fn(PathBuf) -> Message + Clone + 'static),
+        on_dnd_enter: &(impl Fn(PathBuf) -> Message + Clone + 'static),
+        on_dnd_leave: &Message,
+        on_dnd_drop: &(impl Fn(PathBuf, Option<ClipboardPaste>, DndAction) -> Message + Clone + 'static),
         items: &mut Vec<Element<'a, Message>>,
     ) {
         let spacing = theme::active().cosmic().spacing;
         let is_expanded = self.expanded_paths.contains(&node.path);
         let is_current = self.current_path.as_ref().is_some_and(|p| *p == node.path);
+        let is_dnd_hovered = dnd_hover.is_some_and(|p| *p == node.path);
         let has_children = node.has_subdirectories();
         let indent = (node.depth as u16) * 16;
 
@@ -233,7 +278,7 @@ impl NavTreeState {
             widget::button::custom(widget::text::body(&node.name).width(Length::Fill))
                 .padding([spacing.space_xxxs, spacing.space_xs])
                 .on_press(on_navigate_clone(path_clone))
-                .class(if is_current {
+                .class(if is_current || is_dnd_hovered {
                     theme::Button::Suggested
                 } else {
                     theme::Button::Text
@@ -248,12 +293,34 @@ impl NavTreeState {
         .spacing(spacing.space_xxs)
         .align_y(cosmic::iced::Alignment::Center);
 
-        items.push(row.into());
+        // Wrap with DndDestination for drag-and-drop support
+        let path_for_drop = node.path.clone();
+        let path_for_enter = node.path.clone();
+        let on_dnd_enter_clone = on_dnd_enter.clone();
+        let on_dnd_leave_clone = on_dnd_leave.clone();
+        let on_dnd_drop_clone = on_dnd_drop.clone();
+
+        let dnd_row = DndDestination::for_data::<ClipboardPaste>(row, move |data, action| {
+            on_dnd_drop_clone(path_for_drop.clone(), data, action)
+        })
+        .on_enter(move |_, _, _| on_dnd_enter_clone(path_for_enter.clone()))
+        .on_leave(move || on_dnd_leave_clone.clone());
+
+        items.push(dnd_row.into());
 
         // Render children if expanded
         if is_expanded {
             for child in &node.children {
-                self.render_node(child, on_toggle, on_navigate, items);
+                self.render_node(
+                    child,
+                    dnd_hover,
+                    on_toggle,
+                    on_navigate,
+                    on_dnd_enter,
+                    on_dnd_leave,
+                    on_dnd_drop,
+                    items,
+                );
             }
         }
     }

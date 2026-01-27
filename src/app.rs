@@ -453,6 +453,9 @@ pub enum Message {
     ToggleShowFolderTree(bool),
     TreeToggleExpand(PathBuf),
     TreeNavigate(PathBuf),
+    TreeDndEnter(PathBuf),
+    TreeDndLeave,
+    TreeDndDrop(PathBuf, Option<ClipboardPaste>, DndAction),
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     OutputEvent(OutputEvent, WlOutput),
     Cosmic(app::Action),
@@ -737,6 +740,7 @@ pub struct App {
     windows: FxHashMap<window::Id, Window>,
     nav_dnd_hover: Option<(Location, Instant)>,
     tab_dnd_hover: Option<(Entity, Instant)>,
+    tree_dnd_hover: Option<PathBuf>,
     type_select_prefix: String,
     type_select_last_key: Option<Instant>,
     nav_drag_id: DragId,
@@ -2232,6 +2236,7 @@ impl Application for App {
             windows: FxHashMap::default(),
             nav_dnd_hover: None,
             tab_dnd_hover: None,
+            tree_dnd_hover: None,
             type_select_prefix: String::new(),
             type_select_last_key: None,
             nav_drag_id: DragId::new(),
@@ -2317,8 +2322,14 @@ impl Application for App {
             let tree_view = self
                 .nav_tree
                 .view(
+                    self.tree_dnd_hover.as_ref(),
                     |path| cosmic::Action::App(Message::TreeToggleExpand(path)),
                     |path| cosmic::Action::App(Message::TreeNavigate(path)),
+                    |path| cosmic::Action::App(Message::TreeDndEnter(path)),
+                    cosmic::Action::App(Message::TreeDndLeave),
+                    |path, data, action| {
+                        cosmic::Action::App(Message::TreeDndDrop(path, data, action))
+                    },
                 )
                 .map(|msg| msg);
 
@@ -4687,6 +4698,28 @@ impl Application for App {
             Message::TreeNavigate(path) => {
                 let location = Location::Path(path);
                 return self.update(Message::TabMessage(None, tab::Message::Location(location)));
+            }
+            Message::TreeDndEnter(path) => {
+                self.tree_dnd_hover = Some(path);
+            }
+            Message::TreeDndLeave => {
+                self.tree_dnd_hover = None;
+            }
+            Message::TreeDndDrop(path, data, action) => {
+                self.tree_dnd_hover = None;
+                if let Some(data) = data {
+                    let kind = match action {
+                        DndAction::Move => ClipboardKind::Cut { is_dnd: true },
+                        _ => ClipboardKind::Copy,
+                    };
+                    return self.update(Message::PasteContents(
+                        path,
+                        ClipboardPaste {
+                            kind,
+                            paths: data.paths,
+                        },
+                    ));
+                }
             }
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             Message::OutputEvent(output_event, output) => {
