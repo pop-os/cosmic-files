@@ -219,7 +219,7 @@ pub async fn sync_to_disk(
     dir_stream.buffer_unordered(16).collect::<Vec<_>>().await;
 }
 
-fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
+pub fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
     // List of compound extensions to check
     const COMPOUND_EXTENSIONS: &[&str] = &[
         ".tar.gz",

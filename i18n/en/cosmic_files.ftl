@@ -200,6 +200,9 @@ compressed = Compressed {$items} {$items ->
         *[other] items
     } from "{$from}" to "{$to}"
 copy_noun = Copy
+pasted-image = Pasted Image
+pasted-text = Pasted Text
+pasted-video = Pasted Video
 creating = Creating "{$name}" in "{$parent}"
 created = Created "{$name}" in "{$parent}"
 copying = Copying {$items} {$items ->
