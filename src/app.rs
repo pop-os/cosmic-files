@@ -71,6 +71,7 @@ use wayland_client::{Proxy, protocol::wl_output::WlOutput};
 use crate::{
     FxOrderMap,
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
+    desktop_entry::create_desktop_entry,
     config::{
         AppTheme, Config, DesktopConfig, Favorite, IconSizes, TIME_CONFIG_ID, TabConfig,
         TimeConfig, TypeToSearch,
@@ -145,6 +146,7 @@ pub enum Action {
     AddToSidebar,
     Compress,
     Copy,
+    CreateDesktopEntry,
     Cut,
     CosmicSettingsDesktop,
     CosmicSettingsDisplays,
@@ -212,6 +214,7 @@ impl Action {
             Self::AddToSidebar => Message::AddToSidebar(entity_opt),
             Self::Compress => Message::Compress(entity_opt),
             Self::Copy => Message::Copy(entity_opt),
+            Self::CreateDesktopEntry => Message::CreateDesktopEntry(entity_opt),
             Self::Cut => Message::Cut(entity_opt),
             Self::CosmicSettingsDesktop => Message::CosmicSettings("desktop"),
             Self::CosmicSettingsDisplays => Message::CosmicSettings("displays"),
@@ -335,6 +338,7 @@ pub enum Message {
     Config(Config),
     Copy(Option<Entity>),
     CosmicSettings(&'static str),
+    CreateDesktopEntry(Option<Entity>),
     Cut(Option<Entity>),
     Delete(Option<Entity>),
     DesktopConfig(DesktopConfig),
@@ -2671,6 +2675,27 @@ impl Application for App {
                 let paths = self.selected_paths(entity_opt);
                 let contents = ClipboardCopy::new(ClipboardKind::Copy, paths);
                 return clipboard::write_data(contents);
+            }
+            Message::CreateDesktopEntry(entity_opt) => {
+                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+                    if let Some(items) = tab.items_opt() {
+                        if let Some(item) = items.iter().find(|i| i.selected) {
+                            if let Some(path) = item.path_opt() {
+                                if let Err(err) = create_desktop_entry(path) {
+                                    log::warn!("failed to create desktop entry: {}", err);
+                                    let _ = self.toasts.push(widget::toaster::Toast::new(
+                                        fl!("create-desktop-entry-error"),
+                                    ));
+                                } else {
+                                    let _ = self.toasts.push(widget::toaster::Toast::new(
+                                        fl!("create-desktop-entry-success"),
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
             }
             Message::Cut(entity_opt) => {
                 self.set_cut(entity_opt);

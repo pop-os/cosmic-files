@@ -302,6 +302,9 @@ type-to-search-select = Selects the first matching file or folder
 # Context menu
 add-to-sidebar = Add to sidebar
 compress = Compress
+create-desktop-entry = Create desktop entry
+create-desktop-entry-success = Desktop entry created
+create-desktop-entry-error = Failed to create desktop entry
 delete-permanently = Delete permanently
 eject = Eject
 extract-here = Extract
