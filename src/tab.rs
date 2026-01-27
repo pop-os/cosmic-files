@@ -346,6 +346,10 @@ fn tab_complete(path: &Path) -> Result<Vec<(String, PathBuf)>, Box<dyn Error>> {
         let Some(file_name) = file_name_os.to_str() else {
             continue;
         };
+        // Don't list hidden files before entering a pattern
+        if pattern == "^" && file_name.starts_with('.') {
+            continue;
+        }
         if regex.is_match(file_name) {
             completions.push((file_name.to_string(), entry.path()));
         }
