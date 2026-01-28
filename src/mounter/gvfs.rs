@@ -23,12 +23,11 @@ fn resolve_uri(uri: &str) -> (String, gio::File) {
         TARGET_URI_ATTRIBUTE,
         gio::FileQueryInfoFlags::NONE,
         gio::Cancellable::NONE,
-    ) {
-        if let Some(resolved_uri) = file_info.attribute_as_string(TARGET_URI_ATTRIBUTE) {
-            let resolved_uri = String::from(resolved_uri);
-            let file = gio::File::for_uri(&resolved_uri);
-            return (resolved_uri, file);
-        }
+    ) && let Some(resolved_uri) = file_info.attribute_as_string(TARGET_URI_ATTRIBUTE)
+    {
+        let resolved_uri = String::from(resolved_uri);
+        let file = gio::File::for_uri(&resolved_uri);
+        return (resolved_uri, file);
     }
 
     (uri.to_string(), file)
@@ -60,7 +59,7 @@ fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
                     gio::Cancellable::NONE,
                 )
                 .ok()
-                .and_then(|info| Some(info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE)))
+                .map(|info| info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE))
                 .unwrap_or(true); // Default to remote if query fails
 
             MounterItem::Gvfs(Item {
@@ -457,9 +456,9 @@ impl Gvfs {
                                         log::info!("mount {name}: result {res:?}");
                                         // Update the mounter_item with mount information after successful mount
                                         let mut updated_item = mounter_item.clone();
-                                        if res.is_ok() {
-                                            if let MounterItem::Gvfs(ref mut item) = updated_item {
-                                                if let Some(mount) = volume_for_callback.get_mount() {
+                                        if res.is_ok()
+                                            && let MounterItem::Gvfs(ref mut item) = updated_item
+                                                && let Some(mount) = volume_for_callback.get_mount() {
                                                     let root = MountExt::root(&mount);
                                                     item.path_opt = root.path();
                                                     item.is_mounted = true;
@@ -469,14 +468,9 @@ impl Gvfs {
                                                             gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE,
                                                             gio::Cancellable::NONE,
                                                         )
-                                                        .ok()
-                                                        .and_then(|info| {
-                                                            Some(info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE))
-                                                        })
+                                                        .ok().map(|info| info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE))
                                                         .unwrap_or(true);
                                                 }
-                                            }
-                                        }
                                         event_tx.send(Event::MountResult(updated_item, match res {
                                             Ok(()) => {
                                                 _ = complete_tx.send(Ok(()));

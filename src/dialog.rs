@@ -179,11 +179,11 @@ impl<T: AsRef<str>> From<T> for DialogLabel {
                 });
             }
 
-            if let Some(span) = spans.last_mut() {
-                if underline == span.underline {
-                    span.text.push(c);
-                    continue;
-                }
+            if let Some(span) = spans.last_mut()
+                && underline == span.underline
+            {
+                span.text.push(c);
+                continue;
             }
 
             spans.push(DialogLabelSpan {
@@ -718,10 +718,10 @@ impl App {
                         children.push(preview);
                     }
 
-                    if children.is_empty() {
-                        if let Some(item) = &self.tab.parent_item_opt {
-                            children.push(item.preview_view(None, military_time));
-                        }
+                    if children.is_empty()
+                        && let Some(item) = &self.tab.parent_item_opt
+                    {
+                        children.push(item.preview_view(None, military_time));
                     }
                 }
             }
@@ -1279,12 +1279,12 @@ impl Application for App {
             return self.update(message);
         }
 
-        if let Some(data) = self.nav_model.data::<MounterData>(entity) {
-            if let Some(mounter) = MOUNTERS.get(&data.0) {
-                return mounter
-                    .mount(data.1.clone())
-                    .map(|()| cosmic::action::none());
-            }
+        if let Some(data) = self.nav_model.data::<MounterData>(entity)
+            && let Some(mounter) = MOUNTERS.get(&data.0)
+        {
+            return mounter
+                .mount(data.1.clone())
+                .map(|()| cosmic::action::none());
         }
         Task::none()
     }
@@ -1322,10 +1322,10 @@ impl Application for App {
 
         // Close the dialog if the focused widget is the dialog's main text input instead of
         // unfocussing the widget.
-        if let operation::Outcome::Some(focused) = operation::focusable::find_focused().finish() {
-            if self.dialog_text_input == focused {
-                return self.update(Message::Cancel);
-            }
+        if let operation::Outcome::Some(focused) = operation::focusable::find_focused().finish()
+            && self.dialog_text_input == focused
+        {
+            return self.update(Message::Cancel);
         }
 
         self.update(Message::Cancel)
@@ -1419,14 +1419,14 @@ impl Application for App {
                 }
 
                 // Check key binds from accept label
-                if let Some(key_bind) = &self.accept_label.key_bind_opt {
-                    if key_bind.matches(modifiers, &key) {
-                        return self.update(if self.flags.kind.save() {
-                            Message::Save(false)
-                        } else {
-                            Message::Open
-                        });
-                    }
+                if let Some(key_bind) = &self.accept_label.key_bind_opt
+                    && key_bind.matches(modifiers, &key)
+                {
+                    return self.update(if self.flags.kind.save() {
+                        Message::Save(false)
+                    } else {
+                        Message::Open
+                    });
                 }
 
                 // Uncaptured keys with only shift modifiers go to the search or location box
@@ -1434,45 +1434,44 @@ impl Application for App {
                     && !modifiers.control()
                     && !modifiers.alt()
                     && matches!(key, Key::Character(_))
+                    && let Some(text) = text
                 {
-                    if let Some(text) = text {
-                        match self.flags.config.type_to_search {
-                            TypeToSearch::Recursive => {
-                                let mut term = self.search_get().unwrap_or_default().to_string();
-                                term.push_str(&text);
-                                return self.search_set(Some(term));
+                    match self.flags.config.type_to_search {
+                        TypeToSearch::Recursive => {
+                            let mut term = self.search_get().unwrap_or_default().to_string();
+                            term.push_str(&text);
+                            return self.search_set(Some(term));
+                        }
+                        TypeToSearch::EnterPath => {
+                            let location = (self.tab.edit_location)
+                                .as_ref()
+                                .map_or_else(|| &self.tab.location, |x| &x.location);
+                            // Try to add text to end of location
+                            if let Some(path) = location.path_opt() {
+                                let mut path_string = path.to_string_lossy().to_string();
+                                path_string.push_str(&text);
+                                self.tab.edit_location =
+                                    Some(location.with_path(PathBuf::from(path_string)).into());
                             }
-                            TypeToSearch::EnterPath => {
-                                let location = (self.tab.edit_location)
-                                    .as_ref()
-                                    .map_or_else(|| &self.tab.location, |x| &x.location);
-                                // Try to add text to end of location
-                                if let Some(path) = location.path_opt() {
-                                    let mut path_string = path.to_string_lossy().to_string();
-                                    path_string.push_str(&text);
-                                    self.tab.edit_location =
-                                        Some(location.with_path(PathBuf::from(path_string)).into());
-                                }
+                        }
+                        TypeToSearch::SelectByPrefix => {
+                            // Reset buffer if timeout elapsed
+                            if let Some(last_key) = self.type_select_last_key
+                                && last_key.elapsed() >= tab::TYPE_SELECT_TIMEOUT
+                            {
+                                self.type_select_prefix.clear();
                             }
-                            TypeToSearch::SelectByPrefix => {
-                                // Reset buffer if timeout elapsed
-                                if let Some(last_key) = self.type_select_last_key {
-                                    if last_key.elapsed() >= tab::TYPE_SELECT_TIMEOUT {
-                                        self.type_select_prefix.clear();
-                                    }
-                                }
 
-                                // Accumulate character and select
-                                self.type_select_prefix.push_str(&text.to_lowercase());
-                                self.type_select_last_key = Some(Instant::now());
+                            // Accumulate character and select
+                            self.type_select_prefix.push_str(&text.to_lowercase());
+                            self.type_select_last_key = Some(Instant::now());
 
-                                self.tab.select_by_prefix(&self.type_select_prefix);
-                                if let Some(offset) = self.tab.select_focus_scroll() {
-                                    return scrollable::scroll_to(
-                                        self.tab.scrollable_id.clone(),
-                                        offset,
-                                    );
-                                }
+                            self.tab.select_by_prefix(&self.type_select_prefix);
+                            if let Some(offset) = self.tab.select_focus_scroll() {
+                                return scrollable::scroll_to(
+                                    self.tab.scrollable_id.clone(),
+                                    offset,
+                                );
                             }
                         }
                     }
@@ -1486,20 +1485,21 @@ impl Application for App {
                 let mut unmounted = Vec::new();
                 if let Some(old_items) = self.mounter_items.get(&mounter_key) {
                     for old_item in old_items {
-                        if let Some(old_path) = old_item.path() {
-                            if old_item.is_mounted() {
-                                let mut still_mounted = false;
-                                for item in &mounter_items {
-                                    if let Some(path) = item.path() {
-                                        if path == old_path && item.is_mounted() {
-                                            still_mounted = true;
-                                            break;
-                                        }
-                                    }
+                        if let Some(old_path) = old_item.path()
+                            && old_item.is_mounted()
+                        {
+                            let mut still_mounted = false;
+                            for item in &mounter_items {
+                                if let Some(path) = item.path()
+                                    && path == old_path
+                                    && item.is_mounted()
+                                {
+                                    still_mounted = true;
+                                    break;
                                 }
-                                if !still_mounted {
-                                    unmounted.push(Location::Path(old_path));
-                                }
+                            }
+                            if !still_mounted {
+                                unmounted.push(Location::Path(old_path));
                             }
                         }
                     }
@@ -1601,16 +1601,16 @@ impl Application for App {
                 let mut paths = Vec::new();
                 if let Some(items) = self.tab.items_opt() {
                     for item in items {
-                        if item.selected {
-                            if let Some(path) = item.path_opt() {
-                                paths.push(path.clone());
-                                let _ = update_recently_used(
-                                    path,
-                                    Self::APP_ID.to_string(),
-                                    "cosmic-files".to_string(),
-                                    None,
-                                );
-                            }
+                        if item.selected
+                            && let Some(path) = item.path_opt()
+                        {
+                            paths.push(path.clone());
+                            let _ = update_recently_used(
+                                path,
+                                Self::APP_ID.to_string(),
+                                "cosmic-files".to_string(),
+                                None,
+                            );
                         }
                     }
                 }
@@ -1640,11 +1640,11 @@ impl Application for App {
                 }
 
                 // If we are in directory mode, return the current directory
-                if self.flags.kind.is_dir() {
-                    if let Location::Path(tab_path) = &self.tab.location {
-                        self.result_opt = Some(DialogResult::Open(vec![tab_path.clone()]));
-                        return window::close(self.flags.window_id);
-                    }
+                if self.flags.kind.is_dir()
+                    && let Location::Path(tab_path) = &self.tab.location
+                {
+                    self.result_opt = Some(DialogResult::Open(vec![tab_path.clone()]));
+                    return window::close(self.flags.window_id);
                 }
             }
             Message::Preview => {
@@ -1654,26 +1654,24 @@ impl Application for App {
                 });
             }
             Message::Save(replace) => {
-                if let DialogKind::SaveFile { filename } = &self.flags.kind {
-                    if !filename.is_empty() {
-                        if let Some(tab_path) = self.tab.location.path_opt() {
-                            let path = tab_path.join(filename);
-                            if path.is_dir() {
-                                // cd to directory
-                                let message = Message::TabMessage(tab::Message::Location(
-                                    Location::Path(path),
-                                ));
-                                return self.update(message);
-                            } else if !replace && path.exists() {
-                                self.dialog_pages.push_back(DialogPage::Replace {
-                                    filename: filename.clone(),
-                                });
-                                return widget::button::focus(REPLACE_BUTTON_ID.clone());
-                            }
-                            self.result_opt = Some(DialogResult::Open(vec![path]));
-                            return window::close(self.flags.window_id);
-                        }
+                if let DialogKind::SaveFile { filename } = &self.flags.kind
+                    && !filename.is_empty()
+                    && let Some(tab_path) = self.tab.location.path_opt()
+                {
+                    let path = tab_path.join(filename);
+                    if path.is_dir() {
+                        // cd to directory
+                        let message =
+                            Message::TabMessage(tab::Message::Location(Location::Path(path)));
+                        return self.update(message);
+                    } else if !replace && path.exists() {
+                        self.dialog_pages.push_back(DialogPage::Replace {
+                            filename: filename.clone(),
+                        });
+                        return widget::button::focus(REPLACE_BUTTON_ID.clone());
                     }
+                    self.result_opt = Some(DialogResult::Open(vec![path]));
+                    return window::close(self.flags.window_id);
                 }
             }
             Message::ScrollTab(scroll_speed) => {
@@ -1703,16 +1701,14 @@ impl Application for App {
                 let tab_commands = self.tab.update(tab_message, self.modifiers);
 
                 // Update filename box when anything is selected
-                if let DialogKind::SaveFile { filename } = &mut self.flags.kind {
-                    if let Some(click_i) = click_i_opt {
-                        if let Some(items) = self.tab.items_opt() {
-                            if let Some(item) = items.get(click_i) {
-                                if item.selected && !item.metadata.is_dir() {
-                                    filename.clone_from(&item.name);
-                                }
-                            }
-                        }
-                    }
+                if let DialogKind::SaveFile { filename } = &mut self.flags.kind
+                    && let Some(click_i) = click_i_opt
+                    && let Some(items) = self.tab.items_opt()
+                    && let Some(item) = items.get(click_i)
+                    && item.selected
+                    && !item.metadata.is_dir()
+                {
+                    filename.clone_from(&item.name);
                 }
 
                 let mut commands = Vec::new();
@@ -1840,34 +1836,34 @@ impl Application for App {
             Message::TabRescan(location, parent_item_opt, mut items, selection_paths) => {
                 if location == self.tab.location {
                     // Filter
-                    if let Some(filter_i) = self.filter_selected {
-                        if let Some(filter) = self.filters.get(filter_i) {
-                            // Parse globs (Mime implements PartialEq with &str, so no need to parse)
-                            let mut parsed_globs = Vec::new();
-                            let mut mimes = Vec::new();
-                            for pattern in &filter.patterns {
-                                match pattern {
-                                    DialogFilterPattern::Glob(value) => {
-                                        match glob::Pattern::new(value) {
-                                            Ok(glob) => parsed_globs.push(glob),
-                                            Err(err) => {
-                                                log::warn!("failed to parse glob {value:?}: {err}");
-                                            }
+                    if let Some(filter_i) = self.filter_selected
+                        && let Some(filter) = self.filters.get(filter_i)
+                    {
+                        // Parse globs (Mime implements PartialEq with &str, so no need to parse)
+                        let mut parsed_globs = Vec::new();
+                        let mut mimes = Vec::new();
+                        for pattern in &filter.patterns {
+                            match pattern {
+                                DialogFilterPattern::Glob(value) => {
+                                    match glob::Pattern::new(value) {
+                                        Ok(glob) => parsed_globs.push(glob),
+                                        Err(err) => {
+                                            log::warn!("failed to parse glob {value:?}: {err}");
                                         }
                                     }
-                                    DialogFilterPattern::Mime(value) => mimes.push(value.as_str()),
                                 }
+                                DialogFilterPattern::Mime(value) => mimes.push(value.as_str()),
                             }
+                        }
 
-                            items.retain(|item| {
-                                // Directories are always shown
-                                item.metadata.is_dir()
+                        items.retain(|item| {
+                            // Directories are always shown
+                            item.metadata.is_dir()
                                 // Check for mime type match (first because it is faster)
                                     || mimes.iter().copied().any(|mime| mime == item.mime)
                                 // Check for glob match (last because it is slower)
                                     || parsed_globs.iter().any(|glob| glob.matches(&item.name))
-                            });
-                        }
+                        });
                     }
 
                     // Select based on filename
@@ -1944,19 +1940,19 @@ impl Application for App {
 
         let mut col = widget::column::with_capacity(2);
 
-        if self.core.is_condensed() {
-            if let Some(term) = self.search_get() {
-                col = col.push(
-                    widget::container(
-                        widget::text_input::search_input("", term)
-                            .width(Length::Fill)
-                            .id(self.search_id.clone())
-                            .on_clear(Message::SearchClear)
-                            .on_input(Message::SearchInput),
-                    )
-                    .padding(space_xxs),
-                );
-            }
+        if self.core.is_condensed()
+            && let Some(term) = self.search_get()
+        {
+            col = col.push(
+                widget::container(
+                    widget::text_input::search_input("", term)
+                        .width(Length::Fill)
+                        .id(self.search_id.clone())
+                        .on_clear(Message::SearchClear)
+                        .on_input(Message::SearchInput),
+                )
+                .padding(space_xxs),
+            );
         }
 
         col = col.push(

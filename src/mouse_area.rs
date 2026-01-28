@@ -246,19 +246,18 @@ struct State {
 
 impl State {
     fn drag_rect(&self, cursor: mouse::Cursor) -> Option<Rectangle> {
-        if let Some(drag_source) = self.drag_initiated {
-            if let Some(position) = cursor.position().or(self.last_virtual_position) {
-                if position.distance(drag_source) > 1.0 {
-                    let min_x = drag_source.x.min(position.x);
-                    let max_x = drag_source.x.max(position.x);
-                    let min_y = drag_source.y.min(position.y);
-                    let max_y = drag_source.y.max(position.y);
-                    return Some(Rectangle::new(
-                        Point::new(min_x, min_y),
-                        Size::new(max_x - min_x, max_y - min_y),
-                    ));
-                }
-            }
+        if let Some(drag_source) = self.drag_initiated
+            && let Some(position) = cursor.position().or(self.last_virtual_position)
+            && position.distance(drag_source) > 1.0
+        {
+            let min_x = drag_source.x.min(position.x);
+            let max_x = drag_source.x.max(position.x);
+            let min_y = drag_source.y.min(position.y);
+            let max_y = drag_source.y.max(position.y);
+            return Some(Rectangle::new(
+                Point::new(min_x, min_y),
+                Size::new(max_x - min_x, max_y - min_y),
+            ));
         }
         None
     }
@@ -527,12 +526,12 @@ fn update<Message: Clone>(
     let offset = layout.virtual_offset();
     let layout_bounds = layout.bounds();
 
-    let viewport_changed = state.viewport.map_or(true, |v| v != *viewport);
+    let viewport_changed = state.viewport != Some(*viewport);
 
-    if let Some(message) = widget.on_resize.as_ref() {
-        if viewport_changed {
-            shell.publish(message(*viewport));
-        }
+    if let Some(message) = widget.on_resize.as_ref()
+        && viewport_changed
+    {
+        shell.publish(message(*viewport));
     }
 
     state.viewport = Some(*viewport);
@@ -664,113 +663,112 @@ fn update<Message: Clone>(
         }
     }
 
-    if let Some(message) = widget.on_right_press.as_ref() {
-        if matches!(
+    if let Some(message) = widget.on_right_press.as_ref()
+        && matches!(
             event,
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right))
-        ) {
-            let point_opt = if widget.on_right_press_window_position {
-                cursor.position_over(layout_bounds).map(|mut p| {
-                    p.x -= offset.x;
-                    p.y -= offset.y;
-                    p
-                })
-            } else {
-                cursor.position_in(layout_bounds)
-            };
-            shell.publish(message(point_opt));
+        )
+    {
+        let point_opt = if widget.on_right_press_window_position {
+            cursor.position_over(layout_bounds).map(|mut p| {
+                p.x -= offset.x;
+                p.y -= offset.y;
+                p
+            })
+        } else {
+            cursor.position_in(layout_bounds)
+        };
+        shell.publish(message(point_opt));
 
-            if widget.on_right_press_no_capture {
-                return event::Status::Ignored;
-            }
-            return event::Status::Captured;
+        if widget.on_right_press_no_capture {
+            return event::Status::Ignored;
         }
+        return event::Status::Captured;
     }
 
-    if let Some(message) = widget.on_right_release.as_ref() {
-        if matches!(
+    if let Some(message) = widget.on_right_release.as_ref()
+        && matches!(
             event,
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Right))
-        ) {
-            shell.publish(message(cursor.position_in(layout_bounds)));
+        )
+    {
+        shell.publish(message(cursor.position_in(layout_bounds)));
 
-            return event::Status::Captured;
-        }
+        return event::Status::Captured;
     }
 
-    if let Some(message) = widget.on_middle_press.as_ref() {
-        if matches!(
+    if let Some(message) = widget.on_middle_press.as_ref()
+        && matches!(
             event,
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Middle))
-        ) {
-            shell.publish(message(cursor.position_in(layout_bounds)));
+        )
+    {
+        shell.publish(message(cursor.position_in(layout_bounds)));
 
-            return event::Status::Captured;
-        }
+        return event::Status::Captured;
     }
 
-    if let Some(message) = widget.on_middle_release.as_ref() {
-        if matches!(
+    if let Some(message) = widget.on_middle_release.as_ref()
+        && matches!(
             event,
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Middle))
-        ) {
-            shell.publish(message(cursor.position_in(layout_bounds)));
+        )
+    {
+        shell.publish(message(cursor.position_in(layout_bounds)));
 
-            return event::Status::Captured;
-        }
+        return event::Status::Captured;
     }
 
-    if let Some(message) = widget.on_back_press.as_ref() {
-        if matches!(
+    if let Some(message) = widget.on_back_press.as_ref()
+        && matches!(
             event,
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Back))
-        ) {
-            shell.publish(message(cursor.position_in(layout_bounds)));
+        )
+    {
+        shell.publish(message(cursor.position_in(layout_bounds)));
 
-            return event::Status::Captured;
-        }
+        return event::Status::Captured;
     }
 
-    if let Some(message) = widget.on_back_release.as_ref() {
-        if matches!(
+    if let Some(message) = widget.on_back_release.as_ref()
+        && matches!(
             event,
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Back))
-        ) {
-            shell.publish(message(cursor.position_in(layout_bounds)));
+        )
+    {
+        shell.publish(message(cursor.position_in(layout_bounds)));
 
-            return event::Status::Captured;
-        }
+        return event::Status::Captured;
     }
 
-    if let Some(message) = widget.on_forward_press.as_ref() {
-        if matches!(
+    if let Some(message) = widget.on_forward_press.as_ref()
+        && matches!(
             event,
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Forward))
-        ) {
-            shell.publish(message(cursor.position_in(layout_bounds)));
+        )
+    {
+        shell.publish(message(cursor.position_in(layout_bounds)));
 
-            return event::Status::Captured;
-        }
+        return event::Status::Captured;
     }
 
-    if let Some(message) = widget.on_forward_release.as_ref() {
-        if matches!(
+    if let Some(message) = widget.on_forward_release.as_ref()
+        && matches!(
             event,
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Forward))
-        ) {
-            shell.publish(message(cursor.position_in(layout_bounds)));
+        )
+    {
+        shell.publish(message(cursor.position_in(layout_bounds)));
 
-            return event::Status::Captured;
-        }
+        return event::Status::Captured;
     }
 
-    if let Some(on_scroll) = widget.on_scroll.as_ref() {
-        if let Event::Mouse(mouse::Event::WheelScrolled { delta }) = event {
-            if let Some(message) = on_scroll(*delta) {
-                shell.publish(message);
-                return event::Status::Captured;
-            }
-        }
+    if let Some(on_scroll) = widget.on_scroll.as_ref()
+        && let Event::Mouse(mouse::Event::WheelScrolled { delta }) = event
+        && let Some(message) = on_scroll(*delta)
+    {
+        shell.publish(message);
+        return event::Status::Captured;
     }
 
     if let Some((message, drag_rect)) = widget.on_drag.as_ref().zip(state.drag_rect(cursor)) {

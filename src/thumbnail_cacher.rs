@@ -66,10 +66,10 @@ impl ThumbnailCacher {
         if let (Some(cache_base_dir), Ok(metadata)) = (
             THUMBNAIL_CACHE_BASE_DIR.as_ref(),
             std::fs::metadata(&self.file_path),
-        ) {
-            if metadata.is_file() && self.file_path.starts_with(cache_base_dir) {
-                return CachedThumbnail::Valid((self.file_path.clone(), None));
-            }
+        ) && metadata.is_file()
+            && self.file_path.starts_with(cache_base_dir)
+        {
+            return CachedThumbnail::Valid((self.file_path.clone(), None));
         }
 
         // Use cached thumbnail if it is valid.

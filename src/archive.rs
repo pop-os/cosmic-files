@@ -2,6 +2,7 @@ use crate::{
     mime_icon::mime_for_path,
     operation::{Controller, OpReader, OperationError, OperationErrorType, sync_to_disk},
 };
+use cosmic::iced::futures;
 use std::{
     collections::HashSet,
     fs,
