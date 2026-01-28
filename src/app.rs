@@ -145,6 +145,7 @@ pub enum Action {
     AddToSidebar,
     Compress,
     Copy,
+    CopyPath,
     Cut,
     CosmicSettingsDesktop,
     CosmicSettingsDisplays,
@@ -212,6 +213,7 @@ impl Action {
             Self::AddToSidebar => Message::AddToSidebar(entity_opt),
             Self::Compress => Message::Compress(entity_opt),
             Self::Copy => Message::Copy(entity_opt),
+            Self::CopyPath => Message::CopyPath(entity_opt),
             Self::Cut => Message::Cut(entity_opt),
             Self::CosmicSettingsDesktop => Message::CosmicSettings("desktop"),
             Self::CosmicSettingsDisplays => Message::CosmicSettings("displays"),
@@ -334,6 +336,7 @@ pub enum Message {
     Compress(Option<Entity>),
     Config(Config),
     Copy(Option<Entity>),
+    CopyPath(Option<Entity>),
     CosmicSettings(&'static str),
     Cut(Option<Entity>),
     Delete(Option<Entity>),
@@ -2671,6 +2674,15 @@ impl Application for App {
                 let paths = self.selected_paths(entity_opt);
                 let contents = ClipboardCopy::new(ClipboardKind::Copy, paths);
                 return clipboard::write_data(contents);
+            }
+            Message::CopyPath(entity_opt) => {
+                let paths = self.selected_paths(entity_opt);
+                let text = paths
+                    .into_iter()
+                    .filter_map(|p| p.to_str().map(|s| s.to_string()))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                return clipboard::write(text);
             }
             Message::Cut(entity_opt) => {
                 self.set_cut(entity_opt);
