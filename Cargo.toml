@@ -42,7 +42,7 @@ wayland-client = { version = "0.31.11", optional = true }
 xdg = { version = "3.0", optional = true }
 xdg-mime = { git = "https://github.com/ebassi/xdg-mime-rs" }
 # Compression
-bzip2 = { version = "0.6", optional = true }            #TODO: replace with pure Rust crate
+bzip2 = { version = "0.6", optional = true }           #TODO: replace with pure Rust crate
 flate2 = "1.1"
 tar = "0.4.44"
 lzma-rust2 = { version = "0.15.4", optional = true }
@@ -80,7 +80,14 @@ optional = true
 git = "https://github.com/pop-os/libcosmic.git"
 default-features = false
 #TODO: a11y feature crashes
-features = ["about", "autosize", "multi-window", "tokio", "winit", "surface-message"]
+features = [
+    "about",
+    "autosize",
+    "multi-window",
+    "tokio",
+    "winit",
+    "surface-message",
+]
 
 [[example]]
 name = "gio-list"
