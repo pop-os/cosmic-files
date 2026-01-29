@@ -65,16 +65,9 @@ num_cpus = "1.17.0"
 
 # Completion-based IO runtime to enable io_uring / IOCP file IO support.
 [dependencies.compio]
-# Patched to fix mtime: https://github.com/compio-rs/compio/pull/625
-# version = "0.17.0"
-git = "https://github.com/jackpot51/compio.git"
+version = "0.18"
 default-features = false
 features = ["fs", "io", "macros", "polling", "runtime"]
-
-[dependencies.io-uring]
-version = "0.7.11"
-default-features = false
-optional = true
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
@@ -117,8 +110,7 @@ dbus-config = ["libcosmic/dbus-config"]
 desktop = ["libcosmic/desktop", "dep:cosmic-mime-apps", "dep:xdg"]
 desktop-applet = []
 gvfs = ["dep:gio", "dep:glib"]
-io-uring = ["compio/io-uring", "dep:io-uring"]
-io-uring-bindgen = ["io-uring?/bindgen"]
+io-uring = ["compio/io-uring"]
 jemalloc = ["dep:tikv-jemallocator"]
 notify = ["dep:notify-rust"]
 wayland = ["libcosmic/wayland", "dep:cctk", "dep:wayland-client"]
