@@ -299,6 +299,12 @@ type-to-search-recursive = Searches the current folder and all subfolders
 type-to-search-enter-path = Enters the path to the directory or file
 type-to-search-select = Selects the first matching file or folder
 
+### Thumbnail mode
+thumbnail-mode = Thumbnails
+thumbnail-mode-local = Show for local files only
+thumbnail-mode-all = Show for local and network files
+thumbnail-mode-never = Never show
+
 # Context menu
 add-to-sidebar = Add to sidebar
 compress = Compress

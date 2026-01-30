@@ -78,7 +78,10 @@ use crate::{
     FxOrderMap,
     app::{Action, PreviewItem, PreviewKind},
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
-    config::{DesktopConfig, ICON_SCALE_MAX, ICON_SIZE_GRID, IconSizes, TabConfig, ThumbCfg},
+    config::{
+        DesktopConfig, ICON_SCALE_MAX, ICON_SIZE_GRID, IconSizes, TabConfig, ThumbCfg,
+        ThumbnailMode,
+    },
     dialog::DialogKind,
     fl,
     large_image::{
@@ -765,10 +768,11 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
         icon_handle_grid,
         icon_handle_list,
         icon_handle_list_condensed,
-        thumbnail_opt: if remote {
-            Some(ItemThumbnail::NotImage)
+        thumbnail_opt: None,
+        item_location: if remote {
+            ItemLocation::Remote
         } else {
-            None
+            ItemLocation::Local
         },
         button_id: widget::Id::unique(),
         pos_opt: Cell::new(None),
@@ -892,7 +896,12 @@ pub fn item_from_entry(
         icon_handle_grid,
         icon_handle_list,
         icon_handle_list_condensed,
-        thumbnail_opt: remote.then_some(ItemThumbnail::NotImage),
+        thumbnail_opt: None,
+        item_location: if remote {
+            ItemLocation::Remote
+        } else {
+            ItemLocation::Local
+        },
         button_id: widget::Id::unique(),
         pos_opt: Cell::new(None),
         rect_opt: Cell::new(None),
@@ -1117,7 +1126,7 @@ pub fn scan_search<F: Fn(&Path, &str, Metadata) -> bool + Sync>(
         not(target_os = "android")
     )
 )))]
-pub fn scan_trash(_sizes: IconSizes) -> Vec<Item> {
+pub fn scan_trash(_sizes: IconSizes, _thumbnail_mode: ThumbnailMode) -> Vec<Item> {
     log::warn!("viewing trash not supported on this platform");
     Vec::new()
 }
@@ -1184,7 +1193,8 @@ pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
                 icon_handle_grid,
                 icon_handle_list,
                 icon_handle_list_condensed,
-                thumbnail_opt: Some(ItemThumbnail::NotImage),
+                thumbnail_opt: None,
+                item_location: ItemLocation::Trash,
                 button_id: widget::Id::unique(),
                 pos_opt: Cell::new(None),
                 rect_opt: Cell::new(None),
@@ -1353,7 +1363,8 @@ pub fn scan_desktop(
             icon_handle_grid,
             icon_handle_list,
             icon_handle_list_condensed,
-            thumbnail_opt: Some(ItemThumbnail::NotImage),
+            thumbnail_opt: None,
+            item_location: ItemLocation::Trash,
             button_id: widget::Id::unique(),
             pos_opt: Cell::new(None),
             rect_opt: Cell::new(None),
@@ -1658,6 +1669,7 @@ pub enum Message {
     DoubleClick(Option<usize>),
     ClickRelease(Option<usize>),
     Config(TabConfig),
+    ThumbConfig(ThumbCfg),
     ContextAction(Action),
     ContextMenu(Option<Point>, Option<window::Id>),
     LocationContextMenuPoint(Option<Point>),
@@ -1743,6 +1755,17 @@ pub enum DirSize {
     Error(String),
 }
 
+/// Identifies the location category of an item for the purposes of generating a thumbnail.
+#[derive(Clone, Debug)]
+pub enum ItemLocation {
+    /// Item is on the local filesystem, but not in the trash
+    Local,
+    /// Item is on a remote filesystem
+    Remote,
+    /// Item is in the trash
+    Trash,
+}
+
 #[derive(Clone, Debug)]
 pub enum ItemMetadata {
     Path {
@@ -1816,11 +1839,26 @@ impl ItemMetadata {
     }
 }
 
+/// Represents different types of thumbnails that can be generated for file system items.
+///
+/// Thumbnails are generated lazily and only for visible items to optimize performance.
+/// The thumbnail generation respects memory limits and file size constraints configured
+/// by the user.
 #[derive(Debug)]
 pub enum ItemThumbnail {
+    /// Indicates that the item cannot be thumbnailed or is not an image/previewable file.
+    /// This is used as the default fallback for non-previewable content.
     NotImage,
+
+    /// A raster image thumbnail containing an image handle and optional original dimensions.
+    /// The dimensions tuple represents (width, height) of the original image if available.
     Image(widget::image::Handle, Option<(u32, u32)>),
+
+    /// An SVG thumbnail containing a vector graphics handle for scalable images.
     Svg(widget::svg::Handle),
+
+    /// A text preview containing the file's text content for display in a text editor widget.
+    /// Note: Currently disabled in the UI due to performance issues with text shaping.
     Text(widget::text_editor::Content),
 }
 
@@ -2194,7 +2232,17 @@ pub struct Item {
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
     pub icon_handle_list_condensed: widget::icon::Handle,
+    /// Optional thumbnail representation for this item.
+    ///
+    /// - `None`: No thumbnail has been generated yet (lazy loading)
+    /// - `Some(ItemThumbnail::NotImage)`: Item is not previewable
+    /// - `Some(ItemThumbnail::Image/Svg/Text)`: Generated thumbnail for preview
+    ///
+    /// Thumbnails are generated asynchronously only for visible items through a subscription
+    /// system to optimize performance and memory usage.
     pub thumbnail_opt: Option<ItemThumbnail>,
+    /// Describes the item location for the purposes of thumbnail generation
+    pub item_location: ItemLocation,
     pub button_id: widget::Id,
     pub pos_opt: Cell<Option<(usize, usize)>>,
     pub rect_opt: Cell<Option<Rectangle>>,
@@ -2511,6 +2559,17 @@ impl Item {
 
         row = row.push(column);
         row.into()
+    }
+
+    /// Determines if a thumbnail may be generated, based on the thumbnail mode and item location.
+    pub fn allow_generate_thumbnail(&self, thumbnail_mode: &ThumbnailMode) -> bool {
+        match (thumbnail_mode, &self.item_location) {
+            (ThumbnailMode::Local, ItemLocation::Local) => true,
+            (ThumbnailMode::Local, ItemLocation::Remote) => false,
+            (ThumbnailMode::All, _) => true,
+            (_, ItemLocation::Trash) => false,
+            (ThumbnailMode::Never, _) => false,
+        }
     }
 }
 
@@ -3406,6 +3465,27 @@ impl Tab {
                     for item in items.iter_mut() {
                         item.highlighted = false;
                     }
+                }
+            }
+            Message::ThumbConfig(thumb_config) => {
+                let thumbnail_mode_changed =
+                    self.thumb_config.thumbnail_mode != thumb_config.thumbnail_mode;
+                self.thumb_config = thumb_config;
+                if thumbnail_mode_changed {
+                    // Reloads the tab if thumbnail mode was changed, so that when thumbnails are
+                    // disabled the tab immediately updates to hide them.
+                    let selected_paths = self
+                        .selected_locations()
+                        .into_iter()
+                        .filter_map(Location::into_path_opt)
+                        .collect();
+                    let location = self.location.clone();
+                    self.change_location(&location, None);
+                    commands.push(Command::ChangeLocation(
+                        self.title(),
+                        location,
+                        Some(selected_paths),
+                    ));
                 }
             }
             Message::ContextAction(action) => {
@@ -6145,6 +6225,11 @@ impl Tab {
             for item in items {
                 if item.thumbnail_opt.is_some() {
                     // Skip items that already have a mime type and thumbnail
+                    continue;
+                }
+
+                if !item.allow_generate_thumbnail(&self.thumb_config.thumbnail_mode) {
+                    // Skip generating thumbnail if not permitted for thumbnail mode
                     continue;
                 }
 
