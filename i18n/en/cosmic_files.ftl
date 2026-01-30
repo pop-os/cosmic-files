@@ -285,6 +285,7 @@ calculating = Calculating...
 ## Settings
 settings = Settings
 single-click = Single click to open
+folder-tree = Folder tree
 
 ### Appearance
 appearance = Appearance

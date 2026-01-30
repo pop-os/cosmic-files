@@ -28,6 +28,7 @@ use cosmic::{
         keyboard::{Event as KeyEvent, Key, Modifiers},
         stream,
         widget::scrollable,
+        widget::scrollable::AbsoluteOffset,
         window::{self, Event as WindowEvent, Id as WindowId},
     },
     iced_runtime::clipboard,
@@ -95,6 +96,7 @@ use crate::{
 use crate::{
     config::State,
     dialog::DialogSettings,
+    nav_tree::NavTreeState,
     zoom::{zoom_in_view, zoom_out_view, zoom_to_default},
 };
 
@@ -195,6 +197,7 @@ pub enum Action {
     TabViewGrid,
     TabViewList,
     ToggleFoldersFirst,
+    ToggleFolderTree,
     ToggleShowHidden,
     ToggleSort(HeadingOptions),
     WindowClose,
@@ -266,6 +269,7 @@ impl Action {
             Self::TabViewGrid => Message::TabView(entity_opt, tab::View::Grid),
             Self::TabViewList => Message::TabView(entity_opt, tab::View::List),
             Self::ToggleFoldersFirst => Message::ToggleFoldersFirst,
+            Self::ToggleFolderTree => Message::ToggleFolderTree,
             Self::ToggleShowHidden => Message::ToggleShowHidden,
             Self::ToggleSort(sort) => {
                 Message::TabMessage(entity_opt, tab::Message::ToggleSort(*sort))
@@ -430,6 +434,7 @@ pub enum Message {
     TimeConfigChange(TimeConfig),
     ToggleContextPage(ContextPage),
     ToggleFoldersFirst,
+    ToggleFolderTree,
     ToggleShowHidden,
     Undo(usize),
     UndoTrash(widget::ToastId, Arc<[PathBuf]>),
@@ -450,6 +455,15 @@ pub enum Message {
     DndDropTab(Entity, Option<ClipboardPaste>, DndAction),
     DndDropNav(Entity, Option<ClipboardPaste>, DndAction),
     Recents,
+    ToggleShowFolderTree(bool),
+    TreeToggleExpand(PathBuf),
+    TreeNavigate(PathBuf),
+    TreeDndEnter(PathBuf),
+    TreeDndLeave,
+    TreeDndDrop(PathBuf, Option<ClipboardPaste>, DndAction),
+    NavTreeResizeStart(f32),
+    NavTreeResizeDrag(f32),
+    NavTreeResizeEnd,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     OutputEvent(OutputEvent, WlOutput),
     Cosmic(app::Action),
@@ -734,12 +748,21 @@ pub struct App {
     windows: FxHashMap<window::Id, Window>,
     nav_dnd_hover: Option<(Location, Instant)>,
     tab_dnd_hover: Option<(Entity, Instant)>,
+    tree_dnd_hover: Option<PathBuf>,
+    nav_tree_scrollable_id: widget::Id,
+    nav_tree_width: f32,
+    nav_tree_resizing: bool,
+    nav_tree_drag_start_x: f32,
+    nav_tree_start_width: f32,
     type_select_prefix: String,
     type_select_last_key: Option<Instant>,
     nav_drag_id: DragId,
     tab_drag_id: DragId,
     auto_scroll_speed: Option<i16>,
     file_dialog_opt: Option<Dialog<Message>>,
+    nav_tree: NavTreeState,
+    #[cfg(feature = "xdg-portal")]
+    pub inhibit: tokio::sync::watch::Sender<bool>,
 }
 
 impl App {
@@ -2222,12 +2245,19 @@ impl Application for App {
             windows: FxHashMap::default(),
             nav_dnd_hover: None,
             tab_dnd_hover: None,
+            tree_dnd_hover: None,
+            nav_tree_scrollable_id: widget::Id::unique(),
+            nav_tree_width: 280.0,
+            nav_tree_resizing: false,
+            nav_tree_drag_start_x: 0.0,
+            nav_tree_start_width: 280.0,
             type_select_prefix: String::new(),
             type_select_last_key: None,
             nav_drag_id: DragId::new(),
             tab_drag_id: DragId::new(),
             auto_scroll_speed: None,
             file_dialog_opt: None,
+            nav_tree: NavTreeState::new(),
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             layer_sizes: FxHashMap::default(),
         };
@@ -2278,6 +2308,7 @@ impl Application for App {
         }
 
         let nav_model = self.nav_model()?;
+        let spacing = theme::active().cosmic().spacing;
 
         let mut nav = cosmic::widget::nav_bar(nav_model, |entity| {
             cosmic::Action::Cosmic(cosmic::app::Action::NavBar(entity))
@@ -2301,10 +2332,77 @@ impl Application for App {
             nav = nav.max_width(280);
         }
 
-        Some(Element::from(
-            // XXX both must be shrink to avoid flex layout from ignoring it
-            nav.width(Length::Shrink).height(Length::Shrink),
-        ))
+        if self.config.show_folder_tree {
+            // Tree view mode - show folder tree instead of nav bar
+            let toggle_button: Element<'_, cosmic::Action<Message>> =
+                widget::button::icon(icon::from_name("view-list-symbolic").size(16))
+                    .padding(spacing.space_xxs)
+                    .on_press(cosmic::Action::App(Message::ToggleShowFolderTree(false)))
+                    .class(theme::Button::Icon)
+                    .into();
+
+            let toggle_row: Element<'_, cosmic::Action<Message>> =
+                widget::row::with_children(vec![widget::horizontal_space().into(), toggle_button])
+                    .padding([spacing.space_xxs, spacing.space_xs])
+                    .into();
+
+            let tree_view = self
+                .nav_tree
+                .view(
+                    self.tree_dnd_hover.as_ref(),
+                    |path| cosmic::Action::App(Message::TreeToggleExpand(path)),
+                    |path| cosmic::Action::App(Message::TreeNavigate(path)),
+                    |path| cosmic::Action::App(Message::TreeDndEnter(path)),
+                    cosmic::Action::App(Message::TreeDndLeave),
+                    |path, data, action| {
+                        cosmic::Action::App(Message::TreeDndDrop(path, data, action))
+                    },
+                )
+                .map(|msg| msg);
+
+            let tree_content = widget::column::with_children(vec![toggle_row, tree_view])
+                .spacing(spacing.space_xxs);
+
+            let scrollable_tree = widget::scrollable(tree_content)
+                .id(self.nav_tree_scrollable_id.clone())
+                .width(if self.core.is_condensed() {
+                    Length::Fill
+                } else {
+                    Length::Fixed(self.nav_tree_width - 6.0) // Leave room for resize handle
+                })
+                .height(Length::Fill);
+
+            // Resize handle - a narrow vertical bar that can be dragged
+            // Use current width as the starting reference point
+            let current_width = self.nav_tree_width;
+            let handle_content = widget::container(widget::vertical_space())
+                .width(Length::Fixed(6.0))
+                .height(Length::Fill)
+                .class(if self.nav_tree_resizing {
+                    theme::Container::Primary
+                } else {
+                    theme::Container::default()
+                });
+
+            let resize_handle: Element<'_, cosmic::Action<Message>> =
+                crate::mouse_area::MouseArea::new(handle_content)
+                    .on_press(move |_pos| {
+                        cosmic::Action::App(Message::NavTreeResizeStart(current_width))
+                    })
+                    .into();
+
+            let tree_with_handle =
+                widget::row::with_children(vec![scrollable_tree.into(), resize_handle]);
+
+            Some(Element::from(tree_with_handle))
+        } else {
+            // Nav bar mode - return nav as-is (framework requires shrink sizing)
+            // Toggle to tree view via View menu "Folder tree" option
+            Some(Element::from(
+                // XXX both must be shrink to avoid flex layout from ignoring it
+                nav.width(Length::Shrink).height(Length::Shrink),
+            ))
+        }
     }
 
     fn nav_context_menu(
@@ -4188,7 +4286,25 @@ impl Application for App {
                         tab.sort_name = sort.0;
                         tab.sort_direction = sort.1;
 
-                        let mut tasks = Vec::with_capacity(2);
+                        if self.config.show_folder_tree {
+                            if let Some(path) = location.path_opt() {
+                                self.nav_tree.expand_to_path(&path);
+                            }
+                        }
+
+                        let mut tasks = Vec::with_capacity(3);
+
+                        // Scroll tree view to current location
+                        if self.config.show_folder_tree {
+                            let offset = AbsoluteOffset {
+                                x: 0.0,
+                                y: self.nav_tree.scroll_offset_for_current(),
+                            };
+                            tasks.push(scrollable::scroll_to(
+                                self.nav_tree_scrollable_id.clone(),
+                                offset,
+                            ));
+                        }
 
                         if let Some(selection_paths) = selection_paths {
                             tab.select_paths(selection_paths);
@@ -4629,6 +4745,93 @@ impl Application for App {
             },
             Message::Recents => {
                 return self.open_tab(Location::Recents, false, None);
+            }
+            Message::ToggleShowFolderTree(show) => {
+                config_set!(show_folder_tree, show);
+                let mut tasks = vec![self.update_config()];
+                // Expand tree to current location when enabling and scroll to it
+                if show {
+                    if let Some(tab) = self.tab_model.active_data::<Tab>() {
+                        if let Some(path) = tab.location.path_opt() {
+                            self.nav_tree.expand_to_path(&path);
+                            let offset = AbsoluteOffset {
+                                x: 0.0,
+                                y: self.nav_tree.scroll_offset_for_current(),
+                            };
+                            tasks.push(scrollable::scroll_to(
+                                self.nav_tree_scrollable_id.clone(),
+                                offset,
+                            ));
+                        }
+                    }
+                }
+                return Task::batch(tasks);
+            }
+            Message::ToggleFolderTree => {
+                let show = !self.config.show_folder_tree;
+                config_set!(show_folder_tree, show);
+                let mut tasks = vec![self.update_config()];
+                // Expand tree to current location when enabling and scroll to it
+                if show {
+                    if let Some(tab) = self.tab_model.active_data::<Tab>() {
+                        if let Some(path) = tab.location.path_opt() {
+                            self.nav_tree.expand_to_path(&path);
+                            let offset = AbsoluteOffset {
+                                x: 0.0,
+                                y: self.nav_tree.scroll_offset_for_current(),
+                            };
+                            tasks.push(scrollable::scroll_to(
+                                self.nav_tree_scrollable_id.clone(),
+                                offset,
+                            ));
+                        }
+                    }
+                }
+                return Task::batch(tasks);
+            }
+            Message::TreeToggleExpand(path) => {
+                self.nav_tree.toggle_expand(&path);
+            }
+            Message::TreeNavigate(path) => {
+                let location = Location::Path(path);
+                return self.update(Message::TabMessage(None, tab::Message::Location(location)));
+            }
+            Message::TreeDndEnter(path) => {
+                self.tree_dnd_hover = Some(path);
+            }
+            Message::TreeDndLeave => {
+                self.tree_dnd_hover = None;
+            }
+            Message::TreeDndDrop(path, data, action) => {
+                self.tree_dnd_hover = None;
+                if let Some(data) = data {
+                    let kind = match action {
+                        DndAction::Move => ClipboardKind::Cut { is_dnd: true },
+                        _ => ClipboardKind::Copy,
+                    };
+                    return self.update(Message::PasteContents(
+                        path,
+                        ClipboardPaste {
+                            kind,
+                            paths: data.paths,
+                        },
+                    ));
+                }
+            }
+            Message::NavTreeResizeStart(start_x) => {
+                self.nav_tree_resizing = true;
+                self.nav_tree_drag_start_x = start_x;
+                self.nav_tree_start_width = self.nav_tree_width;
+            }
+            Message::NavTreeResizeDrag(cursor_x) => {
+                if self.nav_tree_resizing {
+                    let delta = cursor_x - self.nav_tree_drag_start_x;
+                    let new_width = self.nav_tree_start_width + delta;
+                    self.nav_tree_width = new_width.clamp(150.0, 600.0);
+                }
+            }
+            Message::NavTreeResizeEnd => {
+                self.nav_tree_resizing = false;
             }
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             Message::OutputEvent(output_event, output) => {
@@ -6329,6 +6532,21 @@ impl Application for App {
                 .map(|(entity, tab_msg)| Message::TabMessage(Some(entity), tab_msg)),
             )
         }));
+
+        // Conditional subscription for nav tree resize dragging
+        if self.nav_tree_resizing {
+            subscriptions.push(event::listen_with(
+                |event, _status, _window_id| match event {
+                    Event::Mouse(iced::mouse::Event::CursorMoved { position }) => {
+                        Some(Message::NavTreeResizeDrag(position.x))
+                    }
+                    Event::Mouse(iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left)) => {
+                        Some(Message::NavTreeResizeEnd)
+                    }
+                    _ => None,
+                },
+            ));
+        }
 
         Subscription::batch(subscriptions)
     }
