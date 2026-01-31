@@ -392,16 +392,16 @@ impl LargeImageManager {
         generation: u64,
     ) -> bool {
         // Check if this decode is still current (not superseded by a newer one)
-        if let Some(&current_gen) = self.decode_generations.get(&path) {
-            if generation != current_gen {
-                log::info!(
-                    "Discarding outdated decode for {} (generation {} != current {})",
-                    path.display(),
-                    generation,
-                    current_gen
-                );
-                return false;
-            }
+        if let Some(&current_gen) = self.decode_generations.get(&path)
+            && generation != current_gen
+        {
+            log::info!(
+                "Discarding outdated decode for {} (generation {} != current {})",
+                path.display(),
+                generation,
+                current_gen
+            );
+            return false;
         }
 
         log::info!(
@@ -556,7 +556,7 @@ impl LargeImageManager {
 
     /// Check if sufficient memory is available, clearing cache if needed.
     /// Returns true if memory is available, false otherwise.
-    fn ensure_memory_available(&mut self, path: &PathBuf, width: u32, height: u32) -> bool {
+    fn ensure_memory_available(&mut self, path: &Path, width: u32, height: u32) -> bool {
         let (has_memory, error_opt) = check_memory_available(width, height);
 
         if has_memory {
@@ -565,7 +565,7 @@ impl LargeImageManager {
 
         if self.cache_is_empty() {
             if let Some(error_msg) = error_opt {
-                self.store_error(path.clone(), error_msg);
+                self.store_error(path.to_path_buf(), error_msg);
                 log::warn!(
                     "Cannot load {}: insufficient memory and cache is empty",
                     path.display()
@@ -588,7 +588,7 @@ impl LargeImageManager {
         }
 
         if let Some(error_msg) = error_opt_after {
-            self.store_error(path.clone(), error_msg);
+            self.store_error(path.to_path_buf(), error_msg);
             log::warn!(
                 "Cannot load {}: insufficient memory even after cache clear",
                 path.display()

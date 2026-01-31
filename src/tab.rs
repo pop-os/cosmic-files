@@ -1,5 +1,8 @@
+use chrono::{Datelike, Timelike, Utc};
 use cosmic::{
-    Apply, Element, cosmic_theme, font,
+    Apply, Element, cosmic_theme,
+    desktop::fde::{DesktopEntry, get_languages_from_env},
+    font,
     iced::{
         Alignment,
         Border,
@@ -37,8 +40,6 @@ use cosmic::{
         menu::{action::MenuAction, key_bind::KeyBind},
     },
 };
-
-use chrono::{Datelike, Timelike, Utc};
 use i18n_embed::LanguageLoader;
 use icu::{
     datetime::{
@@ -615,7 +616,8 @@ pub fn fs_kind(_metadata: &Metadata) -> FsKind {
 }
 
 fn get_desktop_file_display_name(path: &Path) -> Option<String> {
-    let entry = match freedesktop_entry_parser::parse_entry(path) {
+    let locales = get_languages_from_env();
+    let entry = match DesktopEntry::from_path(path, Some(&locales)) {
         Ok(ok) => ok,
         Err(err) => {
             log::warn!("failed to parse {}: {}", path.display(), err);
@@ -623,14 +625,11 @@ fn get_desktop_file_display_name(path: &Path) -> Option<String> {
         }
     };
 
-    entry
-        .section("Desktop Entry")
-        .attr("Name")
-        .map(str::to_string)
+    entry.name(&locales).map(|s| s.into_owned())
 }
 
 fn get_desktop_file_icon(path: &Path) -> Option<String> {
-    let entry = match freedesktop_entry_parser::parse_entry(path) {
+    let entry = match DesktopEntry::from_path::<&str>(path, None) {
         Ok(ok) => ok,
         Err(err) => {
             log::warn!("failed to parse {}: {}", path.display(), err);
@@ -638,10 +637,7 @@ fn get_desktop_file_icon(path: &Path) -> Option<String> {
         }
     };
 
-    entry
-        .section("Desktop Entry")
-        .attr("Icon")
-        .map(str::to_string)
+    entry.icon().map(str::to_string)
 }
 
 /// Creates an icon handle from a desktop file's Icon field value.
@@ -656,17 +652,17 @@ fn desktop_icon_handle(icon: &str, size: u16) -> widget::icon::Handle {
 }
 
 pub fn parse_desktop_file(path: &Path) -> (Option<String>, Option<String>) {
-    let entry = match freedesktop_entry_parser::parse_entry(path) {
+    let locales = get_languages_from_env();
+    let entry = match DesktopEntry::from_path(path, Some(&locales)) {
         Ok(ok) => ok,
         Err(err) => {
             log::warn!("failed to parse {}: {}", path.display(), err);
             return (None, None);
         }
     };
-    let section = entry.section("Desktop Entry");
     (
-        section.attr("Name").map(str::to_string),
-        section.attr("Icon").map(str::to_string),
+        entry.name(&locales).map(|s| s.into_owned()),
+        entry.icon().map(str::to_string),
     )
 }
 
@@ -934,43 +930,43 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
 
     #[cfg(feature = "gvfs")]
     {
-        if let Ok(path_meta) = fs::metadata(tab_path) {
-            if fs_kind(&path_meta) == FsKind::Gvfs {
-                let file = gio::File::for_path(tab_path);
+        if let Ok(path_meta) = fs::metadata(tab_path)
+            && fs_kind(&path_meta) == FsKind::Gvfs
+        {
+            let file = gio::File::for_path(tab_path);
 
-                // gio crate expects a comma delimited string
-                let attr_string = [
-                    gio::FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME.as_str(),
-                    gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE.as_str(),
-                    gio::FILE_ATTRIBUTE_TIME_MODIFIED.as_str(),
-                    gio::FILE_ATTRIBUTE_STANDARD_SIZE.as_str(),
-                    gio::FILE_ATTRIBUTE_STANDARD_TYPE.as_str(),
-                    gio::FILE_ATTRIBUTE_STANDARD_NAME.as_str(),
-                ]
-                .join(",");
+            // gio crate expects a comma delimited string
+            let attr_string = [
+                gio::FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME.as_str(),
+                gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE.as_str(),
+                gio::FILE_ATTRIBUTE_TIME_MODIFIED.as_str(),
+                gio::FILE_ATTRIBUTE_STANDARD_SIZE.as_str(),
+                gio::FILE_ATTRIBUTE_STANDARD_TYPE.as_str(),
+                gio::FILE_ATTRIBUTE_STANDARD_NAME.as_str(),
+            ]
+            .join(",");
 
-                match gio::prelude::FileExt::enumerate_children(
-                    &file,
-                    attr_string.as_str(),
-                    gio::FileQueryInfoFlags::NONE,
-                    gio::Cancellable::NONE,
-                ) {
-                    Ok(res) => {
-                        remote_scannable = true;
-                        items = res
-                            .filter_map(|file| {
-                                let file = file.ok()?;
-                                Some(item_from_gvfs_info(tab_path.join(file.name()), file, sizes))
-                            })
-                            .collect();
-                    }
-                    Err(err) => {
-                        log::warn!(
-                            "could not enumerate {} via gio: {}",
-                            tab_path.display(),
-                            err
-                        );
-                    }
+            match gio::prelude::FileExt::enumerate_children(
+                &file,
+                attr_string.as_str(),
+                gio::FileQueryInfoFlags::NONE,
+                gio::Cancellable::NONE,
+            ) {
+                Ok(res) => {
+                    remote_scannable = true;
+                    items = res
+                        .filter_map(|file| {
+                            let file = file.ok()?;
+                            Some(item_from_gvfs_info(tab_path.join(file.name()), file, sizes))
+                        })
+                        .collect();
+                }
+                Err(err) => {
+                    log::warn!(
+                        "could not enumerate {} via gio: {}",
+                        tab_path.display(),
+                        err
+                    );
                 }
             }
         }
@@ -1410,11 +1406,11 @@ impl EditLocation {
                 self.selected = Some(selected);
 
                 // Automatically resolve if there is only one completion
-                if completions.len() == 1 {
-                    if let Some(resolved) = self.resolve() {
-                        self.location = resolved;
-                        self.selected = None;
-                    }
+                if completions.len() == 1
+                    && let Some(resolved) = self.resolve()
+                {
+                    self.location = resolved;
+                    self.selected = None;
                 }
             }
         } else {
@@ -2033,10 +2029,10 @@ impl ItemThumbnail {
         if let Some((item_thumbnail, temp_file)) =
             Self::generate_thumbnail_external(path, &mime, thumbnail_size, thumbnail_dir)
         {
-            if let Ok(cache) = thumbnail_cacher {
-                if let Err(err) = cache.update_with_temp_file(temp_file) {
-                    log::warn!("failed to update cache for {}: {}", path.display(), err);
-                }
+            if let Ok(cache) = thumbnail_cacher
+                && let Err(err) = cache.update_with_temp_file(temp_file)
+            {
+                log::warn!("failed to update cache for {}: {}", path.display(), err);
             }
             return item_thumbnail;
         }
@@ -2076,16 +2072,15 @@ impl ItemThumbnail {
         // If we weren't able to create a thumbnail, but we should have
         // been able to, create a fail marker so that it isn't tried the
         // next time.
-        if let Ok(cacher) = thumbnail_cacher {
-            if tried_supported_file {
-                if let Err(err) = cacher.create_fail_marker() {
-                    log::warn!(
-                        "failed to create thumbnail fail marker for {}: {}",
-                        path.display(),
-                        err
-                    );
-                }
-            }
+        if let Ok(cacher) = thumbnail_cacher
+            && tried_supported_file
+            && let Err(err) = cacher.create_fail_marker()
+        {
+            log::warn!(
+                "failed to create thumbnail fail marker for {}: {}",
+                path.display(),
+                err
+            );
         }
 
         Self::NotImage
@@ -2273,13 +2268,13 @@ impl Item {
                 widget::button::icon(widget::icon::from_name("go-next-symbolic"))
                     .on_press(Message::ItemRight),
             );
-        if self.can_gallery() {
-            if let Some(_path) = self.path_opt() {
-                row = row.push(
-                    widget::button::icon(widget::icon::from_name("view-fullscreen-symbolic"))
-                        .on_press(Message::Gallery(true)),
-                );
-            }
+        if self.can_gallery()
+            && let Some(_path) = self.path_opt()
+        {
+            row = row.push(
+                widget::button::icon(widget::icon::from_name("view-fullscreen-symbolic"))
+                    .on_press(Message::Gallery(true)),
+            );
         }
         row.into()
     }
@@ -2445,11 +2440,11 @@ impl Item {
             }
         }
 
-        if let Some(path) = self.path_opt() {
-            if let Ok(img) = image::image_dimensions(path) {
-                let (width, height) = img;
-                details = details.push(widget::text::body(format!("{width}x{height}")));
-            }
+        if let Some(path) = self.path_opt()
+            && let Ok(img) = image::image_dimensions(path)
+        {
+            let (width, height) = img;
+            details = details.push(widget::text::body(format!("{width}x{height}")));
         }
         column = column.push(details);
 
@@ -2637,12 +2632,11 @@ async fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, 
             .map_err(|s| OperationError::from_state(s, &controller))?;
 
         //TODO: report more errors?
-        if let Ok(entry) = entry_res {
-            if let Ok(metadata) = entry.metadata() {
-                if metadata.is_file() {
-                    total += metadata.len();
-                }
-            }
+        if let Ok(entry) = entry_res
+            && let Ok(metadata) = entry.metadata()
+            && metadata.is_file()
+        {
+            total += metadata.len();
         }
 
         // Yield in case this process takes a while.
@@ -2768,10 +2762,10 @@ impl Tab {
         let selected = self.selected_locations();
         for item in &mut items {
             item.selected = false;
-            if let Some(location) = &item.location_opt {
-                if selected.contains(location) {
-                    item.selected = true;
-                }
+            if let Some(location) = &item.location_opt
+                && selected.contains(location)
+            {
+                item.selected = true;
             }
         }
         self.items_opt = Some(items);
@@ -2790,10 +2784,9 @@ impl Tab {
             for item in items.iter_mut() {
                 item.cut = false;
                 if let Some(location_path) = item.location_opt.as_ref().and_then(Location::path_opt)
+                    && locations.contains(location_path)
                 {
-                    if locations.contains(location_path) {
-                        item.cut = true;
-                    }
+                    item.cut = true;
                 }
             }
         }
@@ -2883,11 +2876,11 @@ impl Tab {
         if let Some(ref mut items) = self.items_opt {
             for (i, item) in items.iter_mut().enumerate() {
                 item.selected = false;
-                if let Some(path) = item.path_opt() {
-                    if paths.contains(path) {
-                        item.selected = true;
-                        self.select_focus = Some(i);
-                    }
+                if let Some(path) = item.path_opt()
+                    && paths.contains(path)
+                {
+                    item.selected = true;
+                    self.select_focus = Some(i);
                 }
             }
         }
@@ -3087,10 +3080,10 @@ impl Tab {
             return Vec::new();
         };
 
-        if let Some((w, h)) = original_dims {
-            if !should_use_tiling(*w, *h) {
-                return Vec::new();
-            }
+        if let Some((w, h)) = original_dims
+            && !should_use_tiling(*w, *h)
+        {
+            return Vec::new();
         }
 
         let Some(path) = item.path_opt() else {
@@ -3391,15 +3384,13 @@ impl Tab {
                     self.date_time_formatter = date_time_formatter(self.config.military_time);
                     self.time_formatter = time_formatter(self.config.military_time);
                 }
-                if show_hidden_changed {
-                    if let Location::Search(path, term, ..) = &self.location {
-                        cd = Some(Location::Search(
-                            path.clone(),
-                            term.clone(),
-                            self.config.show_hidden,
-                            Instant::now(),
-                        ));
-                    }
+                if show_hidden_changed && let Location::Search(path, term, ..) = &self.location {
+                    cd = Some(Location::Search(
+                        path.clone(),
+                        term.clone(),
+                        self.config.show_hidden,
+                        Instant::now(),
+                    ));
                 }
                 // Unhighlight all items when config changes
                 if let Some(ref mut items) = self.items_opt {
@@ -3420,11 +3411,12 @@ impl Tab {
                 self.location_context_menu_index = None;
 
                 //TODO: hack for clearing selecting when right clicking empty space
-                if self.context_menu.is_some() && self.last_right_click.take().is_none() {
-                    if let Some(ref mut items) = self.items_opt {
-                        for item in items.iter_mut() {
-                            item.selected = false;
-                        }
+                if self.context_menu.is_some()
+                    && self.last_right_click.take().is_none()
+                    && let Some(ref mut items) = self.items_opt
+                {
+                    for item in items.iter_mut() {
+                        item.selected = false;
                     }
                 }
             }
@@ -3512,11 +3504,11 @@ impl Tab {
                 }
             }
             Message::EditLocationComplete(selected) => {
-                if let Some(mut edit_location) = self.edit_location.take() {
-                    if !matches!(edit_location.location, Location::Network(..)) {
-                        edit_location.selected = Some(selected);
-                        cd = edit_location.resolve();
-                    }
+                if let Some(mut edit_location) = self.edit_location.take()
+                    && !matches!(edit_location.location, Location::Network(..))
+                {
+                    edit_location.selected = Some(selected);
+                    cd = edit_location.resolve();
                 }
             }
             Message::EditLocationEnable => {
@@ -3532,11 +3524,11 @@ impl Tab {
                         && edit_location
                             .completions
                             .as_ref()
-                            .map_or(false, |completions| !completions.is_empty())
+                            .is_some_and(|completions| !completions.is_empty())
                         && edit_location
                             .location
                             .path_opt()
-                            .map_or(false, |path| !path.exists())
+                            .is_some_and(|path| !path.exists())
                     {
                         edit_location.selected = Some(0);
                     }
@@ -3634,19 +3626,19 @@ impl Tab {
                 }
             }
             Message::GoNext => {
-                if let Some(history_i) = self.history_i.checked_add(1) {
-                    if let Some(location) = self.history.get(history_i) {
-                        cd = Some(location.clone());
-                        history_i_opt = Some(history_i);
-                    }
+                if let Some(history_i) = self.history_i.checked_add(1)
+                    && let Some(location) = self.history.get(history_i)
+                {
+                    cd = Some(location.clone());
+                    history_i_opt = Some(history_i);
                 }
             }
             Message::GoPrevious => {
-                if let Some(history_i) = self.history_i.checked_sub(1) {
-                    if let Some(location) = self.history.get(history_i) {
-                        cd = Some(location.clone());
-                        history_i_opt = Some(history_i);
-                    }
+                if let Some(history_i) = self.history_i.checked_sub(1)
+                    && let Some(location) = self.history.get(history_i)
+                {
+                    cd = Some(location.clone());
+                    history_i_opt = Some(history_i);
                 }
             }
             Message::ItemDown => {
@@ -3825,10 +3817,10 @@ impl Tab {
             Message::LocationUp => {
                 // Sets location to the path's parent
                 // Does nothing if path is root or location is Trash
-                if let Location::Path(ref path) = self.location {
-                    if let Some(parent) = path.parent() {
-                        cd = Some(Location::Path(parent.to_owned()));
-                    }
+                if let Location::Path(ref path) = self.location
+                    && let Some(parent) = path.parent()
+                {
+                    cd = Some(Location::Path(parent.to_owned()));
                 }
             }
             Message::Open(path_opt) => {
@@ -3870,27 +3862,25 @@ impl Tab {
                                 match mode {
                                     Mode::App => {
                                         if is_only_one_selected {
-                                            return ResolveResult::Cd(location.clone());
+                                            ResolveResult::Cd(location.clone())
                                         } else {
-                                            return ResolveResult::OpenInTab(path_opt.cloned());
+                                            ResolveResult::OpenInTab(path_opt.cloned())
                                         }
                                     }
-                                    Mode::Desktop => {
-                                        return match location {
-                                            Location::Trash => ResolveResult::OpenTrash,
-                                            _ => ResolveResult::Open(path_opt.cloned()),
-                                        };
-                                    }
+                                    Mode::Desktop => match location {
+                                        Location::Trash => ResolveResult::OpenTrash,
+                                        _ => ResolveResult::Open(path_opt.cloned()),
+                                    },
                                     Mode::Dialog(_) => {
                                         if is_only_one_selected {
-                                            return ResolveResult::Cd(location.clone());
+                                            ResolveResult::Cd(location.clone())
                                         } else {
-                                            return ResolveResult::Skip;
+                                            ResolveResult::Skip
                                         }
                                     }
                                 }
                             } else {
-                                return ResolveResult::Open(path_opt.cloned());
+                                ResolveResult::Open(path_opt.cloned())
                             }
                         }
                         let mut open_files = Vec::new();
@@ -3935,14 +3925,13 @@ impl Tab {
                 if mod_ctrl || mod_shift {
                     self.update(Message::Click(click_i_opt), modifiers);
                 }
-                if let Some(ref mut items) = self.items_opt {
-                    if !click_i_opt
+                if let Some(ref mut items) = self.items_opt
+                    && !click_i_opt
                         .is_some_and(|click_i| items.get(click_i).is_some_and(|x| x.selected))
-                    {
-                        // If item not selected, clear selection on other items
-                        for (i, item) in items.iter_mut().enumerate() {
-                            item.selected = Some(i) == click_i_opt;
-                        }
+                {
+                    // If item not selected, clear selection on other items
+                    for (i, item) in items.iter_mut().enumerate() {
+                        item.selected = Some(i) == click_i_opt;
                     }
                 }
                 //TODO: hack for clearing selecting when right clicking empty space
@@ -3990,12 +3979,12 @@ impl Tab {
             }
             Message::Resize(viewport) => {
                 // Scroll to ensure focused item still in view
-                if self.viewport_opt.map(|v| v.size()) != Some(viewport.size()) {
-                    if let Some(offset) = self.select_focus_scroll() {
-                        commands.push(Command::Iced(
-                            scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
-                        ));
-                    }
+                if self.viewport_opt.map(|v| v.size()) != Some(viewport.size())
+                    && let Some(offset) = self.select_focus_scroll()
+                {
+                    commands.push(Command::Iced(
+                        scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                    ));
                 }
 
                 self.viewport_opt = Some(viewport);
@@ -4099,20 +4088,17 @@ impl Tab {
                 }
             }
             Message::SelectLast => {
-                if let Some(ref items) = self.items_opt {
-                    if let Some(last_pos) = items.iter().filter_map(|item| item.pos_opt.get()).max()
-                    {
-                        if self.select_position(last_pos.0, last_pos.1, mod_shift) {
-                            if let Some(offset) = self.select_focus_scroll() {
-                                commands.push(Command::Iced(
-                                    scrollable::scroll_to(self.scrollable_id.clone(), offset)
-                                        .into(),
-                                ));
-                            }
-                            if let Some(id) = self.select_focus_id() {
-                                commands.push(Command::Iced(widget::button::focus(id).into()));
-                            }
-                        }
+                if let Some(ref items) = self.items_opt
+                    && let Some(last_pos) = items.iter().filter_map(|item| item.pos_opt.get()).max()
+                    && self.select_position(last_pos.0, last_pos.1, mod_shift)
+                {
+                    if let Some(offset) = self.select_focus_scroll() {
+                        commands.push(Command::Iced(
+                            scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                        ));
+                    }
+                    if let Some(id) = self.select_focus_id() {
+                        commands.push(Command::Iced(widget::button::focus(id).into()));
                     }
                 }
             }
@@ -4136,13 +4122,13 @@ impl Tab {
                 }
             }
             Message::TabComplete(path, completions) => {
-                if let Some(edit_location) = &mut self.edit_location {
-                    if edit_location.location.path_opt() == Some(&path) {
-                        edit_location.completions = Some(completions);
-                        commands.push(Command::Iced(
-                            widget::text_input::focus(self.edit_location_id.clone()).into(),
-                        ));
-                    }
+                if let Some(edit_location) = &mut self.edit_location
+                    && edit_location.location.path_opt() == Some(&path)
+                {
+                    edit_location.completions = Some(completions);
+                    commands.push(Command::Iced(
+                        widget::text_input::focus(self.edit_location_id.clone()).into(),
+                    ));
                 }
             }
             Message::Thumbnail(path, thumbnail) => {
@@ -4276,10 +4262,10 @@ impl Tab {
             }
             Message::DirectorySize(path, dir_size) => {
                 let location = Location::Path(path);
-                if let Some(ref mut item) = self.parent_item_opt {
-                    if item.location_opt.as_ref() == Some(&location) {
-                        item.dir_size.clone_from(&dir_size);
-                    }
+                if let Some(ref mut item) = self.parent_item_opt
+                    && item.location_opt.as_ref() == Some(&location)
+                {
+                    item.dir_size.clone_from(&dir_size);
                 }
                 if let Some(ref mut items) = self.items_opt {
                     for item in items.iter_mut() {
@@ -4317,13 +4303,12 @@ impl Tab {
             } else {
                 // Select parent if location is not directory
                 let mut selected_paths = None;
-                if let Some(path) = location.path_opt() {
-                    if !path.is_dir() {
-                        if let Some(parent) = path.parent() {
-                            selected_paths = Some(vec![path.clone()]);
-                            location = location.with_path(parent.to_path_buf());
-                        }
-                    }
+                if let Some(path) = location.path_opt()
+                    && !path.is_dir()
+                    && let Some(parent) = path.parent()
+                {
+                    selected_paths = Some(vec![path.clone()]);
+                    location = location.with_path(parent.to_path_buf());
                 }
                 if location != self.location || selected_paths.is_some() {
                     if location.path_opt().is_none_or(|path| path.is_dir()) {
@@ -4531,99 +4516,93 @@ impl Tab {
         //TODO: display error messages when image not found?
         let mut name_opt = None;
         let mut element_opt: Option<Element<Message>> = None;
-        if let Some(index) = self.select_focus {
-            if let Some(items) = &self.items_opt {
-                if let Some(item) = items.get(index) {
-                    name_opt = Some(widget::text::heading(&item.display_name));
-                    match item
-                        .thumbnail_opt
-                        .as_ref()
-                        .unwrap_or(&ItemThumbnail::NotImage)
-                    {
-                        ItemThumbnail::NotImage => {}
-                        ItemThumbnail::Image(handle, original_dims) => {
-                            // Determine which image to show based on async decode state
-                            let mut is_loading = false;
-                            let mut error_msg_opt = None;
-                            let image_handle = if let Some(path) = item.path_opt() {
-                                if let Some(error_msg) = self.large_image_manager.get_error(path) {
-                                    error_msg_opt = Some(error_msg.clone());
-                                    handle.clone()
-                                } else if self.large_image_manager.is_decoding(path) {
-                                    // Currently decoding (initial or re-decode) --> show cached/thumbnail with loading indicator
-                                    is_loading = true;
-                                    // Use decoded handle if available (re-decode), otherwise thumbnail (initial decode)
-                                    self.large_image_manager
-                                        .get_decoded(path)
-                                        .cloned()
-                                        .unwrap_or_else(|| handle.clone())
-                                } else if let Some(decoded_handle) =
-                                    self.large_image_manager.get_decoded(path)
-                                {
-                                    // Decoded and not currently decoding --> use it
-                                    decoded_handle.clone()
-                                } else if let Some((w, h)) = original_dims {
-                                    // Check if image needs tiling
-                                    if should_use_tiling(*w, *h) {
-                                        // Large image --> show thumbnail only
-                                        handle.clone()
-                                    } else {
-                                        // Normal-sized image --> load full resolution directly
-                                        widget::image::Handle::from_path(path)
-                                    }
-                                } else {
-                                    // No dimensions available --> show thumbnail
-                                    handle.clone()
-                                }
-                            } else {
+        if let Some(index) = self.select_focus
+            && let Some(items) = &self.items_opt
+            && let Some(item) = items.get(index)
+        {
+            name_opt = Some(widget::text::heading(&item.display_name));
+            match item
+                .thumbnail_opt
+                .as_ref()
+                .unwrap_or(&ItemThumbnail::NotImage)
+            {
+                ItemThumbnail::NotImage => {}
+                ItemThumbnail::Image(handle, original_dims) => {
+                    // Determine which image to show based on async decode state
+                    let mut is_loading = false;
+                    let mut error_msg_opt = None;
+                    let image_handle = if let Some(path) = item.path_opt() {
+                        if let Some(error_msg) = self.large_image_manager.get_error(path) {
+                            error_msg_opt = Some(error_msg.clone());
+                            handle.clone()
+                        } else if self.large_image_manager.is_decoding(path) {
+                            // Currently decoding (initial or re-decode) --> show cached/thumbnail with loading indicator
+                            is_loading = true;
+                            // Use decoded handle if available (re-decode), otherwise thumbnail (initial decode)
+                            self.large_image_manager
+                                .get_decoded(path)
+                                .cloned()
+                                .unwrap_or_else(|| handle.clone())
+                        } else if let Some(decoded_handle) =
+                            self.large_image_manager.get_decoded(path)
+                        {
+                            // Decoded and not currently decoding --> use it
+                            decoded_handle.clone()
+                        } else if let Some((w, h)) = original_dims {
+                            // Check if image needs tiling
+                            if should_use_tiling(*w, *h) {
+                                // Large image --> show thumbnail only
                                 handle.clone()
-                            };
+                            } else {
+                                // Normal-sized image --> load full resolution directly
+                                widget::image::Handle::from_path(path)
+                            }
+                        } else {
+                            // No dimensions available --> show thumbnail
+                            handle.clone()
+                        }
+                    } else {
+                        handle.clone()
+                    };
 
-                            let content: cosmic::Element<'_, Message> =
-                                if let Some(error_msg) = error_msg_opt {
-                                    widget::column()
-                                        .push(widget::image(image_handle))
-                                        .push(widget::text(format!("⚠ {}", error_msg)).size(13))
-                                        .padding(space_xs)
-                                        .align_x(cosmic::iced::Alignment::Center)
-                                        .into()
-                                } else if is_loading {
-                                    widget::column()
-                                        .push(widget::image(image_handle))
-                                        .push(widget::text("Loading higher resolution...").size(14))
-                                        .padding(space_xs)
-                                        .align_x(cosmic::iced::Alignment::Center)
-                                        .into()
-                                } else {
-                                    //TODO: use widget::image::viewer, when its zoom can be reset
-                                    widget::image(image_handle).into()
-                                };
+                    let content: cosmic::Element<'_, Message> =
+                        if let Some(error_msg) = error_msg_opt {
+                            widget::column()
+                                .push(widget::image(image_handle))
+                                .push(widget::text(format!("⚠ {}", error_msg)).size(13))
+                                .padding(space_xs)
+                                .align_x(cosmic::iced::Alignment::Center)
+                                .into()
+                        } else if is_loading {
+                            widget::column()
+                                .push(widget::image(image_handle))
+                                .push(widget::text("Loading higher resolution...").size(14))
+                                .padding(space_xs)
+                                .align_x(cosmic::iced::Alignment::Center)
+                                .into()
+                        } else {
+                            //TODO: use widget::image::viewer, when its zoom can be reset
+                            widget::image(image_handle).into()
+                        };
 
-                            element_opt =
-                                Some(widget::container(content).center(Length::Fill).into());
-                        }
-                        ItemThumbnail::Svg(handle) => {
-                            element_opt = Some(
-                                widget::svg(handle.clone())
-                                    .width(Length::Fill)
-                                    .height(Length::Fill)
-                                    .into(),
-                            );
-                        }
-                        ItemThumbnail::Text(text) => {
-                            element_opt = Some(
-                                widget::container(
-                                    widget::text_editor(text).padding(space_xxs).class(
-                                        cosmic::theme::iced::TextEditor::Custom(Box::new(
-                                            text_editor_class,
-                                        )),
-                                    ),
-                                )
-                                .center(Length::Fill)
-                                .into(),
-                            );
-                        }
-                    }
+                    element_opt = Some(widget::container(content).center(Length::Fill).into());
+                }
+                ItemThumbnail::Svg(handle) => {
+                    element_opt = Some(
+                        widget::svg(handle.clone())
+                            .width(Length::Fill)
+                            .height(Length::Fill)
+                            .into(),
+                    );
+                }
+                ItemThumbnail::Text(text) => {
+                    element_opt = Some(
+                        widget::container(widget::text_editor(text).padding(space_xxs).class(
+                            cosmic::theme::iced::TextEditor::Custom(Box::new(text_editor_class)),
+                        ))
+                        .center(Length::Fill)
+                        .into(),
+                    );
                 }
             }
         }
@@ -4862,32 +4841,32 @@ impl Tab {
                 );
                 let mut popover =
                     widget::popover(text_input).position(widget::popover::Position::Bottom);
-                if let Some(completions) = &edit_location.completions {
-                    if !completions.is_empty() {
-                        let mut column =
-                            widget::column::with_capacity(completions.len()).padding(space_xxs);
-                        for (i, (name, _path)) in completions.iter().enumerate() {
-                            let selected = edit_location.selected == Some(i);
-                            column = column.push(
-                                widget::button::custom(widget::text::body(name))
-                                    //TODO: match to design
-                                    .class(if selected {
-                                        theme::Button::Standard
-                                    } else {
-                                        theme::Button::HeaderBar
-                                    })
-                                    .on_press(Message::EditLocationComplete(i))
-                                    .padding(space_xxs)
-                                    .width(Length::Fill),
-                            );
-                        }
-                        popover = popover.popup(
-                            widget::container(column)
-                                .class(theme::Container::Dropdown)
-                                //TODO: This is a hack to get the popover to be the right width
-                                .max_width(size.width - 140.0),
+                if let Some(completions) = &edit_location.completions
+                    && !completions.is_empty()
+                {
+                    let mut column =
+                        widget::column::with_capacity(completions.len()).padding(space_xxs);
+                    for (i, (name, _path)) in completions.iter().enumerate() {
+                        let selected = edit_location.selected == Some(i);
+                        column = column.push(
+                            widget::button::custom(widget::text::body(name))
+                                //TODO: match to design
+                                .class(if selected {
+                                    theme::Button::Standard
+                                } else {
+                                    theme::Button::HeaderBar
+                                })
+                                .on_press(Message::EditLocationComplete(i))
+                                .padding(space_xxs)
+                                .width(Length::Fill),
                         );
                     }
+                    popover = popover.popup(
+                        widget::container(column)
+                            .class(theme::Container::Dropdown)
+                            //TODO: This is a hack to get the popover to be the right width
+                            .max_width(size.width - 140.0),
+                    );
                 }
                 row = row.push(popover);
                 let mut column = widget::column::with_capacity(4).padding([0, space_s]);
@@ -5913,13 +5892,13 @@ impl Tab {
             .wayland_on_right_press_window_position();
 
         let mut popover = widget::popover(mouse_area);
-        if let Some(point) = self.context_menu {
-            if !cfg!(feature = "wayland") || !crate::is_wayland() {
-                let context_menu = menu::context_menu(self, key_binds, &modifiers);
-                popover = popover
-                    .popup(context_menu)
-                    .position(widget::popover::Position::Point(point));
-            }
+        if let Some(point) = self.context_menu
+            && (!cfg!(feature = "wayland") || !crate::is_wayland())
+        {
+            let context_menu = menu::context_menu(self, key_binds, modifiers);
+            popover = popover
+                .popup(context_menu)
+                .position(widget::popover::Position::Point(point));
         }
 
         let mut tab_column = widget::column::with_capacity(3);
@@ -5939,21 +5918,21 @@ impl Tab {
         }
         match &self.location {
             Location::Trash => {
-                if let Some(items) = self.items_opt() {
-                    if !items.is_empty() {
-                        tab_column = tab_column.push(
-                            widget::layer_container(widget::row::with_children([
-                                widget::horizontal_space().into(),
-                                widget::button::standard(fl!("empty-trash"))
-                                    .on_press(Message::EmptyTrash)
-                                    .into(),
-                            ]))
-                            .padding([space_xxs, space_xs])
-                            .layer(cosmic_theme::Layer::Primary)
-                            .apply(widget::container)
-                            .padding([0, 0, 7, 0]),
-                        );
-                    }
+                if let Some(items) = self.items_opt()
+                    && !items.is_empty()
+                {
+                    tab_column = tab_column.push(
+                        widget::layer_container(widget::row::with_children([
+                            widget::horizontal_space().into(),
+                            widget::button::standard(fl!("empty-trash"))
+                                .on_press(Message::EmptyTrash)
+                                .into(),
+                        ]))
+                        .padding([space_xxs, space_xs])
+                        .layer(cosmic_theme::Layer::Primary)
+                        .apply(widget::container)
+                        .padding([0, 0, 7, 0]),
+                    );
                 }
             }
             Location::Network(uri, _display_name, _path) if uri == "network:///" => {
@@ -6250,10 +6229,10 @@ impl Tab {
                 let mut selected_items: Vec<&Item> =
                     items.iter().filter(|item| item.selected).collect();
 
-                if selected_items.is_empty() {
-                    if let Some(p) = self.parent_item_opt.as_ref() {
-                        selected_items.push(p)
-                    }
+                if selected_items.is_empty()
+                    && let Some(p) = self.parent_item_opt.as_ref()
+                {
+                    selected_items.push(p)
                 }
                 for item in selected_items {
                     // Item must have a path
