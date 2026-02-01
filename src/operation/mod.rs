@@ -5,7 +5,7 @@ use crate::{
     spawn_detached::spawn_detached,
     tab,
 };
-use cosmic::iced::futures::{SinkExt, channel::mpsc::Sender};
+use cosmic::iced::futures::{self, SinkExt, StreamExt, channel::mpsc::Sender, stream};
 use std::{
     borrow::Cow,
     fmt::Formatter,
@@ -194,6 +194,31 @@ async fn copy_or_move(
     })
     .await
     .map_err(wrap_compio_spawn_error)?
+}
+
+pub async fn sync_to_disk(
+    written_files: Vec<PathBuf>,
+    target_dirs: std::collections::HashSet<PathBuf>,
+) {
+    // Sync files to disk
+    stream::iter(written_files.into_iter().map(|path| async move {
+        if let Ok(file) = compio::fs::OpenOptions::new().write(true).open(&path).await {
+            let _ = file.sync_all().await;
+        }
+    }))
+    .buffer_unordered(32)
+    .collect::<Vec<_>>()
+    .await;
+
+    // Sync directories to disk
+    stream::iter(target_dirs.into_iter().map(|path| async move {
+        if let Ok(dir) = compio::fs::OpenOptions::new().read(true).open(&path).await {
+            let _ = dir.sync_all().await;
+        }
+    }))
+    .buffer_unordered(16)
+    .collect::<Vec<_>>()
+    .await;
 }
 
 fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
@@ -934,10 +959,10 @@ impl Operation {
                                 let dir_name = get_directory_name(file_name);
                                 let mut new_dir = to.join(dir_name);
 
-                                if new_dir.exists() {
-                                    if let Some(new_dir_parent) = new_dir.parent() {
-                                        new_dir = copy_unique_path(&new_dir, new_dir_parent);
-                                    }
+                                if new_dir.exists()
+                                    && let Some(new_dir_parent) = new_dir.parent()
+                                {
+                                    new_dir = copy_unique_path(&new_dir, new_dir_parent);
                                 }
 
                                 op_sel.ignored.push(path.clone());
@@ -1185,7 +1210,7 @@ mod tests {
         path::PathBuf,
     };
 
-    use cosmic::iced::futures::{StreamExt, channel::mpsc};
+    use cosmic::iced::futures::{StreamExt, channel::mpsc, future};
     use log::debug;
     use test_log::test;
     use tokio::sync;
@@ -1239,7 +1264,7 @@ mod tests {
             }
         };
 
-        futures::future::join(handle_messages, handle_copy).await.1
+        future::join(handle_messages, handle_copy).await.1
     }
 
     #[test(compio::test)]
