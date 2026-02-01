@@ -5,6 +5,7 @@ use mime_guess::Mime;
 use rustc_hash::FxHashMap;
 use std::{
     fs,
+    io::Read,
     path::Path,
     sync::{LazyLock, Mutex},
 };
@@ -58,8 +59,16 @@ pub fn mime_for_path(
     metadata_opt: Option<&fs::Metadata>,
     remote: bool,
 ) -> Mime {
-    let path = path.as_ref();
     let mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
+    mime_for_path_with_cache(path.as_ref(), metadata_opt, remote, &mime_icon_cache)
+}
+
+fn mime_for_path_with_cache(
+    path: &Path,
+    metadata_opt: Option<&fs::Metadata>,
+    remote: bool,
+    mime_icon_cache: &std::sync::MutexGuard<MimeIconCache>,
+) -> Mime {
     // Try the shared mime info cache first
     let mut gb = mime_icon_cache.shared_mime_info.guess_mime_type();
     if remote {
@@ -90,6 +99,44 @@ pub fn mime_for_path(
     } else {
         guessed_mime.clone()
     }
+}
+
+pub fn mime_for_bytes_or_path(path: impl AsRef<Path>) -> Mime {
+    let path = path.as_ref();
+    let mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
+    let mime_from_data = mime_for_bytes_with_cache(path, &mime_icon_cache);
+    mime_from_data.unwrap_or_else(|_| mime_for_path_with_cache(path, None, false, &mime_icon_cache))
+}
+
+fn mime_for_bytes_with_cache(
+    path: &Path,
+    mime_icon_cache: &std::sync::MutexGuard<MimeIconCache>,
+) -> Result<Mime, std::io::Error> {
+    let mut file = fs::File::open(path)?;
+    let mut buffer = [0u8; 1024];
+    let bytes_read = file.read(&mut buffer)?;
+
+    mime_icon_cache
+        .shared_mime_info
+        .get_mime_type_for_data(&buffer[0..bytes_read])
+        // limit to certain matches which are defined as > 80 per `xdg-mime-rs` docs
+        .filter(|(_mime, priority)| *priority > 80)
+        .map(|(mime, _priority)| mime.clone())
+        // If uncertain, try `infer`. This could happen on platforms without shared-mime-info.
+        // We use `infer` instead of `mime_guess` because the former is for magic bytes, the
+        // latter is for filenames.
+        .or_else(|| {
+            infer::get_from_path(path)
+                .ok()
+                .flatten()
+                .and_then(|m| m.mime_type().parse::<mime_guess::Mime>().ok())
+        })
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Could not determine MIME type from magic bytes",
+            )
+        })
 }
 
 pub fn mime_icon(mime: Mime, size: u16) -> icon::Handle {

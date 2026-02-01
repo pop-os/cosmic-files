@@ -7,7 +7,7 @@ use std::{
 use zip::result::ZipError;
 
 use crate::{
-    mime_icon::mime_for_path,
+    mime_icon::mime_for_bytes_or_path,
     operation::{Controller, OpReader, OperationError, OperationErrorType},
 };
 
@@ -48,7 +48,7 @@ pub fn extract(
 ) -> Result<(), OperationError> {
     // Detect MIME type via magic bytes rather than file extension. Slower,
     // but ensures accurate decompression even if the file extension is wrong.
-    let mime = mime_from_bytes(path);
+    let mime = mime_for_bytes_or_path(path);
     let password = password.as_deref();
     match mime.essence_str() {
         "application/gzip" | "application/x-compressed-tar" => {
@@ -103,15 +103,6 @@ pub fn extract(
         ))?,
     }
     Ok(())
-}
-
-fn mime_from_bytes(path: &Path) -> mime_guess::Mime {
-    let type_opt = infer::get_from_path(path).ok().flatten();
-
-    // fallback to mime_for_path on failed, empty, or invalid magic byte detection
-    type_opt
-        .and_then(|t| t.mime_type().parse::<mime_guess::Mime>().ok())
-        .unwrap_or_else(|| mime_for_path(path, None, false))
 }
 
 // From https://docs.rs/zip/latest/zip/read/struct.ZipArchive.html#method.extract, with cancellation and progress added
