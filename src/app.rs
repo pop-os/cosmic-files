@@ -5036,6 +5036,7 @@ impl Application for App {
                         .on_input(move |password| {
                             Message::DialogUpdate(DialogPage::ExtractPassword { id: *id, password })
                         })
+                        .on_submit(|_| Message::DialogComplete)
                         .id(self.dialog_text_input.clone()),
                 )
                 .primary_action(
