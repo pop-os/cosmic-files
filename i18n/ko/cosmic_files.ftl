@@ -68,7 +68,7 @@ dark = 다크
 light = 라이트
 # Context menu
 new-file = 새 파일...
-new-folder = 새 폴더
+new-folder = 새 폴더...
 open-in-terminal = 터미널에서 열기
 move-to-trash = 휴지통으로 이동
 restore-from-trash = 휴지통에서 복구
@@ -84,7 +84,7 @@ sort-by-size = 크기 순으로 정렬
 file = 파일
 new-tab = 새 탭
 new-window = 새 창
-rename = 이름 바꾸기
+rename = 이름 바꾸기...
 close-tab = 탭 닫기
 quit = 종료
 
@@ -102,7 +102,7 @@ view = 보기
 grid-view = 그리드 보기
 list-view = 목록 보기
 menu-settings = 설정...
-menu-about = 코스믹 파일에 대하여...
+menu-about = COSMIC 파일 정보...
 connect = 연결
 read-execute = 읽기 및 실행
 item-modified = 마지막 수정 일자: { $modified }
@@ -171,7 +171,7 @@ details = 세부 정보
 mounted-drives = 마운트된 드라이브
 mount-error = 드라이브에 접근할 수 없음
 extract-here = 압축 해제
-removed-from-recents = { recents }에서 { $items } 항목 제거됨
+removed-from-recents = { recents } 에서 { $items }개의 항목을 제거했습니다
 add-to-sidebar = 사이드 바에 추가
 item-created = 생성 일자: { $created }
 type-to-search-recursive = 현재 폴더와 하위 폴더 탐색
@@ -202,7 +202,7 @@ delete-permanently = 완전히 삭제
 networks = 네트워크
 write-only = 쓰기 전용
 today = 오늘
-permanently-delete-warning = { $target }이(가) 완전히 삭제됩니다. 이 행동은 되돌릴 수 없습니다.
+permanently-delete-warning = { $target } 이(가) 완전히 삭제됩니다. 이 행동은 되돌릴 수 없습니다.
 empty-trash-warning = 휴지통의 항목이 완전히 삭제됩니다
 empty-trash = 휴지통 비우기
 empty-trash-title = 휴지통을 비울까요?
@@ -210,3 +210,64 @@ type-to-search = 입력하여 검색
 notification-in-progress = 파일 작업이 진행 중입니다
 permanently-delete-question = 완전히 삭제할까요?
 selected-items = { $items }개 항목 선택됨
+sort-newest-first = 새 항목 우선
+renamed = "{ $from }" 에서 "{ $to }" 로 이름 변경됨
+deleted = { trash } 에서 { $items }개의 항목을 제거했습니다
+reload-folder = 폴더 새로고침
+favorite-path-error = 디렉터리를 여는 중 오류가 발생했습니다
+remove-from-sidebar = 사이드 바에서 제거
+restoring = { trash } 에서 { $items }개의 항목을 복구 중 ({ $progress })...
+gallery-preview = 갤러리 미리보기
+sort-smallest-to-largest = 작은 항목부터 큰 항목
+zoom-in = 확대
+removing-from-recents = { recents } 에서 { $items }개의 항목을 제거 중
+zoom-out = 축소
+compressing = "{ $from }"에서 "{ $to }"(으)로 { $items }개의 항목을 압축 중({ $progress })...
+setting-executable-and-launching = "{ $name }"를 실행 가능으로 설정 및 실행 중
+default-size = 기본 크기
+extracted = "{ $from }"에서 "{ $to }"(으)로 { $items }개의 항목을 압축 해제했습니다
+permanently-deleting = { $items }개의 항목을 영구적으로 제거 중
+compressed = "{ $from }"에서 "{ $to }"(으)로 { $items }개의 항목을 압축했습니다
+grid-spacing = 그리드 간격
+copying = "{ $from }"에서 "{ $to }"(으)로 { $items }개의 항목을 복사 중({ $progress })...
+sort-oldest-first = 오래된 항목 우선
+sort-by-trashed = 삭제된 시간 순으로 정렬
+copied = "{ $from }"에서 "{ $to }"(으)로 { $items }개의 항목을 복사했습니다
+list-directories-first = 폴더 우선 나열
+remove-from-recents = 최근 항목에서 제거
+moving = "{ $from }"에서 "{ $to }"(으)로 { $items }개의 항목을 이동 중 ({ $progress })...
+change-wallpaper = 배경화면 변경...
+deleting = { trash } 에서 { $items }개의 항목을 제거 중({ $progress })...
+set-executable-and-launched = "{ $name }"를 실행 가능으로 설정 및 실행됨
+sort-a-z = A-Z
+set-and-launch = 설정 후 실행
+set-executable-and-launch = 실행 가능으로 설정 후 실행
+restored = { trash } 에서 { $items }개의 항목을 복구했습니다
+sort-z-a = Z-A
+operations-running-finished = { $running }개의 작업 진행 중 ({ $percent }%), { $finished } 완료됨...
+sort = 정렬
+show-hidden-files = 숨긴 파일 표시
+trash-folder-icon = 휴지통 아이콘
+extracting = "{ $from }"에서 "{ $to }"(으)로 { $items }개의 항목을 압축 해제 중 ({ $progress })...
+permanently-deleted = { $items }개의 항목을 영구적으로 제거했습니다
+renaming = "{ $from }" 에서 "{ $to }" 로 이름 변경 중
+set-executable-and-launch-description = "{ $name }"을 실행 가능으로 설정하고 실행할까요?
+sort-largest-to-smallest = 큰 항목부터 작은 항목
+moved = "{ $from }"에서 "{ $to }"(으)로 { $items }개의 항목을 이동했습니다
+display-settings = 화면 설정...
+desktop-appearance = 데스크톱 외관...
+favorite-path-error-description =
+    "{ $path }"을(를) 열 수 없습니다
+    "{ $path }"이(가) 존재하지 않거나 열기 권한이 없을 수 있습니다
+
+    사이드바에서 제거하시겠습니까?
+operations-running = { $running }개의 작업 진행 중 ({ $percent }%)...
+network-drive-schemes =
+    지원 프로토콜,접두사(Prefix)
+    AppleTalk,afp://
+    파일 전송 프로토콜 (FTP),ftp:// 또는 ftps://
+    네트워크 파일 시스템 (NFS),nfs://
+    서버 메시지 블록 (SMB),smb://
+    SSH 파일 전송 프로토콜 (SFTP),sftp:// 또는 ssh://
+    WebDAV,dav:// 또는 davs://
+type-to-search-select = 일치하는 첫 번째 파일 또는 폴더를 선택합니다
