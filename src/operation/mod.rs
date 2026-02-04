@@ -221,7 +221,7 @@ pub async fn sync_to_disk(
     .await;
 }
 
-fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
+pub fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
     // List of compound extensions to check
     const COMPOUND_EXTENSIONS: &[&str] = &[
         ".tar.gz",

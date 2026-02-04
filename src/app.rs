@@ -72,7 +72,10 @@ use wayland_client::{Proxy, protocol::wl_output::WlOutput};
 
 use crate::{
     FxOrderMap,
-    clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
+    clipboard::{
+        ClipboardCopy, ClipboardKind, ClipboardPaste, ClipboardPasteImage, ClipboardPasteText,
+        ClipboardPasteVideo,
+    },
     config::{
         AppTheme, Config, DesktopConfig, Favorite, IconSizes, State, TIME_CONFIG_ID, TabConfig,
         TimeConfig, TypeToSearch,
@@ -87,7 +90,7 @@ use crate::{
     mounter::{MOUNTERS, MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage},
     operation::{
         Controller, Operation, OperationError, OperationErrorType, OperationSelection,
-        ReplaceResult,
+        ReplaceResult, copy_unique_path,
     },
     spawn_detached::spawn_detached,
     tab::{
@@ -385,6 +388,12 @@ pub enum Message {
     Overlap(window::Id, OverlapNotifyEvent),
     Paste(Option<Entity>),
     PasteContents(PathBuf, ClipboardPaste),
+    PasteImage(PathBuf),
+    PasteImageContents(PathBuf, ClipboardPasteImage),
+    PasteText(PathBuf),
+    PasteTextContents(PathBuf, ClipboardPasteText),
+    PasteVideo(PathBuf),
+    PasteVideoContents(PathBuf, ClipboardPasteVideo),
     PendingCancel(u64),
     PendingCancelAll,
     PendingComplete(u64, OperationSelection),
@@ -3488,7 +3497,8 @@ impl Application for App {
                             Some(contents) => {
                                 cosmic::action::app(Message::PasteContents(to.clone(), contents))
                             }
-                            None => cosmic::action::none(),
+                            // No file data in clipboard, try image data
+                            None => cosmic::action::app(Message::PasteImage(to.clone())),
                         }
                     });
                 }
@@ -3507,6 +3517,102 @@ impl Application for App {
                             cross_device_copy: is_dnd,
                         }),
                     };
+                }
+            }
+            Message::PasteImage(to) => {
+                return clipboard::read_data::<ClipboardPasteImage>().map(move |contents_opt| {
+                    match contents_opt {
+                        Some(contents) => {
+                            cosmic::action::app(Message::PasteImageContents(to.clone(), contents))
+                        }
+                        // No image data in clipboard, try video data
+                        None => cosmic::action::app(Message::PasteVideo(to.clone())),
+                    }
+                });
+            }
+            Message::PasteImageContents(to, contents) => {
+                let Some(extension) = contents.extension() else {
+                    log::warn!(
+                        "Ignoring paste: unknown image MIME type {:?}",
+                        contents.mime_type
+                    );
+                    return Task::none();
+                };
+
+                // Generate unique filename for the pasted image
+                let base_name = format!("{}.{}", fl!("pasted-image"), extension);
+                let base_path = to.join(&base_name);
+                let final_path = copy_unique_path(&base_path, &to);
+
+                // Write image data to file
+                match fs::write(&final_path, &contents.data) {
+                    Ok(_) => {
+                        log::info!("Pasted image saved to {:?}", final_path);
+                    }
+                    Err(err) => {
+                        log::error!("Failed to save pasted image: {}", err);
+                    }
+                }
+            }
+            Message::PasteVideo(to) => {
+                return clipboard::read_data::<ClipboardPasteVideo>().map(move |contents_opt| {
+                    match contents_opt {
+                        Some(contents) => {
+                            cosmic::action::app(Message::PasteVideoContents(to.clone(), contents))
+                        }
+                        // No video data in clipboard, try text data
+                        None => cosmic::action::app(Message::PasteText(to.clone())),
+                    }
+                });
+            }
+            Message::PasteVideoContents(to, contents) => {
+                let Some(extension) = contents.extension() else {
+                    log::warn!(
+                        "Ignoring paste: unknown video MIME type {:?}",
+                        contents.mime_type
+                    );
+                    return Task::none();
+                };
+
+                // Generate unique filename for the pasted video
+                let base_name = format!("{}.{}", fl!("pasted-video"), extension);
+                let base_path = to.join(&base_name);
+                let final_path = copy_unique_path(&base_path, &to);
+
+                // Write video data to file
+                match fs::write(&final_path, &contents.data) {
+                    Ok(_) => {
+                        log::info!("Pasted video saved to {:?}", final_path);
+                    }
+                    Err(err) => {
+                        log::error!("Failed to save pasted video: {}", err);
+                    }
+                }
+            }
+            Message::PasteText(to) => {
+                return clipboard::read_data::<ClipboardPasteText>().map(move |contents_opt| {
+                    match contents_opt {
+                        Some(contents) => {
+                            cosmic::action::app(Message::PasteTextContents(to.clone(), contents))
+                        }
+                        None => cosmic::action::none(),
+                    }
+                });
+            }
+            Message::PasteTextContents(to, contents) => {
+                // Generate unique filename for the pasted text
+                let base_name = format!("{}.txt", fl!("pasted-text"));
+                let base_path = to.join(&base_name);
+                let final_path = copy_unique_path(&base_path, &to);
+
+                // Write text data to file
+                match fs::write(&final_path, &contents.data) {
+                    Ok(_) => {
+                        log::info!("Pasted text saved to {:?}", final_path);
+                    }
+                    Err(err) => {
+                        log::error!("Failed to save pasted text: {}", err);
+                    }
                 }
             }
             Message::PendingCancel(id) => {
