@@ -317,9 +317,11 @@ impl TryFrom<(Vec<u8>, String)> for ClipboardPasteText {
         if data.is_empty() {
             return Err("Empty text data".into());
         }
-        let text = str::from_utf8(&data)?;
+        // Use lossy conversion to handle clipboard data that may contain
+        // invalid UTF-8 (e.g., Latin-1 encoded special characters from browsers)
+        let text = String::from_utf8_lossy(&data);
         Ok(Self {
-            data: text.to_string(),
+            data: text.into_owned(),
         })
     }
 }
