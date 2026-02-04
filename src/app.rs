@@ -146,6 +146,7 @@ pub enum Action {
     AddToSidebar,
     Compress,
     Copy,
+    CopyTo,
     Cut,
     CosmicSettingsDesktop,
     CosmicSettingsDisplays,
@@ -168,6 +169,7 @@ pub enum Action {
     ItemRight,
     ItemUp,
     LocationUp,
+    MoveTo,
     NewFile,
     NewFolder,
     Open,
@@ -213,6 +215,7 @@ impl Action {
             Self::AddToSidebar => Message::AddToSidebar(entity_opt),
             Self::Compress => Message::Compress(entity_opt),
             Self::Copy => Message::Copy(entity_opt),
+            Self::CopyTo => Message::CopyTo(entity_opt),
             Self::Cut => Message::Cut(entity_opt),
             Self::CosmicSettingsDesktop => Message::CosmicSettings("desktop"),
             Self::CosmicSettingsDisplays => Message::CosmicSettings("displays"),
@@ -237,6 +240,7 @@ impl Action {
             Self::ItemRight => Message::TabMessage(entity_opt, tab::Message::ItemRight),
             Self::ItemUp => Message::TabMessage(entity_opt, tab::Message::ItemUp),
             Self::LocationUp => Message::TabMessage(entity_opt, tab::Message::LocationUp),
+            Self::MoveTo => Message::MoveTo(entity_opt),
             Self::NewFile => Message::NewItem(entity_opt, false),
             Self::NewFolder => Message::NewItem(entity_opt, true),
             Self::Open => Message::TabMessage(entity_opt, tab::Message::Open(None)),
@@ -335,6 +339,8 @@ pub enum Message {
     Compress(Option<Entity>),
     Config(Config),
     Copy(Option<Entity>),
+    CopyTo(Option<Entity>),
+    CopyToResult(DialogResult),
     CosmicSettings(&'static str),
     Cut(Option<Entity>),
     Delete(Option<Entity>),
@@ -359,6 +365,8 @@ pub enum Message {
     ModifiersChanged(window::Id, Modifiers),
     MounterItems(MounterKey, MounterItems),
     MountResult(MounterKey, MounterItem, Result<bool, String>),
+    MoveTo(Option<Entity>),
+    MoveToResult(DialogResult),
     NavBarClose(Entity),
     NavBarContext(Entity),
     NavMenuAction(NavMenuAction),
@@ -949,7 +957,13 @@ impl App {
         }
     }
 
-    fn extract_to(&mut self, paths: &[impl AsRef<Path>]) -> Task<Message> {
+    fn destination_selection_dialog(
+        &mut self,
+        paths: &[impl AsRef<Path>],
+        on_result: impl Fn(DialogResult) -> Message + 'static,
+        title: impl Into<String>,
+        accept_label: impl AsRef<str>,
+    ) -> Task<Message> {
         if let Some(destination) = paths
             .first()
             .and_then(|first| first.as_ref().parent())
@@ -960,10 +974,10 @@ impl App {
                     .kind(DialogKind::OpenFolder)
                     .path(destination),
                 Message::FileDialogMessage,
-                Message::ExtractToResult,
+                on_result,
             );
-            let set_title_task = dialog.set_title(fl!("extract-to-title"));
-            dialog.set_accept_label(fl!("extract-here"));
+            let set_title_task = dialog.set_title(title);
+            dialog.set_accept_label(accept_label);
             self.windows.insert(
                 dialog.window_id(),
                 Window::new(WindowKind::FileDialog(Some(
@@ -975,6 +989,33 @@ impl App {
         } else {
             Task::none()
         }
+    }
+
+    fn extract_to(&mut self, paths: &[impl AsRef<Path>]) -> Task<Message> {
+        self.destination_selection_dialog(
+            paths,
+            Message::ExtractToResult,
+            fl!("extract-to-title"),
+            fl!("extract-here"),
+        )
+    }
+
+    fn move_to(&mut self, paths: &[impl AsRef<Path>]) -> Task<Message> {
+        self.destination_selection_dialog(
+            paths,
+            Message::MoveToResult,
+            fl!("move-to-title"),
+            fl!("move-to-button-label"),
+        )
+    }
+
+    fn copy_to(&mut self, paths: &[impl AsRef<Path>]) -> Task<Message> {
+        self.destination_selection_dialog(
+            paths,
+            Message::CopyToResult,
+            fl!("copy-to-title"),
+            fl!("copy-to-button-label"),
+        )
     }
 
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
@@ -2675,6 +2716,34 @@ impl Application for App {
                 let contents = ClipboardCopy::new(ClipboardKind::Copy, paths);
                 return clipboard::write_data(contents);
             }
+            Message::CopyTo(entity_opt) => {
+                let selected_paths: Box<[_]> = self.selected_paths(entity_opt).collect();
+                return self.copy_to(&selected_paths);
+            }
+            Message::CopyToResult(result) => {
+                match result {
+                    DialogResult::Cancel => {}
+                    DialogResult::Open(selected_paths) => {
+                        let mut file_paths = None;
+                        if let Some(file_dialog) = &self.file_dialog_opt
+                            && let Some(window) = self.windows.remove(&file_dialog.window_id())
+                            && let WindowKind::FileDialog(paths) = window.kind
+                        {
+                            file_paths = paths;
+                        }
+                        if let Some(file_paths) = file_paths
+                            && !selected_paths.is_empty()
+                        {
+                            self.file_dialog_opt = None;
+                            return self.operation(Operation::Copy {
+                                paths: file_paths.to_vec(),
+                                to: selected_paths[0].clone(),
+                            });
+                        }
+                    }
+                }
+                self.file_dialog_opt = None;
+            }
             Message::Cut(entity_opt) => {
                 self.set_cut(entity_opt);
                 let paths = self.selected_paths(entity_opt);
@@ -3195,6 +3264,35 @@ impl Application for App {
                     );
                 }
             },
+            Message::MoveTo(entity_opt) => {
+                let selected_paths: Box<[_]> = self.selected_paths(entity_opt).collect();
+                return self.move_to(&selected_paths);
+            }
+            Message::MoveToResult(result) => {
+                match result {
+                    DialogResult::Cancel => {}
+                    DialogResult::Open(selected_paths) => {
+                        let mut file_paths = None;
+                        if let Some(file_dialog) = &self.file_dialog_opt
+                            && let Some(window) = self.windows.remove(&file_dialog.window_id())
+                            && let WindowKind::FileDialog(paths) = window.kind
+                        {
+                            file_paths = paths;
+                        }
+                        if let Some(file_paths) = file_paths
+                            && !selected_paths.is_empty()
+                        {
+                            self.file_dialog_opt = None;
+                            return self.operation(Operation::Move {
+                                paths: file_paths.to_vec(),
+                                to: selected_paths[0].clone(),
+                                cross_device_copy: false,
+                            });
+                        }
+                    }
+                }
+                self.file_dialog_opt = None;
+            }
             Message::NetworkAuth(mounter_key, uri, auth, auth_tx) => {
                 return self.push_dialog(
                     DialogPage::NetworkAuth {

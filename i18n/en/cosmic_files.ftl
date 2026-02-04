@@ -46,6 +46,10 @@ resume = Resume
 ## Compress Dialog
 create-archive = Create archive
 
+## Copy To Dialog
+copy-to-title = Select copy destination
+copy-to-button-label = Copy
+
 ## Extract Dialog
 extract-password-required = Password required
 extract-to = Extract To...
@@ -58,6 +62,10 @@ empty-trash-warning = Items in the Trash folder will be permanently deleted
 
 ## Mount Error Dialog
 mount-error = Unable to access drive
+
+## Move To Dialog
+move-to-title = Select move destination
+move-to-button-label = Move
 
 ## New File/Folder Dialog
 create-new-file = Create new file
@@ -305,12 +313,14 @@ type-to-search-select = Selects the first matching file or folder
 # Context menu
 add-to-sidebar = Add to sidebar
 compress = Compress
+copy-to = Copy to...
 delete-permanently = Delete permanently
 eject = Eject
 extract-here = Extract
 new-file = New file...
 new-folder = New folder...
 open-in-terminal = Open in terminal
+move-to = Move to...
 move-to-trash = Move to trash
 restore-from-trash = Restore from trash
 remove-from-sidebar = Remove from sidebar
