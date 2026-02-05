@@ -787,6 +787,10 @@ impl App {
     fn open_file(&mut self, paths: &[impl AsRef<Path>]) -> Task<Message> {
         let mut tasks = Vec::new();
 
+        // This will be, at the end of the function, a list of all archives that 
+        // don't have a suitable app
+        let mut found_archives_paths: Vec<PathBuf> = vec![];
+
         // Associate all paths to its MIME type
         // This allows handling paths as groups if possible, such as launching a single video
         // player that is passed every path.
@@ -821,7 +825,7 @@ impl App {
                                 match spawn_detached(&mut command) {
                                     Ok(()) => {
                                         log::debug!("Launched {} with {:?}", app.id, paths);
-                                        // Aggiorna recently_used
+                                        // Updates recently_used
                                         for path in &paths {
                                             let _ = recently_used_xbel::update_recently_used(
                                                 path,
@@ -844,7 +848,7 @@ impl App {
 
                 if !found_archive_app {
                     log::info!("No suitable archive app found for MIME {}. Falling back to extract_to.", mime);
-                    tasks.push(self.extract_to(&paths));
+                    found_archives_paths.extend(paths.iter().cloned());
                 }
 
                 continue 'outer;
@@ -911,6 +915,11 @@ impl App {
                     }
                 }
             }
+        }
+
+        if found_archives_paths.len() > 0 {
+            log::debug!("Paths to extract with dialog: {:?}", found_archives_paths);
+            tasks.push(self.extract_to(&found_archives_paths));
         }
 
         Task::batch(tasks)
