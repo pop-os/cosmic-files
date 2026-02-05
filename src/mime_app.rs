@@ -174,6 +174,10 @@ pub struct MimeApp {
     pub exec: Option<String>,
     pub icon: widget::icon::Handle,
     pub is_default: bool,
+
+    // NEW: needed to understand if an app is a good candidate to open archive files
+    pub categories: Vec<String>,
+    pub no_display: bool,
 }
 
 impl MimeApp {
@@ -205,6 +209,8 @@ impl From<&desktop::DesktopEntryData> for MimeApp {
                 desktop::fde::IconSource::Path(path) => widget::icon::from_path(path.clone()),
             },
             is_default: false,
+            categories: app.categories.clone(),
+            no_display: app.terminal,
         }
     }
 }

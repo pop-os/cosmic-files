@@ -791,7 +791,7 @@ impl App {
         // This allows handling paths as groups if possible, such as launching a single video
         // player that is passed every path.
         let mut groups: FxHashMap<Mime, Vec<PathBuf>> = FxHashMap::default();
-        let _supported_archive_types = crate::archive::SUPPORTED_ARCHIVE_TYPES;
+        let supported_archive_types = crate::archive::SUPPORTED_ARCHIVE_TYPES;
         for (mime, path) in paths.iter().map(|path| {
             (
                 mime_icon::mime_for_path(path, None, false),
@@ -803,6 +803,53 @@ impl App {
 
         'outer: for (mime, paths) in groups {
             log::debug!("Attempting to launch app\n\tfor: {mime}\n\twith: {paths:?}");
+
+            // ---- archives ----
+            if supported_archive_types.iter().copied().any(|t| mime == t) {
+
+                // Checks if there are suitable apps for archives
+                let mut found_archive_app = false;
+                for app in self.mime_app_cache.get(&mime) {
+                    log::debug!("Checking app {} for archive support", app.id);
+                    if Self::is_suitable_archive_app(app) {
+                        found_archive_app = true;
+                        log::debug!("Found suitable archive app {} for MIME {}", app.id, mime);
+
+                        // Immediately launch the app we found
+                        if let Some(mut commands) = app.command(&paths) {
+                            for mut command in commands.drain(..) {
+                                match spawn_detached(&mut command) {
+                                    Ok(()) => {
+                                        log::debug!("Launched {} with {:?}", app.id, paths);
+                                        // Aggiorna recently_used
+                                        for path in &paths {
+                                            let _ = recently_used_xbel::update_recently_used(
+                                                path,
+                                                Self::APP_ID.to_string(),
+                                                "cosmic-files".to_string(),
+                                                None,
+                                            );
+                                        }
+                                    }
+                                    Err(err) => {
+                                        log::warn!("Failed to launch {} for {:?}: {}", app.id, paths, err);
+                                        // TODO: maybe if it fails to launch, fallback to extract_to? by settings found_archive_app = false
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+
+                if !found_archive_app {
+                    log::info!("No suitable archive app found for MIME {}. Falling back to extract_to.", mime);
+                    tasks.push(self.extract_to(&paths));
+                }
+
+                continue 'outer;
+
+            }
 
             // First launch apps that can be launched directly
             if mime == "application/x-desktop" {
@@ -867,6 +914,28 @@ impl App {
         }
 
         Task::batch(tasks)
+    }
+
+    fn is_suitable_archive_app(app: &MimeApp) -> bool {
+
+        if app.no_display {
+            return false;
+        }
+
+        let has = |cat: &str| app.categories.iter().any(|c| c == cat);
+
+        // semantic exclusions
+        if has("FileManager") || has("WebBrowser") {
+            return false;
+        }
+
+        // if it is an archiver, yes!
+        if has("Archiver") {
+            return true;
+        }
+
+        // optional (conservative)
+        has("Utility") && has("Compression")
     }
 
     fn launch_desktop_entries(paths: &[impl AsRef<Path>]) {
