@@ -310,7 +310,7 @@ impl MimeAppCache {
         for (mime, filenames) in list.removed_associations.iter() {
             for filename in filenames {
                 log::trace!("remove {mime}={filename}");
-                if let Some(apps) = self.cache.get_mut(&mime) {
+                if let Some(apps) = self.cache.get_mut(mime) {
                     apps.retain(|x| !filename_eq(&x.path, filename));
                 }
             }
@@ -319,7 +319,7 @@ impl MimeAppCache {
         for (mime, filenames) in list.default_apps.iter() {
             for filename in filenames {
                 log::trace!("default {mime}={filename}");
-                if let Some(apps) = self.cache.get_mut(&mime) {
+                if let Some(apps) = self.cache.get_mut(mime) {
                     let mut found = false;
                     for app in apps.iter_mut() {
                         if filename_eq(&app.path, filename) {
