@@ -298,6 +298,7 @@ calculating = Calculating...
 ## Settings
 settings = Settings
 single-click = Single click to open
+show-recents = Show recents
 
 ### Appearance
 appearance = Appearance

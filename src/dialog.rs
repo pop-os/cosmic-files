@@ -1609,12 +1609,14 @@ impl Application for App {
                             && let Some(path) = item.path_opt()
                         {
                             paths.push(path.clone());
-                            let _ = update_recently_used(
-                                path,
-                                Self::APP_ID.to_string(),
-                                "cosmic-files".to_string(),
-                                None,
-                            );
+                            if self.flags.config.show_recents {
+                                let _ = update_recently_used(
+                                    path,
+                                    Self::APP_ID.to_string(),
+                                    "cosmic-files".to_string(),
+                                    None,
+                                );
+                            }
                         }
                     }
                 }
