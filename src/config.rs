@@ -167,6 +167,7 @@ pub struct Config {
     pub thumb_cfg: ThumbCfg,
     pub favorites: Vec<Favorite>,
     pub show_details: bool,
+    pub show_recents: bool,
     pub tab: TabConfig,
     pub type_to_search: TypeToSearch,
 }
@@ -229,6 +230,7 @@ impl Default for Config {
                 Favorite::Videos,
             ],
             show_details: false,
+            show_recents: true,
             tab: TabConfig::default(),
             type_to_search: TypeToSearch::Recursive,
         }

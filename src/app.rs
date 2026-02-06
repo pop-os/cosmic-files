@@ -416,6 +416,7 @@ pub enum Message {
     SearchClear,
     SearchInput(String),
     SetShowDetails(bool),
+    SetShowRecents(bool),
     SetTypeToSearch(TypeToSearch),
     SystemThemeModeChange,
     Size(window::Id, Size),
@@ -834,12 +835,14 @@ impl App {
             for path in paths {
                 match open::that_detached(&path) {
                     Ok(()) => {
-                        let _ = recently_used_xbel::update_recently_used(
-                            &path,
-                            Self::APP_ID.to_string(),
-                            "cosmic-files".to_string(),
-                            None,
-                        );
+                        if self.config.show_recents {
+                            let _ = recently_used_xbel::update_recently_used(
+                                &path,
+                                Self::APP_ID.to_string(),
+                                "cosmic-files".to_string(),
+                                None,
+                            );
+                        }
                     }
                     Err(err) => {
                         log::warn!("failed to open {}: {}", path.display(), err);
@@ -897,13 +900,15 @@ impl App {
             for (i, mut command) in commands.into_iter().enumerate() {
                 match spawn_detached(&mut command) {
                     Ok(()) => {
-                        for path in paths {
-                            let _ = recently_used_xbel::update_recently_used(
-                                &path.into(),
-                                Self::APP_ID.to_string(),
-                                "cosmic-files".to_string(),
-                                None,
-                            );
+                        if self.config.show_recents {
+                            for path in paths {
+                                let _ = recently_used_xbel::update_recently_used(
+                                    &path.into(),
+                                    Self::APP_ID.to_string(),
+                                    "cosmic-files".to_string(),
+                                    None,
+                                );
+                            }
                         }
 
                         return true;
@@ -1501,11 +1506,13 @@ impl App {
     fn update_nav_model(&mut self) {
         let mut nav_model = segmented_button::ModelBuilder::default();
 
-        nav_model = nav_model.insert(|b| {
-            b.text(fl!("recents"))
-                .icon(icon::from_name("document-open-recent-symbolic"))
-                .data(Location::Recents)
-        });
+        if self.config.show_recents {
+            nav_model = nav_model.insert(|b| {
+                b.text(fl!("recents"))
+                    .icon(icon::from_name("document-open-recent-symbolic"))
+                    .data(Location::Recents)
+            });
+        }
 
         for (favorite_i, favorite) in self.config.favorites.iter().enumerate() {
             if let Some(path) = favorite.path_opt() {
@@ -2011,6 +2018,10 @@ impl App {
                             })
                         },
                     )
+                })
+                .add({
+                    widget::settings::item::builder(fl!("show-recents"))
+                        .toggler(self.config.show_recents, Message::SetShowRecents)
                 })
                 .into(),
         ])
@@ -2885,12 +2896,14 @@ impl Application for App {
                                 {
                                     match spawn_detached(&mut command) {
                                         Ok(()) => {
-                                            let _ = recently_used_xbel::update_recently_used(
-                                                &path,
-                                                Self::APP_ID.to_string(),
-                                                "cosmic-files".to_string(),
-                                                None,
-                                            );
+                                            if self.config.show_recents {
+                                                let _ = recently_used_xbel::update_recently_used(
+                                                    &path,
+                                                    Self::APP_ID.to_string(),
+                                                    "cosmic-files".to_string(),
+                                                    None,
+                                                );
+                                            }
                                         }
                                         Err(err) => {
                                             log::warn!(
@@ -3924,6 +3937,10 @@ impl Application for App {
                 config_set!(show_details, show_details);
                 return self.update_config();
             }
+            Message::SetShowRecents(show_recents) => {
+                config_set!(show_recents, show_recents);
+                return self.update_config();
+            }
             Message::SetTypeToSearch(type_to_search) => {
                 config_set!(type_to_search, type_to_search);
                 return self.update_config();
@@ -4724,7 +4741,9 @@ impl Application for App {
                 }
             },
             Message::Recents => {
-                return self.open_tab(Location::Recents, false, None);
+                if self.config.show_recents {
+                    return self.open_tab(Location::Recents, false, None);
+                }
             }
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             Message::OutputEvent(output_event, output) => {
@@ -6239,12 +6258,15 @@ impl Application for App {
                     std::future::pending().await
                 }),
             ),
-            #[cfg(all(
-                not(feature = "desktop-applet"),
-                not(target_os = "ios"),
-                not(target_os = "android")
-            ))]
-            Subscription::run_with_id(
+        ];
+
+        #[cfg(all(
+            not(feature = "desktop-applet"),
+            not(target_os = "ios"),
+            not(target_os = "android")
+        ))]
+        if self.config.show_recents {
+            subscriptions.push(Subscription::run_with_id(
                 TypeId::of::<RecentsWatcherSubscription>(),
                 stream::channel(1, |mut output| async move {
                     let Some(recents_path) = recently_used_xbel::dir() else {
@@ -6304,8 +6326,8 @@ impl Application for App {
 
                     std::future::pending().await
                 }),
-            ),
-        ];
+            ));
+        }
 
         if let Some(scroll_speed) = self.auto_scroll_speed {
             subscriptions.push(
