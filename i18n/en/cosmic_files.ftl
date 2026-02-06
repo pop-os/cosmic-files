@@ -340,6 +340,7 @@ quit = Quit
 edit = Edit
 cut = Cut
 copy = Copy
+copy-path = Copy file path
 paste = Paste
 select-all = Select all
 
