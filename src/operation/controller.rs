@@ -4,16 +4,17 @@ use std::sync::Arc;
 use std::sync::atomic::{self, AtomicU16};
 use tokio::sync::Notify;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, IntoPrimitive, TryFromPrimitive, Default)]
 #[repr(u16)]
 pub enum ControllerState {
     Cancelled,
     Failed,
     Paused,
+    #[default]
     Running,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct ControllerInner {
     state: AtomicU16,
     progress: AtomicF32,
@@ -30,11 +31,7 @@ impl Default for Controller {
     fn default() -> Self {
         Self {
             primary: true,
-            inner: Arc::new(ControllerInner {
-                state: AtomicU16::new(ControllerState::Running.into()),
-                progress: AtomicF32::new(0.0),
-                notify: Notify::new(),
-            }),
+            inner: Arc::default(),
         }
     }
 }
@@ -143,7 +140,7 @@ impl Clone for Controller {
 impl Drop for Controller {
     fn drop(&mut self) {
         // Cancel operations if primary controller is dropped and controller is still running
-        if self.primary && self.state() != ControllerState::Failed {
+        if self.primary && !self.is_failed() {
             self.cancel();
         }
     }

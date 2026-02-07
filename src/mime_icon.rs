@@ -17,6 +17,7 @@ struct MimeIconKey {
     size: u16,
 }
 
+#[derive(Default)]
 struct MimeIconCache {
     cache: FxHashMap<MimeIconKey, Option<icon::Handle>>,
     #[cfg(unix)]
@@ -25,11 +26,7 @@ struct MimeIconCache {
 
 impl MimeIconCache {
     pub fn new() -> Self {
-        Self {
-            cache: FxHashMap::default(),
-            #[cfg(unix)]
-            shared_mime_info: xdg_mime::SharedMimeInfo::new(),
-        }
+        Self::default()
     }
 
     #[cfg(not(unix))]
@@ -103,7 +100,6 @@ pub fn mime_for_path(
     // The guess could also be uncertain on platforms without shared-mime-info.
     // Try mime_guess, but only if it is not one of the special mime types.
     if guess.uncertain() && (remote || !is_special_mime(guessed_mime)) {
-        // If uncertain, try mime_guess. This could happen on platforms without shared-mime-info
         mime_guess::from_path(path).first_or_octet_stream()
     } else {
         guessed_mime.clone()
@@ -112,10 +108,9 @@ pub fn mime_for_path(
 
 pub fn mime_icon(mime: Mime, size: u16) -> icon::Handle {
     let mut mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
-    match mime_icon_cache.get(MimeIconKey { mime, size }) {
-        Some(handle) => handle,
-        None => icon::from_name(FALLBACK_MIME_ICON).size(size).handle(),
-    }
+    mime_icon_cache
+        .get(MimeIconKey { mime, size })
+        .unwrap_or_else(|| icon::from_name(FALLBACK_MIME_ICON).size(size).handle())
 }
 
 #[cfg(not(unix))]

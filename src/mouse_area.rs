@@ -104,16 +104,16 @@ impl<'a, Message> MouseArea<'a, Message> {
         self
     }
 
-    /// on_right_press will not capture input
+    /// `on_right_press` will not capture input
     #[must_use]
-    pub fn on_right_press_no_capture(mut self) -> Self {
+    pub const fn on_right_press_no_capture(mut self) -> Self {
         self.on_right_press_no_capture = true;
         self
     }
 
-    /// Only on wayland, on_right_press will provide window position instead of widget relative
+    /// Only on wayland, `on_right_press` will provide window position instead of widget relative
     #[must_use]
-    pub fn wayland_on_right_press_window_position(mut self) -> Self {
+    pub const fn wayland_on_right_press_window_position(mut self) -> Self {
         #[cfg(feature = "wayland")]
         {
             self.on_right_press_window_position = true;
@@ -121,9 +121,9 @@ impl<'a, Message> MouseArea<'a, Message> {
         self
     }
 
-    /// on_right_press will provide window position instead of widget relative
+    /// `on_right_press` will provide window position instead of widget relative
     #[must_use]
-    pub fn on_right_press_window_position(mut self) -> Self {
+    pub const fn on_right_press_window_position(mut self) -> Self {
         self.on_right_press_window_position = true;
         self
     }
@@ -521,7 +521,7 @@ where
 /// Processes the given [`Event`] and updates the [`State`] of an [`MouseArea`]
 /// accordingly.
 fn update<Message: Clone>(
-    widget: &mut MouseArea<'_, Message>,
+    widget: &MouseArea<'_, Message>,
     event: &Event,
     layout: Layout<'_>,
     cursor: mouse::Cursor,
@@ -545,8 +545,7 @@ fn update<Message: Clone>(
     let should_check_hover = viewport_changed
         || matches!(
             event,
-            Event::Mouse(mouse::Event::CursorMoved { .. })
-                | Event::Mouse(mouse::Event::WheelScrolled { .. })
+            Event::Mouse(mouse::Event::CursorMoved { .. } | mouse::Event::WheelScrolled { .. })
         );
 
     if should_check_hover {
@@ -599,9 +598,11 @@ fn update<Message: Clone>(
         return;
     }
 
-    if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
-    | Event::Touch(touch::Event::FingerPressed { .. }) = event
-    {
+    if matches!(
+        event,
+        Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
+            | Event::Touch(touch::Event::FingerPressed { .. })
+    ) {
         let click = state.click(cursor.position_in(layout_bounds).unwrap_or_default());
         match click.kind() {
             click::Kind::Single => {
@@ -651,7 +652,7 @@ fn update<Message: Clone>(
     let recent_click = state
         .prev_click
         .as_ref()
-        .is_some_and(|(_, i)| Instant::now().duration_since(*i) <= DOUBLE_CLICK_DURATION);
+        .is_some_and(|(_, i)| i.elapsed() <= DOUBLE_CLICK_DURATION);
     if matches!(
         event,
         Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))

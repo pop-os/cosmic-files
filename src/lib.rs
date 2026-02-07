@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{app::Settings, iced::Limits};
-use std::{env, fs, path::PathBuf, process};
+use std::{env, path::PathBuf, process};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::{
@@ -36,6 +36,10 @@ pub(crate) mod trash;
 mod zoom;
 
 pub(crate) type FxOrderMap<K, V> = ordermap::OrderMap<K, V, rustc_hash::FxBuildHasher>;
+pub(crate) type Debouncer = notify_debouncer_full::Debouncer<
+    notify_debouncer_full::notify::RecommendedWatcher,
+    notify_debouncer_full::RecommendedCache,
+>;
 
 pub(crate) fn err_str<T: ToString>(err: T) -> String {
     err.to_string()
@@ -45,7 +49,8 @@ pub fn desktop_dir() -> PathBuf {
     if let Some(path) = dirs::desktop_dir() {
         path
     } else {
-        let path = home_dir().join("Desktop");
+        let mut path = home_dir();
+        path.push("Desktop");
         log::warn!(
             "failed to locate desktop directory, falling back to {}",
             path.display()
@@ -58,7 +63,8 @@ pub fn home_dir() -> PathBuf {
     if let Some(home) = dirs::home_dir() {
         home
     } else {
-        let path = PathBuf::from("/");
+        let mut path = PathBuf::new();
+        path.push(std::path::Component::RootDir);
         log::warn!(
             "failed to locate home directory, falling back to {}",
             path.display()
@@ -152,38 +158,45 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut locations = Vec::new();
     let mut uris = Vec::new();
     for arg in env::args().skip(1) {
-        let location = if &arg == "--no-daemon" {
+        if arg == "--no-daemon" {
             daemonize = false;
             continue;
-        } else if &arg == "--trash" {
-            Location::Trash
-        } else if &arg == "--recents" {
-            if config.show_recents {
+        }
+
+        let location = match arg.as_str() {
+            "--trash" => Location::Trash,
+            "--recents" => if config.show_recents {
                 Location::Recents
             } else {
                 log::warn!("recents feature is disabled in config");
                 continue;
-            }
-        } else if &arg == "--network" {
-            Location::Network("network:///".to_string(), fl!("networks"), None)
-        } else {
-            //TODO: support more URLs
-            let path = match url::Url::parse(&arg) {
-                Ok(url) if url.scheme() == "file" => if let Ok(path) = url.to_file_path() { path } else {
-                    log::warn!("invalid argument {arg:?}");
-                    continue;
-                },
-                Ok(url) => {
-                    uris.push(url);
-                    continue;
-                }
-                _ => PathBuf::from(arg),
-            };
-            match fs::canonicalize(&path) {
-                Ok(absolute) => Location::Path(absolute),
-                Err(err) => {
-                    log::warn!("failed to canonicalize {}: {}", path.display(), err);
-                    continue;
+            },
+            "--network" => Location::Network("network:///".to_string(), fl!("networks"), None),
+            _ => {
+                //TODO: support more URLs
+                let path = if let Ok(url) = url::Url::parse(&arg) {
+                    match url.scheme() {
+                        "file" => {
+                            let Ok(path) = url.to_file_path() else {
+                                log::warn!("invalid argument {arg:?}");
+                                continue;
+                            };
+                            path
+                        }
+                        _ => {
+                            uris.push(url);
+                            continue;
+                        }
+                    }
+                } else {
+                    PathBuf::from(arg)
+                };
+                match path.canonicalize() {
+                    Ok(absolute) => Location::Path(absolute),
+                    Err(err) => {
+                        log::warn!("failed to canonicalize {}: {}", path.display(), err);
+                        continue;
+                    }
                 }
             }
         };
@@ -219,7 +232,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         state,
         mode: app::Mode::App,
         locations,
-        uris
+        uris,
     };
     cosmic::app::run::<App>(settings, flags)?;
 

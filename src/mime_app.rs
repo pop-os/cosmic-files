@@ -20,14 +20,12 @@ const EXEC_HANDLERS: [&str; 4] = ["%f", "%F", "%u", "%U"];
 // Deprecated field codes. The spec advises to ignore these handlers.
 const DEPRECATED_HANDLERS: [&str; 6] = ["%d", "%D", "%n", "%N", "%v", "%m"];
 
-pub fn exec_to_command(
+pub fn exec_to_command<O: AsRef<OsStr>>(
     exec: &str,
-    path_opt: &[impl AsRef<OsStr>],
+    path_opt: &[O],
 ) -> Option<Vec<process::Command>> {
     let args_vec = shlex::split(exec)?;
-    let program = args_vec.first()?;
-    // Skip program to make indexing easier
-    let args_vec = &args_vec[1..];
+    let (program, args_vec) = args_vec.split_first()?;
 
     // Base Command instance(s)
     // 1. We may need to launch multiple of the same process.
@@ -47,35 +45,31 @@ pub fn exec_to_command(
     let field_code_pos = args_vec
         .iter()
         .position(|arg| EXEC_HANDLERS.contains(&arg.as_str()));
-    let args_handler = field_code_pos.and_then(|i| args_vec.get(i));
-    // msrv
-    // .inspect(|handler| log::trace!("Found paths handler: {handler} for exec: {exec}"));
+    let args_handler = field_code_pos
+        .and_then(|i| args_vec.get(i))
+        .inspect(|&handler| log::trace!("Found paths handler: {handler} for exec: {exec}"));
     // Number of args before the field code.
     // This won't be an off by one err below because take is not zero indexed.
     let field_code_pos = field_code_pos.unwrap_or_default();
     let mut processes = match args_handler.map(String::as_str) {
         Some("%f") => {
-            let mut processes = Vec::with_capacity(path_opt.len());
-
-            for path in path_opt.iter().map(AsRef::as_ref) {
-                // TODO: %f and %F need to handle non-file URLs (see spec)
-                if from_file_or_dir(path).is_none() {
-                    log::warn!("Desktop file expects a file path instead of a URL: {path:?}");
-                }
-
-                // Passing multiple paths to %f should open an instance per path
-                let mut process = process::Command::new(program);
-                process.args(
-                    args_vec
-                        .iter()
-                        .map(AsRef::as_ref)
-                        .take(field_code_pos)
-                        .chain(std::iter::once(path)),
-                );
-                processes.push(process);
-            }
-
-            processes
+            path_opt
+                .iter()
+                .map(|path| {
+                    let path = path.as_ref();
+                    // TODO: %f and %F need to handle non-file URLs (see spec)
+                    if from_file_or_dir(path).is_none() {
+                        log::warn!(
+                            "Desktop file expects a file path instead of a URL: {}",
+                            path.display()
+                        );
+                    }
+                    // Passing multiple paths to %f should open an instance per path
+                    let mut process = process::Command::new(program);
+                    process.args(args_vec.iter().take(field_code_pos)).arg(path);
+                    process
+                })
+                .collect()
         }
         Some("%F") => {
             // TODO: %f and %F need to handle non-file URLs (see spec)
@@ -84,18 +78,17 @@ pub fn exec_to_command(
                 .map(AsRef::as_ref)
                 .filter(|&path| from_file_or_dir(path).is_none())
             {
-                log::warn!("Desktop file expects a file path instead of a URL: {invalid:?}");
+                log::warn!(
+                    "Desktop file expects a file path instead of a URL: {}",
+                    invalid.display()
+                );
             }
 
             // Launch one instance with all args
             let mut process = process::Command::new(program);
-            process.args(
-                args_vec
-                    .iter()
-                    .map(OsStr::new)
-                    .take(field_code_pos)
-                    .chain(path_opt.iter().map(AsRef::as_ref)),
-            );
+            process
+                .args(args_vec.iter().take(field_code_pos))
+                .args(path_opt);
 
             vec![process]
         }
@@ -103,25 +96,15 @@ pub fn exec_to_command(
             .iter()
             .map(|path| {
                 let mut process = process::Command::new(program);
-                process.args(
-                    args_vec
-                        .iter()
-                        .map(OsStr::new)
-                        .take(field_code_pos)
-                        .chain(std::iter::once(path.as_ref())),
-                );
+                process.args(args_vec.iter().take(field_code_pos)).arg(path);
                 process
             })
             .collect(),
         Some("%U") => {
             let mut process = process::Command::new(program);
-            process.args(
-                args_vec
-                    .iter()
-                    .map(OsStr::new)
-                    .take(field_code_pos)
-                    .chain(path_opt.iter().map(AsRef::as_ref)),
-            );
+            process
+                .args(args_vec.iter().take(field_code_pos))
+                .args(path_opt);
             vec![process]
         }
         Some(invalid) => unreachable!("All valid variants were checked; got: {invalid}"),
@@ -152,7 +135,7 @@ pub fn exec_to_command(
     for command in &processes {
         log::debug!(
             "Parsed program {} with args: {:?}",
-            command.get_program().to_string_lossy(),
+            command.get_program().display(),
             command.get_args()
         );
     }
@@ -263,11 +246,8 @@ impl MimeAppCache {
                 self.apps.push(MimeApp::from(app));
             }
             for mime in &app.mime_types {
-                let apps = self
-                    .cache
-                    .entry(mime.clone())
-                    .or_insert_with(|| Vec::with_capacity(1));
-                if !apps.iter().any(|x| x.id == app.id) {
+                let apps = self.cache.entry(mime.clone()).or_default();
+                if apps.iter().all(|x| x.id != app.id) {
                     apps.push(MimeApp::from(app));
                 }
             }
@@ -291,11 +271,8 @@ impl MimeAppCache {
         {
             for filename in filenames {
                 log::trace!("add {mime}={filename}");
-                let apps = self
-                    .cache
-                    .entry(mime.clone())
-                    .or_insert_with(|| Vec::with_capacity(1));
-                if !apps.iter().any(|x| filename_eq(&x.path, filename)) {
+                let apps = self.cache.entry(mime.clone()).or_default();
+                if apps.iter().all(|x| !filename_eq(&x.path, filename)) {
                     if let Some(app) = all_apps.iter().find(|&x| filename_eq(&x.path, filename)) {
                         apps.push(MimeApp::from(app));
                     } else {
@@ -307,7 +284,7 @@ impl MimeAppCache {
             }
         }
 
-        for (mime, filenames) in list.removed_associations.iter() {
+        for (mime, filenames) in &list.removed_associations {
             for filename in filenames {
                 log::trace!("remove {mime}={filename}");
                 if let Some(apps) = self.cache.get_mut(mime) {
@@ -316,12 +293,12 @@ impl MimeAppCache {
             }
         }
 
-        for (mime, filenames) in list.default_apps.iter() {
+        for (mime, filenames) in &list.default_apps {
             for filename in filenames {
                 log::trace!("default {mime}={filename}");
                 if let Some(apps) = self.cache.get_mut(mime) {
                     let mut found = false;
-                    for app in apps.iter_mut() {
+                    for app in apps {
                         if filename_eq(&app.path, filename) {
                             app.is_default = true;
                             found = true;
@@ -379,7 +356,7 @@ impl MimeAppCache {
         self.icons.get(key).map_or(&[], Box::as_ref)
     }
 
-    fn get_default_terminal(&self) -> Option<String> {
+    fn get_default_terminal() -> Option<String> {
         let output = process::Command::new("xdg-mime")
             .args(["query", "default", "x-scheme-handler/terminal"])
             .output()
@@ -403,7 +380,7 @@ impl MimeAppCache {
 
         let mut preference_order = vec!["com.system76.CosmicTerm".to_string()];
 
-        if let Some(id) = self.get_default_terminal() {
+        if let Some(id) = Self::get_default_terminal() {
             preference_order.insert(0, id);
         }
 
@@ -572,7 +549,7 @@ mod tests {
             paths
                 .iter()
                 .zip(command.get_args())
-                .all(|(&expected, actual)| expected == actual.to_string_lossy())
+                .all(|(&expected, actual)| expected == actual)
         );
     }
 
@@ -618,7 +595,7 @@ mod tests {
             paths
                 .iter()
                 .zip(command.get_args())
-                .all(|(&expected, actual)| expected == actual.to_string_lossy())
+                .all(|(&expected, actual)| expected == actual)
         );
     }
 
@@ -646,7 +623,7 @@ mod tests {
             args.iter()
                 .chain(paths.iter())
                 .zip(command.get_args())
-                .all(|(&expected, actual)| expected == actual.to_string_lossy())
+                .all(|(&expected, actual)| expected == actual)
         );
     }
 
@@ -671,7 +648,7 @@ mod tests {
             paths
                 .iter()
                 .zip(command.get_args())
-                .all(|(&expected, actual)| expected == actual.to_string_lossy())
+                .all(|(&expected, actual)| expected == actual)
         );
     }
 
@@ -707,7 +684,7 @@ mod tests {
                 .chain(paths.iter())
                 .chain(args_trailing.iter())
                 .zip(command.get_args())
-                .all(|(&expected, actual)| expected == actual.to_string_lossy())
+                .all(|(&expected, actual)| expected == actual)
         );
     }
 }

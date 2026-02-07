@@ -132,14 +132,13 @@ impl TryFrom<(Vec<u8>, String)> for ClipboardPaste {
         match mime.as_str() {
             "text/uri-list" => {
                 let text = str::from_utf8(&data)?;
-                let lines = text.lines();
 
                 for line in text.lines() {
                     let url = Url::parse(line)?;
-                    match url.to_file_path() {
-                        Ok(path) => paths.push(path),
-                        Err(()) => Err(format!("invalid file URL {url:?}"))?,
-                    }
+                    let Ok(path) = url.to_file_path() else {
+                        return Err(format!("invalid file URL {url:?}").into());
+                    };
+                    paths.push(path);
                 }
             }
             "x-special/gnome-copied-files" => {
@@ -154,10 +153,10 @@ impl TryFrom<(Vec<u8>, String)> for ClipboardPaste {
                         };
                     } else {
                         let url = Url::parse(line)?;
-                        match url.to_file_path() {
-                            Ok(path) => paths.push(path),
-                            Err(()) => Err(format!("invalid file URL {url:?}"))?,
-                        }
+                        let Ok(path) = url.to_file_path() else {
+                            return Err(format!("invalid file URL {url:?}").into());
+                        };
+                        paths.push(path);
                     }
                 }
             }

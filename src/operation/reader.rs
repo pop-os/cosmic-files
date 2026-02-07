@@ -27,12 +27,8 @@ impl OpReader {
 
 impl io::Read for OpReader {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        cosmic::iced::futures::executor::block_on(async {
-            self.controller
-                .check()
-                .await
-                .map_err(|s| io::Error::other(OperationError::from_state(s, &self.controller)))
-        })?;
+        cosmic::iced::futures::executor::block_on(self.controller.check())
+            .map_err(|s| io::Error::other(OperationError::from_state(s, &self.controller)))?;
 
         let count = self.file.read(buf)?;
         self.current += count as u64;

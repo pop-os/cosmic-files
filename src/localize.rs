@@ -8,7 +8,7 @@ use icu::collator::{
     Collator, CollatorBorrowed, CollatorPreferences, options::CollatorOptions,
     preferences::CollationNumericOrdering,
 };
-use icu::locale::Locale;
+use icu::locale::{Locale, locale, subtags::Language};
 use rust_embed::RustEmbed;
 use std::sync::LazyLock;
 
@@ -42,8 +42,7 @@ pub static LANGUAGE_SORTER: LazyLock<CollatorBorrowed> = LazyLock::new(|| {
                     .and_then(create_collator)
             })
             .unwrap_or_else(|| {
-                let locale = Locale::try_from_str("en-US").expect("en-US is a valid BCP-47 tag");
-                create_collator(locale)
+                create_collator(locale!("en-US"))
                     .expect("Creating a collator from the system's current language, the fallback language, or American English should succeed")
             })
 });
@@ -52,9 +51,8 @@ pub static LOCALE: LazyLock<Locale> = LazyLock::new(|| {
     for var in ["LC_TIME", "LC_ALL", "LANG"] {
         if let Ok(locale_str) = std::env::var(var) {
             let cleaned_locale = locale_str
-                .split('.')
-                .next()
-                .unwrap_or(&locale_str)
+                .split_once('.')
+                .map_or(locale_str.as_str(), |split| split.0)
                 .replace('_', "-");
 
             if let Ok(locale) = Locale::try_from_str(&cleaned_locale) {
@@ -62,15 +60,15 @@ pub static LOCALE: LazyLock<Locale> = LazyLock::new(|| {
             }
 
             // Try language-only fallback (e.g., "en" from "en-US")
-            if let Some(lang) = cleaned_locale.split('-').next()
-                && let Ok(locale) = Locale::try_from_str(lang)
+            if let Some((lang, _)) = cleaned_locale.split_once('-')
+                && let Ok(language) = Language::try_from_str(lang)
             {
-                return locale;
+                return Locale::from(language);
             }
         }
     }
     log::warn!("No valid locale found in environment, using fallback");
-    Locale::try_from_str("en-US").expect("Failed to parse fallback locale 'en-US'")
+    locale!("en-US")
 });
 
 #[macro_export]
