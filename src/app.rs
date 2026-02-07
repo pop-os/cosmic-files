@@ -857,7 +857,13 @@ impl App {
                 Ok(entry) => match entry.exec() {
                     Some(exec) => match mime_app::exec_to_command(exec, &[] as &[&str; 0]) {
                         Some(commands) => {
+                            let cwd_opt = entry.desktop_entry("Path");
+
                             for mut command in commands {
+                                if let Some(cwd) = cwd_opt {
+                                    command.current_dir(cwd);
+                                }
+
                                 if let Err(err) = spawn_detached(&mut command) {
                                     log::warn!("failed to execute {}: {}", path.display(), err);
                                 }
