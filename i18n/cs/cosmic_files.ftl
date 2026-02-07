@@ -51,7 +51,7 @@ rename-folder = Přejmenovat složku
 ## Replace Dialog
 
 replace = Nahradit
-replace-title = „{ $filename }“ již na daném místě existuje
+replace-title = Soubor „{ $filename }“ již na daném místě existuje
 replace-warning = Chcete nahradit soubor tím, který ukládáte? Nahrazení přepíše veškerý jeho obsah.
 
 # Context Pages
@@ -403,3 +403,6 @@ sort = Řazení
 sort-a-z = A-Z
 empty-trash-title = Vysypat koš?
 type-to-search-select = Vybere první shodující se soubor nebo složku
+pasted-image = Vložen obrázek
+pasted-text = Vložen text
+pasted-video = Vloženo video

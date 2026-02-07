@@ -6,7 +6,7 @@ filesystem = Файловая система
 home = Домашняя папка
 trash = Корзина
 networks = Сеть
-notification-in-progress = Выполняются файловые операции.
+notification-in-progress = Выполняются файловые операции
 recents = Недавние документы
 undo = Отменить
 today = Сегодня
@@ -26,7 +26,7 @@ create-archive = Создать архив
 ## Empty Trash Dialog
 
 empty-trash = Очистить корзину
-empty-trash-warning = Вы уверены, что хотите навсегда удалить все элементы в корзине?
+empty-trash-warning = Элементы в папке «Корзина» будут удалены без возможности восстановления
 # New File/Folder Dialog
 create-new-file = Создать новый файл
 create-new-folder = Создать новую папку
@@ -67,7 +67,7 @@ skip = Пропустить
 
 owner = Владелец
 group = Группа
-other = Остальные
+other = Прочие
 
 # Context Pages
 
@@ -191,8 +191,8 @@ settings = Параметры
 appearance = Оформление
 theme = Тема
 match-desktop = Как в системе
-dark = Тёмное
-light = Светлое
+dark = Тёмная
+light = Светлая
 # Context menu
 add-to-sidebar = Добавить на боковую панель
 compress = Сжать
@@ -203,10 +203,10 @@ open-in-terminal = Открыть в терминале
 move-to-trash = Переместить в корзину
 restore-from-trash = Восстановить из корзины
 remove-from-sidebar = Убрать с боковой панели
-sort-by-name = Разместить по имени
-sort-by-modified = Разместить по дате изменения
-sort-by-size = Разместить по размеру
-sort-by-trashed = Разместить по дате удаления
+sort-by-name = Сорт. по имени
+sort-by-modified = Сорт. по дате изменения
+sort-by-size = Сорт. по размеру
+sort-by-trashed = Сорт. по дате удаления
 
 # Menu
 
@@ -244,8 +244,8 @@ menu-about = О приложении Файлы COSMIC...
 ## Sort
 
 sort = Сортировка
-sort-a-z = По алфавиту (от А до Я)
-sort-z-a = По алфавиту (от Я до А)
+sort-a-z = От А до Я
+sort-z-a = От Я до А
 sort-newest-first = Сначала новые
 sort-oldest-first = Сначала старые
 sort-smallest-to-largest = От меньшего к большему
@@ -314,15 +314,15 @@ item-modified = Дата изменения: { $modified }
 item-accessed = Дата доступа: { $accessed }
 calculating = Вычисление…
 single-click = Открывать одним нажатием
-type-to-search = Введите для поиска
-type-to-search-recursive = Поиск по текущей папке и всем подпапкам
-type-to-search-enter-path = Введите путь до каталога или файла
+type-to-search = Поле поиска
+type-to-search-recursive = Поиск в текущей папке и подпапках
+type-to-search-enter-path = Ввод пути к каталогу или файлу
 delete-permanently = Удалить навсегда
 eject = Извлечь
-remove-from-recents = Убрать из недавнего
+remove-from-recents = Убрать из недавних
 change-wallpaper = Изменить обои…
 desktop-appearance = Параметры оформления…
-display-settings = Настройки дисплея…
+display-settings = Параметры экрана…
 reload-folder = Обновить папку
 gallery-preview = Галерея предпросмотра
 operations-running =
@@ -365,3 +365,7 @@ removed-from-recents =
         [one] элемент
        *[other] элем.
     } из { recents }
+type-to-search-select = Выделение первого подходящего файла или папки
+pasted-image = Вставленное изображение
+pasted-text = Вставленный текст
+pasted-video = Вставленное видео
