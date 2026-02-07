@@ -1,4 +1,4 @@
-cosmic-files = مدير ملفات COSMIC
+cosmic-files = ملفات COSMIC
 empty-folder = مجلد فارغ
 empty-folder-hidden = مجلد فارغ (يحتوي على عناصر مخفية)
 filesystem = نظام الملفات
@@ -8,7 +8,7 @@ recents = الأحدث
 # List view
 name = الاسم
 modified = مُعدل
-size = حجم
+size = الحجم
 
 # Dialogs
 
@@ -357,3 +357,6 @@ restored =
     } من { trash }
 empty-trash-title = أفرغ المهملات؟
 type-to-search-select = يختار أول ملف أو مجلد مطابق
+pasted-image = صورة مُلصقة
+pasted-text = نص مُلصق
+pasted-video = فيديو مُلصق

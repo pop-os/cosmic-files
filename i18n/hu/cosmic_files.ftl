@@ -232,7 +232,7 @@ compressed =
         [one] elem
        *[other] elem
     } tömörítve innen: „{ $from }” ide: „{ $to }”
-copy_noun = Másolás
+copy_noun = Másolat
 creating = „{ $name }” létrehozása itt: „{ $parent }”
 created = „{ $name }” létrehozva itt: „{ $parent }”
 copying =
@@ -422,3 +422,6 @@ support = Támogatás
 progress-failed = { $percent }%, sikertelen
 empty-trash-title = Kuka ürítése?
 type-to-search-select = Kijelöli az első egyező fájlt vagy mappát
+pasted-image = Beillesztett kép
+pasted-text = Beillesztett szöveg
+pasted-video = Beillesztett videó

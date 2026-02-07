@@ -422,3 +422,6 @@ removed-from-recents =
     } de { recents }
 progress-failed = { $percent }%, échec
 type-to-search-select = Sélectionne le premier fichier ou dossier qui convient
+pasted-image = Image collée
+pasted-text = Text collé
+pasted-video = Vidéo collée

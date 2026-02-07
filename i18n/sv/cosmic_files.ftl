@@ -395,3 +395,6 @@ reload-folder = Ladda om mapp
 selected-items = De { $items } valda objekten
 empty-trash-title = Töm papperskorgen?
 type-to-search-select = Markerar den första matchande filen eller mappen
+pasted-image = Inklistrad bild
+pasted-text = Inklistrad text
+pasted-video = Inklistrad video
