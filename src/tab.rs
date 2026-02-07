@@ -40,6 +40,7 @@ use cosmic::{
         menu::{action::MenuAction, key_bind::KeyBind},
     },
 };
+use gio::prelude::FileExt;
 use i18n_embed::LanguageLoader;
 use icu::{
     datetime::{
@@ -674,7 +675,16 @@ fn display_name_for_file(path: &Path, name: &str, get_from_gvfs: bool, is_deskto
         );
     } else if get_from_gvfs {
         #[cfg(feature = "gvfs")]
-        return Item::display_name(glib::filename_display_name(path).as_str());
+        {
+            let file = gio::File::for_path(path);
+            if let Ok(info) = file.query_info(
+                "standard::display-name",
+                gio::FileQueryInfoFlags::NONE,
+                gio::Cancellable::NONE,
+            ) {
+                return Item::display_name(info.display_name().as_str());
+            }
+        }
     }
     Item::display_name(name)
 }
