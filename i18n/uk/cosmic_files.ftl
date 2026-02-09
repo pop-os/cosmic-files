@@ -27,8 +27,8 @@ file-name = Назва файлу
 folder-name = Назва теки
 file-already-exists = Файл з такою назвою вже існує
 folder-already-exists = Тека з такою назвою вже існує
-name-hidden = Назви, що починаються з ".", будуть приховані
-name-invalid = Назва не може бути "{ $filename }"
+name-hidden = Назви, що починаються з «.», приховано
+name-invalid = Назва не може бути «{ $filename }»
 name-no-slashes = Назва не може містити скісні риски
 
 ## Open/Save Dialog
@@ -52,9 +52,9 @@ rename-folder = Перейменувати теку
 ## Replace Dialog
 
 replace = Замінити
-replace-title = " { $filename }" вже існує в цьому місці
-replace-warning = Бажаєте замінити його тим, що зберігаєте? Замінювання перезапише його вміст.
-replace-warning-operation = Бажаєте замінити його? Замінювання перезапише його вміст.
+replace-title = «{ $filename }» вже існує в цій теці
+replace-warning = Бажаєте замінити файл тим, що зберігаєте? Після заміни його вміст буде перезаписано.
+replace-warning-operation = Бажаєте замінити його? Це перезапише його вміст.
 original-file = Початковий файл
 replace-with = Замінити на
 apply-to-all = Застосувати до всіх
@@ -69,55 +69,55 @@ skip = Пропустити
 
 ## Operations
 
-edit-history = Редагувати історію
+edit-history = Історія дій
 history = Історія
-no-history = Немає елементів у історії.
-pending = В очікуванні
-failed = Не вдалося
-complete = Завершити
+no-history = Історія порожня.
+pending = Очікується
+failed = Не виконано
+complete = Завершено
 copy_noun = Копіювати
-creating = Створення "{ $name }" у " { $parent }"
-created = Створено "{ $name }" у "{ $parent }"
+creating = Створення «{ $name }» в «{ $parent }»
+created = Створено «{ $name }» у «{ $parent }»
 copying =
     Копіювання { $items } { $items ->
-        [one] обʼєкта
-       *[other] обʼєктів
-    } з "{ $from }" до "{ $to }" ({ $progress })...
+        [one] елемента
+       *[other] елементів
+    } з «{ $from }» в «{ $to }» ({ $progress })...
 copied =
     Скопійовано { $items } { $items ->
-        [one] обʼєкт
-       *[other] обʼєкти
-    } з "{ $from }" до "{ $to }"
+        [one] елемент
+       *[other] елеменів
+    } з «{ $from }» в «{ $to }»
 emptying-trash = Спорожнення { trash } ({ $progress })...
 emptied-trash = Спорожнено { trash }
 moving =
     Переміщення { $items } { $items ->
-        [one] обʼєкта
-       *[other] обʼєктів
-    } з { $from } до "{ $to }" ({ $progress })...
+        [one] елемента
+       *[other] елементів
+    } з «{ $from }» в «{ $to }» ({ $progress })...
 moved =
     Переміщено { $items } { $items ->
-        [one] обʼєкт
-       *[other] обʼєкти
-    } з "{ $from }" до "{ $to }"
-renaming = Перейменування "{ $from }" на "{ $to }"
-renamed = Перейменовано "{ $from }" на "{ $to }"
+        [one] елемент
+       *[other] елементи
+    } з «{ $from }» в «{ $to }»
+renaming = Перейменування «{ $from }» на «{ $to }»
+renamed = Перейменовано «{ $from }» на «{ $to }»
 restoring =
     Відновлення { $items } { $items ->
-        [one] обʼєкта
-       *[other] обʼєктів
+        [one] елемента
+       *[other] елементів
     } з { trash } ({ $progress })...
 restored =
     Відновлено { $items } { $items ->
-        [one] обʼєкт
-       *[other] обʼєкти
+        [one] елемент
+       *[other] елементи
     } з { trash }
 unknown-folder = невідома тека
 
 ## Open with
 
 menu-open-with = Відкрити за допомогою...
-default-app = { $name } (за замовчуванням)
+default-app = { $name } (звичайний)
 
 ## Properties
 
@@ -130,7 +130,7 @@ settings = Налаштування
 
 appearance = Зовнішній вигляд
 theme = Тема
-match-desktop = Відповідно системі
+match-desktop = Системна
 dark = Темна
 light = Світла
 # Context menu
@@ -170,14 +170,14 @@ select-all = Вибрати все
 zoom-in = Збільшити
 default-size = Стандартний розмір
 zoom-out = Зменшити
-view = Вигляд
+view = Вид
 grid-view = Перегляд таблицею
 list-view = Перегляд списком
 show-hidden-files = Показати приховані файли
 list-directories-first = Теки спочатку
 menu-settings = Налаштування...
 menu-about = Про Файли COSMIC...
-repository = Репозиторій
+repository = Сховище
 support = Підтримка
 details = Деталі
 dismiss = Закрити повідомлення
@@ -191,7 +191,7 @@ desktop-view-options = Параметри вигляду стільниці...
 show-on-desktop = Показувати на стільниці
 desktop-folder-content = Вміст теки Стільниця
 mounted-drives = Змонтовані диски
-trash-folder-icon = Піктограма теки Смітник
+trash-folder-icon = Піктограма Смітника
 icon-size-and-spacing = Розмір піктограм і відстань між ними
 icon-size = Розмір піктограм
 grid-spacing = Відстань між піктограмами
@@ -212,15 +212,15 @@ create-archive = Створити архів
 extract-password-required = Потрібен пароль
 extract-to = Видобути до...
 extract-to-title = Видобути до теки
-mount-error = Неможливо отримати доступ до диска
+mount-error = Доступ до диска відсутній
 create = Створити
 open-item-location = Відкрити розташування елемента
-open-with-title = Як ви бажаєте відкрити "{ $name }"?
+open-with-title = Як ви бажаєте відкрити «{ $name }»?
 browse-store = Переглянути { $store }
 other-apps = Інші застосунки
 related-apps = Пов'язані застосунки
 permanently-delete-question = Остаточно видалити?
-delete = Вилучити
+delete = Видалити
 permanently-delete-warning = { $target } буде остаточно видалено. Цю дію не можна скасувати.
 set-executable-and-launch = Зробити виконуваним і запустити
 set-executable-and-launch-description = Бажаєте зробити "{ $name }" виконуваним і запустити його?
@@ -239,15 +239,15 @@ read-write = Перегляд і запис
 read-write-execute = Перегляд, запис і виконання
 favorite-path-error = Помилка при відкритті каталогу
 favorite-path-error-description =
-    Неможливо відкрити "{ $path }"
-    "{ $path }" можливо, його не існує або у вас немає прав на відкриття
+    Не вдалося відкрити «{ $path }»
+    «{ $path }» можливо не існує або у вас немає прав на відкриття
 
     Вилучити з бічної панелі?
 keep = Залишити
 add-network-drive = Додати мережевий диск
-connect = Під'єднати
-connect-anonymously = Під'єднатися анонімно
-connecting = Під’єднання…
+connect = З'єднати
+connect-anonymously = З'єднатись анонімно
+connecting = З'єднання…
 domain = Домен
 enter-server-address = Введіть адресу сервера
 network-drive-description =
@@ -261,7 +261,7 @@ network-drive-schemes =
     Серверний Блок Повідомлень,smb://
     Протокол Передавання Файлів SSH,sftp:// або ssh://
     WebDAV,dav:// або davs://
-network-drive-error = Неможливо отримати доступ до мережевого диска
+network-drive-error = Доступ до мережевого диска відсутній
 password = Пароль
 remember-password = Запам'ятати пароль
 try-again = Спробувати знову
@@ -294,31 +294,31 @@ extracting =
     Видобування { $items } { $items ->
         [one] елемента
        *[other] елементів
-    } з "{ $from }" до "{ $to }" ({ $progress })...
+    } з «{ $from }» в «{ $to }» ({ $progress })...
 extracted =
     Видобуто { $items } { $items ->
         [one] елемент
        *[other] елементи
-    } з "{ $from }" до "{ $to }"
-setting-executable-and-launching = Встановлення "{ $name }" виконуваним і запуск
-set-executable-and-launched = Встановлено "{ $name }" виконуваним і запущено
+    } з «{ $from }» в «{ $to }»
+setting-executable-and-launching = Надання «{ $name }» прав на виконання та запуск
+set-executable-and-launched = «{ $name }» надано права на виконання і відкрито
 selected-items = Вибрані { $items } елементи
-setting-permissions = Встановлення дозволів { $mode } для "{ $name }"
-set-permissions = Встановлено дозволи { $mode } для "{ $name }"
-show-details = Показати деталі
+setting-permissions = Надання прав { $mode } для «{ $name }»
+set-permissions = Надано права { $mode } для «{ $name }»
+show-details = Показати подробиці
 type = Тип: { $mime }
 items = Елементів: { $items }
 item-size = Розмір: { $size }
 item-created = Створено: { $created }
 item-modified = Змінено: { $modified }
-item-accessed = Доступ: { $accessed }
+item-accessed = Дата доступу: { $accessed }
 calculating = Обчислення...
 single-click = Відкривати одним клацанням
 type-to-search = Введіть для пошуку
 type-to-search-recursive = Шукає у поточній теці та всіх підтеках
 type-to-search-enter-path = Вводить шлях до каталогу або файлу
 compress = Стиснути
-delete-permanently = Остаточно вилучити
+delete-permanently = Остаточно видалити
 eject = Безпечно вилучити
 extract-here = Видобути
 sort-by-trashed = Упорядкувати за часом видалення
@@ -326,7 +326,7 @@ remove-from-recents = Вилучити з нещодавніх
 change-wallpaper = Змінити зображення тла...
 desktop-appearance = Вигляд стільниці...
 display-settings = Налаштування дисплея...
-reload-folder = Перезавантажити теку
+reload-folder = Оновити теку
 gallery-preview = Попередній перегляд галереї
 sort = Упорядкувати
 sort-a-z = А-Я
@@ -357,3 +357,6 @@ removed-from-recents =
     } з { recents }
 empty-trash-title = Спорожити смітник?
 type-to-search-select = Вибирає перший відповідний файл або папку
+pasted-image = Вставлене Зображення
+pasted-text = Вставлений Текст
+pasted-video = Вставлене Видиво
