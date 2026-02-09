@@ -40,7 +40,6 @@ use cosmic::{
         menu::{action::MenuAction, key_bind::KeyBind},
     },
 };
-use gio::prelude::FileExt;
 use i18n_embed::LanguageLoader;
 use icu::{
     datetime::{
@@ -677,7 +676,8 @@ fn display_name_for_file(path: &Path, name: &str, get_from_gvfs: bool, is_deskto
         #[cfg(feature = "gvfs")]
         {
             let file = gio::File::for_path(path);
-            if let Ok(info) = file.query_info(
+            if let Ok(info) = gio::prelude::FileExt::query_info(
+                &file,
                 "standard::display-name",
                 gio::FileQueryInfoFlags::NONE,
                 gio::Cancellable::NONE,
@@ -2461,7 +2461,8 @@ impl Item {
         if let Some(path) = self.path_opt() {
             if self.selected {
                 column = column.push(
-                    widget::button::standard(fl!("open")).on_press(Message::Open(Some(path.clone()))),
+                    widget::button::standard(fl!("open"))
+                        .on_press(Message::Open(Some(path.clone()))),
                 );
             }
         }
