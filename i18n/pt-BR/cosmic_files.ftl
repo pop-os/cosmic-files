@@ -422,3 +422,6 @@ sort-smallest-to-largest = Do menor para o maior
 sort-largest-to-smallest = Do maior para o menor
 empty-trash-title = Esvaziar a lixeira?
 type-to-search-select = Seleciona o primeiro arquivo ou pasta correspondente
+pasted-image = Imagem colada
+pasted-text = Texto copiado
+pasted-video = Vídeo copiado
