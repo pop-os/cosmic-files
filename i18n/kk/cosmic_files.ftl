@@ -304,3 +304,6 @@ sort-newest-first = Алдымен жаңалары
 sort-oldest-first = Алдымен ескілері
 sort-smallest-to-largest = Кішісінен үлкеніне
 sort-largest-to-smallest = Үлкенінен кішісіне
+pasted-image = Кірістірілген сурет
+pasted-text = Кірістірілген мәтін
+pasted-video = Кірістірілген видео
