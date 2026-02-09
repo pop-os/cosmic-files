@@ -205,6 +205,10 @@ pub fn context_menu<'a>(
                     children.push(menu_item(fl!("cut"), Action::Cut).into());
                 }
                 children.push(menu_item(fl!("copy"), Action::Copy).into());
+                if selected_mount_point == 0 {
+                    children.push(menu_item(fl!("move-to"), Action::MoveTo).into());
+                }
+                children.push(menu_item(fl!("copy-to"), Action::CopyTo).into());
 
                 children.push(divider::horizontal::light().into());
                 let supported_archive_types = crate::archive::SUPPORTED_ARCHIVE_TYPES;
