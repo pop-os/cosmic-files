@@ -5223,7 +5223,7 @@ impl Application for App {
 
                 //TODO: nice description of error
                 widget::dialog()
-                    .title("Failed operation")
+                    .title(fl!("failed-operation-title"))
                     .body(format!("{operation:#?}\n{err}"))
                     .icon(icon::from_name("dialog-error").size(64))
                     //TODO: retry action
