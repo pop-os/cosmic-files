@@ -59,6 +59,7 @@ pub fn context_menu<'a>(
     tab: &Tab,
     key_binds: &HashMap<KeyBind, Action>,
     modifiers: &Modifiers,
+    clipboard_paste_available: bool,
 ) -> Element<'a, tab::Message> {
     let find_key = |action: &Action| -> String {
         for (key_bind, key_action) in key_binds {
@@ -75,6 +76,13 @@ pub fn context_menu<'a>(
             color: Some(color.into()),
         }
     }
+    fn disabled_style(theme: &cosmic::Theme) -> TextStyle {
+        let mut color = theme.cosmic().background.component.on;
+        color.alpha *= 0.5;
+        TextStyle {
+            color: Some(color.into()),
+        }
+    }
 
     let menu_item = |label, action| {
         let key = find_key(&action);
@@ -85,6 +93,18 @@ pub fn context_menu<'a>(
         )
         .on_press(tab::Message::ContextAction(action))
     };
+
+    let menu_item_disabled = |label, action: Action| {
+        let key = find_key(&action);
+        menu_button!(
+            text::body(label).class(theme::Text::Custom(disabled_style)),
+            horizontal_space(),
+            text::body(key).class(theme::Text::Custom(disabled_style))
+        )
+    };
+
+    // Allow paste when clipboard has data and we're in a location that supports it
+    let can_paste = clipboard_paste_available && tab.location.supports_paste();
 
     let (sort_name, sort_direction, _) = tab.sort_options();
     let sort_item = |label, variant| {
@@ -265,8 +285,10 @@ pub fn context_menu<'a>(
                 if tab.mode.multiple() {
                     children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
                 }
-                if tab.location != Location::Recents {
+                if can_paste {
                     children.push(menu_item(fl!("paste"), Action::Paste).into());
+                } else {
+                    children.push(menu_item_disabled(fl!("paste"), Action::Paste).into());
                 }
 
                 //TODO: only show if cosmic-settings is found?
@@ -543,6 +565,7 @@ pub fn menu_bar<'a>(
     config: &Config,
     modifiers: &Modifiers,
     key_binds: &HashMap<KeyBind, Action>,
+    clipboard_paste_available: bool,
 ) -> Element<'a, Message> {
     let sort_options = tab_opt.map(Tab::sort_options);
     let sort_item = |label, sort, dir| {
@@ -573,6 +596,10 @@ pub fn menu_bar<'a>(
             }
         }
     }
+
+    // Allow paste when clipboard has data and we're in a location that supports it
+    let can_paste =
+        clipboard_paste_available && tab_opt.is_some_and(|tab| tab.location.supports_paste());
 
     let (delete_item, delete_item_action) = if in_trash || modifiers.shift() {
         (fl!("delete-permanently"), Action::Delete)
@@ -637,7 +664,7 @@ pub fn menu_bar<'a>(
                         menu_button_optional(fl!("copy"), Action::Copy, selected > 0),
                         menu_button_optional(fl!("move-to"), Action::MoveTo, selected > 0),
                         menu_button_optional(fl!("copy-to"), Action::CopyTo, selected > 0),
-                        menu_button_optional(fl!("paste"), Action::Paste, selected > 0),
+                        menu_button_optional(fl!("paste"), Action::Paste, can_paste),
                         menu::Item::Button(fl!("select-all"), None, Action::SelectAll),
                         menu::Item::Divider,
                         menu::Item::Button(fl!("history"), None, Action::EditHistory),

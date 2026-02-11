@@ -325,3 +325,14 @@ impl TryFrom<(Vec<u8>, String)> for ClipboardPasteText {
         })
     }
 }
+
+/// Cached clipboard content for paste operations.
+/// This is needed because Wayland restricts clipboard access from popup windows.
+#[derive(Clone, Debug)]
+pub enum ClipboardCache {
+    Files(ClipboardPaste),
+    Image(ClipboardPasteImage),
+    Video(ClipboardPasteVideo),
+    Text(ClipboardPasteText),
+    Empty,
+}
