@@ -677,7 +677,17 @@ fn display_name_for_file(path: &Path, name: &str, get_from_gvfs: bool, is_deskto
         );
     } else if get_from_gvfs {
         #[cfg(feature = "gvfs")]
-        return Item::display_name(glib::filename_display_name(path).as_str());
+        {
+            let file = gio::File::for_path(path);
+            if let Ok(info) = gio::prelude::FileExt::query_info(
+                &file,
+                "standard::display-name",
+                gio::FileQueryInfoFlags::NONE,
+                gio::Cancellable::NONE,
+            ) {
+                return Item::display_name(info.display_name().as_str());
+            }
+        }
     }
     Item::display_name(name)
 }
@@ -2518,7 +2528,8 @@ impl Item {
         if let Some(path) = self.path_opt() {
             if self.selected {
                 column = column.push(
-                    widget::button::standard(fl!("open")).on_press(Message::Open(Some(path.clone()))),
+                    widget::button::standard(fl!("open"))
+                        .on_press(Message::Open(Some(path.clone()))),
                 );
             }
         }

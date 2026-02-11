@@ -419,3 +419,6 @@ remove-from-recents = Bain as na cinn is déanaí
 reload-folder = Athlódáil an fillteán
 empty-trash-title = Folmhaigh an bruscar?
 type-to-search-select = Roghnaíonn an chéad chomhad nó fillteán comhoiriúnach
+pasted-image = Íomhá ghreamaithe
+pasted-text = Téacs greamaithe
+pasted-video = Físeán greamaithe
