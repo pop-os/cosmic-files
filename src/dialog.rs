@@ -662,7 +662,11 @@ impl App {
             )
             .padding(0)
             .on_press_maybe(if self.flags.kind.save() {
-                Some(Message::Save(false))
+                if let DialogKind::SaveFile { filename } = &self.flags.kind {
+                    (!filename.is_empty()).then_some(Message::Save(false))
+                } else {
+                    None
+                }
             } else if has_selected || self.flags.kind.is_dir() {
                 Some(Message::Open)
             } else {
