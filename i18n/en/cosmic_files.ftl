@@ -296,7 +296,7 @@ calculating = Calculating...
 ## Settings
 settings = Settings
 single-click = Single click to open
-show-recents = Show recents
+show-recents = Recents folder in the sidebar
 
 ### Appearance
 appearance = Appearance
