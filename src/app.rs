@@ -4172,6 +4172,8 @@ impl Application for App {
                             self.activate_nav_model_location(&tab_path);
 
                             self.tab_model.text_set(entity, tab_title);
+                            // clear the prefix selection buffer when changing location
+                            self.type_select_prefix.clear();
                             commands.push(Task::batch([
                                 self.update_title(),
                                 self.update_watcher(),
