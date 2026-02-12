@@ -1,4 +1,6 @@
 cosmic-files = COSMIC Fájlok
+comment = Fájlkezelő a COSMIC asztali környezethez 
+keywords = mappa;fájl;kezelő;
 empty-folder = Üres mappa
 empty-folder-hidden = Üres mappa (Rejtett elemeket tartalmaz)
 no-results = Nincs találat

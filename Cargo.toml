@@ -128,6 +128,9 @@ fork = "0.6"
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = "0.18"
 
+[build-dependencies]
+xdgen = "0.1"
+
 [dev-dependencies]
 # cap-std = "3"
 # cap-tempfile = "3"

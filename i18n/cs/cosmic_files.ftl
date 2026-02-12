@@ -1,4 +1,6 @@
 cosmic-files = Soubory COSMIC
+comment = Správce souborů pro prostředí COSMIC
+keywords = Složky;Správce;Manažer;Prohlížeč;
 empty-folder = Složka je prázdná
 empty-folder-hidden = Složka je prázdná (obsahuje skryté položky)
 filesystem = Souborový systém
