@@ -1,4 +1,6 @@
 cosmic-files = COSMIC Filer
+comment = Filhanterare för skrivbordsmiljön COSMIC
+keywords = Folder;Katalog;Mapp;Manager;
 empty-folder = Mappen är tom
 empty-folder-hidden = Mappen är tom (har dolda objekt)
 no-results = Inga resultat hittades

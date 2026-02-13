@@ -1,4 +1,6 @@
 cosmic-files = ملفات COSMIC
+comment = مدير ملفات لسطح مكتب COSMIC
+keywords = مجلد;ملف;مدير;
 empty-folder = مجلد فارغ
 empty-folder-hidden = مجلد فارغ (يحتوي على عناصر مخفية)
 filesystem = نظام الملفات

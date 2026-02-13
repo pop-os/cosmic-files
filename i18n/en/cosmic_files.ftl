@@ -1,4 +1,6 @@
 cosmic-files = COSMIC Files
+comment = File manager for the COSMIC desktop
+keywords = Folder;Manager;
 empty-folder = Empty folder
 empty-folder-hidden = Empty folder (has hidden items)
 no-results = No results found
