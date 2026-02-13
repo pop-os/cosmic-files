@@ -808,53 +808,6 @@ impl App {
         'outer: for (mime, paths) in groups {
             log::debug!("Attempting to launch app\n\tfor: {mime}\n\twith: {paths:?}");
 
-            // ---- archives ----
-            if supported_archive_types.iter().copied().any(|t| mime == t) {
-
-                // Checks if there are suitable apps for archives
-                let mut found_archive_app = false;
-                for app in self.mime_app_cache.get(&mime) {
-                    log::debug!("Checking app {} for archive support", app.id);
-                    if Self::is_suitable_archive_app(app) {
-                        found_archive_app = true;
-                        log::debug!("Found suitable archive app {} for MIME {}", app.id, mime);
-
-                        // Immediately launch the app we found
-                        if let Some(mut commands) = app.command(&paths) {
-                            for mut command in commands.drain(..) {
-                                match spawn_detached(&mut command) {
-                                    Ok(()) => {
-                                        log::debug!("Launched {} with {:?}", app.id, paths);
-                                        // Updates recently_used
-                                        for path in &paths {
-                                            let _ = recently_used_xbel::update_recently_used(
-                                                path,
-                                                Self::APP_ID.to_string(),
-                                                "cosmic-files".to_string(),
-                                                None,
-                                            );
-                                        }
-                                    }
-                                    Err(err) => {
-                                        log::warn!("Failed to launch {} for {:?}: {}", app.id, paths, err);
-                                        // TODO: maybe if it fails to launch, fallback to extract_to? by settings found_archive_app = false
-                                    }
-                                }
-                            }
-                        }
-                        break;
-                    }
-                }
-
-                if !found_archive_app {
-                    log::info!("No suitable archive app found for MIME {}. Falling back to extract_to.", mime);
-                    found_archives_paths.extend(paths.iter().cloned());
-                }
-
-                continue 'outer;
-
-            }
-
             // First launch apps that can be launched directly
             if mime == "application/x-desktop" {
                 // Try opening desktop application
@@ -881,6 +834,33 @@ impl App {
                     }
                 }
                 continue;
+            } else if supported_archive_types.iter().copied().any(|t| mime == t) { // Archives handling
+
+                let mut found_archive_app = false;
+
+                // Checks if there are suitable apps for archives (if cosmic-files is the dafult one, fallback to extract_to)
+                for app in self.mime_app_cache.get(&mime) {
+                    if app.id == Self::APP_ID {
+                        log::debug!("Default app is cosmic-files, adding to extract_to dialog");
+                        found_archive_app = false; // Let's confirm we want the extrac_to dialog in this case
+                        break; // Stop looking
+                    } else {
+                        log::debug!("Found suitable archive app {} for MIME {}", app.id, mime);
+
+                        if self.launch_from_mime_cache(&mime, &paths) {
+                            found_archive_app = true; // Not adding to extract_to list
+                            break;
+                        } else {
+                            found_archive_app = false; // Adding to extract_to list because unable to open (fallback)
+                        }
+                    }
+                }
+
+                if !found_archive_app {
+                    found_archives_paths.extend(paths.iter().cloned());
+                }
+
+                continue 'outer;
             }
 
             // Try mime apps, which should be faster than xdg-open
@@ -917,34 +897,14 @@ impl App {
             }
         }
 
+        // We are done with looping through file groups, let's see if there are archives to
+        // open with the extract_to dialog
         if found_archives_paths.len() > 0 {
             log::debug!("Paths to extract with dialog: {:?}", found_archives_paths);
             tasks.push(self.extract_to(&found_archives_paths));
         }
 
         Task::batch(tasks)
-    }
-
-    fn is_suitable_archive_app(app: &MimeApp) -> bool {
-
-        if app.no_display {
-            return false;
-        }
-
-        let has = |cat: &str| app.categories.iter().any(|c| c == cat);
-
-        // semantic exclusions
-        if has("FileManager") || has("WebBrowser") {
-            return false;
-        }
-
-        // if it is an archiver, yes!
-        if has("Archiver") {
-            return true;
-        }
-
-        // optional (conservative)
-        has("Utility") && has("Compression")
     }
 
     fn launch_desktop_entries(paths: &[impl AsRef<Path>]) {
@@ -3198,6 +3158,7 @@ impl Application for App {
                         if let Some(archive_paths) = archive_paths
                             && !selected_paths.is_empty()
                         {
+                            log::debug!("archive_paths is {:?}", archive_paths);
                             self.file_dialog_opt = None;
                             return self.operation(Operation::Extract {
                                 paths: archive_paths,
