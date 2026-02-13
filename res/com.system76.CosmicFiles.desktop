@@ -8,4 +8,17 @@ StartupNotify=true
 Icon=com.system76.CosmicFiles
 Categories=COSMIC;Utility;FileManager;
 Keywords=Folder;Manager;
-MimeType=inode/directory;
+MimeType=inode/directory;application/gzip;application/x-compressed-tar;application/x-tar;application/zip;application/x-bzip;application/x-bzip-compressed-tar;application/x-bzip2;application/x-bzip2-compressed-tar;application/x-xz;application/x-xz-compressed-tar;
+
+Actions=Extract;ExtractTo;
+
+[Desktop Action Extract]
+Name=COSMIC Files Extract
+Exec=cosmic-files --extract %U
+NoDisplay=true
+
+[Desktop Action ExtractTo]
+Name=COSMIC Files Extract To...
+Exec=cosmic-files --extract-to %U
+NoDisplay=true
+
