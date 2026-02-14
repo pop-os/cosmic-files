@@ -4508,12 +4508,43 @@ impl Application for App {
                 return window::maximize(id, maximized);
             }
             Message::WindowNew => match env::current_exe() {
-                Ok(exe) => match process::Command::new(&exe).spawn() {
-                    Ok(_child) => {}
-                    Err(err) => {
-                        log::error!("failed to execute {}: {}", exe.display(), err);
+                Ok(exe) => {
+                    // initialize command to spawn another instance of this application
+                    let mut command = process::Command::new(&exe);
+
+                    // make the new window open at the same location as the currently active tab by
+                    // passing respective command line arguments
+                    let entity = self.tab_model.active();
+                    let active_tab_location =
+                        self.tab_model.data::<Tab>(entity).map(|tab| &tab.location);
+                    match active_tab_location {
+                        Some(
+                            Location::Desktop(path, ..)
+                            | Location::Path(path)
+                            | Location::Search(path, ..),
+                        ) => {
+                            command.arg(path);
+                        }
+                        Some(Location::Network(uri, ..)) => {
+                            command.arg(uri);
+                        }
+                        Some(Location::Recents) => {
+                            command.arg("--recents");
+                        }
+                        Some(Location::Trash) => {
+                            command.arg("--trash");
+                        }
+                        None => {}
+                    };
+
+                    // spawn the new window
+                    match command.spawn() {
+                        Ok(_child) => {}
+                        Err(err) => {
+                            log::error!("failed to execute {}: {}", exe.display(), err);
+                        }
                     }
-                },
+                }
                 Err(err) => {
                     log::error!("failed to get current executable path: {err}");
                 }
