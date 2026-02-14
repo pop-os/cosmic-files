@@ -48,7 +48,7 @@ use crate::{
     localize::LANGUAGE_SORTER,
     menu,
     mounter::{MOUNTERS, MounterItem, MounterItems, MounterKey, MounterMessage},
-    tab::{self, ItemMetadata, Location, Tab},
+    tab::{self, ItemMetadata, Location, SearchLocation, Tab},
     zoom::{zoom_in_view, zoom_out_view, zoom_to_default},
 };
 
@@ -779,19 +779,35 @@ impl App {
 
     fn search_set(&mut self, term_opt: Option<String>) -> Task<Message> {
         let location_opt = match term_opt {
-            Some(term) => self.tab.location.path_opt().map(|path| {
-                (
-                    Location::Search(
-                        path.clone(),
-                        term,
-                        self.tab.config.show_hidden,
-                        Instant::now(),
-                    ),
-                    true,
-                )
-            }),
+            Some(term) => {
+                let search_location = if let Some(path) = self.tab.location.path_opt() {
+                    Some(SearchLocation::Path(path.clone()))
+                } else if self.tab.location.is_recents() {
+                    Some(SearchLocation::Recents)
+                } else if self.tab.location.is_trash() {
+                    Some(SearchLocation::Trash)
+                } else {
+                    None
+                };
+
+                search_location.map(|search_location| {
+                    return (
+                        Location::Search(
+                            search_location,
+                            term,
+                            self.tab.config.show_hidden,
+                            Instant::now(),
+                        ),
+                        true,
+                    );
+                })
+            }
             None => match &self.tab.location {
-                Location::Search(path, ..) => Some((Location::Path(path.clone()), false)),
+                Location::Search(search_location, ..) => match search_location {
+                    SearchLocation::Path(path) => Some((Location::Path(path.clone()), false)),
+                    SearchLocation::Recents => Some((Location::Recents, false)),
+                    SearchLocation::Trash => Some((Location::Trash, false)),
+                },
                 _ => None,
             },
         };
