@@ -11,7 +11,7 @@ use cosmic::{
         event,
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers, key::Named},
-        stream,
+        mouse, stream,
         widget::scrollable,
         window,
     },
@@ -468,6 +468,7 @@ enum Message {
     Key(Modifiers, Key, Option<SmolStr>),
     ModifiersChanged(Modifiers),
     MounterItems(MounterKey, MounterItems),
+    Mouse(window::Id, mouse::Button),
     NewFolder,
     NotifyEvents(Vec<DebouncedEvent>),
     NotifyWatcher(WatcherWrapper),
@@ -852,6 +853,15 @@ impl App {
             let active = self.nav_model.active();
             segmented_button::Selectable::deactivate(&mut self.nav_model, active);
         }
+    }
+
+    fn close_context_menus(&mut self) -> Task<Message> {
+        self.tab.location_context_menu_index = None;
+        if self.tab.context_menu.is_some() {
+            return self.update(Message::TabMessage(tab::Message::ContextMenu(None, None)));
+        }
+
+        Task::none()
     }
 
     fn update_nav_model(&mut self) {
@@ -1300,9 +1310,9 @@ impl Application for App {
             return Task::none();
         }
 
-        if self.search_get().is_some() {
-            // Close search if open
-            return self.search_set(None);
+        if self.tab.location_context_menu_index.is_some() {
+            self.tab.location_context_menu_index = None;
+            return Task::none();
         }
 
         if self.tab.context_menu.is_some() {
@@ -1313,6 +1323,11 @@ impl Application for App {
             // Close location editing if enabled
             self.tab.edit_location = None;
             return Task::none();
+        }
+
+        if self.search_get().is_some() {
+            // Close search if open
+            return self.search_set(None);
         }
 
         let had_focused_button = self.tab.select_focus_id().is_some();
@@ -1529,6 +1544,12 @@ impl Application for App {
 
                 return Task::batch(commands);
             }
+            Message::Mouse(window_id, _button) => {
+                // Close context menu when clicking outside.
+                if self.core.main_window_id() == Some(window_id) {
+                    return self.close_context_menus();
+                }
+            }
             Message::NewFolder => {
                 if let Some(path) = self.tab.location.path_opt() {
                     self.dialog_pages.push_back(DialogPage::NewFolder {
@@ -1684,14 +1705,18 @@ impl Application for App {
                 )));
             }
             Message::SearchActivate => {
-                return if self.search_get().is_none() {
-                    self.search_set(Some(String::new()))
+                let mut tasks = vec![self.close_context_menus()];
+
+                if self.search_get().is_none() {
+                    tasks.push(self.search_set(Some(String::new())));
                 } else {
-                    widget::text_input::focus(self.search_id.clone())
-                };
+                    tasks.push(widget::text_input::focus(self.search_id.clone()));
+                }
+
+                return Task::batch(tasks);
             }
             Message::SearchClear => {
-                return self.search_set(None);
+                return Task::batch([self.close_context_menus(), self.search_set(None)]);
             }
             Message::SearchInput(input) => {
                 return self.search_set(Some(input));
@@ -1972,7 +1997,11 @@ impl Application for App {
         struct WatcherSubscription;
         struct TimeSubscription;
         let mut subscriptions = vec![
-            event::listen_with(|event, status, _window_id| match event {
+            event::listen_with(|event, status, window_id| match event {
+                Event::Mouse(mouse::Event::ButtonPressed(button)) => match status {
+                    event::Status::Ignored => Some(Message::Mouse(window_id, button)),
+                    event::Status::Captured => None,
+                },
                 Event::Keyboard(KeyEvent::KeyPressed {
                     key,
                     modifiers,
