@@ -1,5 +1,5 @@
 cosmic-files = Gestor de Arquivos COSMIC
-comment = Gerenciador de arquivos do COSMIC
+comment = Gerenciador de arquivos do ambiente COSMIC
 empty-folder = Pasta vazia
 empty-folder-hidden = Pasta vazia (contém itens ocultos)
 no-results = Nenhum item encontrado
@@ -426,3 +426,10 @@ type-to-search-select = Seleciona o primeiro arquivo ou pasta correspondente
 pasted-image = Imagem colada
 pasted-text = Texto copiado
 pasted-video = Vídeo copiado
+copy-to-title = Selecione o destino da cópia
+copy-to-button-label = Copiar
+move-to-title = Selecione o destino da movimentação
+move-to-button-label = Mover
+copy-to = Copiar para...
+move-to = Mover para...
+keywords = Pasta;Gerenciador;
