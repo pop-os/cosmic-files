@@ -622,6 +622,8 @@ pub fn menu_bar<'a>(
                     vec![
                         menu_button_optional(fl!("cut"), Action::Cut, selected > 0),
                         menu_button_optional(fl!("copy"), Action::Copy, selected > 0),
+                        menu_button_optional(fl!("move-to"), Action::MoveTo, selected > 0),
+                        menu_button_optional(fl!("copy-to"), Action::CopyTo, selected > 0),
                         menu_button_optional(fl!("paste"), Action::Paste, selected > 0),
                         menu::Item::Button(fl!("select-all"), None, Action::SelectAll),
                         menu::Item::Divider,
