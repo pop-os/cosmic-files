@@ -247,14 +247,19 @@ pub fn context_menu<'a>(
             } else {
                 //TODO: need better designs for menu with no selection
                 //TODO: have things like properties but they apply to the folder?
-                children.push(menu_item(fl!("new-folder"), Action::NewFolder).into());
-                children.push(menu_item(fl!("new-file"), Action::NewFile).into());
-                children.push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
-                children.push(divider::horizontal::light().into());
+                if tab.location != Location::Recents {
+                    children.push(menu_item(fl!("new-folder"), Action::NewFolder).into());
+                    children.push(menu_item(fl!("new-file"), Action::NewFile).into());
+                    children.push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
+                    children.push(divider::horizontal::light().into());
+                }
+
                 if tab.mode.multiple() {
                     children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
                 }
-                children.push(menu_item(fl!("paste"), Action::Paste).into());
+                if tab.location != Location::Recents {
+                    children.push(menu_item(fl!("paste"), Action::Paste).into());
+                }
 
                 //TODO: only show if cosmic-settings is found?
                 if matches!(tab.mode, tab::Mode::Desktop) {
