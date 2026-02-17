@@ -123,7 +123,12 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else if &arg == "--trash" {
             Location::Trash
         } else if &arg == "--recents" {
-            Location::Recents
+            if config.show_recents {
+                Location::Recents
+            } else {
+                log::warn!("recents feature is disabled in config");
+                continue;
+            }
         } else if &arg == "--network" {
             Location::Network("network:///".to_string(), fl!("networks"), None)
         } else {

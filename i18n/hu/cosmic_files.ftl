@@ -1,5 +1,5 @@
 cosmic-files = COSMIC Fájlok
-comment = Fájlkezelő a COSMIC asztali környezethez 
+comment = Fájlkezelő a COSMIC asztali környezethez
 keywords = mappa;fájl;kezelő;
 empty-folder = Üres mappa
 empty-folder-hidden = Üres mappa (Rejtett elemeket tartalmaz)
@@ -427,3 +427,9 @@ type-to-search-select = Kijelöli az első egyező fájlt vagy mappát
 pasted-image = Beillesztett kép
 pasted-text = Beillesztett szöveg
 pasted-video = Beillesztett videó
+copy-to-title = Másolási cél kiválasztása
+copy-to-button-label = Másolás
+move-to-title = Áthelyezési cél kiválasztása
+move-to-button-label = Áthelyezés
+copy-to = Másolás ide…
+move-to = Áthelyezés ide…

@@ -5,13 +5,13 @@ no-results = Keine Ergebnisse gefunden
 filesystem = Dateisystem
 home = Benutzerordner
 networks = Netzwerke
-notification-in-progress = Dateivorgänge sind im Gange.
+notification-in-progress = Dateivorgänge werden ausgeführt
 trash = Papierkorb
 recents = Zuletzt benutzt
 undo = Rückgängig
 today = Heute
 # Optionen für die Desktop-Ansicht
-desktop-view-options = Optionen für die Desktop-Ansicht...
+desktop-view-options = Optionen für die Desktop-Ansicht…
 show-on-desktop = Auf Desktop anzeigen
 desktop-folder-content = Inhalt des Desktop-Ordners
 mounted-drives = Eingehängte Laufwerke
@@ -55,8 +55,8 @@ extract-to-title = In Ordner entpacken
 
 ## Dialog zum Leeren des Papierkorbs
 
-empty-trash = Papierkorb leeren?
-empty-trash-warning = Bist du sicher, dass du alle Elemente im Papierkorb endgültig löschen möchtest?
+empty-trash = Papierkorb leeren
+empty-trash-warning = Elemente im Papierkorb werden endgültig gelöscht
 
 ## Einhängefehler-Dialog
 
@@ -398,3 +398,6 @@ sort-oldest-first = Älteste zuerst
 sort-smallest-to-largest = Kleinste bis größte
 sort-largest-to-smallest = Größte bis kleinste
 repository = Repository
+empty-trash-title = Papierkorb leeren?
+copy-to-title = Kopierziel auswählen
+copy-to-button-label = Kopieren
