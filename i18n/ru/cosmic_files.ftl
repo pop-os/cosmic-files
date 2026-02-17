@@ -1,4 +1,4 @@
-cosmic-files = Файлы COSMIC
+cosmic-files = Файлы
 empty-folder = Папка пуста
 empty-folder-hidden = Папка пуста (есть скрытые элементы)
 no-results = Ничего не найдено
@@ -369,3 +369,11 @@ type-to-search-select = Выделение первого подходящего
 pasted-image = Вставленное изображение
 pasted-text = Вставленный текст
 pasted-video = Вставленное видео
+copy-to-title = Выберите папку назначения
+copy-to-button-label = Копировать
+move-to-title = Выберите папку назначения
+move-to-button-label = Переместить
+copy-to = Копировать в...
+move-to = Переместить в...
+comment = Файловый менеджер для среды COSMIC
+keywords = Папка;Менеджер;

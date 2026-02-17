@@ -1,24 +1,24 @@
 cosmic-files = COSMIC Bestanden
 empty-folder = Lege map
-empty-folder-hidden = Lege map (met verborgen bestanden)
+empty-folder-hidden = Lege map (met verborgen items)
 no-results = Geen resultaten gevonden
 filesystem = Bestandssysteem
 home = Persoonlijke map
 networks = Netwerken
-notification-in-progress = Bestanden worden nog bewerkt
+notification-in-progress = Bestandsbewerkingen worden uitgevoerd
 trash = Prullenbak
 recents = Recente bestanden
-undo = Herstel
+undo = Ongedaan maken
 today = Vandaag
 # Desktop view options
 desktop-view-options = Opties voor bureaubladweergave…
 show-on-desktop = Op bureaublad weergeven
-desktop-folder-content = Bestanden in de Bureablad map
+desktop-folder-content = Bestanden in de Bureablad-map
 mounted-drives = Aangekoppelde schijven
-trash-folder-icon = Pictogram van de map “Prullenbak”
-icon-size-and-spacing = Pictogram grootte en tussenruimte
+trash-folder-icon = Pictogram van de Prullenbak-map
+icon-size-and-spacing = Pictogramgrootte en -afstand
 icon-size = Pictogramgrootte
-grid-spacing = Rastergrootte
+grid-spacing = Rasterafstand
 # List view
 name = Naam
 modified = Gewijzigd
@@ -26,17 +26,17 @@ trashed-on = Verwijderd op
 size = Grootte
 # Progress footer
 details = Details
-dismiss = Negeer bericht
+dismiss = Bericht negeren
 operations-running =
     { $running } { $running ->
-        [one] bewerking
-       *[other] bewerkingen
-    } uitvoeren ({ $percent }%)…
+        [one] bewerking wordt
+       *[other] bewerkingen worden
+    } uitgevoerd ({ $percent }%) …
 operations-running-finished =
     { $running } { $running ->
-        [one] bewerking
-       *[other] bewerkingen
-    } uitvoeren ({ $percent }%), { $finished } voltooid...
+        [one] bewerking wordt
+       *[other] bewerkingen worden
+    } uitgevoerd ({ $percent }%), { $finished } voltooid...
 pause = Pauzeren
 resume = Hervatten
 
@@ -45,18 +45,18 @@ resume = Hervatten
 
 ## Compress Dialog
 
-create-archive = Archiefbestand maken
+create-archive = Archief aanmaken
 
 ## Extract Dialog
 
 extract-password-required = Wachtwoord vereist
-extract-to = Uitpakken naar...
+extract-to = Uitpakken naar…
 extract-to-title = Uitpakken naar map
 
 ## Empty Trash Dialog
 
-empty-trash = Leeg prullenbak
-empty-trash-warning = Weet u zeker dat u alles in de prullenbak permanent wilt verwijderen?
+empty-trash = Prullenbak leegmaken
+empty-trash-warning = Bestanden in de Prullenbak-map worden permanent verwijderd
 
 ## Mount Error Dialog
 
@@ -68,40 +68,40 @@ create-new-file = Nieuw bestand aanmaken
 create-new-folder = Nieuwe map aanmaken
 file-name = Bestandsnaam
 folder-name = Mapnaam
-file-already-exists = Er bestaat al een bestand met deze naam.
-folder-already-exists = Er bestaat al een map met deze naam.
-name-hidden = Namen die met '.' beginnen worden verborgen.
-name-invalid = De naam '{ $filename }' is niet geldig.
-name-no-slashes = De naam mag geen slash '/' bevatten.
+file-already-exists = Er bestaat al een bestand met deze naam
+folder-already-exists = Er bestaat al een map met deze naam
+name-hidden = Namen die met “.” beginnen worden verborgen
+name-invalid = Ongeldige naam “{ $filename }”
+name-no-slashes = Naam mag geen schuine strepen bevatten
 
 ## Open/Save Dialog
 
-cancel = Annuleer
+cancel = Annuleren
 create = Aanmaken
 open = Openen
-open-file = Open een bestand
-open-folder = Open een map
-open-in-new-tab = Open in nieuw tabblad
-open-in-new-window = Open in nieuw venster
-open-item-location = Open locatie van item
+open-file = Bestand openen
+open-folder = Map openen
+open-in-new-tab = In nieuw tabblad openen
+open-in-new-window = In nieuw venster openen
+open-item-location = Bestandslocatie openen
 open-multiple-files = Meerdere bestanden openen
 open-multiple-folders = Meerdere mappen openen
-save = Sla op
+save = Opslaan
 save-file = Bestand opslaan
 
 ## Open With Dialog
 
-open-with-title = Hoe wilt u '{ $name }' openen?
-browse-store = Verken { $store }
+open-with-title = Hoe wilt u “{ $name }” openen?
+browse-store = { $store } verkennen
 other-apps = Andere toepassingen
 related-apps = Gerelateerde toepassingen
 
 ## Permanently delete Dialog
 
-selected-items = de { $items } geselecteerde items
+selected-items = De { $items } geselecteerde items
 permanently-delete-question = Permanent verwijderen?
-delete = Verwijder
-permanently-delete-warning = Weet u zeker dat u { $target } permanent wilt verwijderen? Dit kan niet ongedaan worden gemaakt.
+delete = Verwijderen
+permanently-delete-warning = { $target } wordt permanent verwijderd. Dit kan niet ongedaan gemaakt worden.
 
 ## Rename Dialog
 
@@ -110,10 +110,10 @@ rename-folder = Map hernoemen
 
 ## Replace Dialog
 
-replace = Vervang
-replace-title = '{ $filename }' bestaat al in deze map.
-replace-warning = Wilt u het bestand vervangen door de nieuwe versie? Dit zal de bestaande inhoud overschrijven.
-replace-warning-operation = Wilt u het bestand vervangen? De bestaande inhoud wordt overschreven!
+replace = Vervangen
+replace-title = “{ $filename }” bestaat al op deze locatie
+replace-warning = Wilt u het bestaande bestand vervangen? Als u het vervangt, wordt de inhoud ervan overschreven.
+replace-warning-operation = Wilt u het vervangen? Dit kan niet ongedaan gemaakt worden.
 original-file = Oorspronkelijk bestand
 replace-with = Vervangen door
 apply-to-all = Op alles toepassen
@@ -122,8 +122,8 @@ skip = Overslaan
 
 ## Set as Executable and Launch Dialog
 
-set-executable-and-launch = Uitvoerbaar maken en dan starten
-set-executable-and-launch-description = Wilt u '{ $name }' uitvoerbaar maken en dan starten?
+set-executable-and-launch = Als uitvoerbaar instellen en dan starten
+set-executable-and-launch-description = Wilt u “{ $name }” als uitvoerbaar instellen en dan starten?
 set-and-launch = Uitvoerbaar maken en starten
 
 ## Metadata Dialog
@@ -135,7 +135,7 @@ other = Anderen
 
 ### Mode 0
 
-none = Geen rechten
+none = Geen
 
 ### Mode 1 (unusual)
 
@@ -173,7 +173,7 @@ favorite-path-error-description =
     De map bestaat mogelijk niet of u heeft geen toestemming om die te openen.
 
     Wilt u de map uit de favorieten verwijderen?
-remove = Verwijder
+remove = Verwijderen
 keep = Behouden
 
 # Context Pages
@@ -185,9 +185,9 @@ keep = Behouden
 ## Add Network Drive
 
 add-network-drive = Netwerkschijf toevoegen
-connect = Verbind
+connect = Verbinden
 connect-anonymously = Anoniem verbinden
-connecting = Verbinding maken...
+connecting = Verbinding maken…
 domain = Domein
 enter-server-address = Serveradres invoeren
 network-drive-description =
@@ -307,7 +307,7 @@ unknown-folder = Onbekende map
 
 ## Open with
 
-menu-open-with = Openen met...
+menu-open-with = Openen met…
 default-app = { $name } (standaard)
 
 ## Show details
@@ -328,7 +328,7 @@ single-click = Een keer klikken om te openen
 
 ### Appearance
 
-appearance = Weergave
+appearance = Uiterlijk
 theme = Thema
 match-desktop = Systeemstandaard
 dark = Donker
@@ -344,9 +344,9 @@ add-to-sidebar = Favoriet aan zijbalk toevoegen
 compress = Comprimeren
 delete-permanently = Permanent verwijderen
 extract-here = Uitpakken
-new-file = Nieuw bestand...
+new-file = Nieuw bestand…
 new-folder = Nieuwe map...
-open-in-terminal = Openen in terminal
+open-in-terminal = In terminal openen
 move-to-trash = Naar prullenbak verplaatsen
 restore-from-trash = Uit prullenbak terugzetten
 remove-from-sidebar = Favoriet uit zijbalk verwijderen
@@ -358,7 +358,7 @@ sort-by-trashed = Sorteren op tijdstip van verwijderen
 ## Desktop
 
 change-wallpaper = Schermachtergrond wijzigen...
-desktop-appearance = Bureaublad uiterlijk...
+desktop-appearance = Uiterlijk van het bureaublad…
 display-settings = Beeldschermbeheer...
 
 # Menu
@@ -371,23 +371,23 @@ new-tab = Nieuw tabblad
 new-window = Nieuw venster
 reload-folder = Opnieuw laden
 rename = Hernoemen...
-close-tab = Sluit tabblad
-quit = Sluit
+close-tab = Tabblad sluiten
+quit = Sluiten
 
 ## Edit
 
-edit = Bewerk
-cut = Knip
-copy = Kopieer
-paste = Plak
-select-all = Selecteer alles
+edit = Bewerken
+cut = Knippen
+copy = Kopiëren
+paste = Plakken
+select-all = Alles selecteren
 
 ## View
 
-zoom-in = Zoom in
+zoom-in = Inzoomen
 default-size = Standaardgrootte
-zoom-out = Zoom uit
-view = Aanzicht
+zoom-out = Uitzoomen
+view = Beeld
 grid-view = Rasterweergave
 list-view = Lijstweergave
 show-hidden-files = Verborgen bestanden tonen
@@ -413,3 +413,21 @@ removing-from-recents =
         [one] item
        *[other] items
     } van { recents }
+pasted-image = Geplakte afbeelding
+pasted-text = Geplakte tekst
+pasted-video = Geplakte video
+repository = Broncode
+empty-trash-title = Prullenbak leegmaken?
+removed-from-recents =
+    { $items } { $items ->
+        [one] item
+       *[other] items
+    } uit { recents } verwijderd
+remove-from-recents = Uit recente verwijderen
+type-to-search-select = Dit selecteert het eerst overeenkomende bestand of map
+comment = Bestandsbeheerder voor COSMIC desktop
+copy-to-title = Kopieerbestemming aanwijzen
+copy-to-button-label = Kopiëren
+move-to-button-label = Verplaatsen
+copy-to = Kopiëren naar…
+move-to = Verplaatsen naar…
