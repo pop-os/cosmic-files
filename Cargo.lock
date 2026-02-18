@@ -6169,8 +6169,9 @@ dependencies = [
 
 [[package]]
 name = "recently-used-xbel"
-version = "1.1.0"
-source = "git+https://github.com/pop-os/recently-used-xbel.git#eeba9e08b0446175d7dd4f526d21ea867ed37e87"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63ab2febcd4f0245fbadd0b44f7cd35207128a7b210a089e65740625a45399b5"
 dependencies = [
  "chrono",
  "dirs 5.0.1",
