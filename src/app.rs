@@ -4300,6 +4300,7 @@ impl Application for App {
                         }
                         tab::Command::OpenFile(paths) => commands.push(self.open_file(&paths)),
                         tab::Command::OpenInNewTab(path) => {
+                            commands.push(self.close_context_menus());
                             commands.push(self.open_tab(Location::Path(path), false, None));
                         }
                         tab::Command::OpenInNewWindow(path) => match env::current_exe() {
@@ -4746,25 +4747,21 @@ impl Application for App {
                     }
                 }
                 NavMenuAction::OpenInNewTab(entity) => {
-                    match self.nav_model.data::<Location>(entity) {
-                        Some(Location::Network(uri, display_name, path)) => {
-                            return self.open_tab(
-                                Location::Network(uri.clone(), display_name.clone(), path.clone()),
-                                false,
-                                None,
-                            );
-                        }
+                    let open_task = match self.nav_model.data::<Location>(entity) {
+                        Some(Location::Network(uri, display_name, path)) => self.open_tab(
+                            Location::Network(uri.clone(), display_name.clone(), path.clone()),
+                            false,
+                            None,
+                        ),
                         Some(Location::Path(path)) => {
-                            return self.open_tab(Location::Path(path.clone()), false, None);
+                            self.open_tab(Location::Path(path.clone()), false, None)
                         }
-                        Some(Location::Recents) => {
-                            return self.open_tab(Location::Recents, false, None);
-                        }
-                        Some(Location::Trash) => {
-                            return self.open_tab(Location::Trash, false, None);
-                        }
-                        _ => {}
-                    }
+                        Some(Location::Recents) => self.open_tab(Location::Recents, false, None),
+                        Some(Location::Trash) => self.open_tab(Location::Trash, false, None),
+                        _ => Task::none(),
+                    };
+
+                    return Task::batch([self.close_context_menus(), open_task]);
                 }
 
                 // Open the selected path in a new cosmic-files window.
