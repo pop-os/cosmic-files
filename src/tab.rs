@@ -1221,6 +1221,13 @@ fn uri_to_path(uri: String) -> Option<PathBuf> {
     })
 }
 
+pub fn has_recents() -> bool {
+    match recently_used_xbel::parse_file() {
+        Ok(recent_files) => !recent_files.bookmarks.is_empty(),
+        Err(_) => false,
+    }
+}
+
 pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
     let recent_files = match recently_used_xbel::parse_file() {
         Ok(recent_files) => recent_files,
@@ -5928,6 +5935,7 @@ impl Tab {
             tab_column = tab_column.push(popover);
         }
         match &self.location {
+            Location::Recents => {}
             Location::Trash => {
                 if let Some(items) = self.items_opt()
                     && !items.is_empty()

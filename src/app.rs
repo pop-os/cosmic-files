@@ -313,13 +313,14 @@ pub enum PreviewKind {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum NavMenuAction {
+    ClearRecents,
+    EmptyTrash,
     Open(segmented_button::Entity),
     OpenWith(segmented_button::Entity),
     OpenInNewTab(segmented_button::Entity),
     OpenInNewWindow(segmented_button::Entity),
     Preview(segmented_button::Entity),
     RemoveFromSidebar(segmented_button::Entity),
-    EmptyTrash,
 }
 
 impl MenuAction for NavMenuAction {
@@ -2420,6 +2421,15 @@ impl Application for App {
                 NavMenuAction::RemoveFromSidebar(entity),
             ));
         }
+
+        if matches!(location_opt, Some(Location::Recents)) && tab::has_recents() {
+            items.push(cosmic::widget::menu::Item::Button(
+                fl!("clear-recents-history"),
+                None,
+                NavMenuAction::ClearRecents,
+            ));
+        }
+
         if matches!(location_opt, Some(Location::Trash))
             && !trash::os_limited::is_empty().unwrap_or(true)
         {
@@ -4697,6 +4707,16 @@ impl Application for App {
                 }
             }
             Message::NavMenuAction(action) => match action {
+                NavMenuAction::ClearRecents => match recently_used_xbel::clear_recently_used() {
+                    Ok(()) => {}
+                    Err(err) => {
+                        log::warn!("failed to clear recents history: {}", err);
+                    }
+                },
+                NavMenuAction::EmptyTrash => {
+                    return self
+                        .push_dialog(DialogPage::EmptyTrash, Some(EMPTY_TRASH_BUTTON_ID.clone()));
+                }
                 NavMenuAction::Open(entity) => {
                     if let Some(path) = self
                         .nav_model
@@ -4840,11 +4860,6 @@ impl Application for App {
                         config_set!(favorites, favorites);
                         return self.update_config();
                     }
-                }
-
-                NavMenuAction::EmptyTrash => {
-                    return self
-                        .push_dialog(DialogPage::EmptyTrash, Some(EMPTY_TRASH_BUTTON_ID.clone()));
                 }
             },
             Message::Recents => {
