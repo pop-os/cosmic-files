@@ -3972,6 +3972,20 @@ impl Application for App {
                         .collect();
                     if !selected.is_empty() {
                         //TODO: batch rename
+                        let select_end = selected.last().and_then(|path| {
+                            let name = path.file_name()?.to_str()?;
+                            if path.is_dir() {
+                                Some(name.len())
+                            } else {
+                                // Select only the stem (e.g. "photo" in "photo.jpg")
+                                // For hidden files like ".bashrc" (dot at pos 0), select all
+                                Some(
+                                    name.rfind('.')
+                                        .filter(|&pos| pos > 0)
+                                        .unwrap_or(name.len()),
+                                )
+                            }
+                        });
                         let tasks = selected
                             .into_iter()
                             .filter_map(|path| {
@@ -3987,7 +4001,14 @@ impl Application for App {
                             })
                             .chain(std::iter::once(widget::text_input::focus(
                                 self.dialog_text_input.clone(),
-                            )));
+                            )))
+                            .chain(select_end.map(|end| {
+                                widget::text_input::select_range(
+                                    self.dialog_text_input.clone(),
+                                    0,
+                                    end,
+                                )
+                            }));
                         return Task::batch(tasks);
                     }
                 }
