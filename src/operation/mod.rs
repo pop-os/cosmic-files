@@ -1161,8 +1161,10 @@ impl Operation {
                     .map_err(|s| OperationError::from_state(s, &controller))?;
 
                 let controller_clone = controller.clone();
+                let path_clone = path.clone();
                 compio::runtime::spawn_blocking(move || -> Result<(), OperationError> {
                     let controller = controller_clone;
+                    let path = path_clone;
                     //TODO: what to do on non-Unix systems?
                     #[cfg(unix)]
                     {
@@ -1177,7 +1179,10 @@ impl Operation {
                 .await
                 .map_err(wrap_compio_spawn_error)?
                 .map_err(|e| OperationError::from_err(e, &controller))?;
-                Ok(OperationSelection::default())
+                Ok(OperationSelection {
+                    ignored: Vec::new(),
+                    selected: vec![path],
+                })
             }
         };
 
