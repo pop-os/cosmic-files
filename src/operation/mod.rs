@@ -32,6 +32,7 @@ async fn handle_replace(
     file_from: PathBuf,
     file_to: PathBuf,
     multiple: bool,
+    conflict_count: usize,
 ) -> ReplaceResult {
     let item_from = match tab::item_from_path(file_from, IconSizes::default()) {
         Ok(ok) => ok,
@@ -59,6 +60,7 @@ async fn handle_replace(
                 to: item_to,
                 multiple,
                 apply_to_all: false,
+                conflict_count,
                 tx,
             },
             Some(REPLACE_BUTTON_ID.clone()),
@@ -180,9 +182,9 @@ async fn copy_or_move(
 
         {
             let msg_tx = msg_tx.clone();
-            context = context.on_replace(move |op| {
+            context = context.on_replace(move |op, conflict_count| {
                 let msg_tx = msg_tx.clone();
-                Box::pin(handle_replace(msg_tx, op.from.clone(), op.to.clone(), true))
+                Box::pin(handle_replace(msg_tx, op.from.clone(), op.to.clone(), true, conflict_count))
             });
         }
 

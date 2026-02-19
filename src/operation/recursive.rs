@@ -23,17 +23,18 @@ pub struct Context {
     on_replace: Pin<Box<dyn OnReplace>>,
     pub(crate) op_sel: OperationSelection,
     replace_result_opt: Option<ReplaceResult>,
+    remaining_conflicts: usize,
 }
 
 pub trait OnProgress: Fn(&Op, &Progress) + 'static {}
 impl<F> OnProgress for F where F: Fn(&Op, &Progress) + 'static {}
 
 pub trait OnReplace:
-    for<'a> Fn(&'a Op) -> Pin<Box<dyn Future<Output = ReplaceResult> + 'a>> + 'static
+    for<'a> Fn(&'a Op, usize) -> Pin<Box<dyn Future<Output = ReplaceResult> + 'a>> + 'static
 {
 }
 impl<F> OnReplace for F where
-    F: for<'a> Fn(&'a Op) -> Pin<Box<dyn Future<Output = ReplaceResult> + 'a>> + 'static
+    F: for<'a> Fn(&'a Op, usize) -> Pin<Box<dyn Future<Output = ReplaceResult> + 'a>> + 'static
 {
 }
 
@@ -44,9 +45,10 @@ impl Context {
             buf: vec![0u8; 128 * 1024],
             controller,
             on_progress: Box::new(|_op, _progress| {}),
-            on_replace: Box::pin(|_op| Box::pin(async { ReplaceResult::Cancel })),
+            on_replace: Box::pin(|_op, _count| Box::pin(async { ReplaceResult::Cancel })),
             op_sel: OperationSelection::default(),
             replace_result_opt: None,
+            remaining_conflicts: 0,
         }
     }
 
@@ -156,6 +158,17 @@ impl Context {
         cleanup_ops.reverse();
         ops.append(&mut cleanup_ops);
 
+        // Count potential conflicts (files that would need replacement)
+        self.remaining_conflicts = ops
+            .iter()
+            .filter(|op| {
+                matches!(
+                    op.kind,
+                    OpKind::Copy | OpKind::Move { .. } | OpKind::Symlink { .. }
+                ) && op.to.is_file()
+            })
+            .count();
+
         let total_ops = ops.len();
         for (current_ops, mut op) in ops.into_iter().enumerate() {
             self.controller
@@ -221,7 +234,7 @@ impl Context {
     async fn replace(&mut self, op: &Op) -> Result<ControlFlow<bool, PathBuf>, Box<dyn Error>> {
         let replace_result = match self.replace_result_opt {
             Some(result) => result,
-            None => (self.on_replace)(op).await,
+            None => (self.on_replace)(op, self.remaining_conflicts).await,
         };
 
         match replace_result {
