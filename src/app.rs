@@ -28,7 +28,7 @@ use cosmic::{
         event,
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers},
-        stream,
+        mouse, stream,
         widget::scrollable,
         window::{self, Event as WindowEvent, Id as WindowId},
     },
@@ -146,6 +146,7 @@ pub enum Action {
     AddToSidebar,
     Compress,
     Copy,
+    CopyPath,
     CopyTo,
     Cut,
     CosmicSettingsDesktop,
@@ -215,6 +216,7 @@ impl Action {
             Self::AddToSidebar => Message::AddToSidebar(entity_opt),
             Self::Compress => Message::Compress(entity_opt),
             Self::Copy => Message::Copy(entity_opt),
+            Self::CopyPath => Message::CopyPath(entity_opt),
             Self::CopyTo => Message::CopyTo(entity_opt),
             Self::Cut => Message::Cut(entity_opt),
             Self::CosmicSettingsDesktop => Message::CosmicSettings("desktop"),
@@ -340,6 +342,7 @@ pub enum Message {
     Compress(Option<Entity>),
     Config(Config),
     Copy(Option<Entity>),
+    CopyPath(Option<Entity>),
     CopyTo(Option<Entity>),
     CopyToResult(DialogResult),
     CosmicSettings(&'static str),
@@ -366,6 +369,7 @@ pub enum Message {
     ModifiersChanged(window::Id, Modifiers),
     MounterItems(MounterKey, MounterItems),
     MountResult(MounterKey, MounterItem, Result<bool, String>),
+    Mouse(window::Id, mouse::Button),
     MoveTo(Option<Entity>),
     MoveToResult(DialogResult),
     NavBarClose(Entity),
@@ -1551,6 +1555,21 @@ impl App {
         }
     }
 
+    fn close_context_menus(&mut self) -> Task<Message> {
+        let active = self.tab_model.active();
+        if let Some(tab) = self.tab_model.data_mut::<Tab>(active) {
+            tab.location_context_menu_index = None;
+            if tab.context_menu.is_some() {
+                return self.update(Message::TabMessage(
+                    Some(active),
+                    tab::Message::ContextMenu(None, None),
+                ));
+            }
+        }
+
+        Task::none()
+    }
+
     fn update_nav_model(&mut self) {
         let mut nav_model = segmented_button::ModelBuilder::default();
 
@@ -2591,11 +2610,12 @@ impl Application for App {
             self.set_show_context(false);
             return cosmic::task::message(cosmic::action::app(Message::SetShowDetails(false)));
         }
-        if self.search_get().is_some() {
-            // Close search if open
-            return self.search_set_active(None);
-        }
         if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+            if tab.location_context_menu_index.is_some() {
+                tab.location_context_menu_index = None;
+                return Task::none();
+            }
+
             if tab.context_menu.is_some() {
                 return self.update(Message::TabMessage(
                     Some(entity),
@@ -2616,6 +2636,11 @@ impl Application for App {
                 }
                 return Task::none();
             }
+        }
+
+        if self.search_get().is_some() {
+            // Close search if open
+            return self.search_set_active(None);
         }
 
         Task::none()
@@ -2743,6 +2768,13 @@ impl Application for App {
                 let paths = self.selected_paths(entity_opt);
                 let contents = ClipboardCopy::new(ClipboardKind::Copy, paths);
                 return clipboard::write_data(contents);
+            }
+            Message::CopyPath(entity_opt) => {
+                let paths = self.selected_paths(entity_opt);
+                let path_strings: Vec<String> =
+                    paths.into_iter().map(|p| p.display().to_string()).collect();
+                let text = path_strings.join("\n");
+                return clipboard::write(text);
             }
             Message::CopyTo(entity_opt) => {
                 let selected_paths: Box<[_]> = self.selected_paths(entity_opt).collect();
@@ -3294,6 +3326,12 @@ impl Application for App {
                     );
                 }
             },
+            Message::Mouse(window_id, _button) => {
+                // Close context menu when clicking outside.
+                if self.core.main_window_id() == Some(window_id) {
+                    return self.close_context_menus();
+                }
+            }
             Message::MoveTo(entity_opt) => {
                 let selected_paths: Box<[_]> = self.selected_paths(entity_opt).collect();
                 return self.move_to(&selected_paths);
@@ -4057,14 +4095,18 @@ impl Application for App {
                 ));
             }
             Message::SearchActivate => {
-                return if self.search_get().is_none() {
-                    self.search_set_active(Some(String::new()))
+                let mut tasks = vec![self.close_context_menus()];
+
+                if self.search_get().is_none() {
+                    tasks.push(self.search_set_active(Some(String::new())));
                 } else {
-                    widget::text_input::focus(self.search_id.clone())
+                    tasks.push(widget::text_input::focus(self.search_id.clone()));
                 };
+
+                return Task::batch(tasks);
             }
             Message::SearchClear => {
-                return self.search_set_active(None);
+                return Task::batch([self.close_context_menus(), self.search_set_active(None)]);
             }
             Message::SearchInput(input) => {
                 return self.search_set_active(Some(input));
@@ -4085,18 +4127,7 @@ impl Application for App {
                 return self.update_config();
             }
             Message::TabActivate(entity) => {
-                let mut tasks = Vec::new();
-
-                // Close old context menu
-                let active = self.tab_model.active();
-                if let Some(tab) = self.tab_model.data_mut::<Tab>(active)
-                    && tab.context_menu.is_some()
-                {
-                    tasks.push(self.update(Message::TabMessage(
-                        Some(active),
-                        tab::Message::ContextMenu(None, None),
-                    )));
-                }
+                let mut tasks = vec![self.close_context_menus()];
 
                 // Activate new tab
                 self.tab_model.activate(entity);
@@ -4327,6 +4358,7 @@ impl Application for App {
                         }
                         tab::Command::OpenFile(paths) => commands.push(self.open_file(&paths)),
                         tab::Command::OpenInNewTab(path) => {
+                            commands.push(self.close_context_menus());
                             commands.push(self.open_tab(Location::Path(path), false, None));
                         }
                         tab::Command::OpenInNewWindow(path) => match env::current_exe() {
@@ -4783,25 +4815,21 @@ impl Application for App {
                     }
                 }
                 NavMenuAction::OpenInNewTab(entity) => {
-                    match self.nav_model.data::<Location>(entity) {
-                        Some(Location::Network(uri, display_name, path)) => {
-                            return self.open_tab(
-                                Location::Network(uri.clone(), display_name.clone(), path.clone()),
-                                false,
-                                None,
-                            );
-                        }
+                    let open_task = match self.nav_model.data::<Location>(entity) {
+                        Some(Location::Network(uri, display_name, path)) => self.open_tab(
+                            Location::Network(uri.clone(), display_name.clone(), path.clone()),
+                            false,
+                            None,
+                        ),
                         Some(Location::Path(path)) => {
-                            return self.open_tab(Location::Path(path.clone()), false, None);
+                            self.open_tab(Location::Path(path.clone()), false, None)
                         }
-                        Some(Location::Recents) => {
-                            return self.open_tab(Location::Recents, false, None);
-                        }
-                        Some(Location::Trash) => {
-                            return self.open_tab(Location::Trash, false, None);
-                        }
-                        _ => {}
-                    }
+                        Some(Location::Recents) => self.open_tab(Location::Recents, false, None),
+                        Some(Location::Trash) => self.open_tab(Location::Trash, false, None),
+                        _ => Task::none(),
+                    };
+
+                    return Task::batch([self.close_context_menus(), open_task]);
                 }
 
                 // Open the selected path in a new cosmic-files window.
@@ -6196,6 +6224,10 @@ impl Application for App {
         let mut subscriptions = vec![
             //TODO: filter more events by window id
             event::listen_with(|event, status, window_id| match event {
+                Event::Mouse(mouse::Event::ButtonPressed(button)) => match status {
+                    event::Status::Ignored => Some(Message::Mouse(window_id, button)),
+                    event::Status::Captured => None,
+                },
                 Event::Keyboard(KeyEvent::KeyPressed {
                     key,
                     modifiers,
