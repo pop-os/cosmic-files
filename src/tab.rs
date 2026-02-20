@@ -1666,6 +1666,7 @@ pub enum Command {
     OpenFile(Vec<PathBuf>),
     OpenInNewTab(PathBuf),
     OpenInNewWindow(PathBuf),
+    CopyString(String),
     OpenTrash,
     Preview(PreviewKind),
     SetOpenWith(Mime, String),
@@ -1680,6 +1681,7 @@ pub enum Message {
     AddNetworkDrive,
     AutoScroll(Option<f32>),
     Click(Option<usize>),
+    CopyString(String),
     DoubleClick(Option<usize>),
     ClickRelease(Option<usize>),
     Config(TabConfig),
@@ -2355,6 +2357,32 @@ impl Item {
             "type",
             mime = self.mime.to_string()
         )));
+        if let Some(path) = self.path_opt() {
+            let path_str = path.display().to_string();
+            details = details.push(
+                widget::row::with_capacity(2)
+                    .align_y(Alignment::Start)
+                    .spacing(space_xxxs)
+                    .push(
+                        widget::text::body(fl!(
+                            "item-path",
+                            path = path_str.clone()
+                        ))
+                        .wrapping(cosmic::iced_core::text::Wrapping::WordOrGlyph)
+                        .width(Length::Fill),
+                    )
+                    .push(
+                        widget::tooltip(
+                            widget::button::icon(widget::icon::from_name("edit-copy-symbolic").size(16))
+                                .extra_small()
+                                .on_press(Message::CopyString(path_str))
+                                .class(cosmic::theme::Button::Icon),
+                            widget::text::body(fl!("copy-path")),
+                            widget::tooltip::Position::Bottom,
+                        ),
+                    ),
+            );
+        }
         let mut settings = Vec::new();
         if let Some(mime_app_cache) = mime_app_cache_opt {
             let mime_apps = mime_app_cache.get(&self.mime);
@@ -3456,6 +3484,9 @@ impl Tab {
                 self.context_menu = None;
 
                 commands.push(Command::Action(action));
+            }
+            Message::CopyString(text) => {
+                commands.push(Command::CopyString(text));
             }
             Message::ContextMenu(point_opt, _) => {
                 self.edit_location = None;

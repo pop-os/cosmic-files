@@ -289,6 +289,7 @@ default-app = {$name} (default)
 show-details = Show details
 type = Type: {$mime}
 items = Items: {$items}
+item-path = Path: {$path}
 item-size = Size: {$size}
 item-created = Created: {$created}
 item-modified = Modified: {$modified}
