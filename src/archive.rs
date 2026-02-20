@@ -1,5 +1,5 @@
 use crate::{
-    mime_icon::mime_for_path,
+    mime_icon::mime_for_bytes_or_path,
     operation::{Controller, OpReader, OperationError, OperationErrorType, sync_to_disk},
 };
 use cosmic::iced::futures;
@@ -46,7 +46,9 @@ pub fn extract(
     password: &Option<String>,
     controller: &Controller,
 ) -> Result<(), OperationError> {
-    let mime = mime_for_path(path, None, false);
+    // Detect MIME type via magic bytes rather than file extension. Slower,
+    // but ensures accurate decompression even if the file extension is wrong.
+    let mime = mime_for_bytes_or_path(path);
     let password = password.as_deref();
     match mime.essence_str() {
         "application/gzip" | "application/x-compressed-tar" => {
