@@ -4764,7 +4764,7 @@ impl Tab {
 
         let size = self.size_opt.get().unwrap_or(Size::new(0.0, 0.0));
 
-        let mut row = widget::row::with_capacity(5)
+        let mut row = widget::row::with_capacity(6)
             .align_y(Alignment::Center)
             .padding([space_xxxs, 0]);
         let mut w = 0.0;
@@ -4787,6 +4787,18 @@ impl Tab {
             next_button = next_button.on_press(Message::GoNext);
         }
         row = row.push(next_button);
+        w += f32::from(space_xxs).mul_add(2.0, 16.0);
+
+        let mut up_button =
+            widget::button::custom(widget::icon::from_name("go-up-symbolic").size(16))
+                .padding(space_xxs)
+                .class(theme::Button::Icon);
+        if let Location::Path(ref path) = self.location {
+            if path.parent().is_some() {
+                up_button = up_button.on_press(Message::LocationUp);
+            }
+        }
+        row = row.push(up_button);
         w += f32::from(space_xxs).mul_add(2.0, 16.0);
 
         row = row.push(widget::Space::with_width(Length::Fixed(space_s.into())));
