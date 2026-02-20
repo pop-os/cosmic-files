@@ -10,4 +10,4 @@ zbus = "4" # Blocking connection in zbus 5 hangs
 [dependencies.cosmic-files]
 path = ".."
 default-features = false
-features = ["desktop", "gvfs", "wayland", "wgpu", "desktop-applet"]
+features = ["desktop", "gvfs", "wayland", "desktop-applet"]
