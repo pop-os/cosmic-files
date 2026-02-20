@@ -9,9 +9,11 @@ use cosmic::{
     },
     theme,
     widget::{
-        self, Row, button, column, container, divider, horizontal_space,
+        self, Row, button, column, container, divider,
         menu::{self, ItemHeight, ItemWidth, MenuBar, key_bind::KeyBind},
-        responsive_menu_bar, text,
+        responsive_menu_bar,
+        space::{self, horizontal},
+        text,
     },
 };
 use i18n_embed::LanguageLoader;
@@ -80,7 +82,7 @@ pub fn context_menu<'a>(
         let key = find_key(&action);
         menu_button!(
             text::body(label),
-            horizontal_space(),
+            space::horizontal(),
             text::body(key).class(theme::Text::Custom(key_style))
         )
         .on_press(tab::Message::ContextAction(action))
