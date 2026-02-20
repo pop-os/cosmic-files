@@ -4,7 +4,7 @@ use cosmic::{
     widget,
 };
 use gio::{glib, prelude::*};
-use std::{any::TypeId, cell::Cell, future::pending, path::PathBuf, sync::Arc};
+use std::{any::TypeId, cell::Cell, future::pending, hash::Hash, path::PathBuf, sync::Arc};
 use tokio::sync::{Mutex, mpsc};
 
 use super::{Mounter, MounterAuth, MounterItem, MounterItems, MounterMessage};
@@ -668,32 +668,56 @@ impl Mounter for Gvfs {
     fn subscription(&self) -> Subscription<MounterMessage> {
         let command_tx = self.command_tx.clone();
         let event_rx = self.event_rx.clone();
-        Subscription::run_with_id(
-            TypeId::of::<Self>(),
-            stream::channel(1, |mut output| async move {
-                command_tx.send(Cmd::Rescan).unwrap();
-                while let Some(event) = event_rx.lock().await.recv().await {
-                    match event {
-                        Event::Changed => command_tx.send(Cmd::Rescan).unwrap(),
-                        Event::Items(items) => {
-                            output.send(MounterMessage::Items(items)).await.unwrap();
+        struct Wrapper {
+            command_tx: mpsc::UnboundedSender<Cmd>,
+            event_rx: Arc<Mutex<mpsc::UnboundedReceiver<Event>>>,
+        }
+        impl Hash for Wrapper {
+            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                TypeId::of::<Self>().hash(state);
+            }
+        }
+        Subscription::run_with(
+            Wrapper {
+                command_tx,
+                event_rx,
+            },
+            |Wrapper {
+                 command_tx,
+                 event_rx,
+             }| {
+                let command_tx = command_tx.clone();
+                let event_rx = event_rx.clone();
+                stream::channel(
+                    1,
+                    move |mut output: cosmic::iced::futures::channel::mpsc::Sender<
+                        MounterMessage,
+                    >| async move {
+                        command_tx.send(Cmd::Rescan).unwrap();
+                        while let Some(event) = event_rx.lock().await.recv().await {
+                            match event {
+                                Event::Changed => command_tx.send(Cmd::Rescan).unwrap(),
+                                Event::Items(items) => {
+                                    output.send(MounterMessage::Items(items)).await.unwrap();
+                                }
+                                Event::MountResult(item, res) => output
+                                    .send(MounterMessage::MountResult(item, res))
+                                    .await
+                                    .unwrap(),
+                                Event::NetworkAuth(uri, auth, auth_tx) => output
+                                    .send(MounterMessage::NetworkAuth(uri, auth, auth_tx))
+                                    .await
+                                    .unwrap(),
+                                Event::NetworkResult(uri, res) => output
+                                    .send(MounterMessage::NetworkResult(uri, res))
+                                    .await
+                                    .unwrap(),
+                            }
                         }
-                        Event::MountResult(item, res) => output
-                            .send(MounterMessage::MountResult(item, res))
-                            .await
-                            .unwrap(),
-                        Event::NetworkAuth(uri, auth, auth_tx) => output
-                            .send(MounterMessage::NetworkAuth(uri, auth, auth_tx))
-                            .await
-                            .unwrap(),
-                        Event::NetworkResult(uri, res) => output
-                            .send(MounterMessage::NetworkResult(uri, res))
-                            .await
-                            .unwrap(),
-                    }
-                }
-                pending().await
-            }),
+                        pending().await
+                    },
+                )
+            },
         )
     }
 }
