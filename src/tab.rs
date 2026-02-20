@@ -1621,6 +1621,18 @@ impl Location {
             _ => path,
         }
     }
+
+    /// Returns true if this location supports paste operations (not Trash)
+    pub fn supports_paste(&self) -> bool {
+        matches!(
+            self,
+            Self::Desktop(..)
+                | Self::Path(..)
+                | Self::Search(..)
+                | Self::Recents
+                | Self::Network(_, _, Some(_))
+        )
+    }
 }
 
 pub struct TaskWrapper(pub cosmic::Task<Message>);
@@ -5855,6 +5867,7 @@ impl Tab {
         key_binds: &'a HashMap<KeyBind, Action>,
         modifiers: &'a Modifiers,
         size: Size,
+        clipboard_paste_available: bool,
     ) -> Element<'a, Message> {
         // Update cached size
         self.size_opt.set(Some(size));
@@ -5942,7 +5955,8 @@ impl Tab {
         if let Some(point) = self.context_menu
             && (!cfg!(feature = "wayland") || !crate::is_wayland())
         {
-            let context_menu = menu::context_menu(self, key_binds, modifiers);
+            let context_menu =
+                menu::context_menu(self, key_binds, modifiers, clipboard_paste_available);
             popover = popover
                 .popup(context_menu)
                 .position(widget::popover::Position::Point(point));
@@ -6149,8 +6163,12 @@ impl Tab {
         &'a self,
         key_binds: &'a HashMap<KeyBind, Action>,
         modifiers: &'a Modifiers,
+        clipboard_paste_available: bool,
     ) -> Element<'a, Message> {
-        widget::responsive(|size| self.view_responsive(key_binds, modifiers, size)).into()
+        widget::responsive(move |size| {
+            self.view_responsive(key_binds, modifiers, size, clipboard_paste_available)
+        })
+        .into()
     }
 
     pub fn subscription(&self, preview: bool) -> Subscription<Message> {
