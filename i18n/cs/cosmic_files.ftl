@@ -414,3 +414,6 @@ copy-to = Kopírovat do...
 move-to = Přesunout do...
 copy-to-title = Vyberte cíl kopírování
 move-to-title = Vyberte cíl přesunutí
+show-recents = Složka „Nedávné“ v postranním panelu
+copy-path = Kopírovat cestu
+clear-recents-history = Vymazat historii „Nedávné“

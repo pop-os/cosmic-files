@@ -406,3 +406,6 @@ move-to-title = Välj mål för flytt
 move-to-button-label = Flytta
 copy-to = Kopiera till...
 move-to = Flytta till...
+show-recents = Mapp för senast använda filer i sidofältet
+clear-recents-history = Töm historik för Senaste
+copy-path = Kopiera sökväg
