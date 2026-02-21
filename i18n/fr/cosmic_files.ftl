@@ -433,3 +433,6 @@ copy-to = Copier vers...
 move-to = Déplacer vers...
 comment = Explorateur de fichiers pour le bureau COSMIC
 keywords = Dossier;Gestionnaire;
+show-recents = Dossier Récents dans la barre latérale
+copy-path = Copier le chemin
+clear-recents-history = Effacer l'historique des Récents

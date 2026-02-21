@@ -368,3 +368,6 @@ move-to-title = حدِّد وجهة النقل
 move-to-button-label = انقل
 copy-to = انسخ إلى...
 move-to = انقل إلى...
+show-recents = مجلد الحديثة في الشريط الجانبي
+clear-recents-history = امحُ التأريخ الحديث
+copy-path = انسخ المسار
