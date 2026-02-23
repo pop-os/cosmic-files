@@ -27,7 +27,7 @@ use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 use std::cell::Cell;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
 use std::fs::{self, File};
@@ -46,6 +46,7 @@ use crate::clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste};
 use crate::config::{
     ContextActionPreset, ICON_SCALE_MAX, ICON_SIZE_GRID, IconSizes, TabConfig, ThumbCfg,
 };
+use crate::desktop::{DesktopPaste, DesktopPos};
 use crate::dialog::DialogKind;
 use crate::format_time::{FormatTime, date_time_formatter, format_time, time_formatter};
 use crate::item::{
@@ -337,9 +338,9 @@ pub enum Command {
     AddToSidebar(PathBuf),
     AutoScroll(Option<f32>),
     ChangeLocation(String, Location, Option<Vec<PathBuf>>),
-    Delete(Vec<PathBuf>),
-    DropFiles(PathBuf, ClipboardPaste),
     ClearRecents,
+    Delete(Vec<PathBuf>),
+    DropFiles(PathBuf, ClipboardPaste, Option<DesktopPaste>),
     EmptyTrash,
     #[cfg(feature = "desktop")]
     ExecEntryAction(cosmic::desktop::DesktopEntryData, usize),
@@ -353,7 +354,7 @@ pub enum Command {
     SetOpenWith(Mime, String),
     SetPermissions(PathBuf, u32),
     SetMultiplePermissions(Vec<(PathBuf, u32)>),
-    SetSort(String, HeadingOptions, bool),
+    SetSort(Location, HeadingOptions, bool),
     WindowDrag,
     WindowToggleMaximize,
 }
@@ -389,6 +390,7 @@ pub enum Message {
     GalleryToggle,
     GoNext,
     GoPrevious,
+    ItemBounds(usize, Rectangle),
     ItemDown,
     ItemLeft,
     ItemPageDown,
@@ -458,6 +460,20 @@ pub enum View {
     Grid,
     List,
 }
+
+#[derive(Clone, Copy, Debug)]
+pub struct GridLayout {
+    pub icon_sizes: IconSizes,
+    pub grid_spacing: u16,
+    pub item_width: usize,
+    pub item_height: usize,
+    pub width: usize,
+    pub height: usize,
+    pub cols: usize,
+    pub column_spacing: u16,
+    pub rows: usize,
+}
+
 #[derive(Clone, Copy, Debug, Hash, PartialEq, PartialOrd, Ord, Eq, Deserialize, Serialize)]
 pub enum HeadingOptions {
     Name = 0,
@@ -965,11 +981,7 @@ impl Tab {
         if let Some(ref mut items) = self.items_opt {
             for item in items.iter_mut() {
                 let was_overlapped = item.state.overlaps_drag_rect;
-                item.state.overlaps_drag_rect = item
-                    .state
-                    .rect_opt
-                    .get()
-                    .is_some_and(|r| r.intersects(&rect));
+                item.state.overlaps_drag_rect = item.drag_overlap(&rect, self.config.view);
 
                 item.state.selected = if mod_ctrl || mod_shift {
                     if was_overlapped == item.state.overlaps_drag_rect {
@@ -1713,6 +1725,16 @@ impl Tab {
                     history_i_opt = Some(history_i);
                 }
             }
+            Message::ItemBounds(i, mut bounds) => {
+                if let Some(item) = self.items_opt.as_mut().and_then(|x| x.get_mut(i)) {
+                    // The bounds are offset by the viewport position
+                    if let Some(viewport) = self.viewport_opt {
+                        bounds.x -= viewport.x;
+                        bounds.y -= viewport.y;
+                    }
+                    item.state.grid_bounds = Some(bounds);
+                }
+            }
             Message::ItemDown => {
                 self.dehighlight_all();
                 if let Some(edit_location) = &mut self.edit_location {
@@ -2358,13 +2380,11 @@ impl Tab {
                 if !matches!(self.location, Location::Search(..)) {
                     self.sort_name = heading_option;
                     self.sort_direction = dir;
-                    if !matches!(self.location, Location::Desktop(..)) {
-                        commands.push(Command::SetSort(
-                            self.location.normalize().to_string(),
-                            heading_option,
-                            self.sort_direction,
-                        ));
-                    }
+                    commands.push(Command::SetSort(
+                        self.location.normalize(),
+                        heading_option,
+                        dir,
+                    ));
                 }
             }
             Message::TabComplete(path, completions) => {
@@ -2420,48 +2440,49 @@ impl Tab {
             }
             Message::ToggleSort(heading_option) => {
                 if !matches!(self.location, Location::Search(..)) {
-                    let heading_sort = if self.sort_name == heading_option {
+                    let dir = if self.sort_name == heading_option {
                         !self.sort_direction
                     } else {
                         // Default modified to descending, and others to ascending.
                         heading_option != HeadingOptions::Modified
                     };
-
-                    if !matches!(self.location, Location::Desktop(..)) {
-                        commands.push(Command::SetSort(
-                            self.location.normalize().to_string(),
-                            heading_option,
-                            heading_sort,
-                        ));
-                    }
-
-                    self.sort_direction = heading_sort;
                     self.sort_name = heading_option;
+                    self.sort_direction = dir;
+                    commands.push(Command::SetSort(
+                        self.location.normalize(),
+                        heading_option,
+                        dir,
+                    ));
                 }
             }
-            Message::Drop(Some((to, mut from))) => {
+            Message::Drop(Some((to_loc, from))) => {
                 self.dnd_hovered = None;
-                match to {
-                    Location::Desktop(to, ..)
+
+                match &to_loc {
+                    Location::Desktop { path: to, .. }
                     | Location::Path(to)
                     | Location::Network(_, _, Some(to)) => {
-                        if let Ok(entries) = fs::read_dir(&to) {
-                            for i in entries.into_iter().filter_map(Result::ok) {
-                                let i = i.path();
-                                from.paths.retain(|p| &i != p);
-                                if from.paths.is_empty() {
-                                    log::info!("All dropped files already in target directory.");
-                                    return commands;
-                                }
-                            }
-                        }
-                        commands.push(Command::DropFiles(to, from));
+                        let desktop_paste = if let Location::Desktop {
+                            pos_opt: Some(pos), ..
+                        } = &to_loc
+                        {
+                            let grid_layout = self.grid_layout();
+                            Some(DesktopPaste {
+                                pos: pos.clone(),
+                                rows: grid_layout.rows,
+                                cols: grid_layout.cols,
+                            })
+                        } else {
+                            None
+                        };
+
+                        commands.push(Command::DropFiles(to.clone(), from, desktop_paste));
                     }
                     Location::Trash if matches!(from.kind, ClipboardKind::Cut { .. }) => {
                         commands.push(Command::Delete(from.paths));
                     }
                     _ => {
-                        log::warn!("{:?} to {:?} is not supported.", from.kind, to);
+                        log::warn!("{:?} to {:?} is not supported.", from.kind, to_loc);
                     }
                 }
             }
@@ -2656,7 +2677,7 @@ impl Tab {
         }
     }
 
-    fn column_sort(&self) -> Option<Vec<(usize, &Item)>> {
+    pub fn column_sort(&self) -> Option<Vec<(usize, &Item)>> {
         let check_reverse = |ord: Ordering, sort: bool| {
             if sort { ord } else { ord.reverse() }
         };
@@ -2793,7 +2814,7 @@ impl Tab {
             .on_leave(move || Message::DndLeave(location3.clone())),
         );
         // Desktop will not show DnD indicator
-        if is_dnd_hovered && !matches!(self.mode, Mode::Desktop) {
+        if is_dnd_hovered {
             container = container.style(|t| {
                 let mut a = widget::container::Style::default();
                 let t = t.cosmic();
@@ -3204,7 +3225,7 @@ impl Tab {
 
         let mut children: Vec<Element<_>> = Vec::new();
         match &self.location {
-            Location::Desktop(path, ..)
+            Location::Desktop { path, .. }
             | Location::Path(path)
             | Location::Search(SearchLocation::Path(path), ..) => {
                 let excess_str = "...";
@@ -3367,29 +3388,19 @@ impl Tab {
         .into()
     }
 
-    pub fn grid_view(
-        &self,
-    ) -> (
-        Option<Element<'static, Message>>,
-        Element<'_, Message>,
-        bool,
-    ) {
+    pub fn grid_layout(&self) -> GridLayout {
         let cosmic_theme::Spacing {
             space_xxs,
             space_xxxs,
             ..
         } = theme::spacing();
 
-        let TabConfig {
-            show_hidden,
-            mut icon_sizes,
-            ..
-        } = self.config;
+        let mut icon_sizes = self.config.icon_sizes;
 
         let mut grid_spacing = space_xxs;
-        if let Location::Desktop(_path, _output, desktop_config) = &self.location {
-            icon_sizes.grid = desktop_config.icon_size;
-            grid_spacing = desktop_config.grid_spacing_for(space_xxs);
+        if let Location::Desktop { layout, .. } = &self.location {
+            icon_sizes.grid = layout.config.icon_size;
+            grid_spacing = layout.config.grid_spacing_for(space_xxs);
         }
 
         let text_height = 3 * 20; // 3 lines of text
@@ -3424,6 +3435,44 @@ impl Tab {
             rows_m1 + 1
         };
 
+        GridLayout {
+            icon_sizes,
+            grid_spacing,
+            item_width,
+            item_height,
+            width,
+            height,
+            cols,
+            column_spacing,
+            rows,
+        }
+    }
+
+    pub fn grid_view(
+        &self,
+    ) -> (
+        Option<Element<'static, Message>>,
+        Element<'_, Message>,
+        bool,
+    ) {
+        let cosmic_theme::Spacing {
+            space_xxs,
+            space_xxxs,
+            ..
+        } = theme::spacing();
+
+        let GridLayout {
+            icon_sizes,
+            grid_spacing,
+            item_width,
+            item_height,
+            width: _,
+            height,
+            cols,
+            column_spacing,
+            rows,
+        } = self.grid_layout();
+
         //TODO: move to function
         let visible_rect = {
             // Use cached content height to clamp scroll offset after resize
@@ -3452,21 +3501,95 @@ impl Tab {
         let mut drag_s_i = 0;
 
         let mut column = widget::column::with_capacity(2);
-        if let Some(items) = self.column_sort() {
+        if let Some(mut items) = self.column_sort() {
+            enum GridItem<'a> {
+                Item(usize, &'a Item),
+                Empty,
+            }
+
+            let mut filled_pages = HashSet::new();
+            let mut desktop_items = if let Mode::Desktop = &self.mode
+                && let Location::Desktop {
+                    display, layout, ..
+                } = &self.location
+            {
+                let mut desktop_items = HashMap::new();
+                let mut i = 0;
+                while i < items.len() {
+                    let mut remove = false;
+                    let mut pos_opt = None;
+
+                    if let Some(path) = items[i].1.path_opt() {
+                        if let Some(pos) = layout.positions.get(path) {
+                            remove = true;
+                            //TODO: resize grid if rows/cols do not match
+                            if pos.display == *display {
+                                pos_opt = Some(pos.clone());
+                            }
+                        }
+                    }
+
+                    if !remove {
+                        // Any items without a set display will be on the primary display
+                        if let Some(primary_display) = &layout.primary_display {
+                            if display != primary_display {
+                                remove = true;
+                            }
+                        }
+                    }
+
+                    if remove {
+                        let item = items.remove(i);
+                        if let Some(pos) = pos_opt {
+                            filled_pages.insert(pos.page);
+                            desktop_items.insert((pos.page, pos.row, pos.col), item);
+                        }
+                    } else {
+                        i += 1;
+                    }
+                }
+                Some(desktop_items)
+            } else {
+                None
+            };
+
+            let mut items_iter = items.iter();
+            let mut grid_item_at = |page: usize, row: usize, col: usize| -> Option<GridItem> {
+                // Manually placed desktop items
+                if let Some((i, item)) = desktop_items
+                    .as_mut()
+                    .and_then(|x| x.remove(&(page, row, col)))
+                {
+                    return Some(GridItem::Item(i, item));
+                }
+
+                // Regular items
+                if let Some((i, item)) = items_iter.next() {
+                    filled_pages.insert(page);
+                    return Some(GridItem::Item(*i, item));
+                }
+
+                // Empty spaces on desktop for drag and drop
+                if matches!(self.mode, Mode::Desktop)
+                    && filled_pages.contains(&page)
+                    && col < cols
+                    && row < rows
+                {
+                    return Some(GridItem::Empty);
+                }
+
+                // No more items
+                None
+            };
+
             let mut count = 0;
+            let mut page = 0;
             let mut col = 0;
             let mut row = 0;
-            let mut page_row = 0;
             let mut hidden = 0;
             let mut grid_elements = Vec::new();
-            for &(i, item) in &items {
-                if !show_hidden && item.hidden {
-                    item.state.pos_opt.set(None);
-                    item.state.rect_opt.set(None);
-                    hidden += 1;
-                    continue;
-                }
-                item.state.pos_opt.set(Some((row, col)));
+            let mut content_height = 0;
+            while let Some(grid_item) = grid_item_at(page, row, col) {
                 let item_rect = Rectangle::new(
                     Point::new(
                         (col * (item_width + column_spacing as usize) + space_xxs as usize) as f32,
@@ -3474,7 +3597,19 @@ impl Tab {
                     ),
                     Size::new(item_width as f32, item_height as f32),
                 );
-                item.state.rect_opt.set(Some(item_rect));
+                content_height =
+                    content_height.max((item_rect.y + item_rect.height).ceil() as usize);
+
+                if let GridItem::Item(_i, item) = grid_item {
+                    if !self.config.show_hidden && item.hidden {
+                        item.state.pos_opt.set(None);
+                        item.state.rect_opt.set(None);
+                        hidden += 1;
+                        continue;
+                    }
+                    item.state.pos_opt.set(Some((row, col)));
+                    item.state.rect_opt.set(Some(item_rect));
+                }
 
                 //TODO: error if the row or col is already set?
                 while grid_elements.len() <= row {
@@ -3483,77 +3618,141 @@ impl Tab {
 
                 // Only build elements if visible (for performance)
                 if item_rect.intersects(&visible_rect) {
-                    //TODO: one focus group per grid item (needs custom widget)
-                    let buttons: Vec<Element<Message>> = vec![
-                        widget::button::custom(
-                            widget::icon::icon(item.icon_handle_grid.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_sizes.grid()),
-                        )
-                        .padding(space_xxxs)
-                        .class(button_style(
-                            item.state.selected,
-                            item.state.highlighted,
-                            item.state.cut,
-                            false,
-                            false,
-                            false,
-                        ))
-                        .into(),
-                        widget::tooltip(
-                            widget::button::custom(Item::grid_display_name(&item.display_name))
-                                .id(item.state.button_id.clone())
-                                .padding([0, space_xxxs])
+                    match grid_item {
+                        GridItem::Item(i, item) => {
+                            //TODO: one focus group per grid item (needs custom widget)
+                            let buttons: Vec<Element<Message>> = vec![
+                                widget::button::custom(
+                                    widget::icon::icon(item.icon_handle_grid.clone())
+                                        .content_fit(ContentFit::Contain)
+                                        .size(icon_sizes.grid())
+                                        .width(Length::Shrink),
+                                )
+                                .padding(space_xxxs)
                                 .class(button_style(
                                     item.state.selected,
                                     item.state.highlighted,
                                     item.state.cut,
-                                    true,
-                                    true,
-                                    matches!(self.mode, Mode::Desktop),
-                                )),
-                            widget::text::body(&item.name),
-                            widget::tooltip::Position::Bottom,
-                        )
-                        .into(),
-                    ];
+                                    false,
+                                    false,
+                                    false,
+                                ))
+                                .into(),
+                                widget::tooltip(
+                                    widget::button::custom(Item::grid_display_name(
+                                        &item.display_name,
+                                    ))
+                                    .id(item.state.button_id.clone())
+                                    .padding([0, space_xxxs])
+                                    .class(button_style(
+                                        item.state.selected,
+                                        item.state.highlighted,
+                                        item.state.cut,
+                                        true,
+                                        true,
+                                        matches!(self.mode, Mode::Desktop),
+                                    )),
+                                    widget::text::body(&item.name),
+                                    widget::tooltip::Position::Bottom,
+                                )
+                                .into(),
+                            ];
 
-                    let mut column = widget::column::with_capacity(buttons.len())
-                        .align_x(Alignment::Center)
-                        .height(Length::Fixed(item_height as f32))
-                        .width(Length::Fixed(item_width as f32));
-                    for button in buttons {
-                        column = column.push(
-                            mouse_area::MouseArea::new(button)
-                                .on_right_press_no_capture()
-                                .on_right_press(move |point_opt| {
-                                    Message::RightClick(point_opt, Some(i))
-                                }),
-                        );
+                            let mut column = widget::column::with_capacity(buttons.len())
+                                .align_x(Alignment::Center);
+                            for button in buttons {
+                                column = column.push(
+                                    mouse_area::MouseArea::new(button)
+                                        .on_right_press_no_capture()
+                                        .on_right_press(move |point_opt| {
+                                            Message::RightClick(point_opt, Some(i))
+                                        }),
+                                );
+                            }
+
+                            let container = widget::container(
+                                mouse_area::MouseArea::new(column)
+                                    .on_press(move |_| Message::Click(Some(i)))
+                                    .on_double_click(move |_| Message::DoubleClick(Some(i)))
+                                    .on_release(move |_| Message::ClickRelease(Some(i)))
+                                    .on_middle_press(move |_| Message::MiddleClick(i))
+                                    .on_resize_bounds(move |bounds| Message::ItemBounds(i, bounds))
+                                    .on_enter(move || Message::HighlightActivate(i))
+                                    .on_exit(move || Message::HighlightDeactivate(i)),
+                            )
+                            .align_x(Alignment::Center)
+                            .height(Length::Fixed(item_height as f32))
+                            .width(Length::Fixed(item_width as f32));
+
+                            let element: Element<Message> =
+                                if item.metadata.is_dir() && item.location_opt.is_some() {
+                                    self.dnd_dest(&item.location_opt.clone().unwrap(), container)
+                                } else if matches!(self.mode, Mode::Desktop) {
+                                    if let Location::Desktop {
+                                        path,
+                                        display,
+                                        layout,
+                                        ..
+                                    } = &self.location
+                                    {
+                                        let location = Location::Desktop {
+                                            path: path.clone(),
+                                            display: display.clone(),
+                                            layout: layout.clone(),
+                                            pos_opt: Some(DesktopPos {
+                                                display: display.clone(),
+                                                page,
+                                                row,
+                                                col,
+                                            }),
+                                        };
+                                        self.dnd_dest(&location, container)
+                                    } else {
+                                        container.into()
+                                    }
+                                } else {
+                                    container.into()
+                                };
+
+                            if item.state.selected {
+                                dnd_items.push((i, (row, col), item));
+                                drag_w_i = drag_w_i.min(col);
+                                drag_n_i = drag_n_i.min(row);
+                                drag_e_i = drag_e_i.max(col);
+                                drag_s_i = drag_s_i.max(row);
+                            }
+                            grid_elements[row].push(element);
+                        }
+                        GridItem::Empty => {
+                            // Add empty spaces for drag and drop reordering on desktop
+                            let space = widget::Space::new()
+                                .width(Length::Fixed(item_width as f32))
+                                .height(Length::Fixed(item_height as f32));
+                            let element = if let Location::Desktop {
+                                path,
+                                display,
+                                layout,
+                                ..
+                            } = &self.location
+                            {
+                                let location = Location::Desktop {
+                                    path: path.clone(),
+                                    display: display.clone(),
+                                    layout: layout.clone(),
+                                    pos_opt: Some(DesktopPos {
+                                        display: display.clone(),
+                                        page,
+                                        row,
+                                        col,
+                                    }),
+                                };
+                                self.dnd_dest(&location, space)
+                            } else {
+                                space.into()
+                            };
+                            grid_elements[row].push(element);
+                        }
                     }
-
-                    let column: Element<Message> =
-                        if item.metadata.is_dir() && item.location_opt.is_some() {
-                            self.dnd_dest(&item.location_opt.clone().unwrap(), column)
-                        } else {
-                            column.into()
-                        };
-
-                    if item.state.selected {
-                        dnd_items.push((i, (row, col), item));
-                        drag_w_i = drag_w_i.min(col);
-                        drag_n_i = drag_n_i.min(row);
-                        drag_e_i = drag_e_i.max(col);
-                        drag_s_i = drag_s_i.max(row);
-                    }
-                    let mouse_area = crate::mouse_area::MouseArea::new(column)
-                        .on_press(move |_| Message::Click(Some(i)))
-                        .on_double_click(move |_| Message::DoubleClick(Some(i)))
-                        .on_release(move |_| Message::ClickRelease(Some(i)))
-                        .on_middle_press(move |_| Message::MiddleClick(i))
-                        .on_enter(move || Message::HighlightActivate(i))
-                        .on_exit(move || Message::HighlightDeactivate(i));
-                    grid_elements[row].push(Element::from(mouse_area));
                 } else {
                     // Add a spacer if the row is empty, so scroll works
                     if grid_elements[row].is_empty() {
@@ -3568,14 +3767,13 @@ impl Tab {
                 count += 1;
                 if matches!(self.mode, Mode::Desktop) {
                     row += 1;
-                    if row >= page_row + rows {
+                    if row >= (page + 1) * rows {
                         row = 0;
                         col += 1;
-                    }
-                    if col >= cols {
-                        col = 0;
-                        page_row += rows;
-                        row = page_row;
+                        if col >= cols {
+                            col = 0;
+                            page += 1;
+                        }
                     }
                 } else {
                     col += 1;
@@ -3601,20 +3799,14 @@ impl Tab {
 
             //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
             {
-                let mut max_bottom = 0;
-                for (_, item) in items {
-                    if let Some(rect) = item.state.rect_opt.get() {
-                        let bottom = (rect.y + rect.height).ceil() as usize;
-                        if bottom > max_bottom {
-                            max_bottom = bottom;
-                        }
-                    }
-                }
-
                 // Cache content height for scroll clamping on next frame
-                self.content_height_opt.set(Some(max_bottom as f32));
+                self.content_height_opt.set(Some(content_height as f32));
 
-                let top_deduct = 7 * (space_xxs as usize);
+                let top_deduct = if matches!(self.mode, Mode::Desktop) {
+                    0
+                } else {
+                    7 * (space_xxs as usize)
+                };
 
                 self.item_view_size_opt
                     .set(self.size_opt.get().map(|s| Size {
@@ -3622,7 +3814,7 @@ impl Tab {
                         height: s.height - top_deduct as f32,
                     }));
 
-                let spacer_height = height.saturating_sub(max_bottom + top_deduct);
+                let spacer_height = height.saturating_sub(content_height + top_deduct);
                 if spacer_height > 0 {
                     column = column.push(widget::container(
                         space::vertical().height(Length::Fixed(spacer_height as f32)),
@@ -4187,9 +4379,9 @@ impl Tab {
         let mouse_area = mouse_area::MouseArea::new(item_view)
             .on_press(move |_point_opt| Message::Click(None))
             .on_release(|_| Message::ClickRelease(None))
-            .on_resize(Message::Resize)
             .on_back_press(move |_point_opt| Message::GoPrevious)
             .on_forward_press(move |_point_opt| Message::GoNext)
+            .on_resize_viewport(Message::Resize)
             .on_scroll(|delta| respond_to_scroll_direction(delta, modifiers))
             .on_right_press(|_| Message::RightClickBackground);
 
@@ -5108,11 +5300,7 @@ impl Tab {
         // otherwise a view rebuild is triggered on every drag event.
         let changed = self.items_opt.as_ref().is_some_and(|items| {
             items.iter().any(|item| {
-                let overlaps = item
-                    .state
-                    .rect_opt
-                    .get()
-                    .is_some_and(|r| r.intersects(&rect));
+                let overlaps = item.drag_overlap(&rect, self.config.view);
                 overlaps != item.state.overlaps_drag_rect
             })
         });

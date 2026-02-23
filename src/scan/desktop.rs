@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
-use crate::config::{DesktopConfig, IconSizes};
+use crate::config::IconSizes;
+use crate::desktop::DesktopLayout;
 use crate::fl;
 use crate::item::{DirSize, Item, ItemMetadata, ItemState, ItemThumbnail, item_from_path};
 use crate::location::Location;
@@ -11,19 +12,19 @@ use crate::trash::{Trash, TrashExt};
 //TODO: organize desktop items based on display
 pub fn scan_desktop(
     tab_path: &PathBuf,
-    _display: &str,
-    desktop_config: DesktopConfig,
+    display: &str,
+    layout: &DesktopLayout,
     mut sizes: IconSizes,
 ) -> Vec<Item> {
-    sizes.grid = desktop_config.icon_size;
+    sizes.grid = layout.config.icon_size;
 
     let mut items = Vec::new();
 
-    if desktop_config.show_content {
+    if layout.config.show_content {
         items.extend(scan_path(tab_path, sizes));
     }
 
-    if desktop_config.show_mounted_drives {
+    if layout.config.show_mounted_drives {
         for mounter in MOUNTERS.values() {
             let Some(mounter_items) = mounter.items(sizes) else {
                 continue;
@@ -59,7 +60,7 @@ pub fn scan_desktop(
         }
     }
 
-    if desktop_config.show_trash {
+    if layout.config.show_trash {
         let name = fl!("trash");
         let display_name = Item::display_name(&name);
 
@@ -93,6 +94,25 @@ pub fn scan_desktop(
             state: ItemState::default(),
         });
     }
+
+    items.retain(|item| {
+        // Hide items with a position on another connected display
+        if let Some(path) = item.path_opt() {
+            if let Some(pos) = layout.positions.get(path) {
+                if layout.display_names.contains(&pos.display) {
+                    return display == pos.display;
+                }
+            }
+        }
+
+        // Any items other items will be on the primary display
+        if let Some(primary_display) = &layout.primary_display {
+            return display == primary_display;
+        }
+
+        // Show any remaining items if there is no primary display
+        true
+    });
 
     items
 }
