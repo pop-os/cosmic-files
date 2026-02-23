@@ -43,6 +43,7 @@ use cosmic::{
         dnd_destination::DragId,
         horizontal_space, icon,
         menu::{action::MenuAction, key_bind::KeyBind},
+        progress_bar::primary,
         segmented_button::{self, Entity, ReorderEvent},
         vertical_space,
     },
@@ -82,6 +83,7 @@ use crate::{
         AppTheme, Config, DesktopConfig, Favorite, IconSizes, State, TIME_CONFIG_ID, TabConfig,
         TimeConfig, TypeToSearch,
     },
+    desktop::DesktopLayout,
     dialog::{Dialog, DialogKind, DialogMessage, DialogResult, DialogSettings},
     fl, home_dir,
     key_bind::key_binds,
@@ -1528,14 +1530,79 @@ impl App {
         Task::batch(commands)
     }
 
-    fn update_desktop_config(&mut self) -> Task<Message> {
+    fn desktop_layout(&self) -> Arc<DesktopLayout> {
+        let mut layout = DesktopLayout {
+            primary_output_name: None,
+            config: self.config.desktop.clone(),
+            state: self.state.desktop.clone(),
+        };
+
+        #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
+        {
+            let mut primary_output = None;
+
+            for (_surface_id, info) in self.surface_infos.iter() {
+                eprintln!(
+                    "name {:?}: pos {:?} size {:?}",
+                    info.name, info.logical_position, info.logical_size
+                );
+
+                fn is_edp(info: &OutputInfo) -> bool {
+                    match &info.name {
+                        Some(name) => name.starts_with("eDP"),
+                        None => false,
+                    }
+                }
+
+                //TODO: config for preferred output
+                primary_output = match primary_output {
+                    Some(old_info) => match (is_edp(info), is_edp(old_info)) {
+                        (true, true) | (false, false) => {
+                            // Select top-left display
+                            if info.location.0 < old_info.location.0
+                                || (info.location.0 == old_info.location.0
+                                    && info.location.1 < old_info.location.1)
+                            {
+                                Some(info)
+                            } else {
+                                Some(old_info)
+                            }
+                        }
+                        // This display is eDP, old one is not
+                        (true, false) => Some(info),
+                        // Old display is eDP, this one is not
+                        (false, true) => Some(old_info),
+                    },
+                    None => Some(info),
+                };
+            }
+
+            layout.primary_output_name = primary_output.as_ref().and_then(|x| x.name.clone());
+        }
+
+        Arc::new(layout)
+    }
+
+    fn update_desktop(&mut self) -> Task<Message> {
+        let layout = self.desktop_layout();
         let needs_reload: Box<[_]> = (self.tab_model.iter())
             .filter_map(|entity| {
                 let tab = self.tab_model.data::<Tab>(entity)?;
-                if let Location::Desktop(path, output, _) = &tab.location {
+                if let Location::Desktop {
+                    path,
+                    display,
+                    pos_opt,
+                    ..
+                } = &tab.location
+                {
                     Some((
                         entity,
-                        Location::Desktop(path.clone(), output.clone(), self.config.desktop),
+                        Location::Desktop {
+                            path: path.clone(),
+                            display: display.clone(),
+                            layout: layout.clone(),
+                            pos_opt: *pos_opt,
+                        },
                     ))
                 } else {
                     None
@@ -1551,15 +1618,6 @@ impl App {
             commands.push(self.update_tab(entity, location, None));
         }
         Task::batch(commands)
-    }
-
-    fn update_desktop_layout(&self) {
-        for (surface_id, output_info) in self.surface_infos.iter() {
-            eprintln!(
-                "name {:?}: pos {:?} size {:?}",
-                output_info.name, output_info.logical_position, output_info.logical_size
-            );
-        }
     }
 
     fn activate_nav_model_location(&mut self, location: &Location) {
@@ -2880,7 +2938,7 @@ impl Application for App {
             Message::DesktopConfig(config) => {
                 if config != self.config.desktop {
                     config_set!(desktop, config);
-                    return self.update_desktop_config();
+                    return self.update_desktop();
                 }
             }
             Message::DesktopViewOptions => {
@@ -3316,7 +3374,7 @@ impl Application for App {
                 self.update_nav_model();
 
                 // Update desktop tabs
-                commands.push(self.update_desktop_config());
+                commands.push(self.update_desktop());
 
                 return Task::batch(commands);
             }
@@ -4054,7 +4112,7 @@ impl Application for App {
                                 Window::new(WindowKind::Preview(entity_opt, preview_kind)),
                             );
                             return Task::batch([
-                                self.update_desktop_config(), // Force re-calculating of directory sizes
+                                self.update_desktop(), // Force re-calculating of directory sizes
                                 command.map(|_id| cosmic::action::none()),
                             ]);
                         }
@@ -4080,7 +4138,7 @@ impl Application for App {
                         .icon_set(entity, icon::icon(tab::trash_icon_symbolic(16)));
                 }
 
-                return Task::batch([self.rescan_trash(), self.update_desktop_config()]);
+                return Task::batch([self.rescan_trash(), self.update_desktop()]);
             }
             Message::Rename(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
@@ -5004,7 +5062,6 @@ impl Application for App {
                         let display = match output_info_opt {
                             Some(output_info) => {
                                 self.surface_infos.insert(surface_id, output_info.clone());
-                                self.update_desktop_layout();
                                 match output_info.name {
                                     Some(output_name) => output_name,
                                     None => {
@@ -5020,7 +5077,12 @@ impl Application for App {
                         };
 
                         let (entity, command) = self.open_tab_entity(
-                            Location::Desktop(crate::desktop_dir(), display, self.config.desktop),
+                            Location::Desktop {
+                                path: crate::desktop_dir(),
+                                display,
+                                layout: self.desktop_layout(),
+                                pos_opt: None,
+                            },
                             false,
                             None,
                             widget::Id::unique(),
@@ -5030,6 +5092,7 @@ impl Application for App {
                             .insert(surface_id, Window::new(WindowKind::Desktop(entity)));
                         return Task::batch([
                             command,
+                            self.update_desktop(),
                             get_layer_surface(SctkLayerSurfaceSettings {
                                 id: surface_id,
                                 layer: Layer::Bottom,
@@ -5058,8 +5121,10 @@ impl Application for App {
                             Some(surface_id) => {
                                 self.remove_window(&surface_id);
                                 self.surface_infos.remove(&surface_id);
-                                self.update_desktop_layout();
-                                return destroy_layer_surface(surface_id);
+                                return Task::batch([
+                                    self.update_desktop(),
+                                    destroy_layer_surface(surface_id),
+                                ]);
                             }
                             None => {
                                 log::warn!("output {}: no surface found", output.id());
@@ -5071,7 +5136,7 @@ impl Application for App {
                         match self.surface_ids.get(&output) {
                             Some(surface_id) => {
                                 self.surface_infos.insert(*surface_id, output_info.clone());
-                                self.update_desktop_layout();
+                                return self.update_desktop();
                             }
                             None => {
                                 log::warn!("output {}: no surface found", output.id());
@@ -6190,7 +6255,6 @@ impl Application for App {
                 .view(
                     &self.key_binds,
                     &self.modifiers,
-                    Some(&self.state),
                     self.clipboard_has_content(),
                 )
                 .map(move |message| Message::TabMessage(Some(entity), message));
@@ -6236,7 +6300,6 @@ impl Application for App {
                             .view(
                                 &self.key_binds,
                                 &window.modifiers,
-                                Some(&self.state),
                                 self.clipboard_has_content(),
                             )
                             .map(move |message| Message::TabMessage(Some(*entity), message)),

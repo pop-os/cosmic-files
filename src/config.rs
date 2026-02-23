@@ -160,7 +160,7 @@ impl State {
     }
 }
 
-#[derive(Clone, CosmicConfigEntry, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, CosmicConfigEntry, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(default)]
 pub struct DesktopState {
     //TODO: per-display config!
