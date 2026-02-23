@@ -773,7 +773,7 @@ impl App {
 
     fn search_get(&self) -> Option<&str> {
         match &self.tab.location {
-            Location::Search(_, term, ..) => Some(term),
+            Location::Search { term, .. } => Some(term),
             _ => None,
         }
     }
@@ -782,17 +782,17 @@ impl App {
         let location_opt = match term_opt {
             Some(term) => self.tab.location.path_opt().map(|path| {
                 (
-                    Location::Search(
-                        path.clone(),
+                    Location::Search {
+                        path: path.clone(),
                         term,
-                        self.tab.config.show_hidden,
-                        Instant::now(),
-                    ),
+                        show_hidden: self.tab.config.show_hidden,
+                        time: Instant::now(),
+                    },
                     true,
                 )
             }),
             None => match &self.tab.location {
-                Location::Search(path, ..) => Some((Location::Path(path.clone()), false)),
+                Location::Search { path, .. } => Some((Location::Path(path.clone()), false)),
                 _ => None,
             },
         };

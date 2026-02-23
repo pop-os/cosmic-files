@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
+use cctk::sctk::output::OutputInfo;
+#[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use cosmic::iced::{
     Limits, Point,
     event::wayland::{Event as WaylandEvent, OutputEvent, OverlapNotifyEvent},
@@ -41,6 +43,7 @@ use cosmic::{
         dnd_destination::DragId,
         horizontal_space, icon,
         menu::{action::MenuAction, key_bind::KeyBind},
+        progress_bar::primary,
         segmented_button::{self, Entity, ReorderEvent},
         vertical_space,
     },
@@ -80,6 +83,7 @@ use crate::{
         AppTheme, Config, DesktopConfig, Favorite, IconSizes, State, TIME_CONFIG_ID, TabConfig,
         TimeConfig, TypeToSearch,
     },
+    desktop::{DesktopChange, DesktopLayout, DesktopPos},
     dialog::{Dialog, DialogKind, DialogMessage, DialogResult, DialogSettings},
     fl, home_dir,
     key_bind::key_binds,
@@ -400,7 +404,7 @@ pub enum Message {
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     Overlap(window::Id, OverlapNotifyEvent),
     Paste(Option<Entity>),
-    PasteContents(PathBuf, ClipboardPaste),
+    PasteContents(PathBuf, ClipboardPaste, Option<DesktopPos>),
     PasteImage(PathBuf),
     PasteImageContents(PathBuf, ClipboardPasteImage),
     PasteText(PathBuf),
@@ -751,7 +755,7 @@ pub struct App {
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     surface_ids: FxHashMap<WlOutput, WindowId>,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
-    surface_names: FxHashMap<WindowId, String>,
+    surface_infos: FxHashMap<WindowId, OutputInfo>,
     toasts: widget::toaster::Toasts<Message>,
     watcher_opt: Option<(
         Debouncer<RecommendedWatcher, RecommendedCache>,
@@ -1325,7 +1329,7 @@ impl App {
         location: Location,
         selection_paths: Option<Vec<PathBuf>>,
     ) -> Task<Message> {
-        if let Location::Search(_, term, ..) = location {
+        if let Location::Search { term, .. } = location {
             self.search_set(entity, Some(term), selection_paths)
         } else {
             self.rescan_tab(entity, location, selection_paths)
@@ -1433,7 +1437,7 @@ impl App {
         let entity = self.tab_model.active();
         let tab = self.tab_model.data::<Tab>(entity)?;
         match &tab.location {
-            Location::Search(_, term, ..) => Some(term),
+            Location::Search { term, .. } => Some(term),
             _ => None,
         }
     }
@@ -1454,17 +1458,17 @@ impl App {
             let location_opt = match term_opt {
                 Some(term) => tab.location.path_opt().map(|path| {
                     (
-                        Location::Search(
-                            path.clone(),
+                        Location::Search {
+                            path: path.clone(),
                             term,
-                            tab.config.show_hidden,
-                            Instant::now(),
-                        ),
+                            show_hidden: tab.config.show_hidden,
+                            time: Instant::now(),
+                        },
                         true,
                     )
                 }),
                 None => match &tab.location {
-                    Location::Search(path, ..) => Some((Location::Path(path.clone()), false)),
+                    Location::Search { path, .. } => Some((Location::Path(path.clone()), false)),
                     _ => None,
                 },
             };
@@ -1526,14 +1530,93 @@ impl App {
         Task::batch(commands)
     }
 
+    fn desktop_changes(&mut self, changes: Vec<DesktopChange>) -> Task<Message> {
+        for change in changes {
+            self.state
+                .desktop_changes
+                .retain(|older| older.retain_before(&change));
+            self.state.desktop_changes.push(change);
+        }
+
+        if let Some(state_handler) = self.state_handler.as_ref()
+            && let Err(err) = state_handler.set("desktop_changes", &self.state.desktop_changes)
+        {
+            log::warn!("Failed to save sort names: {err:?}");
+        }
+
+        self.update_desktop()
+    }
+
+    fn desktop_layout(&self) -> Arc<DesktopLayout> {
+        let mut layout = DesktopLayout::new(self.config.desktop.clone());
+
+        #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
+        {
+            let mut primary_output = None;
+
+            for (_surface_id, info) in self.surface_infos.iter() {
+                if let Some(name) = &info.name {
+                    layout.display_names.push(name.clone());
+                }
+
+                fn is_edp(info: &OutputInfo) -> bool {
+                    match &info.name {
+                        Some(name) => name.starts_with("eDP"),
+                        None => false,
+                    }
+                }
+
+                //TODO: config for preferred output
+                primary_output = match primary_output {
+                    Some(old_info) => match (is_edp(info), is_edp(old_info)) {
+                        (true, true) | (false, false) => {
+                            // Select top-left display
+                            if info.location.0 < old_info.location.0
+                                || (info.location.0 == old_info.location.0
+                                    && info.location.1 < old_info.location.1)
+                            {
+                                Some(info)
+                            } else {
+                                Some(old_info)
+                            }
+                        }
+                        // This display is eDP, old one is not
+                        (true, false) => Some(info),
+                        // Old display is eDP, this one is not
+                        (false, true) => Some(old_info),
+                    },
+                    None => Some(info),
+                };
+            }
+
+            layout.primary_display = primary_output.as_ref().and_then(|x| x.name.clone());
+        }
+
+        layout.update(&self.state.desktop_changes);
+
+        Arc::new(layout)
+    }
+
     fn update_desktop(&mut self) -> Task<Message> {
+        let layout = self.desktop_layout();
         let needs_reload: Box<[_]> = (self.tab_model.iter())
             .filter_map(|entity| {
                 let tab = self.tab_model.data::<Tab>(entity)?;
-                if let Location::Desktop(path, output, _) = &tab.location {
+                if let Location::Desktop {
+                    path,
+                    display,
+                    pos_opt,
+                    ..
+                } = &tab.location
+                {
                     Some((
                         entity,
-                        Location::Desktop(path.clone(), output.clone(), self.config.desktop),
+                        Location::Desktop {
+                            path: path.clone(),
+                            display: display.clone(),
+                            layout: layout.clone(),
+                            pos_opt: pos_opt.clone(),
+                        },
                     ))
                 } else {
                     None
@@ -1612,9 +1695,11 @@ impl App {
                             .size(16),
                         )
                         .data(match favorite {
-                            Favorite::Network { uri, name, path } => {
-                                Location::Network(uri.clone(), name.clone(), Some(path.to_owned()))
-                            }
+                            Favorite::Network { uri, name, path } => Location::Network {
+                                uri: uri.clone(),
+                                display_name: name.clone(),
+                                path_opt: Some(path.to_owned()),
+                            },
                             _ => Location::Path(path.clone()),
                         })
                         .data(FavoriteIndex(favorite_i))
@@ -1637,11 +1722,11 @@ impl App {
                             .size(16)
                             .handle(),
                     ))
-                    .data(Location::Network(
-                        "network:///".to_string(),
-                        fl!("networks"),
-                        None,
-                    ))
+                    .data(Location::Network {
+                        uri: "network:///".to_string(),
+                        display_name: fl!("networks"),
+                        path_opt: None,
+                    })
                     .divider_above()
             });
         }
@@ -1660,12 +1745,20 @@ impl App {
                 let uri = item.uri();
                 if let Some(path) = item.path() {
                     if item.is_remote() {
-                        b = b.data(Location::Network(uri, item.name(), Some(path)));
+                        b = b.data(Location::Network {
+                            uri,
+                            display_name: item.name(),
+                            path_opt: Some(path),
+                        });
                     } else {
                         b = b.data(Location::Path(path));
                     }
                 } else if !uri.is_empty() {
-                    b = b.data(Location::Network(uri, item.name(), None));
+                    b = b.data(Location::Network {
+                        uri,
+                        display_name: item.name(),
+                        path_opt: None,
+                    });
                 }
                 if let Some(icon) = item.icon(true) {
                     b = b.icon(icon::icon(icon).size(16));
@@ -2310,7 +2403,7 @@ impl Application for App {
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             surface_ids: FxHashMap::default(),
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
-            surface_names: FxHashMap::default(),
+            surface_infos: FxHashMap::default(),
             toasts: widget::toaster::Toasts::new(Message::CloseToast),
             watcher_opt: None,
             windows: FxHashMap::default(),
@@ -2346,7 +2439,7 @@ impl Application for App {
         for location in flags.uris {
             if let Some(e) = app.nav_model.iter().find(|e| {
                 app.nav_model.data::<Location>(*e).is_some_and(
-                    |l| matches!(l, Location::Network(uri, ..) if *uri == *location.as_str()),
+                    |l| matches!(l, Location::Network { uri, .. } if *uri == *location.as_str()),
                 )
             }) {
                 commands.push(cosmic::task::message(cosmic::Action::App(
@@ -2486,9 +2579,11 @@ impl Application for App {
         if let Some(location) = self.nav_model.data::<Location>(entity) {
             let should_open = match location {
                 #[cfg(feature = "gvfs")]
-                Location::Network(uri, name, Some(path))
-                    if !path.try_exists().unwrap_or_default() =>
-                {
+                Location::Network {
+                    uri,
+                    display_name,
+                    path_opt: Some(path),
+                } if !path.try_exists().unwrap_or_default() => {
                     let mut found = false;
 
                     if let Some(key) = self
@@ -2497,7 +2592,7 @@ impl Application for App {
                         .find_map(|(k, items)| {
                             items.iter().find_map(|item| {
                                 found |= item.path().is_some_and(|p| path.starts_with(&p))
-                                    || item.name() == *name
+                                    || item.name() == *display_name
                                     || item.uri() == *uri;
                                 (!item.is_mounted() && found).then_some(*k)
                             })
@@ -2529,38 +2624,40 @@ impl Application for App {
                         Some(FAVORITE_PATH_ERROR_REMOVE_BUTTON_ID.clone()),
                     );
                 }
-                Location::Path(path) | Location::Network(_, _, Some(path)) => {
-                    match path.try_exists() {
-                        Ok(true) => true,
-                        Ok(false) => {
-                            log::warn!(
-                                "failed to open favorite, path does not exist: {}",
-                                path.display()
-                            );
-                            return self.push_dialog(
-                                DialogPage::FavoritePathError {
-                                    path: path.clone(),
-                                    entity,
-                                },
-                                Some(FAVORITE_PATH_ERROR_REMOVE_BUTTON_ID.clone()),
-                            );
-                        }
-                        Err(err) => {
-                            log::warn!(
-                                "failed to open favorite for path: {}, {}",
-                                path.display(),
-                                err
-                            );
-                            return self.push_dialog(
-                                DialogPage::FavoritePathError {
-                                    path: path.clone(),
-                                    entity,
-                                },
-                                Some(FAVORITE_PATH_ERROR_REMOVE_BUTTON_ID.clone()),
-                            );
-                        }
+                Location::Path(path)
+                | Location::Network {
+                    path_opt: Some(path),
+                    ..
+                } => match path.try_exists() {
+                    Ok(true) => true,
+                    Ok(false) => {
+                        log::warn!(
+                            "failed to open favorite, path does not exist: {}",
+                            path.display()
+                        );
+                        return self.push_dialog(
+                            DialogPage::FavoritePathError {
+                                path: path.clone(),
+                                entity,
+                            },
+                            Some(FAVORITE_PATH_ERROR_REMOVE_BUTTON_ID.clone()),
+                        );
                     }
-                }
+                    Err(err) => {
+                        log::warn!(
+                            "failed to open favorite for path: {}, {}",
+                            path.display(),
+                            err
+                        );
+                        return self.push_dialog(
+                            DialogPage::FavoritePathError {
+                                path: path.clone(),
+                                entity,
+                            },
+                            Some(FAVORITE_PATH_ERROR_REMOVE_BUTTON_ID.clone()),
+                        );
+                    }
+                },
 
                 _ => true,
             };
@@ -2710,7 +2807,7 @@ impl Application for App {
                         };
 
                         let name = Location::Path(path.clone()).title();
-                        if let Location::Network(uri, _, _) = tab
+                        if let Location::Network { uri, .. } = tab
                             .items_opt
                             .as_ref()
                             .and_then(|items| items.iter().find(|&i| i.path_opt() == Some(&path)))
@@ -2810,6 +2907,7 @@ impl Application for App {
                             return self.operation(Operation::Copy {
                                 paths: file_paths.to_vec(),
                                 to: selected_paths[0].clone(),
+                                desktop_pos: None,
                             });
                         }
                     }
@@ -3179,7 +3277,7 @@ impl Application for App {
                                         .as_ref()
                                         .map_or_else(|| &tab.location, |x| &x.location);
                                     // Try to add text to end of location
-                                    if let Location::Network(uri, ..) = location {
+                                    if let Location::Network { uri, .. } = location {
                                         let mut uri_string = uri.clone();
                                         uri_string.push_str(&text);
                                         tab.edit_location =
@@ -3315,7 +3413,11 @@ impl Application for App {
                     // Automatically navigate to the mounted location
                     if let Some(path) = item.path() {
                         let location = if item.is_remote() {
-                            Location::Network(item.uri(), item.name(), Some(path))
+                            Location::Network {
+                                uri: item.uri(),
+                                display_name: item.name(),
+                                path_opt: Some(path),
+                            }
                         } else {
                             Location::Path(path)
                         };
@@ -3367,6 +3469,7 @@ impl Application for App {
                                 paths: file_paths.to_vec(),
                                 to: selected_paths[0].clone(),
                                 cross_device_copy: false,
+                                desktop_pos: None,
                             });
                         }
                     }
@@ -3674,8 +3777,11 @@ impl Application for App {
                     // Use cached clipboard data if available (needed for Wayland popups)
                     match &self.clipboard_cache {
                         ClipboardCache::Files(contents) => {
-                            return self
-                                .update(Message::PasteContents(to.clone(), contents.clone()));
+                            return self.update(Message::PasteContents(
+                                to.clone(),
+                                contents.clone(),
+                                None,
+                            ));
                         }
                         ClipboardCache::Image(contents) => {
                             return self
@@ -3697,6 +3803,7 @@ impl Application for App {
                                     Some(contents) => cosmic::action::app(Message::PasteContents(
                                         to.clone(),
                                         contents,
+                                        None,
                                     )),
                                     None => cosmic::action::app(Message::PasteImage(to.clone())),
                                 },
@@ -3705,18 +3812,20 @@ impl Application for App {
                     }
                 }
             }
-            Message::PasteContents(to, mut contents) => {
+            Message::PasteContents(to, mut contents, desktop_pos) => {
                 contents.paths.retain(|p| *p != to);
                 if !contents.paths.is_empty() {
                     return match contents.kind {
                         ClipboardKind::Copy => self.operation(Operation::Copy {
                             paths: contents.paths,
                             to,
+                            desktop_pos,
                         }),
                         ClipboardKind::Cut { is_dnd } => self.operation(Operation::Move {
                             paths: contents.paths,
                             to,
                             cross_device_copy: is_dnd,
+                            desktop_pos,
                         }),
                     };
                 }
@@ -3915,8 +4024,48 @@ impl Application for App {
                         }
                     }
 
+                    // Rescan recents if item removed
                     if matches!(op, Operation::RemoveFromRecents { .. }) {
                         commands.push(self.rescan_recents());
+                    }
+
+                    // Set desktop position after move
+                    if let Operation::Copy {
+                        desktop_pos: Some(ref pos),
+                        ..
+                    }
+                    | Operation::Move {
+                        desktop_pos: Some(ref pos),
+                        ..
+                    } = op
+                    {
+                        let mut row = pos.row;
+                        let mut col = pos.col;
+                        let mut changes = Vec::new();
+                        for path in op_sel.selected.iter() {
+                            eprintln!("{:?}: {}, {}", path, row, col);
+
+                            changes.push(DesktopChange::Position(
+                                path.clone(),
+                                DesktopPos {
+                                    display: pos.display.clone(),
+                                    row,
+                                    col,
+                                },
+                            ));
+
+                            //TODO: position relatively to preserve shape of group
+                            row += 1;
+                            //TODO: get real rows
+                            let rows = 10;
+                            if row >= rows {
+                                row = 0;
+                                col += 1;
+                            }
+                            //TODO: if col >= cols, next page
+                        }
+
+                        commands.push(self.desktop_changes(changes));
                     }
 
                     self.complete_operations.insert(id, op);
@@ -4395,8 +4544,15 @@ impl Application for App {
                             }
                         }
                         tab::Command::Delete(paths) => commands.push(self.delete(paths)),
-                        tab::Command::DropFiles(to, from) => {
-                            commands.push(self.update(Message::PasteContents(to, from)));
+                        tab::Command::DesktopChanges(changes) => {
+                            commands.push(self.desktop_changes(changes))
+                        }
+                        tab::Command::DropFiles(to, from, desktop_pos) => {
+                            commands.push(self.update(Message::PasteContents(
+                                to,
+                                from,
+                                desktop_pos,
+                            )));
                         }
                         tab::Command::EmptyTrash => {
                             return self.push_dialog(
@@ -4517,6 +4673,7 @@ impl Application for App {
                     if location == tab.location {
                         tab.parent_item_opt = parent_item_opt;
                         tab.set_items(items);
+
                         let location_str = location.to_string();
                         let sort = self
                             .state
@@ -4527,6 +4684,17 @@ impl Application for App {
 
                         tab.sort_name = sort.0;
                         tab.sort_direction = sort.1;
+
+                        // Check for per-display desktop sort override
+                        if let Location::Desktop {
+                            display, layout, ..
+                        } = location
+                        {
+                            if let Some(sort) = layout.display_sorts.get(&display) {
+                                tab.sort_name = sort.0;
+                                tab.sort_direction = sort.1;
+                            }
+                        }
 
                         let mut tasks = Vec::with_capacity(2);
 
@@ -4705,6 +4873,7 @@ impl Application for App {
                                 kind,
                                 paths: data.paths,
                             },
+                            None,
                         )),
                         Location::Trash if matches!(action, DndAction::Move) => {
                             self.delete(data.paths)
@@ -4772,6 +4941,7 @@ impl Application for App {
                                         kind,
                                         paths: data.paths,
                                     },
+                                    None,
                                 ))
                             } else {
                                 log::warn!("{:?} to {:?} is not supported.", action, tab.location);
@@ -4873,8 +5043,16 @@ impl Application for App {
                 }
                 NavMenuAction::OpenInNewTab(entity) => {
                     let open_task = match self.nav_model.data::<Location>(entity) {
-                        Some(Location::Network(uri, display_name, path)) => self.open_tab(
-                            Location::Network(uri.clone(), display_name.clone(), path.clone()),
+                        Some(Location::Network {
+                            uri,
+                            display_name,
+                            path_opt,
+                        }) => self.open_tab(
+                            Location::Network {
+                                uri: uri.clone(),
+                                display_name: display_name.clone(),
+                                path_opt: path_opt.clone(),
+                            },
                             false,
                             None,
                         ),
@@ -4902,10 +5080,14 @@ impl Application for App {
                                     Location::Trash => {
                                         command.arg("--trash");
                                     }
-                                    Location::Network(uri, _, Some(_)) => {
+                                    Location::Network {
+                                        uri,
+                                        path_opt: Some(_),
+                                        ..
+                                    } => {
                                         command.arg(uri);
                                     }
-                                    Location::Network(..) => {
+                                    Location::Network { .. } => {
                                         command.arg("--network");
                                     }
                                     Location::Recents => {
@@ -4978,7 +5160,7 @@ impl Application for App {
                 match output_event {
                     OutputEvent::Created(output_info_opt) => {
                         let output_id = output.id();
-                        log::info!("output {output_id}: created");
+                        log::warn!("output {output_id}: created");
 
                         let surface_id = WindowId::unique();
                         if let Some(old_surface_id) =
@@ -4991,16 +5173,16 @@ impl Application for App {
                         }
 
                         let display = match output_info_opt {
-                            Some(output_info) => match output_info.name {
-                                Some(output_name) => {
-                                    self.surface_names.insert(surface_id, output_name.clone());
-                                    output_name
+                            Some(output_info) => {
+                                self.surface_infos.insert(surface_id, output_info.clone());
+                                match output_info.name {
+                                    Some(output_name) => output_name,
+                                    None => {
+                                        log::warn!("output {output_id}: no output name");
+                                        String::new()
+                                    }
                                 }
-                                None => {
-                                    log::warn!("output {output_id}: no output name");
-                                    String::new()
-                                }
-                            },
+                            }
                             None => {
                                 log::warn!("output {output_id}: no output info");
                                 String::new()
@@ -5008,7 +5190,12 @@ impl Application for App {
                         };
 
                         let (entity, command) = self.open_tab_entity(
-                            Location::Desktop(crate::desktop_dir(), display, self.config.desktop),
+                            Location::Desktop {
+                                path: crate::desktop_dir(),
+                                display,
+                                layout: self.desktop_layout(),
+                                pos_opt: None,
+                            },
                             false,
                             None,
                             widget::Id::unique(),
@@ -5018,6 +5205,7 @@ impl Application for App {
                             .insert(surface_id, Window::new(WindowKind::Desktop(entity)));
                         return Task::batch([
                             command,
+                            self.update_desktop(),
                             get_layer_surface(SctkLayerSurfaceSettings {
                                 id: surface_id,
                                 layer: Layer::Bottom,
@@ -5041,20 +5229,32 @@ impl Application for App {
                         ]);
                     }
                     OutputEvent::Removed => {
-                        log::info!("output {}: removed", output.id());
+                        log::warn!("output {}: removed", output.id());
                         match self.surface_ids.remove(&output) {
                             Some(surface_id) => {
                                 self.remove_window(&surface_id);
-                                self.surface_names.remove(&surface_id);
-                                return destroy_layer_surface(surface_id);
+                                self.surface_infos.remove(&surface_id);
+                                return Task::batch([
+                                    self.update_desktop(),
+                                    destroy_layer_surface(surface_id),
+                                ]);
                             }
                             None => {
                                 log::warn!("output {}: no surface found", output.id());
                             }
                         }
                     }
-                    OutputEvent::InfoUpdate(_output_info) => {
-                        log::info!("output {}: info update", output.id());
+                    OutputEvent::InfoUpdate(output_info) => {
+                        log::warn!("output {}: info update", output.id());
+                        match self.surface_ids.get(&output) {
+                            Some(surface_id) => {
+                                self.surface_infos.insert(*surface_id, output_info.clone());
+                                return self.update_desktop();
+                            }
+                            None => {
+                                log::warn!("output {}: no surface found", output.id());
+                            }
+                        }
                     }
                 }
             }
@@ -6883,7 +7083,7 @@ pub(crate) mod test_utils {
 
         // New tab with items
         let location = Location::Path(path.to_owned());
-        let (parent_item_opt, items) = location.scan(IconSizes::default());
+        let (parent_item_opt, items) = location.scan(IconSizes::default(), &State::default());
         let mut tab = Tab::new(
             location,
             TabConfig::default(),

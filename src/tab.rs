@@ -38,6 +38,7 @@ use cosmic::{
     widget::{
         self, DndDestination, DndSource, Id, Space, Widget,
         menu::{action::MenuAction, key_bind::KeyBind},
+        progress_bar::primary,
     },
 };
 use i18n_embed::LanguageLoader;
@@ -79,7 +80,8 @@ use crate::{
     FxOrderMap,
     app::{Action, PreviewItem, PreviewKind},
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
-    config::{DesktopConfig, ICON_SCALE_MAX, ICON_SIZE_GRID, IconSizes, TabConfig, ThumbCfg},
+    config::{ICON_SCALE_MAX, ICON_SIZE_GRID, IconSizes, TabConfig, ThumbCfg},
+    desktop::{DesktopChange, DesktopLayout, DesktopPos, DesktopSize},
     dialog::DialogKind,
     fl,
     large_image::{
@@ -1291,18 +1293,18 @@ pub fn scan_network(uri: &str, sizes: IconSizes) -> Vec<Item> {
 pub fn scan_desktop(
     tab_path: &PathBuf,
     _display: &str,
-    desktop_config: DesktopConfig,
+    layout: &DesktopLayout,
     mut sizes: IconSizes,
 ) -> Vec<Item> {
-    sizes.grid = desktop_config.icon_size;
+    sizes.grid = layout.config.icon_size;
 
     let mut items = Vec::new();
 
-    if desktop_config.show_content {
+    if layout.config.show_content {
         items.extend(scan_path(tab_path, sizes));
     }
 
-    if desktop_config.show_mounted_drives {
+    if layout.config.show_mounted_drives {
         for mounter in MOUNTERS.values() {
             let Some(mounter_items) = mounter.items(sizes) else {
                 continue;
@@ -1325,6 +1327,7 @@ pub fn scan_desktop(
                 //Override some data with mounter information
                 item.name = mounter_item.name();
                 item.display_name = Item::display_name(&item.name);
+                item.is_mount_point = true;
 
                 //TODO: use icon size for mounter item icon
                 if let Some(icon) = mounter_item.icon(false) {
@@ -1338,7 +1341,7 @@ pub fn scan_desktop(
         }
     }
 
-    if desktop_config.show_trash {
+    if layout.config.show_trash {
         let name = fl!("trash");
         let display_name = Item::display_name(&name);
 
@@ -1390,11 +1393,15 @@ pub struct EditLocation {
 
 impl EditLocation {
     pub fn resolve(&self) -> Option<Location> {
-        if let Location::Network(uri, ..) = &self.location {
+        if let Location::Network { uri, .. } = &self.location {
             MOUNTERS
                 .values()
                 .find_map(|mounter| mounter.dir_info(uri))
-                .map(|(uri, display_name, path_opt)| Location::Network(uri, display_name, path_opt))
+                .map(|(uri, display_name, path_opt)| Location::Network {
+                    uri,
+                    display_name,
+                    path_opt,
+                })
         } else {
             let Some(selected) = self.selected else {
                 return Some(self.location.clone());
@@ -1448,24 +1455,38 @@ impl From<Location> for EditLocation {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Location {
-    Desktop(PathBuf, String, DesktopConfig),
-    Network(String, String, Option<PathBuf>),
+    Desktop {
+        path: PathBuf,
+        display: String,
+        layout: Arc<DesktopLayout>,
+        pos_opt: Option<DesktopPos>,
+    },
+    Network {
+        uri: String,
+        display_name: String,
+        path_opt: Option<PathBuf>,
+    },
     Path(PathBuf),
     Recents,
-    Search(PathBuf, String, bool, Instant),
+    Search {
+        path: PathBuf,
+        term: String,
+        show_hidden: bool,
+        time: Instant,
+    },
     Trash,
 }
 
-impl std::fmt::Display for Location {
+impl fmt::Display for Location {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Desktop(path, display, ..) => {
+            Self::Desktop { path, display, .. } => {
                 write!(f, "{} on display {display}", path.display())
             }
-            Self::Network(uri, ..) => write!(f, "{uri}"),
+            Self::Network { uri, .. } => write!(f, "{uri}"),
             Self::Path(path) => write!(f, "{}", path.display()),
             Self::Recents => write!(f, "recents"),
-            Self::Search(path, term, ..) => write!(f, "search {} for {}", path.display(), term),
+            Self::Search { path, term, .. } => write!(f, "search {} for {}", path.display(), term),
             Self::Trash => write!(f, "trash"),
         }
     }
@@ -1473,7 +1494,7 @@ impl std::fmt::Display for Location {
 
 impl Location {
     pub fn normalize(&self) -> Self {
-        if let Location::Network(uri, ..) = self {
+        if let Location::Network { uri, .. } = self {
             if !uri.ends_with('/') {
                 let mut uri = uri.clone();
                 uri.push('/');
@@ -1512,20 +1533,20 @@ impl Location {
 
     pub const fn path_opt(&self) -> Option<&PathBuf> {
         match self {
-            Self::Desktop(path, ..) => Some(path),
+            Self::Desktop { path, .. } => Some(path),
             Self::Path(path) => Some(path),
-            Self::Search(path, ..) => Some(path),
-            Self::Network(_, _, path) => path.as_ref(),
+            Self::Search { path, .. } => Some(path),
+            Self::Network { path_opt, .. } => path_opt.as_ref(),
             _ => None,
         }
     }
 
     pub(crate) fn into_path_opt(self) -> Option<PathBuf> {
         match self {
-            Self::Desktop(path, ..) => Some(path),
+            Self::Desktop { path, .. } => Some(path),
             Self::Path(path) => Some(path),
-            Self::Search(path, ..) => Some(path),
-            Self::Network(_, _, path) => path,
+            Self::Search { path, .. } => Some(path),
+            Self::Network { path_opt, .. } => path_opt,
             _ => None,
         }
     }
@@ -1533,21 +1554,46 @@ impl Location {
     pub fn with_path(&self, path: PathBuf) -> Self {
         let path = Self::expand_tilde(path);
         match self {
-            Self::Desktop(_, display, desktop_config) => {
-                Self::Desktop(path, display.clone(), *desktop_config)
-            }
+            Self::Desktop {
+                display,
+                layout,
+                pos_opt,
+                ..
+            } => Self::Desktop {
+                path,
+                display: display.clone(),
+                layout: layout.clone(),
+                pos_opt: pos_opt.clone(),
+            },
             Self::Path(..) => Self::Path(path),
-            Self::Search(_, term, show_hidden, time) => {
-                Self::Search(path, term.clone(), *show_hidden, *time)
-            }
+            Self::Search {
+                term,
+                show_hidden,
+                time,
+                ..
+            } => Self::Search {
+                path,
+                term: term.clone(),
+                show_hidden: *show_hidden,
+                time: *time,
+            },
 
             other => other.clone(),
         }
     }
 
     pub fn with_uri(&self, uri: String) -> Self {
-        if let Self::Network(_, name, path) = self {
-            Self::Network(uri, name.clone(), path.clone())
+        if let Self::Network {
+            display_name,
+            path_opt,
+            ..
+        } = self
+        {
+            Self::Network {
+                uri,
+                display_name: display_name.clone(),
+                path_opt: path_opt.clone(),
+            }
         } else {
             self.clone()
         }
@@ -1555,17 +1601,20 @@ impl Location {
 
     pub fn scan(&self, sizes: IconSizes) -> (Option<Item>, Vec<Item>) {
         let items = match self {
-            Self::Desktop(path, display, desktop_config) => {
-                scan_desktop(path, display, *desktop_config, sizes)
-            }
+            Self::Desktop {
+                path,
+                display,
+                layout,
+                ..
+            } => scan_desktop(path, display, layout, sizes),
             Self::Path(path) => scan_path(path, sizes),
-            Self::Search(..) => {
+            Self::Search { .. } => {
                 // Search is done incrementally
                 Vec::new()
             }
             Self::Trash => scan_trash(sizes),
             Self::Recents => scan_recents(sizes),
-            Self::Network(uri, _, _) => scan_network(uri, sizes),
+            Self::Network { uri, .. } => scan_network(uri, sizes),
         };
         let parent_item_opt = match self.path_opt() {
             Some(path) => match item_from_path(path, sizes) {
@@ -1583,15 +1632,11 @@ impl Location {
 
     pub fn title(&self) -> String {
         match self {
-            Self::Desktop(path, _, _) => {
+            Self::Desktop { path, .. } | Self::Path(path) => {
                 let (name, _) = folder_name(path);
                 name
             }
-            Self::Path(path) => {
-                let (name, _) = folder_name(path);
-                name
-            }
-            Self::Search(path, term, ..) => {
+            Self::Search { path, term, .. } => {
                 //TODO: translate
                 let (name, _) = folder_name(path);
                 format!("Search \"{term}\": {name}")
@@ -1602,7 +1647,7 @@ impl Location {
             Self::Recents => {
                 fl!("recents")
             }
-            Self::Network(display_name, ..) => display_name.clone(),
+            Self::Network { display_name, .. } => display_name.clone(),
         }
     }
 
@@ -1626,11 +1671,14 @@ impl Location {
     pub fn supports_paste(&self) -> bool {
         matches!(
             self,
-            Self::Desktop(..)
+            Self::Desktop { .. }
                 | Self::Path(..)
-                | Self::Search(..)
+                | Self::Search { .. }
                 | Self::Recents
-                | Self::Network(_, _, Some(_))
+                | Self::Network {
+                    path_opt: Some(_),
+                    ..
+                }
         )
     }
 }
@@ -1658,7 +1706,8 @@ pub enum Command {
     ChangeLocation(String, Location, Option<Vec<PathBuf>>),
     ContextMenu(Option<Point>, Option<window::Id>),
     Delete(Vec<PathBuf>),
-    DropFiles(PathBuf, ClipboardPaste),
+    DesktopChanges(Vec<DesktopChange>),
+    DropFiles(PathBuf, ClipboardPaste, Option<DesktopPos>),
     EmptyTrash,
     #[cfg(feature = "desktop")]
     ExecEntryAction(cosmic::desktop::DesktopEntryData, usize),
@@ -2241,9 +2290,9 @@ impl Item {
     ) -> widget::Text<'a, cosmic::Theme, cosmic::Renderer> {
         widget::text::body(name)
             .wrapping(text::Wrapping::WordOrGlyph)
-            .ellipsize(text::Ellipsize::Middle(
-                text::EllipsizeHeightLimit::Lines(3),
-            ))
+            .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
+                3,
+            )))
     }
 
     /// Text widget for a filename in list view: word-or-glyph wrapping, middle-ellipsized to 1 line.
@@ -2252,9 +2301,9 @@ impl Item {
     ) -> widget::Text<'a, cosmic::Theme, cosmic::Renderer> {
         widget::text::body(name)
             .wrapping(text::Wrapping::WordOrGlyph)
-            .ellipsize(text::Ellipsize::Middle(
-                text::EllipsizeHeightLimit::Lines(1),
-            ))
+            .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
+                1,
+            )))
     }
 
     pub fn path_opt(&self) -> Option<&PathBuf> {
@@ -2568,10 +2617,11 @@ pub enum View {
 }
 #[derive(Clone, Copy, Debug, Hash, PartialEq, PartialOrd, Ord, Eq, Deserialize, Serialize)]
 pub enum HeadingOptions {
-    Name = 0,
+    Name,
     Modified,
     Size,
     TrashedOn,
+    Manual,
 }
 
 impl fmt::Display for HeadingOptions {
@@ -2581,18 +2631,8 @@ impl fmt::Display for HeadingOptions {
             Self::Modified => write!(f, "{}", fl!("modified")),
             Self::Size => write!(f, "{}", fl!("size")),
             Self::TrashedOn => write!(f, "{}", fl!("trashed-on")),
+            Self::Manual => write!(f, ""),
         }
-    }
-}
-
-impl HeadingOptions {
-    pub fn names() -> Vec<String> {
-        vec![
-            Self::Name.to_string(),
-            Self::Modified.to_string(),
-            Self::Size.to_string(),
-            Self::TrashedOn.to_string(),
-        ]
     }
 }
 
@@ -3203,8 +3243,8 @@ impl Tab {
             {
                 let mut remove = false;
                 if let Some(last_location) = self.history.last() {
-                    if let Location::Network(last_uri, ..) = last_location
-                        && let Location::Network(uri, ..) = location
+                    if let Location::Network { uri: last_uri, .. } = last_location
+                        && let Location::Network { uri, .. } = location
                     {
                         remove = last_uri == uri;
                     } else if let Some(last_path) = last_location.path_opt()
@@ -3436,13 +3476,13 @@ impl Tab {
                     self.date_time_formatter = date_time_formatter(self.config.military_time);
                     self.time_formatter = time_formatter(self.config.military_time);
                 }
-                if show_hidden_changed && let Location::Search(path, term, ..) = &self.location {
-                    cd = Some(Location::Search(
-                        path.clone(),
-                        term.clone(),
-                        self.config.show_hidden,
-                        Instant::now(),
-                    ));
+                if show_hidden_changed && let Location::Search { path, term, .. } = &self.location {
+                    cd = Some(Location::Search {
+                        path: path.clone(),
+                        term: term.clone(),
+                        show_hidden: self.config.show_hidden,
+                        time: Instant::now(),
+                    });
                 }
                 // Unhighlight all items when config changes
                 if let Some(ref mut items) = self.items_opt {
@@ -3557,7 +3597,7 @@ impl Tab {
             }
             Message::EditLocationComplete(selected) => {
                 if let Some(mut edit_location) = self.edit_location.take()
-                    && !matches!(edit_location.location, Location::Network(..))
+                    && !matches!(edit_location.location, Location::Network { .. })
                 {
                     edit_location.selected = Some(selected);
                     cd = edit_location.resolve();
@@ -4161,14 +4201,21 @@ impl Tab {
                 commands.push(Command::SetPermissions(path, mode));
             }
             Message::SetSort(heading_option, dir) => {
-                if !matches!(self.location, Location::Search(..)) {
+                if !matches!(self.location, Location::Search { .. }) {
                     self.sort_name = heading_option;
                     self.sort_direction = dir;
-                    if !matches!(self.location, Location::Desktop(..)) {
+                    if let Location::Desktop { display, .. } = &self.location {
+                        // Desktop sort is stored per display in desktop_changes
+                        commands.push(Command::DesktopChanges(vec![DesktopChange::Sort(
+                            display.clone(),
+                            heading_option,
+                            dir,
+                        )]));
+                    } else {
                         commands.push(Command::SetSort(
                             self.location.normalize().to_string(),
                             heading_option,
-                            self.sort_direction,
+                            dir,
                         ));
                     }
                 }
@@ -4225,49 +4272,56 @@ impl Tab {
                 );
             }
             Message::ToggleSort(heading_option) => {
-                if !matches!(self.location, Location::Search(..)) {
-                    let heading_sort = if self.sort_name == heading_option {
+                if !matches!(self.location, Location::Search { .. }) {
+                    let dir = if self.sort_name == heading_option {
                         !self.sort_direction
                     } else {
                         // Default modified to descending, and others to ascending.
                         heading_option != HeadingOptions::Modified
                     };
-
-                    if !matches!(self.location, Location::Desktop(..)) {
+                    self.sort_name = heading_option;
+                    self.sort_direction = dir;
+                    if let Location::Desktop { display, .. } = &self.location {
+                        // Desktop sort is stored per display in desktop_changes
+                        commands.push(Command::DesktopChanges(vec![DesktopChange::Sort(
+                            display.clone(),
+                            heading_option,
+                            dir,
+                        )]));
+                    } else {
                         commands.push(Command::SetSort(
                             self.location.normalize().to_string(),
                             heading_option,
-                            heading_sort,
+                            dir,
                         ));
                     }
-
-                    self.sort_direction = heading_sort;
-                    self.sort_name = heading_option;
                 }
             }
-            Message::Drop(Some((to, mut from))) => {
+            Message::Drop(Some((to_loc, mut from))) => {
                 self.dnd_hovered = None;
-                match to {
-                    Location::Desktop(to, ..)
+
+                match &to_loc {
+                    Location::Desktop { path: to, .. }
                     | Location::Path(to)
-                    | Location::Network(_, _, Some(to)) => {
-                        if let Ok(entries) = fs::read_dir(&to) {
-                            for i in entries.into_iter().filter_map(Result::ok) {
-                                let i = i.path();
-                                from.paths.retain(|p| &i != p);
-                                if from.paths.is_empty() {
-                                    log::info!("All dropped files already in target directory.");
-                                    return commands;
-                                }
-                            }
-                        }
-                        commands.push(Command::DropFiles(to, from));
+                    | Location::Network {
+                        path_opt: Some(to), ..
+                    } => {
+                        let desktop_pos = if let Location::Desktop {
+                            pos_opt: Some(pos), ..
+                        } = &to_loc
+                        {
+                            Some(pos.clone())
+                        } else {
+                            None
+                        };
+
+                        commands.push(Command::DropFiles(to.clone(), from, desktop_pos));
                     }
                     Location::Trash if matches!(from.kind, ClipboardKind::Cut { .. }) => {
                         commands.push(Command::Delete(from.paths));
                     }
                     _ => {
-                        log::warn!("{:?} to {:?} is not supported.", from.kind, to);
+                        log::warn!("{:?} to {:?} is not supported.", from.kind, to_loc);
                     }
                 }
             }
@@ -4396,7 +4450,7 @@ impl Tab {
 
     pub(crate) const fn sort_options(&self) -> (HeadingOptions, bool, bool) {
         match self.location {
-            Location::Search(..) => (HeadingOptions::Modified, false, false),
+            Location::Search { .. } => (HeadingOptions::Modified, false, false),
             _ => (
                 self.sort_name,
                 self.sort_direction,
@@ -4505,6 +4559,9 @@ impl Tab {
                     }
                 });
             }
+            HeadingOptions::Manual => {
+                // Manual sort is only used on desktop, and other code will handle positioning
+            }
         }
         Some(items)
     }
@@ -4538,7 +4595,7 @@ impl Tab {
             .on_leave(move || Message::DndLeave(location3.clone())),
         );
         // Desktop will not show DnD indicator
-        if is_dnd_hovered && !matches!(self.mode, Mode::Desktop) {
+        if is_dnd_hovered {
             container = container.style(|t| {
                 let mut a = widget::container::Style::default();
                 let t = t.cosmic();
@@ -4855,7 +4912,7 @@ impl Tab {
             let mut text_input = None;
 
             //TODO: allow editing other locations
-            if let Location::Network(ref uri, ..) = edit_location.location {
+            if let Location::Network { uri, .. } = &edit_location.location {
                 let location = edit_location.location.clone();
                 text_input = Some(
                     widget::text_input("", uri.clone())
@@ -4946,7 +5003,9 @@ impl Tab {
 
         let mut children: Vec<Element<_>> = Vec::new();
         match &self.location {
-            Location::Desktop(path, ..) | Location::Path(path) | Location::Search(path, ..) => {
+            Location::Desktop { path, .. }
+            | Location::Path(path)
+            | Location::Search { path, .. } => {
                 let excess_str = "...";
                 let excess_width = text_width_body(excess_str);
                 for (index, ancestor) in path.ancestors().enumerate() {
@@ -5051,15 +5110,19 @@ impl Tab {
                         .into(),
                 );
             }
-            Location::Network(uri, display_name, path) => {
+            Location::Network {
+                uri,
+                display_name,
+                path_opt,
+            } => {
                 children.push(
                     widget::button::custom(widget::text::heading(display_name))
                         .padding(space_xxxs)
-                        .on_press(Message::Location(Location::Network(
-                            uri.clone(),
-                            display_name.clone(),
-                            path.clone(),
-                        )))
+                        .on_press(Message::Location(Location::Network {
+                            uri: uri.clone(),
+                            display_name: display_name.clone(),
+                            path_opt: path_opt.clone(),
+                        }))
                         .class(theme::Button::Text)
                         .into(),
                 );
@@ -5104,7 +5167,7 @@ impl Tab {
                         .into(),
                     widget::text::body(if has_hidden {
                         fl!("empty-folder-hidden")
-                    } else if matches!(self.location, Location::Search(..)) {
+                    } else if matches!(self.location, Location::Search { .. }) {
                         fl!("no-results")
                     } else {
                         fl!("empty-folder")
@@ -5142,9 +5205,9 @@ impl Tab {
         } = self.config;
 
         let mut grid_spacing = space_xxs;
-        if let Location::Desktop(_path, _output, desktop_config) = &self.location {
-            icon_sizes.grid = desktop_config.icon_size;
-            grid_spacing = desktop_config.grid_spacing_for(space_xxs);
+        if let Location::Desktop { layout, .. } = &self.location {
+            icon_sizes.grid = layout.config.icon_size;
+            grid_spacing = layout.config.grid_spacing_for(space_xxs);
         }
 
         let text_height = 3 * 20; // 3 lines of text
@@ -5207,21 +5270,91 @@ impl Tab {
         let mut drag_s_i = 0;
 
         let mut column = widget::column::with_capacity(2);
-        if let Some(items) = self.column_sort() {
+        if let Some(mut items) = self.column_sort() {
+            enum GridItem<'a> {
+                Item(usize, &'a Item),
+                Empty,
+            }
+
+            let mut desktop_items = if let Mode::Desktop = &self.mode
+                && let Location::Desktop {
+                    display, layout, ..
+                } = &self.location
+            {
+                layout.resize(display, DesktopSize { rows, cols });
+
+                let mut desktop_items = HashMap::new();
+                let mut i = 0;
+                while i < items.len() {
+                    let mut remove = false;
+                    let mut pos_opt = None;
+
+                    if let Some(path) = items[i].1.path_opt() {
+                        if let Some(pos) = layout.positions.get(path) {
+                            remove = true;
+                            //TODO: resize grid if rows/cols do not match
+                            if pos.display == *display {
+                                if self.sort_name == HeadingOptions::Manual {
+                                    pos_opt = Some((pos.row, pos.col));
+                                } else {
+                                    remove = false;
+                                }
+                            }
+                        }
+                    }
+
+                    if !remove {
+                        // Any items without a set display will be on the primary display
+                        if let Some(primary_display) = &layout.primary_display {
+                            if display != primary_display {
+                                remove = true;
+                            }
+                        }
+                    }
+
+                    if remove {
+                        let item = items.remove(i);
+                        if let Some(pos) = pos_opt {
+                            desktop_items.insert(pos, item);
+                        }
+                    } else {
+                        i += 1;
+                    }
+                }
+                Some(desktop_items)
+            } else {
+                None
+            };
+
+            let mut items_iter = items.iter();
+            let mut grid_item_at = |row: usize, col: usize| -> Option<GridItem> {
+                // Manually placed desktop items
+                if let Some((i, item)) = desktop_items.as_mut().and_then(|x| x.remove(&(row, col)))
+                {
+                    return Some(GridItem::Item(i, item));
+                }
+
+                // Regular items
+                if let Some((i, item)) = items_iter.next() {
+                    return Some(GridItem::Item(*i, item));
+                }
+
+                // Empty spaces on desktop for drag and drop
+                if matches!(self.mode, Mode::Desktop) && row < rows {
+                    return Some(GridItem::Empty);
+                }
+
+                // No more items
+                None
+            };
+
             let mut count = 0;
             let mut col = 0;
             let mut row = 0;
             let mut page_row = 0;
             let mut hidden = 0;
             let mut grid_elements = Vec::new();
-            for &(i, item) in &items {
-                if !show_hidden && item.hidden {
-                    item.pos_opt.set(None);
-                    item.rect_opt.set(None);
-                    hidden += 1;
-                    continue;
-                }
-                item.pos_opt.set(Some((row, col)));
+            while let Some(grid_item) = grid_item_at(row, col) {
                 let item_rect = Rectangle::new(
                     Point::new(
                         (col * (item_width + column_spacing as usize) + space_xxs as usize) as f32,
@@ -5229,7 +5362,17 @@ impl Tab {
                     ),
                     Size::new(item_width as f32, item_height as f32),
                 );
-                item.rect_opt.set(Some(item_rect));
+
+                if let GridItem::Item(_i, item) = grid_item {
+                    if !show_hidden && item.hidden {
+                        item.pos_opt.set(None);
+                        item.rect_opt.set(None);
+                        hidden += 1;
+                        continue;
+                    }
+                    item.pos_opt.set(Some((row, col)));
+                    item.rect_opt.set(Some(item_rect));
+                }
 
                 //TODO: error if the row or col is already set?
                 while grid_elements.len() <= row {
@@ -5238,83 +5381,140 @@ impl Tab {
 
                 // Only build elements if visible (for performance)
                 if item_rect.intersects(&visible_rect) {
-                    //TODO: one focus group per grid item (needs custom widget)
-                    let buttons: Vec<Element<Message>> = vec![
-                        widget::button::custom(
-                            widget::icon::icon(item.icon_handle_grid.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_sizes.grid())
-                                .width(Length::Shrink),
-                        )
-                        .padding(space_xxxs)
-                        .class(button_style(
-                            item.selected,
-                            item.highlighted,
-                            item.cut,
-                            false,
-                            false,
-                            false,
-                        ))
-                        .into(),
-                        widget::tooltip(
-                            widget::button::custom(Item::grid_display_name(&item.display_name))
-                                .id(item.button_id.clone())
-                                .padding([0, space_xxxs])
+                    match grid_item {
+                        GridItem::Item(i, item) => {
+                            //TODO: one focus group per grid item (needs custom widget)
+                            let buttons: Vec<Element<Message>> = vec![
+                                widget::button::custom(
+                                    widget::icon::icon(item.icon_handle_grid.clone())
+                                        .content_fit(ContentFit::Contain)
+                                        .size(icon_sizes.grid())
+                                        .width(Length::Shrink),
+                                )
+                                .padding(space_xxxs)
                                 .class(button_style(
                                     item.selected,
                                     item.highlighted,
                                     item.cut,
-                                    true,
-                                    true,
-                                    matches!(self.mode, Mode::Desktop),
-                                )),
-                            widget::text::body(&item.name),
-                            widget::tooltip::Position::Bottom,
-                        )
-                        .into(),
-                    ];
+                                    false,
+                                    false,
+                                    false,
+                                ))
+                                .into(),
+                                widget::tooltip(
+                                    widget::button::custom(Item::grid_display_name(
+                                        &item.display_name,
+                                    ))
+                                    .id(item.button_id.clone())
+                                    .padding([0, space_xxxs])
+                                    .class(button_style(
+                                        item.selected,
+                                        item.highlighted,
+                                        item.cut,
+                                        true,
+                                        true,
+                                        matches!(self.mode, Mode::Desktop),
+                                    )),
+                                    widget::text::body(&item.name),
+                                    widget::tooltip::Position::Bottom,
+                                )
+                                .into(),
+                            ];
 
-                    let mut column = widget::column::with_capacity(buttons.len())
-                        .align_x(Alignment::Center)
-                        .height(Length::Fixed(item_height as f32))
-                        .width(Length::Fixed(item_width as f32));
-                    for button in buttons {
-                        if self.context_menu.is_some() {
-                            column = column.push(button);
-                        } else {
-                            column = column.push(
-                                mouse_area::MouseArea::new(button)
-                                    .on_right_press_no_capture()
-                                    .wayland_on_right_press_window_position()
-                                    .on_right_press(move |point_opt| {
-                                        Message::RightClick(point_opt, Some(i))
-                                    }),
+                            let mut column = widget::column::with_capacity(buttons.len())
+                                .align_x(Alignment::Center)
+                                .height(Length::Fixed(item_height as f32))
+                                .width(Length::Fixed(item_width as f32));
+                            for button in buttons {
+                                if self.context_menu.is_some() {
+                                    column = column.push(button);
+                                } else {
+                                    column = column.push(
+                                        mouse_area::MouseArea::new(button)
+                                            .on_right_press_no_capture()
+                                            .wayland_on_right_press_window_position()
+                                            .on_right_press(move |point_opt| {
+                                                Message::RightClick(point_opt, Some(i))
+                                            }),
+                                    );
+                                }
+                            }
+
+                            let column: Element<Message> =
+                                if item.metadata.is_dir() && item.location_opt.is_some() {
+                                    self.dnd_dest(&item.location_opt.clone().unwrap(), column)
+                                } else if matches!(self.mode, Mode::Desktop) {
+                                    if let Location::Desktop {
+                                        path,
+                                        display,
+                                        layout,
+                                        ..
+                                    } = &self.location
+                                    {
+                                        let location = Location::Desktop {
+                                            path: path.clone(),
+                                            display: display.clone(),
+                                            layout: layout.clone(),
+                                            pos_opt: Some(DesktopPos {
+                                                display: display.clone(),
+                                                row,
+                                                col,
+                                            }),
+                                        };
+                                        self.dnd_dest(&location, column)
+                                    } else {
+                                        column.into()
+                                    }
+                                } else {
+                                    column.into()
+                                };
+
+                            if item.selected {
+                                dnd_items.push((i, (row, col), item));
+                                drag_w_i = drag_w_i.min(col);
+                                drag_n_i = drag_n_i.min(row);
+                                drag_e_i = drag_e_i.max(col);
+                                drag_s_i = drag_s_i.max(row);
+                            }
+                            let mouse_area = crate::mouse_area::MouseArea::new(column)
+                                .on_press(move |_| Message::Click(Some(i)))
+                                .on_double_click(move |_| Message::DoubleClick(Some(i)))
+                                .on_release(move |_| Message::ClickRelease(Some(i)))
+                                .on_middle_press(move |_| Message::MiddleClick(i))
+                                .on_enter(move || Message::HighlightActivate(i))
+                                .on_exit(move || Message::HighlightDeactivate(i));
+                            grid_elements[row].push(Element::from(mouse_area));
+                        }
+                        GridItem::Empty => {
+                            // Add empty spaces for drag and drop reordering on desktop
+                            let space = widget::Space::new(
+                                Length::Fixed(item_width as f32),
+                                Length::Fixed(item_height as f32),
                             );
+                            let element = if let Location::Desktop {
+                                path,
+                                display,
+                                layout,
+                                ..
+                            } = &self.location
+                            {
+                                let location = Location::Desktop {
+                                    path: path.clone(),
+                                    display: display.clone(),
+                                    layout: layout.clone(),
+                                    pos_opt: Some(DesktopPos {
+                                        display: display.clone(),
+                                        row,
+                                        col,
+                                    }),
+                                };
+                                self.dnd_dest(&location, space)
+                            } else {
+                                space.into()
+                            };
+                            grid_elements[row].push(element);
                         }
                     }
-
-                    let column: Element<Message> =
-                        if item.metadata.is_dir() && item.location_opt.is_some() {
-                            self.dnd_dest(&item.location_opt.clone().unwrap(), column)
-                        } else {
-                            column.into()
-                        };
-
-                    if item.selected {
-                        dnd_items.push((i, (row, col), item));
-                        drag_w_i = drag_w_i.min(col);
-                        drag_n_i = drag_n_i.min(row);
-                        drag_e_i = drag_e_i.max(col);
-                        drag_s_i = drag_s_i.max(row);
-                    }
-                    let mouse_area = crate::mouse_area::MouseArea::new(column)
-                        .on_press(move |_| Message::Click(Some(i)))
-                        .on_double_click(move |_| Message::DoubleClick(Some(i)))
-                        .on_release(move |_| Message::ClickRelease(Some(i)))
-                        .on_middle_press(move |_| Message::MiddleClick(i))
-                        .on_enter(move || Message::HighlightActivate(i))
-                        .on_exit(move || Message::HighlightDeactivate(i));
-                    grid_elements[row].push(Element::from(mouse_area));
                 } else {
                     // Add a spacer if the row is empty, so scroll works
                     if grid_elements[row].is_empty() {
@@ -5422,9 +5622,9 @@ impl Tab {
                                 false,
                                 false,
                             )),
-                            widget::button::custom(
-                                Item::grid_display_name(item.display_name.clone()),
-                            )
+                            widget::button::custom(Item::grid_display_name(
+                                item.display_name.clone(),
+                            ))
                             .id(item.button_id.clone())
                             .on_press(Message::Click(Some(*i)))
                             .padding([0, space_xxxs])
@@ -5493,7 +5693,7 @@ impl Tab {
         let modified_width = 200.0;
         let size_width = 100.0;
         let condensed = size.width < (name_width + modified_width + size_width);
-        let is_search = matches!(self.location, Location::Search(..));
+        let is_search = matches!(self.location, Location::Search { .. });
         let icon_size = if condensed || is_search {
             icon_sizes.list_condensed()
         } else {
@@ -5997,7 +6197,7 @@ impl Tab {
                     );
                 }
             }
-            Location::Network(uri, _display_name, _path) if uri == "network:///" => {
+            Location::Network { uri, .. } if uri == "network:///" => {
                 tab_column = tab_column.push(
                     widget::layer_container(widget::row::with_children([
                         widget::horizontal_space().into(),
@@ -6358,7 +6558,13 @@ impl Tab {
         }
 
         // Load search items incrementally
-        if let Location::Search(path, term, show_hidden, start) = &self.location {
+        if let Location::Search {
+            path,
+            term,
+            show_hidden,
+            time: start,
+        } = &self.location
+        {
             let location = self.location.clone();
             let path = path.clone();
             let term = term.clone();

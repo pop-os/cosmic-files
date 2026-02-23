@@ -129,7 +129,11 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
         let uri = String::from(file.child(info.name()).uri());
 
         //TODO: what is the best way to resolve shortcuts?
-        let location = Location::Network(uri, display_name.clone(), file.child(&name).path());
+        let location = Location::Network {
+            uri,
+            display_name: display_name.clone(),
+            path_opt: file.child(&name).path(),
+        };
 
         let metadata = if !force_dir && !info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE) {
             let mtime = info.attribute_uint64(gio::FILE_ATTRIBUTE_TIME_MODIFIED);
