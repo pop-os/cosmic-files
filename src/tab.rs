@@ -4271,7 +4271,20 @@ impl Tab {
             }
             Message::Drop(Some((to, mut from))) => {
                 self.dnd_hovered = None;
-                eprintln!("drop from {:?} to {:?}", from, to);
+
+                if let Location::Desktop {
+                    path: to,
+                    display,
+                    layout,
+                    pos_opt: Some((row, col)),
+                } = &to
+                {
+                    eprintln!(
+                        "Drop {:?} to desktop {:?} display {:?} position {}, {}: {:?}",
+                        from, to, display, row, col, layout
+                    );
+                }
+
                 match to {
                     Location::Desktop { path: to, .. }
                     | Location::Path(to)
