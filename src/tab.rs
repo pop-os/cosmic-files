@@ -6211,11 +6211,10 @@ impl Tab {
                 // pre-processing step
                 widget::id_container(
                     widget::scrollable(popover)
-                        .id(self.scrollable_id.clone())
                         .on_scroll(Message::Scroll)
                         .width(Length::Fill)
                         .height(Length::Fill),
-                    widget::Id::new("asdfasdlkfj;asdklfj;sdklfa"),
+                    widget::Id::new(format!("{}-scrollable", self.scrollable_id)),
                 ),
             );
         } else {
@@ -6422,7 +6421,14 @@ impl Tab {
         clipboard_paste_available: bool,
     ) -> Element<'a, Message> {
         widget::responsive(move |size| {
-            self.view_responsive(key_binds, modifiers, size, clipboard_paste_available)
+            widget::id_container(
+                self.view_responsive(key_binds, modifiers, size, clipboard_paste_available),
+                Id::new(format!(
+                    "tab-{}-{}",
+                    self.scrollable_id, self.location_title
+                )),
+            )
+            .into()
         })
         .into()
     }
