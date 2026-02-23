@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
+use cctk::sctk::output::OutputInfo;
+#[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use cosmic::iced::{
     Limits, Point,
     event::wayland::{Event as WaylandEvent, OutputEvent, OverlapNotifyEvent},
@@ -751,7 +753,7 @@ pub struct App {
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     surface_ids: FxHashMap<WlOutput, WindowId>,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
-    surface_names: FxHashMap<WindowId, String>,
+    surface_infos: FxHashMap<WindowId, OutputInfo>,
     toasts: widget::toaster::Toasts<Message>,
     watcher_opt: Option<(
         Debouncer<RecommendedWatcher, RecommendedCache>,
@@ -1526,7 +1528,7 @@ impl App {
         Task::batch(commands)
     }
 
-    fn update_desktop(&mut self) -> Task<Message> {
+    fn update_desktop_config(&mut self) -> Task<Message> {
         let needs_reload: Box<[_]> = (self.tab_model.iter())
             .filter_map(|entity| {
                 let tab = self.tab_model.data::<Tab>(entity)?;
@@ -1549,6 +1551,15 @@ impl App {
             commands.push(self.update_tab(entity, location, None));
         }
         Task::batch(commands)
+    }
+
+    fn update_desktop_layout(&self) {
+        for (surface_id, output_info) in self.surface_infos.iter() {
+            eprintln!(
+                "name {:?}: pos {:?} size {:?}",
+                output_info.name, output_info.logical_position, output_info.logical_size
+            );
+        }
     }
 
     fn activate_nav_model_location(&mut self, location: &Location) {
@@ -2310,7 +2321,7 @@ impl Application for App {
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             surface_ids: FxHashMap::default(),
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
-            surface_names: FxHashMap::default(),
+            surface_infos: FxHashMap::default(),
             toasts: widget::toaster::Toasts::new(Message::CloseToast),
             watcher_opt: None,
             windows: FxHashMap::default(),
@@ -2869,7 +2880,7 @@ impl Application for App {
             Message::DesktopConfig(config) => {
                 if config != self.config.desktop {
                     config_set!(desktop, config);
-                    return self.update_desktop();
+                    return self.update_desktop_config();
                 }
             }
             Message::DesktopViewOptions => {
@@ -3305,7 +3316,7 @@ impl Application for App {
                 self.update_nav_model();
 
                 // Update desktop tabs
-                commands.push(self.update_desktop());
+                commands.push(self.update_desktop_config());
 
                 return Task::batch(commands);
             }
@@ -4043,7 +4054,7 @@ impl Application for App {
                                 Window::new(WindowKind::Preview(entity_opt, preview_kind)),
                             );
                             return Task::batch([
-                                self.update_desktop(), // Force re-calculating of directory sizes
+                                self.update_desktop_config(), // Force re-calculating of directory sizes
                                 command.map(|_id| cosmic::action::none()),
                             ]);
                         }
@@ -4069,7 +4080,7 @@ impl Application for App {
                         .icon_set(entity, icon::icon(tab::trash_icon_symbolic(16)));
                 }
 
-                return Task::batch([self.rescan_trash(), self.update_desktop()]);
+                return Task::batch([self.rescan_trash(), self.update_desktop_config()]);
             }
             Message::Rename(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
@@ -4978,7 +4989,7 @@ impl Application for App {
                 match output_event {
                     OutputEvent::Created(output_info_opt) => {
                         let output_id = output.id();
-                        log::info!("output {output_id}: created");
+                        log::warn!("output {output_id}: created");
 
                         let surface_id = WindowId::unique();
                         if let Some(old_surface_id) =
@@ -4991,16 +5002,17 @@ impl Application for App {
                         }
 
                         let display = match output_info_opt {
-                            Some(output_info) => match output_info.name {
-                                Some(output_name) => {
-                                    self.surface_names.insert(surface_id, output_name.clone());
-                                    output_name
+                            Some(output_info) => {
+                                self.surface_infos.insert(surface_id, output_info.clone());
+                                self.update_desktop_layout();
+                                match output_info.name {
+                                    Some(output_name) => output_name,
+                                    None => {
+                                        log::warn!("output {output_id}: no output name");
+                                        String::new()
+                                    }
                                 }
-                                None => {
-                                    log::warn!("output {output_id}: no output name");
-                                    String::new()
-                                }
-                            },
+                            }
                             None => {
                                 log::warn!("output {output_id}: no output info");
                                 String::new()
@@ -5041,11 +5053,12 @@ impl Application for App {
                         ]);
                     }
                     OutputEvent::Removed => {
-                        log::info!("output {}: removed", output.id());
+                        log::warn!("output {}: removed", output.id());
                         match self.surface_ids.remove(&output) {
                             Some(surface_id) => {
                                 self.remove_window(&surface_id);
-                                self.surface_names.remove(&surface_id);
+                                self.surface_infos.remove(&surface_id);
+                                self.update_desktop_layout();
                                 return destroy_layer_surface(surface_id);
                             }
                             None => {
@@ -5053,8 +5066,17 @@ impl Application for App {
                             }
                         }
                     }
-                    OutputEvent::InfoUpdate(_output_info) => {
-                        log::info!("output {}: info update", output.id());
+                    OutputEvent::InfoUpdate(output_info) => {
+                        log::warn!("output {}: info update", output.id());
+                        match self.surface_ids.get(&output) {
+                            Some(surface_id) => {
+                                self.surface_infos.insert(*surface_id, output_info.clone());
+                                self.update_desktop_layout();
+                            }
+                            None => {
+                                log::warn!("output {}: no surface found", output.id());
+                            }
+                        }
                     }
                 }
             }
@@ -6168,6 +6190,7 @@ impl Application for App {
                 .view(
                     &self.key_binds,
                     &self.modifiers,
+                    Some(&self.state),
                     self.clipboard_has_content(),
                 )
                 .map(move |message| Message::TabMessage(Some(entity), message));
@@ -6213,6 +6236,7 @@ impl Application for App {
                             .view(
                                 &self.key_binds,
                                 &window.modifiers,
+                                Some(&self.state),
                                 self.clipboard_has_content(),
                             )
                             .map(move |message| Message::TabMessage(Some(*entity), message)),
@@ -6883,7 +6907,7 @@ pub(crate) mod test_utils {
 
         // New tab with items
         let location = Location::Path(path.to_owned());
-        let (parent_item_opt, items) = location.scan(IconSizes::default());
+        let (parent_item_opt, items) = location.scan(IconSizes::default(), &State::default());
         let mut tab = Tab::new(
             location,
             TabConfig::default(),

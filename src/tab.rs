@@ -79,7 +79,9 @@ use crate::{
     FxOrderMap,
     app::{Action, PreviewItem, PreviewKind},
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
-    config::{DesktopConfig, ICON_SCALE_MAX, ICON_SIZE_GRID, IconSizes, TabConfig, ThumbCfg},
+    config::{
+        DesktopConfig, ICON_SCALE_MAX, ICON_SIZE_GRID, IconSizes, State, TabConfig, ThumbCfg,
+    },
     dialog::DialogKind,
     fl,
     large_image::{
@@ -1290,8 +1292,8 @@ pub fn scan_network(uri: &str, sizes: IconSizes) -> Vec<Item> {
 //TODO: organize desktop items based on display
 pub fn scan_desktop(
     tab_path: &PathBuf,
-    _display: &str,
-    desktop_config: DesktopConfig,
+    display: &str,
+    desktop_config: &DesktopConfig,
     mut sizes: IconSizes,
 ) -> Vec<Item> {
     sizes.grid = desktop_config.icon_size;
@@ -1556,7 +1558,7 @@ impl Location {
     pub fn scan(&self, sizes: IconSizes) -> (Option<Item>, Vec<Item>) {
         let items = match self {
             Self::Desktop(path, display, desktop_config) => {
-                scan_desktop(path, display, *desktop_config, sizes)
+                scan_desktop(path, display, desktop_config, sizes)
             }
             Self::Path(path) => scan_path(path, sizes),
             Self::Search(..) => {
@@ -1583,7 +1585,7 @@ impl Location {
 
     pub fn title(&self) -> String {
         match self {
-            Self::Desktop(path, _, _) => {
+            Self::Desktop(path, ..) => {
                 let (name, _) = folder_name(path);
                 name
             }
@@ -2241,9 +2243,9 @@ impl Item {
     ) -> widget::Text<'a, cosmic::Theme, cosmic::Renderer> {
         widget::text::body(name)
             .wrapping(text::Wrapping::WordOrGlyph)
-            .ellipsize(text::Ellipsize::Middle(
-                text::EllipsizeHeightLimit::Lines(3),
-            ))
+            .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
+                3,
+            )))
     }
 
     /// Text widget for a filename in list view: word-or-glyph wrapping, middle-ellipsized to 1 line.
@@ -2252,9 +2254,9 @@ impl Item {
     ) -> widget::Text<'a, cosmic::Theme, cosmic::Renderer> {
         widget::text::body(name)
             .wrapping(text::Wrapping::WordOrGlyph)
-            .ellipsize(text::Ellipsize::Middle(
-                text::EllipsizeHeightLimit::Lines(1),
-            ))
+            .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
+                1,
+            )))
     }
 
     pub fn path_opt(&self) -> Option<&PathBuf> {
@@ -4247,6 +4249,7 @@ impl Tab {
             }
             Message::Drop(Some((to, mut from))) => {
                 self.dnd_hovered = None;
+                eprintln!("drop from {:?} to {:?}", from, to);
                 match to {
                     Location::Desktop(to, ..)
                     | Location::Path(to)
@@ -4538,7 +4541,7 @@ impl Tab {
             .on_leave(move || Message::DndLeave(location3.clone())),
         );
         // Desktop will not show DnD indicator
-        if is_dnd_hovered && !matches!(self.mode, Mode::Desktop) {
+        if is_dnd_hovered {
             container = container.style(|t| {
                 let mut a = widget::container::Style::default();
                 let t = t.cosmic();
@@ -5124,6 +5127,7 @@ impl Tab {
 
     pub fn grid_view(
         &self,
+        state_opt: Option<&State>,
     ) -> (
         Option<Element<'static, Message>>,
         Element<'_, Message>,
@@ -5296,6 +5300,9 @@ impl Tab {
                     let column: Element<Message> =
                         if item.metadata.is_dir() && item.location_opt.is_some() {
                             self.dnd_dest(&item.location_opt.clone().unwrap(), column)
+                        } else if matches!(self.mode, Mode::Desktop) {
+                            //TODO: use desktop folder and reorder
+                            self.dnd_dest(&item.location_opt.clone().unwrap(), column)
                         } else {
                             column.into()
                         };
@@ -5422,9 +5429,9 @@ impl Tab {
                                 false,
                                 false,
                             )),
-                            widget::button::custom(
-                                Item::grid_display_name(item.display_name.clone()),
-                            )
+                            widget::button::custom(Item::grid_display_name(
+                                item.display_name.clone(),
+                            ))
                             .id(item.button_id.clone())
                             .on_press(Message::Click(Some(*i)))
                             .padding([0, space_xxxs])
@@ -5866,6 +5873,7 @@ impl Tab {
         &'a self,
         key_binds: &'a HashMap<KeyBind, Action>,
         modifiers: &'a Modifiers,
+        state_opt: Option<&'a State>,
         size: Size,
         clipboard_paste_available: bool,
     ) -> Element<'a, Message> {
@@ -5885,7 +5893,7 @@ impl Tab {
             Some(self.location_view())
         };
         let (drag_list, mut item_view, can_scroll) = match self.config.view {
-            View::Grid => self.grid_view(),
+            View::Grid => self.grid_view(state_opt),
             View::List => self.list_view(),
         };
         item_view = widget::container(item_view).width(Length::Fill).into();
@@ -6163,10 +6171,17 @@ impl Tab {
         &'a self,
         key_binds: &'a HashMap<KeyBind, Action>,
         modifiers: &'a Modifiers,
+        state_opt: Option<&'a State>,
         clipboard_paste_available: bool,
     ) -> Element<'a, Message> {
         widget::responsive(move |size| {
-            self.view_responsive(key_binds, modifiers, size, clipboard_paste_available)
+            self.view_responsive(
+                key_binds,
+                modifiers,
+                state_opt,
+                size,
+                clipboard_paste_available,
+            )
         })
         .into()
     }

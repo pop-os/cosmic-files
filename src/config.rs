@@ -112,12 +112,14 @@ pub enum TypeToSearch {
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(default)]
 pub struct State {
+    pub desktop: DesktopState,
     pub sort_names: FxOrderMap<String, (HeadingOptions, bool)>,
 }
 
 impl Default for State {
     fn default() -> Self {
         Self {
+            desktop: DesktopState::default(),
             sort_names: FxOrderMap::from_iter(dirs::download_dir().into_iter().map(|dir| {
                 (
                     Location::Path(dir).normalize().to_string(),
@@ -156,6 +158,13 @@ impl State {
             CONFIG_VERSION,
         )
     }
+}
+
+#[derive(Clone, CosmicConfigEntry, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default)]
+pub struct DesktopState {
+    //TODO: per-display config!
+    pub positions: FxOrderMap<String, (i32, i32)>,
 }
 
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
