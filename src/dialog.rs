@@ -24,6 +24,7 @@ use cosmic::{
         segmented_button,
     },
 };
+use mime_guess::{Mime, mime};
 use notify_debouncer_full::{
     DebouncedEvent, Debouncer, RecommendedCache, new_debouncer,
     notify::{self, RecommendedWatcher},
@@ -1871,7 +1872,6 @@ impl Application for App {
                     if let Some(filter_i) = self.filter_selected
                         && let Some(filter) = self.filters.get(filter_i)
                     {
-                        // Parse globs (Mime implements PartialEq with &str, so no need to parse)
                         let mut parsed_globs = Vec::new();
                         let mut mimes = Vec::new();
                         for pattern in &filter.patterns {
@@ -1884,15 +1884,25 @@ impl Application for App {
                                         }
                                     }
                                 }
-                                DialogFilterPattern::Mime(value) => mimes.push(value.as_str()),
+                                DialogFilterPattern::Mime(value) => match value.parse::<Mime>() {
+                                    Ok(parsed) => mimes.push(parsed),
+                                    Err(err) => {
+                                        log::warn!("failed to parse mime {value:?}: {err}");
+                                    }
+                                },
                             }
                         }
 
                         items.retain(|item| {
                             // Directories are always shown
                             item.metadata.is_dir()
-                                // Check for mime type match (first because it is faster)
-                                    || mimes.iter().copied().any(|mime| mime == item.mime)
+                                    || mimes.iter().any(|filter_mime| {
+                                        if filter_mime.subtype() == mime::STAR {
+                                            filter_mime.type_() == item.mime.type_()
+                                        } else {
+                                            *filter_mime == item.mime
+                                        }
+                                    })
                                 // Check for glob match (last because it is slower)
                                     || parsed_globs.iter().any(|glob| glob.matches(&item.name))
                         });
