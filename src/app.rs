@@ -547,6 +547,7 @@ pub enum DialogPage {
         mime: mime_guess::Mime,
         selected: usize,
         store_opt: Option<MimeApp>,
+        set_default: bool,
     },
     PermanentlyDelete {
         paths: Box<[PathBuf]>,
@@ -2970,11 +2971,13 @@ impl Application for App {
                             path,
                             mime,
                             selected,
+                            set_default,
                             ..
                         } => {
                             let available_apps = self.get_apps_for_mime(&mime);
 
                             if let Some((app, _)) = available_apps.get(selected) {
+                                let app_id = app.id.clone();
                                 if let Some(mut command) =
                                     app.command(&[&path]).and_then(|v| v.into_iter().next())
                                 {
@@ -2991,7 +2994,7 @@ impl Application for App {
                                             log::warn!(
                                                 "failed to open {} with {:?}: {}",
                                                 path.display(),
-                                                app.id,
+                                                app_id,
                                                 err
                                             );
                                         }
@@ -3000,8 +3003,12 @@ impl Application for App {
                                     log::warn!(
                                         "failed to open {} with {:?}: failed to get command",
                                         path.display(),
-                                        app.id
+                                        app_id
                                     );
+                                }
+                                if set_default {
+                                    self.mime_app_cache
+                                        .set_default(mime.clone(), app_id);
                                 }
                             }
                         }
@@ -3571,6 +3578,7 @@ impl Application for App {
                                         .and_then(|mime| {
                                             self.mime_app_cache.get(&mime).first().cloned()
                                         }),
+                                    set_default: false,
                                 },
                                 Some(CONFIRM_OPEN_WITH_BUTTON_ID.clone()),
                             );
@@ -3579,8 +3587,23 @@ impl Application for App {
                 }
             }
             Message::OpenWithSelection(index) => {
-                if let Some(DialogPage::OpenWith { selected, .. }) = self.dialog_pages.front_mut() {
+                let is_default = if let Some(DialogPage::OpenWith { mime, .. }) =
+                    self.dialog_pages.front()
+                {
+                    self.get_apps_for_mime(mime)
+                        .get(index)
+                        .map_or(false, |(app, _)| app.is_default)
+                } else {
+                    false
+                };
+                if let Some(DialogPage::OpenWith {
+                    selected,
+                    set_default,
+                    ..
+                }) = self.dialog_pages.front_mut()
+                {
                     *selected = index;
+                    *set_default = is_default;
                 }
             }
             Message::Paste(entity_opt) => {
@@ -4621,6 +4644,7 @@ impl Application for App {
                                             .and_then(|mime| {
                                                 self.mime_app_cache.get(&mime).first().cloned()
                                             }),
+                                        set_default: false,
                                     },
                                     None,
                                 );
@@ -5483,7 +5507,7 @@ impl Application for App {
                 mime,
                 selected,
                 store_opt,
-                ..
+                set_default,
             } => {
                 let name = match path.file_name() {
                     Some(file_name) => file_name.to_str(),
@@ -5567,6 +5591,27 @@ impl Application for App {
                             Length::Shrink
                         }
                     }));
+
+                {
+                    let path = path.clone();
+                    let mime = mime.clone();
+                    let selected = *selected;
+                    let store_opt = store_opt.clone();
+                    let set_default = *set_default;
+                    dialog = dialog.control(
+                        widget::checkbox(fl!("open-with-set-default"), set_default).on_toggle(
+                            move |value| {
+                                Message::DialogUpdate(DialogPage::OpenWith {
+                                    path: path.clone(),
+                                    mime: mime.clone(),
+                                    selected,
+                                    store_opt: store_opt.clone(),
+                                    set_default: value,
+                                })
+                            },
+                        ),
+                    );
+                }
 
                 if let Some(app) = store_opt {
                     dialog = dialog.tertiary_action(

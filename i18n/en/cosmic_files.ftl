@@ -86,6 +86,7 @@ save-file = Save file
 
 ## Open With Dialog
 open-with-title = How do you want to open "{$name}"?
+open-with-set-default = Always use this application
 browse-store = Browse {$store}
 other-apps = Other applications
 related-apps = Related applications
