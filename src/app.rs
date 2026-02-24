@@ -83,7 +83,7 @@ use crate::{
         AppTheme, Config, DesktopConfig, Favorite, IconSizes, State, TIME_CONFIG_ID, TabConfig,
         TimeConfig, TypeToSearch,
     },
-    desktop::DesktopLayout,
+    desktop::{DesktopLayout, DesktopPos},
     dialog::{Dialog, DialogKind, DialogMessage, DialogResult, DialogSettings},
     fl, home_dir,
     key_bind::key_binds,
@@ -404,7 +404,7 @@ pub enum Message {
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     Overlap(window::Id, OverlapNotifyEvent),
     Paste(Option<Entity>),
-    PasteContents(PathBuf, ClipboardPaste),
+    PasteContents(PathBuf, ClipboardPaste, Option<DesktopPos>),
     PasteImage(PathBuf),
     PasteImageContents(PathBuf, ClipboardPasteImage),
     PasteText(PathBuf),
@@ -1542,11 +1542,6 @@ impl App {
             let mut primary_output = None;
 
             for (_surface_id, info) in self.surface_infos.iter() {
-                eprintln!(
-                    "name {:?}: pos {:?} size {:?}",
-                    info.name, info.logical_position, info.logical_size
-                );
-
                 fn is_edp(info: &OutputInfo) -> bool {
                     match &info.name {
                         Some(name) => name.starts_with("eDP"),
@@ -1601,7 +1596,7 @@ impl App {
                             path: path.clone(),
                             display: display.clone(),
                             layout: layout.clone(),
-                            pos_opt: *pos_opt,
+                            pos_opt: pos_opt.clone(),
                         },
                     ))
                 } else {
@@ -2879,6 +2874,7 @@ impl Application for App {
                             return self.operation(Operation::Copy {
                                 paths: file_paths.to_vec(),
                                 to: selected_paths[0].clone(),
+                                desktop_pos: None,
                             });
                         }
                     }
@@ -3436,6 +3432,7 @@ impl Application for App {
                                 paths: file_paths.to_vec(),
                                 to: selected_paths[0].clone(),
                                 cross_device_copy: false,
+                                desktop_pos: None,
                             });
                         }
                     }
@@ -3743,8 +3740,11 @@ impl Application for App {
                     // Use cached clipboard data if available (needed for Wayland popups)
                     match &self.clipboard_cache {
                         ClipboardCache::Files(contents) => {
-                            return self
-                                .update(Message::PasteContents(to.clone(), contents.clone()));
+                            return self.update(Message::PasteContents(
+                                to.clone(),
+                                contents.clone(),
+                                None,
+                            ));
                         }
                         ClipboardCache::Image(contents) => {
                             return self
@@ -3766,6 +3766,7 @@ impl Application for App {
                                     Some(contents) => cosmic::action::app(Message::PasteContents(
                                         to.clone(),
                                         contents,
+                                        None,
                                     )),
                                     None => cosmic::action::app(Message::PasteImage(to.clone())),
                                 },
@@ -3774,18 +3775,20 @@ impl Application for App {
                     }
                 }
             }
-            Message::PasteContents(to, mut contents) => {
+            Message::PasteContents(to, mut contents, desktop_pos) => {
                 contents.paths.retain(|p| *p != to);
                 if !contents.paths.is_empty() {
                     return match contents.kind {
                         ClipboardKind::Copy => self.operation(Operation::Copy {
                             paths: contents.paths,
                             to,
+                            desktop_pos,
                         }),
                         ClipboardKind::Cut { is_dnd } => self.operation(Operation::Move {
                             paths: contents.paths,
                             to,
                             cross_device_copy: is_dnd,
+                            desktop_pos,
                         }),
                     };
                 }
@@ -3984,8 +3987,54 @@ impl Application for App {
                         }
                     }
 
+                    // Rescan recents if item removed
                     if matches!(op, Operation::RemoveFromRecents { .. }) {
                         commands.push(self.rescan_recents());
+                    }
+
+                    // Set desktop position after move
+                    if let Operation::Copy {
+                        desktop_pos: Some(ref pos),
+                        ..
+                    }
+                    | Operation::Move {
+                        desktop_pos: Some(ref pos),
+                        ..
+                    } = op
+                    {
+                        let mut row = pos.row;
+                        let mut col = pos.col;
+                        for path in op_sel.selected.iter() {
+                            eprintln!("{:?}: {}, {}", path, row, col);
+
+                            self.state.desktop.positions.retain(|_, x| x != path);
+                            self.state.desktop.positions.insert(
+                                DesktopPos {
+                                    display: pos.display.clone(),
+                                    row,
+                                    col,
+                                    rows: pos.rows,
+                                    cols: pos.cols,
+                                },
+                                path.clone(),
+                            );
+
+                            row += 1;
+                            if row >= pos.rows {
+                                row = 0;
+                                col += 1;
+                            }
+                            //TODO: if col >= cols, next page
+                        }
+
+                        self.state.desktop.positions.retain(|_, x| x.exists());
+                        if let Some(state_handler) = self.state_handler.as_ref()
+                            && let Err(err) = state_handler.set("desktop", &self.state.desktop)
+                        {
+                            log::warn!("Failed to save sort names: {err:?}");
+                        }
+
+                        commands.push(self.update_desktop());
                     }
 
                     self.complete_operations.insert(id, op);
@@ -4464,8 +4513,12 @@ impl Application for App {
                             }
                         }
                         tab::Command::Delete(paths) => commands.push(self.delete(paths)),
-                        tab::Command::DropFiles(to, from) => {
-                            commands.push(self.update(Message::PasteContents(to, from)));
+                        tab::Command::DropFiles(to, from, desktop_pos) => {
+                            commands.push(self.update(Message::PasteContents(
+                                to,
+                                from,
+                                desktop_pos,
+                            )));
                         }
                         tab::Command::EmptyTrash => {
                             return self.push_dialog(
@@ -4774,6 +4827,7 @@ impl Application for App {
                                 kind,
                                 paths: data.paths,
                             },
+                            None,
                         )),
                         Location::Trash if matches!(action, DndAction::Move) => {
                             self.delete(data.paths)
@@ -4841,6 +4895,7 @@ impl Application for App {
                                         kind,
                                         paths: data.paths,
                                     },
+                                    None,
                                 ))
                             } else {
                                 log::warn!("{:?} to {:?} is not supported.", action, tab.location);

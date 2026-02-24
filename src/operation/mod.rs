@@ -1,6 +1,7 @@
 use crate::{
     app::{ArchiveType, DialogPage, Message, REPLACE_BUTTON_ID},
     config::IconSizes,
+    desktop::DesktopPos,
     fl,
     spawn_detached::spawn_detached,
     tab,
@@ -129,6 +130,8 @@ async fn copy_or_move(
             })
             .collect();
 
+        let mut context = Context::new(controller.clone());
+
         // Attempt quick and simple renames
         //TODO: allow rename to be used for directories in recursive context?
         if matches!(method, Method::Move { .. }) {
@@ -142,6 +145,7 @@ async fn copy_or_move(
                 match fs::rename(from, to) {
                     Ok(()) => {
                         log::info!("renamed {} to {}", from.display(), to.display());
+                        context.op_sel.selected.push(to.clone());
                         false
                     }
                     Err(err) => {
@@ -156,8 +160,6 @@ async fn copy_or_move(
                 }
             });
         }
-
-        let mut context = Context::new(controller.clone());
 
         {
             let controller = controller.clone();
@@ -342,6 +344,7 @@ pub enum Operation {
     Copy {
         paths: Vec<PathBuf>,
         to: PathBuf,
+        desktop_pos: Option<DesktopPos>,
     },
     /// Move items to the trash
     Delete {
@@ -364,6 +367,7 @@ pub enum Operation {
         paths: Vec<PathBuf>,
         to: PathBuf,
         cross_device_copy: bool,
+        desktop_pos: Option<DesktopPos>,
     },
     NewFile {
         path: PathBuf,
@@ -470,7 +474,7 @@ impl Operation {
                 to = file_name(to),
                 progress = progress()
             ),
-            Self::Copy { paths, to } => fl!(
+            Self::Copy { paths, to, .. } => fl!(
                 "copying",
                 items = paths.len(),
                 from = paths_parent_name(paths),
@@ -543,7 +547,7 @@ impl Operation {
                 from = paths_parent_name(paths),
                 to = file_name(to)
             ),
-            Self::Copy { paths, to } => fl!(
+            Self::Copy { paths, to, .. } => fl!(
                 "copied",
                 items = paths.len(),
                 from = paths_parent_name(paths),
@@ -816,7 +820,7 @@ impl Operation {
                 .await
                 .map_err(wrap_compio_spawn_error)?
             }
-            Self::Copy { paths, to } => {
+            Self::Copy { paths, to, .. } => {
                 copy_or_move(paths, to, Method::Copy, msg_tx, controller).await
             }
             Self::Delete { paths } => {
@@ -982,6 +986,7 @@ impl Operation {
                 paths,
                 to,
                 cross_device_copy,
+                ..
             } => {
                 copy_or_move(
                     paths,

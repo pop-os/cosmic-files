@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     FxOrderMap,
     app::App,
+    desktop::DesktopPos,
     tab::{HeadingOptions, Location, View},
 };
 
@@ -163,8 +164,8 @@ impl State {
 #[derive(Clone, CosmicConfigEntry, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(default)]
 pub struct DesktopState {
-    //TODO: per-display config!
-    pub positions: FxOrderMap<String, (i32, i32)>,
+    //TODO: improve this config format
+    pub positions: FxOrderMap<DesktopPos, PathBuf>,
 }
 
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
