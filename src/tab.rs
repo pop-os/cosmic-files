@@ -1327,6 +1327,7 @@ pub fn scan_desktop(
                 //Override some data with mounter information
                 item.name = mounter_item.name();
                 item.display_name = Item::display_name(&item.name);
+                item.is_mount_point = true;
 
                 //TODO: use icon size for mounter item icon
                 if let Some(icon) = mounter_item.icon(false) {
