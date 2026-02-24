@@ -578,6 +578,7 @@ pub enum DialogPage {
         to: tab::Item,
         multiple: bool,
         apply_to_all: bool,
+        conflict_count: usize,
         tx: mpsc::Sender<ReplaceResult>,
     },
     SetExecutableAndLaunch {
@@ -5857,6 +5858,7 @@ impl Application for App {
                 to,
                 multiple,
                 apply_to_all,
+                conflict_count,
                 tx,
             } => {
                 let military_time = self.config.tab.military_time;
@@ -5881,13 +5883,18 @@ impl Application for App {
                 if *multiple {
                     dialog
                         .control(
-                            widget::checkbox(fl!("apply-to-all"), *apply_to_all).on_toggle(
+                            widget::checkbox(
+                                format!("{} ({})" ,fl!("apply-to-all"), *conflict_count),
+                                *apply_to_all,
+                            )
+                                .on_toggle(
                                 |apply_to_all| {
                                     Message::DialogUpdate(DialogPage::Replace {
                                         from: from.clone(),
                                         to: to.clone(),
                                         multiple: *multiple,
                                         apply_to_all,
+                                        conflict_count: *conflict_count,
                                         tx: tx.clone(),
                                     })
                                 },
