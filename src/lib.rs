@@ -92,11 +92,9 @@ pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
     let locations = vec![tab::Location::Desktop {
         path: desktop_dir(),
         display: String::new(),
-        layout: Arc::new(desktop::DesktopLayout {
-            primary_output_name: None,
-            config: config.desktop.clone(),
-            state: state.desktop.clone()
-        }),
+        layout: Arc::new(desktop::DesktopLayout::new(
+            config.desktop.clone(),
+        )),
         pos_opt: None
     }];
     let flags = Flags {

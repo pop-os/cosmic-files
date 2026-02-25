@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     FxOrderMap,
     app::App,
-    desktop::DesktopPos,
+    desktop::{DesktopChange, DesktopPos},
     tab::{HeadingOptions, Location, View},
 };
 
@@ -113,14 +113,14 @@ pub enum TypeToSearch {
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(default)]
 pub struct State {
-    pub desktop: DesktopState,
+    pub desktop_changes: Vec<DesktopChange>,
     pub sort_names: FxOrderMap<String, (HeadingOptions, bool)>,
 }
 
 impl Default for State {
     fn default() -> Self {
         Self {
-            desktop: DesktopState::default(),
+            desktop_changes: Default::default(),
             sort_names: FxOrderMap::from_iter(dirs::download_dir().into_iter().map(|dir| {
                 (
                     Location::Path(dir).normalize().to_string(),
@@ -159,13 +159,6 @@ impl State {
             CONFIG_VERSION,
         )
     }
-}
-
-#[derive(Clone, CosmicConfigEntry, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
-#[serde(default)]
-pub struct DesktopState {
-    //TODO: improve this config format
-    pub positions: FxOrderMap<DesktopPos, PathBuf>,
 }
 
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]

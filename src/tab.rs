@@ -5238,13 +5238,13 @@ impl Tab {
                 } = &self.location
             {
                 let mut desktop_items = HashMap::new();
-                //TODO: make this nested iterator more efficient, or handle it when generating DesktopLayout
                 let mut i = 0;
                 while i < items.len() {
                     let mut remove = false;
                     let mut pos_opt = None;
-                    for (pos, path) in layout.state.positions.iter() {
-                        if items[i].1.path_opt() == Some(path) {
+
+                    if let Some(path) = items[i].1.path_opt() {
+                        if let Some(pos) = layout.positions.get(path) {
                             remove = true;
                             //TODO: resize grid if rows/cols do not match
                             if pos.display == *display && pos.rows == rows && pos.cols == cols {

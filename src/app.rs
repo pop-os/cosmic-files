@@ -83,7 +83,7 @@ use crate::{
         AppTheme, Config, DesktopConfig, Favorite, IconSizes, State, TIME_CONFIG_ID, TabConfig,
         TimeConfig, TypeToSearch,
     },
-    desktop::{DesktopLayout, DesktopPos},
+    desktop::{DesktopChange, DesktopLayout, DesktopPos},
     dialog::{Dialog, DialogKind, DialogMessage, DialogResult, DialogSettings},
     fl, home_dir,
     key_bind::key_binds,
@@ -1531,17 +1531,17 @@ impl App {
     }
 
     fn desktop_layout(&self) -> Arc<DesktopLayout> {
-        let mut layout = DesktopLayout {
-            primary_output_name: None,
-            config: self.config.desktop.clone(),
-            state: self.state.desktop.clone(),
-        };
+        let mut layout = DesktopLayout::new(self.config.desktop.clone());
 
         #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
         {
             let mut primary_output = None;
 
             for (_surface_id, info) in self.surface_infos.iter() {
+                if let Some(name) = &info.name {
+                    layout.output_names.push(name.clone());
+                }
+
                 fn is_edp(info: &OutputInfo) -> bool {
                     match &info.name {
                         Some(name) => name.starts_with("eDP"),
@@ -1574,6 +1574,8 @@ impl App {
 
             layout.primary_output_name = primary_output.as_ref().and_then(|x| x.name.clone());
         }
+
+        layout.update_positions(&self.state.desktop_changes);
 
         Arc::new(layout)
     }
@@ -4007,8 +4009,8 @@ impl Application for App {
                         for path in op_sel.selected.iter() {
                             eprintln!("{:?}: {}, {}", path, row, col);
 
-                            self.state.desktop.positions.retain(|_, x| x != path);
-                            self.state.desktop.positions.insert(
+                            let change = DesktopChange::Position(
+                                path.clone(),
                                 DesktopPos {
                                     display: pos.display.clone(),
                                     row,
@@ -4016,9 +4018,13 @@ impl Application for App {
                                     rows: pos.rows,
                                     cols: pos.cols,
                                 },
-                                path.clone(),
                             );
+                            self.state
+                                .desktop_changes
+                                .retain(|older| older.retain_before(&change));
+                            self.state.desktop_changes.push(change);
 
+                            //TODO: position relatively to preserve shape of group
                             row += 1;
                             if row >= pos.rows {
                                 row = 0;
@@ -4027,9 +4033,9 @@ impl Application for App {
                             //TODO: if col >= cols, next page
                         }
 
-                        self.state.desktop.positions.retain(|_, x| x.exists());
                         if let Some(state_handler) = self.state_handler.as_ref()
-                            && let Err(err) = state_handler.set("desktop", &self.state.desktop)
+                            && let Err(err) =
+                                state_handler.set("desktop_changes", &self.state.desktop_changes)
                         {
                             log::warn!("Failed to save sort names: {err:?}");
                         }
