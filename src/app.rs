@@ -1595,7 +1595,9 @@ impl App {
 
         for (favorite_i, favorite) in self.config.favorites.iter().enumerate() {
             if let Some(path) = favorite.path_opt() {
-                let name = if matches!(favorite, Favorite::Home) {
+                let name = if let Favorite::Network { display_name, .. } = favorite && !display_name.is_empty() {
+                    display_name.clone()
+                } else if matches!(favorite, Favorite::Home) {
                     fl!("home")
                 } else if let Some(file_name) = path.file_name().and_then(|x| x.to_str()) {
                     file_name.to_string()
@@ -1613,7 +1615,7 @@ impl App {
                             .size(16),
                         )
                         .data(match favorite {
-                            Favorite::Network { uri, name, path } => {
+                            Favorite::Network { uri, name, path, .. } => {
                                 Location::Network(uri.clone(), name.clone(), Some(path.to_owned()))
                             }
                             _ => Location::Path(path.clone()),
@@ -2727,7 +2729,7 @@ impl Application for App {
                     });
                     let name = Location::Path(path.clone()).title();
                     let favorite = if let Some((uri, _, _)) = is_network.clone() {
-                        Favorite::Network { uri, name, path }
+                        Favorite::Network { uri, name, path, display_name: String::new() }
                     } else {
                         Favorite::from_path(path)
                     };
