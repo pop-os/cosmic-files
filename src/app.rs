@@ -33,16 +33,16 @@ use cosmic::{
         window::{self, Event as WindowEvent, Id as WindowId},
     },
     iced_runtime::clipboard,
-    iced_widget::button::focus,
+    iced_widget::{button::focus, scrollable::AbsoluteOffset},
     style, surface, theme,
     widget::{
         self,
         about::About,
         dnd_destination::DragId,
-        horizontal_space, icon,
+        icon,
         menu::{action::MenuAction, key_bind::KeyBind},
         segmented_button::{self, Entity, ReorderEvent},
-        vertical_space,
+        space,
     },
 };
 use mime_guess::Mime;
@@ -1897,7 +1897,7 @@ impl App {
                 section = section.add(widget::column::with_children([
                     widget::row::with_children([
                         widget::progress_bar(0.0..=1.0, progress)
-                            .height(progress_bar_height)
+                            .girth(progress_bar_height)
                             .into(),
                         if controller.is_paused() {
                             widget::tooltip(
@@ -3210,7 +3210,10 @@ impl Application for App {
                                     if let Some(offset) = tab.select_focus_scroll() {
                                         return scrollable::scroll_to(
                                             tab.scrollable_id.clone(),
-                                            offset,
+                                            AbsoluteOffset {
+                                                x: Some(offset.x),
+                                                y: Some(offset.y),
+                                            },
                                         );
                                     }
                                 }
@@ -4194,7 +4197,13 @@ impl Application for App {
                         //Restore scroll
                         //TODO: why do scrollers with different IDs get the same scroll position?
                         let scroll = tab.scroll_opt.unwrap_or_default();
-                        tasks.push(scrollable::scroll_to(tab.scrollable_id.clone(), scroll));
+                        tasks.push(scrollable::scroll_to(
+                            tab.scrollable_id.clone(),
+                            AbsoluteOffset {
+                                x: Some(scroll.x),
+                                y: Some(scroll.y),
+                            },
+                        ));
                     }
                     self.activate_nav_model_location(&tab.location.clone());
                 }
@@ -5224,7 +5233,7 @@ impl Application for App {
                 .title(fl!("add-network-drive"))
                 .header(text_input)
                 .footer(widget::row::with_children([
-                    widget::horizontal_space().into(),
+                    widget::space::horizontal().into(),
                     button.into(),
                 ]))
             }
@@ -5246,7 +5255,7 @@ impl Application for App {
                             _ => None,
                         }
                     })
-                    .unwrap_or_else(|| widget::horizontal_space().into());
+                    .unwrap_or_else(|| widget::space::horizontal().into());
                 context_drawer::context_drawer(
                     self.preview(entity_opt, kind, true)
                         .map(move |x| Message::TabMessage(Some(entity), x)),
@@ -5529,8 +5538,9 @@ impl Application for App {
                     //TODO: what should submit do?
                     //TODO: button for showing password
                     controls = controls.push(
-                        widget::checkbox(fl!("remember-password"), *remember).on_toggle(
-                            move |value| {
+                        widget::checkbox(*remember)
+                            .label(fl!("remember-password"))
+                            .on_toggle(move |value| {
                                 Message::DialogUpdate(DialogPage::NetworkAuth {
                                     mounter_key: *mounter_key,
                                     uri: uri.clone(),
@@ -5540,8 +5550,7 @@ impl Application for App {
                                     },
                                     auth_tx: auth_tx.clone(),
                                 })
-                            },
-                        ),
+                            }),
                     );
                 }
 
@@ -5705,11 +5714,13 @@ impl Application for App {
                                     } else {
                                         widget::text::body(app.name.clone()).into()
                                     },
-                                    widget::horizontal_space().into(),
+                                    widget::space::horizontal().into(),
                                     if *selected == i {
                                         icon::from_name("checkbox-checked-symbolic").size(16).into()
                                     } else {
-                                        widget::Space::with_width(Length::Fixed(16.0)).into()
+                                        widget::space::horizontal()
+                                            .width(Length::Fixed(16.0))
+                                            .into()
                                     },
                                 ])
                                 .spacing(space_s)
@@ -5914,12 +5925,9 @@ impl Application for App {
                 if *multiple {
                     dialog
                         .control(
-                            widget::checkbox(
-                                format!("{} ({})" ,fl!("apply-to-all"), *conflict_count),
-                                *apply_to_all,
-                            )
-                                .on_toggle(
-                                |apply_to_all| {
+                            widget::checkbox(*apply_to_all)
+                                .label(format!("{} ({})", fl!("apply-to-all"), *conflict_count))
+                                .on_toggle(|apply_to_all| {
                                     Message::DialogUpdate(DialogPage::Replace {
                                         from: from.clone(),
                                         to: to.clone(),
@@ -5928,8 +5936,7 @@ impl Application for App {
                                         conflict_count: *conflict_count,
                                         tx: tx.clone(),
                                     })
-                                },
-                            ),
+                                }),
                         )
                         .secondary_action(
                             widget::button::standard(fl!("skip")).on_press(Message::ReplaceResult(
@@ -6050,7 +6057,7 @@ impl Application for App {
         //TODO: get height from theme?
         let progress_bar_height = Length::Fixed(4.0);
         let progress_bar =
-            widget::progress_bar(0.0..=1.0, total_progress).height(progress_bar_height);
+            widget::progress_bar(0.0..=1.0, total_progress).girth(progress_bar_height);
 
         let container = widget::layer_container(widget::column::with_children([
             widget::row::with_children([
@@ -6086,14 +6093,14 @@ impl Application for App {
             .align_y(Alignment::Center)
             .into(),
             widget::text::body(title).into(),
-            widget::Space::with_height(space_s).into(),
+            widget::space::vertical().height(space_s).into(),
             widget::row::with_children([
                 widget::button::link(fl!("details"))
                     .on_press(Message::ToggleContextPage(ContextPage::EditHistory))
                     .padding(0)
                     .trailing_icon(true)
                     .into(),
-                widget::horizontal_space().into(),
+                widget::space::horizontal().into(),
                 widget::button::standard(fl!("dismiss"))
                     .on_press(Message::PendingDismiss)
                     .into(),
@@ -6215,7 +6222,7 @@ impl Application for App {
         }
 
         // The toaster is added on top of an empty element to ensure that it does not override context menus
-        tab_column = tab_column.push(widget::toaster(&self.toasts, widget::horizontal_space()));
+        tab_column = tab_column.push(widget::toaster(&self.toasts, widget::space::horizontal()));
 
         let content: Element<_> = tab_column.into();
 
@@ -6254,27 +6261,27 @@ impl Application for App {
                                 self.clipboard_has_content(),
                             )
                             .map(move |message| Message::TabMessage(Some(*entity), message)),
-                        None => widget::vertical_space().into(),
+                        None => widget::space::vertical().into(),
                     };
 
                     tab_column = tab_column.push(tab_view);
 
                     // The toaster is added on top of an empty element to ensure that it does not override context menus
                     tab_column =
-                        tab_column.push(widget::toaster(&self.toasts, widget::horizontal_space()));
+                        tab_column.push(widget::toaster(&self.toasts, widget::space::horizontal()));
                     return if let Some(margin) = self.margin.get(&id) {
                         if margin.0 >= 0. || margin.2 >= 0. {
                             tab_column = widget::column::with_children([
-                                vertical_space().height(margin.0).into(),
+                                space::vertical().height(margin.0).into(),
                                 tab_column.into(),
-                                vertical_space().height(margin.2).into(),
+                                space::vertical().height(margin.2).into(),
                             ]);
                         }
                         if margin.1 >= 0. || margin.3 >= 0. {
                             Element::from(widget::row::with_children([
-                                horizontal_space().width(margin.1).into(),
+                                space::horizontal().width(margin.1).into(),
                                 tab_column.into(),
-                                horizontal_space().width(margin.3).into(),
+                                space::horizontal().width(margin.3).into(),
                             ]))
                         } else {
                             tab_column.into()
@@ -6286,7 +6293,7 @@ impl Application for App {
                 WindowKind::DesktopViewOptions => self.desktop_view_options(),
                 WindowKind::Dialogs(id) => match self.dialog() {
                     Some(element) => return widget::autosize::autosize(element, id.clone()).into(),
-                    None => widget::horizontal_space().into(),
+                    None => widget::space::horizontal().into(),
                 },
                 WindowKind::Preview(entity_opt, kind) => self
                     .preview(entity_opt, kind, false)
@@ -6306,11 +6313,14 @@ impl Application for App {
             }
         };
 
-        widget::container(widget::scrollable(content))
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .class(theme::Container::WindowBackground)
-            .into()
+        widget::container(widget::id_container(
+            widget::scrollable(content),
+            widget::Id::new("main container for files"),
+        ))
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .class(theme::Container::WindowBackground)
+        .into()
     }
 
     fn system_theme_update(
@@ -6400,20 +6410,21 @@ impl Application for App {
                 }
                 Message::TimeConfigChange(update.config)
             }),
-            Subscription::run_with_id(
-                TypeId::of::<WatcherSubscription>(),
-                stream::channel(100, |mut output| async move {
-                    let watcher_res = {
-                        let mut output = output.clone();
-                        new_debouncer(
-                            time::Duration::from_millis(250),
-                            Some(time::Duration::from_millis(250)),
-                            move |events_res: notify_debouncer_full::DebounceEventResult| {
-                                match events_res {
-                                    Ok(mut events) => {
-                                        log::debug!("{events:?}");
+            Subscription::run_with(TypeId::of::<WatcherSubscription>(), |_| {
+                stream::channel(
+                    100,
+                    |mut output: futures::channel::mpsc::Sender<Message>| async move {
+                        let watcher_res = {
+                            let mut output = output.clone();
+                            new_debouncer(
+                                time::Duration::from_millis(250),
+                                Some(time::Duration::from_millis(250)),
+                                move |events_res: notify_debouncer_full::DebounceEventResult| {
+                                    match events_res {
+                                        Ok(mut events) => {
+                                            log::debug!("{events:?}");
 
-                                        events.retain(|event| {
+                                            events.retain(|event| {
                                             match &event.kind {
                                                 notify::EventKind::Access(_) => {
                                                     // Data not mutated
@@ -6432,190 +6443,196 @@ impl Application for App {
                                             }
                                         });
 
-                                        if !events.is_empty() {
-                                            match futures::executor::block_on(async {
-                                                output.send(Message::NotifyEvents(events)).await
-                                            }) {
-                                                Ok(()) => {}
-                                                Err(err) => {
-                                                    log::warn!(
-                                                        "failed to send notify events: {err:?}"
-                                                    );
+                                            if !events.is_empty() {
+                                                match futures::executor::block_on(async {
+                                                    output.send(Message::NotifyEvents(events)).await
+                                                }) {
+                                                    Ok(()) => {}
+                                                    Err(err) => {
+                                                        log::warn!(
+                                                            "failed to send notify events: {err:?}"
+                                                        );
+                                                    }
                                                 }
                                             }
                                         }
+                                        Err(err) => {
+                                            log::warn!("failed to watch files: {err:?}");
+                                        }
                                     }
+                                },
+                            )
+                        };
+
+                        match watcher_res {
+                            Ok(watcher) => {
+                                match output
+                                    .send(Message::NotifyWatcher(WatcherWrapper {
+                                        watcher_opt: Some(watcher),
+                                    }))
+                                    .await
+                                {
+                                    Ok(()) => {}
                                     Err(err) => {
-                                        log::warn!("failed to watch files: {err:?}");
+                                        log::warn!("failed to send notify watcher: {err:?}");
+                                    }
+                                }
+                            }
+                            Err(err) => {
+                                log::warn!("failed to create file watcher: {err:?}");
+                            }
+                        }
+
+                        std::future::pending().await
+                    },
+                )
+            }),
+            Subscription::run_with(TypeId::of::<TrashWatcherSubscription>(), |_| {
+                stream::channel(
+                    1,
+                    |mut output: futures::channel::mpsc::Sender<Message>| async move {
+                        let watcher_res = new_debouncer(
+                            time::Duration::from_millis(250),
+                            Some(time::Duration::from_millis(250)),
+                            move |event_res: notify_debouncer_full::DebounceEventResult| {
+                                match event_res {
+                                    Ok(events) => {
+                                        // Rescan on any event. We don't need to evaluate each event
+                                        // because as long as the trash changed in any way we need to
+                                        // rescan.
+                                        let should_rescan =
+                                            events.iter().any(|event| !event.kind.is_access());
+
+                                        if should_rescan
+                                            && let Err(e) = futures::executor::block_on(async {
+                                                output.send(Message::RescanTrash).await
+                                            })
+                                        {
+                                            log::warn!(
+                                                "trash needs to be rescanned but sending message failed: {e:?}"
+                                            );
+                                        }
+                                    }
+                                    Err(e) => {
+                                        log::warn!("failed to watch trash bin for changes: {e:?}");
                                     }
                                 }
                             },
-                        )
-                    };
-
-                    match watcher_res {
-                        Ok(watcher) => {
-                            match output
-                                .send(Message::NotifyWatcher(WatcherWrapper {
-                                    watcher_opt: Some(watcher),
-                                }))
-                                .await
-                            {
-                                Ok(()) => {}
-                                Err(err) => {
-                                    log::warn!("failed to send notify watcher: {err:?}");
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            log::warn!("failed to create file watcher: {err:?}");
-                        }
-                    }
-
-                    std::future::pending().await
-                }),
-            ),
-            Subscription::run_with_id(
-                TypeId::of::<TrashWatcherSubscription>(),
-                stream::channel(1, |mut output| async move {
-                    let watcher_res = new_debouncer(
-                        time::Duration::from_millis(250),
-                        Some(time::Duration::from_millis(250)),
-                        move |event_res: notify_debouncer_full::DebounceEventResult| match event_res
-                        {
-                            Ok(events) => {
-                                // Rescan on any event. We don't need to evaluate each event
-                                // because as long as the trash changed in any way we need to
-                                // rescan.
-                                let should_rescan =
-                                    events.iter().any(|event| !event.kind.is_access());
-
-                                if should_rescan
-                                    && let Err(e) = futures::executor::block_on(async {
-                                        output.send(Message::RescanTrash).await
-                                    })
-                                {
-                                    log::warn!(
-                                        "trash needs to be rescanned but sending message failed: {e:?}"
-                                    );
-                                }
-                            }
-                            Err(e) => {
-                                log::warn!("failed to watch trash bin for changes: {e:?}");
-                            }
-                        },
-                    );
-
-                    // TODO: Trash watching support for Windows, macOS, and other OSes
-                    #[cfg(all(
-                        unix,
-                        not(target_os = "macos"),
-                        not(target_os = "ios"),
-                        not(target_os = "android")
-                    ))]
-                    match (watcher_res, trash::os_limited::trash_folders()) {
-                        (Ok(mut watcher), Ok(trash_bins)) => {
-                            // Watch the "bins" themselves as well as the files folder where
-                            // trashed items are placed. This allows us to avoid recursively
-                            // watching the trash which is slow but also properly get events.
-                            let trash_paths = trash_bins
-                                .into_iter()
-                                .flat_map(|path| [path.join("files"), path]);
-                            for path in trash_paths {
-                                if let Err(e) =
-                                    watcher.watch(&path, notify::RecursiveMode::NonRecursive)
-                                {
-                                    log::warn!(
-                                        "failed to add trash bin `{}` to watcher: {e:?}",
-                                        path.display()
-                                    );
-                                }
-                            }
-
-                            // Don't drop the watcher
-                            std::future::pending().await
-                        }
-                        (Err(e), _) => {
-                            log::warn!("failed to create new watcher for trash bin: {e:?}");
-                        }
-                        (_, Err(e)) => {
-                            log::warn!("could not find any valid trash bins to watch: {e:?}");
-                        }
-                    }
-
-                    std::future::pending().await
-                }),
-            ),
-        ];
-
-        #[cfg(all(
-            not(feature = "desktop-applet"),
-            not(target_os = "ios"),
-            not(target_os = "android")
-        ))]
-        if self.config.show_recents {
-            subscriptions.push(Subscription::run_with_id(
-                TypeId::of::<RecentsWatcherSubscription>(),
-                stream::channel(1, |mut output| async move {
-                    let Some(recents_path) = recently_used_xbel::dir() else {
-                        log::warn!(
-                            "failed to watch recents changes: .recently_used.xbel does not exist"
                         );
-                        return std::future::pending().await;
-                    };
 
-                    let watcher_res = new_debouncer(
-                        time::Duration::from_millis(250),
-                        Some(time::Duration::from_millis(250)),
-                        move |event_res: notify_debouncer_full::DebounceEventResult| match event_res
-                        {
-                            Ok(events) => {
-                                // Programs differ in how they modify the recents file so the
-                                // rescan is triggered on any event but access.
-                                if events.iter().any(|event| {
-                                    let kind = event.kind;
-                                    kind.is_create()
-                                        || kind.is_modify()
-                                        || kind.is_remove()
-                                        || kind.is_other()
-                                }) && let Err(e) = futures::executor::block_on(async {
-                                    output.send(Message::RescanRecents).await
-                                }) {
+                        // TODO: Trash watching support for Windows, macOS, and other OSes
+                        #[cfg(all(
+                            unix,
+                            not(target_os = "macos"),
+                            not(target_os = "ios"),
+                            not(target_os = "android")
+                        ))]
+                        match (watcher_res, trash::os_limited::trash_folders()) {
+                            (Ok(mut watcher), Ok(trash_bins)) => {
+                                // Watch the "bins" themselves as well as the files folder where
+                                // trashed items are placed. This allows us to avoid recursively
+                                // watching the trash which is slow but also properly get events.
+                                let trash_paths = trash_bins
+                                    .into_iter()
+                                    .flat_map(|path| [path.join("files"), path]);
+                                for path in trash_paths {
+                                    if let Err(e) =
+                                        watcher.watch(&path, notify::RecursiveMode::NonRecursive)
+                                    {
+                                        log::warn!(
+                                            "failed to add trash bin `{}` to watcher: {e:?}",
+                                            path.display()
+                                        );
+                                    }
+                                }
+
+                                // Don't drop the watcher
+                                std::future::pending().await
+                            }
+                            (Err(e), _) => {
+                                log::warn!("failed to create new watcher for trash bin: {e:?}");
+                            }
+                            (_, Err(e)) => {
+                                log::warn!("could not find any valid trash bins to watch: {e:?}");
+                            }
+                        }
+
+                        std::future::pending().await
+                    },
+                )
+            }),
+            #[cfg(all(
+                not(feature = "desktop-applet"),
+                not(target_os = "ios"),
+                not(target_os = "android")
+            ))]
+            Subscription::run_with(TypeId::of::<RecentsWatcherSubscription>(), |_| {
+                stream::channel(
+                    1,
+                    |mut output: futures::channel::mpsc::Sender<Message>| async move {
+                        let Some(recents_path) = recently_used_xbel::dir() else {
+                            log::warn!(
+                                "failed to watch recents changes: .recently_used.xbel does not exist"
+                            );
+                            return std::future::pending().await;
+                        };
+
+                        let watcher_res = new_debouncer(
+                            time::Duration::from_millis(250),
+                            Some(time::Duration::from_millis(250)),
+                            move |event_res: notify_debouncer_full::DebounceEventResult| {
+                                match event_res {
+                                    Ok(events) => {
+                                        // Programs differ in how they modify the recents file so the
+                                        // rescan is triggered on any event but access.
+                                        if events.iter().any(|event| {
+                                            let kind = event.kind;
+                                            kind.is_create()
+                                                || kind.is_modify()
+                                                || kind.is_remove()
+                                                || kind.is_other()
+                                        }) && let Err(e) = futures::executor::block_on(async {
+                                            output.send(Message::RescanRecents).await
+                                        }) {
+                                            log::warn!(
+                                                "open recents tabs need to be updated but sending message failed: {e:?}"
+                                            );
+                                        }
+                                    }
+                                    Err(e) => {
+                                        log::warn!(
+                                            "failed to watch recents file for changes: {e:?}"
+                                        )
+                                    }
+                                }
+                            },
+                        );
+
+                        match watcher_res {
+                            Ok(mut watcher) => {
+                                if let Err(e) = watcher
+                                    .watch(&recents_path, notify::RecursiveMode::NonRecursive)
+                                {
                                     log::warn!(
-                                        "open recents tabs need to be updated but sending message failed: {e:?}"
+                                        "failed to add recents file `{}` to watcher: {}",
+                                        recents_path.display(),
+                                        e
                                     );
                                 }
+
+                                // Don't drop the watcher.
+                                std::future::pending::<()>().await;
                             }
                             Err(e) => {
-                                log::warn!("failed to watch recents file for changes: {e:?}")
+                                log::warn!("failed to create new watcher for recents file: {e:?}")
                             }
-                        },
-                    );
-
-                    match watcher_res {
-                        Ok(mut watcher) => {
-                            if let Err(e) =
-                                watcher.watch(&recents_path, notify::RecursiveMode::NonRecursive)
-                            {
-                                log::warn!(
-                                    "failed to add recents file `{}` to watcher: {}",
-                                    recents_path.display(),
-                                    e
-                                );
-                            }
-
-                            // Don't drop the watcher.
-                            std::future::pending::<()>().await;
                         }
-                        Err(e) => {
-                            log::warn!("failed to create new watcher for recents file: {e:?}")
-                        }
-                    }
 
-                    std::future::pending().await
-                }),
-            ));
-        }
+                        std::future::pending().await
+                    },
+                )
+            }),
+        ];
 
         if let Some(scroll_speed) = self.auto_scroll_speed {
             subscriptions.push(
@@ -6660,38 +6677,44 @@ impl Application for App {
                 // Handle notification when window is closed and operations are in progress
                 #[cfg(feature = "notify")]
                 {
+                    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
                     struct NotificationSubscription;
-                    subscriptions.push(Subscription::run_with_id(
+                    subscriptions.push(Subscription::run_with(
                         TypeId::of::<NotificationSubscription>(),
-                        stream::channel(1, move |msg_tx| async move {
-                            let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
-                            tokio::task::spawn_blocking(move || {
-                                match notify_rust::Notification::new()
-                                    .summary(&fl!("notification-in-progress"))
-                                    .timeout(notify_rust::Timeout::Never)
-                                    .show()
-                                {
-                                    Ok(notification) => {
-                                        let _ = futures::executor::block_on(async {
-                                            msg_tx
-                                                .lock()
-                                                .await
-                                                .send(Message::Notification(Arc::new(Mutex::new(
-                                                    notification,
-                                                ))))
-                                                .await
-                                        });
-                                    }
-                                    Err(err) => {
-                                        log::warn!("failed to create notification: {err}");
-                                    }
-                                }
-                            })
-                            .await
-                            .unwrap();
+                        |_| {
+                            stream::channel(
+                                1,
+                                move |msg_tx: futures::channel::mpsc::Sender<_>| async move {
+                                    let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
+                                    tokio::task::spawn_blocking(move || {
+                                        match notify_rust::Notification::new()
+                                            .summary(&fl!("notification-in-progress"))
+                                            .timeout(notify_rust::Timeout::Never)
+                                            .show()
+                                        {
+                                            Ok(notification) => {
+                                                let _ = futures::executor::block_on(async {
+                                                    msg_tx
+                                                        .lock()
+                                                        .await
+                                                        .send(Message::Notification(Arc::new(
+                                                            Mutex::new(notification),
+                                                        )))
+                                                        .await
+                                                });
+                                            }
+                                            Err(err) => {
+                                                log::warn!("failed to create notification: {err}");
+                                            }
+                                        }
+                                    })
+                                    .await
+                                    .unwrap();
 
-                            std::future::pending().await
-                        }),
+                                    std::future::pending().await
+                                },
+                            )
+                        },
                     ));
                 }
             }

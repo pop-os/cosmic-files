@@ -27,7 +27,7 @@ use cosmic::{
         stream,
         //TODO: export in cosmic::widget
         widget::{
-            horizontal_rule, rule,
+            rule,
             scrollable::{self, AbsoluteOffset, Viewport},
             stack,
         },
@@ -36,8 +36,9 @@ use cosmic::{
     iced_core::{mouse::ScrollDelta, widget::tree},
     theme,
     widget::{
-        self, DndDestination, DndSource, Id, Space, Widget,
+        self, DndDestination, DndSource, Id, RcElementWrapper, Space, Widget,
         menu::{action::MenuAction, key_bind::KeyBind},
+        space,
     },
 };
 use i18n_embed::LanguageLoader;
@@ -2241,9 +2242,9 @@ impl Item {
     ) -> widget::Text<'a, cosmic::Theme, cosmic::Renderer> {
         widget::text::body(name)
             .wrapping(text::Wrapping::WordOrGlyph)
-            .ellipsize(text::Ellipsize::Middle(
-                text::EllipsizeHeightLimit::Lines(3),
-            ))
+            .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
+                3,
+            )))
     }
 
     /// Text widget for a filename in list view: word-or-glyph wrapping, middle-ellipsized to 1 line.
@@ -2252,9 +2253,9 @@ impl Item {
     ) -> widget::Text<'a, cosmic::Theme, cosmic::Renderer> {
         widget::text::body(name)
             .wrapping(text::Wrapping::WordOrGlyph)
-            .ellipsize(text::Ellipsize::Middle(
-                text::EllipsizeHeightLimit::Lines(1),
-            ))
+            .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
+                1,
+            )))
     }
 
     pub fn path_opt(&self) -> Option<&PathBuf> {
@@ -3656,7 +3657,14 @@ impl Tab {
                 }
                 if let Some(offset) = self.select_focus_scroll() {
                     commands.push(Command::Iced(
-                        scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                        scrollable::scroll_to(
+                            self.scrollable_id.clone(),
+                            AbsoluteOffset {
+                                x: Some(offset.x),
+                                y: Some(offset.y),
+                            },
+                        )
+                        .into(),
                     ));
                 }
                 if let Some(id) = self.select_focus_id() {
@@ -3720,7 +3728,14 @@ impl Tab {
                     }
                     if let Some(offset) = self.select_focus_scroll() {
                         commands.push(Command::Iced(
-                            scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                            scrollable::scroll_to(
+                                self.scrollable_id.clone(),
+                                AbsoluteOffset {
+                                    x: Some(offset.x),
+                                    y: Some(offset.y),
+                                },
+                            )
+                            .into(),
                         ));
                     }
                     if let Some(id) = self.select_focus_id() {
@@ -3771,7 +3786,14 @@ impl Tab {
                     }
                     if let Some(offset) = self.select_focus_scroll() {
                         commands.push(Command::Iced(
-                            scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                            scrollable::scroll_to(
+                                self.scrollable_id.clone(),
+                                AbsoluteOffset {
+                                    x: Some(offset.x),
+                                    y: Some(offset.y),
+                                },
+                            )
+                            .into(),
                         ));
                     }
                     if let Some(id) = self.select_focus_id() {
@@ -3805,7 +3827,14 @@ impl Tab {
                     }
                     if let Some(offset) = self.select_focus_scroll() {
                         commands.push(Command::Iced(
-                            scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                            scrollable::scroll_to(
+                                self.scrollable_id.clone(),
+                                AbsoluteOffset {
+                                    x: Some(offset.x),
+                                    y: Some(offset.y),
+                                },
+                            )
+                            .into(),
                         ));
                     }
                     if let Some(id) = self.select_focus_id() {
@@ -3843,7 +3872,14 @@ impl Tab {
                     }
                     if let Some(offset) = self.select_focus_scroll() {
                         commands.push(Command::Iced(
-                            scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                            scrollable::scroll_to(
+                                self.scrollable_id.clone(),
+                                AbsoluteOffset {
+                                    x: Some(offset.x),
+                                    y: Some(offset.y),
+                                },
+                            )
+                            .into(),
                         ));
                     }
                     if let Some(id) = self.select_focus_id() {
@@ -4035,7 +4071,14 @@ impl Tab {
                     && let Some(offset) = self.select_focus_scroll()
                 {
                     commands.push(Command::Iced(
-                        scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                        scrollable::scroll_to(
+                            self.scrollable_id.clone(),
+                            AbsoluteOffset {
+                                x: Some(offset.x),
+                                y: Some(offset.y),
+                            },
+                        )
+                        .into(),
                     ));
                 }
 
@@ -4060,7 +4103,14 @@ impl Tab {
             Message::ScrollToFocused => {
                 if let Some(offset) = self.select_focus_scroll() {
                     commands.push(Command::Iced(
-                        scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                        scrollable::scroll_to(
+                            self.scrollable_id.clone(),
+                            AbsoluteOffset {
+                                x: Some(offset.x),
+                                y: Some(offset.y),
+                            },
+                        )
+                        .into(),
                     ));
                 }
             }
@@ -4131,7 +4181,14 @@ impl Tab {
                 if self.select_position(0, 0, mod_shift) {
                     if let Some(offset) = self.select_focus_scroll() {
                         commands.push(Command::Iced(
-                            scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                            scrollable::scroll_to(
+                                self.scrollable_id.clone(),
+                                AbsoluteOffset {
+                                    x: Some(offset.x),
+                                    y: Some(offset.y),
+                                },
+                            )
+                            .into(),
                         ));
                     }
                     if let Some(id) = self.select_focus_id() {
@@ -4146,7 +4203,14 @@ impl Tab {
                 {
                     if let Some(offset) = self.select_focus_scroll() {
                         commands.push(Command::Iced(
-                            scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                            scrollable::scroll_to(
+                                self.scrollable_id.clone(),
+                                AbsoluteOffset {
+                                    x: Some(offset.x),
+                                    y: Some(offset.y),
+                                },
+                            )
+                            .into(),
                         ));
                     }
                     if let Some(id) = self.select_focus_id() {
@@ -4335,7 +4399,14 @@ impl Tab {
             let offset = AbsoluteOffset { x: 0.0, y: 0.0 };
             self.scroll_opt = Some(offset);
             commands.push(Command::Iced(
-                scrollable::scroll_to(self.scrollable_id.clone(), offset).into(),
+                scrollable::scroll_to(
+                    self.scrollable_id.clone(),
+                    AbsoluteOffset {
+                        x: Some(0.0),
+                        y: Some(0.0),
+                    },
+                )
+                .into(),
             ));
         }
 
@@ -4660,20 +4731,20 @@ impl Tab {
         }
 
         let mut column = widget::column::with_capacity(2);
-        column = column.push(widget::Space::with_height(Length::Fixed(space_m.into())));
+        column = column.push(widget::space::vertical().height(Length::Fixed(space_m.into())));
         {
             let mut row = widget::row::with_capacity(5).align_y(Alignment::Center);
-            row = row.push(widget::horizontal_space());
+            row = row.push(widget::space::horizontal());
             if let Some(name) = name_opt {
                 row = row.push(name);
             }
-            row = row.push(widget::horizontal_space());
+            row = row.push(widget::space::horizontal());
             row = row.push(
                 widget::button::icon(widget::icon::from_name("window-close-symbolic"))
                     .class(theme::Button::Standard)
                     .on_press(Message::Gallery(false)),
             );
-            row = row.push(widget::Space::with_width(Length::Fixed(space_m.into())));
+            row = row.push(widget::space::horizontal().width(Length::Fixed(space_m.into())));
             // This mouse area provides window drag while the header bar is hidden
             let mouse_area = mouse_area::MouseArea::new(row)
                 .on_press(|_| Message::WindowDrag)
@@ -4682,28 +4753,29 @@ impl Tab {
         }
         {
             let mut row = widget::row::with_capacity(7).align_y(Alignment::Center);
-            row = row.push(widget::Space::with_width(Length::Fixed(space_m.into())));
+            row = row.push(widget::space::horizontal().width(Length::Fixed(space_m.into())));
             row = row.push(
                 widget::button::icon(widget::icon::from_name("go-previous-symbolic"))
                     .padding(space_xs)
                     .class(theme::Button::Standard)
                     .on_press(Message::GalleryPrevious),
             );
-            row = row.push(widget::Space::with_width(Length::Fixed(space_xxs.into())));
+            row = row.push(widget::space::horizontal().width(Length::Fixed(space_xxs.into())));
             if let Some(element) = element_opt {
                 row = row.push(element);
             } else {
                 //TODO: what to do when no image?
-                row = row.push(widget::Space::new(Length::Fill, Length::Fill));
+                row = row.push(space::horizontal().width(Length::Fill));
+                row = row.push(space::vertical().height(Length::Fill));
             }
-            row = row.push(widget::Space::with_width(Length::Fixed(space_xxs.into())));
+            row = row.push(widget::space::horizontal().width(Length::Fixed(space_xxs.into())));
             row = row.push(
                 widget::button::icon(widget::icon::from_name("go-next-symbolic"))
                     .padding(space_xs)
                     .class(theme::Button::Standard)
                     .on_press(Message::GalleryNext),
             );
-            row = row.push(widget::Space::with_width(Length::Fixed(space_m.into())));
+            row = row.push(widget::space::horizontal().width(Length::Fixed(space_m.into())));
             column = column.push(row);
         }
 
@@ -4732,12 +4804,12 @@ impl Tab {
         ) -> f32 {
             let text: text::Text<&'a str, font::Font> = text::Text {
                 content,
-                bounds: Size::INFINITY,
+                bounds: Size::INFINITE,
                 size: font_size.into(),
                 line_height: text::LineHeight::Absolute(line_height.into()),
                 font,
-                horizontal_alignment: Horizontal::Left,
-                vertical_alignment: Vertical::Top,
+                align_x: text::Alignment::Left,
+                align_y: Vertical::Top,
                 shaping: text::Shaping::default(),
                 wrapping: text::Wrapping::None,
                 ellipsize: text::Ellipsize::End(text::EllipsizeHeightLimit::Lines(1)),
@@ -4789,7 +4861,7 @@ impl Tab {
         row = row.push(next_button);
         w += f32::from(space_xxs).mul_add(2.0, 16.0);
 
-        row = row.push(widget::Space::with_width(Length::Fixed(space_s.into())));
+        row = row.push(widget::space::horizontal().width(Length::Fixed(space_s.into())));
         w += f32::from(space_s);
 
         //TODO: allow resizing?
@@ -4842,13 +4914,13 @@ impl Tab {
         .padding([0, space_xxs]);
 
         let accent_rule =
-            horizontal_rule(1).class(theme::Rule::Custom(Box::new(|theme| rule::Style {
+            rule::horizontal(1).class(theme::Rule::Custom(Box::new(|theme| rule::Style {
                 color: theme.cosmic().accent_color().into(),
-                width: 1,
                 radius: 0.0.into(),
                 fill_mode: rule::FillMode::Full,
+                snap: true,
             })));
-        let heading_rule = widget::container(horizontal_rule(1))
+        let heading_rule = widget::container(rule::horizontal(1))
             .padding([0, theme::active().cosmic().corner_radii.radius_xs[0] as u16]);
 
         if let Some(edit_location) = &self.edit_location {
@@ -5385,9 +5457,9 @@ impl Tab {
 
                 let spacer_height = height.saturating_sub(max_bottom + top_deduct);
                 if spacer_height > 0 {
-                    column = column.push(widget::container(Space::with_height(Length::Fixed(
-                        spacer_height as f32,
-                    ))));
+                    column = column.push(widget::container(
+                        space::vertical().height(Length::Fixed(spacer_height as f32)),
+                    ));
                 }
             }
         }
@@ -5422,9 +5494,9 @@ impl Tab {
                                 false,
                                 false,
                             )),
-                            widget::button::custom(
-                                Item::grid_display_name(item.display_name.clone()),
-                            )
+                            widget::button::custom(Item::grid_display_name(
+                                item.display_name.clone(),
+                            ))
                             .id(item.button_id.clone())
                             .on_press(Message::Click(Some(*i)))
                             .padding([0, space_xxxs])
@@ -5448,7 +5520,7 @@ impl Tab {
                         dnd_item_i += 1;
                     } else {
                         dnd_grid = dnd_grid.push(
-                            widget::container(Space::with_height(item_width as f32))
+                            widget::container(space::vertical().height(item_width as f32))
                                 .height(Length::Fixed(item_height as f32)),
                         );
                     }
@@ -5537,7 +5609,7 @@ impl Tab {
 
                 if count > 0 {
                     column = column
-                        .push(widget::container(horizontal_rule(1)).padding([0, rule_padding]));
+                        .push(widget::container(rule::horizontal(1)).padding([0, rule_padding]));
                     y += 1.0;
                 }
 
@@ -5735,7 +5807,9 @@ impl Tab {
 
                     if item.selected || !drag_items.is_empty() {
                         let dnd_row = if !item.selected {
-                            Element::from(Space::with_height(Length::Fixed(f32::from(row_height))))
+                            Element::from(
+                                space::vertical().height(Length::Fixed(f32::from(row_height))),
+                            )
                         } else if condensed {
                             widget::row::with_children([
                                 widget::icon::icon(item.icon_handle_list_condensed.clone())
@@ -5842,7 +5916,7 @@ impl Tab {
 
             let spacer_height = size.height - y - f32::from(top_deduct);
             if spacer_height > 0. {
-                column = column.push(widget::container(Space::with_height(spacer_height)));
+                column = column.push(widget::container(space::vertical().height(spacer_height)));
             }
         }
         let drag_col = (!drag_items.is_empty())
@@ -5911,7 +5985,7 @@ impl Tab {
         let view = self.config.view;
         let item_view = match drag_list {
             Some(drag_list) if self.selected_clicked => {
-                let drag_list = RcElementWrapper::<Message>(Rc::new(RefCell::new(drag_list)));
+                let drag_list = RcElementWrapper::new(drag_list);
                 item_view
                     .drag_content(move || {
                         ClipboardCopy::new(crate::clipboard::ClipboardKind::Copy, &files)
@@ -5968,11 +6042,16 @@ impl Tab {
         }
         if can_scroll {
             tab_column = tab_column.push(
-                widget::scrollable(popover)
-                    .id(self.scrollable_id.clone())
-                    .on_scroll(Message::Scroll)
-                    .width(Length::Fill)
-                    .height(Length::Fill),
+                // FIXME: new responsive widget will remove the state from the scrollable
+                // id_container with custom id forces the state to be extracted in a diff
+                // pre-processing step
+                widget::id_container(
+                    widget::scrollable(popover)
+                        .on_scroll(Message::Scroll)
+                        .width(Length::Fill)
+                        .height(Length::Fill),
+                    widget::Id::new(format!("{}-scrollable", self.scrollable_id)),
+                ),
             );
         } else {
             tab_column = tab_column.push(popover);
@@ -5985,7 +6064,7 @@ impl Tab {
                 {
                     tab_column = tab_column.push(
                         widget::layer_container(widget::row::with_children([
-                            widget::horizontal_space().into(),
+                            widget::space::horizontal().into(),
                             widget::button::standard(fl!("empty-trash"))
                                 .on_press(Message::EmptyTrash)
                                 .into(),
@@ -6000,7 +6079,7 @@ impl Tab {
             Location::Network(uri, _display_name, _path) if uri == "network:///" => {
                 tab_column = tab_column.push(
                     widget::layer_container(widget::row::with_children([
-                        widget::horizontal_space().into(),
+                        widget::space::horizontal().into(),
                         widget::button::standard(fl!("add-network-drive"))
                             .on_press(Message::AddNetworkDrive)
                             .into(),
@@ -6166,7 +6245,14 @@ impl Tab {
         clipboard_paste_available: bool,
     ) -> Element<'a, Message> {
         widget::responsive(move |size| {
-            self.view_responsive(key_binds, modifiers, size, clipboard_paste_available)
+            widget::id_container(
+                self.view_responsive(key_binds, modifiers, size, clipboard_paste_available),
+                Id::new(format!(
+                    "tab-{}-{}",
+                    self.scrollable_id, self.location_title
+                )),
+            )
+            .into()
         })
         .into()
     }
@@ -6237,50 +6323,86 @@ impl Tab {
                         (max_mb, max_jobs)
                     };
 
-                    subscriptions.push(Subscription::run_with_id(
-                        ("thumbnail", path.clone()),
-                        stream::channel(1, move |mut output| async move {
-                            let message = {
-                                let path = path.clone();
+                    #[derive(Clone)]
+                    struct Wrapper {
+                        path: PathBuf,
+                        metadata: ItemMetadata,
+                        mime: mime::Mime,
+                        effective_max_mb: u64,
+                        effective_jobs: usize,
+                        max_size: u64,
+                    }
 
-                                // Acquire semaphore permit
-                                _ = THUMB_SEMAPHORE.acquire().await;
+                    impl Hash for Wrapper {
+                        fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                            self.path.hash(state);
+                        }
+                    }
 
-                                tokio::task::spawn_blocking(move || {
-                                    let start = Instant::now();
-                                    let thumbnail = ItemThumbnail::new(
-                                        &path,
-                                        metadata,
-                                        mime,
-                                        THUMBNAIL_SIZE,
-                                        effective_max_mb,
-                                        effective_jobs,
-                                        max_size,
-                                    );
-                                    log::debug!(
-                                        "thumbnailed {} in {:?}",
-                                        path.display(),
-                                        start.elapsed()
-                                    );
-                                    Message::Thumbnail(path, thumbnail)
-                                })
-                                .await
-                                .unwrap()
-                            };
+                    subscriptions.push(Subscription::run_with(
+                        Wrapper {
+                            path: path.clone(),
+                            metadata,
+                            mime,
+                            effective_max_mb,
+                            effective_jobs,
+                            max_size,
+                        },
+                        |wrapper| {
+                            let Wrapper {
+                                path,
+                                metadata,
+                                mime,
+                                effective_max_mb,
+                                effective_jobs,
+                                max_size,
+                            } = wrapper.clone();
+                            stream::channel(
+                                1,
+                                move |mut output: futures::channel::mpsc::Sender<_>| async move {
+                                    let message = {
+                                        let path = path.clone();
 
-                            match output.send(message).await {
-                                Ok(()) => {}
-                                Err(err) => {
-                                    log::warn!(
-                                        "failed to send thumbnail for {}: {}",
-                                        path.display(),
-                                        err
-                                    );
-                                }
-                            }
+                                        // Acquire semaphore permit
+                                        _ = THUMB_SEMAPHORE.acquire().await;
 
-                            std::future::pending().await
-                        }),
+                                        tokio::task::spawn_blocking(move || {
+                                            let start = Instant::now();
+                                            let thumbnail = ItemThumbnail::new(
+                                                &path,
+                                                metadata,
+                                                mime,
+                                                THUMBNAIL_SIZE,
+                                                effective_max_mb,
+                                                effective_jobs,
+                                                max_size,
+                                            );
+                                            log::debug!(
+                                                "thumbnailed {} in {:?}",
+                                                path.display(),
+                                                start.elapsed()
+                                            );
+                                            Message::Thumbnail(path, thumbnail)
+                                        })
+                                        .await
+                                        .unwrap()
+                                    };
+
+                                    match output.send(message).await {
+                                        Ok(()) => {}
+                                        Err(err) => {
+                                            log::warn!(
+                                                "failed to send thumbnail for {}: {}",
+                                                path.display(),
+                                                err
+                                            );
+                                        }
+                                    }
+
+                                    std::future::pending().await
+                                },
+                            )
+                        },
                     ));
                 }
 
@@ -6305,51 +6427,63 @@ impl Tab {
                     if let Some(path) = item.path_opt().cloned() {
                         // Item must be calculating directory size
                         if let DirSize::Calculating(controller) = &item.dir_size {
-                            let controller = controller.clone();
-                            subscriptions.push(Subscription::run_with_id(
-                                ("dir_size", path.clone()),
-                                stream::channel(1, |mut output| async move {
-                                    let message = {
-                                        let start = Instant::now();
-                                        match calculate_dir_size(&path, controller).await {
-                                            Ok(size) => {
-                                                log::debug!(
-                                                    "calculated directory size of {} in {:?}",
-                                                    path.display(),
-                                                    start.elapsed()
-                                                );
-                                                Message::DirectorySize(
-                                                    path.clone(),
-                                                    DirSize::Directory(size),
-                                                )
+                            struct Wrapper {
+                                path: PathBuf,
+                                controller: Controller,
+                            }
+                            impl Hash for Wrapper {
+                                fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                                    self.path.hash(state);
+                                }
+                            }
+                            subscriptions.push(Subscription::run_with(
+                                Wrapper { path: path.clone(), controller: controller.clone() },
+                                |Wrapper { path, controller }| {
+                                    let path = path.clone();
+                                    let controller = controller.clone();
+                                    stream::channel(1, |mut output: futures::channel::mpsc::Sender<_>| async move {
+                                        let message = {
+                                            let start = Instant::now();
+                                            match calculate_dir_size(&path, controller).await {
+                                                Ok(size) => {
+                                                    log::debug!(
+                                                        "calculated directory size of {} in {:?}",
+                                                        path.display(),
+                                                        start.elapsed()
+                                                    );
+                                                    Message::DirectorySize(
+                                                        path.clone(),
+                                                        DirSize::Directory(size),
+                                                    )
+                                                }
+                                                Err(err) => {
+                                                    log::warn!(
+                                                        "failed to calculate directory size of {}: {}",
+                                                        path.display(),
+                                                        err
+                                                    );
+                                                    Message::DirectorySize(
+                                                        path.clone(),
+                                                        DirSize::Error(err.to_string()),
+                                                    )
+                                                }
                                             }
+                                        };
+
+                                        match output.send(message).await {
+                                            Ok(()) => {}
                                             Err(err) => {
                                                 log::warn!(
-                                                    "failed to calculate directory size of {}: {}",
+                                                    "failed to send directory size for {}: {}",
                                                     path.display(),
                                                     err
                                                 );
-                                                Message::DirectorySize(
-                                                    path.clone(),
-                                                    DirSize::Error(err.to_string()),
-                                                )
                                             }
                                         }
-                                    };
 
-                                    match output.send(message).await {
-                                        Ok(()) => {}
-                                        Err(err) => {
-                                            log::warn!(
-                                                "failed to send directory size for {}: {}",
-                                                path.display(),
-                                                err
-                                            );
-                                        }
-                                    }
-
-                                    std::future::pending().await
-                                }),
+                                        std::future::pending().await
+                                    })
+                                }
                             ));
                         }
                     }
@@ -6364,87 +6498,116 @@ impl Tab {
             let term = term.clone();
             let show_hidden = *show_hidden;
             let start = *start;
-            subscriptions.push(Subscription::run_with_id(
-                location.clone(),
-                stream::channel(2, move |mut output| async move {
-                    //TODO: optimal size?
-                    let (results_tx, results_rx) = mpsc::channel(65536);
+            #[derive(Debug, Hash, Clone)]
+            struct Wrapper {
+                location: Location,
+                path: PathBuf,
+                term: String,
+                show_hidden: bool,
+                start: Instant,
+            }
 
-                    let ready = Arc::new(atomic::AtomicBool::new(false));
-                    let last_modified_opt = Arc::new(RwLock::new(None));
-                    output
-                        .send(Message::SearchContext(
-                            location.clone(),
-                            SearchContextWrapper(Some(SearchContext {
-                                results_rx,
-                                ready: ready.clone(),
-                                last_modified_opt: last_modified_opt.clone(),
-                            })),
-                        ))
-                        .await
-                        .unwrap();
-
-                    let output = Arc::new(tokio::sync::Mutex::new(output));
-                    {
-                        let output = output.clone();
-                        tokio::task::spawn_blocking(move || {
-                            scan_search(
-                                &path,
-                                &term,
-                                show_hidden,
-                                move |path, name, metadata| -> bool {
-                                    // Don't send if the result is too old
-                                    if let Some(last_modified) = *last_modified_opt.read().unwrap()
-                                    {
-                                        if let Ok(modified) = metadata.modified() {
-                                            if modified < last_modified {
-                                                return true;
-                                            }
-                                        } else {
-                                            return true;
-                                        }
-                                    }
-
-                                    match results_tx.blocking_send((
-                                        path.to_path_buf(),
-                                        name.to_string(),
-                                        metadata,
-                                    )) {
-                                        Ok(()) => {
-                                            if ready.swap(true, atomic::Ordering::SeqCst) {
-                                                true
-                                            } else {
-                                                // Wake up update method
-                                                futures::executor::block_on(async {
-                                                    output
-                                                        .lock()
-                                                        .await
-                                                        .send(Message::SearchReady(false))
-                                                        .await
-                                                })
-                                                .is_ok()
-                                            }
-                                        }
-                                        Err(_) => false,
-                                    }
-                                },
-                            );
-                            log::info!(
-                                "searched for {:?} in {} in {:?}",
+            subscriptions.push(Subscription::run_with(
+                Wrapper {
+                    location: location.clone(),
+                    path: path.clone(),
+                    term: term.clone(),
+                    show_hidden,
+                    start,
+                },
+                |wrapper| {
+                    let wrapper = wrapper.clone();
+                    stream::channel(
+                        2,
+                        move |mut output: futures::channel::mpsc::Sender<Message>| async move {
+                            let Wrapper {
+                                location,
+                                path,
                                 term,
-                                path.display(),
-                                start.elapsed(),
-                            );
-                        })
-                        .await
-                        .unwrap();
-                    }
+                                show_hidden,
+                                start,
+                            } = wrapper;
+                            //TODO: optimal size?
+                            let (results_tx, results_rx) = mpsc::channel(65536);
 
-                    // Send final ready
-                    let _ = output.lock().await.send(Message::SearchReady(true)).await;
+                            let ready = Arc::new(atomic::AtomicBool::new(false));
+                            let last_modified_opt = Arc::new(RwLock::new(None));
+                            output
+                                .send(Message::SearchContext(
+                                    location.clone(),
+                                    SearchContextWrapper(Some(SearchContext {
+                                        results_rx,
+                                        ready: ready.clone(),
+                                        last_modified_opt: last_modified_opt.clone(),
+                                    })),
+                                ))
+                                .await
+                                .unwrap();
 
-                    std::future::pending().await
-                }),
+                            let output = Arc::new(tokio::sync::Mutex::new(output));
+                            {
+                                let output = output.clone();
+                                tokio::task::spawn_blocking(move || {
+                                    scan_search(
+                                        &path,
+                                        &term,
+                                        show_hidden,
+                                        move |path, name, metadata| -> bool {
+                                            // Don't send if the result is too old
+                                            if let Some(last_modified) =
+                                                *last_modified_opt.read().unwrap()
+                                            {
+                                                if let Ok(modified) = metadata.modified() {
+                                                    if modified < last_modified {
+                                                        return true;
+                                                    }
+                                                } else {
+                                                    return true;
+                                                }
+                                            }
+
+                                            match results_tx.blocking_send((
+                                                path.to_path_buf(),
+                                                name.to_string(),
+                                                metadata,
+                                            )) {
+                                                Ok(()) => {
+                                                    if ready.swap(true, atomic::Ordering::SeqCst) {
+                                                        true
+                                                    } else {
+                                                        // Wake up update method
+                                                        futures::executor::block_on(async {
+                                                            output
+                                                                .lock()
+                                                                .await
+                                                                .send(Message::SearchReady(false))
+                                                                .await
+                                                        })
+                                                        .is_ok()
+                                                    }
+                                                }
+                                                Err(_) => false,
+                                            }
+                                        },
+                                    );
+                                    log::info!(
+                                        "searched for {:?} in {} in {:?}",
+                                        term,
+                                        path.display(),
+                                        start.elapsed(),
+                                    );
+                                })
+                                .await
+                                .unwrap();
+                            }
+
+                            // Send final ready
+                            let _ = output.lock().await.send(Message::SearchReady(true)).await;
+
+                            std::future::pending().await
+                        },
+                    )
+                },
             ));
         }
 
@@ -6454,49 +6617,55 @@ impl Tab {
             .and_then(|x| x.location.path_opt())
             .cloned()
         {
-            subscriptions.push(Subscription::run_with_id(
-                ("tab_complete", path.to_string_lossy().into_owned()),
-                stream::channel(1, |mut output| async move {
-                    let message = {
-                        let path = path.clone();
-                        tokio::task::spawn_blocking(move || {
-                            let start = Instant::now();
-                            match tab_complete(&path) {
-                                Ok(completions) => {
-                                    log::info!(
-                                        "tab completed {} in {:?}",
-                                        path.display(),
-                                        start.elapsed()
-                                    );
-                                    Message::TabComplete(path.clone(), completions)
-                                }
+            subscriptions.push(Subscription::run_with(
+                ("tab_complete", path.clone()),
+                |(_, path)| {
+                    let path = path.clone();
+                    stream::channel(
+                        1,
+                        |mut output: futures::channel::mpsc::Sender<_>| async move {
+                            let message = {
+                                let path = path.clone();
+                                tokio::task::spawn_blocking(move || {
+                                    let start = Instant::now();
+                                    match tab_complete(&path) {
+                                        Ok(completions) => {
+                                            log::info!(
+                                                "tab completed {} in {:?}",
+                                                path.display(),
+                                                start.elapsed()
+                                            );
+                                            Message::TabComplete(path.clone(), completions)
+                                        }
+                                        Err(err) => {
+                                            log::warn!(
+                                                "failed to tab complete {}: {}",
+                                                path.display(),
+                                                err
+                                            );
+                                            Message::TabComplete(path.clone(), Vec::new())
+                                        }
+                                    }
+                                })
+                                .await
+                                .unwrap()
+                            };
+
+                            match output.send(message).await {
+                                Ok(()) => {}
                                 Err(err) => {
                                     log::warn!(
-                                        "failed to tab complete {}: {}",
+                                        "failed to send tab completion for {}: {}",
                                         path.display(),
                                         err
                                     );
-                                    Message::TabComplete(path.clone(), Vec::new())
                                 }
                             }
-                        })
-                        .await
-                        .unwrap()
-                    };
 
-                    match output.send(message).await {
-                        Ok(()) => {}
-                        Err(err) => {
-                            log::warn!(
-                                "failed to send tab completion for {}: {}",
-                                path.display(),
-                                err
-                            );
-                        }
-                    }
-
-                    std::future::pending().await
-                }),
+                            std::future::pending().await
+                        },
+                    )
+                },
             ));
         }
 
@@ -6529,141 +6698,6 @@ pub fn respond_to_scroll_direction(delta: ScrollDelta, modifiers: &Modifiers) ->
     None
 }
 
-#[derive(Clone)]
-pub struct RcElementWrapper<M>(pub Rc<RefCell<Element<'static, M>>>);
-
-impl<M> Widget<M, cosmic::Theme, cosmic::Renderer> for RcElementWrapper<M> {
-    fn size(&self) -> Size<Length> {
-        self.0.borrow().as_widget().size()
-    }
-
-    fn size_hint(&self) -> Size<Length> {
-        self.0.borrow().as_widget().size_hint()
-    }
-
-    fn layout(
-        &self,
-        tree: &mut tree::Tree,
-        renderer: &cosmic::Renderer,
-        limits: &cosmic::iced_core::layout::Limits,
-    ) -> cosmic::iced_core::layout::Node {
-        self.0.borrow().as_widget().layout(tree, renderer, limits)
-    }
-
-    fn draw(
-        &self,
-        tree: &tree::Tree,
-        renderer: &mut cosmic::Renderer,
-        theme: &cosmic::Theme,
-        style: &cosmic::iced_core::renderer::Style,
-        layout: cosmic::iced_core::Layout<'_>,
-        cursor: cosmic::iced_core::mouse::Cursor,
-        viewport: &Rectangle,
-    ) {
-        self.0
-            .borrow()
-            .as_widget()
-            .draw(tree, renderer, theme, style, layout, cursor, viewport);
-    }
-
-    fn tag(&self) -> tree::Tag {
-        self.0.borrow().as_widget().tag()
-    }
-
-    fn state(&self) -> tree::State {
-        self.0.borrow().as_widget().state()
-    }
-
-    fn children(&self) -> Vec<tree::Tree> {
-        self.0.borrow().as_widget().children()
-    }
-
-    fn diff(&mut self, tree: &mut tree::Tree) {
-        self.0.borrow_mut().as_widget_mut().diff(tree);
-    }
-
-    fn operate(
-        &self,
-        state: &mut tree::Tree,
-        layout: cosmic::iced_core::Layout<'_>,
-        renderer: &cosmic::Renderer,
-        operation: &mut dyn widget::Operation,
-    ) {
-        self.0
-            .borrow()
-            .as_widget()
-            .operate(state, layout, renderer, operation);
-    }
-
-    fn on_event(
-        &mut self,
-        _state: &mut tree::Tree,
-        _event: cosmic::iced::Event,
-        _layout: cosmic::iced_core::Layout<'_>,
-        _cursor: cosmic::iced_core::mouse::Cursor,
-        _renderer: &cosmic::Renderer,
-        _clipboard: &mut dyn cosmic::iced_core::Clipboard,
-        _shell: &mut cosmic::iced_core::Shell<'_, M>,
-        _viewport: &Rectangle,
-    ) -> event::Status {
-        self.0.borrow_mut().as_widget_mut().on_event(
-            _state, _event, _layout, _cursor, _renderer, _clipboard, _shell, _viewport,
-        )
-    }
-
-    fn mouse_interaction(
-        &self,
-        _state: &tree::Tree,
-        _layout: cosmic::iced_core::Layout<'_>,
-        _cursor: cosmic::iced_core::mouse::Cursor,
-        _viewport: &Rectangle,
-        _renderer: &cosmic::Renderer,
-    ) -> cosmic::iced_core::mouse::Interaction {
-        self.0
-            .borrow()
-            .as_widget()
-            .mouse_interaction(_state, _layout, _cursor, _viewport, _renderer)
-    }
-
-    fn overlay<'a>(
-        &'a mut self,
-        _state: &'a mut tree::Tree,
-        _layout: cosmic::iced_core::Layout<'_>,
-        _renderer: &cosmic::Renderer,
-        _translation: cosmic::iced_core::Vector,
-    ) -> Option<cosmic::iced_core::overlay::Element<'a, M, cosmic::Theme, cosmic::Renderer>> {
-        // TODO
-        None
-    }
-
-    fn id(&self) -> Option<Id> {
-        self.0.borrow().as_widget().id()
-    }
-
-    fn set_id(&mut self, _id: Id) {
-        self.0.borrow_mut().as_widget_mut().set_id(_id);
-    }
-
-    fn drag_destinations(
-        &self,
-        _state: &tree::Tree,
-        _layout: cosmic::iced_core::Layout<'_>,
-        renderer: &cosmic::Renderer,
-        _dnd_rectangles: &mut cosmic::iced_core::clipboard::DndDestinationRectangles,
-    ) {
-        self.0
-            .borrow()
-            .as_widget()
-            .drag_destinations(_state, _layout, renderer, _dnd_rectangles);
-    }
-}
-
-impl<Message: 'static> From<RcElementWrapper<Message>> for Element<'static, Message> {
-    fn from(wrapper: RcElementWrapper<Message>) -> Self {
-        Element::new(wrapper)
-    }
-}
-
 fn text_editor_class(
     theme: &cosmic::Theme,
     status: cosmic::widget::text_editor::Status,
@@ -6678,7 +6712,6 @@ fn text_editor_class(
     let mut placeholder = cosmic.palette.neutral_9;
     placeholder.alpha = 0.7;
     let placeholder = placeholder.into();
-    let icon = cosmic.background.on.into();
 
     match status {
         cosmic::iced_widget::text_editor::Status::Active
@@ -6690,14 +6723,13 @@ fn text_editor_class(
                     width: 2.0,
                     color: container.component.divider.into(),
                 },
-                icon,
                 placeholder,
                 value,
                 selection,
             }
         }
         cosmic::iced_widget::text_editor::Status::Hovered
-        | cosmic::iced_widget::text_editor::Status::Focused => {
+        | cosmic::iced_widget::text_editor::Status::Focused { .. } => {
             cosmic::iced_widget::text_editor::Style {
                 background: background.into(),
                 border: cosmic::iced::Border {
@@ -6705,7 +6737,6 @@ fn text_editor_class(
                     width: 2.0,
                     color: cosmic::iced::Color::from(cosmic.accent.base),
                 },
-                icon,
                 placeholder,
                 value,
                 selection,

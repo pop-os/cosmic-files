@@ -16,6 +16,7 @@ use cosmic::{
         window,
     },
     iced_core::widget::operation,
+    iced_widget::scrollable::AbsoluteOffset,
     iced_winit::{self, SurfaceIdWrapper},
     theme,
     widget::{
@@ -201,7 +202,8 @@ impl<T: AsRef<str>> From<T> for DialogLabel {
 
 impl<'a, M: Clone + 'static> From<&'a DialogLabel> for Element<'a, M> {
     fn from(label: &'a DialogLabel) -> Self {
-        let mut iced_spans = Vec::with_capacity(label.spans.len());
+        let mut iced_spans: Vec<cosmic::iced_core::text::Span<'_, ()>> =
+            Vec::with_capacity(label.spans.len());
         for span in &label.spans {
             iced_spans.push(cosmic::iced::widget::span(&span.text).underline(span.underline));
         }
@@ -614,10 +616,13 @@ impl App {
         for (choice_i, choice) in self.choices.iter().enumerate() {
             match choice {
                 DialogChoice::CheckBox { label, value, .. } => {
-                    row =
-                        row.push(widget::checkbox(label, *value).on_toggle(move |checked| {
-                            Message::Choice(choice_i, usize::from(checked))
-                        }));
+                    row = row.push(
+                        widget::checkbox(*value)
+                            .label(label)
+                            .on_toggle(move |checked| {
+                                Message::Choice(choice_i, usize::from(checked))
+                            }),
+                    );
                 }
                 DialogChoice::ComboBox {
                     label,
@@ -639,7 +644,7 @@ impl App {
                 .align_y(Alignment::Center)
                 .spacing(space_xxs);
         }
-        row = row.push(widget::horizontal_space());
+        row = row.push(widget::space::horizontal());
         row = row.push(widget::button::standard(fl!("cancel")).on_press(Message::Cancel));
 
         let mut has_selected = false;
@@ -1086,7 +1091,7 @@ impl Application for App {
                             .find(|item| item.selected)
                             .map(|item| item.preview_actions().map(Message::TabMessage))
                     })
-                    .unwrap_or_else(|| widget::horizontal_space().into());
+                    .unwrap_or_else(|| widget::space::horizontal().into());
                 Some(
                     context_drawer::context_drawer(
                         self.preview(kind).map(Message::TabMessage),
@@ -1489,7 +1494,10 @@ impl Application for App {
                             if let Some(offset) = self.tab.select_focus_scroll() {
                                 return scrollable::scroll_to(
                                     self.tab.scrollable_id.clone(),
-                                    offset,
+                                    AbsoluteOffset {
+                                        x: Some(offset.x),
+                                        y: Some(offset.y),
+                                    },
                                 );
                             }
                         }
@@ -2050,18 +2058,18 @@ impl Application for App {
                 }
                 Message::TimeConfigChange(update.config)
             }),
-            Subscription::run_with_id(
-                TypeId::of::<WatcherSubscription>(),
-                stream::channel(100, |mut output| async move {
-                    let watcher_res = {
-                        let mut output = output.clone();
-                        new_debouncer(
-                            time::Duration::from_millis(250),
-                            Some(time::Duration::from_millis(250)),
-                            move |events_res: notify_debouncer_full::DebounceEventResult| {
-                                match events_res {
-                                    Ok(mut events) => {
-                                        events.retain(|event| {
+            Subscription::run_with(TypeId::of::<WatcherSubscription>(), |_| {
+                stream::channel(100, {
+                    |mut output: futures::channel::mpsc::Sender<_>| async move {
+                        let watcher_res = {
+                            let mut output = output.clone();
+                            new_debouncer(
+                                time::Duration::from_millis(250),
+                                Some(time::Duration::from_millis(250)),
+                                move |events_res: notify_debouncer_full::DebounceEventResult| {
+                                    match events_res {
+                                        Ok(mut events) => {
+                                            events.retain(|event| {
                                             match &event.kind {
                                                 notify::EventKind::Access(_) => {
                                                     // Data not mutated
@@ -2080,49 +2088,50 @@ impl Application for App {
                                             }
                                         });
 
-                                        if !events.is_empty() {
-                                            match futures::executor::block_on(async {
-                                                output.send(Message::NotifyEvents(events)).await
-                                            }) {
-                                                Ok(()) => {}
-                                                Err(err) => {
-                                                    log::warn!(
-                                                        "failed to send notify events: {err:?}"
-                                                    );
+                                            if !events.is_empty() {
+                                                match futures::executor::block_on(async {
+                                                    output.send(Message::NotifyEvents(events)).await
+                                                }) {
+                                                    Ok(()) => {}
+                                                    Err(err) => {
+                                                        log::warn!(
+                                                            "failed to send notify events: {err:?}"
+                                                        );
+                                                    }
                                                 }
                                             }
                                         }
+                                        Err(err) => {
+                                            log::warn!("failed to watch files: {err:?}");
+                                        }
                                     }
-                                    Err(err) => {
-                                        log::warn!("failed to watch files: {err:?}");
-                                    }
-                                }
-                            },
-                        )
-                    };
+                                },
+                            )
+                        };
 
-                    match watcher_res {
-                        Ok(watcher) => {
-                            match output
-                                .send(Message::NotifyWatcher(WatcherWrapper {
-                                    watcher_opt: Some(watcher),
-                                }))
-                                .await
-                            {
-                                Ok(()) => {}
-                                Err(err) => {
-                                    log::warn!("failed to send notify watcher: {err:?}");
+                        match watcher_res {
+                            Ok(watcher) => {
+                                match output
+                                    .send(Message::NotifyWatcher(WatcherWrapper {
+                                        watcher_opt: Some(watcher),
+                                    }))
+                                    .await
+                                {
+                                    Ok(()) => {}
+                                    Err(err) => {
+                                        log::warn!("failed to send notify watcher: {err:?}");
+                                    }
                                 }
                             }
+                            Err(err) => {
+                                log::warn!("failed to create file watcher: {err:?}");
+                            }
                         }
-                        Err(err) => {
-                            log::warn!("failed to create file watcher: {err:?}");
-                        }
-                    }
 
-                    std::future::pending().await
-                }),
-            ),
+                        std::future::pending().await
+                    }
+                })
+            }),
             self.tab
                 .subscription(
                     self.core.window.show_context
