@@ -131,6 +131,7 @@ open-with = Open with
 owner = Owner
 group = Group
 other = Other
+mixed = Mixed
 ### Mode 0
 none = None
 ### Mode 1 (unusual)
