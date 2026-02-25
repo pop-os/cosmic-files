@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
+use cctk::sctk::output::OutputInfo;
+#[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use cosmic::iced::{
     Limits, Point,
     event::wayland::{Event as WaylandEvent, OutputEvent, OverlapNotifyEvent},
@@ -41,6 +43,7 @@ use cosmic::{
         dnd_destination::DragId,
         horizontal_space, icon,
         menu::{action::MenuAction, key_bind::KeyBind},
+        progress_bar::primary,
         segmented_button::{self, Entity, ReorderEvent},
         vertical_space,
     },
@@ -80,6 +83,7 @@ use crate::{
         AppTheme, Config, DesktopConfig, Favorite, IconSizes, State, TIME_CONFIG_ID, TabConfig,
         TimeConfig, TypeToSearch,
     },
+    desktop::{DesktopChange, DesktopLayout, DesktopPos},
     dialog::{Dialog, DialogKind, DialogMessage, DialogResult, DialogSettings},
     fl, home_dir,
     key_bind::key_binds,
@@ -400,7 +404,7 @@ pub enum Message {
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     Overlap(window::Id, OverlapNotifyEvent),
     Paste(Option<Entity>),
-    PasteContents(PathBuf, ClipboardPaste),
+    PasteContents(PathBuf, ClipboardPaste, Option<DesktopPos>),
     PasteImage(PathBuf),
     PasteImageContents(PathBuf, ClipboardPasteImage),
     PasteText(PathBuf),
@@ -752,7 +756,7 @@ pub struct App {
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     surface_ids: FxHashMap<WlOutput, WindowId>,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
-    surface_names: FxHashMap<WindowId, String>,
+    surface_infos: FxHashMap<WindowId, OutputInfo>,
     toasts: widget::toaster::Toasts<Message>,
     watcher_opt: Option<(
         Debouncer<RecommendedWatcher, RecommendedCache>,
@@ -1527,14 +1531,76 @@ impl App {
         Task::batch(commands)
     }
 
+    fn desktop_layout(&self) -> Arc<DesktopLayout> {
+        let mut layout = DesktopLayout::new(self.config.desktop.clone());
+
+        #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
+        {
+            let mut primary_output = None;
+
+            for (_surface_id, info) in self.surface_infos.iter() {
+                if let Some(name) = &info.name {
+                    layout.output_names.push(name.clone());
+                }
+
+                fn is_edp(info: &OutputInfo) -> bool {
+                    match &info.name {
+                        Some(name) => name.starts_with("eDP"),
+                        None => false,
+                    }
+                }
+
+                //TODO: config for preferred output
+                primary_output = match primary_output {
+                    Some(old_info) => match (is_edp(info), is_edp(old_info)) {
+                        (true, true) | (false, false) => {
+                            // Select top-left display
+                            if info.location.0 < old_info.location.0
+                                || (info.location.0 == old_info.location.0
+                                    && info.location.1 < old_info.location.1)
+                            {
+                                Some(info)
+                            } else {
+                                Some(old_info)
+                            }
+                        }
+                        // This display is eDP, old one is not
+                        (true, false) => Some(info),
+                        // Old display is eDP, this one is not
+                        (false, true) => Some(old_info),
+                    },
+                    None => Some(info),
+                };
+            }
+
+            layout.primary_output_name = primary_output.as_ref().and_then(|x| x.name.clone());
+        }
+
+        layout.update_positions(&self.state.desktop_changes);
+
+        Arc::new(layout)
+    }
+
     fn update_desktop(&mut self) -> Task<Message> {
+        let layout = self.desktop_layout();
         let needs_reload: Box<[_]> = (self.tab_model.iter())
             .filter_map(|entity| {
                 let tab = self.tab_model.data::<Tab>(entity)?;
-                if let Location::Desktop(path, output, _) = &tab.location {
+                if let Location::Desktop {
+                    path,
+                    display,
+                    pos_opt,
+                    ..
+                } = &tab.location
+                {
                     Some((
                         entity,
-                        Location::Desktop(path.clone(), output.clone(), self.config.desktop),
+                        Location::Desktop {
+                            path: path.clone(),
+                            display: display.clone(),
+                            layout: layout.clone(),
+                            pos_opt: pos_opt.clone(),
+                        },
                     ))
                 } else {
                     None
@@ -2311,7 +2377,7 @@ impl Application for App {
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             surface_ids: FxHashMap::default(),
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
-            surface_names: FxHashMap::default(),
+            surface_infos: FxHashMap::default(),
             toasts: widget::toaster::Toasts::new(Message::CloseToast),
             watcher_opt: None,
             windows: FxHashMap::default(),
@@ -2811,6 +2877,7 @@ impl Application for App {
                             return self.operation(Operation::Copy {
                                 paths: file_paths.to_vec(),
                                 to: selected_paths[0].clone(),
+                                desktop_pos: None,
                             });
                         }
                     }
@@ -3368,6 +3435,7 @@ impl Application for App {
                                 paths: file_paths.to_vec(),
                                 to: selected_paths[0].clone(),
                                 cross_device_copy: false,
+                                desktop_pos: None,
                             });
                         }
                     }
@@ -3675,8 +3743,11 @@ impl Application for App {
                     // Use cached clipboard data if available (needed for Wayland popups)
                     match &self.clipboard_cache {
                         ClipboardCache::Files(contents) => {
-                            return self
-                                .update(Message::PasteContents(to.clone(), contents.clone()));
+                            return self.update(Message::PasteContents(
+                                to.clone(),
+                                contents.clone(),
+                                None,
+                            ));
                         }
                         ClipboardCache::Image(contents) => {
                             return self
@@ -3698,6 +3769,7 @@ impl Application for App {
                                     Some(contents) => cosmic::action::app(Message::PasteContents(
                                         to.clone(),
                                         contents,
+                                        None,
                                     )),
                                     None => cosmic::action::app(Message::PasteImage(to.clone())),
                                 },
@@ -3706,18 +3778,20 @@ impl Application for App {
                     }
                 }
             }
-            Message::PasteContents(to, mut contents) => {
+            Message::PasteContents(to, mut contents, desktop_pos) => {
                 contents.paths.retain(|p| *p != to);
                 if !contents.paths.is_empty() {
                     return match contents.kind {
                         ClipboardKind::Copy => self.operation(Operation::Copy {
                             paths: contents.paths,
                             to,
+                            desktop_pos,
                         }),
                         ClipboardKind::Cut { is_dnd } => self.operation(Operation::Move {
                             paths: contents.paths,
                             to,
                             cross_device_copy: is_dnd,
+                            desktop_pos,
                         }),
                     };
                 }
@@ -3916,8 +3990,58 @@ impl Application for App {
                         }
                     }
 
+                    // Rescan recents if item removed
                     if matches!(op, Operation::RemoveFromRecents { .. }) {
                         commands.push(self.rescan_recents());
+                    }
+
+                    // Set desktop position after move
+                    if let Operation::Copy {
+                        desktop_pos: Some(ref pos),
+                        ..
+                    }
+                    | Operation::Move {
+                        desktop_pos: Some(ref pos),
+                        ..
+                    } = op
+                    {
+                        let mut row = pos.row;
+                        let mut col = pos.col;
+                        for path in op_sel.selected.iter() {
+                            eprintln!("{:?}: {}, {}", path, row, col);
+
+                            let change = DesktopChange::Position(
+                                path.clone(),
+                                DesktopPos {
+                                    display: pos.display.clone(),
+                                    row,
+                                    col,
+                                    rows: pos.rows,
+                                    cols: pos.cols,
+                                },
+                            );
+                            self.state
+                                .desktop_changes
+                                .retain(|older| older.retain_before(&change));
+                            self.state.desktop_changes.push(change);
+
+                            //TODO: position relatively to preserve shape of group
+                            row += 1;
+                            if row >= pos.rows {
+                                row = 0;
+                                col += 1;
+                            }
+                            //TODO: if col >= cols, next page
+                        }
+
+                        if let Some(state_handler) = self.state_handler.as_ref()
+                            && let Err(err) =
+                                state_handler.set("desktop_changes", &self.state.desktop_changes)
+                        {
+                            log::warn!("Failed to save sort names: {err:?}");
+                        }
+
+                        commands.push(self.update_desktop());
                     }
 
                     self.complete_operations.insert(id, op);
@@ -4396,8 +4520,12 @@ impl Application for App {
                             }
                         }
                         tab::Command::Delete(paths) => commands.push(self.delete(paths)),
-                        tab::Command::DropFiles(to, from) => {
-                            commands.push(self.update(Message::PasteContents(to, from)));
+                        tab::Command::DropFiles(to, from, desktop_pos) => {
+                            commands.push(self.update(Message::PasteContents(
+                                to,
+                                from,
+                                desktop_pos,
+                            )));
                         }
                         tab::Command::EmptyTrash => {
                             return self.push_dialog(
@@ -4737,6 +4865,7 @@ impl Application for App {
                                 kind,
                                 paths: data.paths,
                             },
+                            None,
                         )),
                         Location::Trash if matches!(action, DndAction::Move) => {
                             self.delete(data.paths)
@@ -4804,6 +4933,7 @@ impl Application for App {
                                         kind,
                                         paths: data.paths,
                                     },
+                                    None,
                                 ))
                             } else {
                                 log::warn!("{:?} to {:?} is not supported.", action, tab.location);
@@ -5010,7 +5140,7 @@ impl Application for App {
                 match output_event {
                     OutputEvent::Created(output_info_opt) => {
                         let output_id = output.id();
-                        log::info!("output {output_id}: created");
+                        log::warn!("output {output_id}: created");
 
                         let surface_id = WindowId::unique();
                         if let Some(old_surface_id) =
@@ -5023,16 +5153,16 @@ impl Application for App {
                         }
 
                         let display = match output_info_opt {
-                            Some(output_info) => match output_info.name {
-                                Some(output_name) => {
-                                    self.surface_names.insert(surface_id, output_name.clone());
-                                    output_name
+                            Some(output_info) => {
+                                self.surface_infos.insert(surface_id, output_info.clone());
+                                match output_info.name {
+                                    Some(output_name) => output_name,
+                                    None => {
+                                        log::warn!("output {output_id}: no output name");
+                                        String::new()
+                                    }
                                 }
-                                None => {
-                                    log::warn!("output {output_id}: no output name");
-                                    String::new()
-                                }
-                            },
+                            }
                             None => {
                                 log::warn!("output {output_id}: no output info");
                                 String::new()
@@ -5040,7 +5170,12 @@ impl Application for App {
                         };
 
                         let (entity, command) = self.open_tab_entity(
-                            Location::Desktop(crate::desktop_dir(), display, self.config.desktop),
+                            Location::Desktop {
+                                path: crate::desktop_dir(),
+                                display,
+                                layout: self.desktop_layout(),
+                                pos_opt: None,
+                            },
                             false,
                             None,
                             widget::Id::unique(),
@@ -5050,6 +5185,7 @@ impl Application for App {
                             .insert(surface_id, Window::new(WindowKind::Desktop(entity)));
                         return Task::batch([
                             command,
+                            self.update_desktop(),
                             get_layer_surface(SctkLayerSurfaceSettings {
                                 id: surface_id,
                                 layer: Layer::Bottom,
@@ -5073,20 +5209,32 @@ impl Application for App {
                         ]);
                     }
                     OutputEvent::Removed => {
-                        log::info!("output {}: removed", output.id());
+                        log::warn!("output {}: removed", output.id());
                         match self.surface_ids.remove(&output) {
                             Some(surface_id) => {
                                 self.remove_window(&surface_id);
-                                self.surface_names.remove(&surface_id);
-                                return destroy_layer_surface(surface_id);
+                                self.surface_infos.remove(&surface_id);
+                                return Task::batch([
+                                    self.update_desktop(),
+                                    destroy_layer_surface(surface_id),
+                                ]);
                             }
                             None => {
                                 log::warn!("output {}: no surface found", output.id());
                             }
                         }
                     }
-                    OutputEvent::InfoUpdate(_output_info) => {
-                        log::info!("output {}: info update", output.id());
+                    OutputEvent::InfoUpdate(output_info) => {
+                        log::warn!("output {}: info update", output.id());
+                        match self.surface_ids.get(&output) {
+                            Some(surface_id) => {
+                                self.surface_infos.insert(*surface_id, output_info.clone());
+                                return self.update_desktop();
+                            }
+                            None => {
+                                log::warn!("output {}: no surface found", output.id());
+                            }
+                        }
                     }
                 }
             }
@@ -6921,7 +7069,7 @@ pub(crate) mod test_utils {
 
         // New tab with items
         let location = Location::Path(path.to_owned());
-        let (parent_item_opt, items) = location.scan(IconSizes::default());
+        let (parent_item_opt, items) = location.scan(IconSizes::default(), &State::default());
         let mut tab = Tab::new(
             location,
             TabConfig::default(),

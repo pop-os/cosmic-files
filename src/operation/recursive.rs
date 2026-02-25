@@ -69,6 +69,7 @@ impl Context {
 
             if from_parent == to_parent {
                 // Skip matching source and destination
+                self.op_sel.selected.push(to_parent);
                 continue;
             }
 

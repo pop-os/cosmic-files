@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{app::Settings, iced::Limits};
-use std::{env, fs, path::PathBuf, process};
+use std::{env, fs, path::PathBuf, process, sync::Arc};
 
 use app::{App, Flags};
 pub mod app;
@@ -10,6 +10,7 @@ mod archive;
 pub mod clipboard;
 use config::Config;
 pub mod config;
+pub mod desktop;
 pub mod dialog;
 mod key_bind;
 pub(crate) mod large_image;
@@ -88,7 +89,14 @@ pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
         settings = settings.no_main_window(true);
     }
 
-    let locations = vec![tab::Location::Desktop(desktop_dir(), String::new(), config.desktop)];
+    let locations = vec![tab::Location::Desktop {
+        path: desktop_dir(),
+        display: String::new(),
+        layout: Arc::new(desktop::DesktopLayout::new(
+            config.desktop.clone(),
+        )),
+        pos_opt: None
+    }];
     let flags = Flags {
         config_handler,
         config,
