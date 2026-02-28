@@ -315,3 +315,6 @@ copy-to-button-label = Salin
 copy-to-title = Pilih destinasi salinan
 keywords = Map;Pengelola;
 comment = Pengelola berkas untuk desktop COSMIC
+show-recents = Map terbaru di bilah sisi
+clear-recents-history = Bersihkan riwayat Terbaru
+copy-path = Salin jalur

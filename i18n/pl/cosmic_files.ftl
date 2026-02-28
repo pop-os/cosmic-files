@@ -434,3 +434,6 @@ move-to-title = Wybierz gdzie przenieść
 move-to-button-label = Przenieś
 copy-to = Skopiuj do…
 move-to = Przenieś do…
+show-recents = Ostatnie katalogi w panelu bocznym
+clear-recents-history = Wyczyść bierzącą historię
+copy-path = Skopiuj ścieżkę
