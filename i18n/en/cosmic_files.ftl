@@ -316,7 +316,7 @@ type-to-search-select = Selects the first matching file or folder
 # Context menu
 add-to-sidebar = Add to sidebar
 clear-recents-history = Clear Recents history
-compress = Compress
+compress = Compress...
 copy-to = Copy to...
 delete-permanently = Delete permanently
 eject = Eject
