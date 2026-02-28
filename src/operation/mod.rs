@@ -1,5 +1,6 @@
 use crate::{
     app::{ArchiveType, DialogPage, Message, REPLACE_BUTTON_ID},
+    archive,
     config::IconSizes,
     fl,
     spawn_detached::spawn_detached,
@@ -184,7 +185,13 @@ async fn copy_or_move(
             let msg_tx = msg_tx.clone();
             context = context.on_replace(move |op, conflict_count| {
                 let msg_tx = msg_tx.clone();
-                Box::pin(handle_replace(msg_tx, op.from.clone(), op.to.clone(), true, conflict_count))
+                Box::pin(handle_replace(
+                    msg_tx,
+                    op.from.clone(),
+                    op.to.clone(),
+                    true,
+                    conflict_count,
+                ))
             });
         }
 
@@ -748,23 +755,34 @@ impl Operation {
                                         .map_err(|e| OperationError::from_err(e, &controller))?
                                         .to_str()
                                     {
+                                        let mut file = fs::File::open(path).map_err(|e| {
+                                            OperationError::from_err(e, &controller)
+                                        })?;
+                                        let metadata = file.metadata().map_err(|e| {
+                                            OperationError::from_err(e, &controller)
+                                        })?;
+
+                                        if let Ok(modified) = metadata.modified() {
+                                            if let Some(last_modified) =
+                                                archive::system_time_to_zip_date_time(modified)
+                                            {
+                                                zip_options =
+                                                    zip_options.last_modified_time(last_modified);
+                                            }
+                                        }
+
+                                        #[cfg(unix)]
+                                        {
+                                            use std::os::unix::fs::MetadataExt;
+                                            let mode = metadata.mode();
+                                            zip_options = zip_options.unix_permissions(mode);
+                                        }
+
                                         if path.is_file() {
-                                            let mut file = fs::File::open(path).map_err(|e| {
-                                                OperationError::from_err(e, &controller)
-                                            })?;
-                                            let metadata = file.metadata().map_err(|e| {
-                                                OperationError::from_err(e, &controller)
-                                            })?;
                                             let total = metadata.len();
                                             if total >= 4 * 1024 * 1024 * 1024 {
                                                 // The large file option must be enabled for files above 4 GiB
                                                 zip_options = zip_options.large_file(true);
-                                            }
-                                            #[cfg(unix)]
-                                            {
-                                                use std::os::unix::fs::MetadataExt;
-                                                let mode = metadata.mode();
-                                                zip_options = zip_options.unix_permissions(mode);
                                             }
                                             archive
                                                 .start_file(relative_path, zip_options)

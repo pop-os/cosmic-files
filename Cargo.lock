@@ -1461,6 +1461,7 @@ dependencies = [
  "dirs 6.0.0",
  "env_logger",
  "fastrand 2.3.0",
+ "filetime",
  "flate2",
  "fork",
  "gio",
