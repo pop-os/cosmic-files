@@ -2400,8 +2400,7 @@ impl Application for App {
         }
 
         Some(Element::from(
-            // XXX both must be shrink to avoid flex layout from ignoring it
-            nav.width(Length::Shrink).height(Length::Shrink),
+            nav.width(Length::Shrink).height(Length::Fill),
         ))
     }
 
