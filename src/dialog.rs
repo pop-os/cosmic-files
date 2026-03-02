@@ -711,7 +711,7 @@ impl App {
 
                         match (selected.next(), selected.next()) {
                             // At least two selected items
-                            (Some(_), Some(_)) => Some(self.tab.multi_preview_view()),
+                            (Some(_), Some(_)) => Some(self.tab.multi_preview_view(None)),
                             // Exactly one selected item
                             (Some(item), None) => Some(item.preview_view(None, military_time)),
                             // No selected items
