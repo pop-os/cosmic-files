@@ -6248,7 +6248,20 @@ impl Tab {
         );
 
         let selected_items: Vec<&Item> = self.items_opt().map_or(Vec::new(), |items| {
-            items.iter().filter(|item| item.selected).collect()
+            items
+                .iter()
+                .filter(|item| {
+                    if item.selected {
+                        item.location_opt
+                            .as_ref()
+                            .map(Location::path_opt)
+                            .flatten()
+                            .is_some()
+                    } else {
+                        false
+                    }
+                })
+                .collect()
         });
 
         let mut details = widget::column().spacing(space_xxxs);
