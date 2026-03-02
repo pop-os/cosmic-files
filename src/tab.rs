@@ -58,7 +58,7 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
-    cell::{Cell, RefCell},
+    cell::Cell,
     cmp::{Ordering, Reverse},
     collections::{BTreeMap, HashMap},
     error::Error,
@@ -68,7 +68,6 @@ use std::{
     io::{BufRead, BufReader},
     os::unix::fs::MetadataExt,
     path::{self, Path, PathBuf},
-    rc::Rc,
     sync::{Arc, LazyLock, RwLock, atomic},
     time::{Duration, Instant, SystemTime},
 };
@@ -6678,7 +6677,6 @@ impl Tab {
             struct Wrapper {
                 location: Location,
                 search_location: SearchLocation,
-                path: PathBuf,
                 term: String,
                 show_hidden: bool,
                 start: Instant,
@@ -6688,7 +6686,6 @@ impl Tab {
                 Wrapper {
                     location: location.clone(),
                     search_location: search_location.clone(),
-                    path: path.clone(),
                     term: term.clone(),
                     show_hidden,
                     start,
@@ -6701,7 +6698,6 @@ impl Tab {
                             let Wrapper {
                                 location,
                                 search_location,
-                                path,
                                 term,
                                 show_hidden,
                                 start,

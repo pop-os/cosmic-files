@@ -8,7 +8,7 @@ use cosmic::{
     iced_core::{
         Clipboard, Color, Layout, Length, Point, Rectangle, Shell, Size, Vector, Widget,
         border::Border,
-        event::{self, Event},
+        event::Event,
         layout,
         mouse::{self, click},
         overlay,

@@ -11,9 +11,7 @@ use cosmic::{
     widget::{
         self, Row, button, column, container, divider,
         menu::{self, ItemHeight, ItemWidth, MenuBar, key_bind::KeyBind},
-        responsive_menu_bar,
-        space::{self, horizontal},
-        text,
+        responsive_menu_bar, space, text,
     },
 };
 use i18n_embed::LanguageLoader;
