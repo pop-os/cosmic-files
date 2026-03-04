@@ -4308,6 +4308,9 @@ impl Application for App {
                             config_set!(favorites, favorites);
                             commands.push(self.update_config());
                         }
+                        tab::Command::CopyString(text) => {
+                            return clipboard::write(text);
+                        }
                         tab::Command::AutoScroll(scroll_speed) => {
                             // converting an f32 to an i16 here by multiplying by 10 and casting to i16
                             // further resolution isn't necessary
