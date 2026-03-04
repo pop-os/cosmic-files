@@ -69,6 +69,8 @@ pub enum Favorite {
         uri: String,
         name: String,
         path: PathBuf,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        display_name: String,
     },
 }
 
