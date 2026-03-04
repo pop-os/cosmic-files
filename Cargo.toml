@@ -103,6 +103,7 @@ default = [
     "lzma-rust2",
     "notify",
     "wayland",
+    "wgpu",
 ]
 dbus-config = ["libcosmic/dbus-config"]
 desktop = ["dep:cosmic-mime-apps", "dep:xdg"]
