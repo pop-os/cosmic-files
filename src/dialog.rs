@@ -24,6 +24,7 @@ use cosmic::{
         segmented_button,
     },
 };
+use mime_guess::Mime;
 use notify_debouncer_full::{
     DebouncedEvent, Debouncer, RecommendedCache, new_debouncer,
     notify::{self, RecommendedWatcher},
@@ -46,7 +47,7 @@ use crate::{
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
-    menu,
+    menu, mime_icon,
     mounter::{MOUNTERS, MounterItem, MounterItems, MounterKey, MounterMessage},
     tab::{self, ItemMetadata, Location, SearchLocation, Tab},
     zoom::{zoom_in_view, zoom_out_view, zoom_to_default},
@@ -1908,7 +1909,12 @@ impl Application for App {
                             // Directories are always shown
                             item.metadata.is_dir()
                                 // Check for mime type match (first because it is faster)
-                                    || mimes.iter().copied().any(|mime| mime == item.mime)
+                                    || mimes.iter().copied().any(|mime| {
+                                        mime == item.mime
+                                            || mime.parse::<Mime>().is_ok_and(|base_mime| {
+                                                mime_icon::is_mime_subclass_of(&item.mime, &base_mime)
+                                            })
+                                    })
                                 // Check for glob match (last because it is slower)
                                     || parsed_globs.iter().any(|glob| glob.matches(&item.name))
                         });
