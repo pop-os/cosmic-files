@@ -22,6 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 pub enum Message {
     DialogMessage(DialogMessage),
     DialogOpen(DialogKind),
+    DialogOpenImages,
     DialogResult(DialogResult),
 }
 
@@ -105,6 +106,31 @@ impl Application for App {
                     return Task::batch(tasks);
                 }
             }
+            Message::DialogOpenImages => {
+                if self.dialog_opt.is_none() {
+                    let (mut dialog, task) = Dialog::new(
+                        DialogSettings::new().kind(DialogKind::OpenFile),
+                        Message::DialogMessage,
+                        Message::DialogResult,
+                    );
+                    let mut tasks = vec![task];
+                    tasks.push(dialog.set_filters(
+                        vec![
+                            DialogFilter {
+                                label: "Images".into(),
+                                patterns: vec![DialogFilterPattern::Mime("image/*".into())],
+                            },
+                            DialogFilter {
+                                label: "Any file".into(),
+                                patterns: vec![DialogFilterPattern::Glob("*".into())],
+                            },
+                        ],
+                        Some(0),
+                    ));
+                    self.dialog_opt = Some(dialog);
+                    return Task::batch(tasks);
+                }
+            }
             Message::DialogResult(result) => {
                 self.dialog_opt = None;
                 self.result_opt = Some(result);
@@ -127,6 +153,13 @@ impl Application for App {
             let mut button = widget::button::standard("Open File");
             if self.dialog_opt.is_none() {
                 button = button.on_press(Message::DialogOpen(DialogKind::OpenFile));
+            }
+            column = column.push(button);
+        }
+        {
+            let mut button = widget::button::standard("Open Image");
+            if self.dialog_opt.is_none() {
+                button = button.on_press(Message::DialogOpenImages);
             }
             column = column.push(button);
         }
