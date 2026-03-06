@@ -433,3 +433,6 @@ move-to-title = Áthelyezési cél kiválasztása
 move-to-button-label = Áthelyezés
 copy-to = Másolás ide…
 move-to = Áthelyezés ide…
+show-recents = Legutóbbiak mappa megjelenítése az oldalsávban
+copy-path = Útvonal másolása
+clear-recents-history = Legutóbbiak előzményének törlése

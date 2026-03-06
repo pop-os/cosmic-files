@@ -1,14 +1,14 @@
-cosmic-files = COSMIC Tiedostot
+cosmic-files = COSMICin tiedostot
 empty-folder = Tyhjä kansio
 empty-folder-hidden = Tyhjä kansio (sisältää piilotettuja kohteita)
 no-results = Ei tuloksia
 filesystem = Tiedostojärjestelmä
 home = Koti
-networks = Verkkoyhteydet
+networks = Verkot
 notification-in-progress = Tiedostotoimintoja käynnissä.
 trash = Roskakori
 recents = Viimeaikaiset
-undo = Peruuta viimeisin toiminto
+undo = Kumoa
 today = Tänään
 
 # Desktop view options
@@ -17,9 +17,9 @@ desktop-view-options = Työpöytänäkymän asetukset…
 show-on-desktop = Näytä työpöydällä
 desktop-folder-content = Työpöytäkansion sisältö
 mounted-drives = Tiedostojärjestelmään liitetyt kovalevyt
-trash-folder-icon = Roskakorikansion kuva
-icon-size-and-spacing = Kuvan koko ja välitys
-icon-size = Kuvan koko
+trash-folder-icon = Roskakorikansion kuvake
+icon-size-and-spacing = Kuvakkeen koko ja välistys
+icon-size = Kuvakkeen koko
 
 # List view
 
@@ -50,15 +50,15 @@ create-new-file = Luo uusi tiedosto
 create-new-folder = Luo uusi kansio
 file-name = Tiedoston nimi
 folder-name = Kansion nimi
-file-already-exists = Annetun niminen tiedosto on jo olemassa.
-folder-already-exists = Annetun niminen kansio on jo olemassa.
-name-hidden = Merkillä "." alkavat nimet piilotetaan.
-name-invalid = Nimi ei voi olla "{ $filename }".
-name-no-slashes = Nimi ei voi sisältää vinoviivoja.
+file-already-exists = Tiedosto samalla nimellä on jo olemassa
+folder-already-exists = Kansio samalla nimellä on jo olemassa
+name-hidden = Merkillä "." alkavat nimet piilotetaan
+name-invalid = Nimi ei voi olla "{ $filename }"
+name-no-slashes = Nimi ei voi sisältää vinoviivoja
 
 ## Open/Save Dialog
 
-cancel = Peruuta
+cancel = Peru
 create = Luo
 open = Avaa
 open-file = Avaa tiedosto
@@ -84,14 +84,14 @@ rename-folder = Nimeä kansio uudelleen
 ## Replace Dialog
 
 replace = Korvaa
-replace-title = Kohde "{ $filename }" on jo olemassa tässä sijainnissa.
+replace-title = "{ $filename }" on jo olemassa tässä sijainnissa
 replace-warning = Haluatko korvata sen tallentamallasi kohteella? Korvaaminen ylikirjoittaa kohteen sisällön.
 replace-warning-operation = Haluatko korvata sen? Korvaaminen ylikirjoittaa sen sisällön.
 original-file = Alkuperäinen tiedosto
 replace-with = Korvaa kohteella
 apply-to-all = Sovella kaikkiin
 keep-both = Pidä molemmat
-skip = Jätä välistä
+skip = Ohita
 
 ## Set as Executable and Launch Dialog
 
@@ -232,11 +232,11 @@ light = Vaalea
 # Context menu
 
 add-to-sidebar = Lisää sivupalkkiin
-compress = Tiivistä
-extract-here = Avaa tänne
+compress = Pakkaa
+extract-here = Pura
 new-file = Uusi tiedosto…
 new-folder = Uusi kansio…
-open-in-terminal = Avaa terminaalissa
+open-in-terminal = Avaa päätteessä
 move-to-trash = Siirrä roskakoriin
 restore-from-trash = Palauta roskakorista
 remove-from-sidebar = Poista sivupalkista
@@ -261,22 +261,22 @@ new-tab = Uusi välilehti
 new-window = Uusi ikkuna
 rename = Nimeä uudelleen…
 close-tab = Sulje välilehti
-quit = Sulje
+quit = Lopeta
 
 ## Edit
 
 edit = Muokkaa
 cut = Leikkaa
 copy = Kopioi
-paste = Maalaa
+paste = Liitä
 select-all = Valitse kaikki
 
 ## View
 
-zoom-in = Zoomaa sisään
+zoom-in = Lähennä
 default-size = Oletuskoko
-zoom-out = Zoomaa ulos
-view = Näkymä
+zoom-out = Loitonna
+view = Näytä
 grid-view = Ruudukkonäkymä
 list-view = Listanäkymä
 show-hidden-files = Näytä piilotetut tiedostot
@@ -288,9 +288,32 @@ menu-about = Tietoa COSMIC Tiedostoista…
 ## Sort
 
 sort = Järjestä
-sort-a-z = A-Z
-sort-z-a = Z-A
+sort-a-z = A-Ö
+sort-z-a = Ö-A
 sort-newest-first = Uusin ensin
 sort-oldest-first = Vanhin ensin
 sort-smallest-to-largest = Pienimmästä suurimpaan
 sort-largest-to-smallest = Suurimmasta pienimpään
+resume = Jatka
+extract-password-required = Salasana vaaditaan
+extract-to-title = Pura kansioon
+empty-trash-title = Tyhjennetäänkö roskakori?
+other-apps = Muut sovellukset
+related-apps = Liittyvät sovellukset
+permanently-delete-question = Poistetaanko pysyvästi?
+delete = Poista
+open-with = Avaa sovelluksella
+remove = Poista
+cancelled = Peruttu
+type = Tyyppi: { $mime }
+item-size = Koko: { $size }
+item-created = Luotu: { $created }
+item-modified = Muokattu: { $modified }
+delete-permanently = Poista pysyvästi
+reload-folder = Lataa kansio uudelleen
+comment = Tiedostonhallinta COSMIC-työpöydälle
+keywords = Folder;Manager;Kansio;Hakemisto;Hallinta;Hallinnointi;Hallitse;Hallinnoi;
+copy-to-button-label = Kopioi
+move-to-button-label = Siirrä
+clear-recents-history = Tyhjennä viimeaikaisten historia
+copy-path = Kopioi polku
