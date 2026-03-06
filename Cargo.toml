@@ -102,8 +102,8 @@ default = [
     "io-uring",
     "lzma-rust2",
     "notify",
-    "wgpu",
     "wayland",
+    "wgpu",
 ]
 dbus-config = ["libcosmic/dbus-config"]
 desktop = ["dep:cosmic-mime-apps", "dep:xdg"]
@@ -145,6 +145,10 @@ tokio = { version = "1", features = ["rt", "macros"] }
 # libcosmic = { path = "../libcosmic" }
 # cosmic-config = { path = "../libcosmic/cosmic-config" }
 # cosmic-theme = { path = "../libcosmic/cosmic-theme" }
+# libcosmic = { git = "https://github.com/pop-os/libcosmic//", branch = "iced-rebase" }
+# cosmic-config = { git = "https://github.com/pop-os/libcosmic//", branch = "iced-rebase" }
+# cosmic-theme = { git = "https://github.com/pop-os/libcosmic//", branch = "iced-rebase" }
+
 
 # [patch.'https://github.com/pop-os/smithay-clipboard']
 # smithay-clipboard = { path = "../smithay-clipboard" }
