@@ -433,3 +433,6 @@ copy-to = 复制至…
 move-to = 移动至…
 comment = COSMIC 桌面的文件管理器
 keywords = 文件夹;管理器;
+clear-recents-history = 清除最近访问历史
+copy-path = 复制文件路径
+show-recents = 侧边栏显示最近访问
