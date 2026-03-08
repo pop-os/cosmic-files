@@ -427,12 +427,30 @@ impl LargeImageManager {
         self.decode_errors.remove(path);
     }
 
+    /// Mark path as decoding with the given generation. Used by external decoders (e.g. PDF
+    /// preview) that will later call store_decoded_with_generation. Returns true if decode was
+    /// started, false if already decoding or already decoded.
+    pub fn try_start_decode(&mut self, path: &Path, generation: u64) -> bool {
+        self.clear_error(path);
+        if self.decoding_images.contains(path) || self.decoded_images.contains_key(path) {
+            return false;
+        }
+        self.decoding_images.insert(path.to_path_buf());
+        self.decode_generations.insert(path.to_path_buf(), generation);
+        true
+    }
+
     pub fn clear_cache(&mut self) {
+        let decoded_count = self.decoded_images.len();
         log::info!(
             "Clearing {} cached images from large image manager",
-            self.decoded_images.len()
+            decoded_count
         );
         self.decoded_images.clear();
+        self.decoded_display_sizes.clear();
+        self.decoding_images.clear();
+        self.decode_generations.clear();
+        self.decode_errors.clear();
     }
 
     pub fn cache_size(&self) -> usize {

@@ -82,6 +82,7 @@ use crate::{
     mounter::MOUNTERS,
     mouse_area,
     operation::{Controller, OperationError},
+    pdf_preview::{decode_pdf_preview, is_pdf_mime, try_decode_pdf},
     thumbnail_cacher::{CachedThumbnail, ThumbnailCacher, ThumbnailSize},
     thumbnailer::thumbnailer,
 };
@@ -1883,6 +1884,8 @@ pub enum Message {
     HighlightActivate(usize),
     DirectorySize(PathBuf, DirSize),
     ImageDecoded(PathBuf, u32, u32, Vec<u8>, Option<(u32, u32)>, u64), // path, width, height, pixels, display_size, generation
+    ImageDecodeFailed(PathBuf),
+    PdfPreviewFailed(PathBuf),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -2375,7 +2378,9 @@ impl Item {
     }
 
     pub fn can_gallery(&self) -> bool {
-        self.mime.type_() == mime::IMAGE || self.mime.type_() == mime::TEXT
+        self.mime.type_() == mime::IMAGE
+            || self.mime.type_() == mime::TEXT
+            || is_pdf_mime(&self.mime)
     }
 
     pub fn file_metadata(&self) -> Option<Metadata> {
@@ -3320,7 +3325,7 @@ impl Tab {
     }
 
     fn trigger_async_decode(&mut self) -> Vec<Command> {
-        // Only trigger decode in gallery mode for the currently selected image
+        // Only trigger decode in gallery mode for the currently selected item
         if !self.gallery {
             return Vec::new();
         }
@@ -3337,6 +3342,28 @@ impl Tab {
             return Vec::new();
         };
 
+        // PDF: use evince-thumbnailer at high res, store in LargeImageManager
+        if is_pdf_mime(&item.mime) {
+            let Some(path) = item.path_opt() else {
+                return Vec::new();
+            };
+            let path = path.to_path_buf();
+            if !try_decode_pdf(&mut self.large_image_manager, &path) {
+                return Vec::new();
+            }
+            return vec![Command::Iced(
+                cosmic::iced::Task::perform(decode_pdf_preview(path.clone()), move |result| {
+                    result
+                        .map(|(path, w, h, pixels)| {
+                            Message::ImageDecoded(path, w, h, pixels, None, 0)
+                        })
+                        .unwrap_or_else(|| Message::PdfPreviewFailed(path.clone()))
+                })
+                .into(),
+            )];
+        }
+
+        // Image: existing large-image decode
         let Some(ItemThumbnail::Image(_, original_dims)) = &item.thumbnail_opt else {
             return Vec::new();
         };
@@ -3365,6 +3392,7 @@ impl Tab {
             .large_image_manager
             .try_decode(&path, display_dimensions);
         if should_decode {
+            let path_fail = path.clone();
             vec![Command::Iced(
                 cosmic::iced::Task::perform(
                     decode_large_image(path, target_dimensions),
@@ -3380,7 +3408,7 @@ impl Tab {
                                     generation,
                                 )
                             })
-                            .unwrap_or_else(|| Message::AutoScroll(None))
+                            .unwrap_or_else(|| Message::ImageDecodeFailed(path_fail.clone()))
                     },
                 )
                 .into(),
@@ -4531,6 +4559,14 @@ impl Tab {
                     generation,
                 );
             }
+            Message::ImageDecodeFailed(path) => {
+                self.large_image_manager
+                    .store_error(path, fl!("failed-to-generate-preview"));
+            }
+            Message::PdfPreviewFailed(path) => {
+                self.large_image_manager
+                    .store_error(path, fl!("failed-to-generate-preview"));
+            }
             Message::ToggleSort(heading_option) => {
                 if !matches!(self.location, Location::Search(..)) {
                     let heading_sort = if self.sort_name == heading_option {
@@ -4894,42 +4930,42 @@ impl Tab {
             {
                 ItemThumbnail::NotImage => {}
                 ItemThumbnail::Image(handle, original_dims) => {
-                    // Determine which image to show based on async decode state
-                    let mut is_loading = false;
-                    let mut error_msg_opt = None;
-                    let image_handle = if let Some(path) = item.path_opt() {
-                        if let Some(error_msg) = self.large_image_manager.get_error(path) {
-                            error_msg_opt = Some(error_msg.clone());
-                            handle.clone()
-                        } else if self.large_image_manager.is_decoding(path) {
-                            // Currently decoding (initial or re-decode) --> show cached/thumbnail with loading indicator
-                            is_loading = true;
-                            // Use decoded handle if available (re-decode), otherwise thumbnail (initial decode)
-                            self.large_image_manager
-                                .get_decoded(path)
-                                .cloned()
-                                .unwrap_or_else(|| handle.clone())
-                        } else if let Some(decoded_handle) =
-                            self.large_image_manager.get_decoded(path)
-                        {
-                            // Decoded and not currently decoding --> use it
-                            decoded_handle.clone()
-                        } else if let Some((w, h)) = original_dims {
-                            // Check if image needs tiling
-                            if should_use_tiling(*w, *h) {
-                                // Large image --> show thumbnail only
-                                handle.clone()
+                    // Single path for both images and PDFs: large_image_manager holds decoded previews
+                    let (is_loading, error_msg_opt, image_handle) =
+                        if let Some(path) = item.path_opt() {
+                            if let Some(error_msg) = self.large_image_manager.get_error(path) {
+                                (false, Some(error_msg.clone()), handle.clone())
+                            } else if self.large_image_manager.is_decoding(path) {
+                                // Currently decoding --> show loading; use decoded if available (re-decode), else thumbnail
+                                (
+                                    true,
+                                    None,
+                                    self.large_image_manager
+                                        .get_decoded(path)
+                                        .cloned()
+                                        .unwrap_or_else(|| handle.clone()),
+                                )
+                            } else if let Some(decoded_handle) =
+                                self.large_image_manager.get_decoded(path)
+                            {
+                                // Decoded and not currently decoding --> use it
+                                (false, None, decoded_handle.clone())
+                            } else if let Some((w, h)) = original_dims {
+                                // Check if image needs tiling
+                                if should_use_tiling(*w, *h) {
+                                    // Large image --> show thumbnail only
+                                    (false, None, handle.clone())
+                                } else {
+                                    // Normal-sized image --> load full resolution directly
+                                    (false, None, widget::image::Handle::from_path(path))
+                                }
                             } else {
-                                // Normal-sized image --> load full resolution directly
-                                widget::image::Handle::from_path(path)
+                                // No dimensions available --> show thumbnail
+                                (false, None, handle.clone())
                             }
                         } else {
-                            // No dimensions available --> show thumbnail
-                            handle.clone()
-                        }
-                    } else {
-                        handle.clone()
-                    };
+                            (false, None, handle.clone())
+                        };
 
                     let content: cosmic::Element<'_, Message> =
                         if let Some(error_msg) = error_msg_opt {
@@ -4942,7 +4978,7 @@ impl Tab {
                         } else if is_loading {
                             widget::column::with_capacity(2)
                                 .push(widget::image(image_handle))
-                                .push(widget::text("Loading higher resolution...").size(14))
+                                .push(widget::text(fl!("loading-preview")).size(14))
                                 .padding(space_xs)
                                 .align_x(cosmic::iced::Alignment::Center)
                                 .into()
