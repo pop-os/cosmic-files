@@ -5,7 +5,10 @@ use crate::{
     spawn_detached::spawn_detached,
     tab,
 };
-use cosmic::iced::futures::{self, SinkExt, StreamExt, channel::mpsc::Sender, stream};
+use cosmic::{
+    iced::futures::{self, SinkExt, StreamExt, channel::mpsc::Sender, stream},
+    widget::segmented_button::Entity,
+};
 use std::{
     borrow::Cow,
     fmt::Formatter,
@@ -184,7 +187,13 @@ async fn copy_or_move(
             let msg_tx = msg_tx.clone();
             context = context.on_replace(move |op, conflict_count| {
                 let msg_tx = msg_tx.clone();
-                Box::pin(handle_replace(msg_tx, op.from.clone(), op.to.clone(), true, conflict_count))
+                Box::pin(handle_replace(
+                    msg_tx,
+                    op.from.clone(),
+                    op.to.clone(),
+                    true,
+                    conflict_count,
+                ))
             });
         }
 
@@ -348,6 +357,7 @@ pub enum Operation {
     /// Move items to the trash
     Delete {
         paths: Vec<PathBuf>,
+        metadata: OperationMetadata,
     },
     /// Delete a path from the trash
     DeleteTrash {
@@ -479,7 +489,7 @@ impl Operation {
                 to = file_name(to),
                 progress = progress()
             ),
-            Self::Delete { paths } => fl!(
+            Self::Delete { paths, .. } => fl!(
                 "moving",
                 items = paths.len(),
                 from = paths_parent_name(paths),
@@ -551,7 +561,7 @@ impl Operation {
                 from = paths_parent_name(paths),
                 to = file_name(to)
             ),
-            Self::Delete { paths } => fl!(
+            Self::Delete { paths, .. } => fl!(
                 "moved",
                 items = paths.len(),
                 from = paths_parent_name(paths),
@@ -821,7 +831,7 @@ impl Operation {
             Self::Copy { paths, to } => {
                 copy_or_move(paths, to, Method::Copy, msg_tx, controller).await
             }
-            Self::Delete { paths } => {
+            Self::Delete { paths, .. } => {
                 let total = paths.len();
                 for (i, path) in paths.into_iter().enumerate() {
                     futures::executor::block_on(async {
@@ -1187,6 +1197,28 @@ impl Operation {
 
         paths
     }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct OperationMetadata {
+    /// ID of tab that launched this operation
+    pub tab_entity: Entity,
+    /// Selected item position at operation launch
+    pub selected: Option<SelectedMetadata>,
+    /// Selected items positions at operation launch
+    pub selected_range: Option<SelectedRange>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct SelectedMetadata {
+    pub index: usize,
+    pub position: (usize, usize),
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct SelectedRange {
+    pub index_range: (usize, usize),
+    pub start_pos: (usize, usize),
 }
 
 #[track_caller]

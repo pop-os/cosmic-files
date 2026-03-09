@@ -89,8 +89,8 @@ use crate::{
     mime_icon,
     mounter::{MOUNTERS, MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage},
     operation::{
-        Controller, Operation, OperationError, OperationErrorType, OperationSelection,
-        ReplaceResult, copy_unique_path,
+        self, Controller, Operation, OperationError, OperationErrorType, OperationMetadata,
+        OperationSelection, ReplaceResult, copy_unique_path,
     },
     spawn_detached::spawn_detached,
     tab::{
@@ -1232,7 +1232,11 @@ impl App {
             )));
         }
         if !trash_paths.is_empty() {
-            tasks.push(self.operation(Operation::Delete { paths: trash_paths }));
+            let metadata = self.operation_metadata();
+            tasks.push(self.operation(Operation::Delete {
+                paths: trash_paths,
+                metadata,
+            }));
         }
         Task::batch(tasks)
     }
@@ -1276,6 +1280,32 @@ impl App {
             },
         ))
         .map(cosmic::Action::App)
+    }
+
+    /// [`OperationMetadata`] for currently focused [`Tab`].
+    fn operation_metadata(&self) -> OperationMetadata {
+        let tab_entity = self.tab_model.active();
+        let tab: Option<&Tab> = self.tab_model.data(tab_entity);
+        let selected = tab.and_then(|tab| {
+            let index = tab.select_focus?;
+            let position = tab.items_opt()?.get(index)?.pos_opt.get()?;
+
+            Some(operation::SelectedMetadata { index, position })
+        });
+        let selected_range = tab.and_then(|tab| {
+            let index_range = tab.select_range?;
+            let start_pos = tab.items_opt()?.get(index_range.0)?.pos_opt.get()?;
+
+            Some(operation::SelectedRange {
+                index_range,
+                start_pos,
+            })
+        });
+        OperationMetadata {
+            tab_entity,
+            selected,
+            selected_range,
+        }
     }
 
     fn remove_window(&mut self, id: &window::Id) {
@@ -1513,6 +1543,43 @@ impl App {
         if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
             tab.cut_selected();
         }
+    }
+
+    /// Focus next item after destructive mutative operation.
+    ///
+    /// Some operations mutate the [`Tab`] in a destructive manner, such as deleting or cutting
+    /// items. It's ergonomic to automatically select the next item.
+    fn focus_next_after_op(&mut self, metadata: OperationMetadata) -> Option<PathBuf> {
+        // This function needs to take care to only select the next item if the tab state did
+        // not change during the operation. In other words, the next item should only be selected
+        // if the user is on the same tab with the same selected (and now deleted/cutted)
+        // items.
+        if self.tab_model.is_active(metadata.tab_entity)
+            && let Some(tab) = self.tab_model.active_data_mut::<Tab>()
+        {
+            let index = if let Some(operation::SelectedMetadata { index, .. }) = metadata.selected
+                && Some(index) == tab.select_focus
+            {
+                index + 1
+            } else if let Some(operation::SelectedRange { index_range, .. }) =
+                metadata.selected_range
+                && Some(index_range) == tab.select_range
+            {
+                index_range.0 + 1
+            } else {
+                return None;
+            };
+
+            if let Some(item) = tab.items_opt().and_then(|items| items.get(index))
+                && let Some(position) = item.pos_opt.get()
+                && let Some(path) = item.path_opt().cloned()
+            {
+                tab.select_position(position.0, position.1, false);
+                return Some(path);
+            }
+        }
+
+        None
     }
 
     fn update_config(&mut self) -> Task<Message> {
@@ -3875,12 +3942,12 @@ impl Application for App {
                     self.progress_operations.remove(id);
                 }
             }
-            Message::PendingComplete(id, op_sel) => {
+            Message::PendingComplete(id, mut op_sel) => {
                 let mut commands = Vec::with_capacity(4);
                 if let Some((op, _)) = self.pending_operations.remove(&id) {
                     // Show toast for some operations
                     if let Some(description) = op.toast() {
-                        if let Operation::Delete { ref paths } = op {
+                        if let Operation::Delete { ref paths, .. } = op {
                             let paths: Arc<[PathBuf]> = Arc::from(paths.as_slice());
                             commands.push(
                                 self.toasts
@@ -3917,6 +3984,18 @@ impl Application for App {
                         if self.update_favorites(&path_changes) {
                             commands.push(self.update_config());
                         }
+                    }
+
+                    // Select next item if necessary
+                    match op {
+                        Operation::Delete { metadata, .. } => {
+                            if let Some(path) = self.focus_next_after_op(metadata) {
+                                op_sel.selected.reserve_exact(1);
+                                op_sel.selected.push(path);
+                            }
+                        }
+                        // XXX: Repeat for all ops that change the tab
+                        _ => (),
                     }
 
                     if matches!(op, Operation::RemoveFromRecents { .. }) {
