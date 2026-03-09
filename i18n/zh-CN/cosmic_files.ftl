@@ -351,7 +351,7 @@ type-to-search-recursive = 搜索当前文件夹及其所有子文件夹
 type-to-search-enter-path = 输入文件夹或文件路径
 # Context menu
 add-to-sidebar = 加入侧边栏
-compress = 压缩
+compress = 压缩…
 delete-permanently = 永久删除
 eject = 弹出
 extract-here = 解压到此处
@@ -433,3 +433,6 @@ copy-to = 复制至…
 move-to = 移动至…
 comment = COSMIC 桌面的文件管理器
 keywords = 文件夹;管理器;
+clear-recents-history = 清除最近访问历史
+copy-path = 复制文件路径
+show-recents = 侧边栏显示最近访问
