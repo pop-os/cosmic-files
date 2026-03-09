@@ -319,7 +319,7 @@ item-size = Grootte: { $size }
 item-created = Aangemaakt op: { $created }
 item-modified = Bewerkt op: { $modified }
 item-accessed = Geopend op: { $accessed }
-calculating = Wordt berekend...
+calculating = Wordt berekend…
 
 ## Settings
 
@@ -345,7 +345,7 @@ compress = Comprimeren
 delete-permanently = Permanent verwijderen
 extract-here = Uitpakken
 new-file = Nieuw bestand…
-new-folder = Nieuwe map...
+new-folder = Nieuwe map…
 open-in-terminal = In terminal openen
 move-to-trash = Naar prullenbak verplaatsen
 restore-from-trash = Uit prullenbak terugzetten
@@ -370,7 +370,7 @@ file = Bestand
 new-tab = Nieuw tabblad
 new-window = Nieuw venster
 reload-folder = Opnieuw laden
-rename = Hernoemen...
+rename = Hernoemen…
 close-tab = Tabblad sluiten
 quit = Sluiten
 
@@ -393,8 +393,8 @@ list-view = Lijstweergave
 show-hidden-files = Verborgen bestanden tonen
 list-directories-first = Mappen bovenaan weergeven
 gallery-preview = Galerijweergave
-menu-settings = Instellingen...
-menu-about = Over COSMIC Bestanden...
+menu-settings = Instellingen…
+menu-about = Over COSMIC Bestanden…
 
 ## Sort
 
@@ -431,3 +431,5 @@ copy-to-button-label = Kopiëren
 move-to-button-label = Verplaatsen
 copy-to = Kopiëren naar…
 move-to = Verplaatsen naar…
+keywords = Bestand;Map;Document;Verkenner
+move-to-title = Verplaatsbestemming aanwijzen

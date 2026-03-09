@@ -5,7 +5,7 @@ no-results = Sonuç bulunamadı
 filesystem = Dosya sistemi
 home = Ev
 networks = Ağlar
-notification-in-progress = Dosya işlemi devam etmekte.
+notification-in-progress = Dosya işlemi devam etmekte
 trash = Çöp
 recents = Son kullanılanlar
 undo = Geri al
@@ -16,11 +16,11 @@ show-on-desktop = Masaüstünde göster
 desktop-folder-content = Masaüstü klasörü içeriği
 mounted-drives = Bağlı sürücüler
 trash-folder-icon = Çöp klasörü simgesi
-icon-size-and-spacing = Simge boyutu ve aralığı
+icon-size-and-spacing = Simge boyutu ve boşluğu
 icon-size = Simge boyutu
 # List view
 name = Ad
-modified = Değiştirilme
+modified = Değiştirildi
 trashed-on = Çöpe atılma
 size = Boyut
 # Progress footer
@@ -29,12 +29,12 @@ dismiss = Mesajı kapat
 operations-running =
     { $running } { $running ->
         [one] işlem
-       *[other] işlemler
+       *[other] işlem
     } çalışıyor ({ $percent }%)...
 operations-running-finished =
     { $running } { $running ->
         [one] işlem
-       *[other] işlemler
+       *[other] işlem
     } çalışıyor ({ $percent }%), { $finished } bitti...
 pause = Duraklat
 resume = Devam et
@@ -44,12 +44,12 @@ resume = Devam et
 
 ## Compress Dialog
 
-create-archive = Arşivle
+create-archive = Arşiv oluştur
 
 ## Empty Trash Dialog
 
 empty-trash = Çöpü boşalt
-empty-trash-warning = Çöpteki bütün ögeleri kalıcı olarak silmek istediğine emin misiniz?
+empty-trash-warning = Çöp Kutusu klasöründeki öğeler kalıcı olarak silinecektir
 
 ## Mount Error Dialog
 
@@ -61,11 +61,11 @@ create-new-file = Yeni dosya oluştur
 create-new-folder = Yeni klasör oluştur
 file-name = Dosya adı
 folder-name = Klasör adı
-file-already-exists = Bu adda bir dosya zaten var.
-folder-already-exists = Bu adda bir klasör zaten var.
-name-hidden = "." ile başlayan adlar gizlenecek.
-name-invalid = Ad "{ $filename }" olamaz.
-name-no-slashes = Ad eğik çizgi içeremez.
+file-already-exists = Bu isimde bir dosya zaten var
+folder-already-exists = Bu isimde bir klasör zaten var
+name-hidden = "." ile başlayan adlar gizlenecek
+name-invalid = Ad "{ $filename }" olamaz
+name-no-slashes = Ad eğik çizgi içeremez
 
 ## Open/Save Dialog
 
@@ -95,11 +95,11 @@ rename-folder = Klasörü yeniden adlandır
 ## Replace Dialog
 
 replace = Değiştir
-replace-title = "{ $filename }" bu konumda zaten var.
-replace-warning = Kaydettiğiniz dosya ile değiştirmek istiyor musunuz? Değiştirmek içeriğinin üzerine yazacak.
-replace-warning-operation = Değiştirmek istiyor musunuz? Değiştirmek içeriğinin üzerine yazacak.
+replace-title = "{ $filename }" bu konumda zaten var
+replace-warning = Kaydettiğiniz dosya ile değiştirmek istiyor musunuz? Değiştirme içeriğin üzerine yazacak.
+replace-warning-operation = Değiştirmek istiyor musunuz? Değiştirme içeriğin üzerine yazacak.
 original-file = Orijinal dosya
-replace-with = Değiştir
+replace-with = Bununla değiştir
 apply-to-all = Tümüne uygula
 keep-both = İkisini de sakla
 skip = Atla
@@ -112,7 +112,7 @@ set-and-launch = Ayarla ve başlat
 
 ## Metadata Dialog
 
-owner = Sahip
+owner = Sahibi
 group = Grup
 other = Diğer
 
@@ -137,15 +137,15 @@ network-drive-description =
 ### Make sure to keep the comma which separates the columns
 
 network-drive-schemes =
-    Kullanılabilir protokoller,ön eki
+    Kullanılabilir protokoller,Ön eki
     AppleTalk,afp://
-    File Transfer Protocol,ftp:// or ftps://
-    Network File System,nfs://
-    Server Message Block,smb://
-    SSH File Transfer Protocol,sftp:// or ssh://
-    WebDav,dav:// or davs://
-network-drive-error = Ağ aygıtına erişilemedi
-password = Şifre
+    Dosya Transfer Protokolü,ftp:// veya ftps://
+    Ağ Dosya Sistemi,nfs://
+    Sunucu Mesaj Bloğu,smb://
+    SSH Dosya Transfer Protokolü,sftp:// veya ssh://
+    WebDav,dav:// veya davs://
+network-drive-error = Ağ sürücüsüne erişilemiyor
+password = Parola
 remember-password = Parolayı hatırla
 try-again = Tekrar dene
 username = Kullanıcı adı
@@ -156,7 +156,7 @@ cancelled = İptal edildi
 edit-history = Geçmişi düzenle
 history = Geçmiş
 no-history = Geçmişte öge bulunmuyor.
-pending = Askıda
+pending = Devam ediyor
 progress = %{ $percent }
 progress-cancelled = %{ $percent }, iptal edildi
 progress-paused = %{ $percent }, duraklatıldı
@@ -164,63 +164,63 @@ failed = Başarısız
 complete = Tamamlandı
 compressing =
     { $items } { $items ->
-        [one] nesne
-       *[other] nesneler
-    } "{ $from }" den "{ $to }" nesnesine sıkıştırılıyor ({ $progress })...
+        [one] öge
+       *[other] öge
+    } "{ $from }" den "{ $to }" e sıkıştırılıyor ({ $progress })...
 compressed =
     { $items } { $items ->
-        [one] nesne
-       *[other] nesneler
-    } den "{ $from }" e "{ $to }"
+        [one] öge
+       *[other] öge
+    } "{ $from }" den "{ $to }" e sıkıştırıldı
 copy_noun = Kopyala
-creating = "{ $parent }" dizininde "{ $name }" oluşturuluyor
-created = "{ $parent }" dizininde "{ $name }" oluşturuldu
+creating = "{ $parent }" de "{ $name }" oluşturuluyor
+created = "{ $parent }" de "{ $name }" oluşturuldu
 copying =
     { $items } { $items ->
-        [one] nesne
-       *[other] nesneler
-    } den "{ $from }" e "{ $to }" kopyalanıyor ({ $progress })...
+        [one] öge
+       *[other] öge
+    } "{ $from }" den "{ $to }" e kopyalanıyor ({ $progress })...
 copied =
     { $items } { $items ->
-        [one] nesne
-       *[other] nesneler
-    } den "{ $from }" e "{ $to }" kopyalandı
+        [one] öge
+       *[other] öge
+    } "{ $from }"den "{ $to }" e kopyalandı
 emptying-trash = { trash } boşaltılıyor ({ $progress })...
 emptied-trash = { trash } boşaltıldı
 extracting =
     { $items } { $items ->
-        [one] nesne
-       *[other] nesneler
-    } den "{ $from }" e "{ $to }" çıkartılıyor ({ $progress })...
+        [one] öge
+       *[other] öge
+    } "{ $from }" den "{ $to }" e çıkartılıyor ({ $progress })...
 extracted =
     { $items } { $items ->
-        [one] nesne
-       *[other] nesneler
-    } den "{ $from }" e "{ $to }" çıkartıldı
+        [one] öge
+       *[other] öge
+    } "{ $from }" den "{ $to }" e çıkartıldı
 setting-executable-and-launching = "{ $name }" çalıştırılabilir olarak ayarlanıp başlatılıyor
 set-executable-and-launched = "{ $name }" çalıştırılabilir olarak ayarlanıp başlatıldı
 moving =
     { $items } { $items ->
-        [one] nesne
-       *[other] nesneler
-    } den "{ $from }" e "{ $to }" taşınıyor ({ $progress })...
+        [one] öge
+       *[other] öge
+    } "{ $from }" den "{ $to }" e taşınıyor ({ $progress })...
 moved =
     { $items } { $items ->
-        [one] nesne
-       *[other] nesneler
-    } den "{ $from }" e "{ $to }" taşındı
+        [one] öge
+       *[other] öge
+    } "{ $from }" den "{ $to }" e taşındı
 renaming = "{ $from }" adı "{ $to }" olarak değiştiriliyor
 renamed = "{ $from }" adı "{ $to }" olarak değiştirildi
 restoring =
     { $items } { $items ->
-        [one] nesne
-       *[other] nesneler
-    } den { trash } geri yükleniyor ({ $progress })...
+        [one] öge
+       *[other] öge
+    } { trash } den geri yükleniyor ({ $progress })...
 restored =
     { $items } { $items ->
-        [one] nesne
-       *[other] nesneler
-    } den { trash } geri yüklendi
+        [one] öge
+       *[other] öge
+    } { trash } den geri yüklendi
 unknown-folder = bilinmeyen klasör
 
 ## Open with
@@ -234,9 +234,9 @@ show-details = Detayları göster
 type = Tür: { $mime }
 items = Öge sayısı: { $items }
 item-size = Boyut: { $size }
-item-created = Oluşturuldu: { $created }
-item-modified = Düzenlendi: { $modified }
-item-accessed = Erişildi: { $accessed }
+item-created = Oluşturulma: { $created }
+item-modified = Düzenlenme: { $modified }
+item-accessed = Erişilme: { $accessed }
 calculating = Hesaplanıyor...
 
 ## Settings
@@ -318,13 +318,13 @@ repository = Depo
 support = Destek
 remove = Kaldır
 grid-spacing = Izgara aralığı
-extract-password-required = Şifre gerekli
-extract-to = Çıkart...
+extract-password-required = Parola gerekli
+extract-to = Buraya Çıkar…
 extract-to-title = Klasöre çıkar
 other-apps = Diğer uygulamalar
 related-apps = İlgili uygulamalar
 selected-items = { $items } seçili öğeler
-permanently-delete-question = Kalıcı olarak sil
+permanently-delete-question = Kalıcı olarak silinsin mi?
 delete = Sil
 permanently-delete-warning = { $target } kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.
 open-with = Birlikte aç
@@ -338,49 +338,65 @@ read-write = Okuma ve yazma
 read-write-execute = Okuma, yazma ve çalıştırma
 favorite-path-error = Dizin açılırken hata oluştu
 favorite-path-error-description =
-    "{ $path }" açılamıyor.
-    Mevcut olmayabilir veya açma izniniz olmayabilir.
+    "{ $path }" açılamadı
+    "{ $path }" Dosya mevcut olmayabilir veya açmak için izniniz olmayabilir.
 
-    Kenar çubuğundan kaldırmak ister misiniz?
+    Bunu kenar çubuğundan kaldırmak ister misiniz?
 keep = Tut
-progress-failed = { $percent }%, başarısız oldu
+progress-failed = %{ $percent }, başarısız oldu
 deleting =
     Çöp kutusundan { $items } { $items ->
-        [one] nesne
-       *[other] nesneler
+        [one] öge
+       *[other] öge
     } { trash } ({ $progress }) siliniyor...
 deleted =
     Çöp kutusundan { $items } { $items ->
-        [one] nesne
-       *[other] nesneler
+        [one] öge
+       *[other] öge
     } { trash } silindi
 setting-permissions = "{ $name }" için izinler { $mode } olarak ayarlanıyor
 set-permissions = "{ $name }" için izinleri { $mode } olarak ayarla
 permanently-deleting =
-    Kalıcı olarak { $items } { $items ->
-        [one] nesne
-       *[other] nesneler
-    } siliniyor
+    { $items } { $items ->
+        [one] öge
+       *[other] öge
+    } kalıcı olarak siliniyor
 permanently-deleted =
-    Kalıcı olarak { $items } { $items ->
-        [one] nesne
-       *[other] nesneler
-    } silindi
+    { $items } { $items ->
+        [one] öge
+       *[other] öge
+    } kalıcı olarak silindi
 removing-from-recents =
-    Şuradan { $items } { $items ->
-        [one] nesne
-       *[other] nesneler
-    } { recents } kaldırılıyor
+    { $items } { $items ->
+        [one] öge
+       *[other] öge
+    } { recents } den kaldırılıyor
 removed-from-recents =
-    Şuradan { $items } { $items ->
-        [one] nesne
-       *[other] nesnenler
-    } { recents } kaldırıldı
+    { $items } { $items ->
+        [one] öge
+       *[other] öge
+    } { recents } den kaldırıldı
 single-click = Açmak için tek tıklama
-type-to-search = Aramak için yaz
+type-to-search = Aramak için yazın
 type-to-search-recursive = Geçerli klasörü ve tüm alt klasörleri arar
 type-to-search-enter-path = Dizin veya dosyanın yolunu girer
 delete-permanently = Kalıcı olarak sil
 eject = Çıkart
 remove-from-recents = Son kullanılanlardan kaldır
 reload-folder = Klasörü yeniden yükle
+comment = COSMIC masaüstü için dosya yöneticisi
+keywords = Klasör;Yönetici;
+empty-trash-title = Çöp boşaltılsın mı?
+copy-to-title = Kopyalama hedefini seçin
+copy-to-button-label = Kopyala
+move-to-title = Taşıma hedefini seçin
+move-to-button-label = Taşı
+pasted-image = Yapıştırılan Görüntü
+pasted-text = Yapıştırılan Metin
+pasted-video = Yapıştırılan Video
+clear-recents-history = Son kullanılanlar geçmişini temizle
+copy-path = Yolu kopyala
+type-to-search-select = İlk eşleşen dosyayı veya klasörü seçer
+copy-to = Buraya kopyala…
+move-to = Buraya taşı…
+show-recents = Kenar çubuğundaki son kullanılanlar klasörü
