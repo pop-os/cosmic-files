@@ -357,7 +357,7 @@ type-to-search-recursive = Wyszukuj w obecnym katalogu i jego podkatalogach
 type-to-search-enter-path = Wprowadź ścieżkę pliku lub katalogu
 # Context menu
 add-to-sidebar = Dodaj do bocznego panelu
-compress = Spakuj
+compress = Spakuj…
 delete-permanently = Usuń definitywnie
 eject = Wysuń
 extract-here = Wypakuj
@@ -434,3 +434,6 @@ move-to-title = Wybierz gdzie przenieść
 move-to-button-label = Przenieś
 copy-to = Skopiuj do…
 move-to = Przenieś do…
+show-recents = Ostatnie katalogi w panelu bocznym
+clear-recents-history = Wyczyść bierzącą historię
+copy-path = Skopiuj ścieżkę
