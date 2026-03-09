@@ -6210,6 +6210,7 @@ impl Tab {
                 // pre-processing step
                 widget::id_container(
                     widget::scrollable(popover)
+                        .id(self.scrollable_id.clone())
                         .on_scroll(Message::Scroll)
                         .width(Length::Fill)
                         .height(Length::Fill),
