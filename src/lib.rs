@@ -13,6 +13,7 @@ pub mod config;
 pub mod dialog;
 mod key_bind;
 pub(crate) mod large_image;
+pub(crate) mod load_image;
 mod localize;
 mod menu;
 mod mime_app;

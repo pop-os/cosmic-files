@@ -4866,7 +4866,7 @@ impl Tab {
                                 .into()
                         } else {
                             //TODO: use widget::image::viewer, when its zoom can be reset
-                            widget::image(image_handle).into()
+                            crate::load_image::loaded_image(image_handle).into()
                         };
 
                     element_opt = Some(widget::container(content).center(Length::Fill).into());
