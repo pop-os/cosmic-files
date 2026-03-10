@@ -47,7 +47,7 @@ use crate::{
     fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
-    menu,
+    menu, mime_icon,
     mounter::{MOUNTERS, MounterItem, MounterItems, MounterKey, MounterMessage},
     tab::{self, ItemMetadata, Location, SearchLocation, Tab},
     zoom::{zoom_in_view, zoom_out_view, zoom_to_default},
@@ -1917,6 +1917,7 @@ impl Application for App {
                                             filter_mime.type_() == item.mime.type_()
                                         } else {
                                             *filter_mime == item.mime
+                                                || mime_icon::is_mime_subclass_of(&item.mime, filter_mime)
                                         }
                                     })
                                 // Check for glob match (last because it is slower)
