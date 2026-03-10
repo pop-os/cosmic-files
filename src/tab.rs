@@ -49,7 +49,7 @@ use icu::{
     },
     locale::preferences::extensions::unicode::keywords::HourCycle,
 };
-use image::{DynamicImage, ImageDecoder, ImageReader};
+use image::{DynamicImage, ImageDecoder, ImageReader, metadata::Orientation};
 use jxl_oxide::integration::JxlDecoder;
 use mime_guess::{Mime, mime};
 use regex::Regex;
@@ -2159,8 +2159,14 @@ impl ItemThumbnail {
                             let max_ram = max_mem * 1000 * 1000 / jobs as u64;
                             limits.max_alloc = Some(max_ram);
                             reader.limits(limits);
-                            match reader.decode() {
-                                Ok(reader) => Some(reader),
+                            match reader.into_decoder().and_then(|mut decoder| {
+                                let orientation =
+                                    decoder.orientation().unwrap_or(Orientation::NoTransforms);
+                                let mut img = DynamicImage::from_decoder(decoder)?;
+                                img.apply_orientation(orientation);
+                                Ok(img)
+                            }) {
+                                Ok(img) => Some(img),
                                 Err(err) => {
                                     log::warn!("failed to decode {}: {}", path.display(), err);
                                     None
@@ -7315,6 +7321,148 @@ mod tests {
                     assert_eq!(set_mode_part(mode_no_other, MODE_SHIFT_OTHER, other), mode);
                 }
             }
+        }
+    }
+
+    // Tests for EXIF orientation handling in thumbnail generation.
+    // Regression tests for https://github.com/pop-os/cosmic-files/issues/883
+    mod exif_orientation {
+        use image::{ImageDecoder as _, ImageEncoder as _, metadata::Orientation};
+        use tempfile::NamedTempFile;
+
+        /// Build a minimal raw TIFF chunk (the payload of an Exif/eXIf block)
+        /// containing only the Orientation tag. All values use little-endian.
+        #[rustfmt::skip]
+        fn make_exif_chunk(orientation: Orientation) -> Vec<u8> {
+            vec![
+                b'I', b'I',                              // marker
+                0x2A, 0x00,                              // TIFF magic = 42
+                0x08, 0x00, 0x00, 0x00,                  // offset to IFD
+                0x01, 0x00,                              // 1 IFD entry
+                0x12, 0x01,                              // tag = 0x0112 (Orientation)
+                0x03, 0x00,                              // type = SHORT
+                0x01, 0x00, 0x00, 0x00,                  // count = 1
+                orientation.to_exif(), 0x00, 0x00, 0x00, // value (padded to 4 bytes)
+                0x00, 0x00, 0x00, 0x00,                  // no next IFD
+            ]
+        }
+
+        /// Write a PNG with EXIF orientation metadata embedded and return a temp file.
+        fn write_png_with_orientation(
+            img: &image::RgbaImage,
+            orientation: Orientation,
+        ) -> NamedTempFile {
+            let exif_chunk = make_exif_chunk(orientation);
+            let temp = NamedTempFile::new().expect("failed to create temp file");
+            let file = std::fs::File::create(temp.path()).expect("failed to create file");
+            let mut encoder = image::codecs::png::PngEncoder::new(file);
+            encoder
+                .set_exif_metadata(exif_chunk)
+                .expect("failed to set exif metadata");
+            encoder
+                .write_image(
+                    img.as_raw(),
+                    img.width(),
+                    img.height(),
+                    image::ExtendedColorType::Rgba8,
+                )
+                .expect("failed to encode PNG");
+            temp
+        }
+
+        /// Decode a PNG file using the same approach as the thumbnail generator:
+        /// into_decoder() → orientation() → from_decoder() → apply_orientation()
+        fn decode_with_orientation(path: &std::path::Path) -> image::DynamicImage {
+            let reader = image::ImageReader::open(path)
+                .expect("failed to open")
+                .with_guessed_format()
+                .expect("failed to guess format");
+            let mut decoder = reader.into_decoder().expect("failed to create decoder");
+            let orientation = decoder.orientation().unwrap_or(Orientation::NoTransforms);
+            let mut img =
+                image::DynamicImage::from_decoder(decoder).expect("failed to decode image");
+            img.apply_orientation(orientation);
+            img
+        }
+
+        /// Create a 2×1 RGBA test image: left pixel RED, right pixel GREEN.
+        fn make_2x1_red_green() -> image::RgbaImage {
+            let mut img = image::RgbaImage::new(2, 1);
+            img.put_pixel(0, 0, image::Rgba([255, 0, 0, 255])); // red
+            img.put_pixel(1, 0, image::Rgba([0, 255, 0, 255])); // green
+            img
+        }
+
+        #[test]
+        fn no_orientation_tag_leaves_image_unchanged() {
+            let src = make_2x1_red_green();
+            let tmp = write_png_with_orientation(&src, Orientation::NoTransforms);
+            let decoded = decode_with_orientation(tmp.path());
+            let rgba = decoded.to_rgba8();
+            assert_eq!(rgba.get_pixel(0, 0), &image::Rgba([255, 0, 0, 255]));
+            assert_eq!(rgba.get_pixel(1, 0), &image::Rgba([0, 255, 0, 255]));
+        }
+
+        #[test]
+        fn exif_orientation_rotate180_is_applied() {
+            let src = make_2x1_red_green();
+            let tmp = write_png_with_orientation(&src, Orientation::Rotate180);
+            let decoded = decode_with_orientation(tmp.path());
+            let rgba = decoded.to_rgba8();
+            // After 180° rotation of a 2×1 image the pixels swap positions.
+            assert_eq!(
+                rgba.get_pixel(0, 0),
+                &image::Rgba([0, 255, 0, 255]),
+                "left pixel should be green after 180° rotation"
+            );
+            assert_eq!(
+                rgba.get_pixel(1, 0),
+                &image::Rgba([255, 0, 0, 255]),
+                "right pixel should be red after 180° rotation"
+            );
+        }
+
+        #[test]
+        fn exif_orientation_rotate90_cw_is_applied() {
+            let src = make_2x1_red_green();
+            let tmp = write_png_with_orientation(&src, Orientation::Rotate90);
+            let decoded = decode_with_orientation(tmp.path());
+            let rgba = decoded.to_rgba8();
+            // 2×1 image rotated 90° CW becomes a 1×2 image.
+            // Rotation maps (x,y) → (H-1-y, x) where H=1:
+            //   (0,0) red  → (0, 0)
+            //   (1,0) green → (0, 1)
+            assert_eq!(decoded.width(), 1);
+            assert_eq!(decoded.height(), 2);
+            assert_eq!(
+                rgba.get_pixel(0, 0),
+                &image::Rgba([255, 0, 0, 255]),
+                "top pixel should be red after 90° CW rotation"
+            );
+            assert_eq!(
+                rgba.get_pixel(0, 1),
+                &image::Rgba([0, 255, 0, 255]),
+                "bottom pixel should be green after 90° CW rotation"
+            );
+        }
+
+        #[test]
+        fn exif_orientation_flip_horizontal_is_applied() {
+            let src = make_2x1_red_green();
+            let tmp = write_png_with_orientation(&src, Orientation::FlipHorizontal);
+            let decoded = decode_with_orientation(tmp.path());
+            let rgba = decoded.to_rgba8();
+            // Horizontal flip swaps left↔right.
+            assert_eq!(
+                rgba.get_pixel(0, 0),
+                &image::Rgba([0, 255, 0, 255]),
+                "left pixel should be green after horizontal flip"
+            );
+            assert_eq!(
+                rgba.get_pixel(1, 0),
+                &image::Rgba([255, 0, 0, 255]),
+                "right pixel should be red after horizontal flip"
+            );
         }
     }
 }
