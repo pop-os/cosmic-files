@@ -1,5 +1,5 @@
 use cosmic::widget;
-use image::ImageReader;
+use image::{DynamicImage, ImageDecoder, ImageReader, ImageResult, metadata::Orientation};
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
@@ -256,6 +256,21 @@ pub fn check_memory_available(width: u32, height: u32) -> (bool, Option<String>)
     check_ram_available(width, height)
 }
 
+/// Decode an image from a reader, applying any EXIF orientation metadata so that
+/// the returned image is correctly oriented regardless of how the pixels are stored.
+pub fn decode_with_orientation<R: std::io::BufRead + std::io::Seek>(
+    reader: ImageReader<R>,
+) -> ImageResult<DynamicImage> {
+    reader.into_decoder().and_then(|mut decoder| {
+        let orientation = decoder
+            .orientation()
+            .unwrap_or(Orientation::NoTransforms);
+        let mut img = DynamicImage::from_decoder(decoder)?;
+        img.apply_orientation(orientation);
+        Ok(img)
+    })
+}
+
 /// Decode a large image asynchronously in a blocking thread pool.
 ///
 /// This function is used for gallery mode where full-resolution images need to be loaded.
@@ -280,7 +295,7 @@ pub async fn decode_large_image(
                         limits.max_alloc = Some(GALLERY_MEMORY_LIMIT_MB * DECIMAL_MB_TO_BYTES);
                         reader.limits(limits);
 
-                        match reader.decode() {
+                        match decode_with_orientation(reader) {
                             Ok(img) => {
                                 let rgba = img.into_rgba8();
                                 let orig_width = rgba.width();
