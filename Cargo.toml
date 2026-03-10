@@ -69,7 +69,7 @@ default-features = false
 features = ["fs", "io", "macros", "polling", "runtime"]
 
 [dependencies.libcosmic]
-git = "https://github.com/pop-os/libcosmic.git"
+git = "https://github.com/pop-os/libcosmic"
 default-features = false
 #TODO: a11y feature crashes
 features = [
