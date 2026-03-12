@@ -386,6 +386,7 @@ pub enum Operation {
     /// Permanently delete items, skipping the trash
     PermanentlyDelete {
         paths: Box<[PathBuf]>,
+        metadata: OperationMetadata,
     },
     RemoveFromRecents {
         paths: Box<[PathBuf]>,
@@ -528,7 +529,9 @@ impl Operation {
                 name = file_name(path),
                 parent = parent_name(path)
             ),
-            Self::PermanentlyDelete { paths } => fl!("permanently-deleting", items = paths.len()),
+            Self::PermanentlyDelete { paths, .. } => {
+                fl!("permanently-deleting", items = paths.len())
+            }
             Self::Rename { from, to } => {
                 fl!("renaming", from = file_name(from), to = file_name(to))
             }
@@ -595,7 +598,9 @@ impl Operation {
                 name = file_name(path),
                 parent = parent_name(path)
             ),
-            Self::PermanentlyDelete { paths } => fl!("permanently-deleted", items = paths.len()),
+            Self::PermanentlyDelete { paths, .. } => {
+                fl!("permanently-deleted", items = paths.len())
+            }
             Self::RemoveFromRecents { paths } => fl!("removed-from-recents", items = paths.len()),
             Self::Rename { from, to } => fl!("renamed", from = file_name(from), to = file_name(to)),
             Self::Restore { items } => fl!("restored", items = items.len()),
@@ -1042,7 +1047,7 @@ impl Operation {
             }
             .await
             .map_err(wrap_compio_spawn_error)?,
-            Self::PermanentlyDelete { paths } => {
+            Self::PermanentlyDelete { paths, .. } => {
                 let total = paths.len();
                 for (idx, path) in paths.into_iter().enumerate() {
                     controller
@@ -1203,22 +1208,21 @@ impl Operation {
 pub struct OperationMetadata {
     /// ID of tab that launched this operation
     pub tab_entity: Entity,
-    /// Selected item position at operation launch
-    pub selected: Option<SelectedMetadata>,
     /// Selected items positions at operation launch
-    pub selected_range: Option<SelectedRange>,
+    pub selected: Option<SelectedItems>,
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
-pub struct SelectedMetadata {
-    pub index: usize,
-    pub position: (usize, usize),
-}
-
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
-pub struct SelectedRange {
-    pub index_range: (usize, usize),
-    pub start_pos: (usize, usize),
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SelectedItems {
+    Single {
+        index: usize,
+        position: (usize, usize),
+    },
+    Range {
+        first: usize,
+        last: usize,
+        first_pos: (usize, usize),
+    },
 }
 
 #[track_caller]
