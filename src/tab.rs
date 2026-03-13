@@ -4,16 +4,7 @@ use cosmic::{
     desktop::fde::{DesktopEntry, get_languages_from_env},
     font,
     iced::{
-        Alignment,
-        Border,
-        Color,
-        ContentFit,
-        Length,
-        Point,
-        Rectangle,
-        Size,
-        Subscription,
-        Vector,
+        Alignment, Border, Color, ContentFit, Length, Point, Rectangle, Size, Subscription, Vector,
         advanced::{
             graphics,
             text::{self, Paragraph},
@@ -23,9 +14,7 @@ use cosmic::{
         event,
         futures::{self, SinkExt},
         keyboard::Modifiers,
-        padding,
-        stream,
-        //TODO: export in cosmic::widget
+        padding, stream,
         widget::{
             rule,
             scrollable::{self, AbsoluteOffset, Viewport},
@@ -2968,6 +2957,11 @@ impl Tab {
     }
 
     pub fn set_items(&mut self, mut items: Vec<Item>) {
+        let highlighted = self
+            .items_opt
+            .as_ref()
+            .and_then(|items| items.iter().enumerate().find(|i| i.1.highlighted))
+            .map(|(i, _)| i);
         let selected = self.selected_locations();
         for item in &mut items {
             item.selected = false;
@@ -2978,6 +2972,12 @@ impl Tab {
             }
         }
         self.items_opt = Some(items);
+        if let Some(i) = highlighted
+            .zip(self.items_opt.as_mut())
+            .and_then(|(h, items)| items.get_mut(h))
+        {
+            i.highlighted = true;
+        }
     }
 
     pub fn cut_selected(&mut self) {
