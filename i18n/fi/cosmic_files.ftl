@@ -5,7 +5,7 @@ no-results = Ei tuloksia
 filesystem = Tiedostojärjestelmä
 home = Koti
 networks = Verkot
-notification-in-progress = Tiedostotoimintoja käynnissä.
+notification-in-progress = Tiedostotoimintoja käynnissä
 trash = Roskakori
 recents = Viimeaikaiset
 undo = Kumoa
@@ -16,7 +16,7 @@ today = Tänään
 desktop-view-options = Työpöytänäkymän asetukset…
 show-on-desktop = Näytä työpöydällä
 desktop-folder-content = Työpöytäkansion sisältö
-mounted-drives = Tiedostojärjestelmään liitetyt kovalevyt
+mounted-drives = Liitetyt asemat
 trash-folder-icon = Roskakorikansion kuvake
 icon-size-and-spacing = Kuvakkeen koko ja välistys
 icon-size = Kuvakkeen koko
@@ -38,7 +38,7 @@ create-archive = Luo arkisto
 ## Empty Trash Dialog
 
 empty-trash = Tyhjennä roskakori
-empty-trash-warning = Haluatko varmasti tyhjentää koko roskakorin pysyvästi?
+empty-trash-warning = Roskakorikansion kohteet poistetaan pysyvästi
 
 ## Mount Error Dialog
 
@@ -73,8 +73,8 @@ save-file = Tallenna tiedosto
 
 ## Open With Dialog
 
-open-with-title = Kuinka haluat avata kohteen "{ $name }"?
-browse-store = Selaa { $store }
+open-with-title = Miten haluat avata kohteen "{ $name }"?
+browse-store = Selaa { $store }a
 
 ## Rename Dialog
 
@@ -88,15 +88,15 @@ replace-title = "{ $filename }" on jo olemassa tässä sijainnissa
 replace-warning = Haluatko korvata sen tallentamallasi kohteella? Korvaaminen ylikirjoittaa kohteen sisällön.
 replace-warning-operation = Haluatko korvata sen? Korvaaminen ylikirjoittaa sen sisällön.
 original-file = Alkuperäinen tiedosto
-replace-with = Korvaa kohteella
-apply-to-all = Sovella kaikkiin
+replace-with = Korvaa käyttäen
+apply-to-all = Toteuta kaikkiin
 keep-both = Pidä molemmat
 skip = Ohita
 
 ## Set as Executable and Launch Dialog
 
 set-executable-and-launch = Aseta käynnistettäväksi ja käynnistä
-set-executable-and-launch-description = Haluatko asettaa kohteen "{ $name }" käynnistettväksi ja käynnistää sen?
+set-executable-and-launch-description = Haluatko asettaa kohteen "{ $name }" käynnistettäväksi ja käynnistää sen?
 set-and-launch = Aseta ja käynnistä
 
 ## Metadata Dialog
@@ -116,9 +116,9 @@ other = Muut
 add-network-drive = Lisää verkkolevy
 connect = Yhdistä
 connect-anonymously = Yhdistä nimettömästi
-connecting = Yhdistää…
+connecting = Yhdistetään…
 domain = Verkkotunnus
-enter-server-address = Syötä palvelimen osoite
+enter-server-address = Kirjoita palvelimen osoite
 network-drive-description =
     Palvelinosoitteet sisältävät protokollaetuliitteen sekä osoitteen.
     Esimerkkejä: ssh://192.168.0.1, ftp://[2001:db8::1]
@@ -126,14 +126,14 @@ network-drive-description =
 ### Make sure to keep the comma which separates the columns
 
 network-drive-schemes =
-    Saatavissa olevat protokollat,Etuliite
+    Saatavilla olevat yhteyskäytännöt,Etuliite
     AppleTalk,afp://
-    File Transfer Protocol,ftp:// or ftps://
+    File Transfer Protocol,ftp:// tai ftps://
     Network File System,nfs://
     Server Message Block,smb://
-    SSH File Transfer Protocol,sftp:// or ssh://
-    WebDav,dav:// or davs://
-network-drive-error = Verkkolevy saavuttamattomissa
+    SSH File Transfer Protocol,sftp:// tai ssh://
+    WebDav,dav:// tai davs://
+network-drive-error = Verkkolevy ei saatavilla
 password = Salasana
 remember-password = Muista salasana
 try-again = Yritä uudelleen
@@ -144,56 +144,56 @@ username = Käyttäjänimi
 edit-history = Muokkaa historiaa
 history = Historia
 no-history = Historia on tyhjä.
-pending = Odottaa käsittelyä
-failed = Epäonnistui
-complete = Valmis
+pending = Jonossa
+failed = Epäonnistuneet
+complete = Valmiit
 compressing =
-    Tiivistetään { $items } { $items ->
+    Pakataan { $items } { $items ->
         [one] kohde
-       *[other] kohteita
-    } lähteestä "{ $from }" arkistoon "{ $to }"
+       *[other] kohdetta
+    } sijainnista "{ $from }" arkistoon "{ $to }" ({ $progress })…
 compressed =
-    Tiivistetty { $items } { $items ->
+    Pakattu { $items } { $items ->
         [one] kohde
-       *[other] kohteet
-    } lähteestä "{ $from }" arkistoon "{ $to }"
+       *[other] kohdetta
+    } sijainnista "{ $from }" arkistoon "{ $to }"
 copy_noun = Kopio
-creating = Luodaan kohdetta "{ $name }" kohteen "{ $parent }" alle
-created = Luotu kohde "{ $name }" kohteen "{ $parent }" alle
+creating = Luodaan "{ $name }" kohteen "{ $parent }" alle
+created = Luotu "{ $name }" kohteen "{ $parent }" alle
 copying =
     Kopioidaan { $items } { $items ->
         [one] kohde
-       *[other] kohteita
-    } lähteestä "{ $from }" kohteeseen "{ $to }"
+       *[other] kohdetta
+    } sijainnista "{ $from }" kohteeseen "{ $to }" ({ $progress })…
 copied =
     Kopioitu { $items } { $items ->
         [one] kohde
-       *[other] kohteet
-    } lähteestä "{ $from }" kohteeseen "{ $to }"
-emptying-trash = Tyhjennetään { trash }
+       *[other] kohdetta
+    } sijainnista "{ $from }" kohteeseen "{ $to }"
+emptying-trash = Tyhjennetään { trash } ({ $progress })…
 emptied-trash = Tyhjennetty { trash }
 extracting =
     Puretaan { $items } { $items ->
         [one] kohde
-       *[other] kohteet
-    } arkistosta "{ $from }" kohteeseen "{ $to }"
+       *[other] kohdetta
+    } arkistosta "{ $from }" kohteeseen "{ $to }" ({ $progress })…
 extracted =
     Purettu { $items } { $items ->
         [one] kohde
-       *[other] kohteet
+       *[other] kohdetta
     } arkistosta "{ $from }" kohteeseen "{ $to }"
 setting-executable-and-launching = Asetetaan "{ $name }" käynnistettäväksi ja käynnistetään
 set-executable-and-launched = Asetettu "{ $name }" käynnistettäväksi ja käynnistetty
 moving =
     Siirretään { $items } { $items ->
         [one] kohde
-       *[other] kohteet
-    } lähteestä "{ $from }" kohteeseen "{ $to }"
+       *[other] kohdetta
+    } sijainnista "{ $from }" kohteeseen "{ $to }" ({ $progress })…
 moved =
     Siirretty { $items } { $items ->
         [one] kohde
-       *[other] kohteet
-    } lähteestä "{ $from }" kohteeseen "{ $to }"
+       *[other] kohdetta
+    } sijainnista "{ $from }" kohteeseen "{ $to }"
 renaming = Nimetään kohde "{ $from }" muotoon "{ $to }"
 renamed = Nimetty kohde "{ $from }" muotoon "{ $to }"
 restoring =
@@ -206,11 +206,11 @@ restored =
         [one] kohde
        *[other] kohteet
     } { trash }sta
-unknown-folder = Tuntematon kansio
+unknown-folder = tuntematon kansio
 
 ## Open with
 
-menu-open-with = Avaa ohjelmalla…
+menu-open-with = Avaa sovelluksella…
 default-app = { $name } (oletus)
 
 ## Show details
@@ -225,14 +225,14 @@ settings = Asetukset
 
 appearance = Ulkoasu
 theme = Teema
-match-desktop = Sovita yhteen työpöydän kanssa
+match-desktop = Sovita työpöytään
 dark = Tumma
 light = Vaalea
 
 # Context menu
 
 add-to-sidebar = Lisää sivupalkkiin
-compress = Pakkaa
+compress = Pakkaa…
 extract-here = Pura
 new-file = Uusi tiedosto…
 new-folder = Uusi kansio…
@@ -241,9 +241,9 @@ move-to-trash = Siirrä roskakoriin
 restore-from-trash = Palauta roskakorista
 remove-from-sidebar = Poista sivupalkista
 sort-by-name = Järjestä nimen mukaan
-sort-by-modified = Järjestä muokkauspäivämäärän mukaan
+sort-by-modified = Järjestä muokkausajan mukaan
 sort-by-size = Järjestä koon mukaan
-sort-by-trashed = Järjestä poistamispäivämäärän mukaan
+sort-by-trashed = Järjestä poistamisajan mukaan
 
 ## Desktop
 
@@ -281,9 +281,9 @@ grid-view = Ruudukkonäkymä
 list-view = Listanäkymä
 show-hidden-files = Näytä piilotetut tiedostot
 list-directories-first = Näytä kansiot ensin
-gallery-preview = Gallerian esinäkymä
+gallery-preview = Gallerian esikatselu
 menu-settings = Asetukset…
-menu-about = Tietoa COSMIC Tiedostoista…
+menu-about = Tietoa COSMICin tiedostonhallinnasta…
 
 ## Sort
 
@@ -318,3 +318,70 @@ move-to-button-label = Siirrä
 clear-recents-history = Tyhjennä viimeaikaisten historia
 copy-path = Kopioi polku
 dismiss = Hylkää viesti
+operations-running =
+    { $running } { $running ->
+        [one] toiminto
+       *[other] toimintoa
+    } käynnissä ({ $percent } %)...
+operations-running-finished =
+    { $running } { $running ->
+        [one] toiminto
+       *[other] toimintoa
+    } käynnissä ({ $percent } %), { $finished } valmistunut…
+pause = Keskeytä
+extract-to = Pura sijaintiin…
+permanently-delete-warning = { $target } tullaan poistamaan pysyvästi. Tätä toimintoa ei voi perua.
+execute-only = Vain suoritus
+write-only = Vain kirjoitus
+write-execute = Kirjoita ja suorita
+read-only = Vain luku
+read-execute = Lue ja suorita
+read-write = Lue ja kirjoita
+read-write-execute = Lue, kirjoita sekä suorita
+calculating = Lasketaan…
+single-click = Yhden napsautuksen avaus
+type-to-search = Kirjoita etsiäksesi
+type-to-search-recursive = Etsii nykyisestä kansiosta ja kaikista alikansioista
+remove-from-recents = Poista viimeaikaisista
+selected-items = { $items } valittua kohdetta
+show-recents = Viimeaikaisten kansio sivupalkissa
+copy-to = Kopioi…
+move-to = Siirrä…
+details = Yksityiskohdat
+grid-spacing = Ruudukkovälit
+none = Ei mitään
+favorite-path-error = Virhe avattaessa kansiota
+favorite-path-error-description =
+    Polun { $path } avaaminen ei onnistunut
+    "{ $path }" ei välttämättä ole olemassa tai oikeutesi eivät riitä sen avaamiseen
+
+    Haluatko poistaa sen sivupalkista?
+keep = Pidä
+repository = Tietovarasto
+support = Tuki
+progress = { $percent } %
+progress-cancelled = { $percent } %, peruttu
+progress-failed = { $percent } %, epäonnistui
+progress-paused = { $percent } %, keskeytetty
+setting-permissions = Asetetaan kohteen "{ $name }" käyttöoikeudeksi { $mode }
+set-permissions = Asetettu kohteen { $name } käyttöoikeudeksi { $mode }
+permanently-deleting =
+    Poistetaan pysyvästi { $items } { $items ->
+        [one] kohde
+       *[other] kohdetta
+    }
+permanently-deleted =
+    Poistettu pysyvästi { $items } { $items ->
+        [one] kohde
+       *[other] kohdetta
+    }
+items = Kohteita: { $items }
+item-accessed = Käytetty: { $accessed }
+type-to-search-enter-path = Kirjoittaa polun kansioon tai tiedostoon
+eject = Poista asemasta
+copy-to-title = Valitse mihin kopioidaan
+move-to-title = Valitse mihin siirretään
+pasted-image = Liitetty kuva
+pasted-text = Liitetty teksti
+pasted-video = Liitetty video
+type-to-search-select = Valitsee ensimmäisen täsmäävän tiedoston tai kansion
