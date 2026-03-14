@@ -762,13 +762,12 @@ impl Operation {
                                             OperationError::from_err(e, &controller)
                                         })?;
 
-                                        if let Ok(modified) = metadata.modified() {
-                                            if let Some(last_modified) =
+                                        if let Ok(modified) = metadata.modified()
+                                            && let Some(last_modified) =
                                                 archive::system_time_to_zip_date_time(modified)
-                                            {
-                                                zip_options =
-                                                    zip_options.last_modified_time(last_modified);
-                                            }
+                                        {
+                                            zip_options =
+                                                zip_options.last_modified_time(last_modified);
                                         }
 
                                         #[cfg(unix)]
