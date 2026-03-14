@@ -2,9 +2,8 @@ use crate::{
     mime_icon::mime_for_path,
     operation::{Controller, OpReader, OperationError, OperationErrorType, sync_to_disk},
 };
-use chrono::TimeZone;
-use chrono::{Datelike, Timelike};
 use cosmic::iced::futures;
+use jiff::{Zoned, civil::DateTime, tz::TimeZone};
 use std::{
     collections::HashSet,
     fs,
@@ -285,25 +284,25 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
 }
 
 fn zip_date_time_to_system_time(date_time: zip::DateTime) -> Option<SystemTime> {
-    let date = chrono::NaiveDate::from_ymd_opt(
-        date_time.year() as i32,
-        date_time.month() as u32,
-        date_time.day() as u32,
-    )?;
-    let time = chrono::NaiveTime::from_hms_opt(
-        date_time.hour() as u32,
-        date_time.minute() as u32,
-        date_time.second() as u32,
-    )?;
-    let naive = chrono::NaiveDateTime::new(date, time);
-    chrono::Local
-        .from_local_datetime(&naive)
-        .latest()
+    let dt = DateTime::new(
+        date_time.year() as i16,
+        date_time.month() as i8,
+        date_time.day() as i8,
+        date_time.hour() as i8,
+        date_time.minute() as i8,
+        date_time.second() as i8,
+        0,
+    )
+    .ok()?;
+    TimeZone::system()
+        .to_ambiguous_zoned(dt)
+        .later()
+        .ok()
         .map(SystemTime::from)
 }
 
 pub fn system_time_to_zip_date_time(system_time: SystemTime) -> Option<zip::DateTime> {
-    let date_time: chrono::DateTime<chrono::Local> = system_time.into();
+    let date_time = Zoned::try_from(system_time).ok()?;
 
     zip::DateTime::from_date_and_time(
         date_time.year() as u16,

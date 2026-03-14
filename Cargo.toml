@@ -8,7 +8,8 @@ rust-version = "1.90"
 
 [dependencies]
 anyhow = "1"
-chrono = { version = "0.4", features = ["unstable-locales"] }
+jiff = "0.2"
+jiff-icu = "0.2"
 icu = { version = "2.1.1", features = ["compiled_data"] }
 cctk = { git = "https://github.com/pop-os/cosmic-protocols", package = "cosmic-client-toolkit", rev = "160b086", optional = true }
 cosmic-mime-apps = { git = "https://github.com/pop-os/cosmic-mime-apps.git", optional = true }
