@@ -2113,54 +2113,25 @@ impl ItemThumbnail {
             }
 
             tried_supported_file = true;
-            let dyn_img: Option<image::DynamicImage> = match mime.subtype().as_str() {
-                "jxl" => match File::open(path) {
-                    Ok(file) => match JxlDecoder::new(file) {
-                        Ok(mut decoder) => {
-                            let mut limits = image::Limits::default();
-                            let max_ram = max_mem * 1000 * 1000 / jobs as u64;
-                            limits.max_alloc = Some(max_ram);
-                            let _ = decoder.set_limits(limits);
-                            match image::DynamicImage::from_decoder(decoder) {
-                                Ok(img) => Some(img),
-                                Err(err) => {
-                                    log::warn!("failed to decode jxl {}: {}", path.display(), err);
-                                    None
-                                }
-                            }
-                        }
+            let dyn_img = match image::ImageReader::open(path)
+                .and_then(image::ImageReader::with_guessed_format)
+            {
+                Ok(mut reader) => {
+                    let mut limits = image::Limits::default();
+                    let max_ram = max_mem * 1000 * 1000 / jobs as u64;
+                    limits.max_alloc = Some(max_ram);
+                    reader.limits(limits);
+                    match reader.decode() {
+                        Ok(reader) => Some(reader),
                         Err(err) => {
-                            log::warn!("failed to create jxl decoder {}: {}", path.display(), err);
-                            None
-                        }
-                    },
-                    Err(err) => {
-                        log::warn!("failed to open path {}: {}", path.display(), err);
-                        None
-                    }
-                },
-                _ => {
-                    match image::ImageReader::open(path)
-                        .and_then(image::ImageReader::with_guessed_format)
-                    {
-                        Ok(mut reader) => {
-                            let mut limits = image::Limits::default();
-                            let max_ram = max_mem * 1000 * 1000 / jobs as u64;
-                            limits.max_alloc = Some(max_ram);
-                            reader.limits(limits);
-                            match reader.decode() {
-                                Ok(reader) => Some(reader),
-                                Err(err) => {
-                                    log::warn!("failed to decode {}: {}", path.display(), err);
-                                    None
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            log::warn!("failed to read {}: {}", path.display(), err);
+                            log::warn!("failed to decode {}: {}", path.display(), err);
                             None
                         }
                     }
+                }
+                Err(err) => {
+                    log::warn!("failed to read {}: {}", path.display(), err);
+                    None
                 }
             };
 
