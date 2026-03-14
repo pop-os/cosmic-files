@@ -73,8 +73,8 @@ use crate::{
     dialog::DialogKind,
     fl,
     large_image::{
-        LargeImageManager, decode_large_image, exceeds_memory_limit, should_use_dedicated_worker,
-        should_use_tiling,
+        LargeImageManager, decode_large_image, decode_with_orientation, exceeds_memory_limit,
+        should_use_dedicated_worker, should_use_tiling,
     },
     localize::{LANGUAGE_SORTER, LOCALE},
     menu, mime_app,
@@ -2148,8 +2148,8 @@ impl ItemThumbnail {
                             let max_ram = max_mem * 1000 * 1000 / jobs as u64;
                             limits.max_alloc = Some(max_ram);
                             reader.limits(limits);
-                            match reader.decode() {
-                                Ok(reader) => Some(reader),
+                            match decode_with_orientation(reader) {
+                                Ok(img) => Some(img),
                                 Err(err) => {
                                     log::warn!("failed to decode {}: {}", path.display(), err);
                                     None
