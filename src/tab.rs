@@ -1,4 +1,3 @@
-use chrono::{Datelike, Timelike, Utc};
 use cosmic::{
     Apply, Element, cosmic_theme,
     desktop::fde::{DesktopEntry, get_languages_from_env},
@@ -40,6 +39,7 @@ use icu::{
     locale::preferences::extensions::unicode::keywords::HourCycle,
 };
 use image::{DynamicImage, ImageDecoder, ImageReader};
+use jiff_icu::ConvertFrom;
 use jxl_oxide::integration::JxlDecoder;
 use mime_guess::{Mime, mime};
 use regex::Regex;
@@ -444,25 +444,10 @@ impl<'a> FormatTime<'a> {
 
 impl Display for FormatTime<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let datetime = chrono::DateTime::<chrono::Local>::from(self.time);
-        let now = chrono::Local::now();
-        let icu_datetime = DateTime {
-            date: Date::try_new_gregorian(
-                datetime.year(),
-                datetime.month() as u8,
-                datetime.day() as u8,
-            )
-            .unwrap(),
-            time: Time::try_new(
-                datetime.hour() as u8,
-                datetime.minute() as u8,
-                datetime.second() as u8,
-                0,
-            )
-            .unwrap(),
-        };
-
-        if datetime.date_naive() == now.date_naive() {
+        let zoned = jiff::Zoned::try_from(self.time).unwrap();
+        let now = jiff::Zoned::now();
+        let icu_datetime = DateTime::convert_from(zoned.datetime());
+        if zoned.date() == now.date() {
             f.write_str(fl!("today").as_str())?;
             f.write_str(", ")?;
             self.time_formatter.format(&icu_datetime).fmt(f)
@@ -1340,8 +1325,8 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
         .into_iter()
         .filter_map(|bookmark| {
             let path = uri_to_path(bookmark.href)?;
-            let last_edit = bookmark.modified.parse::<chrono::DateTime<Utc>>().ok()?;
-            let last_visit = bookmark.visited.parse::<chrono::DateTime<Utc>>().ok()?;
+            let last_edit = bookmark.modified.parse::<jiff::Timestamp>().ok()?;
+            let last_visit = bookmark.visited.parse::<jiff::Timestamp>().ok()?;
 
             if path.exists() {
                 let file_name = path.file_name()?;
