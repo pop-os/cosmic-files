@@ -395,7 +395,7 @@ where
 
         update(
             self,
-            &event,
+            event,
             layout,
             cursor,
             shell,

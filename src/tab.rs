@@ -8,9 +8,8 @@ use cosmic::{
             graphics,
             text::{self, Paragraph},
         },
-        alignment::{Horizontal, Vertical},
+        alignment::Vertical,
         clipboard::dnd::DndAction,
-        event,
         futures::{self, SinkExt},
         keyboard::Modifiers,
         padding, stream,
@@ -24,7 +23,7 @@ use cosmic::{
     iced_core::{mouse::ScrollDelta, widget::tree},
     theme,
     widget::{
-        self, DndDestination, DndSource, Id, RcElementWrapper, Space, Widget,
+        self, DndDestination, DndSource, Id, RcElementWrapper, Widget,
         menu::{action::MenuAction, key_bind::KeyBind},
         space,
     },
@@ -32,15 +31,13 @@ use cosmic::{
 use i18n_embed::LanguageLoader;
 use icu::{
     datetime::{
-        DateTimeFormatter, DateTimeFormatterPreferences, fieldsets,
-        input::{Date, DateTime, Time},
+        DateTimeFormatter, DateTimeFormatterPreferences, fieldsets, input::DateTime,
         options::TimePrecision,
     },
     locale::preferences::extensions::unicode::keywords::HourCycle,
 };
-use image::{DynamicImage, ImageDecoder, ImageReader};
+use image::{DynamicImage, ImageReader};
 use jiff_icu::ConvertFrom;
-use jxl_oxide::integration::JxlDecoder;
 use mime_guess::{Mime, mime};
 use regex::Regex;
 use rustc_hash::FxHashMap;
@@ -1284,10 +1281,8 @@ pub mod trash_helpers {
                 log::warn!("failed to get metadata for trash item {entry:?}: {err}")
             }) {
                 let name = entry.name.to_string_lossy();
-                if regex.is_match(&name) {
-                    if !callback(SearchItem::Trash(entry, metadata)) {
-                        break;
-                    }
+                if regex.is_match(&name) && !callback(SearchItem::Trash(entry, metadata)) {
+                    break;
                 }
             }
         }
@@ -2601,13 +2596,12 @@ impl Item {
         }
         column = column.push(details);
 
-        if let Some(path) = self.path_opt() {
-            if self.selected {
-                column = column.push(
-                    widget::button::standard(fl!("open"))
-                        .on_press(Message::Open(Some(path.clone()))),
-                );
-            }
+        if let Some(path) = self.path_opt()
+            && self.selected
+        {
+            column = column.push(
+                widget::button::standard(fl!("open")).on_press(Message::Open(Some(path.clone()))),
+            );
         }
 
         if !settings.is_empty() {
@@ -5917,12 +5911,13 @@ impl Tab {
                     };
 
                     let button_row = button(row.into());
-                    let button_row: Element<_> =
-                        if item.metadata.is_dir() && item.location_opt.is_some() {
-                            self.dnd_dest(item.location_opt.as_ref().unwrap(), button_row)
-                        } else {
-                            button_row.into()
-                        };
+                    let button_row: Element<_> = if item.metadata.is_dir()
+                        && let Some(location) = item.location_opt.as_ref()
+                    {
+                        self.dnd_dest(location, button_row)
+                    } else {
+                        button_row.into()
+                    };
 
                     if item.selected || !drag_items.is_empty() {
                         let dnd_row = if !item.selected {
@@ -6289,8 +6284,7 @@ impl Tab {
                     if item.selected {
                         item.location_opt
                             .as_ref()
-                            .map(Location::path_opt)
-                            .flatten()
+                            .and_then(Location::path_opt)
                             .is_some()
                     } else {
                         false
@@ -6688,17 +6682,15 @@ impl Tab {
                                             // Don't send if the result is too old
                                             if let Some(last_modified) =
                                                 *last_modified_opt.read().unwrap()
-                                            {
-                                                if let SearchItem::Path(_, _, ref metadata) =
+                                                && let SearchItem::Path(_, _, ref metadata) =
                                                     search_item
-                                                {
-                                                    if let Ok(modified) = metadata.modified() {
-                                                        if modified < last_modified {
-                                                            return true;
-                                                        }
-                                                    } else {
+                                            {
+                                                if let Ok(modified) = metadata.modified() {
+                                                    if modified < last_modified {
                                                         return true;
                                                     }
+                                                } else {
+                                                    return true;
                                                 }
                                             }
 
