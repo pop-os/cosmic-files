@@ -3029,29 +3029,43 @@ impl Tab {
             // considered first, otherwise last. Consider the focused item last when only a single character has been
             // typed, so we eagerly switch focus on the first character and stay on the same item as long as the prefix
             // matches.
-            let start = if prefix_lower.chars().count() == 1 {
+            let single_char = prefix_lower.chars().count() == 1;
+            let start = if single_char {
                 Self::index_after_focus(focus, self.sort_direction)
             } else {
                 Self::index_before_focus(focus, self.sort_direction)
             };
-            let Some((until, after)) = items.split_at_mut_checked(start) else {
-                log::error!(
-                    "invalid select focus index {start} for items of length {}",
-                    items.len()
-                );
-                return false;
-            };
-            let search_items = after
-                .into_iter()
-                .enumerate()
-                .map(|(i, item)| (i + start, item))
-                .chain(until.into_iter().enumerate());
+            self.select_focus = Self::select_first_prefix_from_index(
+                &prefix_lower,
+                items,
+                start,
+                self.sort_direction,
+            );
 
-            self.select_focus = if self.sort_direction {
-                Self::select_first_prefix_match(&prefix_lower, search_items)
-            } else {
-                Self::select_first_prefix_match(&prefix_lower, search_items.rev())
+            if self.select_focus.is_some() || single_char {
+                return self.select_focus.is_some();
+            }
+
+            let mut chars = prefix_lower.chars();
+            let Some(first) = chars.next() else {
+                log::error!("search term is empty");
+                return self.select_focus.is_some();
             };
+
+            // Check if all entered characters are the same
+            if !chars.all(|c| c == first) {
+                return self.select_focus.is_some();
+            }
+
+            // Search for a single character when all entered characters are the same.
+            // This allows cycling through items starting with the same character by repeatedly pressing a key.
+            let start = Self::index_after_focus(focus, self.sort_direction);
+            self.select_focus = Self::select_first_prefix_from_index(
+                &first.to_string(),
+                items,
+                start,
+                self.sort_direction,
+            );
 
             return self.select_focus.is_some();
         }
@@ -3064,6 +3078,33 @@ impl Tab {
 
     fn index_after_focus(current_focus: Option<usize>, forward: bool) -> usize {
         current_focus.map_or(0, |i| if forward { i + 1 } else { i })
+    }
+
+    fn select_first_prefix_from_index(
+        prefix_lower: &str,
+        items: &mut [Item],
+        start: usize,
+        forward: bool,
+    ) -> Option<usize> {
+        // Order the search item so they begin at `start`.
+        let Some((until, after)) = items.split_at_mut_checked(start) else {
+            log::error!(
+                "invalid start index {start} for items of length {}",
+                items.len()
+            );
+            return None;
+        };
+        let search_items = after
+            .into_iter()
+            .enumerate()
+            .map(|(i, item)| (i + start, item))
+            .chain(until.into_iter().enumerate());
+
+        if forward {
+            Self::select_first_prefix_match(prefix_lower, search_items)
+        } else {
+            Self::select_first_prefix_match(prefix_lower, search_items.rev())
+        }
     }
 
     /// Selects the first item in the given iterator whose name starts with the given prefix.
