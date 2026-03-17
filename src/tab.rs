@@ -3086,10 +3086,19 @@ impl Tab {
                 .map(|(i, item)| (i + start, item))
                 .chain(until.into_iter().enumerate());
 
+            // Special case: when all entered characters are the same, only search for said character.
+            // This allows cycling through items starting with the same character.
+            let mut chars = prefix_lower.chars();
+            let term = match chars.next() {
+                Some(first) if chars.all(|c| c == first) => first.to_string(),
+                Some(_) => prefix_lower,
+                None => return false,
+            };
+
             self.select_focus = if self.sort_direction {
-                Self::select_first_prefix_match(&prefix_lower, search_items)
+                Self::select_first_prefix_match(&term, search_items)
             } else {
-                Self::select_first_prefix_match(&prefix_lower, search_items.rev())
+                Self::select_first_prefix_match(&term, search_items.rev())
             };
 
             return self.select_focus.is_some();
