@@ -1452,7 +1452,7 @@ impl App {
                     };
 
                     search_location.map(|search_location| {
-                        return (
+                        (
                             Location::Search(
                                 search_location,
                                 term,
@@ -1460,7 +1460,7 @@ impl App {
                                 Instant::now(),
                             ),
                             true,
-                        );
+                        )
                     })
                 }
                 None => match &tab.location {
@@ -6194,11 +6194,11 @@ impl Application for App {
                         .button_height(32)
                         .button_spacing(space_xxs)
                         .enable_tab_drag(String::from("x-cosmic-files/tab-dnd"))
-                        .on_reorder(move |event| Message::ReorderTab(event))
+                        .on_reorder(Message::ReorderTab)
                         .tab_drag_threshold(25.)
                         .on_activate(Message::TabActivate)
                         .on_close(|entity| Message::TabClose(Some(entity)))
-                        .on_dnd_enter(|entity, mimes| Message::DndEnterTab(entity, mimes))
+                        .on_dnd_enter(Message::DndEnterTab)
                         .on_dnd_leave(|_| Message::DndExitTab)
                         .on_dnd_drop(|entity, data, action| {
                             Message::DndDropTab(entity, data, action)

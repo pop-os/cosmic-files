@@ -1,4 +1,3 @@
-use chrono::{Datelike, Timelike, Utc};
 use cosmic::{
     Apply, Element, cosmic_theme,
     desktop::fde::{DesktopEntry, get_languages_from_env},
@@ -9,9 +8,8 @@ use cosmic::{
             graphics,
             text::{self, Paragraph},
         },
-        alignment::{Horizontal, Vertical},
+        alignment::Vertical,
         clipboard::dnd::DndAction,
-        event,
         futures::{self, SinkExt},
         keyboard::Modifiers,
         padding, stream,
@@ -25,7 +23,7 @@ use cosmic::{
     iced_core::{mouse::ScrollDelta, widget::tree},
     theme,
     widget::{
-        self, DndDestination, DndSource, Id, RcElementWrapper, Space, Widget,
+        self, DndDestination, DndSource, Id, RcElementWrapper, Widget,
         menu::{action::MenuAction, key_bind::KeyBind},
         space,
     },
@@ -33,14 +31,13 @@ use cosmic::{
 use i18n_embed::LanguageLoader;
 use icu::{
     datetime::{
-        DateTimeFormatter, DateTimeFormatterPreferences, fieldsets,
-        input::{Date, DateTime, Time},
+        DateTimeFormatter, DateTimeFormatterPreferences, fieldsets, input::DateTime,
         options::TimePrecision,
     },
     locale::preferences::extensions::unicode::keywords::HourCycle,
 };
-use image::{DynamicImage, ImageDecoder, ImageReader};
-use jxl_oxide::integration::JxlDecoder;
+use image::{DynamicImage, ImageReader};
+use jiff_icu::ConvertFrom;
 use mime_guess::{Mime, mime};
 use regex::Regex;
 use rustc_hash::FxHashMap;
@@ -444,25 +441,10 @@ impl<'a> FormatTime<'a> {
 
 impl Display for FormatTime<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let datetime = chrono::DateTime::<chrono::Local>::from(self.time);
-        let now = chrono::Local::now();
-        let icu_datetime = DateTime {
-            date: Date::try_new_gregorian(
-                datetime.year(),
-                datetime.month() as u8,
-                datetime.day() as u8,
-            )
-            .unwrap(),
-            time: Time::try_new(
-                datetime.hour() as u8,
-                datetime.minute() as u8,
-                datetime.second() as u8,
-                0,
-            )
-            .unwrap(),
-        };
-
-        if datetime.date_naive() == now.date_naive() {
+        let zoned = jiff::Zoned::try_from(self.time).unwrap();
+        let now = jiff::Zoned::now();
+        let icu_datetime = DateTime::convert_from(zoned.datetime());
+        if zoned.date() == now.date() {
             f.write_str(fl!("today").as_str())?;
             f.write_str(", ")?;
             self.time_formatter.format(&icu_datetime).fmt(f)
@@ -1299,10 +1281,8 @@ pub mod trash_helpers {
                 log::warn!("failed to get metadata for trash item {entry:?}: {err}")
             }) {
                 let name = entry.name.to_string_lossy();
-                if regex.is_match(&name) {
-                    if !callback(SearchItem::Trash(entry, metadata)) {
-                        break;
-                    }
+                if regex.is_match(&name) && !callback(SearchItem::Trash(entry, metadata)) {
+                    break;
                 }
             }
         }
@@ -1340,8 +1320,8 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
         .into_iter()
         .filter_map(|bookmark| {
             let path = uri_to_path(bookmark.href)?;
-            let last_edit = bookmark.modified.parse::<chrono::DateTime<Utc>>().ok()?;
-            let last_visit = bookmark.visited.parse::<chrono::DateTime<Utc>>().ok()?;
+            let last_edit = bookmark.modified.parse::<jiff::Timestamp>().ok()?;
+            let last_visit = bookmark.visited.parse::<jiff::Timestamp>().ok()?;
 
             if path.exists() {
                 let file_name = path.file_name()?;
@@ -2113,54 +2093,25 @@ impl ItemThumbnail {
             }
 
             tried_supported_file = true;
-            let dyn_img: Option<image::DynamicImage> = match mime.subtype().as_str() {
-                "jxl" => match File::open(path) {
-                    Ok(file) => match JxlDecoder::new(file) {
-                        Ok(mut decoder) => {
-                            let mut limits = image::Limits::default();
-                            let max_ram = max_mem * 1000 * 1000 / jobs as u64;
-                            limits.max_alloc = Some(max_ram);
-                            let _ = decoder.set_limits(limits);
-                            match image::DynamicImage::from_decoder(decoder) {
-                                Ok(img) => Some(img),
-                                Err(err) => {
-                                    log::warn!("failed to decode jxl {}: {}", path.display(), err);
-                                    None
-                                }
-                            }
-                        }
+            let dyn_img = match image::ImageReader::open(path)
+                .and_then(image::ImageReader::with_guessed_format)
+            {
+                Ok(mut reader) => {
+                    let mut limits = image::Limits::default();
+                    let max_ram = max_mem * 1000 * 1000 / jobs as u64;
+                    limits.max_alloc = Some(max_ram);
+                    reader.limits(limits);
+                    match reader.decode() {
+                        Ok(reader) => Some(reader),
                         Err(err) => {
-                            log::warn!("failed to create jxl decoder {}: {}", path.display(), err);
-                            None
-                        }
-                    },
-                    Err(err) => {
-                        log::warn!("failed to open path {}: {}", path.display(), err);
-                        None
-                    }
-                },
-                _ => {
-                    match image::ImageReader::open(path)
-                        .and_then(image::ImageReader::with_guessed_format)
-                    {
-                        Ok(mut reader) => {
-                            let mut limits = image::Limits::default();
-                            let max_ram = max_mem * 1000 * 1000 / jobs as u64;
-                            limits.max_alloc = Some(max_ram);
-                            reader.limits(limits);
-                            match reader.decode() {
-                                Ok(reader) => Some(reader),
-                                Err(err) => {
-                                    log::warn!("failed to decode {}: {}", path.display(), err);
-                                    None
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            log::warn!("failed to read {}: {}", path.display(), err);
+                            log::warn!("failed to decode {}: {}", path.display(), err);
                             None
                         }
                     }
+                }
+                Err(err) => {
+                    log::warn!("failed to read {}: {}", path.display(), err);
+                    None
                 }
             };
 
@@ -2645,13 +2596,12 @@ impl Item {
         }
         column = column.push(details);
 
-        if let Some(path) = self.path_opt() {
-            if self.selected {
-                column = column.push(
-                    widget::button::standard(fl!("open"))
-                        .on_press(Message::Open(Some(path.clone()))),
-                );
-            }
+        if let Some(path) = self.path_opt()
+            && self.selected
+        {
+            column = column.push(
+                widget::button::standard(fl!("open")).on_press(Message::Open(Some(path.clone()))),
+            );
         }
 
         if !settings.is_empty() {
@@ -5961,12 +5911,13 @@ impl Tab {
                     };
 
                     let button_row = button(row.into());
-                    let button_row: Element<_> =
-                        if item.metadata.is_dir() && item.location_opt.is_some() {
-                            self.dnd_dest(item.location_opt.as_ref().unwrap(), button_row)
-                        } else {
-                            button_row.into()
-                        };
+                    let button_row: Element<_> = if item.metadata.is_dir()
+                        && let Some(location) = item.location_opt.as_ref()
+                    {
+                        self.dnd_dest(location, button_row)
+                    } else {
+                        button_row.into()
+                    };
 
                     if item.selected || !drag_items.is_empty() {
                         let dnd_row = if !item.selected {
@@ -6333,8 +6284,7 @@ impl Tab {
                     if item.selected {
                         item.location_opt
                             .as_ref()
-                            .map(Location::path_opt)
-                            .flatten()
+                            .and_then(Location::path_opt)
                             .is_some()
                     } else {
                         false
@@ -6732,17 +6682,15 @@ impl Tab {
                                             // Don't send if the result is too old
                                             if let Some(last_modified) =
                                                 *last_modified_opt.read().unwrap()
-                                            {
-                                                if let SearchItem::Path(_, _, ref metadata) =
+                                                && let SearchItem::Path(_, _, ref metadata) =
                                                     search_item
-                                                {
-                                                    if let Ok(modified) = metadata.modified() {
-                                                        if modified < last_modified {
-                                                            return true;
-                                                        }
-                                                    } else {
+                                            {
+                                                if let Ok(modified) = metadata.modified() {
+                                                    if modified < last_modified {
                                                         return true;
                                                     }
+                                                } else {
+                                                    return true;
                                                 }
                                             }
 
