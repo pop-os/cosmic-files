@@ -4182,7 +4182,14 @@ impl Application for App {
             }
             Message::SetShowRecents(show_recents) => {
                 config_set!(show_recents, show_recents);
-                return self.update_config();
+                if !show_recents {
+                    return Task::batch([
+                        self.update_config(),
+                        cosmic::task::message(Message::NavMenuAction(NavMenuAction::ClearRecents)),
+                    ]);
+                } else {
+                    return self.update_config();
+                }
             }
             Message::SetTypeToSearch(type_to_search) => {
                 config_set!(type_to_search, type_to_search);
