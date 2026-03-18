@@ -2808,8 +2808,8 @@ pub struct Tab {
     pub(crate) items_opt: Option<Vec<Item>>,
     pub dnd_hovered: Option<(Location, Instant)>,
     pub(crate) scrollable_id: widget::Id,
-    select_focus: Option<usize>,
-    select_range: Option<(usize, usize)>,
+    pub(crate) select_focus: Option<usize>,
+    pub(crate) select_range: Option<(usize, usize)>,
     clicked: Option<usize>,
     selected_clicked: bool,
     last_right_click: Option<usize>,
@@ -3095,7 +3095,7 @@ impl Tab {
         }
     }
 
-    fn select_position(&mut self, row: usize, col: usize, mod_shift: bool) -> bool {
+    pub(crate) fn select_position(&mut self, row: usize, col: usize, mod_shift: bool) -> bool {
         let mut start = (row, col);
         let mut end = (row, col);
         if mod_shift {
