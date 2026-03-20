@@ -390,7 +390,7 @@ menu-about = Über COSMIC Dateien...
 
 ## Sortieren
 
-sort = Sortieren
+sort = Sortierung
 sort-a-z = A-Z
 sort-z-a = Z-A
 sort-newest-first = Neueste zuerst
@@ -424,3 +424,4 @@ clear-recents-history = Verlauf zuletzt verwendeter Elemente leeren
 comment = Dateimanager für den COSMIC Desktop
 keywords = Ordner;Manager;
 move-to-button-label = Verschieben
+move-to-title = Verschiebeziel auswählen
