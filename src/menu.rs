@@ -215,7 +215,7 @@ pub fn context_menu<'a>(
                             .push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
                     }
                 }
-                if tab.location.is_recents() {
+                if tab.location.is_recents() || matches!(tab.location, Location::Search(..)) {
                     children.push(
                         menu_item(fl!("open-item-location"), Action::OpenItemLocation).into(),
                     );
