@@ -1,11 +1,11 @@
-cosmic-files = COSMIC 檔案總管
+cosmic-files = COSMIC 檔案
 empty-folder = 空資料夾
 empty-folder-hidden = 空資料夾（包含隱藏項目）
 no-results = 找不到結果
 filesystem = 檔案系統
-home = 主目錄
+home = 家目錄
 networks = 網路
-notification-in-progress = 檔案操作正在進行中。
+notification-in-progress = 檔案操作正在進行中
 trash = 垃圾桶
 recents = 最近使用
 undo = 復原
@@ -42,7 +42,7 @@ name-no-slashes = 名稱不能包含斜線。
 ## Open/Save Dialog
 
 cancel = 取消
-create = 建立
+create = 創作
 open = 開啟
 open-file = 開啟檔案
 open-folder = 開啟資料夾
@@ -192,9 +192,9 @@ settings = 設定
 
 appearance = 外觀
 theme = 主題
-match-desktop = 與桌面一致
-dark = 暗色模式
-light = 亮色模式
+match-desktop = 符合桌面
+dark = 暗色
+light = 亮色
 # Context menu
 add-to-sidebar = 加入側邊欄
 compress = 壓縮
@@ -215,8 +215,8 @@ sort-by-size = 依大小排序
 ## File
 
 file = 檔案
-new-tab = 新分頁
-new-window = 新視窗
+new-tab = 新建分頁
+new-window = 新建視窗
 rename = 重新命名...
 close-tab = 關閉分頁
 quit = 退出
@@ -281,3 +281,20 @@ removed-from-recents =
         [one] 项目
        *[other] 项目
     }
+repository = 軟體庫源
+desktop-view-options = 桌面檢視選項...
+show-on-desktop = 顯示在桌面
+desktop-folder-content = 桌面資料夾內容
+mounted-drives = 已經掛載的磁碟機
+trash-folder-icon = 垃圾桶圖示
+trashed-on = 遺棄時間
+icon-size-and-spacing = 圖示大小與間距
+icon-size = 圖示大小
+grid-spacing = 網格間距
+details = 詳情
+dismiss = 撤停訊息
+delete = 刪除
+remove = 移除
+support = 支援
+cancelled = 已取消
+keywords = 資料夾;管理器;

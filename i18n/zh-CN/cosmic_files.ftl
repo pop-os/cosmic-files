@@ -11,7 +11,7 @@ recents = 最近访问
 undo = 撤销
 today = 今天
 # Desktop view options
-desktop-view-options = 桌面视图选项...
+desktop-view-options = 桌面视图选项…
 show-on-desktop = 在桌面显示
 desktop-folder-content = 桌面文件夹内容
 mounted-drives = 已装载驱动器
@@ -31,7 +31,7 @@ operations-running =
     正在进行 { $running } { $running ->
         [one] 个操作
        *[other] 个操作
-    }（{ $percent }%）...
+    }（{ $percent }%）…
 operations-running-finished =
     正在进行 { $running } { $running ->
         [one] 个操作
@@ -50,7 +50,7 @@ create-archive = 创建压缩包
 ## Extract Dialog
 
 extract-password-required = 需要密码
-extract-to = 提取到...
+extract-to = 提取到…
 extract-to-title = 提取到文件夹
 
 ## Empty Trash Dialog
@@ -317,7 +317,7 @@ unknown-folder = 未知文件夹
 
 ## Open with
 
-menu-open-with = 打开方式...
+menu-open-with = 打开方式…
 default-app = { $name }（默认）
 
 ## Show details
@@ -329,7 +329,7 @@ item-size = 文件大小：{ $size }
 item-created = 创建于：{ $created }
 item-modified = 修改于：{ $modified }
 item-accessed = 访问于：{ $accessed }
-calculating = 计算中...
+calculating = 计算中…
 
 ## Settings
 
@@ -355,8 +355,8 @@ compress = 压缩…
 delete-permanently = 永久删除
 eject = 弹出
 extract-here = 解压到此处
-new-file = 新建文件...
-new-folder = 新建文件夹...
+new-file = 新建文件…
+new-folder = 新建文件夹…
 open-in-terminal = 在终端模拟器中打开
 move-to-trash = 移动到回收站
 restore-from-trash = 从回收站中还原
@@ -369,9 +369,9 @@ remove-from-recents = 从最近访问中移除
 
 ## Desktop
 
-change-wallpaper = 更改壁纸...
-desktop-appearance = 桌面外观...
-display-settings = 显示设置...
+change-wallpaper = 更改壁纸…
+desktop-appearance = 桌面外观…
+display-settings = 显示设置…
 
 # Menu
 
@@ -382,7 +382,7 @@ file = 文件
 new-tab = 新建标签
 new-window = 新建窗口
 reload-folder = 刷新文件夹
-rename = 重命名...
+rename = 重命名…
 close-tab = 关闭标签
 quit = 退出
 
@@ -405,7 +405,7 @@ list-view = 列表视图
 show-hidden-files = 显示隐藏文件
 list-directories-first = 优先列出目录
 gallery-preview = 图库预览
-menu-settings = 设置...
+menu-settings = 设置…
 menu-about = 关于 COSMIC 文件…
 
 ## Sort
