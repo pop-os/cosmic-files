@@ -2781,7 +2781,12 @@ impl Application for App {
                     tab.refresh_cut(&[]);
                 }
                 let paths = self.selected_paths(entity_opt);
-                let contents = ClipboardCopy::new(ClipboardKind::Copy, paths);
+                self.clipboard_cache = ClipboardCache::Files(ClipboardPaste {
+                    paths: paths.map(|p| p.to_path_buf()).collect(),
+                    kind: ClipboardKind::Copy,
+                });
+                let contents =
+                    ClipboardCopy::new(ClipboardKind::Copy, self.selected_paths(entity_opt));
                 return clipboard::write_data(contents);
             }
             Message::CopyPath(entity_opt) => {
@@ -2822,7 +2827,15 @@ impl Application for App {
             Message::Cut(entity_opt) => {
                 self.set_cut(entity_opt);
                 let paths = self.selected_paths(entity_opt);
-                let contents = ClipboardCopy::new(ClipboardKind::Cut { is_dnd: false }, paths);
+                self.clipboard_cache = ClipboardCache::Files(ClipboardPaste {
+                    paths: paths.map(|p| p.to_path_buf()).collect(),
+                    kind: ClipboardKind::Cut { is_dnd: false },
+                });
+                let contents = ClipboardCopy::new(
+                    ClipboardKind::Cut { is_dnd: false },
+                    self.selected_paths(entity_opt),
+                );
+
                 return clipboard::write_data(contents);
             }
             Message::CloseToast(id) => {
