@@ -39,7 +39,7 @@ use icu::{
     },
     locale::preferences::extensions::unicode::keywords::HourCycle,
 };
-use image::{DynamicImage, ImageDecoder, ImageReader, metadata::Orientation};
+use image::{DynamicImage, ImageDecoder, ImageReader};
 use jxl_oxide::integration::JxlDecoder;
 use mime_guess::{Mime, mime};
 use regex::Regex;
@@ -73,7 +73,7 @@ use crate::{
     dialog::DialogKind,
     fl,
     large_image::{
-        LargeImageManager, decode_large_image, exceeds_memory_limit, should_use_dedicated_worker,
+        LargeImageManager, decode_large_image, decode_with_orientation, exceeds_memory_limit, should_use_dedicated_worker,
         should_use_tiling,
     },
     localize::{LANGUAGE_SORTER, LOCALE},
@@ -2148,13 +2148,7 @@ impl ItemThumbnail {
                             let max_ram = max_mem * 1000 * 1000 / jobs as u64;
                             limits.max_alloc = Some(max_ram);
                             reader.limits(limits);
-                            match reader.into_decoder().and_then(|mut decoder| {
-                                let orientation =
-                                    decoder.orientation().unwrap_or(Orientation::NoTransforms);
-                                let mut img = DynamicImage::from_decoder(decoder)?;
-                                img.apply_orientation(orientation);
-                                Ok(img)
-                            }) {
+                            match decode_with_orientation(reader) {
                                 Ok(img) => Some(img),
                                 Err(err) => {
                                     log::warn!("failed to decode {}: {}", path.display(), err);
