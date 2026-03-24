@@ -889,11 +889,13 @@ impl App {
     fn update_nav_model(&mut self) {
         let mut nav_model = segmented_button::ModelBuilder::default();
 
-        nav_model = nav_model.insert(|b| {
-            b.text(fl!("recents"))
-                .icon(widget::icon::from_name("document-open-recent-symbolic"))
-                .data(Location::Recents)
-        });
+        if self.flags.config.show_recents {
+            nav_model = nav_model.insert(|b| {
+                b.text(fl!("recents"))
+                    .icon(widget::icon::from_name("document-open-recent-symbolic"))
+                    .data(Location::Recents)
+            });
+        }
 
         for favorite in &self.flags.config.favorites {
             if let Some(path) = favorite.path_opt() {
