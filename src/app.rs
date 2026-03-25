@@ -3840,10 +3840,10 @@ impl Application for App {
                 // Check if clipboard has any paste-able content and cache it
                 return clipboard::read_data::<ClipboardPaste>().map(|contents_opt| {
                     match contents_opt {
-                        Some(contents) => cosmic::action::app(Message::ClipboardCached(
-                            ClipboardCache::Files(contents),
-                        )),
-                        None => cosmic::action::app(Message::CheckClipboardImage),
+                        Some(contents) if !contents.paths.is_empty() => cosmic::action::app(
+                            Message::ClipboardCached(ClipboardCache::Files(contents)),
+                        ),
+                        _ => cosmic::action::app(Message::CheckClipboardImage),
                     }
                 });
             }
