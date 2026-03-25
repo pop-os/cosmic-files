@@ -128,9 +128,14 @@ impl TryFrom<(Vec<u8>, String)> for ClipboardPaste {
         // Assume the kind is Copy if not provided by the mime type
         let mut kind = ClipboardKind::Copy;
         let mut paths = Vec::new();
+
         match mime.as_str() {
             "text/uri-list" => {
                 let text = str::from_utf8(&data)?;
+                let lines = text.lines();
+                if text.is_empty() || lines.count() == 0 {
+                    Err(format!("Empty file url"))?;
+                }
                 for line in text.lines() {
                     let url = Url::parse(line)?;
                     match url.to_file_path() {
@@ -141,6 +146,10 @@ impl TryFrom<(Vec<u8>, String)> for ClipboardPaste {
             }
             "x-special/gnome-copied-files" => {
                 let text = str::from_utf8(&data)?;
+                let lines = text.lines();
+                if text.is_empty() || lines.count() == 0 {
+                    Err(format!("Empty file url"))?;
+                }
                 for (i, line) in text.lines().enumerate() {
                     if i == 0 {
                         kind = match line {
