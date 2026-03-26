@@ -412,6 +412,7 @@ pub enum Message {
     CheckClipboardImage,
     CheckClipboardVideo,
     CheckClipboardText,
+    RetryCheckClipboard(ClipboardCache),
     ClipboardCached(ClipboardCache),
     PendingCancel(u64),
     PendingCancelAll,
@@ -3840,9 +3841,12 @@ impl Application for App {
                 // Check if clipboard has any paste-able content and cache it
                 return clipboard::read_data::<ClipboardPaste>().map(|contents_opt| {
                     match contents_opt {
-                        Some(contents) if !contents.paths.is_empty() => cosmic::action::app(
-                            Message::ClipboardCached(ClipboardCache::Files(contents)),
+                        Some(contents) if contents.paths.is_empty() => cosmic::action::app(
+                            Message::RetryCheckClipboard(ClipboardCache::Files(contents)),
                         ),
+                        Some(contents) => cosmic::action::app(Message::ClipboardCached(
+                            ClipboardCache::Files(contents),
+                        )),
                         _ => cosmic::action::app(Message::CheckClipboardImage),
                     }
                 });
@@ -3874,6 +3878,28 @@ impl Application for App {
                         None => ClipboardCache::Empty,
                     }))
                 });
+            }
+            Message::RetryCheckClipboard(cache) => {
+                let mut cmds = Vec::new();
+                cmds.push(self.update(Message::ClipboardCached(cache)));
+
+                cmds.push(
+                    iced::Task::future(tokio::time::sleep(Duration::from_millis(300)))
+                        .discard()
+                        .chain(
+                            clipboard::read_data::<ClipboardPaste>().map(|contents_opt| {
+                                match contents_opt {
+                                    Some(contents) if !contents.paths.is_empty() => {
+                                        cosmic::action::app(Message::ClipboardCached(
+                                            ClipboardCache::Files(contents),
+                                        ))
+                                    }
+                                    _ => cosmic::action::app(Message::CheckClipboardImage),
+                                }
+                            }),
+                        ),
+                );
+                return Task::batch(cmds);
             }
             Message::ClipboardCached(cache) => {
                 self.clipboard_cache = cache;
@@ -4369,6 +4395,7 @@ impl Application for App {
                                             widget::Id::unique(),
                                         )),
                                     );
+                                    commands.push(self.update(Message::CheckClipboard));
                                     commands.push(self.update(Message::Surface(
                                         cosmic::surface::action::app_popup(
                                             move |app: &mut Self| -> SctkPopupSettings {
@@ -5179,7 +5206,11 @@ impl Application for App {
                     };
                 }
                 // Check clipboard when window gains focus
-                return self.update(Message::CheckClipboard);
+                // HACK: Wait a moment for the data to be available.
+                return cosmic::task::future(async {
+                    _ = tokio::time::sleep(Duration::from_millis(300)).await;
+                    cosmic::action::app(Message::CheckClipboard)
+                });
             }
             Message::Surface(action) => {
                 return cosmic::task::message(cosmic::Action::Cosmic(
