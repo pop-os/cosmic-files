@@ -3694,6 +3694,24 @@ impl Application for App {
                     // Use cached clipboard data if available (needed for Wayland popups)
                     match &self.clipboard_cache {
                         ClipboardCache::Files(contents) => {
+                            if contents.paths.is_empty() {
+                                return iced::Task::future(tokio::time::sleep(
+                                    std::time::Duration::from_millis(300),
+                                ))
+                                .discard()
+                                .chain(
+                                    clipboard::read_data::<ClipboardPaste>().map(
+                                        move |contents_opt| match contents_opt {
+                                            Some(contents) => cosmic::action::app(
+                                                Message::PasteContents(to.clone(), contents),
+                                            ),
+                                            None => {
+                                                cosmic::action::app(Message::PasteImage(to.clone()))
+                                            }
+                                        },
+                                    ),
+                                );
+                            }
                             return self
                                 .update(Message::PasteContents(to.clone(), contents.clone()));
                         }
