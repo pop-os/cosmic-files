@@ -14,6 +14,7 @@ use cosmic::iced::{
 };
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use cosmic::iced_winit::commands::overlap_notify::overlap_notify;
+use cosmic::widget::Toast;
 use cosmic::{
     Application, ApplicationExt, Element,
     app::{self, Core, Task, context_drawer},
@@ -166,6 +167,7 @@ pub enum Action {
     Gallery,
     HistoryNext,
     HistoryPrevious,
+    InstallDeb,
     ItemDown,
     ItemLeft,
     ItemRight,
@@ -238,6 +240,7 @@ impl Action {
             Self::Gallery => Message::TabMessage(entity_opt, tab::Message::GalleryToggle),
             Self::HistoryNext => Message::TabMessage(entity_opt, tab::Message::GoNext),
             Self::HistoryPrevious => Message::TabMessage(entity_opt, tab::Message::GoPrevious),
+            Self::InstallDeb => Message::InstallDeb(entity_opt),
             Self::ItemDown => Message::TabMessage(entity_opt, tab::Message::ItemDown),
             Self::ItemLeft => Message::TabMessage(entity_opt, tab::Message::ItemLeft),
             Self::ItemRight => Message::TabMessage(entity_opt, tab::Message::ItemRight),
@@ -364,6 +367,8 @@ pub enum Message {
     ExtractToResult(DialogResult),
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     Focused(window::Id),
+    InstallDeb(Option<Entity>),
+    DebInstallResult(Result<(), String>),
     Key(window::Id, Modifiers, Key, Option<SmolStr>),
     LaunchUrl(String),
     MaybeExit,
@@ -3113,6 +3118,20 @@ impl Application for App {
                     self.update(Message::DialogComplete),
                 ]);
             }
+            Message::DebInstallResult(result) => match result {
+                Ok(_) => {
+                    self.toasts
+                        .push(Toast::new("Package installed successfully"));
+                }
+                Err(err) => {
+                    if err == "Package already installed" {
+                        self.toasts.push(Toast::new("Package is already installed"));
+                    } else {
+                        self.toasts
+                            .push(Toast::new(format!("Install failed: {}", err)));
+                    }
+                }
+            },
             Message::ExtractHere(entity_opt) => {
                 let paths: Box<[_]> = self.selected_paths(entity_opt).collect();
                 if let Some(destination) = paths
@@ -3159,6 +3178,43 @@ impl Application for App {
             Message::FileDialogMessage(dialog_message) => {
                 if let Some(dialog) = &mut self.file_dialog_opt {
                     return dialog.update(dialog_message);
+                }
+            }
+            Message::InstallDeb(entity_opt) => {
+                let paths: Vec<_> = self.selected_paths(entity_opt).collect();
+                if let Some(path) = paths.first().cloned() {
+                    return Task::future(async move {
+                        let output = tokio::process::Command::new("pkexec")
+                            .arg("apt")
+                            .arg("install")
+                            .arg("-y")
+                            .arg(&path)
+                            .output()
+                            .await;
+
+                        match output {
+                            Ok(out) => {
+                                let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+                                let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+
+                                if stdout.contains("already") || stderr.contains("already") {
+                                    cosmic::Action::App(Message::DebInstallResult(Err(
+                                        "Package already installed".to_string(),
+                                    )))
+                                } else if out.status.success() {
+                                    cosmic::Action::App(Message::DebInstallResult(Ok(())))
+                                } else {
+                                    cosmic::Action::App(Message::DebInstallResult(Err(stderr)))
+                                }
+                            }
+                            Ok(out) => cosmic::Action::App(Message::DebInstallResult(Err(
+                                String::from_utf8_lossy(&out.stderr).to_string(),
+                            ))),
+                            Err(e) => {
+                                cosmic::Action::App(Message::DebInstallResult(Err(e.to_string())))
+                            }
+                        }
+                    });
                 }
             }
             Message::Key(window_id, modifiers, key, text) => {

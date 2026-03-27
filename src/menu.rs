@@ -210,6 +210,15 @@ pub fn context_menu<'a>(
                 }
                 if selected == 1 {
                     children.push(menu_item(fl!("menu-open-with"), Action::OpenWith).into());
+
+                    if selected_types
+                        .iter()
+                        .any(|t| t.essence_str() == "application/vnd.debian.binary-package")
+                    {
+                        children.push(
+                            menu_item("Install Package".to_string(), Action::InstallDeb).into(),
+                        );
+                    }
                     if selected_dir == 1 {
                         children
                             .push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
