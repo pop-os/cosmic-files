@@ -89,8 +89,8 @@ use crate::{
     mime_icon,
     mounter::{MOUNTERS, MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage},
     operation::{
-        Controller, Operation, OperationError, OperationErrorType, OperationSelection,
-        ReplaceResult, copy_unique_path,
+        self, Controller, Operation, OperationError, OperationErrorType, OperationMetadata,
+        OperationSelection, ReplaceResult, SelectedItems, copy_unique_path,
     },
     spawn_detached::spawn_detached,
     tab::{
@@ -564,6 +564,7 @@ pub enum DialogPage {
     },
     PermanentlyDelete {
         paths: Box<[PathBuf]>,
+        metadata: OperationMetadata,
     },
     DeleteTrash {
         items: Vec<TrashItem>,
@@ -1224,15 +1225,21 @@ impl App {
 
         let mut tasks = Vec::new();
         if !dialog_paths.is_empty() {
+            let metadata = self.operation_metadata();
             tasks.push(self.update(Message::DialogPush(
                 DialogPage::PermanentlyDelete {
                     paths: dialog_paths.into_boxed_slice(),
+                    metadata,
                 },
                 Some(PERMANENT_DELETE_BUTTON_ID.clone()),
             )));
         }
         if !trash_paths.is_empty() {
-            tasks.push(self.operation(Operation::Delete { paths: trash_paths }));
+            let metadata = self.operation_metadata();
+            tasks.push(self.operation(Operation::Delete {
+                paths: trash_paths,
+                metadata,
+            }));
         }
         Task::batch(tasks)
     }
@@ -1276,6 +1283,31 @@ impl App {
             },
         ))
         .map(cosmic::Action::App)
+    }
+
+    /// [`OperationMetadata`] for currently focused [`Tab`].
+    fn operation_metadata(&self) -> OperationMetadata {
+        let tab_entity = self.tab_model.active();
+        let tab: Option<&Tab> = self.tab_model.data(tab_entity);
+        let selected = tab.and_then(|tab| {
+            if let Some(index) = tab.select_focus {
+                let position = tab.items_opt()?.get(index)?.pos_opt.get()?;
+                Some(SelectedItems::Single { index, position })
+            } else if let Some((first, last)) = tab.select_range {
+                let first_pos = tab.items_opt()?.get(first)?.pos_opt.get()?;
+                Some(SelectedItems::Range {
+                    first,
+                    last,
+                    first_pos,
+                })
+            } else {
+                None
+            }
+        });
+        OperationMetadata {
+            tab_entity,
+            selected,
+        }
     }
 
     fn remove_window(&mut self, id: &window::Id) {
@@ -1513,6 +1545,40 @@ impl App {
         if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
             tab.cut_selected();
         }
+    }
+
+    /// Focus next item after destructive mutative operation.
+    ///
+    /// Some operations mutate the [`Tab`] in a destructive manner, such as deleting or cutting
+    /// items. It's ergonomic to automatically select the next item in some cases.
+    fn focus_next_after_op(&mut self, metadata: OperationMetadata) -> Option<PathBuf> {
+        // This function needs to take care to only select the next item if the tab state did
+        // not change during the operation. In other words, the next item should only be selected
+        // if the user is on the same tab with the same selected (and now removed) items.
+        if self.tab_model.is_active(metadata.tab_entity)
+            && let Some(tab) = self.tab_model.active_data_mut::<Tab>()
+            && let Some(selected) = metadata.selected
+        {
+            let index = match selected {
+                SelectedItems::Single { index, .. } if Some(index) == tab.select_focus => index + 1,
+                SelectedItems::Range { first, last, .. }
+                    if Some((first, last)) == tab.select_range =>
+                {
+                    first + 1
+                }
+                _ => return None,
+            };
+
+            if let Some(item) = tab.items_opt()?.get(index)
+                && let Some(position) = item.pos_opt.get()
+                && let Some(path) = item.path_opt().cloned()
+            {
+                tab.select_position(position.0, position.1, false);
+                return Some(path);
+            }
+        }
+
+        None
     }
 
     fn update_config(&mut self) -> Task<Message> {
@@ -3069,8 +3135,10 @@ impl Application for App {
                                 }
                             }
                         }
-                        DialogPage::PermanentlyDelete { paths } => {
-                            tasks.push(self.operation(Operation::PermanentlyDelete { paths }));
+                        DialogPage::PermanentlyDelete { paths, metadata } => {
+                            tasks.push(
+                                self.operation(Operation::PermanentlyDelete { paths, metadata }),
+                            );
                         }
                         DialogPage::DeleteTrash { items } => {
                             tasks.push(self.operation(Operation::DeleteTrash { items }));
@@ -3890,12 +3958,12 @@ impl Application for App {
                     self.progress_operations.remove(id);
                 }
             }
-            Message::PendingComplete(id, op_sel) => {
+            Message::PendingComplete(id, mut op_sel) => {
                 let mut commands = Vec::with_capacity(4);
                 if let Some((op, _)) = self.pending_operations.remove(&id) {
                     // Show toast for some operations
                     if let Some(description) = op.toast() {
-                        if let Operation::Delete { ref paths } = op {
+                        if let Operation::Delete { ref paths, .. } = op {
                             let paths: Arc<[PathBuf]> = Arc::from(paths.as_slice());
                             commands.push(
                                 self.toasts
@@ -3932,6 +4000,15 @@ impl Application for App {
                         if self.update_favorites(&path_changes) {
                             commands.push(self.update_config());
                         }
+                    }
+
+                    // Select next item if necessary
+                    if let Operation::Delete { metadata, .. }
+                    | Operation::PermanentlyDelete { metadata, .. } = op
+                        && let Some(path) = self.focus_next_after_op(metadata)
+                    {
+                        op_sel.selected.reserve_exact(1);
+                        op_sel.selected.push(path);
                     }
 
                     if matches!(op, Operation::RemoveFromRecents { .. }) {
@@ -4013,8 +4090,9 @@ impl Application for App {
             Message::PermanentlyDelete(entity_opt) => {
                 let paths: Box<[_]> = self.selected_paths(entity_opt).collect();
                 if !paths.is_empty() {
+                    let metadata = self.operation_metadata();
                     return self.push_dialog(
-                        DialogPage::PermanentlyDelete { paths },
+                        DialogPage::PermanentlyDelete { paths, metadata },
                         Some(PERMANENT_DELETE_BUTTON_ID.clone()),
                     );
                 }
@@ -5787,7 +5865,7 @@ impl Application for App {
 
                 dialog
             }
-            DialogPage::PermanentlyDelete { paths } => {
+            DialogPage::PermanentlyDelete { paths, .. } => {
                 let target = if paths.len() == 1 {
                     format!(
                         "\"{}\"",

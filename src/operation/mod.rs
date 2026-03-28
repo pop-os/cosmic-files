@@ -6,7 +6,10 @@ use crate::{
     spawn_detached::spawn_detached,
     tab,
 };
-use cosmic::iced::futures::{self, SinkExt, StreamExt, channel::mpsc::Sender, stream};
+use cosmic::{
+    iced::futures::{self, SinkExt, StreamExt, channel::mpsc::Sender, stream},
+    widget::segmented_button::Entity,
+};
 use std::{
     borrow::Cow,
     fmt::Formatter,
@@ -355,6 +358,7 @@ pub enum Operation {
     /// Move items to the trash
     Delete {
         paths: Vec<PathBuf>,
+        metadata: OperationMetadata,
     },
     /// Delete a path from the trash
     DeleteTrash {
@@ -383,6 +387,7 @@ pub enum Operation {
     /// Permanently delete items, skipping the trash
     PermanentlyDelete {
         paths: Box<[PathBuf]>,
+        metadata: OperationMetadata,
     },
     RemoveFromRecents {
         paths: Box<[PathBuf]>,
@@ -486,7 +491,7 @@ impl Operation {
                 to = file_name(to),
                 progress = progress()
             ),
-            Self::Delete { paths } => fl!(
+            Self::Delete { paths, .. } => fl!(
                 "moving",
                 items = paths.len(),
                 from = paths_parent_name(paths),
@@ -525,7 +530,9 @@ impl Operation {
                 name = file_name(path),
                 parent = parent_name(path)
             ),
-            Self::PermanentlyDelete { paths } => fl!("permanently-deleting", items = paths.len()),
+            Self::PermanentlyDelete { paths, .. } => {
+                fl!("permanently-deleting", items = paths.len())
+            }
             Self::Rename { from, to } => {
                 fl!("renaming", from = file_name(from), to = file_name(to))
             }
@@ -558,7 +565,7 @@ impl Operation {
                 from = paths_parent_name(paths),
                 to = file_name(to)
             ),
-            Self::Delete { paths } => fl!(
+            Self::Delete { paths, .. } => fl!(
                 "moved",
                 items = paths.len(),
                 from = paths_parent_name(paths),
@@ -592,7 +599,9 @@ impl Operation {
                 name = file_name(path),
                 parent = parent_name(path)
             ),
-            Self::PermanentlyDelete { paths } => fl!("permanently-deleted", items = paths.len()),
+            Self::PermanentlyDelete { paths, .. } => {
+                fl!("permanently-deleted", items = paths.len())
+            }
             Self::RemoveFromRecents { paths } => fl!("removed-from-recents", items = paths.len()),
             Self::Rename { from, to } => fl!("renamed", from = file_name(from), to = file_name(to)),
             Self::Restore { items } => fl!("restored", items = items.len()),
@@ -838,7 +847,7 @@ impl Operation {
             Self::Copy { paths, to } => {
                 copy_or_move(paths, to, Method::Copy, msg_tx, controller).await
             }
-            Self::Delete { paths } => {
+            Self::Delete { paths, .. } => {
                 let total = paths.len();
                 for (i, path) in paths.into_iter().enumerate() {
                     futures::executor::block_on(async {
@@ -1049,7 +1058,7 @@ impl Operation {
             }
             .await
             .map_err(wrap_compio_spawn_error)?,
-            Self::PermanentlyDelete { paths } => {
+            Self::PermanentlyDelete { paths, .. } => {
                 let total = paths.len();
                 for (idx, path) in paths.into_iter().enumerate() {
                     controller
@@ -1204,6 +1213,27 @@ impl Operation {
 
         paths
     }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct OperationMetadata {
+    /// ID of tab that launched this operation
+    pub tab_entity: Entity,
+    /// Selected items positions at operation launch
+    pub selected: Option<SelectedItems>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SelectedItems {
+    Single {
+        index: usize,
+        position: (usize, usize),
+    },
+    Range {
+        first: usize,
+        last: usize,
+        first_pos: (usize, usize),
+    },
 }
 
 #[track_caller]
