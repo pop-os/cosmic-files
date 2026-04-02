@@ -3012,7 +3012,7 @@ impl Tab {
     /// Returns true if an item was selected.
     pub fn select_by_prefix(&mut self, prefix: &str) -> bool {
         let prefix_lower = prefix.to_lowercase();
-        self.select_focus = None;
+        let focus = self.select_focus.take();
 
         if let Some(ref mut items) = self.items_opt {
             // First, deselect all items
@@ -3020,16 +3020,102 @@ impl Tab {
                 item.selected = false;
             }
 
-            // Find first matching item
-            for (i, item) in items.iter_mut().enumerate() {
-                if item.name.to_lowercase().starts_with(&prefix_lower) {
-                    item.selected = true;
-                    self.select_focus = Some(i);
-                    return true;
-                }
+            // Determine the start index of the search. When the index is before the currently focused item, it will be
+            // considered first, otherwise last. Consider the focused item last when only a single character has been
+            // typed, so we eagerly switch focus on the first character and stay on the same item as long as the prefix
+            // matches.
+            let single_char = prefix_lower.chars().count() == 1;
+            let start = if single_char {
+                Self::index_after_focus(focus, self.sort_direction)
+            } else {
+                Self::index_before_focus(focus, self.sort_direction)
+            };
+            self.select_focus = Self::select_first_prefix_from_index(
+                &prefix_lower,
+                items,
+                start,
+                self.sort_direction,
+            );
+
+            if self.select_focus.is_some() || single_char {
+                return self.select_focus.is_some();
             }
+
+            let mut chars = prefix_lower.chars();
+            let Some(first) = chars.next() else {
+                log::error!("search term is empty");
+                return self.select_focus.is_some();
+            };
+
+            // Check if all entered characters are the same
+            if !chars.all(|c| c == first) {
+                return self.select_focus.is_some();
+            }
+
+            // Search for a single character when all entered characters are the same.
+            // This allows cycling through items starting with the same character by repeatedly pressing a key.
+            let start = Self::index_after_focus(focus, self.sort_direction);
+            self.select_focus = Self::select_first_prefix_from_index(
+                &first.to_string(),
+                items,
+                start,
+                self.sort_direction,
+            );
+
+            return self.select_focus.is_some();
         }
         false
+    }
+
+    fn index_before_focus(current_focus: Option<usize>, forward: bool) -> usize {
+        current_focus.map_or(0, |i| if forward { i } else { i + 1 })
+    }
+
+    fn index_after_focus(current_focus: Option<usize>, forward: bool) -> usize {
+        current_focus.map_or(0, |i| if forward { i + 1 } else { i })
+    }
+
+    fn select_first_prefix_from_index(
+        prefix_lower: &str,
+        items: &mut [Item],
+        start: usize,
+        forward: bool,
+    ) -> Option<usize> {
+        // Order the search item so they begin at `start`.
+        let Some((until, after)) = items.split_at_mut_checked(start) else {
+            log::error!(
+                "invalid start index {start} for items of length {}",
+                items.len()
+            );
+            return None;
+        };
+        let search_items = after
+            .into_iter()
+            .enumerate()
+            .map(|(i, item)| (i + start, item))
+            .chain(until.into_iter().enumerate());
+
+        if forward {
+            Self::select_first_prefix_match(prefix_lower, search_items)
+        } else {
+            Self::select_first_prefix_match(prefix_lower, search_items.rev())
+        }
+    }
+
+    /// Selects the first item in the given iterator whose name starts with the given prefix.
+    ///
+    /// The `prefix` must be lowercase.
+    fn select_first_prefix_match<'a>(
+        prefix: &str,
+        items: impl Iterator<Item = (usize, &'a mut Item)>,
+    ) -> Option<usize> {
+        for (i, item) in items {
+            if item.name.to_lowercase().starts_with(&prefix) {
+                item.selected = true;
+                return Some(i);
+            }
+        }
+        None
     }
 
     pub fn select_paths(&mut self, paths: Vec<PathBuf>) {
