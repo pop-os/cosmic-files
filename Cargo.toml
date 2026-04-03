@@ -75,6 +75,7 @@ default-features = false
 #TODO: a11y feature crashes
 features = [
     "about",
+    "advanced-shaping",
     "autosize",
     "desktop",
     "multi-window",
