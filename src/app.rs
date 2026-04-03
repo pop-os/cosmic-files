@@ -791,9 +791,8 @@ impl App {
     fn open_file(&mut self, paths: &[impl AsRef<Path>]) -> Task<Message> {
         let mut tasks = Vec::new();
 
-        // This will be, at the end of the function, a list of all archives that 
-        // don't have a suitable app
-        let mut found_archives_paths: Vec<PathBuf> = vec![];
+        // List of archives to open ourselves
+        let mut queued_archive_paths: Vec<PathBuf> = vec![];
 
         // Associate all paths to its MIME type
         // This allows handling paths as groups if possible, such as launching a single video
@@ -840,28 +839,28 @@ impl App {
                 continue;
             } else if supported_archive_types.iter().copied().any(|t| mime == t) { // Archives handling
 
-                let mut found_archive_app = false;
+                let mut handle_archives = true;
 
-                // Checks if there are suitable apps for archives (if cosmic-files is the dafult one, fallback to extract_to)
+                // Checks for default archival app other than COSMIC Files
                 for app in self.mime_app_cache.get(&mime) {
                     if app.id == Self::APP_ID {
-                        log::debug!("Default app is cosmic-files, adding to extract_to dialog");
-                        found_archive_app = false; // Let's confirm we want the extrac_to dialog in this case
-                        break; // Stop looking
+                        log::debug!("Default archival app is cosmic-files, adding to extract_to dialog");
+                        handle_archives = true;
+                        break;
                     } else {
                         log::debug!("Found suitable archive app {} for MIME {}", app.id, mime);
 
                         if self.launch_from_mime_cache(&mime, &paths) {
-                            found_archive_app = true; // Not adding to extract_to list
+                            handle_archives = false; // Opened externally, so don't handle
                             break;
                         } else {
-                            found_archive_app = false; // Adding to extract_to list because unable to open (fallback)
+                            handle_archives = true; // Still handle if external open failed
                         }
                     }
                 }
 
-                if !found_archive_app {
-                    found_archives_paths.extend(paths.iter().cloned());
+                if handle_archives {
+                    queued_archive_paths.extend(paths.iter().cloned());
                 }
 
                 continue 'outer;
@@ -901,11 +900,10 @@ impl App {
             }
         }
 
-        // We are done with looping through file groups, let's see if there are archives to
-        // open with the extract_to dialog
-        if found_archives_paths.len() > 0 {
-            log::debug!("Paths to extract with dialog: {:?}", found_archives_paths);
-            tasks.push(self.extract_to(&found_archives_paths));
+        // Open any queued archvies with extract_to dialog
+        if queued_archive_paths.len() > 0 {
+            log::debug!("Paths to extract with dialog: {:?}", queued_archive_paths);
+            tasks.push(self.extract_to(&queued_archive_paths));
         }
 
         Task::batch(tasks)
