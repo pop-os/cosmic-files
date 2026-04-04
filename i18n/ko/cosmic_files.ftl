@@ -272,3 +272,4 @@ network-drive-schemes =
     WebDAV,dav:// 또는 davs://
 type-to-search-select = 일치하는 첫 번째 파일 또는 폴더를 선택합니다
 comment = COSMIC 데스크톱용 위한 파일 관리자
+keywords = 폴더;관리자;
