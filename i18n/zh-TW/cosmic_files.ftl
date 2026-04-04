@@ -1,11 +1,11 @@
-cosmic-files = COSMIC 檔案總管
+cosmic-files = COSMIC 檔案
 empty-folder = 空資料夾
 empty-folder-hidden = 空資料夾（包含隱藏項目）
 no-results = 找不到結果
 filesystem = 檔案系統
-home = 主目錄
+home = 家目錄
 networks = 網路
-notification-in-progress = 檔案操作正在進行中。
+notification-in-progress = 檔案操作正在進行中
 trash = 垃圾桶
 recents = 最近使用
 undo = 復原
@@ -25,7 +25,7 @@ create-archive = 建立壓縮檔案
 ## Empty Trash Dialog
 
 empty-trash = 清空垃圾桶
-empty-trash-warning = 你確定要永久刪除垃圾桶中的所有項目嗎？
+empty-trash-warning = 垃圾桶中的項目將被永久刪除
 
 ## New File/Folder Dialog
 
@@ -33,16 +33,16 @@ create-new-file = 建立新檔案
 create-new-folder = 建立新資料夾
 file-name = 檔案名稱
 folder-name = 資料夾名稱
-file-already-exists = 已存在同名檔案。
-folder-already-exists = 已存在同名資料夾。
-name-hidden = 以「.」開頭的名稱將會被隱藏。
-name-invalid = 名稱不能是 「{ $filename }」。
-name-no-slashes = 名稱不能包含斜線。
+file-already-exists = 相同名稱的檔案已經存在
+folder-already-exists = 相同名稱的資料夾已經存在
+name-hidden = 以「.」開頭的名稱將會被隱藏
+name-invalid = 名稱不能是「{ $filename }」
+name-no-slashes = 名稱不能包含斜線
 
 ## Open/Save Dialog
 
 cancel = 取消
-create = 建立
+create = 創作
 open = 開啟
 open-file = 開啟檔案
 open-folder = 開啟資料夾
@@ -62,12 +62,12 @@ rename-folder = 重新命名資料夾
 ## Replace Dialog
 
 replace = 取代
-replace-title = 檔案「{ $filename }」已存在於此位置。
+replace-title = 「{ $filename }」已存在於此位置
 replace-warning = 你要取代它嗎？取代將覆蓋其內容。
 replace-warning-operation = 你要取代它嗎？取代將覆蓋其內容。
 original-file = 原始檔案
 replace-with = 取代為
-apply-to-all = 套用至所有項目
+apply-to-all = 套用至全部
 keep-both = 保留兩者
 skip = 跳過
 
@@ -112,7 +112,7 @@ username = 使用者名稱
 
 edit-history = 編輯歷史
 history = 歷史紀錄
-no-history = 沒有歷史項目。
+no-history = 無歷史記錄項目。
 pending = 待處理
 failed = 失敗
 complete = 完成
@@ -133,14 +133,14 @@ copying =
     正在複製 { $items } { $items ->
         [one] 項目
        *[other] 項目
-    } 從「{ $from }」到「{ $to }」（{ $progress }）...
+    }從「{ $from }」到「{ $to }」（{ $progress }）...
 copied =
     已複製 { $items } { $items ->
         [one] 項目
        *[other] 項目
     }從「{ $from }」到「{ $to }」
-emptying-trash = 正在清空{ trash }（{ $progress }）…
-emptied-trash = 已清空{ trash }
+emptying-trash = 正在清空 { trash }（{ $progress }）…
+emptied-trash = 已經清空 { trash }
 extracting =
     正在解壓縮 { $items } 項目 { $items ->
         [one] 項目
@@ -192,9 +192,9 @@ settings = 設定
 
 appearance = 外觀
 theme = 主題
-match-desktop = 與桌面一致
-dark = 暗色模式
-light = 亮色模式
+match-desktop = 符合桌面
+dark = 暗色
+light = 亮色
 # Context menu
 add-to-sidebar = 加入側邊欄
 compress = 壓縮
@@ -215,8 +215,8 @@ sort-by-size = 依大小排序
 ## File
 
 file = 檔案
-new-tab = 新分頁
-new-window = 新視窗
+new-tab = 新建分頁
+new-window = 新建視窗
 rename = 重新命名...
 close-tab = 關閉分頁
 quit = 退出
@@ -252,10 +252,10 @@ sort-oldest-first = 最舊的在前
 sort-smallest-to-largest = 由小至大
 sort-largest-to-smallest = 由大至小
 deleted =
-    已刪除 { $items } { $items ->
+    已經刪除 { $items } { $items ->
         [one] 項目
        *[other] 項目
-    }從{ trash }
+    } 從 { trash }
 permanently-deleting =
     正在永久刪除 { $items } { $items ->
         [one] 项目
@@ -275,9 +275,81 @@ deleting =
     正在刪除 { $items } { $items ->
         [one] 项目
        *[other] 项目
-    }從{ trash }（{ $progress }）…
+    }從 { trash }（{ $progress }）…
 removed-from-recents =
     已從{ recents }中移除 { $items } { $items ->
         [one] 项目
        *[other] 项目
     }
+repository = 軟體庫源
+desktop-view-options = 桌面檢視選項...
+show-on-desktop = 顯示在桌面
+desktop-folder-content = 桌面資料夾內容
+mounted-drives = 已經掛載的磁碟機
+trash-folder-icon = 垃圾桶圖示
+trashed-on = 遺棄時間
+icon-size-and-spacing = 圖示大小與間距
+icon-size = 圖示大小
+grid-spacing = 網格間距
+details = 詳情
+dismiss = 撤停訊息
+delete = 刪除
+remove = 移除
+support = 支援
+cancelled = 已取消
+keywords = 資料夾;管理器;
+empty-trash-title = 清空垃圾桶？
+pause = 暫停
+resume = 繼續
+extract-password-required = 需要密碼
+extract-to = 解壓縮至...
+extract-to-title = 解壓縮至資料夾
+mount-error = 無法存取磁碟機
+open-with-title = 您要如何開啟「{ $name }」？
+browse-store = 瀏覽 { $store }
+other-apps = 其他應用程式
+related-apps = 相關應用程式
+permanently-delete-question = 永久刪除？
+set-executable-and-launch = 設定為可以執行並啟動
+read-only = 唯讀
+read-execute = 讀取和執行
+read-write = 讀取和寫入
+read-write-execute = 讀取、寫入和執行
+favorite-path-error = 開啟目錄時發生錯誤
+set-executable-and-launch-description = 您是否要將「{ $name }」設為可執行並啟動它？
+set-and-launch = 設定並啟動
+none = 無
+execute-only = 僅執行
+write-only = 僅寫入
+write-execute = 寫入和執行
+operations-running =
+    { $running } { $running ->
+        [one] 個操作
+       *[other] 個操作
+    }正在執行（{ $percent }%）...
+operations-running-finished =
+    { $running } { $running ->
+        [one] 個操作
+       *[other] 個操作
+    }正在執行（{ $percent }%）， { $finished } 個已經完成...
+permanently-delete-warning = 「{ $target }」將被永久刪除。此操作無法復原。
+open-with = 開啟檔案
+selected-items = 已經選定 { $items } 個項目
+copy-to-title = 選擇複製目的地
+copy-to-button-label = 複製
+move-to-title = 選擇移動目的地
+move-to-button-label = 移動
+keep = 保留
+progress = { $percent }%
+progress-cancelled = { $percent }%，已經取消
+progress-failed = { $percent }%，失敗
+progress-paused = { $percent }%，已經暫停
+favorite-path-error-description =
+    無法開啟「{ $path }」
+    「{ $path }」可能不存在，或您可能沒有權限開啟它。
+
+    您是否要將它從側邊欄移除？
+comment = 檔案管理器 用於 COSMIC 桌面
+pasted-image = 已經貼上的圖片
+pasted-text = 已經貼上的文字
+pasted-video = 已經貼上的影片
