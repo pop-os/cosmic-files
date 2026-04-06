@@ -80,6 +80,7 @@ use crate::{
         AppTheme, Config, DesktopConfig, Favorite, IconSizes, State, TIME_CONFIG_ID, TabConfig,
         TimeConfig, TypeToSearch,
     },
+    context_action,
     dialog::{Dialog, DialogKind, DialogMessage, DialogResult, DialogSettings},
     fl, home_dir,
     key_bind::key_binds,
@@ -108,6 +109,9 @@ static DELETE_TRASH_BUTTON_ID: LazyLock<widget::Id> =
 
 static CONFIRM_OPEN_WITH_BUTTON_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("confirm-open-with-button"));
+
+static CONFIRM_CONTEXT_ACTION_BUTTON_ID: LazyLock<widget::Id> =
+    LazyLock::new(|| widget::Id::new("confirm-context-action-button"));
 
 static EMPTY_TRASH_BUTTON_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("empty-trash-button"));
@@ -180,6 +184,7 @@ pub enum Action {
     OpenItemLocation,
     OpenTerminal,
     OpenWith,
+    RunContextAction(usize),
     Paste,
     PermanentlyDelete,
     Preview,
@@ -252,6 +257,9 @@ impl Action {
             Self::OpenItemLocation => Message::OpenItemLocation(entity_opt),
             Self::OpenTerminal => Message::OpenTerminal(entity_opt),
             Self::OpenWith => Message::OpenWithDialog(entity_opt),
+            Self::RunContextAction(action) => {
+                Message::TabMessage(entity_opt, tab::Message::RunContextAction(*action))
+            }
             Self::Paste => Message::Paste(entity_opt),
             Self::PermanentlyDelete => Message::PermanentlyDelete(entity_opt),
             Self::Preview => Message::Preview(entity_opt),
@@ -323,6 +331,7 @@ pub enum NavMenuAction {
     OpenInNewTab(segmented_button::Entity),
     OpenInNewWindow(segmented_button::Entity),
     Preview(segmented_button::Entity),
+    RunContextAction(segmented_button::Entity, usize),
     RemoveFromSidebar(segmented_button::Entity),
 }
 
@@ -557,6 +566,10 @@ pub enum DialogPage {
         parent: PathBuf,
         name: String,
         dir: bool,
+    },
+    RunContextAction {
+        action: usize,
+        paths: Box<[PathBuf]>,
     },
     OpenWith {
         path: PathBuf,
@@ -2593,6 +2606,28 @@ impl Application for App {
                 NavMenuAction::OpenInNewWindow(entity),
             ));
         }
+        if let Some(path) = location_opt.and_then(Location::path_opt) {
+            let selected_dir = usize::from(path.is_dir());
+            let action_items: Vec<_> = self
+                .config
+                .context_actions
+                .iter()
+                .enumerate()
+                .filter(|(_, action)| action.matches_selection(1, selected_dir))
+                .map(|(i, action)| {
+                    cosmic::widget::menu::Item::Button(
+                        action.name.clone(),
+                        None,
+                        NavMenuAction::RunContextAction(entity, i),
+                    )
+                })
+                .collect();
+
+            if !action_items.is_empty() {
+                items.push(cosmic::widget::menu::Item::Divider);
+                items.extend(action_items);
+            }
+        }
         items.push(cosmic::widget::menu::Item::Divider);
         if matches!(location_opt, Some(Location::Path(..))) {
             items.push(cosmic::widget::menu::Item::Button(
@@ -3184,6 +3219,9 @@ impl Application for App {
                             } else {
                                 Operation::NewFile { path }
                             }));
+                        }
+                        DialogPage::RunContextAction { action, paths } => {
+                            context_action::run(&self.config.context_actions, action, &paths);
                         }
                         DialogPage::OpenWith {
                             path,
@@ -4505,6 +4543,25 @@ impl Application for App {
                         tab::Command::ExecEntryAction(entry, action) => {
                             Self::exec_entry_action(&entry, action);
                         }
+                        tab::Command::RunContextAction(action) => {
+                            let paths: Box<[_]> = self.selected_paths(Some(entity)).collect();
+                            if let Some(preset) = self.config.context_actions.get(action) {
+                                if preset.confirm {
+                                    commands.push(self.push_dialog(
+                                        DialogPage::RunContextAction { action, paths },
+                                        Some(CONFIRM_CONTEXT_ACTION_BUTTON_ID.clone()),
+                                    ));
+                                } else {
+                                    context_action::run(
+                                        &self.config.context_actions,
+                                        action,
+                                        &paths,
+                                    );
+                                }
+                            } else {
+                                log::warn!("invalid context action index `{action}`");
+                            }
+                        }
                         tab::Command::Iced(iced_command) => {
                             commands.push(iced_command.0.map(move |x| {
                                 cosmic::action::app(Message::TabMessage(Some(entity), x))
@@ -5009,6 +5066,30 @@ impl Application for App {
                                     err
                                 );
                             }
+                        }
+                    }
+                }
+                NavMenuAction::RunContextAction(entity, action) => {
+                    if let Some(path) = self
+                        .nav_model
+                        .data::<Location>(entity)
+                        .and_then(Location::path_opt)
+                        .cloned()
+                    {
+                        let paths = vec![path];
+                        if let Some(preset) = self.config.context_actions.get(action) {
+                            if preset.confirm {
+                                return self.push_dialog(
+                                    DialogPage::RunContextAction {
+                                        action,
+                                        paths: paths.into_boxed_slice(),
+                                    },
+                                    Some(CONFIRM_CONTEXT_ACTION_BUTTON_ID.clone()),
+                                );
+                            }
+                            context_action::run(&self.config.context_actions, action, &paths);
+                        } else {
+                            log::warn!("invalid context action index `{action}`");
                         }
                     }
                 }
@@ -5788,6 +5869,26 @@ impl Application for App {
                         .spacing(space_xxs),
                     )
             }
+            DialogPage::RunContextAction { action, paths } => {
+                let name = self
+                    .config
+                    .context_actions
+                    .get(*action)
+                    .map_or_else(|| fl!("context-action"), |preset| preset.name.clone());
+
+                widget::dialog()
+                    .title(fl!("context-action-confirm-title", name = name))
+                    .body(fl!("context-action-confirm-warning", items = paths.len()))
+                    .icon(icon::from_name("dialog-error").size(64))
+                    .primary_action(
+                        widget::button::suggested(fl!("run"))
+                            .on_press(Message::DialogComplete)
+                            .id(CONFIRM_CONTEXT_ACTION_BUTTON_ID.clone()),
+                    )
+                    .secondary_action(
+                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                    )
+            }
             DialogPage::OpenWith {
                 path,
                 mime,
@@ -6333,6 +6434,7 @@ impl Application for App {
                     &self.key_binds,
                     &self.modifiers,
                     self.clipboard_has_content(),
+                    &self.config.context_actions,
                 )
                 .map(move |message| Message::TabMessage(Some(entity), message));
             tab_column = tab_column.push(tab_view);
@@ -6361,6 +6463,7 @@ impl Application for App {
                                 &self.key_binds,
                                 &window.modifiers,
                                 self.clipboard_has_content(),
+                                &self.config.context_actions,
                             )
                             .map(|x| Message::TabMessage(Some(*entity), x)),
                             id.clone(),
@@ -6378,6 +6481,7 @@ impl Application for App {
                                 &self.key_binds,
                                 &window.modifiers,
                                 self.clipboard_has_content(),
+                                &self.config.context_actions,
                             )
                             .map(move |message| Message::TabMessage(Some(*entity), message)),
                         None => widget::space::vertical().into(),

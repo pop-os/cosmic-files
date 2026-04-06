@@ -66,7 +66,10 @@ use crate::{
     FxOrderMap,
     app::{Action, PreviewItem, PreviewKind},
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
-    config::{DesktopConfig, ICON_SCALE_MAX, ICON_SIZE_GRID, IconSizes, TabConfig, ThumbCfg},
+    config::{
+        ContextActionPreset, DesktopConfig, ICON_SCALE_MAX, ICON_SIZE_GRID, IconSizes, TabConfig,
+        ThumbCfg,
+    },
     dialog::DialogKind,
     fl,
     large_image::{
@@ -1794,6 +1797,7 @@ pub enum Command {
     OpenInNewWindow(PathBuf),
     OpenTrash,
     Preview(PreviewKind),
+    RunContextAction(usize),
     SetOpenWith(Mime, String),
     SetPermissions(PathBuf, u32),
     SetMultiplePermissions(Vec<(PathBuf, u32)>),
@@ -1852,6 +1856,7 @@ pub enum Message {
     SelectFirst,
     SelectLast,
     SetOpenWith(Mime, String),
+    RunContextAction(usize),
     SetPermissions(PathBuf, u32),
     ShiftPermissions(Option<(PathBuf, u32)>, u32, u32),
     SetSort(HeadingOptions, bool),
@@ -3565,6 +3570,11 @@ impl Tab {
                 self.context_menu = None;
 
                 commands.push(Command::Action(action));
+            }
+            Message::RunContextAction(action) => {
+                self.context_menu = None;
+
+                commands.push(Command::RunContextAction(action));
             }
             Message::ContextMenu(point_opt, _) => {
                 self.edit_location = None;
@@ -6083,6 +6093,7 @@ impl Tab {
         modifiers: &'a Modifiers,
         size: Size,
         clipboard_paste_available: bool,
+        context_actions: &'a [ContextActionPreset],
     ) -> Element<'a, Message> {
         // Update cached size
         self.size_opt.set(Some(size));
@@ -6170,8 +6181,13 @@ impl Tab {
         if let Some(point) = self.context_menu
             && (!cfg!(feature = "wayland") || !crate::is_wayland())
         {
-            let context_menu =
-                menu::context_menu(self, key_binds, modifiers, clipboard_paste_available);
+            let context_menu = menu::context_menu(
+                self,
+                key_binds,
+                modifiers,
+                clipboard_paste_available,
+                context_actions,
+            );
             popover = popover
                 .popup(context_menu)
                 .position(widget::popover::Position::Point(point));
@@ -6536,10 +6552,17 @@ impl Tab {
         key_binds: &'a HashMap<KeyBind, Action>,
         modifiers: &'a Modifiers,
         clipboard_paste_available: bool,
+        context_actions: &'a [ContextActionPreset],
     ) -> Element<'a, Message> {
         widget::responsive(move |size| {
             widget::id_container(
-                self.view_responsive(key_binds, modifiers, size, clipboard_paste_available),
+                self.view_responsive(
+                    key_binds,
+                    modifiers,
+                    size,
+                    clipboard_paste_available,
+                    context_actions,
+                ),
                 Id::new(format!(
                     "tab-{}-{}",
                     self.scrollable_id, self.location_title
