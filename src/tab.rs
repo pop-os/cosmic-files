@@ -1,4 +1,3 @@
-use chrono::{Datelike, Timelike, Utc};
 use cosmic::{
     Apply, Element, cosmic_theme,
     desktop::fde::{DesktopEntry, get_languages_from_env},
@@ -9,9 +8,8 @@ use cosmic::{
             graphics,
             text::{self, Paragraph},
         },
-        alignment::{Horizontal, Vertical},
+        alignment::Vertical,
         clipboard::dnd::DndAction,
-        event,
         futures::{self, SinkExt},
         keyboard::Modifiers,
         padding, stream,
@@ -25,7 +23,7 @@ use cosmic::{
     iced_core::{mouse::ScrollDelta, widget::tree},
     theme,
     widget::{
-        self, DndDestination, DndSource, Id, RcElementWrapper, Space, Widget,
+        self, DndDestination, DndSource, Id, RcElementWrapper, Widget,
         menu::{action::MenuAction, key_bind::KeyBind},
         space,
     },
@@ -33,14 +31,13 @@ use cosmic::{
 use i18n_embed::LanguageLoader;
 use icu::{
     datetime::{
-        DateTimeFormatter, DateTimeFormatterPreferences, fieldsets,
-        input::{Date, DateTime, Time},
+        DateTimeFormatter, DateTimeFormatterPreferences, fieldsets, input::DateTime,
         options::TimePrecision,
     },
     locale::preferences::extensions::unicode::keywords::HourCycle,
 };
-use image::{DynamicImage, ImageDecoder, ImageReader};
-use jxl_oxide::integration::JxlDecoder;
+use image::{DynamicImage, ImageReader};
+use jiff_icu::ConvertFrom;
 use mime_guess::{Mime, mime};
 use regex::Regex;
 use rustc_hash::FxHashMap;
@@ -49,7 +46,7 @@ use std::{
     borrow::Cow,
     cell::Cell,
     cmp::{Ordering, Reverse},
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     error::Error,
     fmt::{self, Display},
     fs::{self, File, Metadata},
@@ -444,25 +441,10 @@ impl<'a> FormatTime<'a> {
 
 impl Display for FormatTime<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let datetime = chrono::DateTime::<chrono::Local>::from(self.time);
-        let now = chrono::Local::now();
-        let icu_datetime = DateTime {
-            date: Date::try_new_gregorian(
-                datetime.year(),
-                datetime.month() as u8,
-                datetime.day() as u8,
-            )
-            .unwrap(),
-            time: Time::try_new(
-                datetime.hour() as u8,
-                datetime.minute() as u8,
-                datetime.second() as u8,
-                0,
-            )
-            .unwrap(),
-        };
-
-        if datetime.date_naive() == now.date_naive() {
+        let zoned = jiff::Zoned::try_from(self.time).unwrap();
+        let now = jiff::Zoned::now();
+        let icu_datetime = DateTime::convert_from(zoned.datetime());
+        if zoned.date() == now.date() {
             f.write_str(fl!("today").as_str())?;
             f.write_str(", ")?;
             self.time_formatter.format(&icu_datetime).fmt(f)
@@ -1299,10 +1281,8 @@ pub mod trash_helpers {
                 log::warn!("failed to get metadata for trash item {entry:?}: {err}")
             }) {
                 let name = entry.name.to_string_lossy();
-                if regex.is_match(&name) {
-                    if !callback(SearchItem::Trash(entry, metadata)) {
-                        break;
-                    }
+                if regex.is_match(&name) && !callback(SearchItem::Trash(entry, metadata)) {
+                    break;
                 }
             }
         }
@@ -1340,8 +1320,8 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
         .into_iter()
         .filter_map(|bookmark| {
             let path = uri_to_path(bookmark.href)?;
-            let last_edit = bookmark.modified.parse::<chrono::DateTime<Utc>>().ok()?;
-            let last_visit = bookmark.visited.parse::<chrono::DateTime<Utc>>().ok()?;
+            let last_edit = bookmark.modified.parse::<jiff::Timestamp>().ok()?;
+            let last_visit = bookmark.visited.parse::<jiff::Timestamp>().ok()?;
 
             if path.exists() {
                 let file_name = path.file_name()?;
@@ -1816,6 +1796,7 @@ pub enum Command {
     Preview(PreviewKind),
     SetOpenWith(Mime, String),
     SetPermissions(PathBuf, u32),
+    SetMultiplePermissions(Vec<(PathBuf, u32)>),
     SetSort(String, HeadingOptions, bool),
     WindowDrag,
     WindowToggleMaximize,
@@ -1872,6 +1853,7 @@ pub enum Message {
     SelectLast,
     SetOpenWith(Mime, String),
     SetPermissions(PathBuf, u32),
+    ShiftPermissions(Option<(PathBuf, u32)>, u32, u32),
     SetSort(HeadingOptions, bool),
     TabComplete(PathBuf, Vec<(String, PathBuf)>),
     Thumbnail(PathBuf, ItemThumbnail),
@@ -2113,54 +2095,25 @@ impl ItemThumbnail {
             }
 
             tried_supported_file = true;
-            let dyn_img: Option<image::DynamicImage> = match mime.subtype().as_str() {
-                "jxl" => match File::open(path) {
-                    Ok(file) => match JxlDecoder::new(file) {
-                        Ok(mut decoder) => {
-                            let mut limits = image::Limits::default();
-                            let max_ram = max_mem * 1000 * 1000 / jobs as u64;
-                            limits.max_alloc = Some(max_ram);
-                            let _ = decoder.set_limits(limits);
-                            match image::DynamicImage::from_decoder(decoder) {
-                                Ok(img) => Some(img),
-                                Err(err) => {
-                                    log::warn!("failed to decode jxl {}: {}", path.display(), err);
-                                    None
-                                }
-                            }
-                        }
+            let dyn_img = match image::ImageReader::open(path)
+                .and_then(image::ImageReader::with_guessed_format)
+            {
+                Ok(mut reader) => {
+                    let mut limits = image::Limits::default();
+                    let max_ram = max_mem * 1000 * 1000 / jobs as u64;
+                    limits.max_alloc = Some(max_ram);
+                    reader.limits(limits);
+                    match reader.decode() {
+                        Ok(reader) => Some(reader),
                         Err(err) => {
-                            log::warn!("failed to create jxl decoder {}: {}", path.display(), err);
-                            None
-                        }
-                    },
-                    Err(err) => {
-                        log::warn!("failed to open path {}: {}", path.display(), err);
-                        None
-                    }
-                },
-                _ => {
-                    match image::ImageReader::open(path)
-                        .and_then(image::ImageReader::with_guessed_format)
-                    {
-                        Ok(mut reader) => {
-                            let mut limits = image::Limits::default();
-                            let max_ram = max_mem * 1000 * 1000 / jobs as u64;
-                            limits.max_alloc = Some(max_ram);
-                            reader.limits(limits);
-                            match reader.decode() {
-                                Ok(reader) => Some(reader),
-                                Err(err) => {
-                                    log::warn!("failed to decode {}: {}", path.display(), err);
-                                    None
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            log::warn!("failed to read {}: {}", path.display(), err);
+                            log::warn!("failed to decode {}: {}", path.display(), err);
                             None
                         }
                     }
+                }
+                Err(err) => {
+                    log::warn!("failed to read {}: {}", path.display(), err);
+                    None
                 }
             };
 
@@ -2645,13 +2598,12 @@ impl Item {
         }
         column = column.push(details);
 
-        if let Some(path) = self.path_opt() {
-            if self.selected {
-                column = column.push(
-                    widget::button::standard(fl!("open"))
-                        .on_press(Message::Open(Some(path.clone()))),
-                );
-            }
+        if let Some(path) = self.path_opt()
+            && self.selected
+        {
+            column = column.push(
+                widget::button::standard(fl!("open")).on_press(Message::Open(Some(path.clone()))),
+            );
         }
 
         if !settings.is_empty() {
@@ -4385,6 +4337,31 @@ impl Tab {
             Message::SetPermissions(path, mode) => {
                 commands.push(Command::SetPermissions(path, mode));
             }
+            Message::ShiftPermissions(path_mode_opt, shift, bits) => match path_mode_opt {
+                Some((path, mode)) => commands.push(Command::SetPermissions(
+                    path,
+                    set_mode_part(mode, shift, bits.try_into().unwrap()),
+                )),
+                // Shift permissions on all selected items
+                None => {
+                    let mut permissions = Vec::new();
+                    for item in self.items_opt().map_or(Vec::new(), |items| {
+                        items.iter().filter(|item| item.selected).collect()
+                    }) {
+                        if let (Some(path), Some(mode)) = (
+                            item.path_opt(),
+                            item.file_metadata()
+                                .and_then(|metadata| Some(metadata.mode())),
+                        ) {
+                            permissions.push((
+                                path.clone(),
+                                set_mode_part(mode, shift, bits.try_into().unwrap()),
+                            ));
+                        }
+                    }
+                    commands.push(Command::SetMultiplePermissions(permissions));
+                }
+            },
             Message::SetSort(heading_option, dir) => {
                 if !matches!(self.location, Location::Search(..)) {
                     self.sort_name = heading_option;
@@ -5961,12 +5938,13 @@ impl Tab {
                     };
 
                     let button_row = button(row.into());
-                    let button_row: Element<_> =
-                        if item.metadata.is_dir() && item.location_opt.is_some() {
-                            self.dnd_dest(item.location_opt.as_ref().unwrap(), button_row)
-                        } else {
-                            button_row.into()
-                        };
+                    let button_row: Element<_> = if item.metadata.is_dir()
+                        && let Some(location) = item.location_opt.as_ref()
+                    {
+                        self.dnd_dest(location, button_row)
+                    } else {
+                        button_row.into()
+                    };
 
                     if item.selected || !drag_items.is_empty() {
                         let dnd_row = if !item.selected {
@@ -6297,7 +6275,10 @@ impl Tab {
 
         dnd_dest.into()
     }
-    pub fn multi_preview_view<'a>(&'a self) -> Element<'a, Message> {
+    pub fn multi_preview_view<'a>(
+        &'a self,
+        mime_app_cache_opt: Option<&'a mime_app::MimeAppCache>,
+    ) -> Element<'a, Message> {
         let cosmic_theme::Spacing {
             space_xxxs,
             space_m,
@@ -6333,8 +6314,7 @@ impl Tab {
                     if item.selected {
                         item.location_opt
                             .as_ref()
-                            .map(Location::path_opt)
-                            .flatten()
+                            .and_then(Location::path_opt)
                             .is_some()
                     } else {
                         false
@@ -6351,6 +6331,11 @@ impl Tab {
 
         let mut total_size: u64 = 0;
         let mut mime_type_counts: BTreeMap<String, u64> = BTreeMap::new();
+        let mut user_name: BTreeSet<String> = BTreeSet::new();
+        let mut mode_user: BTreeSet<u32> = BTreeSet::new();
+        let mut group_name: BTreeSet<String> = BTreeSet::new();
+        let mut mode_group: BTreeSet<u32> = BTreeSet::new();
+        let mut mode_other: BTreeSet<u32> = BTreeSet::new();
         let mut calculating_dir_size = false;
         let mut dir_size_error: Option<String> = None;
 
@@ -6374,6 +6359,20 @@ impl Tab {
                 } else {
                     total_size = total_size.saturating_add(metadata.len());
                 }
+                let mode = metadata.mode();
+                user_name.insert(
+                    get_user_by_uid(metadata.uid())
+                        .and_then(|user| user.name().to_str().map(ToOwned::to_owned))
+                        .unwrap_or_default(),
+                );
+                mode_user.insert(get_mode_part(mode, MODE_SHIFT_USER));
+                group_name.insert(
+                    get_group_by_gid(metadata.gid())
+                        .and_then(|group| group.name().to_str().map(ToOwned::to_owned))
+                        .unwrap_or_default(),
+                );
+                mode_group.insert(get_mode_part(mode, MODE_SHIFT_GROUP));
+                mode_other.insert(get_mode_part(mode, MODE_SHIFT_OTHER));
             }
         }
         let mut mime_types: Vec<(String, u64)> = mime_type_counts.into_iter().collect();
@@ -6411,6 +6410,124 @@ impl Tab {
         column = column.push(details);
 
         column = column.push(widget::button::standard(fl!("open")).on_press(Message::Open(None)));
+
+        let mut settings = Vec::new();
+        // Only allow modifying open-with if all mime types are the same
+        if mime_types.len() == 1 {
+            if let Some(mime) = mime_types
+                .get(0)
+                .and_then(|(mime, _)| mime.parse::<Mime>().ok())
+            {
+                if let Some(mime_app_cache) = mime_app_cache_opt {
+                    let mime_apps = mime_app_cache.get(&mime);
+                    if !mime_apps.is_empty() {
+                        let mime_closure = mime.clone();
+                        settings.push(
+                            widget::settings::item::builder(fl!("open-with")).control(
+                                Element::from(
+                                    widget::dropdown(
+                                        mime_apps,
+                                        mime_apps.iter().position(|x| x.is_default),
+                                        move |index| (index, mime_closure.clone()),
+                                    )
+                                    .icons(Cow::Borrowed(mime_app_cache.icons(&mime))),
+                                )
+                                .map(|(index, mime)| {
+                                    let mime_app = &mime_apps[index];
+                                    Message::SetOpenWith(mime, mime_app.id.clone())
+                                }),
+                            ),
+                        );
+                    }
+                }
+            }
+        }
+
+        #[cfg(unix)]
+        {
+            // Only return mode part if it's the only one
+            fn selected_mode_part(mut modes: BTreeSet<u32>) -> Option<usize> {
+                match (modes.pop_first(), modes.pop_first()) {
+                    (Some(mode), None) => Some(mode.try_into().unwrap()),
+                    _ => None,
+                }
+            }
+
+            // Convert a limited number of values from a set into a comma separated list
+            fn join_set(set: BTreeSet<String>) -> String {
+                let limit = 5;
+                let mut title = set.into_iter().collect::<Vec<String>>();
+                if title.len() > limit {
+                    title.truncate(limit);
+                    title.push("...".to_string());
+                }
+                title.join(", ")
+            }
+
+            let mode_part_user = selected_mode_part(mode_user);
+            settings.push(
+                widget::settings::item::builder(join_set(user_name))
+                    .description(fl!("owner"))
+                    .control(
+                        widget::dropdown(
+                            Cow::Borrowed(MODE_NAMES.as_slice()),
+                            mode_part_user,
+                            move |selected| {
+                                Message::ShiftPermissions(
+                                    None,
+                                    MODE_SHIFT_USER,
+                                    selected.try_into().unwrap(),
+                                )
+                            },
+                        )
+                        .placeholder(fl!("mixed")),
+                    ),
+            );
+
+            let mode_part_group = selected_mode_part(mode_group);
+            settings.push(
+                widget::settings::item::builder(join_set(group_name))
+                    .description(fl!("group"))
+                    .control(
+                        widget::dropdown(
+                            Cow::Borrowed(MODE_NAMES.as_slice()),
+                            mode_part_group,
+                            move |selected| {
+                                Message::ShiftPermissions(
+                                    None,
+                                    MODE_SHIFT_GROUP,
+                                    selected.try_into().unwrap(),
+                                )
+                            },
+                        )
+                        .placeholder(fl!("mixed")),
+                    ),
+            );
+
+            let mode_part_other = selected_mode_part(mode_other);
+            settings.push(
+                widget::settings::item::builder(fl!("other")).control(
+                    widget::dropdown(
+                        Cow::Borrowed(MODE_NAMES.as_slice()),
+                        mode_part_other,
+                        move |selected| {
+                            Message::ShiftPermissions(
+                                None,
+                                MODE_SHIFT_OTHER,
+                                selected.try_into().unwrap(),
+                            )
+                        },
+                    )
+                    .placeholder(fl!("mixed")),
+                ),
+            );
+        }
+
+        if !settings.is_empty() {
+            let mut section = widget::settings::section();
+            section = section.extend(settings);
+            column = column.push(section);
+        }
 
         column.into()
     }
@@ -6732,17 +6849,15 @@ impl Tab {
                                             // Don't send if the result is too old
                                             if let Some(last_modified) =
                                                 *last_modified_opt.read().unwrap()
-                                            {
-                                                if let SearchItem::Path(_, _, ref metadata) =
+                                                && let SearchItem::Path(_, _, ref metadata) =
                                                     search_item
-                                                {
-                                                    if let Ok(modified) = metadata.modified() {
-                                                        if modified < last_modified {
-                                                            return true;
-                                                        }
-                                                    } else {
+                                            {
+                                                if let Ok(modified) = metadata.modified() {
+                                                    if modified < last_modified {
                                                         return true;
                                                     }
+                                                } else {
+                                                    return true;
                                                 }
                                             }
 

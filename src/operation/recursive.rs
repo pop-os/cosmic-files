@@ -419,10 +419,10 @@ impl Op {
                     use std::os::unix::prelude::MetadataExt;
                     log::info!("{}", metadata.mtime());
                 }
-                if let Ok(time) = dbg!(metadata.modified()) {
+                if let Ok(time) = metadata.modified() {
                     times = times.set_modified(time);
                 }
-                if let Ok(time) = dbg!(metadata.accessed()) {
+                if let Ok(time) = metadata.accessed() {
                     times = times.set_accessed(time);
                 }
                 //TODO: upstream set_times implementation to compio?
