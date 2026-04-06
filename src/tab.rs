@@ -2440,7 +2440,7 @@ impl Item {
             ..
         } = theme::active().cosmic().spacing;
 
-        let mut column = widget::column().spacing(space_m);
+        let mut column = widget::column::with_capacity(4).spacing(space_m);
 
         column = column.push(
             widget::container(self.preview())
@@ -2448,7 +2448,7 @@ impl Item {
                 .max_height(THUMBNAIL_SIZE as f32),
         );
 
-        let mut details = widget::column().spacing(space_xxxs);
+        let mut details = widget::column::with_capacity(8).spacing(space_xxxs);
         details = details.push(widget::text::heading(self.name.clone()));
         details = details.push(widget::text::body(fl!(
             "type",
@@ -2618,10 +2618,10 @@ impl Item {
     pub fn replace_view(&self, heading: String, military_time: bool) -> Element<'_, Message> {
         let cosmic_theme::Spacing { space_xxxs, .. } = theme::active().cosmic().spacing;
 
-        let mut row = widget::row().spacing(space_xxxs);
+        let mut row = widget::row::with_capacity(2).spacing(space_xxxs);
         row = row.push(self.preview());
 
-        let mut column = widget::column().spacing(space_xxxs);
+        let mut column = widget::column::with_capacity(3).spacing(space_xxxs);
         column = column.push(widget::text::heading(heading));
 
         //TODO: translate!
@@ -4828,14 +4828,14 @@ impl Tab {
 
                     let content: cosmic::Element<'_, Message> =
                         if let Some(error_msg) = error_msg_opt {
-                            widget::column()
+                            widget::column::with_capacity(2)
                                 .push(widget::image(image_handle))
                                 .push(widget::text(format!("⚠ {}", error_msg)).size(13))
                                 .padding(space_xs)
                                 .align_x(cosmic::iced::Alignment::Center)
                                 .into()
                         } else if is_loading {
-                            widget::column()
+                            widget::column::with_capacity(2)
                                 .push(widget::image(image_handle))
                                 .push(widget::text("Loading higher resolution...").size(14))
                                 .padding(space_xs)
@@ -5323,7 +5323,7 @@ impl Tab {
                     })
                     .into(),
                 ]),
-                Mode::Desktop => widget::column(),
+                Mode::Desktop => widget::column::with_capacity(0),
             }
             .align_x(Alignment::Center)
             .spacing(space_xxs),
@@ -5531,7 +5531,7 @@ impl Tab {
                     // Add a spacer if the row is empty, so scroll works
                     if grid_elements[row].is_empty() {
                         grid_elements[row].push(Element::from(
-                            widget::column()
+                            widget::column::with_capacity(0)
                                 .width(Length::Fill)
                                 .height(Length::Fixed(item_height as f32)),
                         ));
@@ -6027,7 +6027,7 @@ impl Tab {
 
                     button_row
                 } else {
-                    widget::column()
+                    widget::column::with_capacity(0)
                         .width(Length::Fill)
                         .height(Length::Fixed(f32::from(row_height)))
                         .into()
@@ -6285,7 +6285,7 @@ impl Tab {
             ..
         } = theme::active().cosmic().spacing;
 
-        let mut column = widget::column().spacing(space_m);
+        let mut column = widget::column::with_capacity(4).spacing(space_m);
 
         let handle = widget::icon::from_name("text-x-generic")
             .size(IconSizes::default().grid())
@@ -6323,7 +6323,7 @@ impl Tab {
                 .collect()
         });
 
-        let mut details = widget::column().spacing(space_xxxs);
+        let mut details = widget::column::with_capacity(3).spacing(space_xxxs);
         details = details.push(widget::text::body(fl!(
             "items",
             items = selected_items.len()
