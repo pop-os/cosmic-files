@@ -4837,6 +4837,24 @@ impl Application for App {
             Message::DndDropNav(entity, data, action) => {
                 self.nav_dnd_hover = None;
                 if let Some((location, data)) = self.nav_model.data::<Location>(entity).zip(data) {
+                    // If all dropped paths are directories and target is not Trash,
+                    // add them as sidebar favorites (bookmarks) instead of copying/moving.
+                    // This enables macOS Finder-like drag-to-sidebar behavior.
+                    if !matches!(location, Location::Trash)
+                        && !data.paths.is_empty()
+                        && data.paths.iter().all(|p| p.is_dir())
+                    {
+                        let mut favorites = self.config.favorites.clone();
+                        for path in data.paths {
+                            let favorite = Favorite::from_path(path);
+                            if !favorites.contains(&favorite) {
+                                favorites.push(favorite);
+                            }
+                        }
+                        config_set!(favorites, favorites);
+                        return self.update_config();
+                    }
+
                     let kind = match action {
                         DndAction::Move => ClipboardKind::Cut { is_dnd: true },
                         _ => ClipboardKind::Copy,
