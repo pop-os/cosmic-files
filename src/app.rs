@@ -32,7 +32,8 @@ use cosmic::{
         widget::scrollable,
         window::{self, Event as WindowEvent, Id as WindowId},
     },
-    iced_runtime::clipboard,
+    iced_core::widget::operation::focusable::unfocus,
+    iced_runtime::{clipboard, task},
     iced_widget::{button::focus, scrollable::AbsoluteOffset},
     style, surface, theme,
     widget::{
@@ -1177,14 +1178,14 @@ impl App {
             entity.id()
         };
 
-        (
-            entity,
-            Task::batch([
-                self.update_title(),
-                self.update_watcher(),
-                self.update_tab(entity, location, selection_paths),
-            ]),
-        )
+        let mut tasks = Vec::with_capacity(4);
+        if activate {
+            tasks.push(task::widget(unfocus()));
+        }
+        tasks.push(self.update_title());
+        tasks.push(self.update_watcher());
+        tasks.push(self.update_tab(entity, location, selection_paths));
+        (entity, Task::batch(tasks))
     }
 
     fn open_tab(
