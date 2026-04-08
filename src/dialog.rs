@@ -5,6 +5,9 @@ use cosmic::{
     Application, ApplicationExt, Element,
     app::{Core, Task, context_drawer, cosmic::Cosmic},
     cosmic_config, cosmic_theme, executor,
+    iced::core::widget::operation,
+    iced::platform_specific::shell::{self as iced_winit, SurfaceIdWrapper},
+    iced::widget::scrollable::AbsoluteOffset,
     iced::{
         self, Alignment, Event, Length, Size, Subscription,
         core::SmolStr,
@@ -15,9 +18,6 @@ use cosmic::{
         widget::scrollable,
         window,
     },
-    iced_core::widget::operation,
-    iced_widget::scrollable::AbsoluteOffset,
-    iced_winit::{self, SurfaceIdWrapper},
     theme,
     widget::{
         self, Operation,
@@ -203,7 +203,7 @@ impl<T: AsRef<str>> From<T> for DialogLabel {
 
 impl<'a, M: Clone + 'static> From<&'a DialogLabel> for Element<'a, M> {
     fn from(label: &'a DialogLabel) -> Self {
-        let mut iced_spans: Vec<cosmic::iced_core::text::Span<'_, ()>> =
+        let mut iced_spans: Vec<cosmic::iced::core::text::Span<'_, ()>> =
             Vec::with_capacity(label.spans.len());
         for span in &label.spans {
             iced_spans.push(cosmic::iced::widget::span(&span.text).underline(span.underline));
@@ -1791,7 +1791,7 @@ impl Application for App {
                                         use cctk::wayland_protocols::xdg::shell::client::xdg_positioner::{
                                             Anchor, Gravity,
                                         };
-                                        use cosmic::iced_runtime::platform_specific::wayland::popup::{
+                                        use cosmic::iced::runtime::platform_specific::wayland::popup::{
                                             SctkPopupSettings, SctkPositioner,
                                         };
                                         use cosmic::iced::Rectangle;

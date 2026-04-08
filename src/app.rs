@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
+use cosmic::iced::platform_specific::shell::wayland::commands::overlap_notify::overlap_notify;
+#[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use cosmic::iced::{
     Limits, Point,
     event::wayland::{Event as WaylandEvent, OutputEvent, OverlapNotifyEvent},
@@ -12,8 +14,6 @@ use cosmic::iced::{
         Anchor, KeyboardInteractivity, Layer, destroy_layer_surface, get_layer_surface,
     },
 };
-#[cfg(all(feature = "wayland", feature = "desktop-applet"))]
-use cosmic::iced_winit::commands::overlap_notify::overlap_notify;
 use cosmic::{
     Application, ApplicationExt, Element,
     app::{self, Core, Task, context_drawer},
@@ -21,6 +21,9 @@ use cosmic::{
     cosmic_theme,
     desktop::fde::DesktopEntry,
     executor,
+    iced::core::widget::operation::focusable::unfocus,
+    iced::runtime::{clipboard, task},
+    iced::widget::{button::focus, scrollable::AbsoluteOffset},
     iced::{
         self, Alignment, Event, Length, Rectangle, Size, Subscription,
         clipboard::dnd::DndAction,
@@ -32,9 +35,6 @@ use cosmic::{
         widget::scrollable,
         window::{self, Event as WindowEvent, Id as WindowId},
     },
-    iced_core::widget::operation::focusable::unfocus,
-    iced_runtime::{clipboard, task},
-    iced_widget::{button::focus, scrollable::AbsoluteOffset},
     style, surface, theme,
     widget::{
         self,
@@ -1253,31 +1253,28 @@ impl App {
             .insert(id, (operation.clone(), controller.clone()));
 
         // Use a task to send operations to the compio runtime thread.
-        cosmic::Task::stream(cosmic::iced_futures::stream::channel(
-            4,
-            move |msg_tx| async move {
-                let (tx, rx) = tokio::sync::oneshot::channel();
+        cosmic::Task::stream(cosmic::iced::stream::channel(4, move |msg_tx| async move {
+            let (tx, rx) = tokio::sync::oneshot::channel();
 
-                let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
+            let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
 
-                let msg_tx_clone = msg_tx.clone();
+            let msg_tx_clone = msg_tx.clone();
 
-                _ = compio_tx
-                    .send(Box::pin(async move {
-                        let msg = match operation.perform(&msg_tx_clone, controller).await {
-                            Ok(result_paths) => Message::PendingComplete(id, result_paths),
-                            Err(err) => Message::PendingError(id, err),
-                        };
+            _ = compio_tx
+                .send(Box::pin(async move {
+                    let msg = match operation.perform(&msg_tx_clone, controller).await {
+                        Ok(result_paths) => Message::PendingComplete(id, result_paths),
+                        Err(err) => Message::PendingError(id, err),
+                    };
 
-                        _ = tx.send(msg);
-                    }))
-                    .await;
+                    _ = tx.send(msg);
+                }))
+                .await;
 
-                if let Ok(msg) = rx.await {
-                    let _ = msg_tx.lock().await.send(msg).await;
-                }
-            },
-        ))
+            if let Ok(msg) = rx.await {
+                let _ = msg_tx.lock().await.send(msg).await;
+            }
+        }))
         .map(cosmic::Action::App)
     }
 
@@ -2054,7 +2051,8 @@ impl App {
                 let progress = controller.progress();
                 section = section.add(widget::column::with_children([
                     widget::row::with_children([
-                        widget::progress_bar(0.0..=1.0, progress)
+                        widget::determinate_linear(progress)
+                            .width(Length::Fill)
                             .girth(progress_bar_height)
                             .into(),
                         if controller.is_paused() {
@@ -4431,7 +4429,7 @@ impl Application for App {
                                     use cctk::wayland_protocols::xdg::shell::client::xdg_positioner::{
                                         Anchor, Gravity,
                                     };
-                                    use cosmic::iced_runtime::platform_specific::wayland::popup::{
+                                    use cosmic::iced::runtime::platform_specific::wayland::popup::{
                                         SctkPopupSettings, SctkPositioner,
                                     };
                                     let window_id = WindowId::unique();
@@ -6178,8 +6176,9 @@ impl Application for App {
 
         //TODO: get height from theme?
         let progress_bar_height = Length::Fixed(4.0);
-        let progress_bar =
-            widget::progress_bar(0.0..=1.0, total_progress).girth(progress_bar_height);
+        let progress_bar = widget::determinate_linear(total_progress)
+            .width(Length::Fill)
+            .girth(progress_bar_height);
 
         let container = widget::layer_container(widget::column::with_children([
             widget::row::with_children([
