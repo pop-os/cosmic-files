@@ -6125,7 +6125,7 @@ impl Tab {
 
         let view = self.config.view;
         let item_view = match drag_list {
-            Some(drag_list) if self.selected_clicked => {
+            Some(drag_list) => {
                 let drag_list = RcElementWrapper::new(drag_list);
                 item_view
                     .drag_content(move || {

@@ -4845,10 +4845,18 @@ impl Application for App {
                         && data.paths.iter().all(|p| p.is_dir())
                     {
                         let mut favorites = self.config.favorites.clone();
+                        // Find insertion index from the drop target's FavoriteIndex
+                        let insert_idx = self
+                            .nav_model
+                            .data::<FavoriteIndex>(entity)
+                            .map(|FavoriteIndex(i)| (i + 1).min(favorites.len()))
+                            .unwrap_or(favorites.len());
+                        let mut offset = 0;
                         for path in data.paths {
                             let favorite = Favorite::from_path(path);
                             if !favorites.contains(&favorite) {
-                                favorites.push(favorite);
+                                favorites.insert(insert_idx + offset, favorite);
+                                offset += 1;
                             }
                         }
                         config_set!(favorites, favorites);
