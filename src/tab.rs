@@ -2,6 +2,7 @@ use cosmic::{
     Apply, Element, cosmic_theme,
     desktop::fde::{DesktopEntry, get_languages_from_env},
     font,
+    iced::core::{mouse::ScrollDelta, widget::tree},
     iced::{
         Alignment, Border, Color, ContentFit, Length, Point, Rectangle, Size, Subscription, Vector,
         advanced::{
@@ -20,7 +21,6 @@ use cosmic::{
         },
         window,
     },
-    iced_core::{mouse::ScrollDelta, widget::tree},
     theme,
     widget::{
         self, DndDestination, DndSource, Id, RcElementWrapper, Widget,
@@ -6244,7 +6244,7 @@ impl Tab {
             tab_view = tab_view.style(|t| {
                 let mut a = widget::container::Style::default();
                 let c = t.cosmic();
-                a.border = cosmic::iced_core::Border {
+                a.border = cosmic::iced::core::Border {
                     color: (c.accent_color()).into(),
                     width: 1.,
                     radius: c.radius_0().into(),
@@ -6992,7 +6992,7 @@ pub fn respond_to_scroll_direction(delta: ScrollDelta, modifiers: &Modifiers) ->
 fn text_editor_class(
     theme: &cosmic::Theme,
     status: cosmic::widget::text_editor::Status,
-) -> cosmic::iced_widget::text_editor::Style {
+) -> cosmic::iced::widget::text_editor::Style {
     let cosmic = theme.cosmic();
     let container = theme.current_container();
 
@@ -7005,9 +7005,9 @@ fn text_editor_class(
     let placeholder = placeholder.into();
 
     match status {
-        cosmic::iced_widget::text_editor::Status::Active
-        | cosmic::iced_widget::text_editor::Status::Disabled => {
-            cosmic::iced_widget::text_editor::Style {
+        cosmic::iced::widget::text_editor::Status::Active
+        | cosmic::iced::widget::text_editor::Status::Disabled => {
+            cosmic::iced::widget::text_editor::Style {
                 background: background.into(),
                 border: cosmic::iced::Border {
                     radius: cosmic.corner_radii.radius_m.into(),
@@ -7019,9 +7019,9 @@ fn text_editor_class(
                 selection,
             }
         }
-        cosmic::iced_widget::text_editor::Status::Hovered
-        | cosmic::iced_widget::text_editor::Status::Focused { .. } => {
-            cosmic::iced_widget::text_editor::Style {
+        cosmic::iced::widget::text_editor::Status::Hovered
+        | cosmic::iced::widget::text_editor::Status::Focused { .. } => {
+            cosmic::iced::widget::text_editor::Style {
                 background: background.into(),
                 border: cosmic::iced::Border {
                     radius: cosmic.corner_radii.radius_m.into(),
@@ -7040,7 +7040,7 @@ fn text_editor_class(
 mod tests {
     use std::{fs, io, path::PathBuf};
 
-    use cosmic::{iced::mouse::ScrollDelta, iced_runtime::keyboard::Modifiers, widget};
+    use cosmic::{iced::mouse::ScrollDelta, iced::runtime::keyboard::Modifiers, widget};
     use log::{debug, trace};
     use tempfile::TempDir;
     use test_log::test;

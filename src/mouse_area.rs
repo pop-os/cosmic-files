@@ -5,7 +5,7 @@ use std::time::Instant;
 use crate::tab::DOUBLE_CLICK_DURATION;
 use cosmic::{
     Element, Renderer, Theme,
-    iced_core::{
+    iced::core::{
         Clipboard, Color, Layout, Length, Point, Rectangle, Shell, Size, Vector, Widget,
         border::Border,
         event::Event,
@@ -488,7 +488,7 @@ where
         state: &Tree,
         layout: Layout<'_>,
         renderer: &Renderer,
-        dnd_rectangles: &mut cosmic::iced_core::clipboard::DndDestinationRectangles,
+        dnd_rectangles: &mut cosmic::iced::core::clipboard::DndDestinationRectangles,
     ) {
         self.content.as_widget().drag_destinations(
             &state.children[0],

@@ -1,6 +1,6 @@
 use cosmic::{
+    iced::core::keyboard::key::Named,
     iced::keyboard::Key,
-    iced_core::keyboard::key::Named,
     widget::menu::key_bind::{KeyBind, Modifier},
 };
 use std::collections::HashMap;
