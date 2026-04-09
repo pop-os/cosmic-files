@@ -70,10 +70,6 @@ impl ContextActionPreset {
     }
 }
 
-pub fn action_name(actions: &[ContextActionPreset], action: usize) -> Option<String> {
-    actions.get(action).map(|preset| preset.name.clone())
-}
-
 pub fn run(actions: &[ContextActionPreset], action: usize, paths: &[PathBuf]) {
     if let Some(preset) = actions.get(action) {
         preset.run(paths);

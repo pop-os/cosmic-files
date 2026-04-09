@@ -45,7 +45,7 @@ use crate::{
         Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind, REPLACE_BUTTON_ID,
     },
     config::{Config, DialogConfig, Favorite, TIME_CONFIG_ID, ThumbCfg, TimeConfig, TypeToSearch},
-    context_action, fl, home_dir,
+    fl, home_dir,
     key_bind::key_binds,
     localize::LANGUAGE_SORTER,
     menu,
@@ -444,10 +444,6 @@ enum DialogPage {
     NewFolder {
         parent: PathBuf,
         name: String,
-    },
-    RunContextAction {
-        action: usize,
-        paths: Box<[PathBuf]>,
     },
     Replace {
         filename: String,
@@ -1212,21 +1208,6 @@ impl Application for App {
                         .spacing(space_xxs),
                     )
             }
-            DialogPage::RunContextAction { action, paths } => {
-                let name = context_action::action_name(&self.flags.config.context_actions, *action)
-                    .unwrap_or_else(|| fl!("context-action"));
-
-                widget::dialog()
-                    .title(fl!("context-action-confirm-title", name = name))
-                    .body(fl!("context-action-confirm-warning", items = paths.len()))
-                    .icon(widget::icon::from_name("dialog-error").size(64))
-                    .primary_action(
-                        widget::button::suggested(fl!("run")).on_press(Message::DialogComplete),
-                    )
-                    .secondary_action(
-                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
-                    )
-            }
             DialogPage::Replace { filename } => widget::dialog()
                 .title(fl!("replace-title", filename = filename.as_str()))
                 .icon(widget::icon::from_name("dialog-question").size(64))
@@ -1448,9 +1429,6 @@ impl Application for App {
                                     log::warn!("failed to create {}: {}", path.display(), err);
                                 }
                             }
-                        }
-                        DialogPage::RunContextAction { action, paths } => {
-                            context_action::run(&self.flags.config.context_actions, action, &paths);
                         }
                         DialogPage::Replace { .. } => {
                             return self.update(Message::Save(true));
@@ -1879,28 +1857,6 @@ impl Application for App {
                                 }
                             }
                         }
-                        tab::Command::RunContextAction(action) => {
-                            let paths: Box<[_]> = self
-                                .tab
-                                .selected_locations()
-                                .into_iter()
-                                .filter_map(Location::into_path_opt)
-                                .collect();
-                            if let Some(preset) = self.flags.config.context_actions.get(action) {
-                                if preset.confirm {
-                                    self.dialog_pages
-                                        .push_back(DialogPage::RunContextAction { action, paths });
-                                } else {
-                                    context_action::run(
-                                        &self.flags.config.context_actions,
-                                        action,
-                                        &paths,
-                                    );
-                                }
-                            } else {
-                                log::warn!("invalid context action index `{action}`");
-                            }
-                        }
                         tab::Command::Iced(iced_command) => {
                             commands.push(iced_command.0.map(|tab_message| {
                                 cosmic::action::app(Message::TabMessage(tab_message))
@@ -2073,13 +2029,8 @@ impl Application for App {
         }
 
         col = col.push(
-            self.tab
-                .view(
-                    &self.key_binds,
-                    &self.modifiers,
-                    false,
-                    &self.flags.config.context_actions,
-                )
+                self.tab
+                .view(&self.key_binds, &self.modifiers, false, &[])
                 .map(Message::TabMessage),
         );
 
