@@ -183,7 +183,7 @@ pub fn context_menu<'a>(
         ) => {
             if selected_trash_only {
                 children.push(menu_item(fl!("open"), Action::Open).into());
-                if !trash::os_limited::is_empty().unwrap_or(true) {
+                if !crate::trash_helpers::is_empty() {
                     children.push(menu_item(fl!("empty-trash"), Action::EmptyTrash).into());
                 }
             } else if let Some(entry) = selected_desktop_entry {

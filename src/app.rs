@@ -485,6 +485,7 @@ pub enum Message {
     None,
     Surface(surface::Action),
     CutPaths(Vec<PathBuf>),
+    UpdateTrashState(bool),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1780,7 +1781,7 @@ impl App {
 
         nav_model = nav_model.insert(|b| {
             b.text(fl!("trash"))
-                .icon(icon::icon(tab::trash_helpers::trash_icon_symbolic(16)))
+                .icon(icon::icon(crate::trash_helpers::trash_icon_symbolic(16)))
                 .data(Location::Trash)
                 .divider_above()
         });
@@ -2486,7 +2487,7 @@ impl Application for App {
             layer_sizes: FxHashMap::default(),
         };
 
-        let mut commands = vec![app.update_config(), app.update(Message::CheckClipboard)];
+        let mut commands = vec![app.update_config(), app.update(Message::CheckClipboard), app.update(Message::RescanTrash)];
 
         for location in flags.locations {
             if let Some(path) = location.path_opt()
@@ -2620,7 +2621,7 @@ impl Application for App {
         }
 
         if matches!(location_opt, Some(Location::Trash))
-            && !trash::os_limited::is_empty().unwrap_or(true)
+            && !crate::trash_helpers::is_empty()
         {
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("empty-trash"),
@@ -4148,7 +4149,7 @@ impl Application for App {
                 return self.rescan_recents();
             }
             Message::RescanTrash => {
-                // Update trash icon if empty/full
+                // Update trash icon if empty/full synchronously using cached value
                 let maybe_entity = self.nav_model.iter().find(|&entity| {
                     self.nav_model
                         .data::<Location>(entity)
@@ -4157,11 +4158,35 @@ impl Application for App {
                 if let Some(entity) = maybe_entity {
                     self.nav_model.icon_set(
                         entity,
-                        icon::icon(tab::trash_helpers::trash_icon_symbolic(16)),
+                        icon::icon(crate::trash_helpers::trash_icon_symbolic(16)),
                     );
                 }
 
-                return Task::batch([self.rescan_trash(), self.update_desktop()]);
+                return Task::batch([
+                    Task::future(async {
+                        let is_empty = tokio::task::spawn_blocking(|| {
+                            crate::trash_helpers::check_is_empty_blocking()
+                        }).await.unwrap();
+                        cosmic::action::app(Message::UpdateTrashState(is_empty))
+                    }),
+                    self.rescan_trash(),
+                    self.update_desktop()
+                ]);
+            }
+            Message::UpdateTrashState(is_empty) => {
+                crate::trash_helpers::set_empty(is_empty);
+
+                let maybe_entity = self.nav_model.iter().find(|&entity| {
+                    self.nav_model
+                        .data::<Location>(entity)
+                        .is_some_and(|loc| matches!(loc, Location::Trash))
+                });
+                if let Some(entity) = maybe_entity {
+                    self.nav_model.icon_set(
+                        entity,
+                        icon::icon(crate::trash_helpers::trash_icon_symbolic(16)),
+                    );
+                }
             }
             Message::Rename(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
@@ -6648,33 +6673,36 @@ impl Application for App {
                             not(target_os = "ios"),
                             not(target_os = "android")
                         ))]
-                        match (watcher_res, trash::os_limited::trash_folders()) {
-                            (Ok(mut watcher), Ok(trash_bins)) => {
-                                // Watch the "bins" themselves as well as the files folder where
-                                // trashed items are placed. This allows us to avoid recursively
-                                // watching the trash which is slow but also properly get events.
-                                let trash_paths = trash_bins
-                                    .into_iter()
-                                    .flat_map(|path| [path.join("files"), path]);
-                                for path in trash_paths {
-                                    if let Err(e) =
-                                        watcher.watch(&path, notify::RecursiveMode::NonRecursive)
-                                    {
-                                        log::warn!(
-                                            "failed to add trash bin `{}` to watcher: {e:?}",
-                                            path.display()
-                                        );
-                                    }
-                                }
+                        {
+                            let trash_bins_res = tokio::task::spawn_blocking(|| {
+                                crate::trash_helpers::trash_folders_blocking()
+                            }).await.unwrap();
 
-                                // Don't drop the watcher
-                                std::future::pending().await
-                            }
-                            (Err(e), _) => {
-                                log::warn!("failed to create new watcher for trash bin: {e:?}");
-                            }
-                            (_, Err(e)) => {
-                                log::warn!("could not find any valid trash bins to watch: {e:?}");
+                            match watcher_res {
+                                Ok(mut watcher) => {
+                                    // Watch the "bins" themselves as well as the files folder where
+                                    // trashed items are placed. This allows us to avoid recursively
+                                    // watching the trash which is slow but also properly get events.
+                                    let trash_paths = trash_bins_res
+                                        .into_iter()
+                                        .flat_map(|path| [path.join("files"), path]);
+                                    for path in trash_paths {
+                                        if let Err(e) =
+                                            watcher.watch(&path, notify::RecursiveMode::NonRecursive)
+                                        {
+                                            log::warn!(
+                                                "failed to add trash bin `{}` to watcher: {e:?}",
+                                                path.display()
+                                            );
+                                        }
+                                    }
+
+                                    // Don't drop the watcher
+                                    std::future::pending().await
+                                }
+                                Err(e) => {
+                                    log::warn!("failed to create new watcher for trash bin: {e:?}");
+                                }
                             }
                         }
 

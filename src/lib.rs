@@ -27,6 +27,7 @@ mod zoom;
 
 use crate::config::State;
 pub mod tab;
+pub mod trash_helpers;
 mod thumbnail_cacher;
 mod thumbnailer;
 
