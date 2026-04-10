@@ -1354,7 +1354,6 @@ dependencies = [
  "cosmic-client-toolkit",
  "cosmic-mime-apps",
  "dirs 6.0.0",
- "env_logger",
  "fastrand",
  "filetime",
  "flate2",
@@ -1394,8 +1393,11 @@ dependencies = [
  "tar",
  "tempfile",
  "test-log",
+ "thiserror 2.0.18",
  "tikv-jemallocator",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
  "trash",
  "url",
  "uzers",
@@ -1963,7 +1965,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32e90c2accc4b07a8456ea0debdc2e7587bdd890680d71173a15d4ae604f6eef"
 dependencies = [
  "log",
- "regex",
 ]
 
 [[package]]
@@ -1975,7 +1976,6 @@ dependencies = [
  "anstream",
  "anstyle",
  "env_filter",
- "jiff",
  "log",
 ]
 
