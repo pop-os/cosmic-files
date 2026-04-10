@@ -86,6 +86,35 @@ impl Controller {
         self.set_state(ControllerState::Paused);
     }
 
+    /// Returns when the state is paused.
+    ///
+    /// Use this to pause futures.
+    pub async fn until_paused(&self) {
+        loop {
+            if matches!(self.state(), ControllerState::Paused) {
+                return;
+            }
+
+            self.inner.notify.notified().await;
+        }
+    }
+
+    /// Returns when state is neither paused, cancelled, nor failed.
+    ///
+    /// Use this to resume futures.
+    pub async fn until_unpaused(&self) {
+        loop {
+            if !matches!(
+                self.state(),
+                ControllerState::Paused | ControllerState::Cancelled | ControllerState::Failed
+            ) {
+                return;
+            }
+
+            self.inner.notify.notified().await;
+        }
+    }
+
     pub fn unpause(&self) {
         if !self.is_cancelled() | !self.is_failed() {
             self.set_state(ControllerState::Running);
