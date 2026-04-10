@@ -441,8 +441,13 @@ impl<M: Send + 'static> Dialog<M> {
 
 #[derive(Clone, Debug)]
 enum DialogPage {
-    NewFolder { parent: PathBuf, name: String },
-    Replace { filename: String },
+    NewFolder {
+        parent: PathBuf,
+        name: String,
+    },
+    Replace {
+        filename: String,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -1833,6 +1838,7 @@ impl Application for App {
                                                             &app.key_binds,
                                                             &app.modifiers,
                                                             false, // Paste not used in dialogs
+                                                            &app.flags.config.context_actions,
                                                         )
                                                         .map(Message::TabMessage)
                                                         .map(cosmic::Action::App),
@@ -2025,8 +2031,8 @@ impl Application for App {
         }
 
         col = col.push(
-            self.tab
-                .view(&self.key_binds, &self.modifiers, false)
+                self.tab
+                .view(&self.key_binds, &self.modifiers, false, &[])
                 .map(Message::TabMessage),
         );
 
