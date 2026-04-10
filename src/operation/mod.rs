@@ -22,6 +22,9 @@ use zip::AesMode::Aes256;
 pub use self::controller::{Controller, ControllerState};
 pub mod controller;
 
+pub use notifiers::*;
+mod notifiers;
+
 pub use self::reader::OpReader;
 pub mod reader;
 

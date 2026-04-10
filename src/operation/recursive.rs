@@ -334,12 +334,14 @@ impl Op {
         }
         match self.kind {
             OpKind::Copy => {
+                crate::operation::actively_writing_add(self.to.clone());
                 let result = self.copy(ctx, progress).await;
 
                 if result.is_err() {
                     _ = compio::fs::remove_file(&self.to).await;
                 }
 
+                crate::operation::actively_writing_remove(&self.to);
                 return result;
             }
             OpKind::Move { cross_device_copy } => {

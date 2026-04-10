@@ -6771,6 +6771,10 @@ impl Tab {
                             stream::channel(
                                 1,
                                 move |mut output: futures::channel::mpsc::Sender<_>| async move {
+                                    while crate::operation::is_actively_writing_to(&path) {
+                                        crate::operation::actively_writing_tick().await;
+                                    }
+
                                     let message = {
                                         let path = path.clone();
 
