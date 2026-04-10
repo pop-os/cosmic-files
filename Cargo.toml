@@ -63,6 +63,7 @@ num_cpus = "1.17.0"
 filetime = "0.2"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+thiserror = "2.0.18"
 
 # Completion-based IO runtime to enable io_uring / IOCP file IO support.
 [dependencies.compio]
