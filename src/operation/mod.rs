@@ -114,7 +114,7 @@ async fn copy_or_move(
         );
 
         // Handle duplicate file names by renaming paths
-        let mut from_to_pairs: Vec<(PathBuf, PathBuf)> = paths
+        let from_to_pairs_iter = paths
             .into_iter()
             .zip(std::iter::repeat(to.as_path()))
             .filter_map(|(from, to)| {
@@ -132,36 +132,46 @@ async fn copy_or_move(
                     //TODO: how to handle from missing file name?
                     None
                 }
-            })
-            .collect();
+            });
 
         // Attempt quick and simple renames
         //TODO: allow rename to be used for directories in recursive context?
-        if matches!(method, Method::Move { .. }) {
-            from_to_pairs.retain(|(from, to)| {
-                //TODO: show replace dialog here?
-                if to.exists() {
-                    return true;
-                }
 
-                //TODO: use compio::fs::rename?
-                match fs::rename(from, to) {
-                    Ok(()) => {
-                        log::info!("renamed {} to {}", from.display(), to.display());
-                        false
+        let from_to_pairs: Vec<(PathBuf, PathBuf)> = if matches!(method, Method::Move { .. }) {
+            from_to_pairs_iter
+                .map(|(from, to)| async move {
+                    //TODO: show replace dialog here?
+                    if to.exists() {
+                        return Some((from, to));
                     }
-                    Err(err) => {
-                        log::info!(
-                            "failed to rename {} to {}, fallback to recursive move: {}",
-                            from.display(),
-                            to.display(),
-                            err
-                        );
-                        true
+
+                    match compio::fs::rename(&from, &to).await {
+                        Ok(()) => {
+                            log::info!("renamed {} to {}", from.display(), to.display());
+                            None
+                        }
+                        Err(err) => {
+                            log::info!(
+                                "failed to rename {} to {}, fallback to recursive move: {}",
+                                from.display(),
+                                to.display(),
+                                err
+                            );
+                            Some((from, to))
+                        }
                     }
-                }
-            });
-        }
+                })
+                .collect::<cosmic::iced::futures::stream::FuturesOrdered<_>>()
+                .fold(Vec::new(), |mut pairs, pair| async move {
+                    if let Some(pair) = pair {
+                        pairs.push(pair);
+                    }
+                    pairs
+                })
+                .await
+        } else {
+            from_to_pairs_iter.collect()
+        };
 
         let mut context = Context::new(controller.clone());
 
@@ -219,7 +229,7 @@ pub async fn sync_to_disk(
         }
     }))
     .buffer_unordered(32)
-    .collect::<Vec<_>>()
+    .collect::<()>()
     .await;
 
     // Sync directories to disk
@@ -229,7 +239,7 @@ pub async fn sync_to_disk(
         }
     }))
     .buffer_unordered(16)
-    .collect::<Vec<_>>()
+    .collect::<()>()
     .await;
 }
 
