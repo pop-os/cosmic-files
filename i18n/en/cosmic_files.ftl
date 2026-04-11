@@ -116,6 +116,7 @@ permanently-delete-warning = {$target} will be permanently deleted. This action 
 ## Rename Dialog
 rename-file = Rename file
 rename-folder = Rename folder
+rename-confirm = Rename
 
 ## Replace Dialog
 replace = Replace
