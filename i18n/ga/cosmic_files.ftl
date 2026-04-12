@@ -433,3 +433,4 @@ keywords = Fillteán;Bainisteoir;
 show-recents = Fillteán le déanaí sa bharra taoibh
 clear-recents-history = Glan stair na n-earraí le déanaí
 copy-path = Cóipeáil an chosán
+mixed = Measctha
