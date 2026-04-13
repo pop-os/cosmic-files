@@ -1,6 +1,17 @@
 # cosmic-files
 File manager for the COSMIC desktop environment
 
+## Platform Requirements
+
+**⚠️ Linux Ecosystem Required**
+
+This project must be compiled and run in a Linux environment. It depends on:
+- Wayland display server protocol
+- Linux-specific system libraries (libxkbcommon, etc.)
+- freedesktop.org standards
+
+**macOS and Windows are not supported** for building or running this application.
+
 ## Build the project from source
 
 ```sh
