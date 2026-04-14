@@ -708,6 +708,9 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
             children_opt,
         },
         hidden,
+        image_dimensions: (!remote && mime.type_() == mime::IMAGE)
+            .then(|| image::image_dimensions(&path).ok())
+            .flatten(),
         location_opt: Some(Location::Path(path)),
         mime,
         icon_handle_grid,
@@ -843,6 +846,7 @@ pub fn item_from_entry(
         },
         hidden,
         location_opt: Some(Location::Path(path)),
+        image_dimensions: None,
         mime,
         icon_handle_grid,
         icon_handle_list,
@@ -896,6 +900,9 @@ pub fn item_from_trash_entry(
         metadata: ItemMetadata::Trash { metadata, entry },
         hidden: false,
         location_opt: None,
+        image_dimensions: (mime.type_() == mime::IMAGE)
+            .then(|| image::image_dimensions(&original_path).ok())
+            .flatten(),
         mime,
         icon_handle_grid,
         icon_handle_list,
@@ -1444,6 +1451,7 @@ pub fn scan_desktop(
             metadata,
             hidden: false,
             location_opt: Some(Location::Trash),
+            image_dimensions: None,
             mime,
             icon_handle_grid,
             icon_handle_list,
@@ -2319,6 +2327,7 @@ pub struct Item {
     pub hidden: bool,
     pub location_opt: Option<Location>,
     pub mime: Mime,
+    pub image_dimensions: Option<(u32, u32)>,
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
     pub icon_handle_list_condensed: widget::icon::Handle,
@@ -6713,13 +6722,13 @@ impl Tab {
 
                     // Determine effective memory budget based on image size
                     let (effective_max_mb, effective_jobs) = if mime.type_() == mime::IMAGE {
-                        match image::image_dimensions(&path) {
-                            Ok((width, height)) => {
+                        match item.image_dimensions {
+                            Some((width, height)) => {
                                 let (_use_dedicated, eff_mb, eff_jobs) =
                                     should_use_dedicated_worker(width, height, max_mb, max_jobs);
                                 (eff_mb, eff_jobs)
                             }
-                            Err(_) => (max_mb, max_jobs),
+                            None => (max_mb, max_jobs),
                         }
                     } else {
                         (max_mb, max_jobs)
