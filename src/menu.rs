@@ -60,6 +60,7 @@ pub fn context_menu<'a>(
     key_binds: &HashMap<KeyBind, Action>,
     modifiers: &Modifiers,
     clipboard_paste_available: bool,
+    trash_is_empty: bool,
 ) -> Element<'a, tab::Message> {
     let find_key = |action: &Action| -> String {
         for (key_bind, key_action) in key_binds {
@@ -183,7 +184,7 @@ pub fn context_menu<'a>(
         ) => {
             if selected_trash_only {
                 children.push(menu_item(fl!("open"), Action::Open).into());
-                if !trash::os_limited::is_empty().unwrap_or(true) {
+                if !trash_is_empty {
                     children.push(menu_item(fl!("empty-trash"), Action::EmptyTrash).into());
                 }
             } else if let Some(entry) = selected_desktop_entry {

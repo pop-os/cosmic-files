@@ -1833,6 +1833,7 @@ impl Application for App {
                                                             &app.key_binds,
                                                             &app.modifiers,
                                                             false, // Paste not used in dialogs
+                                                            true, // trash_is_empty - default to true for dialogs
                                                         )
                                                         .map(Message::TabMessage)
                                                         .map(cosmic::Action::App),
@@ -2026,7 +2027,7 @@ impl Application for App {
 
         col = col.push(
             self.tab
-                .view(&self.key_binds, &self.modifiers, false)
+                .view(&self.key_binds, &self.modifiers, false, true)
                 .map(Message::TabMessage),
         );
 
