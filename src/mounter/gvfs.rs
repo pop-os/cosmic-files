@@ -5,7 +5,7 @@ use cosmic::{
 };
 use gio::{glib, prelude::*};
 use std::{any::TypeId, cell::Cell, future::pending, hash::Hash, path::PathBuf, sync::Arc};
-use tokio::sync::{Mutex, mpsc};
+use tokio::sync::mpsc;
 
 use super::{Mounter, MounterAuth, MounterItem, MounterItems, MounterMessage};
 use crate::{
@@ -230,7 +230,10 @@ fn dir_info(uri: &str) -> Result<(String, String, Option<PathBuf>), glib::Error>
     Ok((resolved_uri, info.display_name().into(), file.path()))
 }
 
-fn mount_op(uri: String, event_tx: mpsc::UnboundedSender<Event>) -> gio::MountOperation {
+fn mount_op(
+    uri: String,
+    event_tx: std::sync::Weak<crate::channel::Sender<Event>>,
+) -> gio::MountOperation {
     let mount_op = gio::MountOperation::new();
     mount_op.connect_ask_password(
         move |mount_op, message, default_user, default_domain, flags| {
@@ -253,9 +256,9 @@ fn mount_op(uri: String, event_tx: mpsc::UnboundedSender<Event>) -> gio::MountOp
                     .then_some(false),
             };
             let (auth_tx, mut auth_rx) = mpsc::channel(1);
-            event_tx
-                .send(Event::NetworkAuth(uri.clone(), auth, auth_tx))
-                .unwrap();
+            if let Some(event_tx) = event_tx.upgrade() {
+                event_tx.send(Event::NetworkAuth(uri.clone(), auth, auth_tx));
+            }
             //TODO: async recv?
             if let Some(auth) = auth_rx.blocking_recv() {
                 if auth.anonymous_opt == Some(true) {
@@ -358,37 +361,45 @@ impl Item {
 
 pub struct Gvfs {
     command_tx: mpsc::UnboundedSender<Cmd>,
-    event_rx: Arc<Mutex<mpsc::UnboundedReceiver<Event>>>,
+    event_rx: Arc<crate::channel::Receiver<Event>>,
 }
 
 impl Gvfs {
     pub fn new() -> Self {
         //TODO: switch to using gvfs-zbus which will better integrate with async rust
         let (command_tx, mut command_rx) = mpsc::unbounded_channel();
-        let (event_tx, event_rx) = mpsc::unbounded_channel();
+        let (event_tx, event_rx) = crate::channel::channel();
+        let event_tx = Arc::new(event_tx);
         std::thread::spawn(move || {
             let main_loop = glib::MainLoop::new(None, false);
             main_loop.context().spawn_local(async move {
+                let event_tx = Arc::downgrade(&event_tx);
                 let monitor = gio::VolumeMonitor::get();
                 {
                     let event_tx = event_tx.clone();
                     monitor.connect_mount_changed(move |_monitor, mount| {
                         log::info!("mount changed {}", MountExt::name(mount));
-                        event_tx.send(Event::Changed).unwrap();
+                        if let Some(event_tx) = event_tx.upgrade() {
+                            event_tx.send(Event::Changed);
+                        }
                     });
                 }
                 {
                     let event_tx = event_tx.clone();
                     monitor.connect_mount_added(move |_monitor, mount| {
                         log::info!("mount added {}", MountExt::name(mount));
-                        event_tx.send(Event::Changed).unwrap();
+                        if let Some(event_tx) = event_tx.upgrade() {
+                            event_tx.send(Event::Changed);
+                        }
                     });
                 }
                 {
                     let event_tx = event_tx.clone();
                     monitor.connect_mount_removed(move |_monitor, mount| {
                         log::info!("mount removed {}", MountExt::name(mount));
-                        event_tx.send(Event::Changed).unwrap();
+                        if let Some(event_tx) = event_tx.upgrade() {
+                            event_tx.send(Event::Changed);
+                        }
                     });
                 }
 
@@ -396,21 +407,27 @@ impl Gvfs {
                     let event_tx = event_tx.clone();
                     monitor.connect_volume_changed(move |_monitor, volume| {
                         log::info!("volume changed {}", VolumeExt::name(volume));
-                        event_tx.send(Event::Changed).unwrap();
+                        if let Some(event_tx) = event_tx.upgrade() {
+                            event_tx.send(Event::Changed);
+                        }
                     });
                 }
                 {
                     let event_tx = event_tx.clone();
                     monitor.connect_volume_added(move |_monitor, volume| {
                         log::info!("volume added {}", VolumeExt::name(volume));
-                        event_tx.send(Event::Changed).unwrap();
+                        if let Some(event_tx) = event_tx.upgrade() {
+                            event_tx.send(Event::Changed);
+                        }
                     });
                 }
                 {
                     let event_tx = event_tx.clone();
                     monitor.connect_volume_removed(move |_monitor, volume| {
                         log::info!("volume removed {}", VolumeExt::name(volume));
-                        event_tx.send(Event::Changed).unwrap();
+                        if let Some(event_tx) = event_tx.upgrade() {
+                            event_tx.send(Event::Changed);
+                        }
                     });
                 }
 
@@ -420,7 +437,11 @@ impl Gvfs {
                             items_tx.send(items(&monitor, sizes)).await.unwrap();
                         }
                         Cmd::Rescan => {
-                            event_tx.send(Event::Items(items(&monitor, IconSizes::default()))).unwrap();
+                            let Some(event_tx) = event_tx.upgrade() else {
+                                return;
+                            };
+
+                            event_tx.send(Event::Items(items(&monitor, IconSizes::default())));
                         }
                         Cmd::Mount(mounter_item, complete_tx) => {
                             let MounterItem::Gvfs(ref item) = mounter_item else {
@@ -472,6 +493,9 @@ impl Gvfs {
                                                         .ok().map(|info| info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE))
                                                         .unwrap_or(true);
                                                 }
+                                        let Some(event_tx) = event_tx.upgrade() else {
+                                            return;
+                                        };
                                         event_tx.send(Event::MountResult(updated_item, match res {
                                             Ok(()) => {
                                                 _ = complete_tx.send(Ok(()));
@@ -483,7 +507,7 @@ impl Gvfs {
                                                 Some(gio::IOErrorEnum::FailedHandled) => Ok(false),
                                                 _ => Err(format!("{err}"))
                                             }}
-                                        })).unwrap();
+                                        }));
                                     },
                                 );
                                 break;
@@ -499,6 +523,9 @@ impl Gvfs {
                                 gio::Cancellable::NONE,
                                 move |res| {
                                     log::info!("network drive {uri}: result {res:?}");
+                                    let Some(event_tx) = event_tx.upgrade() else {
+                                        return;
+                                    };
                                     event_tx.send(Event::NetworkResult(uri, match res {
                                         Ok(()) => {
                                             _ = result_tx.send(Ok(()));
@@ -509,7 +536,7 @@ impl Gvfs {
                                             Some(gio::IOErrorEnum::FailedHandled) => Ok(false),
                                             _ => Err(format!("{err}"))
                                         }}
-                                    })).unwrap();
+                                    }));
                                 }
                             );
                         }
@@ -533,6 +560,9 @@ impl Gvfs {
                                         // FIXME sometimes a uri can be mounted and then not recognized as mounted...
                                         // seems to be related to uri with a path
                                         items_tx.blocking_send(network_scan(&uri, sizes)).unwrap();
+                                        let Some(event_tx) = event_tx.upgrade() else {
+                                            return;
+                                        };
                                         event_tx.send(Event::NetworkResult(resolved_uri, match res {
                                             Ok(()) => {
                                                 Ok(true)
@@ -541,7 +571,7 @@ impl Gvfs {
                                                 Some(gio::IOErrorEnum::FailedHandled) => Ok(false),
                                                 _ => Err(format!("{err}"))
                                             }
-                                        })).unwrap();
+                                        }));
                                     }
                                 );
                             } else {
@@ -597,7 +627,7 @@ impl Gvfs {
         });
         Self {
             command_tx,
-            event_rx: Arc::new(Mutex::new(event_rx)),
+            event_rx: Arc::new(event_rx),
         }
     }
 }
@@ -671,7 +701,7 @@ impl Mounter for Gvfs {
         let event_rx = self.event_rx.clone();
         struct Wrapper {
             command_tx: mpsc::UnboundedSender<Cmd>,
-            event_rx: Arc<Mutex<mpsc::UnboundedReceiver<Event>>>,
+            event_rx: Arc<crate::channel::Receiver<Event>>,
         }
         impl Hash for Wrapper {
             fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -695,7 +725,7 @@ impl Mounter for Gvfs {
                         MounterMessage,
                     >| async move {
                         command_tx.send(Cmd::Rescan).unwrap();
-                        while let Some(event) = event_rx.lock().await.recv().await {
+                        while let Some(event) = event_rx.recv().await {
                             match event {
                                 Event::Changed => command_tx.send(Cmd::Rescan).unwrap(),
                                 Event::Items(items) => {

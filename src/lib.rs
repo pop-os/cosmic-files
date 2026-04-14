@@ -8,6 +8,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use app::{App, Flags};
 pub mod app;
 mod archive;
+pub mod channel;
 pub mod clipboard;
 mod context_action;
 use config::Config;
@@ -136,7 +137,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         .event_format(log_format);
 
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::from_env("RUST_LOG"))
+        .with(tracing_subscriber::EnvFilter::from_default_env())
         .with(log_layer)
         .init();
 

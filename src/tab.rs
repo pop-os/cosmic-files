@@ -6955,9 +6955,8 @@ impl Tab {
                                 .await
                                 .unwrap();
 
-                            let output = Arc::new(tokio::sync::Mutex::new(output));
+                            let (watch_tx, mut watch_rx) = tokio::sync::watch::channel(true);
                             {
-                                let output = output.clone();
                                 tokio::task::spawn_blocking(move || {
                                     scan_search(
                                         &search_location,
@@ -6985,14 +6984,7 @@ impl Tab {
                                                         true
                                                     } else {
                                                         // Wake up update method
-                                                        futures::executor::block_on(async {
-                                                            output
-                                                                .lock()
-                                                                .await
-                                                                .send(Message::SearchReady(false))
-                                                                .await
-                                                        })
-                                                        .is_ok()
+                                                        watch_tx.send(false).is_ok()
                                                     }
                                                 }
                                                 Err(_) => false,
@@ -7005,13 +6997,16 @@ impl Tab {
                                         search_location,
                                         start.elapsed(),
                                     );
-                                })
-                                .await
-                                .unwrap();
+                                });
+                            }
+
+                            while watch_rx.changed().await.is_ok() {
+                                let is_ready = *watch_rx.borrow_and_update();
+                                let _ = output.send(Message::SearchReady(is_ready)).await;
                             }
 
                             // Send final ready
-                            let _ = output.lock().await.send(Message::SearchReady(true)).await;
+                            let _ = output.send(Message::SearchReady(true)).await;
 
                             std::future::pending().await
                         },
