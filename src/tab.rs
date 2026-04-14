@@ -39,7 +39,6 @@ use icu::{
 use image::{DynamicImage, ImageReader};
 use jiff_icu::ConvertFrom;
 use mime_guess::{Mime, mime};
-use regex::Regex;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -1158,136 +1157,14 @@ pub fn scan_search<F: Fn(SearchItem) -> bool + Sync>(
             }
         }
         SearchLocation::Trash => {
-            trash_helpers::scan_search_trash(callback, &regex);
+            crate::trash_helpers::scan_search_trash(callback, &regex);
         }
     }
 }
 
-// This config statement is from trash::os_limited, inverted
-#[cfg(not(any(
-    target_os = "windows",
-    all(
-        unix,
-        not(target_os = "macos"),
-        not(target_os = "ios"),
-        not(target_os = "android")
-    )
-)))]
-mod trash_helpers {
-    use super::*;
 
-    pub fn trash_entries() -> usize {
-        0
-    }
 
-    pub fn trash_icon(icon_size: u16) -> widget::icon::Handle {
-        widget::icon::from_name("user-trash")
-            .size(icon_size)
-            .handle()
-    }
 
-    pub fn trash_icon_symbolic(icon_size: u16) -> widget::icon::Handle {
-        widget::icon::from_name("user-trash-symbolic")
-            .size(icon_size)
-            .handle()
-    }
-
-    pub fn scan_trash(_sizes: IconSizes) -> Vec<Item> {
-        log::warn!("viewing trash not supported on this platform");
-        Vec::new()
-    }
-
-    pub fn scan_search_trash<F: Fn(SearchItem) -> bool + Sync>(callback: F, regex: &Regex) {}
-}
-
-// This config statement is from trash::os_limited
-#[cfg(any(
-    target_os = "windows",
-    all(
-        unix,
-        not(target_os = "macos"),
-        not(target_os = "ios"),
-        not(target_os = "android")
-    )
-))]
-pub mod trash_helpers {
-    use super::*;
-
-    pub fn trash_entries() -> usize {
-        match trash::os_limited::list() {
-            Ok(entries) => entries.len(),
-            Err(_err) => 0,
-        }
-    }
-
-    pub fn trash_icon(icon_size: u16) -> widget::icon::Handle {
-        widget::icon::from_name(if trash::os_limited::is_empty().unwrap_or(true) {
-            "user-trash"
-        } else {
-            "user-trash-full"
-        })
-        .size(icon_size)
-        .handle()
-    }
-
-    pub fn trash_icon_symbolic(icon_size: u16) -> widget::icon::Handle {
-        widget::icon::from_name(if trash::os_limited::is_empty().unwrap_or(true) {
-            "user-trash-symbolic"
-        } else {
-            "user-trash-full-symbolic"
-        })
-        .size(icon_size)
-        .handle()
-    }
-
-    pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
-        let entries = match trash::os_limited::list() {
-            Ok(entry) => entry,
-            Err(err) => {
-                log::warn!("failed to read trash items: {err}");
-                return Vec::new();
-            }
-        };
-        let mut items: Vec<_> = entries
-            .into_iter()
-            .filter_map(|entry| {
-                let metadata = trash::os_limited::metadata(&entry)
-                    .inspect_err(|err| {
-                        log::warn!("failed to get metadata for trash item {entry:?}: {err}")
-                    })
-                    .ok()?;
-                Some(item_from_trash_entry(entry, metadata, sizes))
-            })
-            .collect();
-        items.sort_by(|a, b| match (a.metadata.is_dir(), b.metadata.is_dir()) {
-            (true, false) => Ordering::Less,
-            (false, true) => Ordering::Greater,
-            _ => LANGUAGE_SORTER.compare(&a.display_name, &b.display_name),
-        });
-        items
-    }
-
-    pub fn scan_search_trash<F: Fn(SearchItem) -> bool + Sync>(callback: F, regex: &Regex) {
-        let entries = match trash::os_limited::list() {
-            Ok(entries) => entries,
-            Err(err) => {
-                log::warn!("failed to read trash items: {err}");
-                return;
-            }
-        };
-
-        for entry in entries {
-            if let Ok(metadata) = trash::os_limited::metadata(&entry).inspect_err(|err| {
-                log::warn!("failed to get metadata for trash item {entry:?}: {err}")
-            }) {
-                let name = entry.name.to_string_lossy();
-                if regex.is_match(&name) && !callback(SearchItem::Trash(entry, metadata)) {
-                    break;
-                }
-            }
-        }
-    }
-}
 
 fn uri_to_path(uri: String) -> Option<PathBuf> {
     uri.parse::<url::Url>().ok().and_then(|url| {
@@ -1422,15 +1299,15 @@ pub fn scan_desktop(
         let display_name = Item::display_name(&name);
 
         let metadata = ItemMetadata::SimpleDir {
-            entries: trash_helpers::trash_entries() as u64,
+            entries: crate::trash_helpers::trash_entries() as u64,
         };
 
         let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) = {
             (
                 "inode/directory".parse().unwrap(),
-                trash_helpers::trash_icon(sizes.grid()),
-                trash_helpers::trash_icon(sizes.list()),
-                trash_helpers::trash_icon(sizes.list_condensed()),
+                crate::trash_helpers::trash_icon(sizes.grid()),
+                crate::trash_helpers::trash_icon(sizes.list()),
+                crate::trash_helpers::trash_icon(sizes.list_condensed()),
             )
         };
 
@@ -1670,7 +1547,7 @@ impl Location {
                 // Search is done incrementally
                 Vec::new()
             }
-            Self::Trash => trash_helpers::scan_trash(sizes),
+            Self::Trash => crate::trash_helpers::scan_trash(sizes),
             Self::Recents => scan_recents(sizes),
             Self::Network(uri, _, _) => scan_network(uri, sizes),
         };

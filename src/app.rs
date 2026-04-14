@@ -1780,7 +1780,7 @@ impl App {
 
         nav_model = nav_model.insert(|b| {
             b.text(fl!("trash"))
-                .icon(icon::icon(tab::trash_helpers::trash_icon_symbolic(16)))
+                .icon(icon::icon(crate::trash_helpers::trash_icon_symbolic(16)))
                 .data(Location::Trash)
                 .divider_above()
         });
@@ -4157,7 +4157,7 @@ impl Application for App {
                 if let Some(entity) = maybe_entity {
                     self.nav_model.icon_set(
                         entity,
-                        icon::icon(tab::trash_helpers::trash_icon_symbolic(16)),
+                        icon::icon(crate::trash_helpers::trash_icon_symbolic(16)),
                     );
                 }
 
