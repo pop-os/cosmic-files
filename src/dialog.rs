@@ -5,6 +5,9 @@ use cosmic::{
     Application, ApplicationExt, Element,
     app::{Core, Task, context_drawer, cosmic::Cosmic},
     cosmic_config, cosmic_theme, executor,
+    iced::core::widget::operation,
+    iced::platform_specific::shell::{self as iced_winit, SurfaceIdWrapper},
+    iced::widget::scrollable::AbsoluteOffset,
     iced::{
         self, Alignment, Event, Length, Size, Subscription,
         core::SmolStr,
@@ -15,9 +18,6 @@ use cosmic::{
         widget::scrollable,
         window,
     },
-    iced_core::widget::operation,
-    iced_widget::scrollable::AbsoluteOffset,
-    iced_winit::{self, SurfaceIdWrapper},
     theme,
     widget::{
         self, Operation,
@@ -203,7 +203,7 @@ impl<T: AsRef<str>> From<T> for DialogLabel {
 
 impl<'a, M: Clone + 'static> From<&'a DialogLabel> for Element<'a, M> {
     fn from(label: &'a DialogLabel) -> Self {
-        let mut iced_spans: Vec<cosmic::iced_core::text::Span<'_, ()>> =
+        let mut iced_spans: Vec<cosmic::iced::core::text::Span<'_, ()>> =
             Vec::with_capacity(label.spans.len());
         for span in &label.spans {
             iced_spans.push(cosmic::iced::widget::span(&span.text).underline(span.underline));
@@ -441,8 +441,13 @@ impl<M: Send + 'static> Dialog<M> {
 
 #[derive(Clone, Debug)]
 enum DialogPage {
-    NewFolder { parent: PathBuf, name: String },
-    Replace { filename: String },
+    NewFolder {
+        parent: PathBuf,
+        name: String,
+    },
+    Replace {
+        filename: String,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -1208,7 +1213,9 @@ impl Application for App {
                 .icon(widget::icon::from_name("dialog-question").size(64))
                 .body(fl!("replace-warning"))
                 .primary_action(
-                    widget::button::suggested(fl!("replace")).on_press(Message::DialogComplete),
+                    widget::button::suggested(fl!("replace"))
+                        .on_press(Message::DialogComplete)
+                        .id(REPLACE_BUTTON_ID.clone()),
                 )
                 .secondary_action(
                     widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
@@ -1789,7 +1796,7 @@ impl Application for App {
                                         use cctk::wayland_protocols::xdg::shell::client::xdg_positioner::{
                                             Anchor, Gravity,
                                         };
-                                        use cosmic::iced_runtime::platform_specific::wayland::popup::{
+                                        use cosmic::iced::runtime::platform_specific::wayland::popup::{
                                             SctkPopupSettings, SctkPositioner,
                                         };
                                         use cosmic::iced::Rectangle;
@@ -1831,6 +1838,7 @@ impl Application for App {
                                                             &app.key_binds,
                                                             &app.modifiers,
                                                             false, // Paste not used in dialogs
+                                                            &app.flags.config.context_actions,
                                                         )
                                                         .map(Message::TabMessage)
                                                         .map(cosmic::Action::App),
@@ -2023,8 +2031,8 @@ impl Application for App {
         }
 
         col = col.push(
-            self.tab
-                .view(&self.key_binds, &self.modifiers, false)
+                self.tab
+                .view(&self.key_binds, &self.modifiers, false, &[])
                 .map(Message::TabMessage),
         );
 

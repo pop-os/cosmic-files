@@ -8,6 +8,7 @@ use app::{App, Flags};
 pub mod app;
 mod archive;
 pub mod clipboard;
+mod context_action;
 use config::Config;
 pub mod config;
 pub mod dialog;

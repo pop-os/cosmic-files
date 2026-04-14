@@ -20,7 +20,7 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use crate::{
     app::{Action, Message},
-    config::Config,
+    config::{Config, ContextActionPreset},
     fl,
     tab::{self, HeadingOptions, Location, LocationMenuAction, SearchLocation, Tab},
 };
@@ -60,6 +60,7 @@ pub fn context_menu<'a>(
     key_binds: &HashMap<KeyBind, Action>,
     modifiers: &Modifiers,
     clipboard_paste_available: bool,
+    context_actions: &[ContextActionPreset],
 ) -> Element<'a, tab::Message> {
     let find_key = |action: &Action| -> String {
         for (key_bind, key_action) in key_binds {
@@ -157,6 +158,14 @@ pub fn context_menu<'a>(
     selected_types.sort_unstable();
     selected_types.dedup();
     selected_trash_only = selected_trash_only && selected == 1;
+    let context_action_items = |selected: usize, selected_dir: usize| {
+        context_actions
+            .iter()
+            .enumerate()
+            .filter(|(_, action)| action.matches_selection(selected, selected_dir))
+            .map(|(i, action)| menu_item(action.name.clone(), Action::RunContextAction(i)).into())
+            .collect::<Vec<Element<'a, tab::Message>>>()
+    };
     // Parse the desktop entry if it is the only selection
     #[cfg(feature = "desktop")]
     let selected_desktop_entry = selected_desktop_entry.and_then(|path| {
@@ -204,6 +213,11 @@ pub fn context_menu<'a>(
                 }
                 // Should this simply bypass trash and remove the shortcut?
                 children.push(menu_item(fl!("move-to-trash"), Action::Delete).into());
+                let action_items = context_action_items(selected, selected_dir);
+                if !action_items.is_empty() {
+                    children.push(divider::horizontal::light().into());
+                    children.extend(action_items);
+                }
             } else if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
                     children.push(menu_item(fl!("open"), Action::Open).into());
@@ -234,6 +248,11 @@ pub fn context_menu<'a>(
                     children.push(menu_item(fl!("open-in-new-tab"), Action::OpenInNewTab).into());
                     children
                         .push(menu_item(fl!("open-in-new-window"), Action::OpenInNewWindow).into());
+                }
+                let action_items = context_action_items(selected, selected_dir);
+                if !action_items.is_empty() {
+                    children.push(divider::horizontal::light().into());
+                    children.extend(action_items);
                 }
                 children.push(divider::horizontal::light().into());
                 if selected_mount_point == 0 {

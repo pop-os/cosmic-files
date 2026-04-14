@@ -1,4 +1,4 @@
-use cosmic::{iced_core, iced_widget};
+use cosmic::iced::{core as iced_core, widget as iced_widget};
 use iced_core::event::Event;
 use iced_core::layout;
 use iced_core::mouse;

@@ -2,6 +2,7 @@ use cosmic::{
     Apply, Element, cosmic_theme,
     desktop::fde::{DesktopEntry, get_languages_from_env},
     font,
+    iced::core::{mouse::ScrollDelta, widget::tree},
     iced::{
         Alignment, Border, Color, ContentFit, Length, Point, Rectangle, Size, Subscription, Vector,
         advanced::{
@@ -20,7 +21,6 @@ use cosmic::{
         },
         window,
     },
-    iced_core::{mouse::ScrollDelta, widget::tree},
     theme,
     widget::{
         self, DndDestination, DndSource, Id, RcElementWrapper, Widget,
@@ -66,7 +66,10 @@ use crate::{
     FxOrderMap,
     app::{Action, PreviewItem, PreviewKind},
     clipboard::{ClipboardCopy, ClipboardKind, ClipboardPaste},
-    config::{DesktopConfig, ICON_SCALE_MAX, ICON_SIZE_GRID, IconSizes, TabConfig, ThumbCfg},
+    config::{
+        ContextActionPreset, DesktopConfig, ICON_SCALE_MAX, ICON_SIZE_GRID, IconSizes, TabConfig,
+        ThumbCfg,
+    },
     dialog::DialogKind,
     fl,
     large_image::{
@@ -1794,6 +1797,7 @@ pub enum Command {
     OpenInNewWindow(PathBuf),
     OpenTrash,
     Preview(PreviewKind),
+    RunContextAction(usize),
     SetOpenWith(Mime, String),
     SetPermissions(PathBuf, u32),
     SetMultiplePermissions(Vec<(PathBuf, u32)>),
@@ -1852,6 +1856,7 @@ pub enum Message {
     SelectFirst,
     SelectLast,
     SetOpenWith(Mime, String),
+    RunContextAction(usize),
     SetPermissions(PathBuf, u32),
     ShiftPermissions(Option<(PathBuf, u32)>, u32, u32),
     SetSort(HeadingOptions, bool),
@@ -2440,7 +2445,7 @@ impl Item {
             ..
         } = theme::active().cosmic().spacing;
 
-        let mut column = widget::column().spacing(space_m);
+        let mut column = widget::column::with_capacity(4).spacing(space_m);
 
         column = column.push(
             widget::container(self.preview())
@@ -2448,7 +2453,7 @@ impl Item {
                 .max_height(THUMBNAIL_SIZE as f32),
         );
 
-        let mut details = widget::column().spacing(space_xxxs);
+        let mut details = widget::column::with_capacity(8).spacing(space_xxxs);
         details = details.push(widget::text::heading(self.name.clone()));
         details = details.push(widget::text::body(fl!(
             "type",
@@ -2618,10 +2623,10 @@ impl Item {
     pub fn replace_view(&self, heading: String, military_time: bool) -> Element<'_, Message> {
         let cosmic_theme::Spacing { space_xxxs, .. } = theme::active().cosmic().spacing;
 
-        let mut row = widget::row().spacing(space_xxxs);
+        let mut row = widget::row::with_capacity(2).spacing(space_xxxs);
         row = row.push(self.preview());
 
-        let mut column = widget::column().spacing(space_xxxs);
+        let mut column = widget::column::with_capacity(3).spacing(space_xxxs);
         column = column.push(widget::text::heading(heading));
 
         //TODO: translate!
@@ -3012,7 +3017,7 @@ impl Tab {
     /// Returns true if an item was selected.
     pub fn select_by_prefix(&mut self, prefix: &str) -> bool {
         let prefix_lower = prefix.to_lowercase();
-        self.select_focus = None;
+        let focus = self.select_focus.take();
 
         if let Some(ref mut items) = self.items_opt {
             // First, deselect all items
@@ -3020,16 +3025,102 @@ impl Tab {
                 item.selected = false;
             }
 
-            // Find first matching item
-            for (i, item) in items.iter_mut().enumerate() {
-                if item.name.to_lowercase().starts_with(&prefix_lower) {
-                    item.selected = true;
-                    self.select_focus = Some(i);
-                    return true;
-                }
+            // Determine the start index of the search. When the index is before the currently focused item, it will be
+            // considered first, otherwise last. Consider the focused item last when only a single character has been
+            // typed, so we eagerly switch focus on the first character and stay on the same item as long as the prefix
+            // matches.
+            let single_char = prefix_lower.chars().count() == 1;
+            let start = if single_char {
+                Self::index_after_focus(focus, self.sort_direction)
+            } else {
+                Self::index_before_focus(focus, self.sort_direction)
+            };
+            self.select_focus = Self::select_first_prefix_from_index(
+                &prefix_lower,
+                items,
+                start,
+                self.sort_direction,
+            );
+
+            if self.select_focus.is_some() || single_char {
+                return self.select_focus.is_some();
             }
+
+            let mut chars = prefix_lower.chars();
+            let Some(first) = chars.next() else {
+                log::error!("search term is empty");
+                return self.select_focus.is_some();
+            };
+
+            // Check if all entered characters are the same
+            if !chars.all(|c| c == first) {
+                return self.select_focus.is_some();
+            }
+
+            // Search for a single character when all entered characters are the same.
+            // This allows cycling through items starting with the same character by repeatedly pressing a key.
+            let start = Self::index_after_focus(focus, self.sort_direction);
+            self.select_focus = Self::select_first_prefix_from_index(
+                &first.to_string(),
+                items,
+                start,
+                self.sort_direction,
+            );
+
+            return self.select_focus.is_some();
         }
         false
+    }
+
+    fn index_before_focus(current_focus: Option<usize>, forward: bool) -> usize {
+        current_focus.map_or(0, |i| if forward { i } else { i + 1 })
+    }
+
+    fn index_after_focus(current_focus: Option<usize>, forward: bool) -> usize {
+        current_focus.map_or(0, |i| if forward { i + 1 } else { i })
+    }
+
+    fn select_first_prefix_from_index(
+        prefix_lower: &str,
+        items: &mut [Item],
+        start: usize,
+        forward: bool,
+    ) -> Option<usize> {
+        // Order the search item so they begin at `start`.
+        let Some((until, after)) = items.split_at_mut_checked(start) else {
+            log::error!(
+                "invalid start index {start} for items of length {}",
+                items.len()
+            );
+            return None;
+        };
+        let search_items = after
+            .into_iter()
+            .enumerate()
+            .map(|(i, item)| (i + start, item))
+            .chain(until.into_iter().enumerate());
+
+        if forward {
+            Self::select_first_prefix_match(prefix_lower, search_items)
+        } else {
+            Self::select_first_prefix_match(prefix_lower, search_items.rev())
+        }
+    }
+
+    /// Selects the first item in the given iterator whose name starts with the given prefix.
+    ///
+    /// The `prefix` must be lowercase.
+    fn select_first_prefix_match<'a>(
+        prefix: &str,
+        items: impl Iterator<Item = (usize, &'a mut Item)>,
+    ) -> Option<usize> {
+        for (i, item) in items {
+            if item.name.to_lowercase().starts_with(&prefix) {
+                item.selected = true;
+                return Some(i);
+            }
+        }
+        None
     }
 
     pub fn select_paths(&mut self, paths: Vec<PathBuf>) {
@@ -3565,6 +3656,11 @@ impl Tab {
                 self.context_menu = None;
 
                 commands.push(Command::Action(action));
+            }
+            Message::RunContextAction(action) => {
+                self.context_menu = None;
+
+                commands.push(Command::RunContextAction(action));
             }
             Message::ContextMenu(point_opt, _) => {
                 self.edit_location = None;
@@ -4828,14 +4924,14 @@ impl Tab {
 
                     let content: cosmic::Element<'_, Message> =
                         if let Some(error_msg) = error_msg_opt {
-                            widget::column()
+                            widget::column::with_capacity(2)
                                 .push(widget::image(image_handle))
                                 .push(widget::text(format!("⚠ {}", error_msg)).size(13))
                                 .padding(space_xs)
                                 .align_x(cosmic::iced::Alignment::Center)
                                 .into()
                         } else if is_loading {
-                            widget::column()
+                            widget::column::with_capacity(2)
                                 .push(widget::image(image_handle))
                                 .push(widget::text("Loading higher resolution...").size(14))
                                 .padding(space_xs)
@@ -5323,7 +5419,7 @@ impl Tab {
                     })
                     .into(),
                 ]),
-                Mode::Desktop => widget::column(),
+                Mode::Desktop => widget::column::with_capacity(0),
             }
             .align_x(Alignment::Center)
             .spacing(space_xxs),
@@ -5531,7 +5627,7 @@ impl Tab {
                     // Add a spacer if the row is empty, so scroll works
                     if grid_elements[row].is_empty() {
                         grid_elements[row].push(Element::from(
-                            widget::column()
+                            widget::column::with_capacity(0)
                                 .width(Length::Fill)
                                 .height(Length::Fixed(item_height as f32)),
                         ));
@@ -6027,7 +6123,7 @@ impl Tab {
 
                     button_row
                 } else {
-                    widget::column()
+                    widget::column::with_capacity(0)
                         .width(Length::Fill)
                         .height(Length::Fixed(f32::from(row_height)))
                         .into()
@@ -6083,6 +6179,7 @@ impl Tab {
         modifiers: &'a Modifiers,
         size: Size,
         clipboard_paste_available: bool,
+        context_actions: &'a [ContextActionPreset],
     ) -> Element<'a, Message> {
         // Update cached size
         self.size_opt.set(Some(size));
@@ -6170,8 +6267,13 @@ impl Tab {
         if let Some(point) = self.context_menu
             && (!cfg!(feature = "wayland") || !crate::is_wayland())
         {
-            let context_menu =
-                menu::context_menu(self, key_binds, modifiers, clipboard_paste_available);
+            let context_menu = menu::context_menu(
+                self,
+                key_binds,
+                modifiers,
+                clipboard_paste_available,
+                context_actions,
+            );
             popover = popover
                 .popup(context_menu)
                 .position(widget::popover::Position::Point(point));
@@ -6244,7 +6346,7 @@ impl Tab {
             tab_view = tab_view.style(|t| {
                 let mut a = widget::container::Style::default();
                 let c = t.cosmic();
-                a.border = cosmic::iced_core::Border {
+                a.border = cosmic::iced::core::Border {
                     color: (c.accent_color()).into(),
                     width: 1.,
                     radius: c.radius_0().into(),
@@ -6285,7 +6387,7 @@ impl Tab {
             ..
         } = theme::active().cosmic().spacing;
 
-        let mut column = widget::column().spacing(space_m);
+        let mut column = widget::column::with_capacity(4).spacing(space_m);
 
         let handle = widget::icon::from_name("text-x-generic")
             .size(IconSizes::default().grid())
@@ -6323,7 +6425,7 @@ impl Tab {
                 .collect()
         });
 
-        let mut details = widget::column().spacing(space_xxxs);
+        let mut details = widget::column::with_capacity(3).spacing(space_xxxs);
         details = details.push(widget::text::body(fl!(
             "items",
             items = selected_items.len()
@@ -6536,10 +6638,17 @@ impl Tab {
         key_binds: &'a HashMap<KeyBind, Action>,
         modifiers: &'a Modifiers,
         clipboard_paste_available: bool,
+        context_actions: &'a [ContextActionPreset],
     ) -> Element<'a, Message> {
         widget::responsive(move |size| {
             widget::id_container(
-                self.view_responsive(key_binds, modifiers, size, clipboard_paste_available),
+                self.view_responsive(
+                    key_binds,
+                    modifiers,
+                    size,
+                    clipboard_paste_available,
+                    context_actions,
+                ),
                 Id::new(format!(
                     "tab-{}-{}",
                     self.scrollable_id, self.location_title
@@ -6992,7 +7101,7 @@ pub fn respond_to_scroll_direction(delta: ScrollDelta, modifiers: &Modifiers) ->
 fn text_editor_class(
     theme: &cosmic::Theme,
     status: cosmic::widget::text_editor::Status,
-) -> cosmic::iced_widget::text_editor::Style {
+) -> cosmic::iced::widget::text_editor::Style {
     let cosmic = theme.cosmic();
     let container = theme.current_container();
 
@@ -7005,9 +7114,9 @@ fn text_editor_class(
     let placeholder = placeholder.into();
 
     match status {
-        cosmic::iced_widget::text_editor::Status::Active
-        | cosmic::iced_widget::text_editor::Status::Disabled => {
-            cosmic::iced_widget::text_editor::Style {
+        cosmic::iced::widget::text_editor::Status::Active
+        | cosmic::iced::widget::text_editor::Status::Disabled => {
+            cosmic::iced::widget::text_editor::Style {
                 background: background.into(),
                 border: cosmic::iced::Border {
                     radius: cosmic.corner_radii.radius_m.into(),
@@ -7019,9 +7128,9 @@ fn text_editor_class(
                 selection,
             }
         }
-        cosmic::iced_widget::text_editor::Status::Hovered
-        | cosmic::iced_widget::text_editor::Status::Focused { .. } => {
-            cosmic::iced_widget::text_editor::Style {
+        cosmic::iced::widget::text_editor::Status::Hovered
+        | cosmic::iced::widget::text_editor::Status::Focused { .. } => {
+            cosmic::iced::widget::text_editor::Style {
                 background: background.into(),
                 border: cosmic::iced::Border {
                     radius: cosmic.corner_radii.radius_m.into(),
@@ -7040,7 +7149,7 @@ fn text_editor_class(
 mod tests {
     use std::{fs, io, path::PathBuf};
 
-    use cosmic::{iced::mouse::ScrollDelta, iced_runtime::keyboard::Modifiers, widget};
+    use cosmic::{iced::mouse::ScrollDelta, iced::runtime::keyboard::Modifiers, widget};
     use log::{debug, trace};
     use tempfile::TempDir;
     use test_log::test;

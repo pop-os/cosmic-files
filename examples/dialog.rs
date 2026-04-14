@@ -148,7 +148,7 @@ impl Application for App {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        let mut column = widget::column().spacing(8).padding(8);
+        let mut column = widget::column::with_capacity(8).spacing(8).padding(8);
         {
             let mut button = widget::button::standard("Open File");
             if self.dialog_opt.is_none() {
