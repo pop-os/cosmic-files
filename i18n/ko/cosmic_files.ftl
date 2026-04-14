@@ -110,7 +110,7 @@ dismiss = 메시지 무시
 copy_noun = 복사
 progress = { $percent }%
 related-apps = 관련 앱
-compress = 압축
+compress = 압축...
 network-drive-error = 네트워크 드라이브에 접근할 수 없음
 icon-size-and-spacing = 아이콘 크기 및 간격
 password = 암호
@@ -272,3 +272,8 @@ network-drive-schemes =
     WebDAV,dav:// 또는 davs://
 type-to-search-select = 일치하는 첫 번째 파일 또는 폴더를 선택합니다
 comment = COSMIC 데스크톱용 위한 파일 관리자
+keywords = 폴더;관리자;
+copy-to-button-label = 복사
+move-to-button-label = 이동
+clear-recents-history = 최근 기록 비우기
+copy-path = 복사 경로

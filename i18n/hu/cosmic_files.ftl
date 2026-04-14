@@ -436,3 +436,4 @@ move-to = Áthelyezés ide…
 show-recents = Legutóbbiak mappa megjelenítése az oldalsávban
 copy-path = Útvonal másolása
 clear-recents-history = Legutóbbiak előzményének törlése
+mixed = Vegyes

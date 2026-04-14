@@ -436,3 +436,4 @@ keywords = Dossier;Gestionnaire;
 show-recents = Dossier Récents dans la barre latérale
 copy-path = Copier le chemin
 clear-recents-history = Effacer l'historique des Récents
+mixed = Mixte

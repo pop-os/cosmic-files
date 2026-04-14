@@ -437,3 +437,4 @@ move-to = Przenieś do…
 show-recents = Ostatnie katalogi w panelu bocznym
 clear-recents-history = Wyczyść bierzącą historię
 copy-path = Skopiuj ścieżkę
+mixed = Mieszane
