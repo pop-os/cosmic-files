@@ -126,6 +126,18 @@ static FAVORITE_PATH_ERROR_REMOVE_BUTTON_ID: LazyLock<widget::Id> =
 static MOUNT_ERROR_TRY_AGAIN_BUTTON_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("mount-error-try-again-button"));
 
+#[allow(dead_code)]
+#[derive(Clone, Copy)]
+enum SelectionFooterAlignment {
+    Left,
+    Center,
+    Right,
+}
+
+const SELECTION_FOOTER_ALIGNMENT: SelectionFooterAlignment = SelectionFooterAlignment::Right;
+const SELECTION_FOOTER_DIVIDER_TOP_PADDING: u16 = 2;
+const SELECTION_FOOTER_VERTICAL_PADDING: u16 = 2;
+
 pub(crate) static REPLACE_BUTTON_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("replace-button"));
 
@@ -792,6 +804,223 @@ impl App {
     /// Returns true if the clipboard cache contains pasteable content
     fn clipboard_has_content(&self) -> bool {
         !matches!(self.clipboard_cache, ClipboardCache::Empty)
+    }
+
+    fn active_tab_has_selection(&self) -> bool {
+        self.tab_model
+            .active_data::<Tab>()
+            .and_then(Tab::items_opt)
+            .is_some_and(|items| items.iter().any(|item| item.selected))
+    }
+
+    fn selection_footer_summary(&self) -> Option<String> {
+        let items = self.tab_model.active_data::<Tab>()?.items_opt()?;
+        let mut selected_count = 0_usize;
+        let mut total_size = 0_u64;
+        let mut calculating_dir_size = false;
+        let mut unknown_size = false;
+        let mut dir_size_error = None;
+
+        for item in items {
+            if !item.selected {
+                continue;
+            }
+
+            selected_count += 1;
+
+            if item.metadata.is_dir() {
+                match &item.dir_size {
+                    tab::DirSize::Calculating(_) => {
+                        calculating_dir_size = true;
+                    }
+                    tab::DirSize::Directory(size) => {
+                        total_size = total_size.saturating_add(*size);
+                    }
+                    tab::DirSize::NotDirectory => {
+                        unknown_size = true;
+                    }
+                    tab::DirSize::Error(err) => {
+                        if dir_size_error.is_none() {
+                            dir_size_error = Some(err.clone());
+                        }
+                    }
+                }
+            } else if let Some(size) = item.metadata.file_size() {
+                total_size = total_size.saturating_add(size);
+            } else {
+                unknown_size = true;
+            }
+        }
+
+        Some(if selected_count == 0 {
+            fl!("items", items = items.len())
+        } else {
+            let size = if calculating_dir_size || unknown_size {
+                fl!("calculating")
+            } else if let Some(error) = dir_size_error {
+                error
+            } else {
+                tab::format_size(total_size)
+            };
+
+            format!(
+                "{} • {}",
+                fl!("items", items = selected_count),
+                fl!("item-size", size = size),
+            )
+        })
+    }
+
+    fn selection_footer(&self) -> Option<Element<'_, Message>> {
+        let cosmic_theme::Spacing { space_xs, .. } = theme::active().cosmic().spacing;
+
+        let summary = self.selection_footer_summary()?;
+
+        let summary_row = match SELECTION_FOOTER_ALIGNMENT {
+            SelectionFooterAlignment::Left => widget::row::with_children([
+                widget::text::caption(summary).into(),
+                widget::space::horizontal().into(),
+            ]),
+            SelectionFooterAlignment::Center => widget::row::with_children([
+                widget::space::horizontal().into(),
+                widget::text::caption(summary).into(),
+                widget::space::horizontal().into(),
+            ]),
+            SelectionFooterAlignment::Right => widget::row::with_children([
+                widget::space::horizontal().into(),
+                widget::text::caption(summary).into(),
+            ]),
+        }
+        .align_y(Alignment::Center);
+
+        Some(
+            widget::column::with_children([
+                widget::container(widget::divider::horizontal::light())
+                    .padding([SELECTION_FOOTER_DIVIDER_TOP_PADDING, 0, 0, 0])
+                    .into(),
+                widget::container(summary_row)
+                    .class(style::Container::Background)
+                    .padding([SELECTION_FOOTER_VERTICAL_PADDING, space_xs])
+                    .width(Length::Fill)
+                    .into(),
+            ])
+            .into(),
+        )
+    }
+
+    fn progress_footer(&self) -> Option<Element<'_, Message>> {
+        if self.progress_operations.is_empty() {
+            return None;
+        }
+
+        let cosmic_theme::Spacing {
+            space_xs, space_s, ..
+        } = theme::active().cosmic().spacing;
+
+        let mut title = String::new();
+        let mut total_progress = 0.0;
+        let mut count = 0;
+        let mut all_paused = true;
+        for (op, controller) in self.pending_operations.values() {
+            if !controller.is_paused() {
+                all_paused = false;
+            }
+            if op.show_progress_notification() {
+                let progress = controller.progress();
+                if title.is_empty() {
+                    title = op.pending_text(progress, controller.state());
+                }
+                total_progress += progress;
+                count += 1;
+            }
+        }
+        let running = count;
+        // Adjust the progress bar so it does not jump around when operations finish
+        for id in &self.progress_operations {
+            if self.complete_operations.contains_key(id) {
+                total_progress += 1.0;
+                count += 1;
+            }
+        }
+        let finished = count - running;
+        total_progress /= count as f32;
+        if running >= 1 && (running > 1 || finished > 0) {
+            if finished > 0 {
+                title = fl!(
+                    "operations-running-finished",
+                    running = running,
+                    finished = finished,
+                    percent = ((total_progress * 100.0) as i32)
+                );
+            } else {
+                title = fl!(
+                    "operations-running",
+                    running = running,
+                    percent = ((total_progress * 100.0) as i32)
+                );
+            }
+        }
+
+        //TODO: get height from theme?
+        let progress_bar_height = Length::Fixed(4.0);
+        let progress_bar = widget::determinate_linear(total_progress)
+            .width(Length::Fill)
+            .girth(progress_bar_height);
+
+        Some(
+            widget::layer_container(widget::column::with_children([
+                widget::row::with_children([
+                    progress_bar.into(),
+                    if all_paused {
+                        widget::tooltip(
+                            widget::button::icon(icon::from_name("media-playback-start-symbolic"))
+                                .on_press(Message::PendingPauseAll(false))
+                                .padding(8),
+                            widget::text::body(fl!("resume")),
+                            widget::tooltip::Position::Top,
+                        )
+                        .into()
+                    } else {
+                        widget::tooltip(
+                            widget::button::icon(icon::from_name("media-playback-pause-symbolic"))
+                                .on_press(Message::PendingPauseAll(true))
+                                .padding(8),
+                            widget::text::body(fl!("pause")),
+                            widget::tooltip::Position::Top,
+                        )
+                        .into()
+                    },
+                    widget::tooltip(
+                        widget::button::icon(icon::from_name("window-close-symbolic"))
+                            .on_press(Message::PendingCancelAll)
+                            .padding(8),
+                        widget::text::body(fl!("cancel")),
+                        widget::tooltip::Position::Top,
+                    )
+                    .into(),
+                ])
+                .align_y(Alignment::Center)
+                .into(),
+                widget::text::body(title).into(),
+                widget::space::vertical().height(space_s).into(),
+                widget::row::with_children([
+                    widget::button::link(fl!("details"))
+                        .on_press(Message::ToggleContextPage(ContextPage::EditHistory))
+                        .padding(0)
+                        .trailing_icon(true)
+                        .into(),
+                    widget::space::horizontal().into(),
+                    widget::button::standard(fl!("dismiss"))
+                        .on_press(Message::PendingDismiss)
+                        .into(),
+                ])
+                .align_y(Alignment::Center)
+                .into(),
+            ]))
+            .padding([8, space_xs])
+            .layer(cosmic_theme::Layer::Primary)
+            .into(),
+        )
     }
 
     fn push_dialog(&mut self, page: DialogPage, focus_id: Option<widget::Id>) -> Task<Message> {
@@ -6272,117 +6501,7 @@ impl Application for App {
     }
 
     fn footer(&self) -> Option<Element<'_, Message>> {
-        if self.progress_operations.is_empty() {
-            return None;
-        }
-
-        let cosmic_theme::Spacing {
-            space_xs, space_s, ..
-        } = theme::active().cosmic().spacing;
-
-        let mut title = String::new();
-        let mut total_progress = 0.0;
-        let mut count = 0;
-        let mut all_paused = true;
-        for (op, controller) in self.pending_operations.values() {
-            if !controller.is_paused() {
-                all_paused = false;
-            }
-            if op.show_progress_notification() {
-                let progress = controller.progress();
-                if title.is_empty() {
-                    title = op.pending_text(progress, controller.state());
-                }
-                total_progress += progress;
-                count += 1;
-            }
-        }
-        let running = count;
-        // Adjust the progress bar so it does not jump around when operations finish
-        for id in &self.progress_operations {
-            if self.complete_operations.contains_key(id) {
-                total_progress += 1.0;
-                count += 1;
-            }
-        }
-        let finished = count - running;
-        total_progress /= count as f32;
-        if running >= 1 && (running > 1 || finished > 0) {
-            if finished > 0 {
-                title = fl!(
-                    "operations-running-finished",
-                    running = running,
-                    finished = finished,
-                    percent = ((total_progress * 100.0) as i32)
-                );
-            } else {
-                title = fl!(
-                    "operations-running",
-                    running = running,
-                    percent = ((total_progress * 100.0) as i32)
-                );
-            }
-        }
-
-        //TODO: get height from theme?
-        let progress_bar_height = Length::Fixed(4.0);
-        let progress_bar = widget::determinate_linear(total_progress)
-            .width(Length::Fill)
-            .girth(progress_bar_height);
-
-        let container = widget::layer_container(widget::column::with_children([
-            widget::row::with_children([
-                progress_bar.into(),
-                if all_paused {
-                    widget::tooltip(
-                        widget::button::icon(icon::from_name("media-playback-start-symbolic"))
-                            .on_press(Message::PendingPauseAll(false))
-                            .padding(8),
-                        widget::text::body(fl!("resume")),
-                        widget::tooltip::Position::Top,
-                    )
-                    .into()
-                } else {
-                    widget::tooltip(
-                        widget::button::icon(icon::from_name("media-playback-pause-symbolic"))
-                            .on_press(Message::PendingPauseAll(true))
-                            .padding(8),
-                        widget::text::body(fl!("pause")),
-                        widget::tooltip::Position::Top,
-                    )
-                    .into()
-                },
-                widget::tooltip(
-                    widget::button::icon(icon::from_name("window-close-symbolic"))
-                        .on_press(Message::PendingCancelAll)
-                        .padding(8),
-                    widget::text::body(fl!("cancel")),
-                    widget::tooltip::Position::Top,
-                )
-                .into(),
-            ])
-            .align_y(Alignment::Center)
-            .into(),
-            widget::text::body(title).into(),
-            widget::space::vertical().height(space_s).into(),
-            widget::row::with_children([
-                widget::button::link(fl!("details"))
-                    .on_press(Message::ToggleContextPage(ContextPage::EditHistory))
-                    .padding(0)
-                    .trailing_icon(true)
-                    .into(),
-                widget::space::horizontal().into(),
-                widget::button::standard(fl!("dismiss"))
-                    .on_press(Message::PendingDismiss)
-                    .into(),
-            ])
-            .align_y(Alignment::Center)
-            .into(),
-        ]))
-        .padding([8, space_xs])
-        .layer(cosmic_theme::Layer::Primary);
-
-        Some(container.into())
+        self.progress_footer()
     }
 
     fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
@@ -6489,6 +6608,9 @@ impl Application for App {
                 )
                 .map(move |message| Message::TabMessage(Some(entity), message));
             tab_column = tab_column.push(tab_view);
+            if let Some(selection_footer) = self.selection_footer() {
+                tab_column = tab_column.push(selection_footer);
+            }
         } else {
             //TODO
         }
@@ -7015,13 +7137,17 @@ impl Application for App {
             }
         }
 
+        let active_entity = self.tab_model.active();
+        let active_tab_has_selection = self.active_tab_has_selection();
+
         subscriptions.extend(self.tab_model.iter().filter_map(|entity| {
             let tab = self.tab_model.data::<Tab>(entity)?;
             Some(
                 tab.subscription(
                     selected_previews
                         .iter()
-                        .any(|preview| preview.as_ref() == Some(entity).as_ref()),
+                        .any(|preview| preview.as_ref() == Some(entity).as_ref())
+                        || (entity == active_entity && active_tab_has_selection),
                 )
                 .with(entity)
                 .map(|(entity, tab_msg)| Message::TabMessage(Some(entity), tab_msg)),

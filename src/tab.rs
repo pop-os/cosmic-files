@@ -353,7 +353,7 @@ fn tab_complete(path: &Path) -> Result<Vec<(String, PathBuf)>, Box<dyn Error>> {
 }
 
 //TODO: translate, add more levels?
-fn format_size(size: u64) -> String {
+pub(crate) fn format_size(size: u64) -> String {
     const KB: u64 = 1000;
     const MB: u64 = 1000 * KB;
     const GB: u64 = 1000 * MB;
