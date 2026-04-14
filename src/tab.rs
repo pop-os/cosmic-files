@@ -1301,13 +1301,14 @@ pub fn scan_desktop(
         let metadata = ItemMetadata::SimpleDir {
             entries: crate::trash_helpers::trash_entries() as u64,
         };
+        let is_empty = crate::trash_helpers::is_empty_blocking();
 
         let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) = {
             (
                 "inode/directory".parse().unwrap(),
-                crate::trash_helpers::trash_icon(sizes.grid()),
-                crate::trash_helpers::trash_icon(sizes.list()),
-                crate::trash_helpers::trash_icon(sizes.list_condensed()),
+                crate::trash_helpers::trash_icon(sizes.grid(), is_empty),
+                crate::trash_helpers::trash_icon(sizes.list(), is_empty),
+                crate::trash_helpers::trash_icon(sizes.list_condensed(), is_empty),
             )
         };
 
@@ -5960,6 +5961,7 @@ impl Tab {
         modifiers: &'a Modifiers,
         size: Size,
         clipboard_paste_available: bool,
+        trash_is_empty: bool,
     ) -> Element<'a, Message> {
         // Update cached size
         self.size_opt.set(Some(size));
@@ -6048,7 +6050,7 @@ impl Tab {
             && (!cfg!(feature = "wayland") || !crate::is_wayland())
         {
             let context_menu =
-                menu::context_menu(self, key_binds, modifiers, clipboard_paste_available);
+                menu::context_menu(self, key_binds, modifiers, clipboard_paste_available, trash_is_empty);
             popover = popover
                 .popup(context_menu)
                 .position(widget::popover::Position::Point(point));
@@ -6413,10 +6415,11 @@ impl Tab {
         key_binds: &'a HashMap<KeyBind, Action>,
         modifiers: &'a Modifiers,
         clipboard_paste_available: bool,
+        trash_is_empty: bool,
     ) -> Element<'a, Message> {
         widget::responsive(move |size| {
             widget::id_container(
-                self.view_responsive(key_binds, modifiers, size, clipboard_paste_available),
+                self.view_responsive(key_binds, modifiers, size, clipboard_paste_available, trash_is_empty),
                 Id::new(format!(
                     "tab-{}-{}",
                     self.scrollable_id, self.location_title

@@ -485,6 +485,7 @@ pub enum Message {
     None,
     Surface(surface::Action),
     CutPaths(Vec<PathBuf>),
+    UpdateTrashState(bool),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -772,6 +773,7 @@ pub struct App {
     auto_scroll_speed: Option<i16>,
     file_dialog_opt: Option<Dialog<Message>>,
     clipboard_cache: ClipboardCache,
+    trash_is_empty: bool,
 }
 
 impl App {
@@ -1780,7 +1782,7 @@ impl App {
 
         nav_model = nav_model.insert(|b| {
             b.text(fl!("trash"))
-                .icon(icon::icon(crate::trash_helpers::trash_icon_symbolic(16)))
+                .icon(icon::icon(crate::trash_helpers::trash_icon_symbolic(16, self.trash_is_empty)))
                 .data(Location::Trash)
                 .divider_above()
         });
@@ -2484,9 +2486,10 @@ impl Application for App {
             clipboard_cache: ClipboardCache::Empty,
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             layer_sizes: FxHashMap::default(),
+            trash_is_empty: true,
         };
 
-        let mut commands = vec![app.update_config(), app.update(Message::CheckClipboard)];
+        let mut commands = vec![app.update_config(), app.update(Message::CheckClipboard), app.update(Message::RescanTrash)];
 
         for location in flags.locations {
             if let Some(path) = location.path_opt()
@@ -2620,7 +2623,7 @@ impl Application for App {
         }
 
         if matches!(location_opt, Some(Location::Trash))
-            && !trash::os_limited::is_empty().unwrap_or(true)
+            && !self.trash_is_empty
         {
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("empty-trash"),
@@ -4148,7 +4151,19 @@ impl Application for App {
                 return self.rescan_recents();
             }
             Message::RescanTrash => {
-                // Update trash icon if empty/full
+                return Task::batch([
+                    Task::future(async {
+                        let is_empty = tokio::task::spawn_blocking(|| {
+                            crate::trash_helpers::is_empty_blocking()
+                        }).await.unwrap();
+                        cosmic::action::app(Message::UpdateTrashState(is_empty))
+                    }),
+                    self.rescan_trash(),
+                    self.update_desktop()
+                ]);
+            }
+            Message::UpdateTrashState(is_empty) => {
+                self.trash_is_empty = is_empty;
                 let maybe_entity = self.nav_model.iter().find(|&entity| {
                     self.nav_model
                         .data::<Location>(entity)
@@ -4157,11 +4172,9 @@ impl Application for App {
                 if let Some(entity) = maybe_entity {
                     self.nav_model.icon_set(
                         entity,
-                        icon::icon(crate::trash_helpers::trash_icon_symbolic(16)),
+                        widget::icon::icon(crate::trash_helpers::trash_icon_symbolic(16, self.trash_is_empty)),
                     );
                 }
-
-                return Task::batch([self.rescan_trash(), self.update_desktop()]);
             }
             Message::Rename(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
@@ -6335,6 +6348,7 @@ impl Application for App {
                     &self.key_binds,
                     &self.modifiers,
                     self.clipboard_has_content(),
+                    self.trash_is_empty,
                 )
                 .map(move |message| Message::TabMessage(Some(entity), message));
             tab_column = tab_column.push(tab_view);
@@ -6363,6 +6377,7 @@ impl Application for App {
                                 &self.key_binds,
                                 &window.modifiers,
                                 self.clipboard_has_content(),
+                                self.trash_is_empty,
                             )
                             .map(|x| Message::TabMessage(Some(*entity), x)),
                             id.clone(),
@@ -6380,6 +6395,7 @@ impl Application for App {
                                 &self.key_binds,
                                 &window.modifiers,
                                 self.clipboard_has_content(),
+                                self.trash_is_empty,
                             )
                             .map(move |message| Message::TabMessage(Some(*entity), message)),
                         None => widget::space::vertical().into(),
@@ -6648,33 +6664,36 @@ impl Application for App {
                             not(target_os = "ios"),
                             not(target_os = "android")
                         ))]
-                        match (watcher_res, trash::os_limited::trash_folders()) {
-                            (Ok(mut watcher), Ok(trash_bins)) => {
-                                // Watch the "bins" themselves as well as the files folder where
-                                // trashed items are placed. This allows us to avoid recursively
-                                // watching the trash which is slow but also properly get events.
-                                let trash_paths = trash_bins
-                                    .into_iter()
-                                    .flat_map(|path| [path.join("files"), path]);
-                                for path in trash_paths {
-                                    if let Err(e) =
-                                        watcher.watch(&path, notify::RecursiveMode::NonRecursive)
-                                    {
-                                        log::warn!(
-                                            "failed to add trash bin `{}` to watcher: {e:?}",
-                                            path.display()
-                                        );
-                                    }
-                                }
+                        {
+                            let trash_bins_res = tokio::task::spawn_blocking(|| {
+                                crate::trash_helpers::trash_folders_blocking()
+                            }).await.unwrap();
 
-                                // Don't drop the watcher
-                                std::future::pending().await
-                            }
-                            (Err(e), _) => {
-                                log::warn!("failed to create new watcher for trash bin: {e:?}");
-                            }
-                            (_, Err(e)) => {
-                                log::warn!("could not find any valid trash bins to watch: {e:?}");
+                            match watcher_res {
+                                Ok(mut watcher) => {
+                                    // Watch the "bins" themselves as well as the files folder where
+                                    // trashed items are placed. This allows us to avoid recursively
+                                    // watching the trash which is slow but also properly get events.
+                                    let trash_paths = trash_bins_res
+                                        .into_iter()
+                                        .flat_map(|path| [path.join("files"), path]);
+                                    for path in trash_paths {
+                                        if let Err(e) =
+                                            watcher.watch(&path, notify::RecursiveMode::NonRecursive)
+                                        {
+                                            log::warn!(
+                                                "failed to add trash bin `{}` to watcher: {e:?}",
+                                                path.display()
+                                            );
+                                        }
+                                    }
+
+                                    // Don't drop the watcher
+                                    std::future::pending().await
+                                }
+                                Err(e) => {
+                                    log::warn!("failed to create new watcher for trash bin: {e:?}");
+                                }
                             }
                         }
 

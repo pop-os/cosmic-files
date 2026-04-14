@@ -2,6 +2,7 @@
 use cosmic::widget;
 use regex::Regex;
 use std::cmp::Ordering as CmpOrdering;
+use std::path::PathBuf;
 use crate::config::IconSizes;
 use crate::localize::LANGUAGE_SORTER;
 use crate::tab::{Item, SearchItem, item_from_trash_entry};
@@ -18,17 +19,25 @@ use crate::tab::{Item, SearchItem, item_from_trash_entry};
 mod os_limited {
     use super::*;
 
+    pub fn is_empty_blocking() -> bool {
+        true
+    }
+
+    pub fn trash_folders_blocking() -> Vec<PathBuf> {
+        Vec::new()
+    }
+
     pub fn trash_entries() -> usize {
         0
     }
 
-    pub fn trash_icon(icon_size: u16) -> widget::icon::Handle {
+    pub fn trash_icon(icon_size: u16, _is_empty: bool) -> widget::icon::Handle {
         widget::icon::from_name("user-trash")
             .size(icon_size)
             .handle()
     }
 
-    pub fn trash_icon_symbolic(icon_size: u16) -> widget::icon::Handle {
+    pub fn trash_icon_symbolic(icon_size: u16, _is_empty: bool) -> widget::icon::Handle {
         widget::icon::from_name("user-trash-symbolic")
             .size(icon_size)
             .handle()
@@ -54,6 +63,14 @@ mod os_limited {
 mod os_limited {
     use super::*;
 
+    pub fn is_empty_blocking() -> bool {
+        trash::os_limited::is_empty().unwrap_or(true)
+    }
+
+    pub fn trash_folders_blocking() -> Vec<PathBuf> {
+        trash::os_limited::trash_folders().unwrap_or_default().into_iter().collect()
+    }
+
     pub fn trash_entries() -> usize {
         match trash::os_limited::list() {
             Ok(entries) => entries.len(),
@@ -61,8 +78,8 @@ mod os_limited {
         }
     }
 
-    pub fn trash_icon(icon_size: u16) -> widget::icon::Handle {
-        widget::icon::from_name(if trash::os_limited::is_empty().unwrap_or(true) {
+    pub fn trash_icon(icon_size: u16, is_empty: bool) -> widget::icon::Handle {
+        widget::icon::from_name(if is_empty {
             "user-trash"
         } else {
             "user-trash-full"
@@ -71,8 +88,8 @@ mod os_limited {
         .handle()
     }
 
-    pub fn trash_icon_symbolic(icon_size: u16) -> widget::icon::Handle {
-        widget::icon::from_name(if trash::os_limited::is_empty().unwrap_or(true) {
+    pub fn trash_icon_symbolic(icon_size: u16, is_empty: bool) -> widget::icon::Handle {
+        widget::icon::from_name(if is_empty {
             "user-trash-symbolic"
         } else {
             "user-trash-full-symbolic"
