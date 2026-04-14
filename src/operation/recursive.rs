@@ -10,7 +10,6 @@ use compio::driver::{ToSharedFd, op::AsyncifyFd};
 use compio::io::{AsyncReadAt, AsyncWriteAt};
 use cosmic::iced::futures;
 use futures::{FutureExt, StreamExt};
-use gio::prelude::FileExtManual;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
@@ -18,10 +17,14 @@ use std::time::Instant;
 use std::{cell::Cell, error::Error, fs, ops::ControlFlow, path::PathBuf};
 use walkdir::WalkDir;
 
+#[cfg(feature = "gvfs")]
+use gio::prelude::FileExtManual;
+
 #[derive(thiserror::Error, Debug)]
 pub enum GioCopyError {
     #[error("controller state")]
     Controller(OperationError),
+    #[cfg(feature = "gvfs")]
     #[error("gio copy failed")]
     GLib(#[from] glib::Error),
 }
@@ -508,6 +511,7 @@ impl Op {
             let buf_out = buf_out_slice.into_inner();
 
             if let Err(why) = result {
+                #[cfg(feature = "gvfs")]
                 if let std::io::ErrorKind::Unsupported = why.kind() {
                     ctx.buf = buf_out;
                     _ = futures::future::join(from_file.close(), to_file.close()).await;
@@ -583,6 +587,7 @@ impl Op {
     /// Fallback mechanism in the event that unsupported I/O error errors occur.
     /// Fixes unsupported errors when copying large files over MTP.
     /// TODO: Find what Gio.File does to work around this.
+    #[cfg(feature = "gvfs")]
     async fn gio_file_copy(
         &self,
         ctx: &mut Context,
