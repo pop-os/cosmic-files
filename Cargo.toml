@@ -144,13 +144,13 @@ tokio = { version = "1", features = ["rt", "macros"] }
 # [patch.'https://github.com/pop-os/cosmic-text']
 # cosmic-text = { path = "../cosmic-text" }
 
-# [patch.'https://github.com/pop-os/libcosmic']
+[patch.'https://github.com/pop-os/libcosmic']
 # libcosmic = { path = "../libcosmic" }
 # cosmic-config = { path = "../libcosmic/cosmic-config" }
 # cosmic-theme = { path = "../libcosmic/cosmic-theme" }
-# libcosmic = { git = "https://github.com/pop-os/libcosmic//", branch = "iced-rebase" }
-# cosmic-config = { git = "https://github.com/pop-os/libcosmic//", branch = "iced-rebase" }
-# cosmic-theme = { git = "https://github.com/pop-os/libcosmic//", branch = "iced-rebase" }
+libcosmic = { git = "https://github.com/pop-os/libcosmic//", branch = "theme-v2" }
+cosmic-config = { git = "https://github.com/pop-os/libcosmic//", branch = "theme-v2" }
+cosmic-theme = { git = "https://github.com/pop-os/libcosmic//", branch = "theme-v2" }
 
 
 # [patch.'https://github.com/pop-os/smithay-clipboard']
