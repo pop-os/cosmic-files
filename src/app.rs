@@ -6143,7 +6143,7 @@ impl Application for App {
 
                 dialog
                     .primary_action(
-                        widget::button::suggested(fl!("rename"))
+                        widget::button::suggested(fl!("rename-confirm"))
                             .on_press_maybe(complete_maybe.clone()),
                     )
                     .secondary_action(
