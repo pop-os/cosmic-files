@@ -4262,12 +4262,14 @@ impl Application for App {
                         .collect();
                     if !selected.is_empty() {
                         //TODO: batch rename
-                        let tasks = selected
+                        let mut last_name = String::new();
+                        let tasks: Vec<_> = selected
                             .into_iter()
                             .filter_map(|path| {
                                 let parent = path.parent()?.to_path_buf();
                                 let name = path.file_name()?.to_str()?.to_string();
                                 let dir = path.is_dir();
+                                last_name = name.clone();
                                 Some(self.dialog_pages.push_back(DialogPage::RenameItem {
                                     from: path,
                                     parent,
@@ -4275,9 +4277,15 @@ impl Application for App {
                                     dir,
                                 }))
                             })
-                            .chain(std::iter::once(widget::text_input::focus(
+                            .collect();
+                        let tasks = tasks.into_iter().chain([
+                            widget::text_input::focus(self.dialog_text_input.clone()),
+                            widget::text_input::select_until_last(
                                 self.dialog_text_input.clone(),
-                            )));
+                                &last_name,
+                                '.',
+                            ),
+                        ]);
                         return Task::batch(tasks);
                     }
                 }
@@ -6151,6 +6159,7 @@ impl Application for App {
                             .into(),
                             widget::text_input("", name.as_str())
                                 .id(self.dialog_text_input.clone())
+                                .double_click_select_delimiter('.')
                                 .on_input(move |name| {
                                     Message::DialogUpdate(DialogPage::RenameItem {
                                         from: from.clone(),
