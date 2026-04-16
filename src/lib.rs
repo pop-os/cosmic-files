@@ -3,10 +3,12 @@
 
 use cosmic::{app::Settings, iced::Limits};
 use std::{env, fs, path::PathBuf, process};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use app::{App, Flags};
 pub mod app;
 mod archive;
+pub mod channel;
 pub mod clipboard;
 mod context_action;
 use config::Config;
@@ -73,7 +75,22 @@ pub fn is_wayland() -> bool {
 /// Runs application in desktop mode
 #[rustfmt::skip]
 pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+    let log_format = tracing_subscriber::fmt::format()
+        .pretty()
+        .without_time()
+        .with_line_number(true)
+        .with_file(true)
+        .with_target(false)
+        .with_thread_names(true);
+
+    let log_layer = tracing_subscriber::fmt::Layer::default()
+        .with_writer(std::io::stderr)
+        .event_format(log_format);
+
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::from_env("RUST_LOG"))
+        .with(log_layer)
+        .init();
 
     localize::localize();
 
@@ -108,7 +125,21 @@ pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
 /// Runs application with these settings
 #[rustfmt::skip]
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+    let log_format = tracing_subscriber::fmt::format()
+        .pretty()
+        .with_line_number(true)
+        .with_file(true)
+        .with_target(false)
+        .with_thread_names(true);
+
+    let log_layer = tracing_subscriber::fmt::Layer::default()
+        .with_writer(std::io::stderr)
+        .event_format(log_format);
+
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .with(log_layer)
+        .init();
 
     localize::localize();
 

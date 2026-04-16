@@ -6967,8 +6967,7 @@ impl Application for App {
                         |_| {
                             stream::channel(
                                 1,
-                                move |msg_tx: futures::channel::mpsc::Sender<_>| async move {
-                                    let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
+                                move |mut msg_tx: futures::channel::mpsc::Sender<_>| async move {
                                     tokio::task::spawn_blocking(move || {
                                         match notify_rust::Notification::new()
                                             .summary(&fl!("notification-in-progress"))
@@ -6978,8 +6977,6 @@ impl Application for App {
                                             Ok(notification) => {
                                                 let _ = futures::executor::block_on(async {
                                                     msg_tx
-                                                        .lock()
-                                                        .await
                                                         .send(Message::Notification(Arc::new(
                                                             Mutex::new(notification),
                                                         )))

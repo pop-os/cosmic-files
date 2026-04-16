@@ -14,7 +14,6 @@ icu = { version = "2.1.1", features = ["compiled_data"] }
 cctk = { git = "https://github.com/pop-os/cosmic-protocols", package = "cosmic-client-toolkit", rev = "160b086", optional = true }
 cosmic-mime-apps = { git = "https://github.com/pop-os/cosmic-mime-apps.git", optional = true }
 dirs = "6.0.0"
-env_logger = "0.11"
 gio = { version = "0.21", optional = true }
 glib = { version = "0.21", optional = true }
 glob = "0.3"
@@ -62,6 +61,11 @@ png = "0.18"
 jxl-oxide = { version = "0.12.5", features = ["image"] }
 num_cpus = "1.17.0"
 filetime = "0.2"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+thiserror = "2.0.18"
+atomic_float = "1.1.0"
+num_enum = "0.7.6"
 
 # Completion-based IO runtime to enable io_uring / IOCP file IO support.
 [dependencies.compio]

@@ -708,6 +708,9 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
             children_opt,
         },
         hidden,
+        image_dimensions: (!remote && mime.type_() == mime::IMAGE)
+            .then(|| image::image_dimensions(&path).ok())
+            .flatten(),
         location_opt: Some(Location::Path(path)),
         mime,
         icon_handle_grid,
@@ -843,6 +846,7 @@ pub fn item_from_entry(
         },
         hidden,
         location_opt: Some(Location::Path(path)),
+        image_dimensions: None,
         mime,
         icon_handle_grid,
         icon_handle_list,
@@ -896,6 +900,9 @@ pub fn item_from_trash_entry(
         metadata: ItemMetadata::Trash { metadata, entry },
         hidden: false,
         location_opt: None,
+        image_dimensions: (mime.type_() == mime::IMAGE)
+            .then(|| image::image_dimensions(&original_path).ok())
+            .flatten(),
         mime,
         icon_handle_grid,
         icon_handle_list,
@@ -1444,6 +1451,7 @@ pub fn scan_desktop(
             metadata,
             hidden: false,
             location_opt: Some(Location::Trash),
+            image_dimensions: None,
             mime,
             icon_handle_grid,
             icon_handle_list,
@@ -2319,6 +2327,7 @@ pub struct Item {
     pub hidden: bool,
     pub location_opt: Option<Location>,
     pub mime: Mime,
+    pub image_dimensions: Option<(u32, u32)>,
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
     pub icon_handle_list_condensed: widget::icon::Handle,
@@ -6713,13 +6722,13 @@ impl Tab {
 
                     // Determine effective memory budget based on image size
                     let (effective_max_mb, effective_jobs) = if mime.type_() == mime::IMAGE {
-                        match image::image_dimensions(&path) {
-                            Ok((width, height)) => {
+                        match item.image_dimensions {
+                            Some((width, height)) => {
                                 let (_use_dedicated, eff_mb, eff_jobs) =
                                     should_use_dedicated_worker(width, height, max_mb, max_jobs);
                                 (eff_mb, eff_jobs)
                             }
-                            Err(_) => (max_mb, max_jobs),
+                            None => (max_mb, max_jobs),
                         }
                     } else {
                         (max_mb, max_jobs)
@@ -6762,6 +6771,10 @@ impl Tab {
                             stream::channel(
                                 1,
                                 move |mut output: futures::channel::mpsc::Sender<_>| async move {
+                                    while crate::operation::is_actively_writing_to(&path) {
+                                        crate::operation::actively_writing_tick().await;
+                                    }
+
                                     let message = {
                                         let path = path.clone();
 
@@ -6946,9 +6959,8 @@ impl Tab {
                                 .await
                                 .unwrap();
 
-                            let output = Arc::new(tokio::sync::Mutex::new(output));
+                            let (watch_tx, mut watch_rx) = tokio::sync::watch::channel(true);
                             {
-                                let output = output.clone();
                                 tokio::task::spawn_blocking(move || {
                                     scan_search(
                                         &search_location,
@@ -6976,14 +6988,7 @@ impl Tab {
                                                         true
                                                     } else {
                                                         // Wake up update method
-                                                        futures::executor::block_on(async {
-                                                            output
-                                                                .lock()
-                                                                .await
-                                                                .send(Message::SearchReady(false))
-                                                                .await
-                                                        })
-                                                        .is_ok()
+                                                        watch_tx.send(false).is_ok()
                                                     }
                                                 }
                                                 Err(_) => false,
@@ -6996,13 +7001,16 @@ impl Tab {
                                         search_location,
                                         start.elapsed(),
                                     );
-                                })
-                                .await
-                                .unwrap();
+                                });
+                            }
+
+                            while watch_rx.changed().await.is_ok() {
+                                let is_ready = *watch_rx.borrow_and_update();
+                                let _ = output.send(Message::SearchReady(is_ready)).await;
                             }
 
                             // Send final ready
-                            let _ = output.lock().await.send(Message::SearchReady(true)).await;
+                            let _ = output.send(Message::SearchReady(true)).await;
 
                             std::future::pending().await
                         },
