@@ -85,7 +85,6 @@ use crate::{
     thumbnailer::thumbnailer,
     trash::{Trash, TrashExt},
 };
-use uzers::{get_group_by_gid, get_user_by_uid};
 
 pub const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 pub const HOVER_DURATION: Duration = Duration::from_millis(1600);
@@ -2429,7 +2428,7 @@ impl Item {
 
                 let mode = metadata.mode();
 
-                let user_name = get_user_by_uid(metadata.uid())
+                let user_name = uzers::get_user_by_uid(metadata.uid())
                     .and_then(|user| user.name().to_str().map(ToOwned::to_owned))
                     .unwrap_or_default();
                 let user_path = path.clone();
@@ -2452,7 +2451,7 @@ impl Item {
                         )),
                 );
 
-                let group_name = get_group_by_gid(metadata.gid())
+                let group_name = uzers::get_group_by_gid(metadata.gid())
                     .and_then(|group| group.name().to_str().map(ToOwned::to_owned))
                     .unwrap_or_default();
                 let group_path = path.clone();
@@ -6358,14 +6357,16 @@ impl Tab {
                     total_size = total_size.saturating_add(metadata.len());
                 }
                 let mode = metadata.mode();
+                #[cfg(unix)]
                 user_name.insert(
-                    get_user_by_uid(metadata.uid())
+                    uzers::get_user_by_uid(metadata.uid())
                         .and_then(|user| user.name().to_str().map(ToOwned::to_owned))
                         .unwrap_or_default(),
                 );
                 mode_user.insert(get_mode_part(mode, MODE_SHIFT_USER));
+                #[cfg(unix)]
                 group_name.insert(
-                    get_group_by_gid(metadata.gid())
+                    uzers::get_group_by_gid(metadata.gid())
                         .and_then(|group| group.name().to_str().map(ToOwned::to_owned))
                         .unwrap_or_default(),
                 );

@@ -191,7 +191,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if daemonize {
-        #[cfg(all(unix, not(target_os = "redox")))]
+        #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
         match fork::daemon(true, true) {
             Ok(fork::Fork::Child) => (),
             Ok(fork::Fork::Parent(_child_pid)) => process::exit(0),
