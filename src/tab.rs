@@ -1,7 +1,7 @@
+#[cfg(feature = "desktop")]
+use cosmic::desktop::fde::{DesktopEntry, get_languages_from_env};
 use cosmic::{
-    Apply, Element, cosmic_theme,
-    desktop::fde::{DesktopEntry, get_languages_from_env},
-    font,
+    Apply, Element, cosmic_theme, font,
     iced::core::{mouse::ScrollDelta, widget::tree},
     iced::{
         Alignment, Border, Color, ContentFit, Length, Point, Rectangle, Size, Subscription, Vector,
@@ -557,6 +557,12 @@ pub fn fs_kind(_metadata: &Metadata) -> FsKind {
     FsKind::Local
 }
 
+#[cfg(not(feature = "desktop"))]
+fn get_desktop_file_display_name(path: &Path) -> Option<String> {
+    None
+}
+
+#[cfg(feature = "desktop")]
 fn get_desktop_file_display_name(path: &Path) -> Option<String> {
     let locales = get_languages_from_env();
     let entry = match DesktopEntry::from_path(path, Some(&locales)) {
@@ -570,6 +576,12 @@ fn get_desktop_file_display_name(path: &Path) -> Option<String> {
     entry.name(&locales).map(|s| s.into_owned())
 }
 
+#[cfg(not(feature = "desktop"))]
+fn get_desktop_file_icon(path: &Path) -> Option<String> {
+    None
+}
+
+#[cfg(feature = "desktop")]
 fn get_desktop_file_icon(path: &Path) -> Option<String> {
     let entry = match DesktopEntry::from_path::<&str>(path, None) {
         Ok(ok) => ok,
@@ -593,6 +605,7 @@ fn desktop_icon_handle(icon: &str, size: u16) -> widget::icon::Handle {
     }
 }
 
+#[cfg(feature = "desktop")]
 pub fn parse_desktop_file(path: &Path) -> (Option<String>, Option<String>) {
     let locales = get_languages_from_env();
     let entry = match DesktopEntry::from_path(path, Some(&locales)) {
