@@ -11,7 +11,7 @@ anyhow = "1"
 jiff = "0.2"
 jiff-icu = "0.2"
 icu = { version = "2.2.0", features = ["compiled_data"] }
-cctk = { git = "https://github.com/pop-os/cosmic-protocols", package = "cosmic-client-toolkit", rev = "160b086", optional = true }
+cctk = { git = "https://github.com/pop-os/cosmic-protocols", package = "cosmic-client-toolkit", rev = "a7d2d7a", optional = true }
 cosmic-mime-apps = { git = "https://github.com/pop-os/cosmic-mime-apps.git", optional = true }
 dirs = "6.0.0"
 gio = { version = "0.21", optional = true }
