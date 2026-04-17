@@ -99,6 +99,7 @@ use crate::{
         self, HOVER_DURATION, HeadingOptions, ItemMetadata, Location, SORT_OPTION_FALLBACK,
         SearchLocation, Tab,
     },
+    trash::{Trash, TrashExt},
     zoom::{zoom_in_view, zoom_out_view, zoom_to_default},
 };
 
@@ -1794,7 +1795,7 @@ impl App {
 
         nav_model = nav_model.insert(|b| {
             b.text(fl!("trash"))
-                .icon(icon::icon(tab::trash_helpers::trash_icon_symbolic(16)))
+                .icon(icon::icon(Trash::icon_symbolic(16)))
                 .data(Location::Trash)
                 .divider_above()
         });
@@ -2655,9 +2656,7 @@ impl Application for App {
             ));
         }
 
-        if matches!(location_opt, Some(Location::Trash))
-            && !trash::os_limited::is_empty().unwrap_or(true)
-        {
+        if matches!(location_opt, Some(Location::Trash)) && !Trash::is_empty() {
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("empty-trash"),
                 None,
@@ -4237,10 +4236,8 @@ impl Application for App {
                         .is_some_and(|loc| matches!(loc, Location::Trash))
                 });
                 if let Some(entity) = maybe_entity {
-                    self.nav_model.icon_set(
-                        entity,
-                        icon::icon(tab::trash_helpers::trash_icon_symbolic(16)),
-                    );
+                    self.nav_model
+                        .icon_set(entity, icon::icon(Trash::icon_symbolic(16)));
                 }
 
                 return Task::batch([self.rescan_trash(), self.update_desktop()]);
@@ -6794,14 +6791,7 @@ impl Application for App {
                             },
                         );
 
-                        // TODO: Trash watching support for Windows, macOS, and other OSes
-                        #[cfg(all(
-                            unix,
-                            not(target_os = "macos"),
-                            not(target_os = "ios"),
-                            not(target_os = "android")
-                        ))]
-                        match (watcher_res, trash::os_limited::trash_folders()) {
+                        match (watcher_res, Trash::folders()) {
                             (Ok(mut watcher), Ok(trash_bins)) => {
                                 // Watch the "bins" themselves as well as the files folder where
                                 // trashed items are placed. This allows us to avoid recursively

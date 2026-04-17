@@ -4,13 +4,17 @@
 use cosmic::{app::Settings, iced::Limits};
 use std::{env, fs, path::PathBuf, process};
 
-use app::{App, Flags};
+use crate::{
+    app::{App, Flags},
+    config::{Config, State},
+    tab::Location,
+};
+
 pub mod app;
 mod archive;
 pub mod clipboard;
-mod context_action;
-use config::Config;
 pub mod config;
+mod context_action;
 pub mod dialog;
 mod key_bind;
 pub(crate) mod large_image;
@@ -23,13 +27,11 @@ mod mounter;
 mod mouse_area;
 pub mod operation;
 mod spawn_detached;
-use tab::Location;
-mod zoom;
-
-use crate::config::State;
 pub mod tab;
 mod thumbnail_cacher;
 mod thumbnailer;
+pub(crate) mod trash;
+mod zoom;
 
 pub(crate) type FxOrderMap<K, V> = ordermap::OrderMap<K, V, rustc_hash::FxBuildHasher>;
 
