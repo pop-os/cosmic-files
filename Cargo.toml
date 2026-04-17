@@ -1,6 +1,6 @@
 [package]
 name = "cosmic-files"
-version = "1.0.9"
+version = "1.0.11"
 authors = ["Jeremy Soller <jeremy@system76.com>"]
 edition = "2024"
 license = "GPL-3.0-only"
@@ -55,7 +55,6 @@ rust-embed = "8"
 slotmap = "1.1.1"
 recently-used-xbel = "1.2.0"
 zip = "8"
-uzers = "0.12.2"
 md-5 = "0.10.6"
 png = "0.18"
 jxl-oxide = { version = "0.12.5", features = ["image"] }
@@ -81,7 +80,6 @@ features = [
     "about",
     "advanced-shaping",
     "autosize",
-    "desktop",
     "multi-window",
     "tokio",
     "winit",
@@ -113,7 +111,7 @@ default = [
     "wgpu",
 ]
 dbus-config = ["libcosmic/dbus-config"]
-desktop = ["dep:cosmic-mime-apps", "dep:xdg"]
+desktop = ["libcosmic/desktop", "dep:cosmic-mime-apps", "dep:xdg"]
 desktop-applet = []
 gvfs = ["dep:gio", "dep:glib"]
 io-uring = ["compio/io-uring"]
@@ -131,6 +129,7 @@ debug = true
 
 [target.'cfg(unix)'.dependencies]
 fork = "0.7"
+uzers = "0.12.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = "0.18"
