@@ -56,7 +56,6 @@ rust-embed = "8"
 slotmap = "1.1.1"
 recently-used-xbel = "1.2.0"
 zip = "8"
-uzers = "0.12.2"
 md-5 = "0.10.6"
 png = "0.18"
 jxl-oxide = { version = "0.12.5", features = ["image"] }
@@ -126,6 +125,7 @@ debug = true
 
 [target.'cfg(unix)'.dependencies]
 fork = "0.7"
+uzers = "0.12.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = "0.18"
