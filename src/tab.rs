@@ -51,7 +51,7 @@ use std::{
     fmt::{self, Display},
     fs::{self, File, Metadata},
     hash::Hash,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Read},
     os::unix::fs::MetadataExt,
     path::{self, Path, PathBuf},
     sync::{Arc, LazyLock, RwLock, atomic},
@@ -95,6 +95,11 @@ const MAX_SEARCH_LATENCY: Duration = Duration::from_millis(20);
 const MAX_SEARCH_RESULTS: usize = 200;
 //TODO: configurable thumbnail size?
 const THUMBNAIL_SIZE: u32 = (ICON_SIZE_GRID as u32) * (ICON_SCALE_MAX as u32);
+/// Maximum bytes of text to pass to the editor for preview; caps shaping work to avoid blocking.
+/// Files larger than this get a truncated preview (first N bytes only).
+const TEXT_PREVIEW_MAX_BYTES: usize = 256 * 1024; // 256 KiB
+/// Maximum file size (bytes) to attempt text preview; files larger than this are skipped entirely.
+const TEXT_PREVIEW_MAX_FILE_BYTES: u64 = 8 * 1000 * 1000; // 8 MiB
 
 // Thumbnail generation semaphore - limits parallel thumbnail workers
 // Uses 4 workers for balanced throughput and memory usage
@@ -2197,17 +2202,37 @@ impl ItemThumbnail {
                     log::warn!("failed to read {}: {}", path.display(), err);
                 }
             }
-        } else if mime.type_() == mime::TEXT && check_size("text", 8 * 1000 * 1000) {
-            /*TODO: fix performance issues, widget::text_editor::Content::with_text forces all text to shape, which blocks rendering
-            match fs::read_to_string(&path) {
-                Ok(data) => {
-                    return ItemThumbnail::Text(widget::text_editor::Content::with_text(&data));
-                }
-                Err(err) => {
-                    log::warn!("failed to read {}: {}", path.display(), err);
+        } else if mime.type_() == mime::TEXT && check_size("text", TEXT_PREVIEW_MAX_FILE_BYTES) {
+            tried_supported_file = true;
+            if size > 0 {
+                // Reuse size from metadata above; cap allocation and read
+                let read_cap = (size.min(TEXT_PREVIEW_MAX_BYTES as u64)) as usize;
+                let mut buf = vec![0u8; read_cap];
+                match File::open(path).and_then(|f| {
+                    let n = Read::read(&mut f.take(read_cap as u64), &mut buf)?;
+                    buf.truncate(n);
+                    Ok(())
+                }) {
+                    Ok(()) => {
+                        let text = match std::str::from_utf8(&buf) {
+                            Ok(s) => s.to_string(),
+                            Err(e) => {
+                                // Use only the valid UTF-8 prefix (slice is guaranteed valid by valid_up_to())
+                                std::str::from_utf8(&buf[..e.valid_up_to()])
+                                    .unwrap_or("")
+                                    .to_string()
+                            }
+                        };
+                        if !text.is_empty() {
+                            return Self::Text(widget::text_editor::Content::with_text(&text));
+                        }
+                    }
+                    Err(err) => {
+                        log::warn!("failed to read {}: {}", path.display(), err);
+                    }
                 }
             }
-            */
+            // size == 0: empty file or unknown size; skip read and allocation
         }
 
         // If we weren't able to create a thumbnail, but we should have
@@ -7159,10 +7184,13 @@ mod tests {
 
     use cosmic::{iced::mouse::ScrollDelta, iced::runtime::keyboard::Modifiers, widget};
     use log::{debug, trace};
+    use mime_guess::mime;
     use tempfile::TempDir;
     use test_log::test;
 
-    use super::{Location, Message, Tab, respond_to_scroll_direction, scan_path};
+    use super::{
+        ItemMetadata, ItemThumbnail, Location, Message, Tab, respond_to_scroll_direction, scan_path,
+    };
     use crate::{
         app::test_utils::{
             NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED, assert_eq_tab_path, empty_fs,
@@ -7581,5 +7609,87 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn item_thumbnail_text_preview_small_utf8_returns_text() -> io::Result<()> {
+        let dir = TempDir::new()?;
+        let path = dir.path().join("preview.txt");
+        fs::write(&path, "Hello, world!")?;
+        let metadata = fs::metadata(&path)?;
+        let item_metadata = ItemMetadata::Path {
+            metadata,
+            children_opt: None,
+        };
+        let thumb = ItemThumbnail::new(
+            &path,
+            item_metadata,
+            mime::TEXT_PLAIN,
+            128,
+            100 * 1024 * 1024,
+            1,
+            8,
+        );
+        assert!(
+            matches!(thumb, ItemThumbnail::Text(_)),
+            "small text file should produce Text thumbnail"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn item_thumbnail_text_preview_empty_file_returns_not_image() -> io::Result<()> {
+        let dir = TempDir::new()?;
+        let path = dir.path().join("empty.txt");
+        fs::File::create(&path)?;
+        let metadata = fs::metadata(&path)?;
+        let item_metadata = ItemMetadata::Path {
+            metadata,
+            children_opt: None,
+        };
+        let thumb = ItemThumbnail::new(
+            &path,
+            item_metadata,
+            mime::TEXT_PLAIN,
+            128,
+            100 * 1024 * 1024,
+            1,
+            8,
+        );
+        assert!(
+            matches!(thumb, ItemThumbnail::NotImage),
+            "empty text file should produce NotImage (no read)"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn item_thumbnail_text_preview_invalid_utf8_uses_valid_prefix() -> io::Result<()> {
+        let dir = TempDir::new()?;
+        let path = dir.path().join("invalid_utf8.txt");
+        // Valid UTF-8 "ab" then invalid byte sequence then "c"
+        fs::write(&path, b"ab\xff\xfe\xfdc")?;
+        let metadata = fs::metadata(&path)?;
+        let item_metadata = ItemMetadata::Path {
+            metadata,
+            children_opt: None,
+        };
+        let thumb = ItemThumbnail::new(
+            &path,
+            item_metadata,
+            mime::TEXT_PLAIN,
+            128,
+            100 * 1024 * 1024,
+            1,
+            8,
+        );
+        match &thumb {
+            ItemThumbnail::Text(content) => {
+                // Text editor content may add a trailing newline
+                assert_eq!(content.text().trim_end(), "ab");
+            }
+            _ => panic!("expected Text thumbnail with valid prefix only, got {:?}", thumb),
+        }
+        Ok(())
     }
 }
