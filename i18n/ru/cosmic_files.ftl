@@ -195,7 +195,7 @@ dark = Тёмная
 light = Светлая
 # Context menu
 add-to-sidebar = Добавить на боковую панель
-compress = Сжать
+compress = Сжать...
 extract-here = Распаковать
 new-file = Новый файл…
 new-folder = Новая папка…
@@ -377,3 +377,7 @@ copy-to = Копировать в...
 move-to = Переместить в...
 comment = Файловый менеджер для среды COSMIC
 keywords = Папка;Менеджер;
+show-recents = «Недавние документы» в бок. панели
+clear-recents-history = Очистить историю недавних
+copy-path = Копировать путь
+mixed = Смешанные

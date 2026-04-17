@@ -353,7 +353,7 @@ type-to-search-recursive = Keresés a jelenlegi mappában és almappákban
 type-to-search-enter-path = Elérési út megadása
 # Context menu
 add-to-sidebar = Hozzáadás az oldalsávhoz
-compress = Tömörítés
+compress = Tömörítés…
 delete-permanently = Végleges törlés
 eject = Kiadás
 extract-here = Kibontás
@@ -433,3 +433,7 @@ move-to-title = Áthelyezési cél kiválasztása
 move-to-button-label = Áthelyezés
 copy-to = Másolás ide…
 move-to = Áthelyezés ide…
+show-recents = Legutóbbiak mappa megjelenítése az oldalsávban
+copy-path = Útvonal másolása
+clear-recents-history = Legutóbbiak előzményének törlése
+mixed = Vegyes

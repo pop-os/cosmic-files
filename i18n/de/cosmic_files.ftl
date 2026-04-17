@@ -7,7 +7,7 @@ home = Benutzerordner
 networks = Netzwerke
 notification-in-progress = Dateivorgänge werden ausgeführt
 trash = Papierkorb
-recents = Zuletzt benutzt
+recents = Zuletzt verwendet
 undo = Rückgängig
 today = Heute
 # Optionen für die Desktop-Ansicht
@@ -66,11 +66,11 @@ create-new-file = Neue Datei erstellen
 create-new-folder = Neuen Ordner erstellen
 file-name = Dateiname
 folder-name = Ordnername
-file-already-exists = Eine Datei mit diesem Namen existiert bereits.
-folder-already-exists = Ein Ordner mit diesem Namen existiert bereits.
-name-hidden = Mit „.“ beginnende Namen werden ausgeblendet.
-name-invalid = Name darf nicht „{ $filename }“ sein.
-name-no-slashes = Namen dürfen keine Schrägstriche enthalten.
+file-already-exists = Eine Datei mit diesem Namen existiert bereits
+folder-already-exists = Ein Ordner mit diesem Namen existiert bereits
+name-hidden = Mit „.“ beginnende Namen werden versteckt
+name-invalid = Name darf nicht „{ $filename }“ sein
+name-no-slashes = Name darf keine Schrägstriche enthalten
 # Öffnen/Speichern-Dialog
 cancel = Abbrechen
 create = Erstellen
@@ -94,16 +94,16 @@ related-apps = Ähnliche Anwendungen
 
 ## Endgültig-löschen-Dialog
 
-selected-items = die { $items } ausgewählten Elemente
+selected-items = Die { $items } ausgewählten Elemente
 permanently-delete-question = Endgültig löschen?
 delete = Löschen
-permanently-delete-warning = Bist du sicher, dass du { $target } endgültig löschen möchtest? Dies kann nicht rückgängig gemacht werden.
+permanently-delete-warning = { $target } wird endgültig gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.
 # Umbenennen-Dialog
 rename-file = Datei umbenennen
 rename-folder = Ordner umbenennen
 # Ersetzen-Dialog
 replace = Ersetzen
-replace-title = { $filename } existiert bereits an diesem Ort.
+replace-title = „{ $filename }“ existiert bereits an diesem Ort
 replace-warning = Möchtest du sie durch diejenige ersetzen, die du gerade speicherst? Beim Ersetzen wird ihr Inhalt überschrieben.
 replace-warning-operation = Möchtest du sie ersetzen? Beim Ersetzen wird ihr Inhalt überschrieben.
 original-file = Originaldatei
@@ -161,10 +161,10 @@ read-write-execute = Lesen, schreiben und ausführen
 
 favorite-path-error = Fehler beim Öffnen des Verzeichnisses
 favorite-path-error-description =
-    „{ $path }“ kann nicht geöffnet werden.
-        Möglicherweise existiert es nicht oder du hast keine Berechtigung, es zu öffnen.
+    „{ $path }“ kann nicht geöffnet werden
+    „{ $path }“ existiert möglicherweise nicht oder du hast keine Berechtigung zum Öffnen
 
-        Möchtest du es aus der Seitenleiste entfernen?
+    Möchtest du es aus der Seitenleiste entfernen?
 remove = Entfernen
 keep = Behalten
 
@@ -299,7 +299,7 @@ unknown-folder = unbekannter Ordner
 
 ## Öffnen mit
 
-menu-open-with = Öffnen mit
+menu-open-with = Öffnen mit...
 default-app = { $name } (Standard)
 
 ## Details anzeigen
@@ -316,7 +316,7 @@ calculating = Wird berechnet...
 ## Einstellungen
 
 settings = Einstellungen
-single-click = Einzelklick zum Öffnen
+single-click = Mit einem Klick öffnen
 
 ### Aussehen
 
@@ -330,10 +330,10 @@ light = Hell
 
 type-to-search = Zum Suchen tippen
 type-to-search-recursive = Durchsucht den aktuellen Ordner und alle Unterordner
-type-to-search-enter-path = Gibt den Pfad zu einem Verzeichnis oder einer Datei ein
+type-to-search-enter-path = Gib den Pfad zum Verzeichnis oder zur Datei ein
 # Kontextmenü
 add-to-sidebar = Zur Seitenleiste hinzufügen
-compress = Komprimieren
+compress = Komprimieren...
 delete-permanently = Endgültig löschen
 extract-here = Entpacken
 new-file = Neue Datei...
@@ -376,9 +376,9 @@ select-all = Alles auswählen
 
 ## Ansicht
 
-zoom-in = Vergrößern
+zoom-in = Hineinzoomen
 default-size = Standardgröße
-zoom-out = Verkleinern
+zoom-out = Herauszoomen
 view = Ansicht
 grid-view = Rasteransicht
 list-view = Listenansicht
@@ -390,14 +390,42 @@ menu-about = Über COSMIC Dateien...
 
 ## Sortieren
 
-sort = Sortieren
+sort = Sortierung
 sort-a-z = A-Z
 sort-z-a = Z-A
 sort-newest-first = Neueste zuerst
 sort-oldest-first = Älteste zuerst
-sort-smallest-to-largest = Kleinste bis größte
-sort-largest-to-smallest = Größte bis kleinste
+sort-smallest-to-largest = Von klein nach groß
+sort-largest-to-smallest = Von groß nach klein
 repository = Repository
 empty-trash-title = Papierkorb leeren?
 copy-to-title = Kopierziel auswählen
 copy-to-button-label = Kopieren
+support = Unterstützung
+progress-failed = { $percent } %, fehlgeschlagen
+removing-from-recents =
+    { $items } { $items ->
+        [one] Element wird
+       *[other] Elemente werden
+    } aus { recents } entfernt
+removed-from-recents =
+    { $items } { $items ->
+        [one] Element wurde
+       *[other] Elemente wurden
+    } aus { recents } entfernt
+eject = Auswerfen
+type-to-search-select = Wählt die erste übereinstimmende Datei oder den ersten übereinstimmenden Ordner aus
+pasted-image = Eingefügtes Bild
+pasted-text = Eingefügter Text
+pasted-video = Eingefügtes Video
+copy-to = Kopieren nach...
+show-recents = Ordner zuletzt verwendeter Elemente in der Seitenleiste
+clear-recents-history = Verlauf zuletzt verwendeter Elemente leeren
+comment = Dateimanager für den COSMIC Desktop
+keywords = Ordner;Manager;
+move-to-button-label = Verschieben
+move-to-title = Verschiebeziel auswählen
+remove-from-recents = Aus den zuletzt verwendeten Elementen entfernen
+move-to = Verschieben nach...
+copy-path = Pfad kopieren
+mixed = Gemischt

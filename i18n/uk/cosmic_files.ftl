@@ -128,7 +128,7 @@ settings = Налаштування
 
 ### Appearance
 
-appearance = Зовнішній вигляд
+appearance = Вигляд
 theme = Тема
 match-desktop = Системна
 dark = Темна
@@ -317,7 +317,7 @@ single-click = Відкривати одним клацанням
 type-to-search = Введіть для пошуку
 type-to-search-recursive = Шукає у поточній теці та всіх підтеках
 type-to-search-enter-path = Вводить шлях до каталогу або файлу
-compress = Стиснути
+compress = Стиснути...
 delete-permanently = Остаточно видалити
 eject = Безпечно вилучити
 extract-here = Видобути
@@ -368,3 +368,6 @@ copy-to-title = Виберіть місце призначення
 move-to-title = Виберіть місце призначення
 comment = Менеджер файлів для середовища COSMIC
 keywords = Тека;Папка;Провідник;Менеджер;Каталог;
+show-recents = Тека «Нещодавні» на бічній панелі
+copy-path = Копіювати шлях
+clear-recents-history = Очистити нещодавні

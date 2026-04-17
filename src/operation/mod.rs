@@ -22,6 +22,9 @@ use zip::AesMode::Aes256;
 pub use self::controller::{Controller, ControllerState};
 pub mod controller;
 
+pub use notifiers::*;
+mod notifiers;
+
 pub use self::reader::OpReader;
 pub mod reader;
 
@@ -111,7 +114,7 @@ async fn copy_or_move(
         );
 
         // Handle duplicate file names by renaming paths
-        let mut from_to_pairs: Vec<(PathBuf, PathBuf)> = paths
+        let from_to_pairs_iter = paths
             .into_iter()
             .zip(std::iter::repeat(to.as_path()))
             .filter_map(|(from, to)| {
@@ -129,36 +132,46 @@ async fn copy_or_move(
                     //TODO: how to handle from missing file name?
                     None
                 }
-            })
-            .collect();
+            });
 
         // Attempt quick and simple renames
         //TODO: allow rename to be used for directories in recursive context?
-        if matches!(method, Method::Move { .. }) {
-            from_to_pairs.retain(|(from, to)| {
-                //TODO: show replace dialog here?
-                if to.exists() {
-                    return true;
-                }
 
-                //TODO: use compio::fs::rename?
-                match fs::rename(from, to) {
-                    Ok(()) => {
-                        log::info!("renamed {} to {}", from.display(), to.display());
-                        false
+        let from_to_pairs: Vec<(PathBuf, PathBuf)> = if matches!(method, Method::Move { .. }) {
+            from_to_pairs_iter
+                .map(|(from, to)| async move {
+                    //TODO: show replace dialog here?
+                    if to.exists() {
+                        return Some((from, to));
                     }
-                    Err(err) => {
-                        log::info!(
-                            "failed to rename {} to {}, fallback to recursive move: {}",
-                            from.display(),
-                            to.display(),
-                            err
-                        );
-                        true
+
+                    match compio::fs::rename(&from, &to).await {
+                        Ok(()) => {
+                            log::info!("renamed {} to {}", from.display(), to.display());
+                            None
+                        }
+                        Err(err) => {
+                            log::info!(
+                                "failed to rename {} to {}, fallback to recursive move: {}",
+                                from.display(),
+                                to.display(),
+                                err
+                            );
+                            Some((from, to))
+                        }
                     }
-                }
-            });
-        }
+                })
+                .collect::<cosmic::iced::futures::stream::FuturesOrdered<_>>()
+                .fold(Vec::new(), |mut pairs, pair| async move {
+                    if let Some(pair) = pair {
+                        pairs.push(pair);
+                    }
+                    pairs
+                })
+                .await
+        } else {
+            from_to_pairs_iter.collect()
+        };
 
         let mut context = Context::new(controller.clone());
 
@@ -216,7 +229,7 @@ pub async fn sync_to_disk(
         }
     }))
     .buffer_unordered(32)
-    .collect::<Vec<_>>()
+    .collect::<()>()
     .await;
 
     // Sync directories to disk
@@ -226,7 +239,7 @@ pub async fn sync_to_disk(
         }
     }))
     .buffer_unordered(16)
-    .collect::<Vec<_>>()
+    .collect::<()>()
     .await;
 }
 
@@ -762,13 +775,12 @@ impl Operation {
                                             OperationError::from_err(e, &controller)
                                         })?;
 
-                                        if let Ok(modified) = metadata.modified() {
-                                            if let Some(last_modified) =
+                                        if let Ok(modified) = metadata.modified()
+                                            && let Some(last_modified) =
                                                 archive::system_time_to_zip_date_time(modified)
-                                            {
-                                                zip_options =
-                                                    zip_options.last_modified_time(last_modified);
-                                            }
+                                        {
+                                            zip_options =
+                                                zip_options.last_modified_time(last_modified);
                                         }
 
                                         #[cfg(unix)]
@@ -1181,8 +1193,10 @@ impl Operation {
                     .map_err(|s| OperationError::from_state(s, &controller))?;
 
                 let controller_clone = controller.clone();
+                let path_clone = path.clone();
                 compio::runtime::spawn_blocking(move || -> Result<(), OperationError> {
                     let controller = controller_clone;
+                    let path = path_clone;
                     //TODO: what to do on non-Unix systems?
                     #[cfg(unix)]
                     {
@@ -1197,7 +1211,10 @@ impl Operation {
                 .await
                 .map_err(wrap_compio_spawn_error)?
                 .map_err(|e| OperationError::from_err(e, &controller))?;
-                Ok(OperationSelection::default())
+                Ok(OperationSelection {
+                    ignored: Vec::new(),
+                    selected: vec![path],
+                })
             }
         };
 

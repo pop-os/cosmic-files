@@ -337,7 +337,7 @@ type-to-search-recursive = Recherche dans le dossier actuel et tous les sous-dos
 type-to-search-enter-path = Entrez le chemin du dossier ou du fichier
 # Context menu
 add-to-sidebar = Ajouter à la barre latérale
-compress = Compresser
+compress = Compresser...
 delete-permanently = Supprimer définitivement
 extract-here = Extraire
 new-file = Nouveau fichier...
@@ -433,3 +433,7 @@ copy-to = Copier vers...
 move-to = Déplacer vers...
 comment = Explorateur de fichiers pour le bureau COSMIC
 keywords = Dossier;Gestionnaire;
+show-recents = Dossier Récents dans la barre latérale
+copy-path = Copier le chemin
+clear-recents-history = Effacer l'historique des Récents
+mixed = Mixte

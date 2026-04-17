@@ -1,6 +1,6 @@
 [package]
 name = "cosmic-files"
-version = "1.0.8"
+version = "1.0.9"
 authors = ["Jeremy Soller <jeremy@system76.com>"]
 edition = "2024"
 license = "GPL-3.0-only"
@@ -8,12 +8,12 @@ rust-version = "1.90"
 
 [dependencies]
 anyhow = "1"
-chrono = { version = "0.4", features = ["unstable-locales"] }
+jiff = "0.2"
+jiff-icu = "0.2"
 icu = { version = "2.1.1", features = ["compiled_data"] }
-cctk = { git = "https://github.com/pop-os/cosmic-protocols", package = "cosmic-client-toolkit", rev = "d0e95be", optional = true }
+cctk = { git = "https://github.com/pop-os/cosmic-protocols", package = "cosmic-client-toolkit", rev = "160b086", optional = true }
 cosmic-mime-apps = { git = "https://github.com/pop-os/cosmic-mime-apps.git", optional = true }
 dirs = "6.0.0"
-env_logger = "0.11"
 gio = { version = "0.21", optional = true }
 glib = { version = "0.21", optional = true }
 glob = "0.3"
@@ -36,14 +36,14 @@ tokio = { version = "1", features = ["process", "sync"] }
 trash = { git = "https://github.com/jackpot51/trash-rs.git", branch = "cosmic" }
 url = "2.5"
 walkdir = "2.5.0"
-wayland-client = { version = "0.31.12", optional = true }
+wayland-client = { version = "0.31.13", optional = true }
 xdg = { version = "3.0", optional = true }
 xdg-mime = { git = "https://github.com/ebassi/xdg-mime-rs" }
 # Compression
 bzip2 = { version = "0.6", optional = true }           #TODO: replace with pure Rust crate
 flate2 = "1.1"
 tar = "0.4.44"
-lzma-rust2 = { version = "0.15.7", optional = true }
+lzma-rust2 = { version = "0.16", optional = true }
 ordermap = { version = "1.1.0", features = ["serde"] }
 # Internationalization
 i18n-embed = { version = "0.16", features = [
@@ -54,13 +54,18 @@ i18n-embed-fl = "0.10"
 rust-embed = "8"
 slotmap = "1.1.1"
 recently-used-xbel = "1.2.0"
-zip = "7"
+zip = "8"
 uzers = "0.12.2"
 md-5 = "0.10.6"
 png = "0.18"
 jxl-oxide = { version = "0.12.5", features = ["image"] }
 num_cpus = "1.17.0"
 filetime = "0.2"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+thiserror = "2.0.18"
+atomic_float = "1.1.0"
+num_enum = "0.7.6"
 
 # Completion-based IO runtime to enable io_uring / IOCP file IO support.
 [dependencies.compio]
@@ -74,6 +79,7 @@ default-features = false
 #TODO: a11y feature crashes
 features = [
     "about",
+    "advanced-shaping",
     "autosize",
     "desktop",
     "multi-window",
@@ -103,8 +109,8 @@ default = [
     "io-uring",
     "lzma-rust2",
     "notify",
-    "wgpu",
     "wayland",
+    "wgpu",
 ]
 dbus-config = ["libcosmic/dbus-config"]
 desktop = ["dep:cosmic-mime-apps", "dep:xdg"]
@@ -124,7 +130,7 @@ inherits = "release"
 debug = true
 
 [target.'cfg(unix)'.dependencies]
-fork = "0.6"
+fork = "0.7"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = "0.18"
@@ -146,6 +152,10 @@ tokio = { version = "1", features = ["rt", "macros"] }
 # libcosmic = { path = "../libcosmic" }
 # cosmic-config = { path = "../libcosmic/cosmic-config" }
 # cosmic-theme = { path = "../libcosmic/cosmic-theme" }
+# libcosmic = { git = "https://github.com/pop-os/libcosmic//", branch = "iced-rebase" }
+# cosmic-config = { git = "https://github.com/pop-os/libcosmic//", branch = "iced-rebase" }
+# cosmic-theme = { git = "https://github.com/pop-os/libcosmic//", branch = "iced-rebase" }
+
 
 # [patch.'https://github.com/pop-os/smithay-clipboard']
 # smithay-clipboard = { path = "../smithay-clipboard" }

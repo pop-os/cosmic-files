@@ -101,6 +101,7 @@ open-with = Öppna med
 owner = Ägare
 group = Grupp
 other = Andra
+mixed = Blandade
 # Listvy
 name = Namn
 modified = Ändrad
@@ -268,7 +269,7 @@ type-to-search-recursive = Söker i den aktuella mappen och alla undermappar
 type-to-search-enter-path = Anger sökvägen till mappen eller filen
 # Kontext meny
 add-to-sidebar = Lägg till i sidofält
-compress = Komprimera
+compress = Komprimera...
 extract-here = Packa upp
 new-file = Ny fil…
 new-folder = Ny mapp…
@@ -406,3 +407,6 @@ move-to-title = Välj mål för flytt
 move-to-button-label = Flytta
 copy-to = Kopiera till...
 move-to = Flytta till...
+show-recents = Mapp för senast använda filer i sidofältet
+clear-recents-history = Töm historik för Senaste
+copy-path = Kopiera sökväg
