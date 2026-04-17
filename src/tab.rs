@@ -41,6 +41,8 @@ use jiff_icu::ConvertFrom;
 use mime_guess::{Mime, mime};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::{
     borrow::Cow,
     cell::Cell,
@@ -51,7 +53,6 @@ use std::{
     fs::{self, File, Metadata},
     hash::Hash,
     io::{BufRead, BufReader},
-    os::unix::fs::MetadataExt,
     path::{self, Path, PathBuf},
     sync::{Arc, LazyLock, RwLock, atomic},
     time::{Duration, Instant, SystemTime},
@@ -4339,6 +4340,7 @@ impl Tab {
                     for item in self.items_opt().map_or(Vec::new(), |items| {
                         items.iter().filter(|item| item.selected).collect()
                     }) {
+                        #[cfg(unix)]
                         if let (Some(path), Some(mode)) = (
                             item.path_opt(),
                             item.file_metadata()
@@ -6356,22 +6358,23 @@ impl Tab {
                 } else {
                     total_size = total_size.saturating_add(metadata.len());
                 }
-                let mode = metadata.mode();
                 #[cfg(unix)]
-                user_name.insert(
-                    uzers::get_user_by_uid(metadata.uid())
-                        .and_then(|user| user.name().to_str().map(ToOwned::to_owned))
-                        .unwrap_or_default(),
-                );
-                mode_user.insert(get_mode_part(mode, MODE_SHIFT_USER));
-                #[cfg(unix)]
-                group_name.insert(
-                    uzers::get_group_by_gid(metadata.gid())
-                        .and_then(|group| group.name().to_str().map(ToOwned::to_owned))
-                        .unwrap_or_default(),
-                );
-                mode_group.insert(get_mode_part(mode, MODE_SHIFT_GROUP));
-                mode_other.insert(get_mode_part(mode, MODE_SHIFT_OTHER));
+                {
+                    let mode = metadata.mode();
+                    user_name.insert(
+                        uzers::get_user_by_uid(metadata.uid())
+                            .and_then(|user| user.name().to_str().map(ToOwned::to_owned))
+                            .unwrap_or_default(),
+                    );
+                    mode_user.insert(get_mode_part(mode, MODE_SHIFT_USER));
+                    group_name.insert(
+                        uzers::get_group_by_gid(metadata.gid())
+                            .and_then(|group| group.name().to_str().map(ToOwned::to_owned))
+                            .unwrap_or_default(),
+                    );
+                    mode_group.insert(get_mode_part(mode, MODE_SHIFT_GROUP));
+                    mode_other.insert(get_mode_part(mode, MODE_SHIFT_OTHER));
+                }
             }
         }
         let mut mime_types: Vec<(String, u64)> = mime_type_counts.into_iter().collect();

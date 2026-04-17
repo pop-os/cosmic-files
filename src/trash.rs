@@ -74,6 +74,8 @@ impl TrashExt for Trash {
         }
     }
 
+    // Not available on Windows only
+    #[cfg(not(target_os = "windows"))]
     fn folders() -> Result<HashSet<PathBuf>, trash::Error> {
         trash::os_limited::trash_folders()
     }
