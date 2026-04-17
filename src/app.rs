@@ -2444,6 +2444,9 @@ impl Application for App {
                 ),
             ]);
 
+        if matches!(flags.mode, Mode::Desktop) {
+            core.set_auto_blur(false);
+        }
         let mut app = Self {
             core,
             about,

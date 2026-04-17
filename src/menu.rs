@@ -71,14 +71,14 @@ pub fn context_menu<'a>(
         String::new()
     };
     fn key_style(theme: &cosmic::Theme) -> TextStyle {
-        let mut color = theme.cosmic().background.component.on;
+        let mut color = theme.cosmic().background(theme.transparent).component.on;
         color.alpha *= 0.75;
         TextStyle {
             color: Some(color.into()),
         }
     }
     fn disabled_style(theme: &cosmic::Theme) -> TextStyle {
-        let mut color = theme.cosmic().background.component.on;
+        let mut color = theme.cosmic().background(theme.transparent).component.on;
         color.alpha *= 0.5;
         TextStyle {
             color: Some(color.into()),
@@ -420,7 +420,7 @@ pub fn context_menu<'a>(
         //TODO: move style to libcosmic
         .style(|theme| {
             let cosmic = theme.cosmic();
-            let component = &cosmic.background.component;
+            let component = &cosmic.background(theme.transparent).component;
             container::Style {
                 icon_color: Some(component.on.into()),
                 text_color: Some(component.on.into()),
@@ -814,7 +814,7 @@ pub fn location_context_menu<'a>(ancestor_index: usize) -> Element<'a, tab::Mess
         .padding(1)
         .style(|theme| {
             let cosmic = theme.cosmic();
-            let component = &cosmic.background.component;
+            let component = &cosmic.background(theme.transparent).component;
             container::Style {
                 icon_color: Some(component.on.into()),
                 text_color: Some(component.on.into()),
