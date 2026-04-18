@@ -1247,6 +1247,7 @@ mod tests {
         fs::{self, File},
         io,
         path::PathBuf,
+        sync::{Arc, Mutex},
     };
 
     use cosmic::iced::futures::{StreamExt, channel::mpsc, future};
@@ -1475,5 +1476,50 @@ mod tests {
         assert!(expected.exists(), "File should have been copied");
 
         Ok(())
+    }
+
+    /// Regression test: for a Move operation, cleanup ops (Remove/Rmdir) were included in
+    /// `total_ops`, causing the progress formula `(item_progress + current_ops) / total_ops`
+    /// to cap at 0.5 for a single-file move (1 copy + 1 remove = total_ops 2, so max was
+    /// (1.0 + 0) / 2 = 0.5). Verify the max progress from on_progress callbacks reaches 1.0.
+    #[test(compio::test)]
+    async fn move_progress_does_not_cap_at_50_percent() {
+        use crate::operation::recursive::{Context, Method};
+
+        let tmp = empty_fs().expect("temp dir");
+        let src = tmp.path().join("src.txt");
+        let dst = tmp.path().join("dst.txt");
+        fs::write(&src, b"hello").expect("write src");
+
+        let max_progress: Arc<Mutex<f32>> = Arc::new(Mutex::new(0.0));
+        let max_clone = max_progress.clone();
+
+        let controller = Controller::default();
+        let mut ctx = Context::new(controller).on_progress(move |_op, progress| {
+            let item_progress = match progress.total_bytes {
+                Some(t) if t > 0 => progress.current_bytes as f32 / t as f32,
+                Some(_) => 1.0,
+                None => 0.0,
+            };
+            let p =
+                (item_progress + progress.current_ops as f32) / progress.total_ops as f32;
+            let mut max = max_clone.lock().unwrap();
+            if p > *max {
+                *max = p;
+            }
+        });
+
+        ctx.recursive_copy_or_move(
+            [(src, dst)],
+            Method::Move { cross_device_copy: false },
+        )
+        .await
+        .expect("move should succeed");
+
+        let max = *max_progress.lock().unwrap();
+        assert!(
+            max >= 1.0,
+            "progress capped at {max:.2} — expected 1.0 for a single-file move (cleanup ops must be excluded from total_ops)"
+        );
     }
 }

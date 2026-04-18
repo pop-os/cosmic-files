@@ -187,8 +187,12 @@ impl Context {
             })
             .count();
 
-        let total_ops = ops.len();
-        for (current_ops, mut op) in ops.into_iter().enumerate() {
+        // Exclude cleanup ops (Remove/Rmdir) from progress denominator — they are fast
+        // file deletions and don't carry byte-level progress. Including them would cause
+        // the bar to cap at `1 / total_ops` (e.g. 50% for a single cross-device move).
+        let total_ops = ops.iter().filter(|op| !op.is_cleanup).count().max(1);
+        let mut current_ops = 0usize;
+        for mut op in ops.into_iter() {
             self.controller
                 .check()
                 .await
@@ -230,6 +234,9 @@ impl Context {
             } else {
                 // Cancelled
                 return Ok(false);
+            }
+            if !op.is_cleanup {
+                current_ops += 1;
             }
         }
 
