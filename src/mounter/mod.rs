@@ -2,7 +2,7 @@ use cosmic::{Task, iced::Subscription, widget};
 use std::{
     collections::BTreeMap,
     fmt,
-    path::PathBuf,
+    path::Path,
     sync::{Arc, LazyLock},
 };
 use tokio::sync::mpsc;
@@ -14,10 +14,10 @@ mod gvfs;
 
 #[derive(Clone)]
 pub struct MounterAuth {
-    pub message: String,
-    pub username_opt: Option<String>,
-    pub domain_opt: Option<String>,
-    pub password_opt: Option<String>,
+    pub message: Arc<str>,
+    pub username_opt: Option<Arc<str>>,
+    pub domain_opt: Option<Arc<str>>,
+    pub password_opt: Option<Arc<str>>,
     pub remember_opt: Option<bool>,
     pub anonymous_opt: Option<bool>,
 }
@@ -51,7 +51,7 @@ pub enum MounterItem {
 }
 
 impl MounterItem {
-    pub fn name(&self) -> String {
+    pub fn name(&self) -> &str {
         match self {
             #[cfg(feature = "gvfs")]
             Self::Gvfs(item) => item.name(),
@@ -59,7 +59,7 @@ impl MounterItem {
         }
     }
 
-    pub fn uri(&self) -> String {
+    pub fn uri(&self) -> &str {
         match self {
             #[cfg(feature = "gvfs")]
             Self::Gvfs(item) => item.uri(),
@@ -83,7 +83,7 @@ impl MounterItem {
         }
     }
 
-    pub fn path(&self) -> Option<PathBuf> {
+    pub fn path(&self) -> Option<&Path> {
         match self {
             #[cfg(feature = "gvfs")]
             Self::Gvfs(item) => item.path(),
@@ -102,21 +102,21 @@ impl MounterItem {
 
 pub type MounterItems = Vec<MounterItem>;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum MounterMessage {
     Items(MounterItems),
-    MountResult(MounterItem, Result<bool, String>),
-    NetworkAuth(String, MounterAuth, mpsc::Sender<MounterAuth>),
-    NetworkResult(String, Result<bool, String>),
+    MountResult(MounterItem, anyhow::Result<bool>),
+    NetworkAuth(Arc<str>, MounterAuth, mpsc::Sender<MounterAuth>),
+    NetworkResult(Arc<str>, anyhow::Result<bool>),
 }
 
 pub trait Mounter: Send + Sync {
     fn items(&self, sizes: IconSizes) -> Option<MounterItems>;
     //TODO: send result
-    fn mount(&self, item: MounterItem) -> Task<()>;
-    fn network_drive(&self, uri: String) -> Task<()>;
-    fn network_scan(&self, uri: &str, sizes: IconSizes) -> Option<Result<Vec<tab::Item>, String>>;
-    fn dir_info(&self, uri: &str) -> Option<(String, String, Option<PathBuf>)>;
+    fn mount(&self, item: MounterItem) -> Task<anyhow::Result<()>>;
+    fn network_drive(&self, uri: String) -> Task<anyhow::Result<()>>;
+    fn network_scan(&self, uri: &str, sizes: IconSizes) -> Option<anyhow::Result<Vec<tab::Item>>>;
+    fn dir_info(&self, uri: &str) -> Option<tab::Location>;
     fn unmount(&self, item: MounterItem) -> Task<()>;
     fn subscription(&self) -> Subscription<MounterMessage>;
 }

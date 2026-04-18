@@ -539,12 +539,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
-name = "atomic_float"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "628d228f918ac3b82fe590352cc719d30664a0c13ca3a60266fe02c7132d480a"
-
-[[package]]
 name = "atomicwrites"
 version = "0.4.2"
 source = "git+https://github.com/jackpot51/rust-atomicwrites#043ab4859d53ffd3d55334685303d8df39c9f768"
@@ -1345,12 +1339,13 @@ dependencies = [
 name = "cosmic-files"
 version = "1.0.11"
 dependencies = [
+ "aho-corasick",
  "anyhow",
- "atomic_float",
  "bzip2",
  "compio",
  "cosmic-client-toolkit",
  "cosmic-mime-apps",
+ "crossbeam-utils",
  "dirs 6.0.0",
  "fastrand",
  "filetime",
@@ -1376,7 +1371,6 @@ dependencies = [
  "notify-debouncer-full",
  "notify-rust",
  "num_cpus",
- "num_enum",
  "open",
  "ordermap",
  "paste",

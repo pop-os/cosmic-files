@@ -17,7 +17,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let mut line = String::new();
                 match io::stdin().read_line(&mut line) {
                     Ok(_) => {
-                        if line == "y" {
+                        if line.trim() == "y" {
                             ReplaceResult::Replace(false)
                         } else {
                             ReplaceResult::Skip(false)

@@ -5,17 +5,11 @@
 use cosmic::desktop::fde::GenericEntry;
 use mime_guess::Mime;
 use rustc_hash::FxHashMap;
-use std::{
-    fs,
-    path::Path,
-    process,
-    sync::{LazyLock, Mutex},
-    time::Instant,
-};
+use std::{fs, path::Path, process, sync::LazyLock, time::Instant};
 
 #[derive(Clone, Debug)]
 pub struct Thumbnailer {
-    pub exec: String,
+    pub exec: Box<str>,
 }
 
 impl Thumbnailer {
@@ -25,8 +19,7 @@ impl Thumbnailer {
         output: &Path,
         thumbnail_size: u32,
     ) -> Option<process::Command> {
-        let args_vec: Vec<String> = shlex::split(&self.exec)?;
-        let mut args = args_vec.iter();
+        let mut args = shlex::Shlex::new(&self.exec);
         let mut command = process::Command::new(args.next()?);
         for arg in args {
             if arg.starts_with('%') {
@@ -38,14 +31,10 @@ impl Thumbnailer {
                         command.arg(output);
                     }
                     "%s" => {
-                        command.arg(format!("{thumbnail_size}"));
+                        command.arg(thumbnail_size.to_string());
                     }
                     _ => {
-                        log::warn!(
-                            "unsupported thumbnailer Exec code {:?} in {:?}",
-                            arg,
-                            self.exec
-                        );
+                        log::warn!("unsupported thumbnailer Exec code {} in {}", arg, self.exec);
                         return None;
                     }
                 }
@@ -103,7 +92,7 @@ impl ThumbnailerCache {
                                     "failed to read entry in directory {}: {}",
                                     dir.display(),
                                     err
-                                )
+                                );
                             })
                             .ok()
                             .map(|entry| entry.path())
@@ -148,13 +137,8 @@ impl ThumbnailerCache {
             for mime_type in mime_types.split_terminator(';') {
                 if let Ok(mime) = mime_type.parse::<Mime>() {
                     log::trace!("thumbnailer {}={}", mime, path.display());
-                    let apps = self
-                        .cache
-                        .entry(mime)
-                        .or_insert_with(|| Vec::with_capacity(1));
-                    apps.push(Thumbnailer {
-                        exec: exec.to_string(),
-                    });
+                    let apps = self.cache.entry(mime).or_default();
+                    apps.push(Thumbnailer { exec: exec.into() });
                 }
             }
         }
@@ -163,15 +147,13 @@ impl ThumbnailerCache {
         log::info!("loaded thumbnailer cache in {elapsed:?}");
     }
 
-    pub fn get(&self, key: &Mime) -> Vec<Thumbnailer> {
-        self.cache.get(key).map_or_else(Vec::new, Vec::clone)
+    pub fn get(&self, key: &Mime) -> Option<&Vec<Thumbnailer>> {
+        self.cache.get(key)
     }
 }
 
-static THUMBNAILER_CACHE: LazyLock<Mutex<ThumbnailerCache>> =
-    LazyLock::new(|| Mutex::new(ThumbnailerCache::new()));
+static THUMBNAILER_CACHE: LazyLock<ThumbnailerCache> = LazyLock::new(ThumbnailerCache::new);
 
-pub fn thumbnailer(mime: &Mime) -> Vec<Thumbnailer> {
-    let thumbnailer_cache = THUMBNAILER_CACHE.lock().unwrap();
-    thumbnailer_cache.get(mime)
+pub fn thumbnailer(mime: &Mime) -> Option<&'static Vec<Thumbnailer>> {
+    THUMBNAILER_CACHE.get(mime)
 }

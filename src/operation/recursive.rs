@@ -3,7 +3,7 @@
 
 use super::{Controller, OperationSelection, ReplaceResult, copy_unique_path};
 use crate::operation::{OperationError, sync_to_disk};
-use anyhow::Context as AnyhowContext;
+use anyhow::{Context as AnyhowContext, anyhow};
 use compio::BufResult;
 use compio::buf::{IntoInner, IoBuf};
 use compio::driver::{ToSharedFd, op::AsyncifyFd};
@@ -14,7 +14,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::time::Instant;
-use std::{cell::Cell, error::Error, fs, ops::ControlFlow, path::PathBuf};
+use std::{cell::Cell, fs, ops::ControlFlow, path::PathBuf};
 use walkdir::WalkDir;
 
 #[cfg(feature = "gvfs")]
@@ -72,13 +72,13 @@ impl Context {
 
     pub async fn recursive_copy_or_move(
         &mut self,
-        from_to_pairs: impl IntoIterator<Item = (PathBuf, PathBuf)>,
+        from_to_pairs: Vec<(PathBuf, PathBuf)>,
         method: Method,
     ) -> Result<bool, OperationError> {
         let mut ops = Vec::new();
         let mut cleanup_ops = Vec::new();
         let mut written_files = Vec::new();
-        let mut target_dirs = std::collections::HashSet::new();
+        let mut target_dirs = rustc_hash::FxHashSet::default();
         for (from_parent, to_parent) in from_to_pairs {
             self.controller
                 .check()
@@ -98,7 +98,7 @@ impl Context {
 
                 let entry = entry.map_err(|err| {
                     OperationError::from_err(
-                        format!(
+                        format_args!(
                             "failed to walk directory {}: {}",
                             from_parent.display(),
                             err
@@ -118,7 +118,7 @@ impl Context {
                 } else if file_type.is_symlink() {
                     let target = fs::read_link(&from).map_err(|err| {
                         OperationError::from_err(
-                            format!("failed to read link {}: {}", from_parent.display(), err),
+                            format_args!("failed to read link {}: {}", from_parent.display(), err),
                             &self.controller,
                         )
                     })?;
@@ -126,7 +126,7 @@ impl Context {
                 } else {
                     //TODO: present dialog and allow continue
                     return Err(OperationError::from_err(
-                        format!("{} is not a known file type", from.display()),
+                        format_args!("{} is not a known file type", from.display()),
                         &self.controller,
                     ));
                 };
@@ -136,7 +136,7 @@ impl Context {
                 } else {
                     let relative = from.strip_prefix(&from_parent).map_err(|err| {
                         OperationError::from_err(
-                            format!(
+                            format_args!(
                                 "failed to remove prefix {} from {}: {}",
                                 from_parent.display(),
                                 from.display(),
@@ -203,7 +203,7 @@ impl Context {
             (self.on_progress)(&op, &progress);
             if op.run(self, progress).await.map_err(|err| {
                 OperationError::from_err(
-                    format!(
+                    format_args!(
                         "failed to {:?} {} to {}: {}",
                         op.kind,
                         op.from.display(),
@@ -249,7 +249,7 @@ impl Context {
         self
     }
 
-    async fn replace(&mut self, op: &Op) -> Result<ControlFlow<bool, PathBuf>, Box<dyn Error>> {
+    async fn replace(&mut self, op: &Op) -> anyhow::Result<ControlFlow<bool, PathBuf>> {
         let replace_result = match self.replace_result_opt {
             Some(result) => result,
             None => (self.on_replace)(op, self.remaining_conflicts).await,
@@ -265,7 +265,7 @@ impl Context {
             }
             ReplaceResult::KeepBoth => match op.to.parent() {
                 Some(to_parent) => Ok(ControlFlow::Continue(copy_unique_path(&op.from, to_parent))),
-                None => Err(format!("failed to get parent of {}", op.to.display()).into()),
+                None => Err(anyhow!("failed to get parent of {}", op.to.display())),
             },
             ReplaceResult::Skip(apply_to_all) => {
                 if apply_to_all {
@@ -331,7 +331,7 @@ impl Op {
         })
     }
 
-    async fn run(&mut self, ctx: &mut Context, progress: Progress) -> Result<bool, Box<dyn Error>> {
+    async fn run(&mut self, ctx: &mut Context, progress: Progress) -> anyhow::Result<bool> {
         if self.skipped.normal.get() || (self.is_cleanup && self.skipped.cleanup.get()) {
             return Ok(true);
         }
@@ -365,32 +365,29 @@ impl Op {
                     }
                 }
                 // This is atomic and ensures `to` is not created by any other process
-                match compio::fs::hard_link(&self.from, &self.to).await {
-                    Ok(()) => {}
-                    Err(err) => {
-                        // https://docs.rs/windows-sys/latest/windows_sys/Win32/Foundation/constant.ERROR_NOT_SAME_DEVICE.html
-                        #[cfg(windows)]
-                        const EXDEV: i32 = 17;
-                        #[cfg(unix)]
-                        const EXDEV: i32 = libc::EXDEV as _;
+                if let Err(err) = compio::fs::hard_link(&self.from, &self.to).await {
+                    // https://docs.rs/windows-sys/latest/windows_sys/Win32/Foundation/constant.ERROR_NOT_SAME_DEVICE.html
+                    #[cfg(windows)]
+                    const EXDEV: i32 = 17;
+                    #[cfg(unix)]
+                    const EXDEV: i32 = libc::EXDEV as _;
 
-                        if err.raw_os_error() == Some(EXDEV) {
-                            if cross_device_copy {
-                                // Do not clean up if cross_device_copy is set
-                                self.skipped.cleanup.set(true);
-                            }
-                            // Try standard copy if hard link fails with cross device error
-                            let mut copy_op = Self {
-                                kind: OpKind::Copy,
-                                from: self.from.clone(),
-                                to: self.to.clone(),
-                                skipped: self.skipped.clone(),
-                                is_cleanup: self.is_cleanup,
-                            };
-                            return Box::pin(copy_op.run(ctx, progress)).await;
+                    if err.raw_os_error() == Some(EXDEV) {
+                        if cross_device_copy {
+                            // Do not clean up if cross_device_copy is set
+                            self.skipped.cleanup.set(true);
                         }
-                        return Err(err.into());
+                        // Try standard copy if hard link fails with cross device error
+                        let mut copy_op = Self {
+                            kind: OpKind::Copy,
+                            from: self.from.clone(),
+                            to: self.to.clone(),
+                            skipped: self.skipped.clone(),
+                            is_cleanup: self.is_cleanup,
+                        };
+                        return Box::pin(copy_op.run(ctx, progress)).await;
                     }
+                    return Err(err.into());
                 }
             }
             OpKind::Mkdir => {
@@ -431,11 +428,7 @@ impl Op {
         Ok(true)
     }
 
-    async fn copy(
-        &mut self,
-        ctx: &mut Context,
-        mut progress: Progress,
-    ) -> Result<bool, Box<dyn Error>> {
+    async fn copy(&mut self, ctx: &mut Context, mut progress: Progress) -> anyhow::Result<bool> {
         // Remove `to` if overwriting and it is an existing file
         if self.to.is_file() {
             match ctx.replace(self).await? {
@@ -454,7 +447,7 @@ impl Op {
                     .read(true)
                     .open(&self.from)
                     .await
-                    .with_context(|| format!("failed to open {} for reading", self.from.display(),))
+                    .with_context(|| format!("failed to open {} for reading", self.from.display()))
             },
             async { compio::fs::metadata(&self.from).await.ok() },
             // This is atomic and ensures `to` is not created by any other process
@@ -474,11 +467,11 @@ impl Op {
         (ctx.on_progress)(self, &progress);
 
         if let Some(metadata) = metadata.as_ref() {
-            if let Err(why) = to_file.set_permissions(metadata.permissions()).await {
+            if let Err(why) = to_file.set_permissions(metadata.permissions()).await
                 // This error is not propagated upwards as some filesystems do not support setting permissions
-                if !matches!(why.kind(), std::io::ErrorKind::Unsupported) {
-                    tracing::warn!(?why, "failed to set permissions for {}", self.to.display(),);
-                }
+                && !matches!(why.kind(), std::io::ErrorKind::Unsupported)
+            {
+                tracing::warn!(?why, "failed to set permissions for {}", self.to.display());
             }
         }
 

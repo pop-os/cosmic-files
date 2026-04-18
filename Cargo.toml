@@ -7,12 +7,14 @@ license = "GPL-3.0-only"
 rust-version = "1.90"
 
 [dependencies]
+aho-corasick = "1"
 anyhow = "1"
 jiff = "0.2"
 jiff-icu = "0.2"
 icu = { version = "2.1.1", features = ["compiled_data"] }
 cctk = { git = "https://github.com/pop-os/cosmic-protocols", package = "cosmic-client-toolkit", rev = "160b086", optional = true }
 cosmic-mime-apps = { git = "https://github.com/pop-os/cosmic-mime-apps.git", optional = true }
+crossbeam-utils = "0.8.21"
 dirs = "6.0.0"
 gio = { version = "0.21", optional = true }
 glib = { version = "0.21", optional = true }
@@ -63,8 +65,6 @@ filetime = "0.2"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 thiserror = "2.0.18"
-atomic_float = "1.1.0"
-num_enum = "0.7.6"
 
 # Completion-based IO runtime to enable io_uring / IOCP file IO support.
 [dependencies.compio]

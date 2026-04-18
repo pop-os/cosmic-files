@@ -1,13 +1,13 @@
+use anyhow::Context;
 use image::DynamicImage;
 use md5::{Digest, Md5};
 use rustc_hash::FxHashMap;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::{
-    error::Error,
     fs::{self, File},
     io::{self, BufReader, BufWriter},
-    path::{Path, PathBuf},
+    path::Path,
     sync::LazyLock,
     time::UNIX_EPOCH,
 };
@@ -17,21 +17,20 @@ use url::Url;
 /// Implements thumbnail caching based on the freedesktop.org Thumbnail Managing Standard.
 /// <https://specifications.freedesktop.org/thumbnail-spec/latest>/
 pub struct ThumbnailCacher {
-    file_path: PathBuf,
-    file_uri: String,
-    thumbnail_dir: PathBuf,
-    thumbnail_path: PathBuf,
+    file_path: Box<Path>,
+    file_uri: Box<str>,
+    thumbnail_dir: Box<Path>,
+    thumbnail_path: Box<Path>,
     thumbnail_size: ThumbnailSize,
-    thumbnail_fail_marker_path: PathBuf,
+    thumbnail_fail_marker_path: Box<Path>,
 }
 
 impl ThumbnailCacher {
-    pub fn new(file_path: &Path, thumbnail_size: ThumbnailSize) -> Result<Self, String> {
-        let file_uri = thumbnail_uri(file_path)
-            .map_err(|err| format!("failed to create URI for {}: {}", file_path.display(), err))?;
-        let cache_base_dir = THUMBNAIL_CACHE_BASE_DIR
-            .as_ref()
-            .ok_or("failed to get thumbnail cache directory".to_string())?;
+    pub fn new(file_path: &Path, thumbnail_size: ThumbnailSize) -> anyhow::Result<Self> {
+        let file_uri = thumbnail_uri(file_path).context("failed to create Uri")?;
+        let Some(cache_base_dir) = THUMBNAIL_CACHE_BASE_DIR.as_ref() else {
+            anyhow::bail!("failed to get thumbnail cache directory");
+        };
         let thumbnail_filename = thumbnail_cache_filename(&file_uri);
         let thumbnail_dir = cache_base_dir.join(thumbnail_size.subdirectory_name());
         if !thumbnail_dir.is_dir() {
@@ -39,25 +38,21 @@ impl ThumbnailCacher {
                 "{} is not a directory, creating one now",
                 thumbnail_dir.display()
             );
-            let _: () = log::error!(
-                "{} failed to create directory, this error can be expected on first run",
-                thumbnail_dir.display()
-            );
-            fs::create_dir_all(&thumbnail_dir).unwrap_or(());
+            fs::create_dir_all(&thumbnail_dir)?;
         }
-        let thumbnail_path = thumbnail_dir.join(&thumbnail_filename);
-        let thumbnail_fail_marker_path = cache_base_dir
-            .join("fail")
-            .join(format!("cosmic-files-{}", env!("CARGO_PKG_VERSION")))
-            .join(&thumbnail_filename);
+        let thumbnail_path = thumbnail_dir.join(&thumbnail_filename).into_boxed_path();
+
+        let mut thumbnail_fail_marker_path = cache_base_dir.join("fail");
+        thumbnail_fail_marker_path.push(format!("cosmic-files-{}", env!("CARGO_PKG_VERSION")));
+        thumbnail_fail_marker_path.push(&thumbnail_filename);
 
         Ok(Self {
-            file_path: file_path.to_path_buf(),
+            file_path: file_path.into(),
             file_uri,
-            thumbnail_dir,
+            thumbnail_dir: thumbnail_dir.into_boxed_path(),
             thumbnail_path,
             thumbnail_size,
-            thumbnail_fail_marker_path,
+            thumbnail_fail_marker_path: thumbnail_fail_marker_path.into_boxed_path(),
         })
     }
 
@@ -93,7 +88,7 @@ impl ThumbnailCacher {
         &self.thumbnail_dir
     }
 
-    pub fn update_with_temp_file(&self, temp_file: NamedTempFile) -> Result<&Path, Box<dyn Error>> {
+    pub fn update_with_temp_file(&self, temp_file: &NamedTempFile) -> anyhow::Result<&Path> {
         #[cfg(unix)]
         fs::set_permissions(temp_file.path(), fs::Permissions::from_mode(0o600))?;
         self.update_thumbnail_text_metadata(temp_file.path())?;
@@ -102,7 +97,7 @@ impl ThumbnailCacher {
         Ok(&self.thumbnail_path)
     }
 
-    pub fn update_with_image(&self, image: DynamicImage) -> Result<&Path, Box<dyn Error>> {
+    pub fn update_with_image(&self, image: &DynamicImage) -> anyhow::Result<&Path> {
         let temp_file = tempfile::Builder::new()
             .prefix("cosmic-files-")
             .tempfile_in(&self.thumbnail_dir)?;
@@ -118,15 +113,13 @@ impl ThumbnailCacher {
             let mut encoder = png::Encoder::new(writer, image.width(), image.height());
             encoder.set_color(png::ColorType::Rgba);
             encoder.set_depth(png::BitDepth::Eight);
-            encoder
-                .write_header()?
-                .write_image_data(&image.into_raw())?;
+            encoder.write_header()?.write_image_data(image.as_raw())?;
         }
 
-        self.update_with_temp_file(temp_file)
+        self.update_with_temp_file(&temp_file)
     }
 
-    pub fn create_fail_marker(&self) -> Result<(), Box<dyn Error>> {
+    pub fn create_fail_marker(&self) -> anyhow::Result<()> {
         if let Some(dir) = self.thumbnail_fail_marker_path.parent() {
             fs::create_dir_all(dir)?;
             #[cfg(unix)]
@@ -142,7 +135,7 @@ impl ThumbnailCacher {
         self.update_thumbnail_text_metadata(&self.thumbnail_fail_marker_path)
     }
 
-    fn update_thumbnail_text_metadata(&self, path: &Path) -> Result<(), Box<dyn Error>> {
+    fn update_thumbnail_text_metadata(&self, path: &Path) -> anyhow::Result<()> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
 
@@ -164,12 +157,11 @@ impl ThumbnailCacher {
             )
         };
 
-        let mut image_data = vec![
-            0;
-            reader
-                .output_buffer_size()
-                .ok_or("The required image buffer size is too large.")?
-        ];
+        let Some(image_data_size) = reader.output_buffer_size() else {
+            anyhow::bail!("The required image buffer size is too large.")
+        };
+
+        let mut image_data = vec![0; image_data_size];
         reader.next_frame(&mut image_data)?;
 
         let file = File::create(path)?;
@@ -180,7 +172,7 @@ impl ThumbnailCacher {
         encoder.set_depth(bit_depth);
 
         text_chunks.insert("Software".to_string(), "COSMIC Files".to_string());
-        text_chunks.insert("Thumb::URI".to_string(), self.file_uri.clone());
+        text_chunks.insert("Thumb::URI".to_string(), self.file_uri.to_string());
         let metadata = std::fs::metadata(&self.file_path)?;
         let size = metadata.len();
         text_chunks.insert("Thumb::Size".to_string(), size.to_string());
@@ -202,9 +194,8 @@ impl ThumbnailCacher {
     }
 
     fn is_thumbnail_valid(&self, thumbnail_path: &Path) -> bool {
-        let thumbnail_file = match File::open(thumbnail_path) {
-            Ok(file) => file,
-            Err(_) => return false,
+        let Ok(thumbnail_file) = File::open(thumbnail_path) else {
+            return false;
         };
         let decoder = png::Decoder::new(BufReader::new(thumbnail_file));
         let reader = match decoder.read_info() {
@@ -219,26 +210,34 @@ impl ThumbnailCacher {
             }
         };
 
-        let texts = &reader.info().uncompressed_latin1_text;
+        let mut thumb_uri = None;
+        let mut thumb_mtime = None;
+        let mut thumb_size = None;
+
+        for text in &reader.info().uncompressed_latin1_text {
+            match text.keyword.as_str() {
+                "Thumb::URI" => thumb_uri = Some(&text.text),
+                "Thumb::MTime" => thumb_mtime = Some(&text.text),
+                "Thumb::Size" => thumb_size = Some(&text.text),
+                _ => (),
+            }
+        }
 
         // Thumb::URI is required and must match.
-        let thumb_uri = texts
-            .iter()
-            .find(|&text| text.keyword == "Thumb::URI")
-            .map(|t| &t.text);
-        if let Some(thumb_uri) = thumb_uri {
-            if *thumb_uri != self.file_uri {
-                return false;
-            }
-        } else {
+        if thumb_uri.is_none_or(|thumb_uri| *thumb_uri != *self.file_uri) {
             return false;
         }
+
+        // Thumb::MTime is required and must match.
+        let Some(thumb_mtime) = thumb_mtime else {
+            return false;
+        };
 
         let metadata = match std::fs::metadata(&self.file_path) {
             Ok(m) => m,
             Err(err) => {
                 log::warn!(
-                    "failed to get metatdata of {}: {}",
+                    "failed to get metadata of {}: {}",
                     self.file_path.display(),
                     err
                 );
@@ -246,65 +245,49 @@ impl ThumbnailCacher {
             }
         };
 
-        // Thumb::MTime is required and must match.
-        let thumb_mtime = texts
-            .iter()
-            .find(|&text| text.keyword == "Thumb::MTime")
-            .map(|t| &t.text);
-        if let Some(thumb_mtime) = thumb_mtime {
-            let modified = match metadata.modified() {
-                Ok(m) => m,
-                Err(err) => {
-                    log::warn!(
-                        "failed to get modified from metatdata of {}, {}",
-                        self.file_path.display(),
-                        err
-                    );
-                    return false;
-                }
-            };
-            let mtime = modified
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs()
-                .to_string();
-            if *thumb_mtime != mtime {
+        let modified = match metadata.modified() {
+            Ok(m) => m,
+            Err(err) => {
+                log::warn!(
+                    "failed to get modified from metadata of {}, {}",
+                    self.file_path.display(),
+                    err
+                );
                 return false;
             }
-        } else {
+        };
+        let mtime = modified
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        if thumb_mtime.parse() != Ok(mtime) {
             return false;
         }
 
         // Thumb::Size isn't required, but it should be verified if present.
-        let thumb_size = texts
-            .iter()
-            .find(|&text| text.keyword == "Thumb::Size")
-            .map(|t| &t.text);
-        if let Some(thumb_size) = thumb_size {
-            let size = metadata.len();
-            if *thumb_size != size.to_string() {
-                return false;
-            }
+        if thumb_size.is_some_and(|thumb_size| thumb_size.parse() != Ok(metadata.len())) {
+            return false;
         }
 
         true
     }
 }
 
-fn thumbnail_uri(path: &Path) -> io::Result<String> {
+fn thumbnail_uri(path: &Path) -> io::Result<Box<str>> {
     let absolute_path = fs::canonicalize(path)?;
-    let url = Url::from_file_path(&absolute_path).map_err(|()| {
-        io::Error::other(format!(
-            "failed to create URI for thumbnail_file: {}",
-            absolute_path.display()
-        ))
-    })?;
-    // Technically square brackets don't need to be percent encoded,
+    let url = Url::from_file_path(&absolute_path)
+        .expect("Url::from_file_path should not error on an absolute path");
+    // Technically braces don't need to be percent encoded,
     // and they aren't by the url crate, but the thumbnailer used by
     // Gnome Files does. In order to share thumbnails and not get duplicates
     // we should do the same.
-    let url = url.as_str().replace('[', "%5B").replace(']', "%5D");
-    Ok(url)
+    static BRACES_AC: LazyLock<aho_corasick::AhoCorasick> = LazyLock::new(|| {
+        aho_corasick::AhoCorasick::new(["[", "]"])
+            .expect("Expected AhoCorasick searcher to be built successfully")
+    });
+
+    let url = BRACES_AC.replace_all(url.as_str(), &["%5B", "%5D"]);
+    Ok(url.into_boxed_str())
 }
 
 fn thumbnail_cache_filename(file_uri: &str) -> String {
@@ -322,18 +305,6 @@ pub enum ThumbnailSize {
 }
 
 impl ThumbnailSize {
-    pub fn from_pixel_size(pixel_size: u32) -> Self {
-        if pixel_size <= Self::Normal.pixel_size() {
-            Self::Normal
-        } else if pixel_size <= Self::Large.pixel_size() {
-            Self::Large
-        } else if pixel_size <= Self::XLarge.pixel_size() {
-            Self::XLarge
-        } else {
-            Self::XXLarge
-        }
-    }
-
     pub const fn pixel_size(self) -> u32 {
         self as u32
     }
@@ -348,9 +319,23 @@ impl ThumbnailSize {
     }
 }
 
+impl From<u32> for ThumbnailSize {
+    fn from(value: u32) -> Self {
+        if value <= Self::Normal.pixel_size() {
+            Self::Normal
+        } else if value <= Self::Large.pixel_size() {
+            Self::Large
+        } else if value <= Self::XLarge.pixel_size() {
+            Self::XLarge
+        } else {
+            Self::XXLarge
+        }
+    }
+}
+
 pub enum CachedThumbnail {
     /// The cached thumbnail is valid and should be used with size if known.
-    Valid((PathBuf, Option<ThumbnailSize>)),
+    Valid((Box<Path>, Option<ThumbnailSize>)),
     /// The cached thumbnail doesn't exist or it's invalid and
     /// needs to be recreated with the pixel size.
     RequiresUpdate(ThumbnailSize),
@@ -360,9 +345,10 @@ pub enum CachedThumbnail {
     Failed,
 }
 
-static THUMBNAIL_CACHE_BASE_DIR: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
-    if let Some(cache_dir) = dirs::cache_dir() {
-        return Some(cache_dir.join("thumbnails"));
+static THUMBNAIL_CACHE_BASE_DIR: LazyLock<Option<Box<Path>>> = LazyLock::new(|| {
+    if let Some(mut cache_dir) = dirs::cache_dir() {
+        cache_dir.push("thumbnails");
+        return Some(cache_dir.into_boxed_path());
     }
 
     log::warn!("failed to get thumbnail cache directory, thumbnails will not be cached");

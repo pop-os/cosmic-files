@@ -13,7 +13,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     FxOrderMap,
     app::App,
-    tab::{HeadingOptions, Location, View},
+    tab::{HeadingOptions, View},
+    zoom::DEFAULT_ZOOM,
 };
 
 pub use crate::context_action::{ContextActionPreset, ContextActionSelection};
@@ -29,7 +30,8 @@ pub const ICON_SCALE_MAX: u16 = 5;
 
 macro_rules! percent {
     ($perc:expr, $pixel:ident) => {
-        (($perc.get() as f32 * $pixel as f32) / 100.).clamp(1., ($pixel * ICON_SCALE_MAX) as _)
+        ((f32::from($perc.get()) * f32::from($pixel)) / 100.)
+            .clamp(1., ($pixel * ICON_SCALE_MAX).into())
     };
 }
 
@@ -68,8 +70,8 @@ pub enum Favorite {
     Videos,
     Path(PathBuf),
     Network {
-        uri: String,
-        name: String,
+        uri: Box<str>,
+        name: Box<str>,
         path: PathBuf,
     },
 }
@@ -114,19 +116,20 @@ pub enum TypeToSearch {
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(default)]
 pub struct State {
-    pub sort_names: FxOrderMap<String, (HeadingOptions, bool)>,
+    pub sort_names: FxOrderMap<Box<str>, (HeadingOptions, bool)>,
 }
 
 impl Default for State {
     fn default() -> Self {
-        Self {
-            sort_names: FxOrderMap::from_iter(dirs::download_dir().into_iter().map(|dir| {
-                (
-                    Location::Path(dir).normalize().to_string(),
-                    (HeadingOptions::Modified, false),
-                )
-            })),
+        let mut sort_names = FxOrderMap::default();
+        if let Some(mut dir) = dirs::download_dir() {
+            dir.push(""); // Normalize dir
+            sort_names.insert(
+                dir.display().to_string().into_boxed_str(),
+                (HeadingOptions::Modified, false),
+            );
         }
+        Self { sort_names }
     }
 }
 
@@ -254,8 +257,8 @@ pub struct DesktopConfig {
 impl Default for DesktopConfig {
     fn default() -> Self {
         Self {
-            grid_spacing: 100.try_into().unwrap(),
-            icon_size: 100.try_into().unwrap(),
+            grid_spacing: DEFAULT_ZOOM,
+            icon_size: DEFAULT_ZOOM,
             show_content: true,
             show_mounted_drives: false,
             show_trash: false,
@@ -303,12 +306,18 @@ pub struct ThumbCfg {
     pub max_size_mb: NonZeroU16,
 }
 
+impl ThumbCfg {
+    const DEFAULT_JOBS: NonZeroU16 = NonZeroU16::new(4).unwrap();
+    const DEFAULT_MAX_MEM: NonZeroU16 = NonZeroU16::new(2000).unwrap();
+    const DEFAULT_MAX_SIZE: NonZeroU16 = NonZeroU16::new(64).unwrap();
+}
+
 impl Default for ThumbCfg {
     fn default() -> Self {
         Self {
-            jobs: 4.try_into().unwrap(),
-            max_mem_mb: 2000.try_into().unwrap(),
-            max_size_mb: 64.try_into().unwrap(),
+            jobs: Self::DEFAULT_JOBS,
+            max_mem_mb: Self::DEFAULT_MAX_MEM,
+            max_size_mb: Self::DEFAULT_MAX_SIZE,
         }
     }
 }
@@ -360,8 +369,8 @@ pub struct IconSizes {
 impl Default for IconSizes {
     fn default() -> Self {
         Self {
-            list: 100.try_into().unwrap(),
-            grid: 100.try_into().unwrap(),
+            list: DEFAULT_ZOOM,
+            grid: DEFAULT_ZOOM,
         }
     }
 }

@@ -12,7 +12,7 @@ impl FileManager {
     fn open(&self, uris: &[&str], _startup_id: &str) {
         match process::Command::new("cosmic-files").args(uris).spawn() {
             Ok(mut child) => {
-                log::info!("spawned cosmic-files with id {:?}", child.id());
+                log::info!("spawned cosmic-files with id {}", child.id());
                 match child.wait() {
                     Ok(status) => {
                         if status.success() {
@@ -37,17 +37,17 @@ impl FileManager {
 #[zbus::interface(name = "org.freedesktop.FileManager1")]
 impl FileManager {
     fn ShowFolders(&self, URIs: Vec<&str>, StartupId: &str) {
-        log::warn!("ShowFolders {:?} {:?}", URIs, StartupId);
+        log::warn!("ShowFolders {URIs:?} {StartupId}");
         self.open(&URIs, StartupId)
     }
 
     fn ShowItems(&self, URIs: Vec<&str>, StartupId: &str) {
-        log::warn!("ShowItems {:?} {:?}", URIs, StartupId);
+        log::warn!("ShowItems {URIs:?} {StartupId}");
         self.open(&URIs, StartupId)
     }
 
     fn ShowItemProperties(&self, URIs: Vec<&str>, StartupId: &str) {
-        log::warn!("ShowItemProperties {:?} {:?}", URIs, StartupId);
+        log::warn!("ShowItemProperties {URIs:?} {StartupId}");
         self.open(&URIs, StartupId)
     }
 }
