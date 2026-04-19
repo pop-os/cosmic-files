@@ -805,11 +805,13 @@ impl App {
     fn open_file(&mut self, paths: &[impl AsRef<Path>]) -> Task<Message> {
         let mut tasks = Vec::new();
 
+        // List of archives to open ourselves
+        let mut queued_archive_paths: Vec<PathBuf> = vec![];
+
         // Associate all paths to its MIME type
         // This allows handling paths as groups if possible, such as launching a single video
         // player that is passed every path.
         let mut groups: FxHashMap<Mime, Vec<PathBuf>> = FxHashMap::default();
-        let mut all_archives = true;
         let supported_archive_types = crate::archive::SUPPORTED_ARCHIVE_TYPES;
         for (mime, path) in paths.iter().map(|path| {
             (
@@ -817,15 +819,7 @@ impl App {
                 path.as_ref().to_owned(),
             )
         }) {
-            if all_archives && !supported_archive_types.iter().copied().any(|t| mime == t) {
-                all_archives = false;
-            }
             groups.entry(mime).or_default().push(path);
-        }
-
-        if all_archives {
-            // Use extract to dialog if all selected paths are supported archives
-            return self.extract_to(paths);
         }
 
         'outer: for (mime, paths) in groups {
@@ -860,6 +854,33 @@ impl App {
                     }
                 }
                 continue;
+            } else if supported_archive_types.iter().copied().any(|t| mime == t) { // Archives handling
+
+                let mut handle_archives = true;
+
+                // Checks for default archival app other than COSMIC Files
+                for app in self.mime_app_cache.get(&mime) {
+                    if app.id == Self::APP_ID {
+                        log::debug!("Default archival app is cosmic-files, adding to extract_to dialog");
+                        handle_archives = true;
+                        break;
+                    } else {
+                        log::debug!("Found suitable archive app {} for MIME {}", app.id, mime);
+
+                        if self.launch_from_mime_cache(&mime, &paths) {
+                            handle_archives = false; // Opened externally, so don't handle
+                            break;
+                        } else {
+                            handle_archives = true; // Still handle if external open failed
+                        }
+                    }
+                }
+
+                if handle_archives {
+                    queued_archive_paths.extend(paths.iter().cloned());
+                }
+
+                continue 'outer;
             }
 
             // Try mime apps, which should be faster than xdg-open
@@ -894,6 +915,12 @@ impl App {
                     }
                 }
             }
+        }
+
+        // Open any queued archvies with extract_to dialog
+        if queued_archive_paths.len() > 0 {
+            log::debug!("Paths to extract with dialog: {:?}", queued_archive_paths);
+            tasks.push(self.extract_to(&queued_archive_paths));
         }
 
         Task::batch(tasks)
@@ -3345,6 +3372,7 @@ impl Application for App {
                         if let Some(archive_paths) = archive_paths
                             && !selected_paths.is_empty()
                         {
+                            log::debug!("archive_paths is {:?}", archive_paths);
                             self.file_dialog_opt = None;
                             return self.operation(Operation::Extract {
                                 paths: archive_paths,
