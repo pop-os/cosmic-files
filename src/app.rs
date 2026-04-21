@@ -1,6 +1,7 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
+use cosmic::core::Auto;
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use cosmic::iced::platform_specific::shell::wayland::commands::overlap_notify::overlap_notify;
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
@@ -11,7 +12,7 @@ use cosmic::iced::{
         IcedMargin, IcedOutput, SctkLayerSurfaceSettings,
     },
     platform_specific::shell::wayland::commands::layer_surface::{
-        Anchor, KeyboardInteractivity, Layer, destroy_layer_surface, get_layer_surface,
+        Anchor, KeyboardInteractivity, Layer, destroy_layer_surface,
     },
 };
 use cosmic::{
@@ -2445,7 +2446,7 @@ impl Application for App {
             ]);
 
         if matches!(flags.mode, Mode::Desktop) {
-            core.set_auto_blur(false);
+            core.set_auto_blur(Auto::Window | Auto::Popup);
         }
         let mut app = Self {
             core,
@@ -5297,24 +5298,32 @@ impl Application for App {
                             .insert(surface_id, Window::new(WindowKind::Desktop(entity)));
                         return Task::batch([
                             command,
-                            get_layer_surface(SctkLayerSurfaceSettings {
-                                id: surface_id,
-                                layer: Layer::Bottom,
-                                keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                                input_zone: None,
-                                anchor: Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT,
-                                output: IcedOutput::Output(output),
-                                namespace: "cosmic-files-applet".into(),
-                                size: Some((None, None)),
-                                margin: IcedMargin {
-                                    top: 0,
-                                    bottom: 0,
-                                    left: 0,
-                                    right: 0,
-                                },
-                                exclusive_zone: 0,
-                                size_limits: Limits::NONE.min_width(1.0).min_height(1.0),
-                            }),
+                            cosmic::task::message(cosmic::action::cosmic(
+                                cosmic::app::Action::Surface(cosmic::surface::action::layer_shell(
+                                    move |_: &mut App| SctkLayerSurfaceSettings {
+                                        id: surface_id,
+                                        layer: Layer::Bottom,
+                                        keyboard_interactivity: KeyboardInteractivity::OnDemand,
+                                        input_zone: None,
+                                        anchor: Anchor::TOP
+                                            | Anchor::BOTTOM
+                                            | Anchor::LEFT
+                                            | Anchor::RIGHT,
+                                        output: IcedOutput::Output(output.clone()),
+                                        namespace: "cosmic-files-applet".into(),
+                                        size: Some((None, None)),
+                                        margin: IcedMargin {
+                                            top: 0,
+                                            bottom: 0,
+                                            left: 0,
+                                            right: 0,
+                                        },
+                                        exclusive_zone: 0,
+                                        size_limits: Limits::NONE.min_width(1.0).min_height(1.0),
+                                    },
+                                    None,
+                                )),
+                            )),
                             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
                             overlap_notify(surface_id, true),
                         ]);
