@@ -365,6 +365,21 @@ copy = Copy
 copy-path = Copy path
 paste = Paste
 select-all = Select all
+deselect-all = Deselect all
+duplicate = Duplicate
+folder-count = {$count} {$count ->
+    [one] folder
+   *[other] folders
+}
+file-count = {$count} {$count ->
+    [one] file
+   *[other] files
+}
+contains-item-count = contains {$count} {$count ->
+    [one] item
+   *[other] items
+}
+selection-footer-summary = {$folders}, {$files} selected ({$size})
 
 ## View
 zoom-in = Zoom in

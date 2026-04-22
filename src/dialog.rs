@@ -441,13 +441,8 @@ impl<M: Send + 'static> Dialog<M> {
 
 #[derive(Clone, Debug)]
 enum DialogPage {
-    NewFolder {
-        parent: PathBuf,
-        name: String,
-    },
-    Replace {
-        filename: String,
-    },
+    NewFolder { parent: PathBuf, name: String },
+    Replace { filename: String },
 }
 
 #[derive(Clone, Debug)]
@@ -2031,8 +2026,8 @@ impl Application for App {
         }
 
         col = col.push(
-                self.tab
-                .view(&self.key_binds, &self.modifiers, false, &[])
+            self.tab
+                .view(&self.key_binds, &self.modifiers, 0, false, &[])
                 .map(Message::TabMessage),
         );
 

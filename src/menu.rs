@@ -4,7 +4,7 @@ use cosmic::{
     Element,
     app::Core,
     iced::{
-        Alignment, Background, Border, Length, advanced::widget::text::Style as TextStyle,
+        Alignment, Background, Border, Color, Length, advanced::widget::text::Style as TextStyle,
         keyboard::Modifiers,
     },
     theme,
@@ -43,6 +43,105 @@ macro_rules! menu_button {
     );
 }
 
+pub fn shortcut_tip_style(theme: &cosmic::Theme) -> TextStyle {
+    let mut color = theme.cosmic().background.component.on;
+    color.alpha *= 0.75;
+    TextStyle {
+        color: Some(color.into()),
+    }
+}
+
+pub fn standard_menu_surface_color(theme: &theme::Theme) -> Color {
+    theme.cosmic().background.component.base.into()
+}
+
+pub fn overlay_menu_style(
+    theme: &theme::Theme,
+    background: fn(&theme::Theme) -> Color,
+) -> theme::menu_bar::Appearance {
+    let cosmic = theme.cosmic();
+
+    theme::menu_bar::Appearance {
+        background: background(theme),
+        border_width: 1.0,
+        bar_border_radius: cosmic.corner_radii.radius_s,
+        menu_border_radius: cosmic.corner_radii.radius_s,
+        border_color: cosmic.background.component.divider.into(),
+        background_expand: [1; 4],
+        path: cosmic.background.component.hover.into(),
+    }
+}
+
+pub fn standard_overlay_menu_style(theme: &theme::Theme) -> theme::menu_bar::Appearance {
+    overlay_menu_style(theme, standard_menu_surface_color)
+}
+
+pub fn custom_menu_item_button_class(background: fn(&theme::Theme) -> Color) -> theme::Button {
+    fn button_style(
+        theme: &theme::Theme,
+        background: fn(&theme::Theme) -> Color,
+        hovered: bool,
+        pressed: bool,
+        disabled: bool,
+    ) -> widget::button::Style {
+        let cosmic = theme.cosmic();
+        let mut appearance = widget::button::Style::new();
+        let mut color = if pressed {
+            cosmic.background.component.pressed.into()
+        } else if hovered {
+            cosmic.background.component.hover.into()
+        } else {
+            background(theme)
+        };
+
+        appearance.text_color = Some(cosmic.background.component.on.into());
+        appearance.icon_color = Some(cosmic.background.component.on.into());
+        appearance.border_radius = cosmic.corner_radii.radius_s.into();
+        if disabled {
+            color.a *= 0.5;
+            appearance.text_color = Some(cosmic.background.component.on_disabled.into());
+            appearance.icon_color = Some(cosmic.background.component.on_disabled.into());
+        }
+        appearance.background = Some(Background::Color(color));
+        appearance
+    }
+
+    theme::Button::Custom {
+        active: Box::new(move |_, theme| button_style(theme, background, false, false, false)),
+        disabled: Box::new(move |theme| button_style(theme, background, false, false, true)),
+        hovered: Box::new(move |_, theme| button_style(theme, background, true, false, false)),
+        pressed: Box::new(move |_, theme| button_style(theme, background, true, true, false)),
+    }
+}
+
+pub fn menu_tree_item<Message: Clone + 'static>(
+    label: String,
+    shortcut: Option<String>,
+    button_class: theme::Button,
+    on_press: Message,
+) -> widget::menu::Tree<Message> {
+    let mut children = vec![text::body(label).into(), space::horizontal().into()];
+    if let Some(shortcut) = shortcut.filter(|shortcut| !shortcut.is_empty()) {
+        children.push(
+            text::body(shortcut)
+                .class(theme::Text::Custom(shortcut_tip_style))
+                .into(),
+        );
+    }
+
+    widget::menu::Tree::from(Element::from(
+        button::custom(
+            Row::with_children(children)
+                .height(Length::Fixed(24.0))
+                .align_y(Alignment::Center),
+        )
+        .padding([theme::active().cosmic().spacing.space_xxs, 16])
+        .width(Length::Fill)
+        .class(button_class)
+        .on_press(on_press),
+    ))
+}
+
 const fn menu_button_optional(
     label: String,
     action: Action,
@@ -70,13 +169,6 @@ pub fn context_menu<'a>(
         }
         String::new()
     };
-    fn key_style(theme: &cosmic::Theme) -> TextStyle {
-        let mut color = theme.cosmic().background.component.on;
-        color.alpha *= 0.75;
-        TextStyle {
-            color: Some(color.into()),
-        }
-    }
     fn disabled_style(theme: &cosmic::Theme) -> TextStyle {
         let mut color = theme.cosmic().background.component.on;
         color.alpha *= 0.5;
@@ -90,7 +182,7 @@ pub fn context_menu<'a>(
         menu_button!(
             text::body(label),
             space::horizontal(),
-            text::body(key).class(theme::Text::Custom(key_style))
+            text::body(key).class(theme::Text::Custom(shortcut_tip_style))
         )
         .on_press(tab::Message::ContextAction(action))
     };
