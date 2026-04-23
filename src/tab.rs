@@ -46,7 +46,7 @@ use std::{
     borrow::Cow,
     cell::Cell,
     cmp::{Ordering, Reverse},
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, HashMap},
     error::Error,
     fmt::{self, Display},
     fs::{self, File, Metadata},
@@ -2144,7 +2144,15 @@ impl SelectionStats {
     }
 
     pub fn breakdown_text(&self) -> String {
-        let mut text = format!("{}, {}", self.folders_label(), self.files_label());
+        let mut parts = Vec::with_capacity(2);
+        if self.selected_files > 0 {
+            parts.push(self.files_label());
+        }
+        if self.selected_folders > 0 {
+            parts.push(self.folders_label());
+        }
+
+        let mut text = parts.join(", ");
         if let Some(contains) = self.contains_label() {
             text.push_str(&format!(" ({contains})"));
         }
@@ -2162,12 +2170,7 @@ impl SelectionStats {
     }
 
     pub fn footer_summary(&self) -> String {
-        fl!(
-            "selection-footer-summary",
-            folders = self.folders_label(),
-            files = self.files_label(),
-            size = self.size_text()
-        )
+        format!("{} selected ({})", self.breakdown_text(), self.size_text())
     }
 }
 
@@ -6712,7 +6715,7 @@ impl Tab {
     }
     pub fn multi_preview_view<'a>(
         &'a self,
-        mime_app_cache_opt: Option<&'a mime_app::MimeAppCache>,
+        _mime_app_cache_opt: Option<&'a mime_app::MimeAppCache>,
     ) -> Element<'a, Message> {
         let cosmic_theme::Spacing {
             space_xxxs,
@@ -6723,6 +6726,9 @@ impl Tab {
 
         let mut column = widget::column::with_capacity(4).spacing(space_m);
 
+        let selected_items: Vec<&Item> = self.items_opt().map_or(Vec::new(), |items| {
+            items.iter().filter(|item| item.selected).collect()
+        });
         let handle = widget::icon::from_name("text-x-generic")
             .size(IconSizes::default().grid())
             .handle();
@@ -6735,17 +6741,14 @@ impl Tab {
         let icon_container2 =
             widget::container(icon.clone()).padding(padding::top(5).bottom(5).left(5).right(5));
         let icon_container3 = widget::container(icon).padding(padding::top(10).right(10));
-        let stack = stack![icon_container1, icon_container2, icon_container3];
+        let preview_stack: Element<'a, Message> =
+            stack![icon_container1, icon_container2, icon_container3].into();
 
         column = column.push(
-            widget::container(stack)
+            widget::container(preview_stack)
                 .center_x(Length::Fill)
                 .max_height(THUMBNAIL_SIZE as f32),
         );
-
-        let selected_items: Vec<&Item> = self.items_opt().map_or(Vec::new(), |items| {
-            items.iter().filter(|item| item.selected).collect()
-        });
 
         let selection_stats = self.selection_stats().unwrap_or_default();
         let in_trash = self.location.is_trash();
@@ -6761,53 +6764,34 @@ impl Tab {
             Message::SelectAll
         };
 
-        let mut details = widget::column::with_capacity(3).spacing(space_xxxs);
+        let mut details = widget::column::with_capacity(4).spacing(space_xxxs);
         let mut mime_type_counts: BTreeMap<String, u64> = BTreeMap::new();
-        let mut user_name: BTreeSet<String> = BTreeSet::new();
-        let mut mode_user: BTreeSet<u32> = BTreeSet::new();
-        let mut group_name: BTreeSet<String> = BTreeSet::new();
-        let mut mode_group: BTreeSet<u32> = BTreeSet::new();
-        let mut mode_other: BTreeSet<u32> = BTreeSet::new();
         for item in selected_items.iter() {
             *mime_type_counts.entry(item.mime.to_string()).or_insert(0) += 1;
+        }
+        let mime_label = match mime_type_counts.len() {
+            1 => mime_type_counts
+                .into_iter()
+                .next()
+                .map(|(mime, _)| mime)
+                .unwrap_or_else(|| fl!("mixed")),
+            _ => fl!("mixed"),
+        };
 
-            if let Some(metadata) = item.file_metadata() {
-                let mode = metadata.mode();
-                user_name.insert(
-                    get_user_by_uid(metadata.uid())
-                        .and_then(|user| user.name().to_str().map(ToOwned::to_owned))
-                        .unwrap_or_default(),
-                );
-                mode_user.insert(get_mode_part(mode, MODE_SHIFT_USER));
-                group_name.insert(
-                    get_group_by_gid(metadata.gid())
-                        .and_then(|group| group.name().to_str().map(ToOwned::to_owned))
-                        .unwrap_or_default(),
-                );
-                mode_group.insert(get_mode_part(mode, MODE_SHIFT_GROUP));
-                mode_other.insert(get_mode_part(mode, MODE_SHIFT_OTHER));
+        details = details.push(widget::text::heading(format!(
+            "{} {}",
+            selection_stats.selected_items,
+            if selection_stats.selected_items == 1 {
+                "Item"
+            } else {
+                "Items"
             }
-        }
-        let mut mime_types: Vec<(String, u64)> = mime_type_counts.into_iter().collect();
-        mime_types.sort_by(|(_, v1), (_, v2)| v2.cmp(v1));
-
-        // Limit the number of displayed mime types
-        let limit = usize::min(10, mime_types.len());
-
-        let mut mime_type_strings: Vec<String> = mime_types[..limit]
-            .iter()
-            .map(|(mime, count)| format!("{} ({})", mime, count))
-            .collect();
-
-        if mime_types.len() > limit {
-            mime_type_strings.push("...".to_string());
-        }
-
+        )));
+        details = details.push(widget::text::body(fl!("type", mime = mime_label)));
         details = details.push(widget::text::body(selection_stats.breakdown_text()));
-        details = details.push(widget::text::body(selection_stats.size_text()));
         details = details.push(widget::text::body(fl!(
-            "type",
-            mime = mime_type_strings.join(", ")
+            "item-size",
+            size = selection_stats.size_text()
         )));
 
         let overflow_items = selection_menu_actions(&selection_stats, in_trash, in_trash);
@@ -6856,124 +6840,6 @@ impl Tab {
 
         column = column.push(action_row);
         column = column.push(details);
-
-        let mut settings = Vec::new();
-        // Only allow modifying open-with if all mime types are the same
-        if mime_types.len() == 1 {
-            if let Some(mime) = mime_types
-                .get(0)
-                .and_then(|(mime, _)| mime.parse::<Mime>().ok())
-            {
-                if let Some(mime_app_cache) = mime_app_cache_opt {
-                    let mime_apps = mime_app_cache.get(&mime);
-                    if !mime_apps.is_empty() {
-                        let mime_closure = mime.clone();
-                        settings.push(
-                            widget::settings::item::builder(fl!("open-with")).control(
-                                Element::from(
-                                    widget::dropdown(
-                                        mime_apps,
-                                        mime_apps.iter().position(|x| x.is_default),
-                                        move |index| (index, mime_closure.clone()),
-                                    )
-                                    .icons(Cow::Borrowed(mime_app_cache.icons(&mime))),
-                                )
-                                .map(|(index, mime)| {
-                                    let mime_app = &mime_apps[index];
-                                    Message::SetOpenWith(mime, mime_app.id.clone())
-                                }),
-                            ),
-                        );
-                    }
-                }
-            }
-        }
-
-        #[cfg(unix)]
-        {
-            // Only return mode part if it's the only one
-            fn selected_mode_part(mut modes: BTreeSet<u32>) -> Option<usize> {
-                match (modes.pop_first(), modes.pop_first()) {
-                    (Some(mode), None) => Some(mode.try_into().unwrap()),
-                    _ => None,
-                }
-            }
-
-            // Convert a limited number of values from a set into a comma separated list
-            fn join_set(set: BTreeSet<String>) -> String {
-                let limit = 5;
-                let mut title = set.into_iter().collect::<Vec<String>>();
-                if title.len() > limit {
-                    title.truncate(limit);
-                    title.push("...".to_string());
-                }
-                title.join(", ")
-            }
-
-            let mode_part_user = selected_mode_part(mode_user);
-            settings.push(
-                widget::settings::item::builder(join_set(user_name))
-                    .description(fl!("owner"))
-                    .control(
-                        widget::dropdown(
-                            Cow::Borrowed(MODE_NAMES.as_slice()),
-                            mode_part_user,
-                            move |selected| {
-                                Message::ShiftPermissions(
-                                    None,
-                                    MODE_SHIFT_USER,
-                                    selected.try_into().unwrap(),
-                                )
-                            },
-                        )
-                        .placeholder(fl!("mixed")),
-                    ),
-            );
-
-            let mode_part_group = selected_mode_part(mode_group);
-            settings.push(
-                widget::settings::item::builder(join_set(group_name))
-                    .description(fl!("group"))
-                    .control(
-                        widget::dropdown(
-                            Cow::Borrowed(MODE_NAMES.as_slice()),
-                            mode_part_group,
-                            move |selected| {
-                                Message::ShiftPermissions(
-                                    None,
-                                    MODE_SHIFT_GROUP,
-                                    selected.try_into().unwrap(),
-                                )
-                            },
-                        )
-                        .placeholder(fl!("mixed")),
-                    ),
-            );
-
-            let mode_part_other = selected_mode_part(mode_other);
-            settings.push(
-                widget::settings::item::builder(fl!("other")).control(
-                    widget::dropdown(
-                        Cow::Borrowed(MODE_NAMES.as_slice()),
-                        mode_part_other,
-                        move |selected| {
-                            Message::ShiftPermissions(
-                                None,
-                                MODE_SHIFT_OTHER,
-                                selected.try_into().unwrap(),
-                            )
-                        },
-                    )
-                    .placeholder(fl!("mixed")),
-                ),
-            );
-        }
-
-        if !settings.is_empty() {
-            let mut section = widget::settings::section();
-            section = section.extend(settings);
-            column = column.push(section);
-        }
 
         column.into()
     }

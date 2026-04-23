@@ -1283,11 +1283,11 @@ mod tests {
     use super::{Controller, Operation, OperationError, OperationSelection, ReplaceResult};
     use crate::{
         app::{
-        DialogPage, Message,
-        test_utils::{
-            NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED, empty_fs, filter_dirs,
-            filter_files, simple_fs,
-        },
+            DialogPage, Message,
+            test_utils::{
+                NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED, empty_fs, filter_dirs,
+                filter_files, simple_fs,
+            },
         },
         fl,
     };

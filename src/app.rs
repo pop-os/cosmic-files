@@ -918,7 +918,14 @@ impl App {
 
     fn trash_footer(&self) -> Option<Element<'_, Message>> {
         let tab = self.tab_model.active_data::<Tab>()?;
-        if !tab.location.is_trash() || self.active_tab_has_selection() {
+        let showing_selection_details = self.core.window.show_context
+            && matches!(
+                self.context_page,
+                ContextPage::Preview(_, PreviewKind::Selected)
+            );
+        if !tab.location.is_trash()
+            || (self.active_tab_has_selection() && !showing_selection_details)
+        {
             return None;
         }
 
@@ -992,10 +999,7 @@ impl App {
                             .clone()
                             .into_iter()
                             .map(|action| {
-                                self.floating_footer_menu_item(
-                                    action.label(),
-                                    action.app_action(),
-                                )
+                                self.floating_footer_menu_item(action.label(), action.app_action())
                             })
                             .collect(),
                     )])
@@ -2610,6 +2614,7 @@ impl App {
                 }
             }
         }
+
         widget::column::with_children(children)
             .padding(if context_drawer {
                 [0, 0, 0, 0]
@@ -6763,10 +6768,12 @@ impl Application for App {
                     self.context_page,
                     ContextPage::Preview(_, PreviewKind::Selected)
                 );
-            let floating_footer = if !use_sidebar_selection {
-                self.floating_footer()
-            } else {
+            let floating_footer = if use_sidebar_selection && tab.location.is_trash() {
+                self.trash_footer()
+            } else if use_sidebar_selection {
                 None
+            } else {
+                self.floating_footer()
             };
             let footer_scroll_inset = floating_footer
                 .as_ref()
