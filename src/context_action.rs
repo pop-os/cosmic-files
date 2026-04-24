@@ -47,7 +47,7 @@ impl ContextActionPreset {
         }
 
         for step in &self.steps {
-            let Some(commands) = mime_app::exec_to_command(step, paths) else {
+            let Some(commands) = mime_app::exec_to_command(step, &self.name, None, paths) else {
                 log::warn!(
                     "failed to parse context action {:?}: invalid Exec {:?}",
                     self.name,

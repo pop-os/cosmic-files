@@ -1,6 +1,7 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
+use bstr::{BString, ByteSlice, ByteVec};
 #[cfg(feature = "desktop")]
 use cosmic::desktop;
 use cosmic::widget;
@@ -8,145 +9,120 @@ pub use mime_guess::Mime;
 use rustc_hash::FxHashMap;
 use std::cmp::Ordering;
 use std::ffi::OsStr;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{fs, io, process};
 
-// Supported exec key field codes
-const EXEC_HANDLERS: [&str; 4] = ["%f", "%F", "%u", "%U"];
-// Deprecated field codes. The spec advises to ignore these handlers.
-const DEPRECATED_HANDLERS: [&str; 6] = ["%d", "%D", "%n", "%N", "%v", "%m"];
-
 pub fn exec_to_command(
     exec: &str,
+    entry_name: &str,
+    entry_path: Option<&Path>,
     path_opt: &[impl AsRef<OsStr>],
 ) -> Option<Vec<process::Command>> {
-    let args_vec = shlex::split(exec)?;
-    let program = args_vec.first()?;
-    // Skip program to make indexing easier
-    let args_vec = &args_vec[1..];
+    let arguments = shlex::split(exec)?;
 
-    // Base Command instance(s)
-    // 1. We may need to launch multiple of the same process.
-    // 2. Each of those processes will need to be passed args from exec.
-    // 3. Each of those args may appear in any order.
-    // 4. Arg order should be preserved.
-    //
-    // So, we'll go through exec in two passes. The first pass handles paths (%f etc) and args up
-    // to the field code followed by the second which passes extra, non-% args to each processes.
-    //
-    // While it'd be marginally faster to process everything in one pass, that's problematic:
-    // 1. path_opt may need to be cloned because it may be moved on each iteration (borrowck
-    //    doesn't know we'll only use it once)
-    // 2. We have to keep track of which modifier (%f etc) we've used/seen already
-    // 3. We have to keep track of which processes received non-modifier args which gets messy fast
-    // 4. `exec` is likely small so looping over it twice is not a big deal
-    let field_code_pos = args_vec
-        .iter()
-        .position(|arg| EXEC_HANDLERS.contains(&arg.as_str()));
-    let args_handler = field_code_pos.and_then(|i| args_vec.get(i));
-    // msrv
-    // .inspect(|handler| log::trace!("Found paths handler: {handler} for exec: {exec}"));
-    // Number of args before the field code.
-    // This won't be an off by one err below because take is not zero indexed.
-    let field_code_pos = field_code_pos.unwrap_or_default();
-    let mut processes = match args_handler.map(String::as_str) {
-        Some("%f") => {
-            let mut processes = Vec::with_capacity(path_opt.len());
+    if arguments.is_empty() {
+        tracing::error!("command does not contain any arguments");
+        return None;
+    }
 
-            for path in path_opt.iter().map(AsRef::as_ref) {
-                // TODO: %f and %F need to handle non-file URLs (see spec)
-                if from_file_or_dir(path).is_none() {
-                    log::warn!("Desktop file expects a file path instead of a URL: {path:?}");
+    let mut commands = Vec::new();
+
+    for path in path_opt.iter().map(AsRef::as_ref) {
+        let mut batch_process = false;
+        let mut args = Vec::with_capacity(arguments.len());
+        let mut field_code_used = false;
+
+        for argument in arguments.iter().skip(1) {
+            let mut new_argument = BString::new(Vec::with_capacity(argument.capacity()));
+            let mut chars = argument.chars();
+            while let Some(char) = chars.next() {
+                // https://specifications.freedesktop.org/desktop-entry/latest/exec-variables.html
+                if char == '%' {
+                    match chars.next() {
+                        Some('%') => new_argument.push_char(char),
+                        Some('c') => new_argument.push_str(entry_name),
+                        Some('k') => {
+                            if let Some(path) = entry_path {
+                                new_argument.push_str(path.as_os_str().as_bytes());
+                            }
+                        }
+
+                        Some('f') => {
+                            if !field_code_used {
+                                // TODO: files on remote file systems should be copied to a temporary local file.
+                                batch_process = true;
+                                field_code_used = true;
+                                new_argument.push_str(path.as_bytes());
+                            }
+                        }
+
+                        Some('F') => {
+                            if !field_code_used && new_argument.is_empty() {
+                                field_code_used = true;
+                                for path in path_opt
+                                    .iter()
+                                    .map(AsRef::as_ref)
+                                    .filter(|&path| from_file_or_dir(path).is_none())
+                                {
+                                    args.push(BString::new(path.as_bytes().to_owned()));
+                                }
+                            }
+                        }
+
+                        Some('u') => {
+                            if !field_code_used {
+                                batch_process = true;
+                                field_code_used = true;
+                                new_argument.push_str(path.as_bytes());
+                            }
+                        }
+
+                        Some('U') => {
+                            if !field_code_used && new_argument.is_empty() {
+                                field_code_used = true;
+                                for path in path_opt.iter().map(AsRef::as_ref) {
+                                    args.push(BString::new(path.as_bytes().to_owned()));
+                                }
+                            }
+                        }
+
+                        _ => (),
+                    }
+                } else {
+                    new_argument.push_char(char);
                 }
-
-                // Passing multiple paths to %f should open an instance per path
-                let mut process = process::Command::new(program);
-                process.args(
-                    args_vec
-                        .iter()
-                        .map(AsRef::as_ref)
-                        .take(field_code_pos)
-                        .chain(std::iter::once(path)),
-                );
-                processes.push(process);
             }
 
-            processes
-        }
-        Some("%F") => {
-            // TODO: %f and %F need to handle non-file URLs (see spec)
-            for invalid in path_opt
-                .iter()
-                .map(AsRef::as_ref)
-                .filter(|&path| from_file_or_dir(path).is_none())
-            {
-                log::warn!("Desktop file expects a file path instead of a URL: {invalid:?}");
+            if !new_argument.is_empty() {
+                args.push(new_argument);
             }
-
-            // Launch one instance with all args
-            let mut process = process::Command::new(program);
-            process.args(
-                args_vec
-                    .iter()
-                    .map(OsStr::new)
-                    .take(field_code_pos)
-                    .chain(path_opt.iter().map(AsRef::as_ref)),
-            );
-
-            vec![process]
         }
-        Some("%u") => path_opt
-            .iter()
-            .map(|path| {
-                let mut process = process::Command::new(program);
-                process.args(
-                    args_vec
-                        .iter()
-                        .map(OsStr::new)
-                        .take(field_code_pos)
-                        .chain(std::iter::once(path.as_ref())),
-                );
-                process
-            })
-            .collect(),
-        Some("%U") => {
-            let mut process = process::Command::new(program);
-            process.args(
-                args_vec
-                    .iter()
-                    .map(OsStr::new)
-                    .take(field_code_pos)
-                    .chain(path_opt.iter().map(AsRef::as_ref)),
-            );
-            vec![process]
-        }
-        Some(invalid) => unreachable!("All valid variants were checked; got: {invalid}"),
-        None => vec![process::Command::new(program)],
-    };
 
-    // Pass 2: Add remaining arguments that are not % to each process
-    for arg in args_vec.iter().skip(field_code_pos) {
-        match arg.as_str() {
-            // Consume path field codes or fail on codes we don't handle yet
-            field_code if arg.starts_with('%') => {
-                if !EXEC_HANDLERS.contains(&field_code)
-                    && !DEPRECATED_HANDLERS.contains(&field_code)
-                {
-                    log::warn!("unsupported Exec code {field_code:?} in {exec:?}");
+        let mut command = process::Command::new(&arguments[0]);
+
+        for arg in args {
+            match arg.to_os_str() {
+                Ok(arg) => {
+                    command.arg(arg);
+                }
+                Err(_) => {
+                    tracing::error!("invalid string encoding in command");
                     return None;
                 }
             }
-            arg => {
-                for process in &mut processes {
-                    process.arg(arg);
-                }
-            }
+        }
+
+        commands.push(command);
+
+        if !batch_process {
+            break;
         }
     }
 
     #[cfg(debug_assertions)]
-    for command in &processes {
+    for command in &commands {
         log::debug!(
             "Parsed program {} with args: {:?}",
             command.get_program().to_string_lossy(),
@@ -154,7 +130,7 @@ pub fn exec_to_command(
         );
     }
 
-    Some(processes)
+    Some(commands)
 }
 
 fn from_file_or_dir(path: impl AsRef<Path>) -> Option<url::Url> {
@@ -176,7 +152,12 @@ pub struct MimeApp {
 impl MimeApp {
     //TODO: move to libcosmic, support multiple files
     pub fn command<O: AsRef<OsStr>>(&self, path_opt: &[O]) -> Option<Vec<process::Command>> {
-        exec_to_command(self.exec.as_deref()?, path_opt)
+        exec_to_command(
+            self.exec.as_deref()?,
+            &self.name,
+            self.path.as_deref(),
+            path_opt,
+        )
     }
 }
 
@@ -473,10 +454,28 @@ mod tests {
     use super::exec_to_command;
 
     #[test]
+    fn keys_within_words() {
+        let exec = "/usr/bin/foo --option=%f";
+        let paths = ["file1"];
+        let commands = exec_to_command(exec, "keys_within_words", None, &paths)
+            .expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+
+        assert_eq!("/usr/bin/foo", command.get_program().to_str().unwrap());
+        assert_eq!(
+            "--option=file1",
+            command.get_args().next().unwrap().to_str().unwrap()
+        );
+    }
+
+    #[test]
     fn one_path_f_field_code() {
         let exec = "/usr/bin/foo %f";
         let paths = ["file1"];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let commands = exec_to_command(exec, "one_path_f_field_code", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();
@@ -493,7 +492,8 @@ mod tests {
     fn one_path_F_field_code() {
         let exec = "/usr/bin/bar %F";
         let paths = ["cat"];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let commands = exec_to_command(exec, "one_path_F_field_code", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();
@@ -506,7 +506,8 @@ mod tests {
     fn one_path_u_field_code() {
         let exec = "/usr/bin/foobar %u";
         let paths = ["/home/josh/krumpli"];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let commands = exec_to_command(exec, "one_path_u_field_code", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();
@@ -523,7 +524,8 @@ mod tests {
     fn one_path_U_field_code() {
         let exec = "/usr/bin/rmrfbye %U";
         let paths = ["/"];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let commands = exec_to_command(exec, "one_path_U_field_code", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();
@@ -539,7 +541,8 @@ mod tests {
             "/usr/share/games/psp/miku.iso",
             "/usr/share/games/psp/eternia.iso",
         ];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let commands = exec_to_command(exec, "mult_path_f_field_code", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(paths.len(), commands.len());
         for (command, path) in commands.into_iter().zip(paths.iter()) {
@@ -559,7 +562,8 @@ mod tests {
             "/usr/share/games/doom2/hr.wad",
             "/usr/share/games/doom2/hrmus.wad",
         ];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let commands = exec_to_command(exec, "mult_path_F_field_code", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();
@@ -581,7 +585,8 @@ mod tests {
             "https://redox-os.org/",
             "https://system76.com/",
         ];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let commands = exec_to_command(exec, "mult_path_u_field_code", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(paths.len(), commands.len());
         for (command, path) in commands.into_iter().zip(paths.iter()) {
@@ -604,7 +609,8 @@ mod tests {
             "frieren01.mkv",
             "rtmp://example.org/this/video/doesnt/exist.avi",
         ];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let commands = exec_to_command(exec, "mult_path_U_field_code", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();
@@ -632,7 +638,8 @@ mod tests {
             "@@u",
         ];
         let paths = ["file1.rs", "file2.rs"];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let commands = exec_to_command(exec, "flatpak_style_exec", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();
@@ -655,7 +662,8 @@ mod tests {
             "file:///usr/share/games/roguelike/mods/mod1",
             "file:///usr/share/games/roguelike/mods/mod2",
         ];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let commands = exec_to_command(exec, "multiple_field_codes", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();
@@ -688,7 +696,8 @@ mod tests {
         ];
         let paths = ["rust_game_dev.pdf", "superhero_ferris.epub"];
         let args_trailing = ["@@"];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let commands = exec_to_command(exec, "sandwiched_field_code", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();
