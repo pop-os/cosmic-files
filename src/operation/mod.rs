@@ -83,6 +83,16 @@ fn get_directory_name(file_name: &str) -> &str {
     file_name
 }
 
+fn retarget_trashed_items(items: Vec<trash::TrashItem>, to: &Path) -> Vec<trash::TrashItem> {
+    items
+        .into_iter()
+        .map(|mut item| {
+            item.original_parent = to.to_path_buf();
+            item
+        })
+        .collect()
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ReplaceResult {
     Replace(bool),
@@ -258,7 +268,6 @@ pub fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
         ".tar.Z",
         ".tar.pz",
     ];
-
     let mut to = to.to_owned();
     if let Some(file_name) = from.file_name().and_then(|name| name.to_str()) {
         let (stem, ext) = if from.is_dir() {
@@ -386,6 +395,11 @@ pub enum Operation {
         paths: Vec<PathBuf>,
         to: PathBuf,
         cross_device_copy: bool,
+    },
+    /// Restore items from trash and move them to a selected destination
+    MoveFromTrash {
+        items: Vec<trash::TrashItem>,
+        to: PathBuf,
     },
     NewFile {
         path: PathBuf,
@@ -528,6 +542,13 @@ impl Operation {
                 to = file_name(to),
                 progress = progress()
             ),
+            Self::MoveFromTrash { items, to } => fl!(
+                "moving",
+                items = items.len(),
+                from = fl!("trash"),
+                to = file_name(to),
+                progress = progress()
+            ),
             Self::NewFile { path } => fl!(
                 "creating",
                 name = file_name(path),
@@ -595,6 +616,12 @@ impl Operation {
                 from = paths_parent_name(paths),
                 to = file_name(to)
             ),
+            Self::MoveFromTrash { items, to } => fl!(
+                "moved",
+                items = items.len(),
+                from = fl!("trash"),
+                to = file_name(to)
+            ),
             Self::NewFile { path } => fl!(
                 "created",
                 name = file_name(path),
@@ -632,6 +659,7 @@ impl Operation {
             | Self::EmptyTrash
             | Self::Extract { .. }
             | Self::Move { .. }
+            | Self::MoveFromTrash { .. }
             | Self::PermanentlyDelete { .. }
             | Self::Restore { .. } => true,
             Self::NewFile { .. }
@@ -1023,6 +1051,19 @@ impl Operation {
                     controller,
                 )
                 .await
+            }
+            Self::MoveFromTrash { items, to } => {
+                let moved_items = retarget_trashed_items(items, &to);
+                let controller_clone = controller.clone();
+                compio::runtime::spawn_blocking(move || {
+                    controller_clone.set_progress(0.0);
+                    trash::os_limited::restore_all(moved_items)
+                        .map_err(|e| OperationError::from_err(e, &controller_clone))?;
+                    controller_clone.set_progress(1.0);
+                    Ok(OperationSelection::default())
+                })
+                .await
+                .map_err(wrap_compio_spawn_error)?
             }
             Self::NewFolder { path } => {
                 let controller_clone = controller.clone();

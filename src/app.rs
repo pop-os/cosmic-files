@@ -21,7 +21,7 @@ use cosmic::{
     cosmic_theme, executor,
     iced::core::widget::operation::focusable::unfocus,
     iced::runtime::{clipboard, task},
-    iced::widget::{button::focus, scrollable::AbsoluteOffset},
+    iced::widget::{button::focus, scrollable::AbsoluteOffset, stack},
     iced::{
         self, Alignment, Event, Length, Rectangle, Size, Subscription,
         clipboard::dnd::DndAction,
@@ -125,6 +125,11 @@ static FAVORITE_PATH_ERROR_REMOVE_BUTTON_ID: LazyLock<widget::Id> =
 static MOUNT_ERROR_TRY_AGAIN_BUTTON_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("mount-error-try-again-button"));
 
+const SELECTION_FOOTER_DIVIDER_TOP_PADDING: u16 = 2;
+const SELECTION_FOOTER_VERTICAL_PADDING: u16 = 2;
+const FLOATING_FOOTER_SCROLL_INSET: u16 = 56;
+const COMPACT_SELECTION_FOOTER_SCROLL_INSET: u16 = 96;
+
 pub(crate) static REPLACE_BUTTON_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("replace-button"));
 
@@ -159,6 +164,7 @@ pub enum Action {
     CosmicSettingsWallpaper,
     DesktopViewOptions,
     Delete,
+    Duplicate,
     EditHistory,
     EditLocation,
     Eject,
@@ -230,6 +236,7 @@ impl Action {
             Self::CosmicSettingsWallpaper => Message::CosmicSettings("wallpaper"),
             Self::Delete => Message::Delete(entity_opt),
             Self::DesktopViewOptions => Message::DesktopViewOptions,
+            Self::Duplicate => Message::Duplicate(entity_opt),
             Self::EditHistory => Message::ToggleContextPage(ContextPage::EditHistory),
             Self::EditLocation => Message::TabMessage(entity_opt, tab::Message::EditLocationEnable),
             Self::Eject => Message::Eject,
@@ -358,6 +365,7 @@ pub enum Message {
     CosmicSettings(&'static str),
     Cut(Option<Entity>),
     Delete(Option<Entity>),
+    Duplicate(Option<Entity>),
     DesktopConfig(DesktopConfig),
     DesktopViewOptions,
     DesktopDialogs(bool),
@@ -682,12 +690,18 @@ enum MimeAppMatch {
 pub struct MounterData(MounterKey, MounterItem);
 
 #[derive(Clone, Debug)]
+pub enum FileDialogContext {
+    Paths(Box<[PathBuf]>),
+    TrashItems(Vec<TrashItem>),
+}
+
+#[derive(Clone, Debug)]
 pub enum WindowKind {
     ContextMenu(Entity, widget::Id),
     Desktop(Entity),
     DesktopViewOptions,
     Dialogs(widget::Id),
-    FileDialog(Option<Box<[PathBuf]>>),
+    FileDialog(Option<FileDialogContext>),
     Preview(Option<Entity>, PreviewKind),
 }
 
@@ -788,9 +802,347 @@ pub struct App {
 }
 
 impl App {
+    fn floating_footer_surface_color(theme: &theme::Theme) -> iced::Color {
+        theme.cosmic().primary.base.into()
+    }
+
     /// Returns true if the clipboard cache contains pasteable content
     fn clipboard_has_content(&self) -> bool {
         !matches!(self.clipboard_cache, ClipboardCache::Empty)
+    }
+
+    fn active_tab_has_selection(&self) -> bool {
+        self.tab_model
+            .active_data::<Tab>()
+            .and_then(Tab::items_opt)
+            .is_some_and(|items| items.iter().any(|item| item.selected))
+    }
+
+    fn selection_footer_stats(&self) -> Option<(tab::SelectionStats, bool, bool)> {
+        let tab = self.tab_model.active_data::<Tab>()?;
+        let stats = tab.selection_stats()?;
+        (stats.selected_items > 0).then_some((
+            stats,
+            tab.location.is_trash(),
+            tab.all_selectable_items_selected(),
+        ))
+    }
+
+    fn uses_compact_selection_footer(&self) -> bool {
+        self.core.is_condensed() || self.size.is_some_and(|size| size.width < 720.0)
+    }
+
+    fn floating_footer_scroll_inset(&self) -> u16 {
+        if self.selection_footer_stats().is_some() && self.uses_compact_selection_footer() {
+            COMPACT_SELECTION_FOOTER_SCROLL_INSET
+        } else {
+            FLOATING_FOOTER_SCROLL_INSET
+        }
+    }
+
+    fn floating_footer_style(theme: &theme::Theme) -> widget::container::Style {
+        let cosmic = theme.cosmic();
+        let background = Self::floating_footer_surface_color(theme);
+
+        widget::container::Style {
+            icon_color: Some(cosmic.background.component.on.into()),
+            text_color: Some(cosmic.background.component.on.into()),
+            background: Some(iced::Background::Color(background)),
+            border: iced::Border {
+                radius: cosmic.corner_radii.radius_s.into(),
+                width: 0.0,
+                color: iced::Color::TRANSPARENT,
+            },
+            snap: true,
+            ..Default::default()
+        }
+    }
+
+    fn floating_footer_menu_style(theme: &theme::Theme) -> theme::menu_bar::Appearance {
+        menu::overlay_menu_style(theme, Self::floating_footer_surface_color)
+    }
+
+    fn floating_footer_menu_item(
+        &self,
+        label: String,
+        action: Action,
+    ) -> widget::menu::Tree<Message> {
+        let shortcut = self.key_binds.iter().find_map(|(key_bind, bound_action)| {
+            (*bound_action == action).then(|| key_bind.to_string())
+        });
+
+        menu::menu_tree_item(
+            label,
+            shortcut,
+            menu::custom_menu_item_button_class(Self::floating_footer_surface_color),
+            action.message(None),
+        )
+    }
+
+    fn floating_footer_more_menu_button() -> widget::Button<'static, Message> {
+        widget::button::custom(
+            widget::container(widget::icon::from_name("view-more-symbolic").size(16))
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .center_x(Length::Fill)
+                .center_y(Length::Fill),
+        )
+        .width(Length::Fixed(32.0))
+        .height(Length::Fixed(32.0))
+        .padding(0)
+        .class(theme::Button::Icon)
+        .on_press(Message::None)
+    }
+
+    fn floating_footer_shell<'a>(&self, content: Element<'a, Message>) -> Element<'a, Message> {
+        let cosmic_theme::Spacing {
+            space_xxs, space_s, ..
+        } = theme::active().cosmic().spacing;
+        let footer_edge_padding = space_xxs.saturating_sub(1);
+
+        widget::container(
+            widget::container(content)
+                .padding([SELECTION_FOOTER_VERTICAL_PADDING + space_xxs, space_xxs])
+                .width(Length::Fill)
+                .style(Self::floating_footer_style),
+        )
+        .padding([
+            SELECTION_FOOTER_DIVIDER_TOP_PADDING + space_xxs,
+            space_s,
+            footer_edge_padding,
+            footer_edge_padding,
+        ])
+        .into()
+    }
+
+    fn trash_footer(&self) -> Option<Element<'_, Message>> {
+        let tab = self.tab_model.active_data::<Tab>()?;
+        let showing_selection_details = self.core.window.show_context
+            && matches!(
+                self.context_page,
+                ContextPage::Preview(_, PreviewKind::Selected)
+            );
+        if !tab.location.is_trash()
+            || (self.active_tab_has_selection() && !showing_selection_details)
+        {
+            return None;
+        }
+
+        tab.items_opt().filter(|items| !items.is_empty()).map(|_| {
+            self.floating_footer_shell(
+                widget::row::with_children([
+                    widget::space::horizontal().into(),
+                    widget::button::standard(fl!("empty-trash"))
+                        .on_press(Message::TabMessage(None, tab::Message::EmptyTrash))
+                        .into(),
+                ])
+                .align_y(Alignment::Center)
+                .into(),
+            )
+        })
+    }
+
+    fn floating_footer(&self) -> Option<Element<'_, Message>> {
+        self.selection_footer().or_else(|| self.trash_footer())
+    }
+
+    fn selection_footer(&self) -> Option<Element<'_, Message>> {
+        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+        let (stats, in_trash, all_selected) = self.selection_footer_stats()?;
+        let compact = self.uses_compact_selection_footer();
+        let summary = stats.footer_summary();
+        let selection_button_label = if all_selected {
+            fl!("deselect-all")
+        } else {
+            fl!("select-all")
+        };
+        let selection_button_message = if all_selected {
+            tab::Message::SelectNone
+        } else {
+            tab::Message::SelectAll
+        };
+
+        let menu_items = tab::selection_menu_actions(&stats, in_trash, in_trash || !compact);
+
+        let build_actions = || {
+            let mut actions = widget::row::with_capacity(4)
+                .spacing(space_xxs)
+                .align_y(Alignment::Center)
+                .push(
+                    widget::button::standard(selection_button_label.clone())
+                        .on_press(Message::TabMessage(None, selection_button_message.clone())),
+                );
+            if compact {
+                actions = actions
+                    .push(widget::button::standard(fl!("move-to")).on_press(Message::MoveTo(None)));
+            }
+            actions
+                .push(
+                    widget::button::custom(
+                        widget::container(widget::icon::icon(tab::delete_action_icon(16)).size(16))
+                            .width(Length::Fill)
+                            .height(Length::Fill)
+                            .center_x(Length::Fill)
+                            .center_y(Length::Fill),
+                    )
+                    .width(Length::Fixed(32.0))
+                    .height(Length::Fixed(32.0))
+                    .padding(0)
+                    .class(theme::Button::Icon)
+                    .on_press(Message::Delete(None)),
+                )
+                .push(
+                    widget::menu::MenuBar::new(vec![widget::menu::Tree::with_children(
+                        Element::from(Self::floating_footer_more_menu_button()),
+                        menu_items
+                            .clone()
+                            .into_iter()
+                            .map(|action| {
+                                self.floating_footer_menu_item(action.label(), action.app_action())
+                            })
+                            .collect(),
+                    )])
+                    .item_height(widget::menu::ItemHeight::Dynamic(40))
+                    .item_width(widget::menu::ItemWidth::Uniform(220))
+                    .style(Self::floating_footer_menu_style as fn(&theme::Theme) -> _),
+                )
+        };
+
+        let wide_row = widget::row::with_children([
+            widget::text::caption(summary.clone()).into(),
+            widget::space::horizontal().into(),
+            build_actions().into(),
+        ])
+        .align_y(Alignment::Center);
+
+        let compact_column = widget::column::with_children([
+            build_actions().into(),
+            widget::text::caption(summary).into(),
+        ])
+        .spacing(space_xxs);
+
+        let footer_content: Element<_> = if compact {
+            compact_column.into()
+        } else {
+            wide_row.into()
+        };
+
+        Some(self.floating_footer_shell(footer_content))
+    }
+
+    fn progress_footer(&self) -> Option<Element<'_, Message>> {
+        if self.progress_operations.is_empty() {
+            return None;
+        }
+
+        let cosmic_theme::Spacing {
+            space_xs, space_s, ..
+        } = theme::active().cosmic().spacing;
+
+        let mut title = String::new();
+        let mut total_progress = 0.0;
+        let mut count = 0;
+        let mut all_paused = true;
+        for (op, controller) in self.pending_operations.values() {
+            if !controller.is_paused() {
+                all_paused = false;
+            }
+            if op.show_progress_notification() {
+                let progress = controller.progress();
+                if title.is_empty() {
+                    title = op.pending_text(progress, controller.state());
+                }
+                total_progress += progress;
+                count += 1;
+            }
+        }
+        let running = count;
+        // Adjust the progress bar so it does not jump around when operations finish
+        for id in &self.progress_operations {
+            if self.complete_operations.contains_key(id) {
+                total_progress += 1.0;
+                count += 1;
+            }
+        }
+        let finished = count - running;
+        total_progress /= count as f32;
+        if running >= 1 && (running > 1 || finished > 0) {
+            if finished > 0 {
+                title = fl!(
+                    "operations-running-finished",
+                    running = running,
+                    finished = finished,
+                    percent = ((total_progress * 100.0) as i32)
+                );
+            } else {
+                title = fl!(
+                    "operations-running",
+                    running = running,
+                    percent = ((total_progress * 100.0) as i32)
+                );
+            }
+        }
+
+        //TODO: get height from theme?
+        let progress_bar_height = Length::Fixed(4.0);
+        let progress_bar = widget::determinate_linear(total_progress)
+            .width(Length::Fill)
+            .girth(progress_bar_height);
+
+        Some(
+            widget::layer_container(widget::column::with_children([
+                widget::row::with_children([
+                    progress_bar.into(),
+                    if all_paused {
+                        widget::tooltip(
+                            widget::button::icon(icon::from_name("media-playback-start-symbolic"))
+                                .on_press(Message::PendingPauseAll(false))
+                                .padding(8),
+                            widget::text::body(fl!("resume")),
+                            widget::tooltip::Position::Top,
+                        )
+                        .into()
+                    } else {
+                        widget::tooltip(
+                            widget::button::icon(icon::from_name("media-playback-pause-symbolic"))
+                                .on_press(Message::PendingPauseAll(true))
+                                .padding(8),
+                            widget::text::body(fl!("pause")),
+                            widget::tooltip::Position::Top,
+                        )
+                        .into()
+                    },
+                    widget::tooltip(
+                        widget::button::icon(icon::from_name("window-close-symbolic"))
+                            .on_press(Message::PendingCancelAll)
+                            .padding(8),
+                        widget::text::body(fl!("cancel")),
+                        widget::tooltip::Position::Top,
+                    )
+                    .into(),
+                ])
+                .align_y(Alignment::Center)
+                .into(),
+                widget::text::body(title).into(),
+                widget::space::vertical().height(space_s).into(),
+                widget::row::with_children([
+                    widget::button::link(fl!("details"))
+                        .on_press(Message::ToggleContextPage(ContextPage::EditHistory))
+                        .padding(0)
+                        .trailing_icon(true)
+                        .into(),
+                    widget::space::horizontal().into(),
+                    widget::button::standard(fl!("dismiss"))
+                        .on_press(Message::PendingDismiss)
+                        .into(),
+                ])
+                .align_y(Alignment::Center)
+                .into(),
+            ]))
+            .padding([8, space_xs])
+            .layer(cosmic_theme::Layer::Primary)
+            .into(),
+        )
     }
 
     fn push_dialog(&mut self, page: DialogPage, focus_id: Option<widget::Id>) -> Task<Message> {
@@ -1011,6 +1363,7 @@ impl App {
     fn destination_selection_dialog(
         &mut self,
         paths: &[impl AsRef<Path>],
+        context: FileDialogContext,
         on_result: impl Fn(DialogResult) -> Message + 'static,
         title: impl Into<String>,
         accept_label: impl AsRef<str>,
@@ -1031,9 +1384,7 @@ impl App {
             dialog.set_accept_label(accept_label);
             self.windows.insert(
                 dialog.window_id(),
-                Window::new(WindowKind::FileDialog(Some(
-                    paths.iter().map(|x| x.as_ref().to_path_buf()).collect(),
-                ))),
+                Window::new(WindowKind::FileDialog(Some(context))),
             );
             self.file_dialog_opt = Some(dialog);
             Task::batch([set_title_task, dialog_task])
@@ -1045,6 +1396,7 @@ impl App {
     fn extract_to(&mut self, paths: &[impl AsRef<Path>]) -> Task<Message> {
         self.destination_selection_dialog(
             paths,
+            FileDialogContext::Paths(paths.iter().map(|x| x.as_ref().to_path_buf()).collect()),
             Message::ExtractToResult,
             fl!("extract-to-title"),
             fl!("extract-here"),
@@ -1054,6 +1406,7 @@ impl App {
     fn move_to(&mut self, paths: &[impl AsRef<Path>]) -> Task<Message> {
         self.destination_selection_dialog(
             paths,
+            FileDialogContext::Paths(paths.iter().map(|x| x.as_ref().to_path_buf()).collect()),
             Message::MoveToResult,
             fl!("move-to-title"),
             fl!("move-to-button-label"),
@@ -1063,10 +1416,20 @@ impl App {
     fn copy_to(&mut self, paths: &[impl AsRef<Path>]) -> Task<Message> {
         self.destination_selection_dialog(
             paths,
+            FileDialogContext::Paths(paths.iter().map(|x| x.as_ref().to_path_buf()).collect()),
             Message::CopyToResult,
             fl!("copy-to-title"),
             fl!("copy-to-button-label"),
         )
+    }
+
+    fn take_file_dialog_context(&mut self) -> Option<FileDialogContext> {
+        let file_dialog = self.file_dialog_opt.take()?;
+        let window = self.windows.remove(&file_dialog.window_id())?;
+        match window.kind {
+            WindowKind::FileDialog(context) => context,
+            _ => None,
+        }
     }
 
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
@@ -1679,6 +2042,56 @@ impl App {
             })
     }
 
+    fn selected_trash_items(&self, entity_opt: Option<Entity>) -> Vec<TrashItem> {
+        let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+        self.tab_model
+            .data::<Tab>(entity)
+            .and_then(Tab::items_opt)
+            .into_iter()
+            .flatten()
+            .filter_map(|item| {
+                if item.selected {
+                    match &item.metadata {
+                        ItemMetadata::Trash { entry, .. } => Some(entry.clone()),
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    fn duplicate_selected(&mut self, entity_opt: Option<Entity>) -> Task<Message> {
+        let mut grouped: BTreeMap<PathBuf, Vec<PathBuf>> = BTreeMap::new();
+        for path in self.selected_paths(entity_opt) {
+            let Some(parent) = path.parent() else {
+                continue;
+            };
+            grouped
+                .entry(parent.to_path_buf())
+                .or_default()
+                .push(path.to_path_buf());
+        }
+
+        Task::batch(
+            grouped
+                .into_iter()
+                .map(|(to, paths)| self.operation(Operation::Copy { paths, to })),
+        )
+    }
+
+    fn move_from_trash(&mut self, items: Vec<TrashItem>) -> Task<Message> {
+        let paths: Box<[_]> = items.iter().map(|item| item.original_path()).collect();
+        self.destination_selection_dialog(
+            &paths,
+            FileDialogContext::TrashItems(items),
+            Message::MoveToResult,
+            fl!("move-to-title"),
+            fl!("move-to-button-label"),
+        )
+    }
+
     fn set_cut(&mut self, entity_opt: Option<Entity>) {
         let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
         if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
@@ -2181,11 +2594,11 @@ impl App {
                         let mut selected = items.iter().filter(|item| item.selected);
 
                         match (selected.next(), selected.next()) {
-                            // At least two selected items
+                            // At least two selected items use the selection details layout
                             (Some(_), Some(_)) => {
                                 Some(tab.multi_preview_view(Some(&self.mime_app_cache)))
                             }
-                            // Exactly one selected item
+                            // Exactly one selected item keeps the existing preview/details layout
                             (Some(item), None) => {
                                 Some(item.preview_view(Some(&self.mime_app_cache), military_time))
                             }
@@ -2206,6 +2619,7 @@ impl App {
                 }
             }
         }
+
         widget::column::with_children(children)
             .padding(if context_drawer {
                 [0, 0, 0, 0]
@@ -2998,17 +3412,10 @@ impl Application for App {
                 match result {
                     DialogResult::Cancel => {}
                     DialogResult::Open(selected_paths) => {
-                        let mut file_paths = None;
-                        if let Some(file_dialog) = &self.file_dialog_opt
-                            && let Some(window) = self.windows.remove(&file_dialog.window_id())
-                            && let WindowKind::FileDialog(paths) = window.kind
-                        {
-                            file_paths = paths;
-                        }
-                        if let Some(file_paths) = file_paths
+                        if let Some(FileDialogContext::Paths(file_paths)) =
+                            self.take_file_dialog_context()
                             && !selected_paths.is_empty()
                         {
-                            self.file_dialog_opt = None;
                             return self.operation(Operation::Copy {
                                 paths: file_paths.to_vec(),
                                 to: selected_paths[0].clone(),
@@ -3016,7 +3423,7 @@ impl Application for App {
                         }
                     }
                 }
-                self.file_dialog_opt = None;
+                self.take_file_dialog_context();
             }
             Message::Cut(entity_opt) => {
                 self.set_cut(entity_opt);
@@ -3050,23 +3457,12 @@ impl Application for App {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
                     if tab.location.is_trash() {
-                        if let Some(items) = tab.items_opt() {
-                            let mut trash_items = Vec::new();
-                            for item in items {
-                                if item.selected {
-                                    if let ItemMetadata::Trash { entry, .. } = &item.metadata {
-                                        trash_items.push(entry.clone());
-                                    } else {
-                                        //TODO: error on trying to permanently delete non-trash file?
-                                    }
-                                }
-                            }
-                            if !trash_items.is_empty() {
-                                return self.update(Message::DialogPush(
-                                    DialogPage::DeleteTrash { items: trash_items },
-                                    Some(DELETE_TRASH_BUTTON_ID.clone()),
-                                ));
-                            }
+                        let trash_items = self.selected_trash_items(entity_opt);
+                        if !trash_items.is_empty() {
+                            return self.update(Message::DialogPush(
+                                DialogPage::DeleteTrash { items: trash_items },
+                                Some(DELETE_TRASH_BUTTON_ID.clone()),
+                            ));
                         }
                     } else {
                         let paths: Box<[_]> = self.selected_paths(entity_opt).collect();
@@ -3075,6 +3471,9 @@ impl Application for App {
                         }
                     }
                 }
+            }
+            Message::Duplicate(entity_opt) => {
+                return self.duplicate_selected(entity_opt);
             }
             Message::DesktopConfig(config) => {
                 if config != self.config.desktop {
@@ -3335,17 +3734,10 @@ impl Application for App {
                 match result {
                     DialogResult::Cancel => {}
                     DialogResult::Open(selected_paths) => {
-                        let mut archive_paths = None;
-                        if let Some(file_dialog) = &self.file_dialog_opt
-                            && let Some(window) = self.windows.remove(&file_dialog.window_id())
-                            && let WindowKind::FileDialog(paths) = window.kind
-                        {
-                            archive_paths = paths;
-                        }
-                        if let Some(archive_paths) = archive_paths
+                        if let Some(FileDialogContext::Paths(archive_paths)) =
+                            self.take_file_dialog_context()
                             && !selected_paths.is_empty()
                         {
-                            self.file_dialog_opt = None;
                             return self.operation(Operation::Extract {
                                 paths: archive_paths,
                                 to: selected_paths[0].clone(),
@@ -3354,7 +3746,7 @@ impl Application for App {
                         }
                     }
                 }
-                self.file_dialog_opt = None;
+                self.take_file_dialog_context();
             }
             Message::FileDialogMessage(dialog_message) => {
                 if let Some(dialog) = &mut self.file_dialog_opt {
@@ -3564,33 +3956,48 @@ impl Application for App {
                 }
             }
             Message::MoveTo(entity_opt) => {
-                let selected_paths: Box<[_]> = self.selected_paths(entity_opt).collect();
-                return self.move_to(&selected_paths);
+                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                if self
+                    .tab_model
+                    .data::<Tab>(entity)
+                    .is_some_and(|tab| tab.location.is_trash())
+                {
+                    let items = self.selected_trash_items(entity_opt);
+                    if !items.is_empty() {
+                        return self.move_from_trash(items);
+                    }
+                } else {
+                    let selected_paths: Box<[_]> = self.selected_paths(entity_opt).collect();
+                    return self.move_to(&selected_paths);
+                }
             }
             Message::MoveToResult(result) => {
                 match result {
                     DialogResult::Cancel => {}
                     DialogResult::Open(selected_paths) => {
-                        let mut file_paths = None;
-                        if let Some(file_dialog) = &self.file_dialog_opt
-                            && let Some(window) = self.windows.remove(&file_dialog.window_id())
-                            && let WindowKind::FileDialog(paths) = window.kind
-                        {
-                            file_paths = paths;
-                        }
-                        if let Some(file_paths) = file_paths
-                            && !selected_paths.is_empty()
-                        {
-                            self.file_dialog_opt = None;
-                            return self.operation(Operation::Move {
-                                paths: file_paths.to_vec(),
-                                to: selected_paths[0].clone(),
-                                cross_device_copy: false,
-                            });
+                        if !selected_paths.is_empty() {
+                            match self.take_file_dialog_context() {
+                                Some(FileDialogContext::Paths(paths)) => {
+                                    return self.operation(Operation::Move {
+                                        paths: paths.to_vec(),
+                                        to: selected_paths[0].clone(),
+                                        cross_device_copy: false,
+                                    });
+                                }
+                                Some(FileDialogContext::TrashItems(items)) => {
+                                    return self.operation(Operation::MoveFromTrash {
+                                        items,
+                                        to: selected_paths[0].clone(),
+                                    });
+                                }
+                                None => {}
+                            }
+                        } else {
+                            self.take_file_dialog_context();
                         }
                     }
                 }
-                self.file_dialog_opt = None;
+                self.take_file_dialog_context();
             }
             Message::NetworkAuth(mounter_key, uri, auth, auth_tx) => {
                 return self.push_dialog(
@@ -4308,21 +4715,7 @@ impl Application for App {
                 }
             }
             Message::RestoreFromTrash(entity_opt) => {
-                let mut trash_items = Vec::new();
-                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
-                if let Some(tab) = self.tab_model.data_mut::<Tab>(entity)
-                    && let Some(items) = tab.items_opt()
-                {
-                    for item in items {
-                        if item.selected {
-                            if let ItemMetadata::Trash { entry, .. } = &item.metadata {
-                                trash_items.push(entry.clone());
-                            } else {
-                                //TODO: error on trying to restore non-trash file?
-                            }
-                        }
-                    }
-                }
+                let trash_items = self.selected_trash_items(entity_opt);
                 if !trash_items.is_empty() {
                     return self.operation(Operation::Restore { items: trash_items });
                 }
@@ -6282,117 +6675,7 @@ impl Application for App {
     }
 
     fn footer(&self) -> Option<Element<'_, Message>> {
-        if self.progress_operations.is_empty() {
-            return None;
-        }
-
-        let cosmic_theme::Spacing {
-            space_xs, space_s, ..
-        } = theme::active().cosmic().spacing;
-
-        let mut title = String::new();
-        let mut total_progress = 0.0;
-        let mut count = 0;
-        let mut all_paused = true;
-        for (op, controller) in self.pending_operations.values() {
-            if !controller.is_paused() {
-                all_paused = false;
-            }
-            if op.show_progress_notification() {
-                let progress = controller.progress();
-                if title.is_empty() {
-                    title = op.pending_text(progress, controller.state());
-                }
-                total_progress += progress;
-                count += 1;
-            }
-        }
-        let running = count;
-        // Adjust the progress bar so it does not jump around when operations finish
-        for id in &self.progress_operations {
-            if self.complete_operations.contains_key(id) {
-                total_progress += 1.0;
-                count += 1;
-            }
-        }
-        let finished = count - running;
-        total_progress /= count as f32;
-        if running >= 1 && (running > 1 || finished > 0) {
-            if finished > 0 {
-                title = fl!(
-                    "operations-running-finished",
-                    running = running,
-                    finished = finished,
-                    percent = ((total_progress * 100.0) as i32)
-                );
-            } else {
-                title = fl!(
-                    "operations-running",
-                    running = running,
-                    percent = ((total_progress * 100.0) as i32)
-                );
-            }
-        }
-
-        //TODO: get height from theme?
-        let progress_bar_height = Length::Fixed(4.0);
-        let progress_bar = widget::determinate_linear(total_progress)
-            .width(Length::Fill)
-            .girth(progress_bar_height);
-
-        let container = widget::layer_container(widget::column::with_children([
-            widget::row::with_children([
-                progress_bar.into(),
-                if all_paused {
-                    widget::tooltip(
-                        widget::button::icon(icon::from_name("media-playback-start-symbolic"))
-                            .on_press(Message::PendingPauseAll(false))
-                            .padding(8),
-                        widget::text::body(fl!("resume")),
-                        widget::tooltip::Position::Top,
-                    )
-                    .into()
-                } else {
-                    widget::tooltip(
-                        widget::button::icon(icon::from_name("media-playback-pause-symbolic"))
-                            .on_press(Message::PendingPauseAll(true))
-                            .padding(8),
-                        widget::text::body(fl!("pause")),
-                        widget::tooltip::Position::Top,
-                    )
-                    .into()
-                },
-                widget::tooltip(
-                    widget::button::icon(icon::from_name("window-close-symbolic"))
-                        .on_press(Message::PendingCancelAll)
-                        .padding(8),
-                    widget::text::body(fl!("cancel")),
-                    widget::tooltip::Position::Top,
-                )
-                .into(),
-            ])
-            .align_y(Alignment::Center)
-            .into(),
-            widget::text::body(title).into(),
-            widget::space::vertical().height(space_s).into(),
-            widget::row::with_children([
-                widget::button::link(fl!("details"))
-                    .on_press(Message::ToggleContextPage(ContextPage::EditHistory))
-                    .padding(0)
-                    .trailing_icon(true)
-                    .into(),
-                widget::space::horizontal().into(),
-                widget::button::standard(fl!("dismiss"))
-                    .on_press(Message::PendingDismiss)
-                    .into(),
-            ])
-            .align_y(Alignment::Center)
-            .into(),
-        ]))
-        .padding([8, space_xs])
-        .layer(cosmic_theme::Layer::Primary);
-
-        Some(container.into())
+        self.progress_footer()
     }
 
     fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
@@ -6490,15 +6773,46 @@ impl Application for App {
 
         let entity = self.tab_model.active();
         if let Some(tab) = self.tab_model.data::<Tab>(entity) {
-            let tab_view = tab
+            let use_sidebar_selection = self.core.window.show_context
+                && matches!(
+                    self.context_page,
+                    ContextPage::Preview(_, PreviewKind::Selected)
+                );
+            let floating_footer = if use_sidebar_selection && tab.location.is_trash() {
+                self.trash_footer()
+            } else if use_sidebar_selection {
+                None
+            } else {
+                self.floating_footer()
+            };
+            let footer_scroll_inset = floating_footer
+                .as_ref()
+                .map(|_| self.floating_footer_scroll_inset())
+                .unwrap_or(0);
+            let tab_view: Element<_> = tab
                 .view(
                     &self.key_binds,
                     &self.modifiers,
+                    footer_scroll_inset,
                     self.clipboard_has_content(),
                     &self.config.context_actions,
                 )
                 .map(move |message| Message::TabMessage(Some(entity), message));
-            tab_column = tab_column.push(tab_view);
+            let tab_layer: Element<_> = if let Some(selection_footer) = floating_footer {
+                stack([
+                    tab_view,
+                    widget::container(selection_footer)
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .align_x(iced::alignment::Horizontal::Center)
+                        .align_y(iced::alignment::Vertical::Bottom)
+                        .into(),
+                ])
+                .into()
+            } else {
+                tab_view
+            };
+            tab_column = tab_column.push(tab_layer);
         } else {
             //TODO
         }
@@ -6541,6 +6855,7 @@ impl Application for App {
                             .view(
                                 &self.key_binds,
                                 &window.modifiers,
+                                0,
                                 self.clipboard_has_content(),
                                 &self.config.context_actions,
                             )
@@ -7015,13 +7330,17 @@ impl Application for App {
             }
         }
 
+        let active_entity = self.tab_model.active();
+        let active_tab_has_selection = self.active_tab_has_selection();
+
         subscriptions.extend(self.tab_model.iter().filter_map(|entity| {
             let tab = self.tab_model.data::<Tab>(entity)?;
             Some(
                 tab.subscription(
                     selected_previews
                         .iter()
-                        .any(|preview| preview.as_ref() == Some(entity).as_ref()),
+                        .any(|preview| preview.as_ref() == Some(entity).as_ref())
+                        || (entity == active_entity && active_tab_has_selection),
                 )
                 .with(entity)
                 .map(|(entity, tab_msg)| Message::TabMessage(Some(entity), tab_msg)),
