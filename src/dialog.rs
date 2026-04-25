@@ -595,6 +595,7 @@ impl App {
             col = col.push(
                 widget::text_input("", filename)
                     .id(self.filename_id.clone())
+                    .double_click_select_delimiter('.')
                     .on_input(Message::Filename)
                     .on_submit(|_| Message::Save(false)),
             );
@@ -1956,6 +1957,16 @@ impl Application for App {
                     // Reset focus on location change
                     if self.search_get().is_some() {
                         return widget::text_input::focus(self.search_id.clone());
+                    }
+                    if let DialogKind::SaveFile { filename } = &self.flags.kind {
+                        return Task::batch([
+                            widget::text_input::focus(self.filename_id.clone()),
+                            widget::text_input::select_until_last(
+                                self.filename_id.clone(),
+                                filename,
+                                '.',
+                            ),
+                        ]);
                     }
                     return widget::text_input::focus(self.filename_id.clone());
                 }

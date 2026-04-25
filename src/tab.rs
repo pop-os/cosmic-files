@@ -1,7 +1,7 @@
+#[cfg(feature = "desktop")]
+use cosmic::desktop::fde::{DesktopEntry, get_languages_from_env};
 use cosmic::{
-    Apply, Element, cosmic_theme,
-    desktop::fde::{DesktopEntry, get_languages_from_env},
-    font,
+    Apply, Element, cosmic_theme, font,
     iced::core::{mouse::ScrollDelta, widget::tree},
     iced::{
         Alignment, Border, Color, ContentFit, Length, Point, Rectangle, Size, Subscription, Vector,
@@ -39,9 +39,10 @@ use icu::{
 use image::{DynamicImage, ImageReader};
 use jiff_icu::ConvertFrom;
 use mime_guess::{Mime, mime};
-use regex::Regex;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::{
     borrow::Cow,
     cell::Cell,
@@ -52,7 +53,6 @@ use std::{
     fs::{self, File, Metadata},
     hash::Hash,
     io::{BufRead, BufReader},
-    os::unix::fs::MetadataExt,
     path::{self, Path, PathBuf},
     sync::{Arc, LazyLock, RwLock, atomic},
     time::{Duration, Instant, SystemTime},
@@ -84,8 +84,8 @@ use crate::{
     operation::{Controller, OperationError},
     thumbnail_cacher::{CachedThumbnail, ThumbnailCacher, ThumbnailSize},
     thumbnailer::thumbnailer,
+    trash::{Trash, TrashExt},
 };
-use uzers::{get_group_by_gid, get_user_by_uid};
 
 pub const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 pub const HOVER_DURATION: Duration = Duration::from_millis(1600);
@@ -648,6 +648,12 @@ pub fn fs_kind(_metadata: &Metadata) -> FsKind {
     FsKind::Local
 }
 
+#[cfg(not(feature = "desktop"))]
+fn get_desktop_file_display_name(path: &Path) -> Option<String> {
+    None
+}
+
+#[cfg(feature = "desktop")]
 fn get_desktop_file_display_name(path: &Path) -> Option<String> {
     let locales = get_languages_from_env();
     let entry = match DesktopEntry::from_path(path, Some(&locales)) {
@@ -661,6 +667,12 @@ fn get_desktop_file_display_name(path: &Path) -> Option<String> {
     entry.name(&locales).map(|s| s.into_owned())
 }
 
+#[cfg(not(feature = "desktop"))]
+fn get_desktop_file_icon(path: &Path) -> Option<String> {
+    None
+}
+
+#[cfg(feature = "desktop")]
 fn get_desktop_file_icon(path: &Path) -> Option<String> {
     let entry = match DesktopEntry::from_path::<&str>(path, None) {
         Ok(ok) => ok,
@@ -684,6 +696,7 @@ fn desktop_icon_handle(icon: &str, size: u16) -> widget::icon::Handle {
     }
 }
 
+#[cfg(feature = "desktop")]
 pub fn parse_desktop_file(path: &Path) -> (Option<String>, Option<String>) {
     let locales = get_languages_from_env();
     let entry = match DesktopEntry::from_path(path, Some(&locales)) {
@@ -799,6 +812,9 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
             children_opt,
         },
         hidden,
+        image_dimensions: (!remote && mime.type_() == mime::IMAGE)
+            .then(|| image::image_dimensions(&path).ok())
+            .flatten(),
         location_opt: Some(Location::Path(path)),
         mime,
         icon_handle_grid,
@@ -934,6 +950,7 @@ pub fn item_from_entry(
         },
         hidden,
         location_opt: Some(Location::Path(path)),
+        image_dimensions: None,
         mime,
         icon_handle_grid,
         icon_handle_list,
@@ -992,6 +1009,9 @@ pub fn item_from_trash_entry(
         metadata: ItemMetadata::Trash { metadata, entry },
         hidden: false,
         location_opt: None,
+        image_dimensions: (mime.type_() == mime::IMAGE)
+            .then(|| image::image_dimensions(&original_path).ok())
+            .flatten(),
         mime,
         icon_handle_grid,
         icon_handle_list,
@@ -1257,133 +1277,7 @@ pub fn scan_search<F: Fn(SearchItem) -> bool + Sync>(
             }
         }
         SearchLocation::Trash => {
-            trash_helpers::scan_search_trash(callback, &regex);
-        }
-    }
-}
-
-// This config statement is from trash::os_limited, inverted
-#[cfg(not(any(
-    target_os = "windows",
-    all(
-        unix,
-        not(target_os = "macos"),
-        not(target_os = "ios"),
-        not(target_os = "android")
-    )
-)))]
-mod trash_helpers {
-    use super::*;
-
-    pub fn trash_entries() -> usize {
-        0
-    }
-
-    pub fn trash_icon(icon_size: u16) -> widget::icon::Handle {
-        widget::icon::from_name("user-trash")
-            .size(icon_size)
-            .handle()
-    }
-
-    pub fn trash_icon_symbolic(icon_size: u16) -> widget::icon::Handle {
-        widget::icon::from_name("user-trash-symbolic")
-            .size(icon_size)
-            .handle()
-    }
-
-    pub fn scan_trash(_sizes: IconSizes) -> Vec<Item> {
-        log::warn!("viewing trash not supported on this platform");
-        Vec::new()
-    }
-
-    pub fn scan_search_trash<F: Fn(SearchItem) -> bool + Sync>(callback: F, regex: &Regex) {}
-}
-
-// This config statement is from trash::os_limited
-#[cfg(any(
-    target_os = "windows",
-    all(
-        unix,
-        not(target_os = "macos"),
-        not(target_os = "ios"),
-        not(target_os = "android")
-    )
-))]
-pub mod trash_helpers {
-    use super::*;
-
-    pub fn trash_entries() -> usize {
-        match trash::os_limited::list() {
-            Ok(entries) => entries.len(),
-            Err(_err) => 0,
-        }
-    }
-
-    pub fn trash_icon(icon_size: u16) -> widget::icon::Handle {
-        widget::icon::from_name(if trash::os_limited::is_empty().unwrap_or(true) {
-            "user-trash"
-        } else {
-            "user-trash-full"
-        })
-        .size(icon_size)
-        .handle()
-    }
-
-    pub fn trash_icon_symbolic(icon_size: u16) -> widget::icon::Handle {
-        widget::icon::from_name(if trash::os_limited::is_empty().unwrap_or(true) {
-            "user-trash-symbolic"
-        } else {
-            "user-trash-full-symbolic"
-        })
-        .size(icon_size)
-        .handle()
-    }
-
-    pub fn scan_trash(sizes: IconSizes) -> Vec<Item> {
-        let entries = match trash::os_limited::list() {
-            Ok(entry) => entry,
-            Err(err) => {
-                log::warn!("failed to read trash items: {err}");
-                return Vec::new();
-            }
-        };
-        let mut items: Vec<_> = entries
-            .into_iter()
-            .filter_map(|entry| {
-                let metadata = trash::os_limited::metadata(&entry)
-                    .inspect_err(|err| {
-                        log::warn!("failed to get metadata for trash item {entry:?}: {err}")
-                    })
-                    .ok()?;
-                Some(item_from_trash_entry(entry, metadata, sizes))
-            })
-            .collect();
-        items.sort_by(|a, b| match (a.metadata.is_dir(), b.metadata.is_dir()) {
-            (true, false) => Ordering::Less,
-            (false, true) => Ordering::Greater,
-            _ => LANGUAGE_SORTER.compare(&a.display_name, &b.display_name),
-        });
-        items
-    }
-
-    pub fn scan_search_trash<F: Fn(SearchItem) -> bool + Sync>(callback: F, regex: &Regex) {
-        let entries = match trash::os_limited::list() {
-            Ok(entries) => entries,
-            Err(err) => {
-                log::warn!("failed to read trash items: {err}");
-                return;
-            }
-        };
-
-        for entry in entries {
-            if let Ok(metadata) = trash::os_limited::metadata(&entry).inspect_err(|err| {
-                log::warn!("failed to get metadata for trash item {entry:?}: {err}")
-            }) {
-                let name = entry.name.to_string_lossy();
-                if regex.is_match(&name) && !callback(SearchItem::Trash(entry, metadata)) {
-                    break;
-                }
-            }
+            Trash::scan_search(callback, &regex);
         }
     }
 }
@@ -1521,15 +1415,15 @@ pub fn scan_desktop(
         let display_name = Item::display_name(&name);
 
         let metadata = ItemMetadata::SimpleDir {
-            entries: trash_helpers::trash_entries() as u64,
+            entries: Trash::entries() as u64,
         };
 
         let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) = {
             (
                 "inode/directory".parse().unwrap(),
-                trash_helpers::trash_icon(sizes.grid()),
-                trash_helpers::trash_icon(sizes.list()),
-                trash_helpers::trash_icon(sizes.list_condensed()),
+                Trash::icon(sizes.grid()),
+                Trash::icon(sizes.list()),
+                Trash::icon(sizes.list_condensed()),
             )
         };
 
@@ -1540,6 +1434,7 @@ pub fn scan_desktop(
             metadata,
             hidden: false,
             location_opt: Some(Location::Trash),
+            image_dimensions: None,
             mime,
             icon_handle_grid,
             icon_handle_list,
@@ -1769,7 +1664,7 @@ impl Location {
                 // Search is done incrementally
                 Vec::new()
             }
-            Self::Trash => trash_helpers::scan_trash(sizes),
+            Self::Trash => Trash::scan(sizes),
             Self::Recents => scan_recents(sizes),
             Self::Network(uri, _, _) => scan_network(uri, sizes),
         };
@@ -2544,6 +2439,7 @@ pub struct Item {
     pub hidden: bool,
     pub location_opt: Option<Location>,
     pub mime: Mime,
+    pub image_dimensions: Option<(u32, u32)>,
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
     pub icon_handle_list_condensed: widget::icon::Handle,
@@ -2772,7 +2668,7 @@ impl Item {
 
                 let mode = metadata.mode();
 
-                let user_name = get_user_by_uid(metadata.uid())
+                let user_name = uzers::get_user_by_uid(metadata.uid())
                     .and_then(|user| user.name().to_str().map(ToOwned::to_owned))
                     .unwrap_or_default();
                 let user_path = path.clone();
@@ -2795,7 +2691,7 @@ impl Item {
                         )),
                 );
 
-                let group_name = get_group_by_gid(metadata.gid())
+                let group_name = uzers::get_group_by_gid(metadata.gid())
                     .and_then(|group| group.name().to_str().map(ToOwned::to_owned))
                     .unwrap_or_default();
                 let group_path = path.clone();
@@ -4789,6 +4685,7 @@ impl Tab {
                     for item in self.items_opt().map_or(Vec::new(), |items| {
                         items.iter().filter(|item| item.selected).collect()
                     }) {
+                        #[cfg(unix)]
                         if let (Some(path), Some(mode)) = (
                             item.path_opt(),
                             item.file_metadata()
@@ -6922,13 +6819,13 @@ impl Tab {
 
                     // Determine effective memory budget based on image size
                     let (effective_max_mb, effective_jobs) = if mime.type_() == mime::IMAGE {
-                        match image::image_dimensions(&path) {
-                            Ok((width, height)) => {
+                        match item.image_dimensions {
+                            Some((width, height)) => {
                                 let (_use_dedicated, eff_mb, eff_jobs) =
                                     should_use_dedicated_worker(width, height, max_mb, max_jobs);
                                 (eff_mb, eff_jobs)
                             }
-                            Err(_) => (max_mb, max_jobs),
+                            None => (max_mb, max_jobs),
                         }
                     } else {
                         (max_mb, max_jobs)
@@ -6971,6 +6868,10 @@ impl Tab {
                             stream::channel(
                                 1,
                                 move |mut output: futures::channel::mpsc::Sender<_>| async move {
+                                    while crate::operation::is_actively_writing_to(&path) {
+                                        crate::operation::actively_writing_tick().await;
+                                    }
+
                                     let message = {
                                         let path = path.clone();
 
@@ -7155,9 +7056,8 @@ impl Tab {
                                 .await
                                 .unwrap();
 
-                            let output = Arc::new(tokio::sync::Mutex::new(output));
+                            let (watch_tx, mut watch_rx) = tokio::sync::watch::channel(true);
                             {
-                                let output = output.clone();
                                 tokio::task::spawn_blocking(move || {
                                     scan_search(
                                         &search_location,
@@ -7185,14 +7085,7 @@ impl Tab {
                                                         true
                                                     } else {
                                                         // Wake up update method
-                                                        futures::executor::block_on(async {
-                                                            output
-                                                                .lock()
-                                                                .await
-                                                                .send(Message::SearchReady(false))
-                                                                .await
-                                                        })
-                                                        .is_ok()
+                                                        watch_tx.send(false).is_ok()
                                                     }
                                                 }
                                                 Err(_) => false,
@@ -7205,13 +7098,16 @@ impl Tab {
                                         search_location,
                                         start.elapsed(),
                                     );
-                                })
-                                .await
-                                .unwrap();
+                                });
+                            }
+
+                            while watch_rx.changed().await.is_ok() {
+                                let is_ready = *watch_rx.borrow_and_update();
+                                let _ = output.send(Message::SearchReady(is_ready)).await;
                             }
 
                             // Send final ready
-                            let _ = output.lock().await.send(Message::SearchReady(true)).await;
+                            let _ = output.send(Message::SearchReady(true)).await;
 
                             std::future::pending().await
                         },

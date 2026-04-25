@@ -18,9 +18,7 @@ use cosmic::{
     Application, ApplicationExt, Element,
     app::{self, Core, Task, context_drawer},
     cosmic_config::{self, ConfigSet},
-    cosmic_theme,
-    desktop::fde::DesktopEntry,
-    executor,
+    cosmic_theme, executor,
     iced::core::widget::operation::focusable::unfocus,
     iced::runtime::{clipboard, task},
     iced::widget::{button::focus, scrollable::AbsoluteOffset, stack},
@@ -99,6 +97,7 @@ use crate::{
         self, HOVER_DURATION, HeadingOptions, ItemMetadata, Location, SORT_OPTION_FALLBACK,
         SearchLocation, Tab,
     },
+    trash::{Trash, TrashExt},
     zoom::{zoom_in_view, zoom_out_view, zoom_to_default},
 };
 
@@ -1186,9 +1185,12 @@ impl App {
 
             // First launch apps that can be launched directly
             if mime == "application/x-desktop" {
-                // Try opening desktop application
-                Self::launch_desktop_entries(&paths);
-                continue;
+                #[cfg(feature = "desktop")]
+                {
+                    // Try opening desktop application
+                    Self::launch_desktop_entries(&paths);
+                    continue;
+                }
             } else if mime == "application/x-executable" || mime == "application/vnd.appimage" {
                 // Try opening executable
                 for path in paths {
@@ -1249,7 +1251,10 @@ impl App {
         Task::batch(tasks)
     }
 
+    #[cfg(feature = "desktop")]
     fn launch_desktop_entries(paths: &[impl AsRef<Path>]) {
+        use cosmic::desktop::fde::DesktopEntry;
+
         for path in paths.iter().map(AsRef::as_ref) {
             match DesktopEntry::from_path::<&str>(path, None) {
                 Ok(entry) => match entry.exec() {
@@ -2207,7 +2212,7 @@ impl App {
 
         nav_model = nav_model.insert(|b| {
             b.text(fl!("trash"))
-                .icon(icon::icon(tab::trash_helpers::trash_icon_symbolic(16)))
+                .icon(icon::icon(Trash::icon_symbolic(16)))
                 .data(Location::Trash)
                 .divider_above()
         });
@@ -3069,9 +3074,7 @@ impl Application for App {
             ));
         }
 
-        if matches!(location_opt, Some(Location::Trash))
-            && !trash::os_limited::is_empty().unwrap_or(true)
-        {
+        if matches!(location_opt, Some(Location::Trash)) && !Trash::is_empty() {
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("empty-trash"),
                 None,
@@ -4644,10 +4647,8 @@ impl Application for App {
                         .is_some_and(|loc| matches!(loc, Location::Trash))
                 });
                 if let Some(entity) = maybe_entity {
-                    self.nav_model.icon_set(
-                        entity,
-                        icon::icon(tab::trash_helpers::trash_icon_symbolic(16)),
-                    );
+                    self.nav_model
+                        .icon_set(entity, icon::icon(Trash::icon_symbolic(16)));
                 }
 
                 return Task::batch([self.rescan_trash(), self.update_desktop()]);
@@ -4669,12 +4670,14 @@ impl Application for App {
                         .collect();
                     if !selected.is_empty() {
                         //TODO: batch rename
-                        let tasks = selected
+                        let mut last_name = String::new();
+                        let tasks: Vec<_> = selected
                             .into_iter()
                             .filter_map(|path| {
                                 let parent = path.parent()?.to_path_buf();
                                 let name = path.file_name()?.to_str()?.to_string();
                                 let dir = path.is_dir();
+                                last_name = name.clone();
                                 Some(self.dialog_pages.push_back(DialogPage::RenameItem {
                                     from: path,
                                     parent,
@@ -4682,9 +4685,15 @@ impl Application for App {
                                     dir,
                                 }))
                             })
-                            .chain(std::iter::once(widget::text_input::focus(
+                            .collect();
+                        let tasks = tasks.into_iter().chain([
+                            widget::text_input::focus(self.dialog_text_input.clone()),
+                            widget::text_input::select_until_last(
                                 self.dialog_text_input.clone(),
-                            )));
+                                &last_name,
+                                '.',
+                            ),
+                        ]);
                         return Task::batch(tasks);
                     }
                 }
@@ -6544,6 +6553,7 @@ impl Application for App {
                             .into(),
                             widget::text_input("", name.as_str())
                                 .id(self.dialog_text_input.clone())
+                                .double_click_select_delimiter('.')
                                 .on_input(move |name| {
                                     Message::DialogUpdate(DialogPage::RenameItem {
                                         from: from.clone(),
@@ -7109,14 +7119,7 @@ impl Application for App {
                             },
                         );
 
-                        // TODO: Trash watching support for Windows, macOS, and other OSes
-                        #[cfg(all(
-                            unix,
-                            not(target_os = "macos"),
-                            not(target_os = "ios"),
-                            not(target_os = "android")
-                        ))]
-                        match (watcher_res, trash::os_limited::trash_folders()) {
+                        match (watcher_res, Trash::folders()) {
                             (Ok(mut watcher), Ok(trash_bins)) => {
                                 // Watch the "bins" themselves as well as the files folder where
                                 // trashed items are placed. This allows us to avoid recursively
@@ -7273,8 +7276,7 @@ impl Application for App {
                         |_| {
                             stream::channel(
                                 1,
-                                move |msg_tx: futures::channel::mpsc::Sender<_>| async move {
-                                    let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
+                                move |mut msg_tx: futures::channel::mpsc::Sender<_>| async move {
                                     tokio::task::spawn_blocking(move || {
                                         match notify_rust::Notification::new()
                                             .summary(&fl!("notification-in-progress"))
@@ -7284,8 +7286,6 @@ impl Application for App {
                                             Ok(notification) => {
                                                 let _ = futures::executor::block_on(async {
                                                     msg_tx
-                                                        .lock()
-                                                        .await
                                                         .send(Message::Notification(Arc::new(
                                                             Mutex::new(notification),
                                                         )))
