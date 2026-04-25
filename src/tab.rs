@@ -6228,7 +6228,7 @@ impl Tab {
                     tab_column = tab_column.push(
                         widget::layer_container(widget::row::with_children([
                             widget::space::horizontal().into(),
-                            widget::button::standard(fl!("clear-recents"))
+                            widget::button::standard(fl!("clear-recents-history"))
                                 .on_press(Message::ClearRecents)
                                 .into(),
                         ]))
