@@ -6787,12 +6787,9 @@ impl Tab {
                 "Items"
             }
         )));
-        details = details.push(widget::text::body(fl!("type", mime = mime_label)));
         details = details.push(widget::text::body(selection_stats.breakdown_text()));
-        details = details.push(widget::text::body(fl!(
-            "item-size",
-            size = selection_stats.size_text()
-        )));
+        details = details.push(widget::text::body(selection_stats.size_text()));
+        details = details.push(widget::text::body(fl!("type", mime = mime_label)));
 
         let overflow_items = selection_menu_actions(&selection_stats, in_trash, in_trash);
 
