@@ -5,18 +5,19 @@ use cosmic::{
     Application, ApplicationExt, Element,
     app::{Core, Task, context_drawer, cosmic::Cosmic},
     cosmic_config, cosmic_theme, executor,
+    iced::core::widget::operation,
+    iced::platform_specific::shell::{self as iced_winit, SurfaceIdWrapper},
+    iced::widget::scrollable::AbsoluteOffset,
     iced::{
         self, Alignment, Event, Length, Size, Subscription,
         core::SmolStr,
         event,
         futures::{self, SinkExt},
         keyboard::{Event as KeyEvent, Key, Modifiers, key::Named},
-        stream,
+        mouse, stream,
         widget::scrollable,
         window,
     },
-    iced_core::widget::operation,
-    iced_winit::{self, SurfaceIdWrapper},
     theme,
     widget::{
         self, Operation,
@@ -24,6 +25,7 @@ use cosmic::{
         segmented_button,
     },
 };
+use mime_guess::{Mime, mime};
 use notify_debouncer_full::{
     DebouncedEvent, Debouncer, RecommendedCache, new_debouncer,
     notify::{self, RecommendedWatcher},
@@ -48,7 +50,7 @@ use crate::{
     localize::LANGUAGE_SORTER,
     menu,
     mounter::{MOUNTERS, MounterItem, MounterItems, MounterKey, MounterMessage},
-    tab::{self, ItemMetadata, Location, Tab},
+    tab::{self, ItemMetadata, Location, SearchLocation, Tab},
     zoom::{zoom_in_view, zoom_out_view, zoom_to_default},
 };
 
@@ -201,7 +203,8 @@ impl<T: AsRef<str>> From<T> for DialogLabel {
 
 impl<'a, M: Clone + 'static> From<&'a DialogLabel> for Element<'a, M> {
     fn from(label: &'a DialogLabel) -> Self {
-        let mut iced_spans = Vec::with_capacity(label.spans.len());
+        let mut iced_spans: Vec<cosmic::iced::core::text::Span<'_, ()>> =
+            Vec::with_capacity(label.spans.len());
         for span in &label.spans {
             iced_spans.push(cosmic::iced::widget::span(&span.text).underline(span.underline));
         }
@@ -468,6 +471,7 @@ enum Message {
     Key(Modifiers, Key, Option<SmolStr>),
     ModifiersChanged(Modifiers),
     MounterItems(MounterKey, MounterItems),
+    Mouse(window::Id, mouse::Button),
     NewFolder,
     NotifyEvents(Vec<DebouncedEvent>),
     NotifyWatcher(WatcherWrapper),
@@ -591,6 +595,7 @@ impl App {
             col = col.push(
                 widget::text_input("", filename)
                     .id(self.filename_id.clone())
+                    .double_click_select_delimiter('.')
                     .on_input(Message::Filename)
                     .on_submit(|_| Message::Save(false)),
             );
@@ -613,10 +618,13 @@ impl App {
         for (choice_i, choice) in self.choices.iter().enumerate() {
             match choice {
                 DialogChoice::CheckBox { label, value, .. } => {
-                    row =
-                        row.push(widget::checkbox(label, *value).on_toggle(move |checked| {
-                            Message::Choice(choice_i, usize::from(checked))
-                        }));
+                    row = row.push(
+                        widget::checkbox(*value)
+                            .label(label)
+                            .on_toggle(move |checked| {
+                                Message::Choice(choice_i, usize::from(checked))
+                            }),
+                    );
                 }
                 DialogChoice::ComboBox {
                     label,
@@ -638,7 +646,7 @@ impl App {
                 .align_y(Alignment::Center)
                 .spacing(space_xxs);
         }
-        row = row.push(widget::horizontal_space());
+        row = row.push(widget::space::horizontal());
         row = row.push(widget::button::standard(fl!("cancel")).on_press(Message::Cancel));
 
         let mut has_selected = false;
@@ -662,7 +670,11 @@ impl App {
             )
             .padding(0)
             .on_press_maybe(if self.flags.kind.save() {
-                Some(Message::Save(false))
+                if let DialogKind::SaveFile { filename } = &self.flags.kind {
+                    (!filename.is_empty()).then_some(Message::Save(false))
+                } else {
+                    None
+                }
             } else if has_selected || self.flags.kind.is_dir() {
                 Some(Message::Open)
             } else {
@@ -706,7 +718,7 @@ impl App {
 
                         match (selected.next(), selected.next()) {
                             // At least two selected items
-                            (Some(_), Some(_)) => Some(self.tab.multi_preview_view()),
+                            (Some(_), Some(_)) => Some(self.tab.multi_preview_view(None)),
                             // Exactly one selected item
                             (Some(item), None) => Some(item.preview_view(None, military_time)),
                             // No selected items
@@ -775,19 +787,35 @@ impl App {
 
     fn search_set(&mut self, term_opt: Option<String>) -> Task<Message> {
         let location_opt = match term_opt {
-            Some(term) => self.tab.location.path_opt().map(|path| {
-                (
-                    Location::Search(
-                        path.clone(),
-                        term,
-                        self.tab.config.show_hidden,
-                        Instant::now(),
-                    ),
-                    true,
-                )
-            }),
+            Some(term) => {
+                let search_location = if let Some(path) = self.tab.location.path_opt() {
+                    Some(SearchLocation::Path(path.clone()))
+                } else if self.tab.location.is_recents() {
+                    Some(SearchLocation::Recents)
+                } else if self.tab.location.is_trash() {
+                    Some(SearchLocation::Trash)
+                } else {
+                    None
+                };
+
+                search_location.map(|search_location| {
+                    (
+                        Location::Search(
+                            search_location,
+                            term,
+                            self.tab.config.show_hidden,
+                            Instant::now(),
+                        ),
+                        true,
+                    )
+                })
+            }
             None => match &self.tab.location {
-                Location::Search(path, ..) => Some((Location::Path(path.clone()), false)),
+                Location::Search(search_location, ..) => match search_location {
+                    SearchLocation::Path(path) => Some((Location::Path(path.clone()), false)),
+                    SearchLocation::Recents => Some((Location::Recents, false)),
+                    SearchLocation::Trash => Some((Location::Trash, false)),
+                },
                 _ => None,
             },
         };
@@ -850,14 +878,25 @@ impl App {
         }
     }
 
+    fn close_context_menus(&mut self) -> Task<Message> {
+        self.tab.location_context_menu_index = None;
+        if self.tab.context_menu.is_some() {
+            return self.update(Message::TabMessage(tab::Message::ContextMenu(None, None)));
+        }
+
+        Task::none()
+    }
+
     fn update_nav_model(&mut self) {
         let mut nav_model = segmented_button::ModelBuilder::default();
 
-        nav_model = nav_model.insert(|b| {
-            b.text(fl!("recents"))
-                .icon(widget::icon::from_name("document-open-recent-symbolic"))
-                .data(Location::Recents)
-        });
+        if self.flags.config.show_recents {
+            nav_model = nav_model.insert(|b| {
+                b.text(fl!("recents"))
+                    .icon(widget::icon::from_name("document-open-recent-symbolic"))
+                    .data(Location::Recents)
+            });
+        }
 
         for favorite in &self.flags.config.favorites {
             if let Some(path) = favorite.path_opt() {
@@ -1072,7 +1111,7 @@ impl Application for App {
                             .find(|item| item.selected)
                             .map(|item| item.preview_actions().map(Message::TabMessage))
                     })
-                    .unwrap_or_else(|| widget::horizontal_space().into());
+                    .unwrap_or_else(|| widget::space::horizontal().into());
                 Some(
                     context_drawer::context_drawer(
                         self.preview(kind).map(Message::TabMessage),
@@ -1170,7 +1209,9 @@ impl Application for App {
                 .icon(widget::icon::from_name("dialog-question").size(64))
                 .body(fl!("replace-warning"))
                 .primary_action(
-                    widget::button::suggested(fl!("replace")).on_press(Message::DialogComplete),
+                    widget::button::suggested(fl!("replace"))
+                        .on_press(Message::DialogComplete)
+                        .id(REPLACE_BUTTON_ID.clone()),
                 )
                 .secondary_action(
                     widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
@@ -1258,8 +1299,7 @@ impl Application for App {
         }
 
         Some(Element::from(
-            // XXX both must be shrink to avoid flex layout from ignoring it
-            nav.width(Length::Shrink).height(Length::Shrink),
+            nav.width(Length::Shrink).height(Length::Fill),
         ))
     }
 
@@ -1296,9 +1336,9 @@ impl Application for App {
             return Task::none();
         }
 
-        if self.search_get().is_some() {
-            // Close search if open
-            return self.search_set(None);
+        if self.tab.location_context_menu_index.is_some() {
+            self.tab.location_context_menu_index = None;
+            return Task::none();
         }
 
         if self.tab.context_menu.is_some() {
@@ -1309,6 +1349,11 @@ impl Application for App {
             // Close location editing if enabled
             self.tab.edit_location = None;
             return Task::none();
+        }
+
+        if self.search_get().is_some() {
+            // Close search if open
+            return self.search_set(None);
         }
 
         let had_focused_button = self.tab.select_focus_id().is_some();
@@ -1470,7 +1515,10 @@ impl Application for App {
                             if let Some(offset) = self.tab.select_focus_scroll() {
                                 return scrollable::scroll_to(
                                     self.tab.scrollable_id.clone(),
-                                    offset,
+                                    AbsoluteOffset {
+                                        x: Some(offset.x),
+                                        y: Some(offset.y),
+                                    },
                                 );
                             }
                         }
@@ -1524,6 +1572,12 @@ impl Application for App {
                 self.update_nav_model();
 
                 return Task::batch(commands);
+            }
+            Message::Mouse(window_id, _button) => {
+                // Close context menu when clicking outside.
+                if self.core.main_window_id() == Some(window_id) {
+                    return self.close_context_menus();
+                }
             }
             Message::NewFolder => {
                 if let Some(path) = self.tab.location.path_opt() {
@@ -1605,12 +1659,14 @@ impl Application for App {
                             && let Some(path) = item.path_opt()
                         {
                             paths.push(path.clone());
-                            let _ = update_recently_used(
-                                path,
-                                Self::APP_ID.to_string(),
-                                "cosmic-files".to_string(),
-                                None,
-                            );
+                            if self.flags.config.show_recents {
+                                let _ = update_recently_used(
+                                    path,
+                                    Self::APP_ID.to_string(),
+                                    "cosmic-files".to_string(),
+                                    None,
+                                );
+                            }
                         }
                     }
                 }
@@ -1680,14 +1736,18 @@ impl Application for App {
                 )));
             }
             Message::SearchActivate => {
-                return if self.search_get().is_none() {
-                    self.search_set(Some(String::new()))
+                let mut tasks = vec![self.close_context_menus()];
+
+                if self.search_get().is_none() {
+                    tasks.push(self.search_set(Some(String::new())));
                 } else {
-                    widget::text_input::focus(self.search_id.clone())
-                };
+                    tasks.push(widget::text_input::focus(self.search_id.clone()));
+                }
+
+                return Task::batch(tasks);
             }
             Message::SearchClear => {
-                return self.search_set(None);
+                return Task::batch([self.close_context_menus(), self.search_set(None)]);
             }
             Message::SearchInput(input) => {
                 return self.search_set(Some(input));
@@ -1732,7 +1792,7 @@ impl Application for App {
                                         use cctk::wayland_protocols::xdg::shell::client::xdg_positioner::{
                                             Anchor, Gravity,
                                         };
-                                        use cosmic::iced_runtime::platform_specific::wayland::popup::{
+                                        use cosmic::iced::runtime::platform_specific::wayland::popup::{
                                             SctkPopupSettings, SctkPositioner,
                                         };
                                         use cosmic::iced::Rectangle;
@@ -1773,6 +1833,8 @@ impl Application for App {
                                                             &app.tab,
                                                             &app.key_binds,
                                                             &app.modifiers,
+                                                            false, // Paste not used in dialogs
+                                                            &app.flags.config.context_actions,
                                                         )
                                                         .map(Message::TabMessage)
                                                         .map(cosmic::Action::App),
@@ -1839,7 +1901,6 @@ impl Application for App {
                     if let Some(filter_i) = self.filter_selected
                         && let Some(filter) = self.filters.get(filter_i)
                     {
-                        // Parse globs (Mime implements PartialEq with &str, so no need to parse)
                         let mut parsed_globs = Vec::new();
                         let mut mimes = Vec::new();
                         for pattern in &filter.patterns {
@@ -1852,15 +1913,25 @@ impl Application for App {
                                         }
                                     }
                                 }
-                                DialogFilterPattern::Mime(value) => mimes.push(value.as_str()),
+                                DialogFilterPattern::Mime(value) => match value.parse::<Mime>() {
+                                    Ok(parsed) => mimes.push(parsed),
+                                    Err(err) => {
+                                        log::warn!("failed to parse mime {value:?}: {err}");
+                                    }
+                                },
                             }
                         }
 
                         items.retain(|item| {
                             // Directories are always shown
                             item.metadata.is_dir()
-                                // Check for mime type match (first because it is faster)
-                                    || mimes.iter().copied().any(|mime| mime == item.mime)
+                                    || mimes.iter().any(|filter_mime| {
+                                        if filter_mime.subtype() == mime::STAR {
+                                            filter_mime.type_() == item.mime.type_()
+                                        } else {
+                                            *filter_mime == item.mime
+                                        }
+                                    })
                                 // Check for glob match (last because it is slower)
                                     || parsed_globs.iter().any(|glob| glob.matches(&item.name))
                         });
@@ -1886,6 +1957,16 @@ impl Application for App {
                     // Reset focus on location change
                     if self.search_get().is_some() {
                         return widget::text_input::focus(self.search_id.clone());
+                    }
+                    if let DialogKind::SaveFile { filename } = &self.flags.kind {
+                        return Task::batch([
+                            widget::text_input::focus(self.filename_id.clone()),
+                            widget::text_input::select_until_last(
+                                self.filename_id.clone(),
+                                filename,
+                                '.',
+                            ),
+                        ]);
                     }
                     return widget::text_input::focus(self.filename_id.clone());
                 }
@@ -1957,7 +2038,7 @@ impl Application for App {
 
         col = col.push(
             self.tab
-                .view(&self.key_binds, &self.modifiers)
+                .view(&self.key_binds, &self.modifiers, false, &[])
                 .map(Message::TabMessage),
         );
 
@@ -1968,7 +2049,11 @@ impl Application for App {
         struct WatcherSubscription;
         struct TimeSubscription;
         let mut subscriptions = vec![
-            event::listen_with(|event, status, _window_id| match event {
+            event::listen_with(|event, status, window_id| match event {
+                Event::Mouse(mouse::Event::ButtonPressed(button)) => match status {
+                    event::Status::Ignored => Some(Message::Mouse(window_id, button)),
+                    event::Status::Captured => None,
+                },
                 Event::Keyboard(KeyEvent::KeyPressed {
                     key,
                     modifiers,
@@ -2014,18 +2099,18 @@ impl Application for App {
                 }
                 Message::TimeConfigChange(update.config)
             }),
-            Subscription::run_with_id(
-                TypeId::of::<WatcherSubscription>(),
-                stream::channel(100, |mut output| async move {
-                    let watcher_res = {
-                        let mut output = output.clone();
-                        new_debouncer(
-                            time::Duration::from_millis(250),
-                            Some(time::Duration::from_millis(250)),
-                            move |events_res: notify_debouncer_full::DebounceEventResult| {
-                                match events_res {
-                                    Ok(mut events) => {
-                                        events.retain(|event| {
+            Subscription::run_with(TypeId::of::<WatcherSubscription>(), |_| {
+                stream::channel(100, {
+                    |mut output: futures::channel::mpsc::Sender<_>| async move {
+                        let watcher_res = {
+                            let mut output = output.clone();
+                            new_debouncer(
+                                time::Duration::from_millis(250),
+                                Some(time::Duration::from_millis(250)),
+                                move |events_res: notify_debouncer_full::DebounceEventResult| {
+                                    match events_res {
+                                        Ok(mut events) => {
+                                            events.retain(|event| {
                                             match &event.kind {
                                                 notify::EventKind::Access(_) => {
                                                     // Data not mutated
@@ -2044,49 +2129,50 @@ impl Application for App {
                                             }
                                         });
 
-                                        if !events.is_empty() {
-                                            match futures::executor::block_on(async {
-                                                output.send(Message::NotifyEvents(events)).await
-                                            }) {
-                                                Ok(()) => {}
-                                                Err(err) => {
-                                                    log::warn!(
-                                                        "failed to send notify events: {err:?}"
-                                                    );
+                                            if !events.is_empty() {
+                                                match futures::executor::block_on(async {
+                                                    output.send(Message::NotifyEvents(events)).await
+                                                }) {
+                                                    Ok(()) => {}
+                                                    Err(err) => {
+                                                        log::warn!(
+                                                            "failed to send notify events: {err:?}"
+                                                        );
+                                                    }
                                                 }
                                             }
                                         }
+                                        Err(err) => {
+                                            log::warn!("failed to watch files: {err:?}");
+                                        }
                                     }
-                                    Err(err) => {
-                                        log::warn!("failed to watch files: {err:?}");
-                                    }
-                                }
-                            },
-                        )
-                    };
+                                },
+                            )
+                        };
 
-                    match watcher_res {
-                        Ok(watcher) => {
-                            match output
-                                .send(Message::NotifyWatcher(WatcherWrapper {
-                                    watcher_opt: Some(watcher),
-                                }))
-                                .await
-                            {
-                                Ok(()) => {}
-                                Err(err) => {
-                                    log::warn!("failed to send notify watcher: {err:?}");
+                        match watcher_res {
+                            Ok(watcher) => {
+                                match output
+                                    .send(Message::NotifyWatcher(WatcherWrapper {
+                                        watcher_opt: Some(watcher),
+                                    }))
+                                    .await
+                                {
+                                    Ok(()) => {}
+                                    Err(err) => {
+                                        log::warn!("failed to send notify watcher: {err:?}");
+                                    }
                                 }
                             }
+                            Err(err) => {
+                                log::warn!("failed to create file watcher: {err:?}");
+                            }
                         }
-                        Err(err) => {
-                            log::warn!("failed to create file watcher: {err:?}");
-                        }
-                    }
 
-                    std::future::pending().await
-                }),
-            ),
+                        std::future::pending().await
+                    }
+                })
+            }),
             self.tab
                 .subscription(
                     self.core.window.show_context

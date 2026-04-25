@@ -1,4 +1,5 @@
-cosmic-files = Gestor de Arquivos COSMIC
+cosmic-files = Gestor de Arquivos
+comment = Gerenciador de arquivos do ambiente COSMIC
 empty-folder = Pasta vazia
 empty-folder-hidden = Pasta vazia (contém itens ocultos)
 no-results = Nenhum item encontrado
@@ -354,7 +355,7 @@ type-to-search-recursive = Pesquisa na pasta atual e em todas as subpastas
 type-to-search-enter-path = Insere o caminho do diretório ou arquivo
 # Context menu
 add-to-sidebar = Adicionar à barra lateral
-compress = Compactar
+compress = Compactar...
 delete-permanently = Excluir permanentemente
 eject = Desmontar
 extract-here = Extrair
@@ -372,7 +373,7 @@ remove-from-recents = Remover dos itens recentes
 
 ## Desktop
 
-change-wallpaper = Alterar papel de parede...
+change-wallpaper = Alterar o plano de fundo...
 desktop-appearance = Aparência da área de trabalho...
 display-settings = Configurações da tela...
 
@@ -409,7 +410,7 @@ show-hidden-files = Mostrar arquivos ocultos
 list-directories-first = Listar pastas primeiro
 gallery-preview = Pré-visualizar
 menu-settings = Configurações...
-menu-about = Sobre o Gestor de Arquivos COSMIC...
+menu-about = Sobre o Gestor de Arquivos...
 
 ## Sort
 
@@ -422,3 +423,17 @@ sort-smallest-to-largest = Do menor para o maior
 sort-largest-to-smallest = Do maior para o menor
 empty-trash-title = Esvaziar a lixeira?
 type-to-search-select = Seleciona o primeiro arquivo ou pasta correspondente
+pasted-image = Imagem colada
+pasted-text = Texto colado
+pasted-video = Vídeo colado
+copy-to-title = Selecione o destino da cópia
+copy-to-button-label = Copiar
+move-to-title = Selecione o destino da movimentação
+move-to-button-label = Mover
+copy-to = Copiar para...
+move-to = Mover para...
+keywords = Pasta;Gerenciador;
+show-recents = Pasta de recentes na barra lateral
+clear-recents-history = Limpar histórico de recentes
+copy-path = Copiar caminho
+mixed = Misto

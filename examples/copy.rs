@@ -8,9 +8,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .on_progress(|op, progress| {
             println!("{:?}: {:?}", op.to, progress);
         })
-        .on_replace(|op| {
+        .on_replace(|op, conflicting_count| {
             Box::pin(async move {
-                println!("replace {:?}? (y/N)", op.to);
+                println!(
+                    "replace {:?}? (y/N) [conflicting: {}]",
+                    op.to, conflicting_count
+                );
                 let mut line = String::new();
                 match io::stdin().read_line(&mut line) {
                     Ok(_) => {

@@ -1,4 +1,6 @@
 cosmic-files = COSMIC Files
+comment = File manager for the COSMIC desktop
+keywords = Folder;Manager;
 empty-folder = Empty folder
 empty-folder-hidden = Empty folder (has hidden items)
 no-results = No results found
@@ -46,6 +48,10 @@ resume = Resume
 ## Compress Dialog
 create-archive = Create archive
 
+## Copy To Dialog
+copy-to-title = Select copy destination
+copy-to-button-label = Copy
+
 ## Extract Dialog
 extract-password-required = Password required
 extract-to = Extract To...
@@ -58,6 +64,10 @@ empty-trash-warning = Items in the Trash folder will be permanently deleted
 
 ## Mount Error Dialog
 mount-error = Unable to access drive
+
+## Move To Dialog
+move-to-title = Select move destination
+move-to-button-label = Move
 
 ## New File/Folder Dialog
 create-new-file = Create new file
@@ -89,6 +99,13 @@ open-with-title = How do you want to open "{$name}"?
 browse-store = Browse {$store}
 other-apps = Other applications
 related-apps = Related applications
+context-action = Context action
+context-action-confirm-title = Run "{$name}"?
+context-action-confirm-warning = This will run on {$items} {$items ->
+    [one] item
+    *[other] items
+  }.
+run = Run
 
 ## Permanently delete Dialog
 selected-items = The {$items} selected items
@@ -121,6 +138,7 @@ open-with = Open with
 owner = Owner
 group = Group
 other = Other
+mixed = Mixed
 ### Mode 0
 none = None
 ### Mode 1 (unusual)
@@ -200,6 +218,9 @@ compressed = Compressed {$items} {$items ->
         *[other] items
     } from "{$from}" to "{$to}"
 copy_noun = Copy
+pasted-image = Pasted Image
+pasted-text = Pasted Text
+pasted-video = Pasted Video
 creating = Creating "{$name}" in "{$parent}"
 created = Created "{$name}" in "{$parent}"
 copying = Copying {$items} {$items ->
@@ -285,6 +306,7 @@ calculating = Calculating...
 ## Settings
 settings = Settings
 single-click = Single click to open
+show-recents = Recents folder in the sidebar
 
 ### Appearance
 appearance = Appearance
@@ -301,13 +323,16 @@ type-to-search-select = Selects the first matching file or folder
 
 # Context menu
 add-to-sidebar = Add to sidebar
-compress = Compress
+clear-recents-history = Clear Recents history
+compress = Compress...
+copy-to = Copy to...
 delete-permanently = Delete permanently
 eject = Eject
 extract-here = Extract
 new-file = New file...
 new-folder = New folder...
 open-in-terminal = Open in terminal
+move-to = Move to...
 move-to-trash = Move to trash
 restore-from-trash = Restore from trash
 remove-from-sidebar = Remove from sidebar
@@ -337,6 +362,7 @@ quit = Quit
 edit = Edit
 cut = Cut
 copy = Copy
+copy-path = Copy path
 paste = Paste
 select-all = Select all
 

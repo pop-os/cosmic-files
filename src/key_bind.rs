@@ -1,6 +1,6 @@
 use cosmic::{
+    iced::core::keyboard::key::Named,
     iced::keyboard::Key,
-    iced_core::keyboard::key::Named,
     widget::menu::key_bind::{KeyBind, Modifier},
 };
 use std::collections::HashMap;
@@ -24,7 +24,6 @@ pub fn key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
     }
 
     // Common keys
-    bind!([], Key::Named(Named::Space), Gallery);
     bind!([], Key::Named(Named::ArrowDown), ItemDown);
     bind!([], Key::Named(Named::ArrowLeft), ItemLeft);
     bind!([], Key::Named(Named::ArrowRight), ItemRight);
@@ -40,7 +39,9 @@ pub fn key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
     bind!([Shift], Key::Named(Named::End), SelectLast);
     bind!([Ctrl, Shift], Key::Character("n".into()), NewFolder);
     bind!([], Key::Named(Named::Enter), Open);
-    bind!([Ctrl], Key::Named(Named::Space), Preview);
+    bind!([Ctrl], Key::Character(" ".into()), Preview);
+    bind!([], Key::Character(" ".into()), Gallery);
+
     bind!([Ctrl], Key::Character("h".into()), ToggleShowHidden);
     bind!([Ctrl], Key::Character("a".into()), SelectAll);
     bind!([Ctrl], Key::Character("=".into()), ZoomIn);
@@ -67,6 +68,7 @@ pub fn key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
     // App and desktop only keys
     if matches!(mode, tab::Mode::App | tab::Mode::Desktop) {
         bind!([Ctrl], Key::Character("c".into()), Copy);
+        bind!([Ctrl, Shift], Key::Character("c".into()), CopyPath);
         bind!([Ctrl], Key::Character("x".into()), Cut);
         bind!([], Key::Named(Named::Delete), Delete);
         bind!([Shift], Key::Named(Named::Delete), PermanentlyDelete);

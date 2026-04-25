@@ -1,4 +1,6 @@
 cosmic-files = Soubory COSMIC
+comment = Správce souborů pro prostředí COSMIC
+keywords = Složka;Složky;Správce;Manažer;Prohlížeč;
 empty-folder = Složka je prázdná
 empty-folder-hidden = Složka je prázdná (obsahuje skryté položky)
 filesystem = Souborový systém
@@ -24,8 +26,8 @@ create-new-file = Vytvořit nový soubor
 create-new-folder = Vytvořit novou složku
 file-name = Název souboru
 folder-name = Název složky
-file-already-exists = Soubor s daným názvem již existuje
-folder-already-exists = Složka s daným názvem již existuje
+file-already-exists = Již existuje soubor s daným názvem
+folder-already-exists = Již existuje složka s daným názvem
 name-hidden = Položky s názvem začínajícím tečkou budou skryty
 name-invalid = Název nemůže být „{ $filename }“
 name-no-slashes = Název nesmí obsahovat lomítka
@@ -51,7 +53,7 @@ rename-folder = Přejmenovat složku
 ## Replace Dialog
 
 replace = Nahradit
-replace-title = „{ $filename }“ již na daném místě existuje
+replace-title = Soubor „{ $filename }“ již na daném místě existuje
 replace-warning = Chcete nahradit soubor tím, který ukládáte? Nahrazení přepíše veškerý jeho obsah.
 
 # Context Pages
@@ -65,7 +67,7 @@ replace-warning = Chcete nahradit soubor tím, který ukládáte? Nahrazení př
 pending = Nevyřízené
 failed = Neúspěšné
 complete = Dokončené
-copy_noun = Kopírovat
+copy_noun = Kopie
 
 ## Open with
 
@@ -147,15 +149,15 @@ icon-size = Velikost ikony
 password = Heslo
 remove = Odstranit
 username = Uživatelské jméno
-details = Detaily
+details = Podrobnosti
 pause = Pozastavit
 resume = Pokračovat
-create-archive = Vytvořit archív
+create-archive = Vytvořit archiv
 extract-password-required = Vyžadováno heslo
 extract-to = Rozbalit do...
 extract-to-title = Rozbalit do složky
 mount-error = Nelze přistoupit k disku
-create = Tvorba
+create = Vytvořit
 open-item-location = Otevřít umístění položky
 open-with-title = Jak chcete otevřít „{ $name }“?
 browse-store = Procházet { $store }
@@ -174,7 +176,7 @@ set-executable-and-launch-description = Chcete povolit spouštění souboru „{
 set-and-launch = Povolit a spustit
 open-with = Otevřít pomocí
 other = Ostatní
-none = Žádný
+none = Žádné
 icon-size-and-spacing = Velikost a rozestupy ikon
 grid-spacing = Rozestupy mřížky
 deleting =
@@ -275,15 +277,15 @@ progress-failed = { $percent }%, selhalo
 progress-paused = { $percent }%, pozastaveno
 keep = Ponechat
 compressing =
-    Komprimování { $items } { $items ->
+    Balení { $items } { $items ->
         [one] položky
        *[other] položek
     } z „{ $from }“ do „{ $to }“ ({ $progress })...
 compressed =
     { $items ->
-        [one] Zkomprimována
-        [few] Zkomprimovány
-       *[other] Zkomprimováno
+        [one] Zabalena
+        [few] Zabaleny
+       *[other] Zabaleno
     } { $items } { $items ->
         [one] položka
         [few] položky
@@ -307,7 +309,7 @@ copied =
        *[other] položek
     } z „{ $from }“ do „{ $to }“
 extracting =
-    Extrahování { $items } { $items ->
+    Rozbalování { $items } { $items ->
         [one] položky
        *[other] položek
     } z „{ $from }“ do „{ $to }“ ({ $progress })...
@@ -323,9 +325,9 @@ read-write = Čtení a zápis
 favorite-path-error = Chyba otevírání složky
 extracted =
     { $items ->
-        [one] Extrahována
-        [few] Extrahovány
-       *[other] Extrahováno
+        [one] Rozbalena
+        [few] Rozbaleny
+       *[other] Rozbaleno
     } { $items } { $items ->
         [one] položka
         [few] položky
@@ -374,7 +376,7 @@ remove-from-recents = Odstranit z nedávných
 renaming = Přejmenování „{ $from }“ na „{ $to }“
 renamed = Přejmenováno „{ $from }“ na „{ $to }“
 unknown-folder = neznámá složka
-show-details = Zobrazit detaily
+show-details = Zobrazit podrobnosti
 type = Typ: { $mime }
 items = Položky: { $items }
 item-size = Velikost: { $size }
@@ -386,9 +388,9 @@ single-click = Otevřít jedním kliknutím
 type-to-search = Vyhledávání psaním
 type-to-search-recursive = Prohledává aktuální složku a její podsložky
 type-to-search-enter-path = Zadává cestu ke složce nebo souboru
-compress = Komprimovat
+compress = Zabalit...
 eject = Vysunout
-extract-here = Extrahovat
+extract-here = Rozbalit
 change-wallpaper = Změnit tapetu...
 desktop-appearance = Vzhled plochy...
 display-settings = Nastavení obrazovky...
@@ -403,3 +405,16 @@ sort = Řazení
 sort-a-z = A-Z
 empty-trash-title = Vysypat koš?
 type-to-search-select = Vybere první shodující se soubor nebo složku
+pasted-image = Vložený obrázek
+pasted-text = Vložený text
+pasted-video = Vložené video
+copy-to-button-label = Kopírovat
+move-to-button-label = Přesunout
+copy-to = Kopírovat do...
+move-to = Přesunout do...
+copy-to-title = Vyberte cíl kopírování
+move-to-title = Vyberte cíl přesunutí
+show-recents = Složka „Nedávné“ v postranním panelu
+copy-path = Kopírovat cestu
+clear-recents-history = Vymazat historii „Nedávné“
+mixed = Různé

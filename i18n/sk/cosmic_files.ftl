@@ -1,4 +1,6 @@
 cosmic-files = Súbory COSMIC
+comment = Správca súborov pre prostredie COSMIC
+keywords = Priečinok;Správca;Súbory;Manažér;Prehliadač;
 empty-folder = Priečinok je prázdny
 empty-folder-hidden = Priečinok je prázdny (obsahuje skryté položky)
 no-results = Neboli nájdené žiadne výsledky

@@ -16,6 +16,8 @@ use crate::{
     tab::{HeadingOptions, Location, View},
 };
 
+pub use crate::context_action::{ContextActionPreset, ContextActionSelection};
+
 pub const CONFIG_VERSION: u64 = 1;
 
 // Default icon sizes
@@ -164,9 +166,11 @@ pub struct Config {
     pub app_theme: AppTheme,
     pub dialog: DialogConfig,
     pub desktop: DesktopConfig,
+    pub context_actions: Vec<ContextActionPreset>,
     pub thumb_cfg: ThumbCfg,
     pub favorites: Vec<Favorite>,
     pub show_details: bool,
+    pub show_recents: bool,
     pub tab: TabConfig,
     pub type_to_search: TypeToSearch,
 }
@@ -219,6 +223,7 @@ impl Default for Config {
             app_theme: AppTheme::System,
             desktop: DesktopConfig::default(),
             dialog: DialogConfig::default(),
+            context_actions: Vec::new(),
             thumb_cfg: ThumbCfg::default(),
             favorites: vec![
                 Favorite::Home,
@@ -229,6 +234,7 @@ impl Default for Config {
                 Favorite::Videos,
             ],
             show_details: false,
+            show_recents: true,
             tab: TabConfig::default(),
             type_to_search: TypeToSearch::Recursive,
         }

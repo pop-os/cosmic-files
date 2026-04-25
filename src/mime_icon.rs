@@ -20,6 +20,7 @@ struct MimeIconKey {
 
 struct MimeIconCache {
     cache: FxHashMap<MimeIconKey, Option<icon::Handle>>,
+    #[cfg(unix)]
     shared_mime_info: xdg_mime::SharedMimeInfo,
 }
 
@@ -27,10 +28,17 @@ impl MimeIconCache {
     pub fn new() -> Self {
         Self {
             cache: FxHashMap::default(),
+            #[cfg(unix)]
             shared_mime_info: xdg_mime::SharedMimeInfo::new(),
         }
     }
 
+    #[cfg(not(unix))]
+    pub fn get(&mut self, _key: MimeIconKey) -> Option<icon::Handle> {
+        None
+    }
+
+    #[cfg(unix)]
     pub fn get(&mut self, key: MimeIconKey) -> Option<icon::Handle> {
         self.cache
             .entry(key)
@@ -54,6 +62,16 @@ impl MimeIconCache {
 static MIME_ICON_CACHE: LazyLock<Mutex<MimeIconCache>> =
     LazyLock::new(|| Mutex::new(MimeIconCache::new()));
 
+#[cfg(not(unix))]
+pub fn mime_for_path(
+    path: impl AsRef<Path>,
+    metadata_opt: Option<&fs::Metadata>,
+    remote: bool,
+) -> Mime {
+    mime_guess::from_path(path).first_or_octet_stream()
+}
+
+#[cfg(unix)]
 pub fn mime_for_path(
     path: impl AsRef<Path>,
     metadata_opt: Option<&fs::Metadata>,
@@ -149,8 +167,13 @@ pub fn mime_icon(mime: Mime, size: u16) -> icon::Handle {
     }
 }
 
+#[cfg(not(unix))]
+pub fn parent_mime_types(_mime: &Mime) -> Option<Vec<Mime>> {
+    None
+}
+
+#[cfg(unix)]
 pub fn parent_mime_types(mime: &Mime) -> Option<Vec<Mime>> {
     let mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
-
     mime_icon_cache.shared_mime_info.get_parents_aliased(mime)
 }

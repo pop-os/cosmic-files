@@ -1,4 +1,6 @@
 cosmic-files = COSMIC Files
+comment = File manager di COSMIC
+keywords = File;Archivi;Cartelle;Explorer;
 empty-folder = Cartella vuota
 empty-folder-hidden = Cartella vuota (con elementi nascosti)
 no-results = Nessun risultato trovato

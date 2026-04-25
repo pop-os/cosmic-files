@@ -1,4 +1,6 @@
 cosmic-files = COSMIC Fájlok
+comment = Fájlkezelő a COSMIC asztali környezethez
+keywords = mappa;fájl;kezelő;
 empty-folder = Üres mappa
 empty-folder-hidden = Üres mappa (Rejtett elemeket tartalmaz)
 no-results = Nincs találat
@@ -232,7 +234,7 @@ compressed =
         [one] elem
        *[other] elem
     } tömörítve innen: „{ $from }” ide: „{ $to }”
-copy_noun = Másolás
+copy_noun = Másolat
 creating = „{ $name }” létrehozása itt: „{ $parent }”
 created = „{ $name }” létrehozva itt: „{ $parent }”
 copying =
@@ -351,7 +353,7 @@ type-to-search-recursive = Keresés a jelenlegi mappában és almappákban
 type-to-search-enter-path = Elérési út megadása
 # Context menu
 add-to-sidebar = Hozzáadás az oldalsávhoz
-compress = Tömörítés
+compress = Tömörítés…
 delete-permanently = Végleges törlés
 eject = Kiadás
 extract-here = Kibontás
@@ -422,3 +424,16 @@ support = Támogatás
 progress-failed = { $percent }%, sikertelen
 empty-trash-title = Kuka ürítése?
 type-to-search-select = Kijelöli az első egyező fájlt vagy mappát
+pasted-image = Beillesztett kép
+pasted-text = Beillesztett szöveg
+pasted-video = Beillesztett videó
+copy-to-title = Másolási cél kiválasztása
+copy-to-button-label = Másolás
+move-to-title = Áthelyezési cél kiválasztása
+move-to-button-label = Áthelyezés
+copy-to = Másolás ide…
+move-to = Áthelyezés ide…
+show-recents = Legutóbbiak mappa megjelenítése az oldalsávban
+copy-path = Útvonal másolása
+clear-recents-history = Legutóbbiak előzményének törlése
+mixed = Vegyes

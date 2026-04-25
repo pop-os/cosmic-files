@@ -9,9 +9,25 @@ use cosmic_files::dialog::{
     Dialog, DialogChoice, DialogChoiceOption, DialogFilter, DialogFilterPattern, DialogKind,
     DialogMessage, DialogResult, DialogSettings,
 };
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+    let log_format = tracing_subscriber::fmt::format()
+        .pretty()
+        .without_time()
+        .with_line_number(true)
+        .with_file(true)
+        .with_target(false)
+        .with_thread_names(true);
+
+    let log_layer = tracing_subscriber::fmt::Layer::default()
+        .with_writer(std::io::stderr)
+        .event_format(log_format);
+
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::from_env("RUST_LOG"))
+        .with(log_layer)
+        .init();
 
     let settings = Settings::default();
     app::run::<App>(settings, ())?;
@@ -22,6 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 pub enum Message {
     DialogMessage(DialogMessage),
     DialogOpen(DialogKind),
+    DialogOpenImages,
     DialogResult(DialogResult),
 }
 
@@ -105,6 +122,31 @@ impl Application for App {
                     return Task::batch(tasks);
                 }
             }
+            Message::DialogOpenImages => {
+                if self.dialog_opt.is_none() {
+                    let (mut dialog, task) = Dialog::new(
+                        DialogSettings::new().kind(DialogKind::OpenFile),
+                        Message::DialogMessage,
+                        Message::DialogResult,
+                    );
+                    let mut tasks = vec![task];
+                    tasks.push(dialog.set_filters(
+                        vec![
+                            DialogFilter {
+                                label: "Images".into(),
+                                patterns: vec![DialogFilterPattern::Mime("image/*".into())],
+                            },
+                            DialogFilter {
+                                label: "Any file".into(),
+                                patterns: vec![DialogFilterPattern::Glob("*".into())],
+                            },
+                        ],
+                        Some(0),
+                    ));
+                    self.dialog_opt = Some(dialog);
+                    return Task::batch(tasks);
+                }
+            }
             Message::DialogResult(result) => {
                 self.dialog_opt = None;
                 self.result_opt = Some(result);
@@ -122,11 +164,18 @@ impl Application for App {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        let mut column = widget::column().spacing(8).padding(8);
+        let mut column = widget::column::with_capacity(8).spacing(8).padding(8);
         {
             let mut button = widget::button::standard("Open File");
             if self.dialog_opt.is_none() {
                 button = button.on_press(Message::DialogOpen(DialogKind::OpenFile));
+            }
+            column = column.push(button);
+        }
+        {
+            let mut button = widget::button::standard("Open Image");
+            if self.dialog_opt.is_none() {
+                button = button.on_press(Message::DialogOpenImages);
             }
             column = column.push(button);
         }

@@ -1,4 +1,6 @@
 cosmic-files = Ficheiros COSMIC
+comment = Gerenciador de arquivos do COSMIC
+keywords = Pastas;Gerenciador;Arquivos;Gestor;Explorer;
 empty-folder = Pasta vazia
 empty-folder-hidden = Pasta vazia (tem ficheiros ocultos)
 no-results = Nenhum resultado encontrado

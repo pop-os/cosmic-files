@@ -3,16 +3,24 @@
 
 use cosmic::{app::Settings, iced::Limits};
 use std::{env, fs, path::PathBuf, process};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use app::{App, Flags};
+use crate::{
+    app::{App, Flags},
+    config::{Config, State},
+    tab::Location,
+};
+
 pub mod app;
 mod archive;
+pub mod channel;
 pub mod clipboard;
-use config::Config;
 pub mod config;
+mod context_action;
 pub mod dialog;
 mod key_bind;
 pub(crate) mod large_image;
+pub(crate) mod load_image;
 mod localize;
 mod menu;
 mod mime_app;
@@ -21,13 +29,11 @@ mod mounter;
 mod mouse_area;
 pub mod operation;
 mod spawn_detached;
-use tab::Location;
-mod zoom;
-
-use crate::config::State;
 pub mod tab;
 mod thumbnail_cacher;
 mod thumbnailer;
+pub(crate) mod trash;
+mod zoom;
 
 pub(crate) type FxOrderMap<K, V> = ordermap::OrderMap<K, V, rustc_hash::FxBuildHasher>;
 
@@ -71,7 +77,22 @@ pub fn is_wayland() -> bool {
 /// Runs application in desktop mode
 #[rustfmt::skip]
 pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+    let log_format = tracing_subscriber::fmt::format()
+        .pretty()
+        .without_time()
+        .with_line_number(true)
+        .with_file(true)
+        .with_target(false)
+        .with_thread_names(true);
+
+    let log_layer = tracing_subscriber::fmt::Layer::default()
+        .with_writer(std::io::stderr)
+        .event_format(log_format);
+
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::from_env("RUST_LOG"))
+        .with(log_layer)
+        .init();
 
     localize::localize();
 
@@ -106,7 +127,21 @@ pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
 /// Runs application with these settings
 #[rustfmt::skip]
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+    let log_format = tracing_subscriber::fmt::format()
+        .pretty()
+        .with_line_number(true)
+        .with_file(true)
+        .with_target(false)
+        .with_thread_names(true);
+
+    let log_layer = tracing_subscriber::fmt::Layer::default()
+        .with_writer(std::io::stderr)
+        .event_format(log_format);
+
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .with(log_layer)
+        .init();
 
     localize::localize();
 
@@ -123,7 +158,12 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else if &arg == "--trash" {
             Location::Trash
         } else if &arg == "--recents" {
-            Location::Recents
+            if config.show_recents {
+                Location::Recents
+            } else {
+                log::warn!("recents feature is disabled in config");
+                continue;
+            }
         } else if &arg == "--network" {
             Location::Network("network:///".to_string(), fl!("networks"), None)
         } else {
@@ -151,7 +191,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if daemonize {
-        #[cfg(all(unix, not(target_os = "redox")))]
+        #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
         match fork::daemon(true, true) {
             Ok(fork::Fork::Child) => (),
             Ok(fork::Fork::Parent(_child_pid)) => process::exit(0),

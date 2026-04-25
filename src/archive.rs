@@ -3,11 +3,13 @@ use crate::{
     operation::{Controller, OpReader, OperationError, OperationErrorType, sync_to_disk},
 };
 use cosmic::iced::futures;
+use jiff::{Zoned, civil::DateTime, tz::TimeZone};
 use std::{
     collections::HashSet,
     fs,
     io::{self, Read, Write},
     path::{Path, PathBuf},
+    time::SystemTime,
 };
 use zip::result::ZipError;
 
@@ -145,6 +147,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
     let mut target_dirs = HashSet::new();
     #[cfg(unix)]
     let mut files_by_unix_mode = Vec::with_capacity(total_files);
+    let mut files_by_last_modified = Vec::with_capacity(total_files);
 
     for i in 0..total_files {
         futures::executor::block_on(async {
@@ -160,11 +163,16 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
             None => archive.by_index(i),
             Some(pwd) => archive.by_index_decrypt(i, pwd.as_bytes()),
         }?;
+
         let filepath = file
             .enclosed_name()
             .ok_or(ZipError::InvalidArchive("Invalid file path".into()))?;
 
         let outpath = directory.as_ref().join(filepath);
+
+        if let Some(last_modified) = file.last_modified() {
+            files_by_last_modified.push((outpath.clone(), last_modified));
+        }
 
         if file.is_dir() {
             make_writable_dir_all(&outpath, &mut target_dirs)?;
@@ -183,6 +191,8 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
         if file.is_symlink() && (cfg!(unix) || cfg!(windows)) {
             let mut target = Vec::with_capacity(file.size() as usize);
             file.read_to_end(&mut target)?;
+            // File no longer needed, drop to allow reading target on windows
+            drop(file);
 
             #[cfg(unix)]
             {
@@ -193,11 +203,15 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
             #[cfg(windows)]
             {
                 let Ok(target) = String::from_utf8(target) else {
-                    return Err(ZipError::InvalidArchive("Invalid UTF-8 as symlink target"));
+                    return Err(ZipError::InvalidArchive(
+                        "Invalid UTF-8 as symlink target".into(),
+                    ));
                 };
-                let target = target.into_boxed_str();
-                let target_is_dir_from_archive =
-                    archive.shared.files.contains_key(&target) && is_dir(&target);
+                let target_is_dir_from_archive = match password {
+                    None => archive.by_name(&target),
+                    Some(pwd) => archive.by_name_decrypt(&target, pwd.as_bytes()),
+                }
+                .map_or(false, |x| x.is_dir());
                 let target_path = directory.as_ref().join(OsString::from(target.to_string()));
                 let target_is_dir = if target_is_dir_from_archive {
                     true
@@ -264,8 +278,47 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
         }
     }
 
+    for (path, last_modified) in files_by_last_modified {
+        if let Some(modified) = zip_date_time_to_system_time(last_modified) {
+            let file_time = filetime::FileTime::from_system_time(modified);
+            filetime::set_file_mtime(&path, file_time)?;
+        }
+    }
+
     // Flush files to disk
     futures::executor::block_on(async { sync_to_disk(written_files, target_dirs).await });
 
     Ok(())
+}
+
+fn zip_date_time_to_system_time(date_time: zip::DateTime) -> Option<SystemTime> {
+    let dt = DateTime::new(
+        date_time.year() as i16,
+        date_time.month() as i8,
+        date_time.day() as i8,
+        date_time.hour() as i8,
+        date_time.minute() as i8,
+        date_time.second() as i8,
+        0,
+    )
+    .ok()?;
+    TimeZone::system()
+        .to_ambiguous_zoned(dt)
+        .later()
+        .ok()
+        .map(SystemTime::from)
+}
+
+pub fn system_time_to_zip_date_time(system_time: SystemTime) -> Option<zip::DateTime> {
+    let date_time = Zoned::try_from(system_time).ok()?;
+
+    zip::DateTime::from_date_and_time(
+        date_time.year() as u16,
+        date_time.month() as u8,
+        date_time.day() as u8,
+        date_time.hour() as u8,
+        date_time.minute() as u8,
+        date_time.second() as u8,
+    )
+    .ok()
 }
