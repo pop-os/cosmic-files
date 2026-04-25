@@ -1364,6 +1364,7 @@ dependencies = [
  "icu",
  "ignore",
  "image",
+ "infer 0.19.0",
  "jiff",
  "jiff-icu",
  "jxl-oxide",
@@ -3754,6 +3755,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "infer"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a588916bfdfd92e71cacef98a63d9b1f0d74d6599980d11894290e7ddefffcf7"
+dependencies = [
+ "cfb",
+]
+
+[[package]]
 name = "inotify"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5997,7 +6007,7 @@ checksum = "63ab2febcd4f0245fbadd0b44f7cd35207128a7b210a089e65740625a45399b5"
 dependencies = [
  "chrono",
  "dirs 5.0.1",
- "infer",
+ "infer 0.16.0",
  "mime_guess",
  "quick-xml 0.36.2",
  "serde",
