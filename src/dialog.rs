@@ -902,6 +902,8 @@ impl App {
             if let Some(path) = favorite.path_opt() {
                 let name = if matches!(favorite, Favorite::Home) {
                     fl!("home")
+                } else if let Favorite::Network { name, .. } = favorite {
+                    name.clone()
                 } else if let Some(file_name) = path.file_name().and_then(|x| x.to_str()) {
                     file_name.to_string()
                 } else {
