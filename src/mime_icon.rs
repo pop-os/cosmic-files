@@ -3,11 +3,9 @@
 use cosmic::widget::icon;
 use mime_guess::Mime;
 use rustc_hash::FxHashMap;
-use std::{
-    fs,
-    path::Path,
-    sync::{LazyLock, Mutex},
-};
+use std::fs;
+use std::path::Path;
+use std::sync::{LazyLock, Mutex};
 
 pub const FALLBACK_MIME_ICON: &str = "text-x-generic";
 

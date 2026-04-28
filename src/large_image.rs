@@ -1,9 +1,7 @@
 use cosmic::widget;
 use image::ImageReader;
-use std::{
-    collections::{HashMap, HashSet},
-    path::{Path, PathBuf},
-};
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 /// Bytes per pixel in RGBA format (Red, Green, Blue, Alpha = 4 bytes)
 pub const RGBA_BYTES_PER_PIXEL: u64 = 4;

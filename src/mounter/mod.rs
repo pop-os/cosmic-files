@@ -1,13 +1,13 @@
-use cosmic::{Task, iced::Subscription, widget};
-use std::{
-    collections::BTreeMap,
-    fmt,
-    path::PathBuf,
-    sync::{Arc, LazyLock},
-};
+use cosmic::iced::Subscription;
+use cosmic::{Task, widget};
+use std::collections::BTreeMap;
+use std::fmt;
+use std::path::PathBuf;
+use std::sync::{Arc, LazyLock};
 use tokio::sync::mpsc;
 
-use crate::{config::IconSizes, tab};
+use crate::config::IconSizes;
+use crate::tab;
 
 #[cfg(feature = "gvfs")]
 mod gvfs;

@@ -1,11 +1,10 @@
 use cosmic::widget;
 use regex::Regex;
-use std::{collections::HashSet, path::PathBuf};
+use std::collections::HashSet;
+use std::path::PathBuf;
 
-use crate::{
-    config::IconSizes,
-    tab::{Item, SearchItem},
-};
+use crate::config::IconSizes;
+use crate::tab::{Item, SearchItem};
 
 pub trait TrashExt {
     fn is_empty() -> bool {
@@ -81,7 +80,8 @@ impl TrashExt for Trash {
     }
 
     fn scan(sizes: IconSizes) -> Vec<Item> {
-        use crate::{localize::LANGUAGE_SORTER, tab::item_from_trash_entry};
+        use crate::localize::LANGUAGE_SORTER;
+        use crate::tab::item_from_trash_entry;
         use std::cmp::Ordering;
 
         let entries = match trash::os_limited::list() {

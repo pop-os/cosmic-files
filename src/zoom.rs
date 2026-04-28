@@ -1,6 +1,7 @@
 use std::num::NonZeroU16;
 
-use crate::{config::IconSizes, tab::View};
+use crate::config::IconSizes;
+use crate::tab::View;
 
 static DEFAULT_ZOOM: NonZeroU16 = NonZeroU16::new(100).unwrap();
 static MIN_ZOOM: NonZeroU16 = NonZeroU16::new(50).unwrap();

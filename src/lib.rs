@@ -1,15 +1,16 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
-use cosmic::{app::Settings, iced::Limits};
-use std::{env, fs, path::PathBuf, process};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use cosmic::app::Settings;
+use cosmic::iced::Limits;
+use std::path::PathBuf;
+use std::{env, fs, process};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
-use crate::{
-    app::{App, Flags},
-    config::{Config, State},
-    tab::Location,
-};
+use crate::app::{App, Flags};
+use crate::config::{Config, State};
+use crate::tab::Location;
 
 pub mod app;
 mod archive;

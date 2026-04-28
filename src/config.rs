@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::{any::TypeId, num::NonZeroU16, path::PathBuf};
+use std::any::TypeId;
+use std::num::NonZeroU16;
+use std::path::PathBuf;
 
-use cosmic::{
-    Application,
-    cosmic_config::{self, CosmicConfigEntry, cosmic_config_derive::CosmicConfigEntry},
-    iced::Subscription,
-    theme,
-};
+use cosmic::cosmic_config::cosmic_config_derive::CosmicConfigEntry;
+use cosmic::cosmic_config::{self, CosmicConfigEntry};
+use cosmic::iced::Subscription;
+use cosmic::{Application, theme};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    FxOrderMap,
-    app::App,
-    tab::{HeadingOptions, Location, View},
-};
+use crate::FxOrderMap;
+use crate::app::App;
+use crate::tab::{HeadingOptions, Location, View};
 
 pub use crate::context_action::{ContextActionPreset, ContextActionSelection};
 

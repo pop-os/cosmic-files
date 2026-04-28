@@ -6,14 +6,11 @@ use cosmic::desktop;
 use cosmic::widget;
 pub use mime_guess::Mime;
 use rustc_hash::FxHashMap;
-use std::{
-    cmp::Ordering,
-    ffi::OsStr,
-    fs, io,
-    path::{Path, PathBuf},
-    process,
-    time::Instant,
-};
+use std::cmp::Ordering;
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
+use std::time::Instant;
+use std::{fs, io, process};
 
 // Supported exec key field codes
 const EXEC_HANDLERS: [&str; 4] = ["%f", "%F", "%u", "%U"];

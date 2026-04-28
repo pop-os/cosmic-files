@@ -1,6 +1,8 @@
-use cosmic_files::operation::recursive::Method;
-use cosmic_files::operation::{Controller, ReplaceResult, recursive::Context};
-use std::{error::Error, io, path::PathBuf};
+use cosmic_files::operation::recursive::{Context, Method};
+use cosmic_files::operation::{Controller, ReplaceResult};
+use std::error::Error;
+use std::io;
+use std::path::PathBuf;
 
 #[compio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

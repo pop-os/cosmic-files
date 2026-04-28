@@ -1,16 +1,14 @@
 use image::DynamicImage;
 use md5::{Digest, Md5};
 use rustc_hash::FxHashMap;
+use std::error::Error;
+use std::fs::{self, File};
+use std::io::{self, BufReader, BufWriter};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
-use std::{
-    error::Error,
-    fs::{self, File},
-    io::{self, BufReader, BufWriter},
-    path::{Path, PathBuf},
-    sync::LazyLock,
-    time::UNIX_EPOCH,
-};
+use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+use std::time::UNIX_EPOCH;
 use tempfile::NamedTempFile;
 use url::Url;
 

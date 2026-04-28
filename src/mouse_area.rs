@@ -3,21 +3,17 @@
 use std::time::Instant;
 
 use crate::tab::DOUBLE_CLICK_DURATION;
-use cosmic::{
-    Element, Renderer, Theme,
-    iced::core::{
-        Clipboard, Color, Layout, Length, Point, Rectangle, Shell, Size, Vector, Widget,
-        border::Border,
-        event::Event,
-        layout,
-        mouse::{self, click},
-        overlay,
-        renderer::{self, Quad, Renderer as _},
-        touch,
-        widget::{Operation, Tree, tree},
-    },
-    widget::Id,
+use cosmic::iced::core::border::Border;
+use cosmic::iced::core::event::Event;
+use cosmic::iced::core::mouse::{self, click};
+use cosmic::iced::core::renderer::{self, Quad, Renderer as _};
+use cosmic::iced::core::widget::{Operation, Tree, tree};
+use cosmic::iced::core::{
+    Clipboard, Color, Layout, Length, Point, Rectangle, Shell, Size, Vector, Widget, layout,
+    overlay, touch,
 };
+use cosmic::widget::Id;
+use cosmic::{Element, Renderer, Theme};
 
 /// Emit messages on mouse events.
 #[allow(missing_debug_implementations)]
