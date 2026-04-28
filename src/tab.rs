@@ -2991,10 +2991,10 @@ impl Tab {
             return None;
         };
         let search_items = after
-            .into_iter()
+            .iter_mut()
             .enumerate()
             .map(|(i, item)| (i + start, item))
-            .chain(until.into_iter().enumerate());
+            .chain(until.iter_mut().enumerate());
 
         if forward {
             Self::select_first_prefix_match(prefix_lower, search_items)
@@ -3011,7 +3011,7 @@ impl Tab {
         items: impl Iterator<Item = (usize, &'a mut Item)>,
     ) -> Option<usize> {
         for (i, item) in items {
-            if item.name.to_lowercase().starts_with(&prefix) {
+            if item.name.to_lowercase().starts_with(prefix) {
                 item.selected = true;
                 return Some(i);
             }
@@ -4332,7 +4332,7 @@ impl Tab {
             Message::ShiftPermissions(path_mode_opt, shift, bits) => match path_mode_opt {
                 Some((path, mode)) => commands.push(Command::SetPermissions(
                     path,
-                    set_mode_part(mode, shift, bits.try_into().unwrap()),
+                    set_mode_part(mode, shift, bits),
                 )),
                 // Shift permissions on all selected items
                 None => {
@@ -4343,13 +4343,9 @@ impl Tab {
                         #[cfg(unix)]
                         if let (Some(path), Some(mode)) = (
                             item.path_opt(),
-                            item.file_metadata()
-                                .and_then(|metadata| Some(metadata.mode())),
+                            item.file_metadata().map(|metadata| metadata.mode()),
                         ) {
-                            permissions.push((
-                                path.clone(),
-                                set_mode_part(mode, shift, bits.try_into().unwrap()),
-                            ));
+                            permissions.push((path.clone(), set_mode_part(mode, shift, bits)));
                         }
                     }
                     commands.push(Command::SetMultiplePermissions(permissions));
@@ -6415,33 +6411,31 @@ impl Tab {
 
         let mut settings = Vec::new();
         // Only allow modifying open-with if all mime types are the same
-        if mime_types.len() == 1 {
-            if let Some(mime) = mime_types
-                .get(0)
+        if mime_types.len() == 1
+            && let Some(mime) = mime_types
+                .first()
                 .and_then(|(mime, _)| mime.parse::<Mime>().ok())
-            {
-                if let Some(mime_app_cache) = mime_app_cache_opt {
-                    let mime_apps = mime_app_cache.get(&mime);
-                    if !mime_apps.is_empty() {
-                        let mime_closure = mime.clone();
-                        settings.push(
-                            widget::settings::item::builder(fl!("open-with")).control(
-                                Element::from(
-                                    widget::dropdown(
-                                        mime_apps,
-                                        mime_apps.iter().position(|x| x.is_default),
-                                        move |index| (index, mime_closure.clone()),
-                                    )
-                                    .icons(Cow::Borrowed(mime_app_cache.icons(&mime))),
-                                )
-                                .map(|(index, mime)| {
-                                    let mime_app = &mime_apps[index];
-                                    Message::SetOpenWith(mime, mime_app.id.clone())
-                                }),
-                            ),
-                        );
-                    }
-                }
+            && let Some(mime_app_cache) = mime_app_cache_opt
+        {
+            let mime_apps = mime_app_cache.get(&mime);
+            if !mime_apps.is_empty() {
+                let mime_closure = mime.clone();
+                settings.push(
+                    widget::settings::item::builder(fl!("open-with")).control(
+                        Element::from(
+                            widget::dropdown(
+                                mime_apps,
+                                mime_apps.iter().position(|x| x.is_default),
+                                move |index| (index, mime_closure.clone()),
+                            )
+                            .icons(Cow::Borrowed(mime_app_cache.icons(&mime))),
+                        )
+                        .map(|(index, mime)| {
+                            let mime_app = &mime_apps[index];
+                            Message::SetOpenWith(mime, mime_app.id.clone())
+                        }),
+                    ),
+                );
             }
         }
 

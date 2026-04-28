@@ -27,7 +27,7 @@ pub trait TrashExt {
         Vec::new()
     }
 
-    fn scan_search<F: Fn(SearchItem) -> bool + Sync>(callback: F, regex: &Regex) {}
+    fn scan_search<F: Fn(SearchItem) -> bool + Sync>(_callback: F, _regex: &Regex) {}
 
     fn icon(icon_size: u16) -> widget::icon::Handle {
         widget::icon::from_name(if Self::is_empty() {

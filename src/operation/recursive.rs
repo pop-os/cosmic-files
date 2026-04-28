@@ -473,12 +473,12 @@ impl Op {
         progress.total_bytes = metadata.as_ref().map(|m| m.len());
         (ctx.on_progress)(self, &progress);
 
-        if let Some(metadata) = metadata.as_ref() {
-            if let Err(why) = to_file.set_permissions(metadata.permissions()).await {
-                // This error is not propagated upwards as some filesystems do not support setting permissions
-                if !matches!(why.kind(), std::io::ErrorKind::Unsupported) {
-                    tracing::warn!(?why, "failed to set permissions for {}", self.to.display(),);
-                }
+        if let Some(metadata) = metadata.as_ref()
+            && let Err(why) = to_file.set_permissions(metadata.permissions()).await
+        {
+            // This error is not propagated upwards as some filesystems do not support setting permissions
+            if !matches!(why.kind(), std::io::ErrorKind::Unsupported) {
+                tracing::warn!(?why, "failed to set permissions for {}", self.to.display(),);
             }
         }
 

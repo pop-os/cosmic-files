@@ -143,12 +143,11 @@ pub fn context_menu<'a>(
                     Some(Location::Trash) | Some(Location::Search(SearchLocation::Trash, ..)) => {
                         selected_trash_only = true
                     }
-                    Some(Location::Path(path)) => {
+                    Some(Location::Path(path))
                         if selected == 1
-                            && path.extension().and_then(|s| s.to_str()) == Some("desktop")
-                        {
-                            selected_desktop_entry = Some(&**path);
-                        }
+                            && path.extension().and_then(|s| s.to_str()) == Some("desktop") =>
+                    {
+                        selected_desktop_entry = Some(&**path);
                     }
                     _ => (),
                 }

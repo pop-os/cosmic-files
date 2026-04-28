@@ -1401,7 +1401,7 @@ impl App {
         // Manually rescan any trash tabs after any operation is completed
         commands.push(self.rescan_trash());
 
-        return Task::batch(commands);
+        Task::batch(commands)
     }
 
     fn handle_operation_errors(&mut self, errors: Vec<(u64, OperationError)>) -> Task<Message> {
@@ -1446,7 +1446,7 @@ impl App {
         }
         // Manually rescan any trash tabs after any operation is completed
         tasks.push(self.rescan_trash());
-        return Task::batch(tasks);
+        Task::batch(tasks)
     }
 
     fn remove_window(&mut self, id: &window::Id) {
@@ -5661,7 +5661,7 @@ impl Application for App {
             }
             DialogPage::FailedOperations(ids) => {
                 let errors: Vec<String> = ids
-                    .into_iter()
+                    .iter()
                     .filter_map(|id| match self.failed_operations.get(id) {
                         Some((operation, _, err)) => Some(format!("{operation:#?}\n{err}")),
                         _ => None,
