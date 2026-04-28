@@ -38,7 +38,7 @@ macro_rules! menu_button {
             .height(Length::Fixed(24.0))
             .align_y(Alignment::Center)
         )
-        .padding([theme::active().cosmic().spacing.space_xxs, 16])
+        .padding([theme::spacing().space_xxs, 16])
         .width(Length::Fill)
         .class(theme::Button::MenuItem)
     );
@@ -579,7 +579,7 @@ pub fn dialog_menu(
     ])
     .item_height(ItemHeight::Dynamic(40))
     .item_width(ItemWidth::Uniform(360))
-    .spacing(theme::active().cosmic().spacing.space_xxxs.into())
+    .spacing(theme::spacing().space_xxxs.into())
     .into()
 }
 
@@ -634,7 +634,7 @@ pub fn menu_bar<'a>(
     responsive_menu_bar()
         .item_height(ItemHeight::Dynamic(40))
         .item_width(ItemWidth::Uniform(360))
-        .spacing(theme::active().cosmic().spacing.space_xxxs.into())
+        .spacing(theme::spacing().space_xxxs.into())
         .into_element(
             core,
             key_binds,

@@ -41,7 +41,7 @@ use cosmic::{
         icon,
         menu::{action::MenuAction, key_bind::KeyBind},
         segmented_button::{self, Entity, ReorderEvent},
-        space,
+        settings, space,
     },
 };
 use mime_guess::Mime;
@@ -1946,7 +1946,7 @@ impl App {
     fn network_drive(&self) -> Element<'_, Message> {
         let cosmic_theme::Spacing {
             space_xxs, space_m, ..
-        } = theme::active().cosmic().spacing;
+        } = theme::spacing();
         let mut table = widget::column::with_capacity(8);
         for (i, line) in fl!("network-drive-schemes").lines().enumerate() {
             let mut row = widget::row::with_capacity(2);
@@ -1977,25 +1977,23 @@ impl App {
     fn desktop_view_options(&self) -> Element<'_, Message> {
         let cosmic_theme::Spacing {
             space_m, space_l, ..
-        } = theme::active().cosmic().spacing;
+        } = theme::spacing();
         let config = self.config.desktop;
 
-        let mut column = widget::column::with_capacity(2);
-
-        let mut section = widget::settings::section().title(fl!("show-on-desktop"));
-        section = section.add(
-            widget::settings::item::builder(fl!("desktop-folder-content")).toggler(
-                config.show_content,
-                move |show_content| {
-                    Message::DesktopConfig(DesktopConfig {
-                        show_content,
-                        ..config
-                    })
-                },
-            ),
-        );
-        section = section.add(
-            widget::settings::item::builder(fl!("mounted-drives")).toggler(
+        let show_on_desktop = settings::section()
+            .title(fl!("show-on-desktop"))
+            .add(
+                settings::item::builder(fl!("desktop-folder-content")).toggler(
+                    config.show_content,
+                    move |show_content| {
+                        Message::DesktopConfig(DesktopConfig {
+                            show_content,
+                            ..config
+                        })
+                    },
+                ),
+            )
+            .add(settings::item::builder(fl!("mounted-drives")).toggler(
                 config.show_mounted_drives,
                 move |show_mounted_drives| {
                     Message::DesktopConfig(DesktopConfig {
@@ -2003,10 +2001,8 @@ impl App {
                         ..config
                     })
                 },
-            ),
-        );
-        section = section.add(
-            widget::settings::item::builder(fl!("trash-folder-icon")).toggler(
+            ))
+            .add(settings::item::builder(fl!("trash-folder-icon")).toggler(
                 config.show_trash,
                 move |show_trash| {
                     Message::DesktopConfig(DesktopConfig {
@@ -2014,50 +2010,49 @@ impl App {
                         ..config
                     })
                 },
-            ),
-        );
-        column = column.push(section);
+            ));
 
-        let mut section = widget::settings::section().title(fl!("icon-size-and-spacing"));
         let icon_size = config.icon_size;
-        section = section.add(
-            widget::settings::item::builder(fl!("icon-size"))
-                .description(format!("{icon_size}%"))
-                .control(
-                    widget::slider(50..=500, icon_size.get(), move |new_value| {
-                        Message::DesktopConfig(DesktopConfig {
-                            icon_size: NonZeroU16::new(new_value).unwrap_or(icon_size),
-                            ..config
-                        })
-                    })
-                    .step(25u16),
-                ),
-        );
-
         let grid_spacing = config.grid_spacing;
-        section = section.add(
-            widget::settings::item::builder(fl!("grid-spacing"))
-                .description(format!("{grid_spacing}%"))
-                .control(
-                    widget::slider(50..=500, grid_spacing.get(), move |new_value| {
-                        Message::DesktopConfig(DesktopConfig {
-                            grid_spacing: NonZeroU16::new(new_value).unwrap_or(grid_spacing),
-                            ..config
+        let icon_size_and_spacing = settings::section()
+            .title(fl!("icon-size-and-spacing"))
+            .add(
+                settings::item::builder(fl!("icon-size"))
+                    .description(format!("{icon_size}%"))
+                    .control(
+                        widget::slider(50..=500, icon_size.get(), move |new_value| {
+                            Message::DesktopConfig(DesktopConfig {
+                                icon_size: NonZeroU16::new(new_value).unwrap_or(icon_size),
+                                ..config
+                            })
                         })
-                    })
-                    .step(25u16),
-                ),
-        );
-        column = column.push(section);
+                        .step(25u16),
+                    ),
+            )
+            .add(
+                settings::item::builder(fl!("grid-spacing"))
+                    .description(format!("{grid_spacing}%"))
+                    .control(
+                        widget::slider(50..=500, grid_spacing.get(), move |new_value| {
+                            Message::DesktopConfig(DesktopConfig {
+                                grid_spacing: NonZeroU16::new(new_value).unwrap_or(grid_spacing),
+                                ..config
+                            })
+                        })
+                        .step(25u16),
+                    ),
+            );
 
-        column
+        widget::column::with_capacity(2)
             .padding([0, space_l, space_l, space_l])
             .spacing(space_m)
+            .push(show_on_desktop)
+            .push(icon_size_and_spacing)
             .into()
     }
 
     fn edit_history(&self) -> Element<'_, Message> {
-        let cosmic_theme::Spacing { space_m, .. } = theme::active().cosmic().spacing;
+        let cosmic_theme::Spacing { space_m, .. } = theme::spacing();
 
         let mut children = Vec::new();
 
@@ -2149,7 +2144,7 @@ impl App {
         kind: &'a PreviewKind,
         context_drawer: bool,
     ) -> Element<'a, tab::Message> {
-        let cosmic_theme::Spacing { space_l, .. } = theme::active().cosmic().spacing;
+        let cosmic_theme::Spacing { space_l, .. } = theme::spacing();
 
         let mut children = Vec::with_capacity(1);
         let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
@@ -2219,8 +2214,8 @@ impl App {
         let tab_config = self.config.tab;
 
         // TODO: Should dialog be updated here too?
-        widget::settings::view_column(vec![
-            widget::settings::section()
+        settings::view_column(vec![
+            settings::section()
                 .title(fl!("appearance"))
                 .add({
                     let app_theme_selected = match self.config.app_theme {
@@ -2228,7 +2223,7 @@ impl App {
                         AppTheme::Light => 2,
                         AppTheme::System => 0,
                     };
-                    widget::settings::item::builder(fl!("theme")).control(widget::dropdown(
+                    settings::item::builder(fl!("theme")).control(widget::dropdown(
                         &self.app_themes,
                         Some(app_theme_selected),
                         move |index| {
@@ -2241,31 +2236,32 @@ impl App {
                     ))
                 })
                 .into(),
-            widget::settings::section()
+            settings::section()
                 .title(fl!("type-to-search"))
-                .add(widget::radio(
-                    widget::text::body(fl!("type-to-search-recursive")),
-                    TypeToSearch::Recursive,
-                    Some(self.config.type_to_search),
-                    Message::SetTypeToSearch,
-                ))
-                .add(widget::radio(
-                    widget::text::body(fl!("type-to-search-enter-path")),
-                    TypeToSearch::EnterPath,
-                    Some(self.config.type_to_search),
-                    Message::SetTypeToSearch,
-                ))
-                .add(widget::radio(
-                    widget::text::body(fl!("type-to-search-select")),
+                .add(
+                    settings::item::builder(fl!("type-to-search-recursive")).radio(
+                        TypeToSearch::Recursive,
+                        Some(self.config.type_to_search),
+                        Message::SetTypeToSearch,
+                    ),
+                )
+                .add(
+                    settings::item::builder(fl!("type-to-search-enter-path")).radio(
+                        TypeToSearch::EnterPath,
+                        Some(self.config.type_to_search),
+                        Message::SetTypeToSearch,
+                    ),
+                )
+                .add(settings::item::builder(fl!("type-to-search-select")).radio(
                     TypeToSearch::SelectByPrefix,
                     Some(self.config.type_to_search),
                     Message::SetTypeToSearch,
                 ))
                 .into(),
-            widget::settings::section()
+            settings::section()
                 .title(fl!("other"))
                 .add({
-                    widget::settings::item::builder(fl!("single-click")).toggler(
+                    settings::item::builder(fl!("single-click")).toggler(
                         tab_config.single_click,
                         move |single_click| {
                             Message::TabConfig(TabConfig {
@@ -2276,7 +2272,7 @@ impl App {
                     )
                 })
                 .add({
-                    widget::settings::item::builder(fl!("show-recents"))
+                    settings::item::builder(fl!("show-recents"))
                         .toggler(self.config.show_recents, Message::SetShowRecents)
                 })
                 .into(),
@@ -5526,7 +5522,7 @@ impl Application for App {
 
         let cosmic_theme::Spacing {
             space_xxs, space_s, ..
-        } = theme::active().cosmic().spacing;
+        } = theme::spacing();
 
         let dialog = match dialog_page {
             DialogPage::Compress {
@@ -6288,7 +6284,7 @@ impl Application for App {
 
         let cosmic_theme::Spacing {
             space_xs, space_s, ..
-        } = theme::active().cosmic().spacing;
+        } = theme::spacing();
 
         let mut title = String::new();
         let mut total_progress = 0.0;
@@ -6445,7 +6441,7 @@ impl Application for App {
     fn view(&self) -> Element<'_, Self::Message> {
         let cosmic_theme::Spacing {
             space_xxs, space_s, ..
-        } = theme::active().cosmic().spacing;
+        } = theme::spacing();
 
         let mut tab_column = widget::column::with_capacity(4);
 
