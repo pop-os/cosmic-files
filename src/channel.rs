@@ -1,13 +1,9 @@
 // Copyright 2025 System76 <info@system76.com>
 // SPDX-License-Identifier: MPL-2.0
 
-use std::{
-    collections::VecDeque,
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
-    },
-};
+use std::collections::VecDeque;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 /// Create a channel backed by `tokio::sync::Notify` and a sync mutex with a vec deque.
 pub fn channel<Message>() -> (Sender<Message>, Receiver<Message>) {

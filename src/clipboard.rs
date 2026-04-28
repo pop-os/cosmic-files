@@ -2,12 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::iced::clipboard::mime::{AllowedMimeTypes, AsMimeTypes};
-use std::{
-    borrow::Cow,
-    error::Error,
-    path::{Path, PathBuf},
-    str,
-};
+use std::borrow::Cow;
+use std::error::Error;
+use std::path::{Path, PathBuf};
+use std::str;
 use url::Url;
 
 #[derive(Clone, Copy, Debug)]

@@ -1,20 +1,15 @@
-use crate::{
-    app::{ArchiveType, DialogPage, Message, REPLACE_BUTTON_ID},
-    archive,
-    config::IconSizes,
-    fl,
-    spawn_detached::spawn_detached,
-    tab,
-};
-use cosmic::iced::futures::{self, SinkExt, StreamExt, channel::mpsc::Sender, stream};
-use std::{
-    borrow::Cow,
-    fmt::Formatter,
-    fs,
-    io::{self, Read, Write},
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use crate::app::{ArchiveType, DialogPage, Message, REPLACE_BUTTON_ID};
+use crate::config::IconSizes;
+use crate::spawn_detached::spawn_detached;
+use crate::{archive, fl, tab};
+use cosmic::iced::futures::channel::mpsc::Sender;
+use cosmic::iced::futures::{self, SinkExt, StreamExt, stream};
+use std::borrow::Cow;
+use std::fmt::Formatter;
+use std::fs;
+use std::io::{self, Read, Write};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tokio::sync::{Mutex as TokioMutex, mpsc};
 use walkdir::WalkDir;
 use zip::AesMode::Aes256;
@@ -1243,28 +1238,23 @@ fn wrap_compio_spawn_error(err: Box<dyn std::any::Any + Send>) -> OperationError
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        fs::{self, File},
-        io,
-        path::PathBuf,
-    };
+    use std::fs::{self, File};
+    use std::io;
+    use std::path::PathBuf;
 
-    use cosmic::iced::futures::{StreamExt, channel::mpsc, future};
+    use cosmic::iced::futures::channel::mpsc;
+    use cosmic::iced::futures::{StreamExt, future};
     use log::debug;
     use test_log::test;
     use tokio::sync;
 
     use super::{Controller, Operation, OperationError, OperationSelection, ReplaceResult};
-    use crate::{
-        app::{
-            DialogPage, Message,
-            test_utils::{
-                NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED, empty_fs, filter_dirs,
-                filter_files, simple_fs,
-            },
-        },
-        fl,
+    use crate::app::test_utils::{
+        NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED, empty_fs, filter_dirs, filter_files,
+        simple_fs,
     };
+    use crate::app::{DialogPage, Message};
+    use crate::fl;
 
     /// Simple wrapper around `[Operation::Copy]`
     pub async fn operation_copy(

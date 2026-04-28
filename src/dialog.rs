@@ -1,58 +1,46 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
-use cosmic::{
-    Application, ApplicationExt, Element,
-    app::{Core, Task, context_drawer, cosmic::Cosmic},
-    cosmic_config, cosmic_theme, executor,
-    iced::core::widget::operation,
-    iced::platform_specific::shell::{self as iced_winit, SurfaceIdWrapper},
-    iced::widget::scrollable::AbsoluteOffset,
-    iced::{
-        self, Alignment, Event, Length, Size, Subscription,
-        core::SmolStr,
-        event,
-        futures::{self, SinkExt},
-        keyboard::{Event as KeyEvent, Key, Modifiers, key::Named},
-        mouse, stream,
-        widget::scrollable,
-        window,
-    },
-    theme,
-    widget::{
-        self, Operation,
-        menu::{Action as MenuAction, KeyBind, key_bind::Modifier},
-        segmented_button,
-    },
+use cosmic::app::cosmic::Cosmic;
+use cosmic::app::{Core, Task, context_drawer};
+use cosmic::iced::core::SmolStr;
+use cosmic::iced::core::widget::operation;
+use cosmic::iced::futures::{self, SinkExt};
+use cosmic::iced::keyboard::key::Named;
+use cosmic::iced::keyboard::{Event as KeyEvent, Key, Modifiers};
+use cosmic::iced::platform_specific::shell::{self as iced_winit, SurfaceIdWrapper};
+use cosmic::iced::widget::scrollable;
+use cosmic::iced::widget::scrollable::AbsoluteOffset;
+use cosmic::iced::{
+    self, Alignment, Event, Length, Size, Subscription, event, mouse, stream, window,
 };
+use cosmic::widget::menu::key_bind::Modifier;
+use cosmic::widget::menu::{Action as MenuAction, KeyBind};
+use cosmic::widget::{self, Operation, segmented_button};
+use cosmic::{Application, ApplicationExt, Element, cosmic_config, cosmic_theme, executor, theme};
 use mime_guess::{Mime, mime};
-use notify_debouncer_full::{
-    DebouncedEvent, Debouncer, RecommendedCache, new_debouncer,
-    notify::{self, RecommendedWatcher},
-};
+use notify_debouncer_full::notify::{self, RecommendedWatcher};
+use notify_debouncer_full::{DebouncedEvent, Debouncer, RecommendedCache, new_debouncer};
 use recently_used_xbel::update_recently_used;
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::{
-    any::TypeId,
-    collections::{HashMap, VecDeque},
-    env, fmt, fs,
-    path::PathBuf,
-    time::{self, Instant},
-};
+use std::any::TypeId;
+use std::collections::{HashMap, VecDeque};
+use std::path::PathBuf;
+use std::time::{self, Instant};
+use std::{env, fmt, fs};
 
-use crate::{
-    app::{
-        Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind, REPLACE_BUTTON_ID,
-    },
-    config::{Config, DialogConfig, Favorite, TIME_CONFIG_ID, ThumbCfg, TimeConfig, TypeToSearch},
-    fl, home_dir,
-    key_bind::key_binds,
-    localize::LANGUAGE_SORTER,
-    menu,
-    mounter::{MOUNTERS, MounterItem, MounterItems, MounterKey, MounterMessage},
-    tab::{self, ItemMetadata, Location, SearchLocation, Tab},
-    zoom::{zoom_in_view, zoom_out_view, zoom_to_default},
+use crate::app::{
+    Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind, REPLACE_BUTTON_ID,
 };
+use crate::config::{
+    Config, DialogConfig, Favorite, TIME_CONFIG_ID, ThumbCfg, TimeConfig, TypeToSearch,
+};
+use crate::key_bind::key_binds;
+use crate::localize::LANGUAGE_SORTER;
+use crate::mounter::{MOUNTERS, MounterItem, MounterItems, MounterKey, MounterMessage};
+use crate::tab::{self, ItemMetadata, Location, SearchLocation, Tab};
+use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
+use crate::{fl, home_dir, menu};
 
 #[derive(Clone, Debug)]
 pub struct DialogMessage(cosmic::Action<Message>);

@@ -1,8 +1,23 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
+use cosmic::app::{self, Core, Task, context_drawer};
+use cosmic::cosmic_config::{self, ConfigSet};
+use cosmic::iced::clipboard::dnd::DndAction;
+use cosmic::iced::core::SmolStr;
+use cosmic::iced::core::widget::operation::focusable::unfocus;
+use cosmic::iced::futures::{self, SinkExt};
+use cosmic::iced::keyboard::{Event as KeyEvent, Key, Modifiers};
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use cosmic::iced::platform_specific::shell::wayland::commands::overlap_notify::overlap_notify;
+use cosmic::iced::runtime::{clipboard, task};
+use cosmic::iced::widget::button::focus;
+use cosmic::iced::widget::scrollable;
+use cosmic::iced::widget::scrollable::AbsoluteOffset;
+use cosmic::iced::window::{self, Event as WindowEvent, Id as WindowId};
+use cosmic::iced::{
+    self, Alignment, Event, Length, Rectangle, Size, Subscription, event, mouse, stream,
+};
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use cosmic::iced::{
     Limits, Point,
@@ -14,92 +29,59 @@ use cosmic::iced::{
         Anchor, KeyboardInteractivity, Layer, destroy_layer_surface, get_layer_surface,
     },
 };
-use cosmic::{
-    Application, ApplicationExt, Element,
-    app::{self, Core, Task, context_drawer},
-    cosmic_config::{self, ConfigSet},
-    cosmic_theme, executor,
-    iced::core::widget::operation::focusable::unfocus,
-    iced::runtime::{clipboard, task},
-    iced::widget::{button::focus, scrollable::AbsoluteOffset},
-    iced::{
-        self, Alignment, Event, Length, Rectangle, Size, Subscription,
-        clipboard::dnd::DndAction,
-        core::SmolStr,
-        event,
-        futures::{self, SinkExt},
-        keyboard::{Event as KeyEvent, Key, Modifiers},
-        mouse, stream,
-        widget::scrollable,
-        window::{self, Event as WindowEvent, Id as WindowId},
-    },
-    style, surface, theme,
-    widget::{
-        self,
-        about::About,
-        dnd_destination::DragId,
-        icon,
-        menu::{action::MenuAction, key_bind::KeyBind},
-        segmented_button::{self, Entity, ReorderEvent},
-        settings, space,
-    },
-};
+use cosmic::widget::about::About;
+use cosmic::widget::dnd_destination::DragId;
+use cosmic::widget::menu::action::MenuAction;
+use cosmic::widget::menu::key_bind::KeyBind;
+use cosmic::widget::segmented_button::{self, Entity, ReorderEvent};
+use cosmic::widget::{self, icon, settings, space};
+use cosmic::{Application, ApplicationExt, Element, cosmic_theme, executor, style, surface, theme};
 use mime_guess::Mime;
-use notify_debouncer_full::{
-    DebouncedEvent, Debouncer, RecommendedCache, new_debouncer,
-    notify::{self, RecommendedWatcher},
-};
+use notify_debouncer_full::notify::{self, RecommendedWatcher};
+use notify_debouncer_full::{DebouncedEvent, Debouncer, RecommendedCache, new_debouncer};
 use rustc_hash::{FxHashMap, FxHashSet};
 use slotmap::Key as SlotMapKey;
-use std::{
-    any::TypeId,
-    collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
-    env, fmt, fs,
-    future::Future,
-    io,
-    num::NonZeroU16,
-    path::{Path, PathBuf},
-    pin::Pin,
-    process,
-    sync::{Arc, LazyLock, Mutex},
-    time::{self, Duration, Instant},
-};
+use std::any::TypeId;
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::future::Future;
+use std::num::NonZeroU16;
+use std::path::{Path, PathBuf};
+use std::pin::Pin;
+use std::sync::{Arc, LazyLock, Mutex};
+use std::time::{self, Duration, Instant};
+use std::{env, fmt, fs, io, process};
 use tokio::sync::mpsc;
 use trash::TrashItem;
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use wayland_client::{Proxy, protocol::wl_output::WlOutput};
 
-use crate::{
-    FxOrderMap,
-    clipboard::{
-        ClipboardCache, ClipboardCopy, ClipboardKind, ClipboardPaste, ClipboardPasteImage,
-        ClipboardPasteText, ClipboardPasteVideo,
-    },
-    config::{
-        AppTheme, Config, DesktopConfig, Favorite, IconSizes, State, TIME_CONFIG_ID, TabConfig,
-        TimeConfig, TypeToSearch,
-    },
-    context_action,
-    dialog::{Dialog, DialogKind, DialogMessage, DialogResult, DialogSettings},
-    fl, home_dir,
-    key_bind::key_binds,
-    localize::LANGUAGE_SORTER,
-    menu,
-    mime_app::{self, MimeApp, MimeAppCache},
-    mime_icon,
-    mounter::{MOUNTERS, MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage},
-    operation::{
-        Controller, Operation, OperationError, OperationErrorType, OperationSelection,
-        ReplaceResult, copy_unique_path,
-    },
-    spawn_detached::spawn_detached,
-    tab::{
-        self, HOVER_DURATION, HeadingOptions, ItemMetadata, Location, SORT_OPTION_FALLBACK,
-        SearchLocation, Tab,
-    },
-    trash::{Trash, TrashExt},
-    zoom::{zoom_in_view, zoom_out_view, zoom_to_default},
+use crate::clipboard::{
+    ClipboardCache, ClipboardCopy, ClipboardKind, ClipboardPaste, ClipboardPasteImage,
+    ClipboardPasteText, ClipboardPasteVideo,
 };
+use crate::config::{
+    AppTheme, Config, DesktopConfig, Favorite, IconSizes, State, TIME_CONFIG_ID, TabConfig,
+    TimeConfig, TypeToSearch,
+};
+use crate::dialog::{Dialog, DialogKind, DialogMessage, DialogResult, DialogSettings};
+use crate::key_bind::key_binds;
+use crate::localize::LANGUAGE_SORTER;
+use crate::mime_app::{self, MimeApp, MimeAppCache};
+use crate::mounter::{
+    MOUNTERS, MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage,
+};
+use crate::operation::{
+    Controller, Operation, OperationError, OperationErrorType, OperationSelection, ReplaceResult,
+    copy_unique_path,
+};
+use crate::spawn_detached::spawn_detached;
+use crate::tab::{
+    self, HOVER_DURATION, HeadingOptions, ItemMetadata, Location, SORT_OPTION_FALLBACK,
+    SearchLocation, Tab,
+};
+use crate::trash::{Trash, TrashExt};
+use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
+use crate::{FxOrderMap, context_action, fl, home_dir, menu, mime_icon};
 
 static PERMANENT_DELETE_BUTTON_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("permanent-delete-button"));
@@ -7033,21 +7015,17 @@ impl Application for App {
 // Ideally, tests would use the cap-std crate which limits path traversal.
 #[cfg(test)]
 pub(crate) mod test_utils {
-    use std::{
-        cmp::Ordering,
-        fs::File,
-        io::{self, Write},
-        iter,
-        path::Path,
-    };
+    use std::cmp::Ordering;
+    use std::fs::File;
+    use std::io::{self, Write};
+    use std::iter;
+    use std::path::Path;
 
     use log::{debug, trace};
     use tempfile::{TempDir, tempdir};
 
-    use crate::{
-        config::{IconSizes, TabConfig, ThumbCfg},
-        tab::Item,
-    };
+    use crate::config::{IconSizes, TabConfig, ThumbCfg};
+    use crate::tab::Item;
 
     use super::*;
 

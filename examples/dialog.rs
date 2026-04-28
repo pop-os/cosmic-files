@@ -1,15 +1,12 @@
-use cosmic::{
-    Application, Element,
-    app::{self, Core, Settings, Task},
-    executor,
-    iced::{Subscription, window},
-    widget,
-};
+use cosmic::app::{self, Core, Settings, Task};
+use cosmic::iced::{Subscription, window};
+use cosmic::{Application, Element, executor, widget};
 use cosmic_files::dialog::{
     Dialog, DialogChoice, DialogChoiceOption, DialogFilter, DialogFilterPattern, DialogKind,
     DialogMessage, DialogResult, DialogSettings,
 };
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let log_format = tracing_subscriber::fmt::format()

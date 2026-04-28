@@ -1,18 +1,20 @@
-use cosmic::{
-    Task,
-    iced::{Subscription, futures::SinkExt, stream},
-    widget,
-};
-use gio::{glib, prelude::*};
-use std::{any::TypeId, cell::Cell, future::pending, hash::Hash, path::PathBuf, sync::Arc};
+use cosmic::iced::futures::SinkExt;
+use cosmic::iced::{Subscription, stream};
+use cosmic::{Task, widget};
+use gio::glib;
+use gio::prelude::*;
+use std::any::TypeId;
+use std::cell::Cell;
+use std::future::pending;
+use std::hash::Hash;
+use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 
 use super::{Mounter, MounterAuth, MounterItem, MounterItems, MounterMessage};
-use crate::{
-    config::IconSizes,
-    err_str,
-    tab::{self, DirSize, ItemMetadata, ItemThumbnail, Location},
-};
+use crate::config::IconSizes;
+use crate::err_str;
+use crate::tab::{self, DirSize, ItemMetadata, ItemThumbnail, Location};
 
 const TARGET_URI_ATTRIBUTE: &str = "standard::target-uri";
 

@@ -1,30 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use cosmic::{
-    Element,
-    app::Core,
-    iced::{
-        Alignment, Background, Border, Length, advanced::widget::text::Style as TextStyle,
-        keyboard::Modifiers,
-    },
-    theme,
-    widget::{
-        self, Row, button, column, container, divider,
-        menu::{self, ItemHeight, ItemWidth, MenuBar, key_bind::KeyBind},
-        responsive_menu_bar, space, text,
-    },
+use cosmic::app::Core;
+use cosmic::iced::advanced::widget::text::Style as TextStyle;
+use cosmic::iced::keyboard::Modifiers;
+use cosmic::iced::{Alignment, Background, Border, Length};
+use cosmic::widget::menu::key_bind::KeyBind;
+use cosmic::widget::menu::{self, ItemHeight, ItemWidth, MenuBar};
+use cosmic::widget::{
+    self, Row, button, column, container, divider, responsive_menu_bar, space, text,
 };
+use cosmic::{Element, theme};
 use i18n_embed::LanguageLoader;
 use mime_guess::Mime;
-use std::{collections::HashMap, sync::LazyLock};
+use std::collections::HashMap;
+use std::sync::LazyLock;
 
-use crate::{
-    app::{Action, Message},
-    config::{Config, ContextActionPreset},
-    fl,
-    tab::{self, HeadingOptions, Location, LocationMenuAction, SearchLocation, Tab},
-    trash::{Trash, TrashExt},
-};
+use crate::app::{Action, Message};
+use crate::config::{Config, ContextActionPreset};
+use crate::fl;
+use crate::tab::{self, HeadingOptions, Location, LocationMenuAction, SearchLocation, Tab};
+use crate::trash::{Trash, TrashExt};
 
 static MENU_ID: LazyLock<cosmic::widget::Id> =
     LazyLock::new(|| cosmic::widget::Id::new("responsive-menu"));

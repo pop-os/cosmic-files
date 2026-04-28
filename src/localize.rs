@@ -1,13 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use i18n_embed::{
-    DefaultLocalizer, LanguageLoader, Localizer,
-    fluent::{FluentLanguageLoader, fluent_language_loader},
-};
-use icu::collator::{
-    Collator, CollatorBorrowed, CollatorPreferences, options::CollatorOptions,
-    preferences::CollationNumericOrdering,
-};
+use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
+use i18n_embed::{DefaultLocalizer, LanguageLoader, Localizer};
+use icu::collator::options::CollatorOptions;
+use icu::collator::preferences::CollationNumericOrdering;
+use icu::collator::{Collator, CollatorBorrowed, CollatorPreferences};
 use icu::locale::Locale;
 use rust_embed::RustEmbed;
 use std::sync::LazyLock;

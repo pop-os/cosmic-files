@@ -1,16 +1,14 @@
-use crate::{
-    mime_icon::mime_for_path,
-    operation::{Controller, OpReader, OperationError, OperationErrorType, sync_to_disk},
-};
+use crate::mime_icon::mime_for_path;
+use crate::operation::{Controller, OpReader, OperationError, OperationErrorType, sync_to_disk};
 use cosmic::iced::futures;
-use jiff::{Zoned, civil::DateTime, tz::TimeZone};
-use std::{
-    collections::HashSet,
-    fs,
-    io::{self, Read, Write},
-    path::{Path, PathBuf},
-    time::SystemTime,
-};
+use jiff::Zoned;
+use jiff::civil::DateTime;
+use jiff::tz::TimeZone;
+use std::collections::HashSet;
+use std::fs;
+use std::io::{self, Read, Write};
+use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 use zip::result::ZipError;
 
 pub const SUPPORTED_ARCHIVE_TYPES: &[&str] = &[
@@ -112,7 +110,8 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
     password: Option<&str>,
     controller: Controller,
 ) -> zip::result::ZipResult<()> {
-    use std::{ffi::OsString, fs};
+    use std::ffi::OsString;
+    use std::fs;
     use zip::result::ZipError;
 
     fn make_writable_dir_all<T: AsRef<Path>>(

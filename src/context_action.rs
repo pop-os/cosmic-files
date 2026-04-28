@@ -4,7 +4,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{mime_app, spawn_detached::spawn_detached};
+use crate::mime_app;
+use crate::spawn_detached::spawn_detached;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ContextActionSelection {
