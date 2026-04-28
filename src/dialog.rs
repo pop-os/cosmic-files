@@ -587,7 +587,7 @@ impl App {
             space_s,
             space_l,
             ..
-        } = theme::active().cosmic().spacing;
+        } = theme::spacing();
         let is_condensed = self.core().is_condensed();
 
         let mut col = widget::column::with_capacity(2).spacing(space_xxs);
@@ -1125,7 +1125,7 @@ impl Application for App {
     }
 
     fn dialog(&self) -> Option<Element<'_, Message>> {
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+        let cosmic_theme::Spacing { space_xxs, .. } = theme::spacing();
 
         //TODO: should gallery view just be a dialog?
         if self.tab.gallery {
@@ -2017,7 +2017,7 @@ impl Application for App {
 
     /// Creates a view after each update.
     fn view(&self) -> Element<'_, Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+        let cosmic_theme::Spacing { space_xxs, .. } = theme::spacing();
 
         let mut col = widget::column::with_capacity(2);
 

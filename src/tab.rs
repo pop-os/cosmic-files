@@ -2278,7 +2278,7 @@ impl Item {
     }
 
     fn preview(&self) -> Element<'_, Message> {
-        let spacing = cosmic::theme::active().cosmic().spacing;
+        let spacing = cosmic::theme::spacing();
         // This loads the image only if thumbnailing worked
         let icon = widget::icon::icon(self.icon_handle_grid.clone())
             .content_fit(ContentFit::Contain)
@@ -2339,7 +2339,7 @@ impl Item {
             space_xxxs,
             space_m,
             ..
-        } = theme::active().cosmic().spacing;
+        } = theme::spacing();
 
         let mut column = widget::column::with_capacity(4).spacing(space_m);
 
@@ -2517,7 +2517,7 @@ impl Item {
     }
 
     pub fn replace_view(&self, heading: String, military_time: bool) -> Element<'_, Message> {
-        let cosmic_theme::Spacing { space_xxxs, .. } = theme::active().cosmic().spacing;
+        let cosmic_theme::Spacing { space_xxxs, .. } = theme::spacing();
 
         let mut row = widget::row::with_capacity(2).spacing(space_xxxs);
         row = row.push(self.preview());
@@ -4765,7 +4765,7 @@ impl Tab {
             space_xs,
             space_m,
             ..
-        } = theme::active().cosmic().spacing;
+        } = theme::spacing();
 
         //TODO: display error messages when image not found?
         let mut name_opt = None;
@@ -4963,7 +4963,7 @@ impl Tab {
             space_s,
             space_m,
             ..
-        } = theme::active().cosmic().spacing;
+        } = theme::spacing();
 
         let size = self.size_opt.get().unwrap_or(Size::new(0.0, 0.0));
 
@@ -5298,7 +5298,7 @@ impl Tab {
     }
 
     pub fn empty_view(&self, has_hidden: bool) -> Element<'_, Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+        let cosmic_theme::Spacing { space_xxs, .. } = theme::spacing();
 
         mouse_area::MouseArea::new(widget::column::with_children([widget::container(
             match self.mode {
@@ -5338,7 +5338,7 @@ impl Tab {
             space_xxs,
             space_xxxs,
             ..
-        } = theme::active().cosmic().spacing;
+        } = theme::spacing();
 
         let TabConfig {
             show_hidden,
@@ -5684,7 +5684,7 @@ impl Tab {
     ) {
         let cosmic_theme::Spacing {
             space_s, space_xxs, ..
-        } = theme::active().cosmic().spacing;
+        } = theme::spacing();
 
         let TabConfig {
             show_hidden,
@@ -6086,7 +6086,7 @@ impl Tab {
             space_xxs,
             space_xs,
             ..
-        } = theme::active().cosmic().spacing;
+        } = theme::spacing();
 
         let location_view_opt = if matches!(self.mode, Mode::Desktop) {
             None
@@ -6282,7 +6282,7 @@ impl Tab {
             space_xxxs,
             space_m,
             ..
-        } = theme::active().cosmic().spacing;
+        } = theme::spacing();
 
         let mut column = widget::column::with_capacity(4).spacing(space_m);
 
