@@ -49,42 +49,19 @@ pub fn exec_to_command(
                             }
                         }
 
-                        Some('f') => {
-                            if !field_code_used {
-                                // TODO: files on remote file systems should be copied to a temporary local file.
-                                batch_process = true;
-                                field_code_used = true;
-                                new_argument.push_str(path.as_bytes());
-                            }
+                        // %f and %u behave the same in a file manager.
+                        Some('f' | 'u') if !field_code_used => {
+                            // TODO: files on remote file systems should be copied to a temporary local file.
+                            batch_process = true;
+                            field_code_used = true;
+                            new_argument.push_str(path.as_bytes());
                         }
 
-                        Some('F') => {
-                            if !field_code_used && new_argument.is_empty() {
-                                field_code_used = true;
-                                for path in path_opt
-                                    .iter()
-                                    .map(AsRef::as_ref)
-                                    .filter(|&path| from_file_or_dir(path).is_none())
-                                {
-                                    args.push(BString::new(path.as_bytes().to_owned()));
-                                }
-                            }
-                        }
-
-                        Some('u') => {
-                            if !field_code_used {
-                                batch_process = true;
-                                field_code_used = true;
-                                new_argument.push_str(path.as_bytes());
-                            }
-                        }
-
-                        Some('U') => {
-                            if !field_code_used && new_argument.is_empty() {
-                                field_code_used = true;
-                                for path in path_opt.iter().map(AsRef::as_ref) {
-                                    args.push(BString::new(path.as_bytes().to_owned()));
-                                }
+                        // %F and %U behave the same in a file manager.
+                        Some('F') | Some('U') if !field_code_used && new_argument.is_empty() => {
+                            field_code_used = true;
+                            for path in path_opt.iter().map(AsRef::as_ref) {
+                                args.push(BString::new(path.as_bytes().to_owned()));
                             }
                         }
 
@@ -131,12 +108,6 @@ pub fn exec_to_command(
     }
 
     Some(commands)
-}
-
-fn from_file_or_dir(path: impl AsRef<Path>) -> Option<url::Url> {
-    url::Url::from_file_path(&path)
-        .ok()
-        .or_else(|| url::Url::from_directory_path(&path).ok())
 }
 
 #[derive(Clone, Debug)]
@@ -490,33 +461,40 @@ mod tests {
     #[test]
     #[allow(non_snake_case)]
     fn one_path_F_field_code() {
-        let exec = "/usr/bin/bar %F";
-        let paths = ["cat"];
+        let exec = "/usr/bin/cosmic-term -w %F";
+        let paths = ["/home/user"];
         let commands = exec_to_command(exec, "one_path_F_field_code", None, &paths)
             .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();
+        let mut args = command.get_args();
 
-        assert_eq!("/usr/bin/bar", command.get_program().to_str().unwrap());
-        assert_eq!("cat", command.get_args().next().unwrap().to_str().unwrap());
+        assert_eq!(
+            "/usr/bin/cosmic-term",
+            command.get_program().to_str().unwrap()
+        );
+        assert_eq!("-w", args.next().unwrap().to_str().unwrap());
+        assert_eq!(paths[0], args.next().unwrap().to_str().unwrap());
     }
 
     #[test]
     fn one_path_u_field_code() {
-        let exec = "/usr/bin/foobar %u";
-        let paths = ["/home/josh/krumpli"];
+        let exec = "/usr/bin/cosmic-term -w %u";
+        let paths = ["/home/user"];
         let commands = exec_to_command(exec, "one_path_u_field_code", None, &paths)
             .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();
+        let mut args = command.get_args();
 
-        assert_eq!("/usr/bin/foobar", command.get_program().to_str().unwrap());
         assert_eq!(
-            *paths.first().unwrap(),
-            command.get_args().next().unwrap().to_str().unwrap()
+            "/usr/bin/cosmic-term",
+            command.get_program().to_str().unwrap()
         );
+        assert_eq!("-w", args.next().unwrap().to_str().unwrap());
+        assert_eq!(paths[0], args.next().unwrap().to_str().unwrap());
     }
 
     #[test]
