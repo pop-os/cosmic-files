@@ -29,7 +29,17 @@ pub fn exec_to_command(
 
     let mut commands = Vec::new();
 
-    for path in path_opt.iter().map(AsRef::as_ref) {
+    let paths = path_opt
+        .iter()
+        .map(AsRef::as_ref)
+        .map(Some)
+        // Add a single `None` if no path was given.
+        .chain(std::iter::repeat_n(
+            None,
+            if path_opt.is_empty() { 1 } else { 0 },
+        ));
+
+    for path in paths {
         let mut batch_process = false;
         let mut args = Vec::with_capacity(arguments.len());
         let mut field_code_used = false;
@@ -50,7 +60,10 @@ pub fn exec_to_command(
                         }
 
                         // %f and %u behave the same in a file manager.
-                        Some('f' | 'u') if !field_code_used => {
+                        Some('f' | 'u')
+                            if let Some(path) = path
+                                && !field_code_used =>
+                        {
                             // TODO: files on remote file systems should be copied to a temporary local file.
                             batch_process = true;
                             field_code_used = true;
@@ -439,6 +452,20 @@ mod tests {
             "--option=file1",
             command.get_args().next().unwrap().to_str().unwrap()
         );
+    }
+
+    #[test]
+    fn no_path_f_field_code() {
+        let exec = "/usr/bin/foo %f";
+        let paths: [&str; 0] = [];
+        let commands = exec_to_command(exec, "no_path_f_field_code", None, &paths)
+            .expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+
+        assert_eq!("/usr/bin/foo", command.get_program().to_str().unwrap());
+        assert_eq!(0, command.get_args().len());
     }
 
     #[test]
