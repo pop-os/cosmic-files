@@ -4574,6 +4574,14 @@ impl Application for App {
                         tab::Command::DropFiles(to, from) => {
                             commands.push(self.update(Message::PasteContents(to, from)));
                         }
+                        tab::Command::ClearRecents => {
+                            match recently_used_xbel::clear_recently_used() {
+                                Ok(()) => {}
+                                Err(err) => {
+                                    log::warn!("failed to clear recents history: {}", err);
+                                }
+                            }
+                        }
                         tab::Command::EmptyTrash => {
                             return self.push_dialog(
                                 DialogPage::EmptyTrash,

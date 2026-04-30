@@ -1663,6 +1663,7 @@ pub enum Command {
     ContextMenu(Option<Point>, Option<window::Id>),
     Delete(Vec<PathBuf>),
     DropFiles(PathBuf, ClipboardPaste),
+    ClearRecents,
     EmptyTrash,
     #[cfg(feature = "desktop")]
     ExecEntryAction(cosmic::desktop::DesktopEntryData, usize),
@@ -1702,6 +1703,7 @@ pub enum Message {
     EditLocationSubmit,
     EditLocationTab,
     OpenInNewTab(PathBuf),
+    ClearRecents,
     EmptyTrash,
     #[cfg(feature = "desktop")]
     ExecEntryAction(Option<PathBuf>, usize),
@@ -3676,6 +3678,9 @@ impl Tab {
             }
             Message::OpenInNewTab(path) => {
                 commands.push(Command::OpenInNewTab(path));
+            }
+            Message::ClearRecents => {
+                commands.push(Command::ClearRecents);
             }
             Message::EmptyTrash => {
                 commands.push(Command::EmptyTrash);
@@ -6183,6 +6188,24 @@ impl Tab {
                             widget::space::horizontal().into(),
                             widget::button::standard(fl!("empty-trash"))
                                 .on_press(Message::EmptyTrash)
+                                .into(),
+                        ]))
+                        .padding([space_xxs, space_xs])
+                        .layer(cosmic_theme::Layer::Primary)
+                        .apply(widget::container)
+                        .padding([0, 0, 7, 0]),
+                    );
+                }
+            }
+            Location::Recents | Location::Search(SearchLocation::Recents, ..) => {
+                if let Some(items) = self.items_opt()
+                    && !items.is_empty()
+                {
+                    tab_column = tab_column.push(
+                        widget::layer_container(widget::row::with_children([
+                            widget::space::horizontal().into(),
+                            widget::button::standard(fl!("clear-recents-history"))
+                                .on_press(Message::ClearRecents)
                                 .into(),
                         ]))
                         .padding([space_xxs, space_xs])
