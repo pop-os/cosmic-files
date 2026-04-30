@@ -884,31 +884,39 @@ impl App {
     #[cfg(feature = "desktop")]
     fn launch_desktop_entries(paths: &[impl AsRef<Path>]) {
         use cosmic::desktop::fde::DesktopEntry;
+        let locales = cosmic::desktop::fde::get_languages_from_env();
 
         for path in paths.iter().map(AsRef::as_ref) {
             match DesktopEntry::from_path::<&str>(path, None) {
                 Ok(entry) => match entry.exec() {
-                    Some(exec) => match mime_app::exec_to_command(exec, &[] as &[&str; 0]) {
-                        Some(commands) => {
-                            let cwd_opt = entry.desktop_entry("Path");
+                    Some(exec) => {
+                        match mime_app::exec_to_command(
+                            exec,
+                            entry.name(&locales).as_deref().unwrap_or_default(),
+                            Some(path),
+                            &[] as &[&str; 0],
+                        ) {
+                            Some(commands) => {
+                                let cwd_opt = entry.desktop_entry("Path");
 
-                            for mut command in commands {
-                                if let Some(cwd) = cwd_opt {
-                                    command.current_dir(cwd);
-                                }
+                                for mut command in commands {
+                                    if let Some(cwd) = cwd_opt {
+                                        command.current_dir(cwd);
+                                    }
 
-                                if let Err(err) = spawn_detached(&mut command) {
-                                    log::warn!("failed to execute {}: {}", path.display(), err);
+                                    if let Err(err) = spawn_detached(&mut command) {
+                                        log::warn!("failed to execute {}: {}", path.display(), err);
+                                    }
                                 }
                             }
+                            None => {
+                                log::warn!(
+                                    "failed to parse {}: invalid Desktop Entry/Exec",
+                                    path.display()
+                                );
+                            }
                         }
-                        None => {
-                            log::warn!(
-                                "failed to parse {}: invalid Desktop Entry/Exec",
-                                path.display()
-                            );
-                        }
-                    },
+                    }
                     None => {
                         log::warn!(
                             "failed to parse {}: missing Desktop Entry/Exec",

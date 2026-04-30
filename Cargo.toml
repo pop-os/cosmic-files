@@ -65,6 +65,7 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 thiserror = "2.0.18"
 atomic_float = "1.1.0"
 num_enum = "0.7.6"
+bstr = "1.12.1"
 
 # Completion-based IO runtime to enable io_uring / IOCP file IO support.
 [dependencies.compio]

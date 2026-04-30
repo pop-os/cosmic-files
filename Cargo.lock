@@ -1375,6 +1375,7 @@ version = "1.0.11"
 dependencies = [
  "anyhow",
  "atomic_float",
+ "bstr",
  "bzip2",
  "compio",
  "cosmic-client-toolkit",
