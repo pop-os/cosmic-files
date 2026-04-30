@@ -475,7 +475,7 @@ enum Message {
     TabMessage(tab::Message),
     TabRescan(
         Location,
-        Option<tab::Item>,
+        Option<Box<tab::Item>>,
         Vec<tab::Item>,
         Option<Vec<PathBuf>>,
     ),

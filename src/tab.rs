@@ -1538,7 +1538,7 @@ impl Location {
         }
     }
 
-    pub fn scan(&self, sizes: IconSizes) -> (Option<Item>, Vec<Item>) {
+    pub fn scan(&self, sizes: IconSizes) -> (Option<Box<Item>>, Vec<Item>) {
         let items = match self {
             Self::Desktop(path, display, desktop_config) => {
                 scan_desktop(path, display, *desktop_config, sizes)
@@ -1554,7 +1554,7 @@ impl Location {
         };
         let parent_item_opt = match self.path_opt() {
             Some(path) => match item_from_path(path, sizes) {
-                Ok(item) => Some(item),
+                Ok(item) => Some(Box::new(item)),
                 Err(err) => {
                     log::warn!("failed to get item for {}: {}", path.display(), err);
                     None
@@ -2637,7 +2637,7 @@ pub struct Tab {
     pub sort_name: HeadingOptions,
     pub sort_direction: bool,
     pub gallery: bool,
-    pub(crate) parent_item_opt: Option<Item>,
+    pub(crate) parent_item_opt: Option<Box<Item>>,
     pub(crate) items_opt: Option<Vec<Item>>,
     pub dnd_hovered: Option<(Location, Instant)>,
     pub(crate) scrollable_id: widget::Id,
