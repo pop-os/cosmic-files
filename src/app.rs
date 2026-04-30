@@ -442,7 +442,7 @@ pub enum Message {
     TabRescan(
         Entity,
         Location,
-        Option<tab::Item>,
+        Option<Box<tab::Item>>,
         Vec<tab::Item>,
         Option<Vec<PathBuf>>,
     ),
