@@ -156,6 +156,7 @@ fn button_appearance(
 ) -> widget::button::Style {
     let cosmic = theme.cosmic();
     let mut appearance = widget::button::Style::new();
+    
     if selected {
         if accent {
             appearance.background = Some(Color::from(cosmic.accent_color()).into());
@@ -182,7 +183,7 @@ fn button_appearance(
             appearance.background = Some(Color::from(cosmic.bg_component_color()).into());
         }
     } else if desktop {
-        appearance.background = Some(Color::from(cosmic.bg_color()).into());
+        appearance.background = None;
         appearance.icon_color = Some(Color::from(cosmic.on_bg_color()));
         if cut {
             appearance.text_color = Some(Color::from(cosmic.background.component.disabled));
@@ -6978,8 +6979,8 @@ fn text_editor_class(
     let cosmic = theme.cosmic();
     let container = theme.current_container();
 
-    let mut background: cosmic::iced::Color = container.component.base.into();
-    background.a = 0.25;
+let mut background: cosmic::iced::Color = container.component.base.into();
+background.a = 0.25;
     let selection = cosmic.accent.base.into();
     let value = cosmic.palette.neutral_9.into();
     let mut placeholder = cosmic.palette.neutral_9;
