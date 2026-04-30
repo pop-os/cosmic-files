@@ -60,21 +60,24 @@ pub fn exec_to_command(
                         }
 
                         // %f and %u behave the same in a file manager.
-                        Some('f' | 'u')
+                        Some('f' | 'u') => {
                             if let Some(path) = path
-                                && !field_code_used =>
-                        {
-                            // TODO: files on remote file systems should be copied to a temporary local file.
-                            batch_process = true;
-                            field_code_used = true;
-                            new_argument.push_str(path.as_bytes());
+                                && !field_code_used
+                            {
+                                // TODO: files on remote file systems should be copied to a temporary local file.
+                                batch_process = true;
+                                field_code_used = true;
+                                new_argument.push_str(path.as_bytes());
+                            }
                         }
 
                         // %F and %U behave the same in a file manager.
-                        Some('F') | Some('U') if !field_code_used && new_argument.is_empty() => {
-                            field_code_used = true;
-                            for path in path_opt.iter().map(AsRef::as_ref) {
-                                args.push(BString::new(path.as_bytes().to_owned()));
+                        Some('F') | Some('U') => {
+                            if !field_code_used && new_argument.is_empty() {
+                                field_code_used = true;
+                                for path in path_opt.iter().map(AsRef::as_ref) {
+                                    args.push(BString::new(path.as_bytes().to_owned()));
+                                }
                             }
                         }
 
