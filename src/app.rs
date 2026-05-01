@@ -287,7 +287,7 @@ impl MenuAction for Action {
 }
 
 #[derive(Clone, Debug)]
-pub struct PreviewItem(pub tab::Item);
+pub struct PreviewItem(pub Box<tab::Item>);
 
 impl PartialEq for PreviewItem {
     fn eq(&self, other: &Self) -> bool {
@@ -573,8 +573,8 @@ pub enum DialogPage {
         dir: bool,
     },
     Replace {
-        from: tab::Item,
-        to: tab::Item,
+        from: Box<tab::Item>,
+        to: Box<tab::Item>,
         multiple: bool,
         apply_to_all: bool,
         conflict_count: usize,
@@ -5205,7 +5205,7 @@ impl Application for App {
                             Ok(item) => {
                                 self.context_page = ContextPage::Preview(
                                     None,
-                                    PreviewKind::Custom(PreviewItem(item)),
+                                    PreviewKind::Custom(PreviewItem(Box::new(item))),
                                 );
                                 self.set_show_context(true);
                             }

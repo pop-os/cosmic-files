@@ -34,7 +34,7 @@ async fn handle_replace(
     conflict_count: usize,
 ) -> ReplaceResult {
     let item_from = match tab::item_from_path(file_from, IconSizes::default()) {
-        Ok(ok) => ok,
+        Ok(ok) => Box::new(ok),
         Err(err) => {
             log::warn!("{err}");
             return ReplaceResult::Cancel;
@@ -42,7 +42,7 @@ async fn handle_replace(
     };
 
     let item_to = match tab::item_from_path(file_to, IconSizes::default()) {
-        Ok(ok) => ok,
+        Ok(ok) => Box::new(ok),
         Err(err) => {
             log::warn!("{err}");
             return ReplaceResult::Cancel;
