@@ -3587,7 +3587,7 @@ impl Tab {
                             match item_from_path(&path, IconSizes::default()) {
                                 Ok(item) => {
                                     commands.push(Command::Preview(PreviewKind::Custom(
-                                        PreviewItem(item),
+                                        PreviewItem(Box::new(item)),
                                     )));
                                 }
                                 Err(err) => {
