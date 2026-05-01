@@ -381,3 +381,11 @@ show-recents = «Недавние документы» в бок. панели
 clear-recents-history = Очистить историю недавних
 copy-path = Копировать путь
 mixed = Смешанные
+context-action = Контекстная команда
+context-action-confirm-title = Выполнить «{ $name }»?
+context-action-confirm-warning =
+    Команда затронет { $items } { $items ->
+        [one] элемент
+       *[other] элем.
+    }.
+run = Выполнить

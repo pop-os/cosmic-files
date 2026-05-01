@@ -418,3 +418,12 @@ show-recents = Složka „Nedávné“ v postranním panelu
 copy-path = Kopírovat cestu
 clear-recents-history = Vymazat historii „Nedávné“
 mixed = Různé
+context-action = Kontextová akce
+context-action-confirm-title = Spustit „{ $name }“?
+context-action-confirm-warning =
+    Tato akce se spustí pro { $items } { $items ->
+        [one] položku
+        [few] položky
+       *[other] položek
+    }.
+run = Spustit
