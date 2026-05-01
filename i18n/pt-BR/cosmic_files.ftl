@@ -437,3 +437,11 @@ show-recents = Pasta de recentes na barra lateral
 clear-recents-history = Limpar histórico de recentes
 copy-path = Copiar caminho
 mixed = Misto
+context-action = Ação de contexto
+context-action-confirm-title = Executar "{ $name }"?
+context-action-confirm-warning =
+    Isso será executado em { $items } { $items ->
+        [one] item
+       *[other] itens
+    }.
+run = Executar

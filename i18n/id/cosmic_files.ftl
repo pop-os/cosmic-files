@@ -319,3 +319,11 @@ show-recents = Map terbaru di bilah sisi
 clear-recents-history = Bersihkan riwayat Terbaru
 copy-path = Salin jalur
 mixed = Bercampur
+context-action = Tindakan konteks
+context-action-confirm-title = Jalankan "{ $name }"?
+run = Jalankan
+context-action-confirm-warning =
+    Ini akan dijalankan pada { $items } { $items ->
+        [one] item
+       *[other] item
+    }.

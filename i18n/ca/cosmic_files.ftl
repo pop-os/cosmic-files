@@ -74,7 +74,7 @@ name-no-slashes = El nom no pot contenir barres.
 
 ## Open/Save Dialog
 
-cancel = Cancel·la
+cancel = Cancel·lar
 create = Crea
 open = Obre
 open-file = Obre el fixer
@@ -352,3 +352,4 @@ sort-newest-first = Primer més recents
 sort-oldest-first = Primer més antics
 sort-smallest-to-largest = De petit a gran
 sort-largest-to-smallest = De gran a petit
+run = Executa

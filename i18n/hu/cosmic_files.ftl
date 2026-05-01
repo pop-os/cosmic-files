@@ -437,3 +437,11 @@ show-recents = Legutóbbiak mappa megjelenítése az oldalsávban
 copy-path = Útvonal másolása
 clear-recents-history = Legutóbbiak előzményének törlése
 mixed = Vegyes
+context-action = Helyi művelet
+context-action-confirm-title = Futtatod ezt: „{ $name }”?
+context-action-confirm-warning =
+    Ez a művelet { $items } { $items ->
+        [one] elemen
+       *[other] elemen
+    } fog lefutni.
+run = Futtatás

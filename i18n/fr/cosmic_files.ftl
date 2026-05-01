@@ -437,3 +437,11 @@ show-recents = Dossier Récents dans la barre latérale
 copy-path = Copier le chemin
 clear-recents-history = Effacer l'historique des Récents
 mixed = Mixte
+context-action-confirm-title = Exécuter "{ $name }" ?
+context-action-confirm-warning =
+    Cela exécutera sur { $items } { $items ->
+        [one] élément
+       *[other] éléments
+    }.
+run = Exécuter
+context-action = Action contextuelle
