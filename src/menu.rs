@@ -410,7 +410,7 @@ pub fn context_menu<'a>(
         }
     }
 
-    container(column::with_children(children))
+    container(cosmic::widget::menu::menu_column::MenuColumn::with_children(children))
         .padding(1)
         //TODO: move style to libcosmic
         .style(|theme| {
