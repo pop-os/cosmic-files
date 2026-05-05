@@ -5428,8 +5428,7 @@ impl Tab {
                         widget::button::custom(
                             widget::icon::icon(item.icon_handle_grid.clone())
                                 .content_fit(ContentFit::Contain)
-                                .size(icon_sizes.grid())
-                                .width(Length::Shrink),
+                                .size(icon_sizes.grid()),
                         )
                         .padding(space_xxxs)
                         .class(button_style(
