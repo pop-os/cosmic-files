@@ -269,6 +269,7 @@ fn button_style(
 
 pub fn folder_icon(path: &PathBuf, icon_size: u16) -> widget::icon::Handle {
     widget::icon::from_name(SPECIAL_DIRS.get(path).map_or("folder", |x| *x))
+        .prefer_svg(true)
         .size(icon_size)
         .handle()
 }
@@ -581,7 +582,10 @@ fn desktop_icon_handle(icon: &str, size: u16) -> widget::icon::Handle {
     if icon_path.is_absolute() && icon_path.exists() {
         widget::icon::from_path(icon_path.to_path_buf())
     } else {
-        widget::icon::from_name(icon).size(size).handle()
+        widget::icon::from_name(icon)
+            .prefer_svg(true)
+            .size(size)
+            .handle()
     }
 }
 
