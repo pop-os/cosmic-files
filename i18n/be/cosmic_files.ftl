@@ -379,7 +379,7 @@ file = Файл
 new-tab = Новая ўкладка
 new-window = Новае акно
 reload-folder = Абнавіць папку
-rename = Перайменаваць...
+rename = Перайменаваць
 close-tab = Закрыць укладку
 quit = Выйсці
 

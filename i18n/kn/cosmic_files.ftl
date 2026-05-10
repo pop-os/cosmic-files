@@ -249,7 +249,7 @@ display-settings = ಡಿಸ್ಪ್ಲೇ ಸೆಟ್ಟಿಂಗ್‌ಗಳ
 file = ಫೈಲ್
 new-tab = ಹೊಸ ಟ್ಯಾಬ್
 new-window = ಹೊಸ ವಿಂಡೋ
-rename = ಮರುಹೆಸರು...
+rename = ಮರುಹೆಸರು
 close-tab = ಟ್ಯಾಬ್‌ನ್ನು ಮುಚ್ಚಿ
 quit = ಮುಗಿಸಿ
 

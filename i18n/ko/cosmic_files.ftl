@@ -84,7 +84,7 @@ sort-by-size = 크기 순으로 정렬
 file = 파일
 new-tab = 새 탭
 new-window = 새 창
-rename = 이름 바꾸기...
+rename = 이름 바꾸기
 close-tab = 탭 닫기
 quit = 종료
 

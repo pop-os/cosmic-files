@@ -365,7 +365,7 @@ display-settings = Paramètres d'affichage...
 file = Fichier
 new-tab = Nouvel onglet
 new-window = Nouvelle fenêtre
-rename = Renommer...
+rename = Renommer
 close-tab = Fermer l'onglet
 quit = Quitter
 

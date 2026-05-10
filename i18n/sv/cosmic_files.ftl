@@ -296,7 +296,7 @@ display-settings = Skärminställningar...
 file = Fil
 new-tab = Ny flik
 new-window = Nytt fönster
-rename = Byt namn...
+rename = Byt namn
 close-tab = Stäng flik
 quit = Avsluta
 

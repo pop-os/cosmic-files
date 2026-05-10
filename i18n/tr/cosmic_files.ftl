@@ -279,7 +279,7 @@ display-settings = Görüntü ayarları...
 file = Dosya
 new-tab = Yeni sekme
 new-window = Yeni pencere
-rename = Yeniden adlandır...
+rename = Yeniden adlandır
 close-tab = Sekmeyi kapat
 quit = Çıkış
 

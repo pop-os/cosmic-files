@@ -382,7 +382,7 @@ file = 文件
 new-tab = 新建标签
 new-window = 新建窗口
 reload-folder = 刷新文件夹
-rename = 重命名…
+rename = 重命名
 close-tab = 关闭标签
 quit = 退出
 

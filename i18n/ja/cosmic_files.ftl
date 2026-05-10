@@ -200,7 +200,7 @@ sort-by-size = サイズで並べ替え
 file = ファイル
 new-tab = 新しいタブ
 new-window = 新しいウィンドウ
-rename = 名前を変更...
+rename = 名前を変更
 close-tab = タブを閉じる
 quit = 終了
 

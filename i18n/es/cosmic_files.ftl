@@ -374,7 +374,7 @@ file = Archivo
 new-tab = Nueva pestaña
 new-window = Nueva ventana
 reload-folder = Refrescar carpeta
-rename = Renombrar...
+rename = Renombrar
 close-tab = Cerrar pestaña
 quit = Cerrar
 

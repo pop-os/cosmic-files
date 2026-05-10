@@ -216,7 +216,7 @@ sort-by-trashed = Сорт. по дате удаления
 file = Файл
 new-tab = Новая вкладка
 new-window = Новое окно
-rename = Переименовать…
+rename = Переименовать
 close-tab = Закрыть вкладку
 quit = Выйти
 

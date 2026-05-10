@@ -384,7 +384,7 @@ file = Fájl
 new-tab = Új lap
 new-window = Új ablak
 reload-folder = Mappa újratöltése
-rename = Átnevezés…
+rename = Átnevezés
 close-tab = Lap bezárása
 quit = Kilépés
 

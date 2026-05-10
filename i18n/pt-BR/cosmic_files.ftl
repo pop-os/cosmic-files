@@ -386,7 +386,7 @@ file = Arquivo
 new-tab = Nova aba
 new-window = Nova janela
 reload-folder = Recarregar pasta
-rename = Renomear...
+rename = Renomear
 close-tab = Fechar aba
 quit = Sair
 

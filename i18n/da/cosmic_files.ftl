@@ -271,7 +271,7 @@ display-settings = Skærmindstillinger...
 file = Fil
 new-tab = Ny fane
 new-window = Nyt vindue
-rename = Omdøb...
+rename = Omdøb
 close-tab = Luk fane
 quit = Afslut
 

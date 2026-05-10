@@ -249,7 +249,7 @@ display-settings = Configuración de pantalla...
 file = Archivo
 new-tab = Nueva pestaña
 new-window = Nueva ventana
-rename = Cambiar nombre...
+rename = Cambiar nombre
 close-tab = Cerrar pestaña
 quit = Cerrar
 

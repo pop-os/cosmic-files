@@ -249,7 +249,7 @@ display-settings = डिस्प्ले सेटिंग्स...
 file = फ़ाइल
 new-tab = नया टैब
 new-window = नई विंडो
-rename = नाम बदलें...
+rename = नाम बदलें
 close-tab = टैब बंद करें
 quit = बंद करें
 

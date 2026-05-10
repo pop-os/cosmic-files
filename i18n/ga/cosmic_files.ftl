@@ -348,7 +348,7 @@ display-settings = Socruithe taispeána...
 file = Comhad
 new-tab = Cluaisín nua
 new-window = Fuinneog nua
-rename = Athainmnigh...
+rename = Athainmnigh
 close-tab = Dún cluaisín
 quit = Scoir
 

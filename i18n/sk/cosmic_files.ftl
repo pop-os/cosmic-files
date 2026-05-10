@@ -420,7 +420,7 @@ file = Súbor
 new-tab = Nová záložka
 new-window = Nové okno
 reload-folder = Obnoviť priečinok
-rename = Premenovať...
+rename = Premenovať
 close-tab = Zavrieť záložku
 quit = Ukončiť
 

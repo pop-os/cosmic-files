@@ -388,7 +388,7 @@ file = Plik
 new-tab = Nowa karta
 new-window = Nowe okno
 reload-folder = Odśwież katalog
-rename = Zmień nazwę…
+rename = Zmień nazwę
 close-tab = Zamknij kartę
 quit = Zamknij
 

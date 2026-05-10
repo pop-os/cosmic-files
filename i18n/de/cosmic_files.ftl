@@ -362,7 +362,7 @@ file = Datei
 new-tab = Neuer Tab
 new-window = Neues Fenster
 reload-folder = Ordner neu laden
-rename = Umbenennen...
+rename = Umbenennen
 close-tab = Tab schließen
 quit = Beenden
 

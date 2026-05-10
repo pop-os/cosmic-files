@@ -370,7 +370,7 @@ file = Bestand
 new-tab = Nieuw tabblad
 new-window = Nieuw venster
 reload-folder = Opnieuw laden
-rename = Hernoemen…
+rename = Hernoemen
 close-tab = Tabblad sluiten
 quit = Sluiten
 

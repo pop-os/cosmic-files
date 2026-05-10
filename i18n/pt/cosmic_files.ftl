@@ -167,7 +167,7 @@ sort-by-size = Ordenar por tamanho
 file = Ficheiro
 new-tab = Novo separador
 new-window = Nova janela
-rename = Renomear...
+rename = Renomear
 close-tab = Fechar separador
 quit = Sair
 

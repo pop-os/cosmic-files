@@ -259,7 +259,7 @@ display-settings = Näytön asetukset…
 file = Tiedosto
 new-tab = Uusi välilehti
 new-window = Uusi ikkuna
-rename = Nimeä uudelleen…
+rename = Nimeä uudelleen
 close-tab = Sulje välilehti
 quit = Lopeta
 

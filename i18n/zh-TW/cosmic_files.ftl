@@ -217,7 +217,7 @@ sort-by-size = 依大小排序
 file = 檔案
 new-tab = 新建分頁
 new-window = 新建視窗
-rename = 重新命名...
+rename = 重新命名
 close-tab = 關閉分頁
 quit = 退出
 

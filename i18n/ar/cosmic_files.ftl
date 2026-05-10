@@ -108,7 +108,7 @@ sort-by-size = رتّب حسب الحجم
 file = ملف
 new-tab = لسان جديد
 new-window = نافذة جديدة
-rename = غيِّر الاسم...
+rename = غيِّر الاسم
 close-tab = أغلق اللسان
 quit = أنهِ
 

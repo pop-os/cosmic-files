@@ -310,7 +310,7 @@ file = فایل
 new-tab = زبانه جدید
 new-window = پنجره جدید
 reload-folder = بازخوانی پوشه
-rename = تغییر نام...
+rename = تغییر نام
 close-tab = بستن زبانه
 quit = خروج
 

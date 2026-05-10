@@ -108,7 +108,7 @@ sort-by-size = Seřadit podle velikosti
 file = Soubor
 new-tab = Nová karta
 new-window = Nové okno
-rename = Přejmenovat...
+rename = Přejmenovat
 close-tab = Zavřít kartu
 quit = Ukončit
 

@@ -317,7 +317,7 @@ display-settings = Configuració de visualització...
 file = Fitxer
 new-tab = Pestanya nova
 new-window = Finestra nova
-rename = Canvia el nom...
+rename = Canvia el nom
 close-tab = Tanca la pestanya
 quit = Surt
 

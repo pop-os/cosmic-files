@@ -340,7 +340,7 @@ display-settings = Setări ecran...
 file = Fișier
 new-tab = Filă nouă
 new-window = Fereastră nouă
-rename = Redenumește...
+rename = Redenumește
 close-tab = Închide fila
 quit = Închide aplicația
 
