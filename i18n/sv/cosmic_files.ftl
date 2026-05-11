@@ -410,3 +410,11 @@ move-to = Flytta till...
 show-recents = Mapp för senast använda filer i sidofältet
 clear-recents-history = Töm historik för Senaste
 copy-path = Kopiera sökväg
+context-action = Kontextåtgärd
+context-action-confirm-title = Kör "{ $name }"?
+context-action-confirm-warning =
+    Detta kommer att köras på { $items } { $items ->
+        [one] objekt
+       *[other] objekt
+    }.
+run = Kör

@@ -167,7 +167,7 @@ read-write-execute = 读取、写入和执行
 
 ## Favorite Path Error Dialog
 
-favorite-path-error = 打开路径时出错
+favorite-path-error = 打开目录时出错
 favorite-path-error-description =
     无法打开 "{ $path }" 。
     "{ $path }" 可能不存在或您没有权限打开它。
@@ -348,7 +348,7 @@ light = 亮色模式
 
 type-to-search = 输入即可搜索
 type-to-search-recursive = 搜索当前文件夹及其所有子文件夹
-type-to-search-enter-path = 输入文件夹或文件路径
+type-to-search-enter-path = 输入文件夹或文件目录
 # Context menu
 add-to-sidebar = 加入侧边栏
 compress = 压缩…
@@ -437,3 +437,11 @@ clear-recents-history = 清除最近访问历史
 copy-path = 复制文件路径
 show-recents = 侧边栏中的最近访问
 mixed = 混合
+context-action-confirm-title = 运行 “{ $name }” ？
+run = 运行
+context-action-confirm-warning =
+    该行动将会在 { $items } { $items ->
+        [one] 项目
+       *[other] 项目
+    } 上运行。
+context-action = 环境行动

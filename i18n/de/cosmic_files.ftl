@@ -429,3 +429,11 @@ remove-from-recents = Aus den zuletzt verwendeten Elementen entfernen
 move-to = Verschieben nach...
 copy-path = Pfad kopieren
 mixed = Gemischt
+context-action = Kontextaktion
+context-action-confirm-title = „{ $name }“ ausführen?
+context-action-confirm-warning =
+    Dies wird ausgeführt auf { $items } { $items ->
+        [one] Element
+       *[other] Elementen
+    }.
+run = Ausführen

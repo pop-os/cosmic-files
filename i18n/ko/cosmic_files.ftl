@@ -277,3 +277,4 @@ copy-to-button-label = 복사
 move-to-button-label = 이동
 clear-recents-history = 최근 기록 비우기
 copy-path = 복사 경로
+move-to-title = 이동 위치 선택

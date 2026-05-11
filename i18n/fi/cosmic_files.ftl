@@ -405,3 +405,12 @@ removed-from-recents =
         [one] kohde
        *[other] kohdetta
     } viimeaikaisista
+mixed = Sekoitettu
+context-action = Kontekstitoiminto
+context-action-confirm-title = Suoritetaanko "{ $name }"?
+context-action-confirm-warning =
+    Tämä suorittaa { $items } { $items ->
+        [one] kohteen
+       *[other] kohdetta
+    }.
+run = Suorita

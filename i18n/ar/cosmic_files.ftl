@@ -372,3 +372,14 @@ show-recents = مجلد الحديثة في الشريط الجانبي
 clear-recents-history = امحُ التأريخ الحديث
 copy-path = انسخ المسار
 mixed = مختلط
+context-action = إجراء السياق
+context-action-confirm-title = شغِّل "{ $name }"؟
+context-action-confirm-warning =
+    سيُشغِّل هذا على { $items } { $items ->
+        [one] عنصر
+        [two] عنصرين
+        [few] عناصر
+        [many] عنصرًا
+       *[other] عنصر
+    }.
+run = شغِّل
