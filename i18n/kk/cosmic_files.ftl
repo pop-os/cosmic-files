@@ -319,3 +319,11 @@ show-recents = Бүйір панеліндегі «Жуырдағы құжатт
 clear-recents-history = Жуырдағылар тарихын өшіру
 copy-path = Орналасқан жолын көшіру
 mixed = Аралас
+context-action = Контекст әрекеті
+context-action-confirm-title = "{ $name }" орындау керек пе?
+context-action-confirm-warning =
+    Бұл { $items } орындалады { $items ->
+        [one] нәрсеге
+       *[other] нәрсеге
+    }.
+run = Орындау

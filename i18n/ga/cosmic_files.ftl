@@ -434,3 +434,11 @@ show-recents = Fillteán le déanaí sa bharra taoibh
 clear-recents-history = Glan stair na n-earraí le déanaí
 copy-path = Cóipeáil an chosán
 mixed = Measctha
+context-action = Gníomh comhthéacsúil
+context-action-confirm-title = Rith "{ $name }"?
+context-action-confirm-warning =
+    Rithfidh sé seo ar { $items } { $items ->
+        [one] mhír
+       *[other] míreanna
+    }.
+run = Rith

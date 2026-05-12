@@ -438,3 +438,11 @@ show-recents = Ostatnie katalogi w panelu bocznym
 clear-recents-history = Wyczyść bierzącą historię
 copy-path = Skopiuj ścieżkę
 mixed = Mieszane
+context-action = Akcja sytuacyjna
+context-action-confirm-title = Uruchomić "{ $name }"?
+context-action-confirm-warning =
+    Zostanie uruchomionych { $items } { $items ->
+        [one] element
+       *[other] elementów
+    }.
+run = Uruchom
