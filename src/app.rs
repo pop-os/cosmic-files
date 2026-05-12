@@ -2949,10 +2949,12 @@ impl Application for App {
             Message::Config(config) => {
                 if config != self.config {
                     log::info!("update config");
-                    // Show details is preserved for existing instances
+                    // Show details and military time are preserved for existing instances
                     let show_details = self.config.show_details;
+                    let military_time = self.config.tab.military_time;
                     self.config = config;
                     self.config.show_details = show_details;
+                    self.config.tab.military_time = military_time;
                     return self.update_config();
                 }
             }
