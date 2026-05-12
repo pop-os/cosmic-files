@@ -1247,7 +1247,7 @@ impl Application for App {
             );
         }
 
-        if self.flags.kind.save() {
+        if self.flags.kind.save() || self.flags.kind.is_dir() {
             elements.push(
                 widget::button::icon(widget::icon::from_name("folder-new-symbolic"))
                     .on_press(Message::NewFolder)
