@@ -45,7 +45,7 @@ impl MimeIconCache {
                     return None;
                 }
                 let icon_name = icon_names.remove(0);
-                let mut named = icon::from_name(icon_name).size(key.size);
+                let mut named = icon::from_name(icon_name).prefer_svg(true).size(key.size);
                 if !icon_names.is_empty() {
                     let fallback_names =
                         icon_names.into_iter().map(std::borrow::Cow::from).collect();
@@ -112,7 +112,10 @@ pub fn mime_icon(mime: Mime, size: u16) -> icon::Handle {
     let mut mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
     match mime_icon_cache.get(MimeIconKey { mime, size }) {
         Some(handle) => handle,
-        None => icon::from_name(FALLBACK_MIME_ICON).size(size).handle(),
+        None => icon::from_name(FALLBACK_MIME_ICON)
+            .prefer_svg(true)
+            .size(size)
+            .handle(),
     }
 }
 
