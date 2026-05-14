@@ -1756,6 +1756,8 @@ pub enum Message {
     HighlightActivate(usize),
     DirectorySize(PathBuf, DirSize),
     ImageDecoded(PathBuf, u32, u32, Vec<u8>, Option<(u32, u32)>, u64), // path, width, height, pixels, display_size, generation
+    CopyPath,
+    Ignore
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -2337,6 +2339,16 @@ impl Item {
 
         let mut details = widget::column::with_capacity(8).spacing(space_xxxs);
         details = details.push(widget::text::heading(self.name.clone()));
+        if let Some(path) = self.path_opt() {
+            details = details.push(
+                widget::row![
+                    widget::text_input("", path.to_string_lossy()).on_input(|_| Message::Ignore),
+                    widget::button::standard(fl!("copy")).on_press(Message::CopyPath),
+                ]
+                .spacing(10)
+                .align_y(Alignment::Center)
+               );
+        }
         details = details.push(widget::text::body(fl!(
             "type",
             mime = self.mime.to_string()
@@ -3314,6 +3326,7 @@ impl Tab {
         let mod_shift = modifiers.contains(Modifiers::SHIFT) && self.mode.multiple();
         let last_context_menu = self.context_menu;
         match message {
+            Message::Ignore =>{},
             Message::AddNetworkDrive => {
                 commands.push(Command::AddNetworkDrive);
             }
@@ -4491,6 +4504,9 @@ impl Tab {
             }
             Message::ZoomOut => {
                 commands.push(Command::Action(Action::ZoomOut));
+            }
+            Message::CopyPath =>{
+                commands.push(Command::Action(Action::CopyPath));
             }
             Message::DirectorySize(path, dir_size) => {
                 let location = Location::Path(path);
