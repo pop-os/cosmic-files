@@ -1789,6 +1789,7 @@ impl Application for App {
                                         let autosize_id = widget::Id::unique();
                                         commands.push(self.update(Message::Surface(
                                             cosmic::surface::action::app_popup(
+                                                |_| Default::default(),
                                                 move |app: &mut Self| -> SctkPopupSettings {
                                                     let anchor_rect = Rectangle {
                                                         x: point.x as i32,

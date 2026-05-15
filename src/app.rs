@@ -4524,6 +4524,7 @@ impl Application for App {
                                     commands.push(self.update(Message::CheckClipboard));
                                     commands.push(self.update(Message::Surface(
                                         cosmic::surface::action::app_popup(
+                                            |_| Default::default(),
                                             move |app: &mut Self| -> SctkPopupSettings {
                                                 let anchor_rect = Rectangle {
                                                     x: point.x as i32,
@@ -5286,30 +5287,35 @@ impl Application for App {
                         return Task::batch([
                             command,
                             cosmic::task::message(cosmic::action::cosmic(
-                                cosmic::app::Action::Surface(cosmic::surface::action::layer_shell(
-                                    move |_: &mut App| SctkLayerSurfaceSettings {
-                                        id: surface_id,
-                                        layer: Layer::Bottom,
-                                        keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                                        input_zone: None,
-                                        anchor: Anchor::TOP
-                                            | Anchor::BOTTOM
-                                            | Anchor::LEFT
-                                            | Anchor::RIGHT,
-                                        output: IcedOutput::Output(output.clone()),
-                                        namespace: "cosmic-files-applet".into(),
-                                        size: Some((None, None)),
-                                        margin: IcedMargin {
-                                            top: 0,
-                                            bottom: 0,
-                                            left: 0,
-                                            right: 0,
+                                cosmic::app::Action::Surface(
+                                    cosmic::surface::action::app_layer_shell(
+                                        |_| Default::default(),
+                                        move |_: &mut App| SctkLayerSurfaceSettings {
+                                            id: surface_id,
+                                            layer: Layer::Bottom,
+                                            keyboard_interactivity: KeyboardInteractivity::OnDemand,
+                                            input_zone: None,
+                                            anchor: Anchor::TOP
+                                                | Anchor::BOTTOM
+                                                | Anchor::LEFT
+                                                | Anchor::RIGHT,
+                                            output: IcedOutput::Output(output.clone()),
+                                            namespace: "cosmic-files-applet".into(),
+                                            size: Some((None, None)),
+                                            margin: IcedMargin {
+                                                top: 0,
+                                                bottom: 0,
+                                                left: 0,
+                                                right: 0,
+                                            },
+                                            exclusive_zone: 0,
+                                            size_limits: Limits::NONE
+                                                .min_width(1.0)
+                                                .min_height(1.0),
                                         },
-                                        exclusive_zone: 0,
-                                        size_limits: Limits::NONE.min_width(1.0).min_height(1.0),
-                                    },
-                                    None,
-                                )),
+                                        None,
+                                    ),
+                                ),
                             )),
                             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
                             overlap_notify(surface_id, true),
