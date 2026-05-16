@@ -1393,7 +1393,10 @@ impl Application for App {
             Message::Config(config) => {
                 if config != self.flags.config {
                     log::info!("update config");
+                    // Don't overwrite military time
+                    let military_time = self.flags.config.tab.military_time;
                     self.flags.config = config;
+                    self.flags.config.tab.military_time = military_time;
                     return self.update_config();
                 }
             }
