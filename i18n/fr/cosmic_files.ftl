@@ -445,3 +445,4 @@ context-action-confirm-warning =
     }.
 run = Exécuter
 context-action = Action contextuelle
+rename-confirm = Renommer
