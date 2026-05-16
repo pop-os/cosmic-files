@@ -427,3 +427,4 @@ context-action-confirm-warning =
        *[other] položek
     }.
 run = Spustit
+rename-confirm = Přejmenovat

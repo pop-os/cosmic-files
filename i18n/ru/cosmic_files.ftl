@@ -389,3 +389,4 @@ context-action-confirm-warning =
        *[other] элем.
     }.
 run = Выполнить
+rename-confirm = Переименовать

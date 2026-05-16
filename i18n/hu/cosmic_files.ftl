@@ -445,3 +445,4 @@ context-action-confirm-warning =
        *[other] elemen
     } fog lefutni.
 run = Futtatás
+rename-confirm = Átnevezés
