@@ -826,6 +826,7 @@ impl App {
     fn update_config(&mut self) -> Task<Message> {
         self.core.window.show_context = self.flags.config.dialog.show_details;
         let config = self.flags.config.dialog_tab();
+        self.tab.config.view = config.view;
         self.update_nav_model();
         self.update(Message::TabMessage(tab::Message::Config(config)))
     }
