@@ -825,9 +825,10 @@ impl App {
 
     fn update_config(&mut self) -> Task<Message> {
         self.core.window.show_context = self.flags.config.dialog.show_details;
-        self.tab.config = self.flags.config.dialog_tab();
+        let config = self.flags.config.dialog_tab();
+        self.tab.config.view = config.view;
         self.update_nav_model();
-        self.update(Message::TabMessage(tab::Message::Config(self.tab.config)))
+        self.update(Message::TabMessage(tab::Message::Config(config)))
     }
 
     fn with_dialog_config<F: Fn(&mut DialogConfig)>(&mut self, f: F) -> Task<Message> {
@@ -1393,7 +1394,10 @@ impl Application for App {
             Message::Config(config) => {
                 if config != self.flags.config {
                     log::info!("update config");
+                    // Don't overwrite military time
+                    let military_time = self.flags.config.tab.military_time;
                     self.flags.config = config;
+                    self.flags.config.tab.military_time = military_time;
                     return self.update_config();
                 }
             }
