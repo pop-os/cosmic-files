@@ -448,6 +448,7 @@ pub enum Message {
         Option<Vec<PathBuf>>,
     ),
     TabView(Option<Entity>, tab::View),
+    TerminalDefault(Box<str>),
     TimeConfigChange(TimeConfig),
     ToggleContextPage(ContextPage),
     ToggleFoldersFirst,
@@ -559,7 +560,7 @@ pub enum DialogPage {
         path: PathBuf,
         mime: mime_guess::Mime,
         selected: usize,
-        store_opt: Option<MimeApp>,
+        store_opt: Option<Arc<MimeApp>>,
     },
     PermanentlyDelete {
         paths: Box<[PathBuf]>,
@@ -2273,7 +2274,7 @@ impl App {
         .into()
     }
 
-    fn get_apps_for_mime(&self, mime_type: &Mime) -> Vec<(&MimeApp, MimeAppMatch)> {
+    fn get_apps_for_mime(&self, mime_type: &Mime) -> Vec<(&Arc<MimeApp>, MimeAppMatch)> {
         let mut results = Vec::new();
 
         let mut dedupe = FxHashSet::default();
@@ -4793,6 +4794,7 @@ impl Application for App {
                     tab.refresh_cut(&paths);
                 }
             }
+            Message::TerminalDefault(command) => {}
             Message::TimeConfigChange(time_config) => {
                 self.config.tab.military_time = time_config.military_time;
                 return self.update_config();
@@ -5982,7 +5984,7 @@ impl Application for App {
                             widget::button::custom(
                                 widget::row::with_children([
                                     icon(app.icon.clone()).size(32).into(),
-                                    if app.is_default && !displayed_default {
+                                    if app.is_default() && !displayed_default {
                                         displayed_default = true;
                                         widget::text::body(fl!(
                                             "default-app",
