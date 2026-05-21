@@ -2341,21 +2341,17 @@ impl Item {
         details = details.push(widget::text::heading(self.name.clone()));
         if let Some(path) = self.path_opt() {
             details = details.push(
-                widget::row![
-                    widget::text_input("", path.to_string_lossy())
-                        .trailing_icon(
-                            widget::icon::from_name("edit-copy-symbolic")
-                                .size(16)
-                                .apply(widget::button::custom)
-                                .class(theme::Button::Icon)
-                                .on_press(Message::CopyPath)
-                                .padding(8)
-                                .into()
-                        )
-                        .on_input(|_| Message::Ignore),
-                ]
-                .spacing(10)
-                .align_y(Alignment::Center),
+                widget::text_input("", path.to_string_lossy())
+                    .trailing_icon(
+                        widget::icon::from_name("edit-copy-symbolic")
+                            .size(16)
+                            .apply(widget::button::custom)
+                            .class(theme::Button::Icon)
+                            .on_press(Message::CopyPath)
+                            .padding(8)
+                            .into(),
+                    )
+                    .on_input(|_| Message::Ignore),
             );
         }
         details = details.push(widget::text::body(fl!(
