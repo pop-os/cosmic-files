@@ -445,3 +445,4 @@ context-action-confirm-warning =
        *[other] itens
     }.
 run = Executar
+rename-confirm = Renomear

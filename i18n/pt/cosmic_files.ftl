@@ -354,3 +354,4 @@ sort-smallest-to-largest = Do menor para o maior
 sort-largest-to-smallest = Do maior para o menor
 context-action-confirm-title = Executar "{ $name }"?
 run = Executar
+rename-confirm = Renomear

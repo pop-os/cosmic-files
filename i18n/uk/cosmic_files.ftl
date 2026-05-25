@@ -82,7 +82,7 @@ copying =
     Копіювання { $items } { $items ->
         [one] елемента
        *[other] елементів
-    } з «{ $from }» в «{ $to }» ({ $progress })...
+    } з «{ $from }» до «{ $to }» ({ $progress })...
 copied =
     Скопійовано { $items } { $items ->
         [one] елемент
@@ -95,7 +95,7 @@ moving =
     Переміщення { $items } { $items ->
         [one] елемента
        *[other] елементів
-    } з «{ $from }» в «{ $to }» ({ $progress })...
+    } з «{ $from }» до «{ $to }» ({ $progress })...
 moved =
     Переміщено { $items } { $items ->
         [one] елемент
@@ -299,7 +299,7 @@ extracting =
     Видобування { $items } { $items ->
         [one] елемента
        *[other] елементів
-    } з «{ $from }» в «{ $to }» ({ $progress })...
+    } з «{ $from }» до «{ $to }» ({ $progress })...
 extracted =
     Видобуто { $items } { $items ->
         [one] елемент
@@ -364,10 +364,10 @@ removed-from-recents =
        *[other] елементів
     } з { recents }
 empty-trash-title = Спорожити смітник?
-type-to-search-select = Вибирає перший відповідний файл або папку
+type-to-search-select = Вибирає перший відповідний файл або теку
 pasted-image = Вставлене зображення
 pasted-text = Вставлений текст
-pasted-video = Вставлене відео
+pasted-video = Вставлене видиво
 copy-to-button-label = Копіювати
 move-to-button-label = Перемістити
 copy-to = Копіювати до…
@@ -387,3 +387,4 @@ context-action-confirm-warning =
        *[other] елементів
     }.
 context-action = Контекстна дія
+rename-confirm = Перейменувати
