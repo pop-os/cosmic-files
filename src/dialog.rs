@@ -6,7 +6,7 @@ use cosmic::app::{Core, Task, context_drawer};
 use cosmic::iced::core::SmolStr;
 use cosmic::iced::core::widget::operation;
 use cosmic::iced::futures::{self, SinkExt};
-use cosmic::iced::keyboard::key::Named;
+use cosmic::iced::keyboard::key::{Named, Physical};
 use cosmic::iced::keyboard::{Event as KeyEvent, Key, Modifiers};
 use cosmic::iced::platform_specific::shell::{self as iced_winit, SurfaceIdWrapper};
 use cosmic::iced::widget::scrollable;
@@ -456,7 +456,7 @@ enum Message {
     Escape,
     Filename(String),
     Filter(usize),
-    Key(Modifiers, Key, Option<SmolStr>),
+    Key(Modifiers, Key, Physical, Option<SmolStr>),
     ModifiersChanged(Modifiers),
     MounterItems(MounterKey, MounterItems),
     Mouse(window::Id, mouse::Button),
@@ -1450,16 +1450,16 @@ impl Application for App {
                 }
                 return self.rescan_tab(None);
             }
-            Message::Key(modifiers, key, text) => {
+            Message::Key(modifiers, key, physical_key, text) => {
                 for (key_bind, action) in &self.key_binds {
-                    if key_bind.matches(modifiers, &key) {
+                    if key_bind.matches(modifiers, &key, Some(&physical_key)) {
                         return self.update(Message::from(action.message()));
                     }
                 }
 
                 // Check key binds from accept label
                 if let Some(key_bind) = &self.accept_label.key_bind_opt
-                    && key_bind.matches(modifiers, &key)
+                    && key_bind.matches(modifiers, &key, Some(&physical_key))
                 {
                     return self.update(if self.flags.kind.save() {
                         Message::Save(false)
@@ -2050,11 +2050,14 @@ impl Application for App {
                 },
                 Event::Keyboard(KeyEvent::KeyPressed {
                     key,
+                    physical_key,
                     modifiers,
                     text,
                     ..
                 }) => match status {
-                    event::Status::Ignored => Some(Message::Key(modifiers, key, text)),
+                    event::Status::Ignored => {
+                        Some(Message::Key(modifiers, key, physical_key, text))
+                    }
                     event::Status::Captured => {
                         if key == Key::Named(Named::Escape) {
                             Some(Message::Escape)
