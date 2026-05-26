@@ -446,3 +446,4 @@ context-action-confirm-warning =
        *[other] elementów
     }.
 run = Uruchom
+rename-confirm = Zmień nazwę

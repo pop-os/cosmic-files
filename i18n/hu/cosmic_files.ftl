@@ -2,7 +2,7 @@ cosmic-files = COSMIC Fájlok
 comment = Fájlkezelő a COSMIC asztali környezethez
 keywords = mappa;fájl;kezelő;
 empty-folder = Üres mappa
-empty-folder-hidden = Üres mappa (Rejtett elemeket tartalmaz)
+empty-folder-hidden = Üres mappa (rejtett elemeket tartalmaz)
 no-results = Nincs találat
 filesystem = Fájlrendszer
 home = Saját mappa
@@ -47,13 +47,13 @@ resume = Folytatás
 
 ## Compress Dialog
 
-create-archive = Tömörített fájl létrehozása
+create-archive = Archívum létrehozása
 
 ## Extract Dialog
 
 extract-password-required = Jelszó szükséges
 extract-to = Kibontás ide…
-extract-to-title = Kibontás mappába
+extract-to-title = Kibontási cél kiválasztása
 
 ## Empty Trash Dialog
 
@@ -93,7 +93,7 @@ save-file = Fájl mentése
 
 ## Open With Dialog
 
-open-with-title = Hogyan szeretnéd megnyitni a következőt: „{ $name }”?
+open-with-title = Hogyan szeretnéd megnyitni a(z) „{ $name }” fájlt?
 browse-store = { $store } böngészése
 other-apps = Egyéb alkalmazások
 related-apps = Hasonló alkalmazások
@@ -113,7 +113,7 @@ rename-folder = Mappa átnevezése
 ## Replace Dialog
 
 replace = Csere
-replace-title = „{ $filename }” már létezik
+replace-title = „{ $filename }” már létezik ezen a helyen
 replace-warning = Szeretnéd lecserélni a meglévő fájlt a mentendő fájllal? A cserével felülírod annak tartalmát.
 replace-warning-operation = Szeretnéd lecserélni? A csere felülírja annak tartalmát.
 original-file = Eredeti fájl
@@ -133,7 +133,7 @@ set-and-launch = Beállítás és indítás
 open-with = Megnyitás ezzel
 owner = Tulajdonos
 group = Csoport
-other = Többi
+other = Mások
 
 ### Mode 0
 
@@ -172,7 +172,7 @@ read-write-execute = Olvasás, írás és végrehajtás
 favorite-path-error = Hiba a könyvtár megnyitásakor
 favorite-path-error-description =
     Nem sikerült megnyitni ezt: „{ $path }”
-    „{ $path }” lehet nem létezik, vagy nincs jogosultságod a megnyitásához
+    A(z) „{ $path }” útvonal lehet, hogy nem létezik, vagy nincs jogosultságod a megnyitásához
 
     Szeretnéd eltávolítani az oldalsávról?
 remove = Eltávolítás
@@ -187,9 +187,9 @@ keep = Megtartás
 ## Add Network Drive
 
 add-network-drive = Hálózati meghajtó hozzáadása
-connect = Csatlakozás
-connect-anonymously = Csatlakozás névtelenül
-connecting = Csatlakozás…
+connect = Kapcsolódás
+connect-anonymously = Kapcsolódás névtelenül
+connecting = Kapcsolódás…
 domain = Tartomány
 enter-server-address = Add meg a kiszolgáló címét
 network-drive-description =
@@ -209,7 +209,7 @@ network-drive-schemes =
 network-drive-error = Nem érhető el a hálózati meghajtó
 password = Jelszó
 remember-password = Jelszó megjegyzése
-try-again = Újra
+try-again = Próbáld újra
 username = Felhasználónév
 
 ## Operations
@@ -217,7 +217,7 @@ username = Felhasználónév
 cancelled = Megszakítva
 edit-history = Fájlműveleti előzmények
 history = Előzmények
-no-history = Nem találhatók elemek az előzményekben
+no-history = Nem találhatók elemek az előzményekben.
 pending = Függőben
 progress = { $percent }%
 progress-cancelled = { $percent }%, megszakítva
@@ -330,7 +330,7 @@ items = Elemek: { $items }
 item-size = Méret: { $size }
 item-created = Létrehozva: { $created }
 item-modified = Módosítva: { $modified }
-item-accessed = Hozzáférve: { $accessed }
+item-accessed = Utolsó hozzáférés: { $accessed }
 calculating = Számítás…
 
 ## Settings
@@ -350,7 +350,7 @@ light = Világos
 
 type-to-search = Gépeléssel keresés
 type-to-search-recursive = Keresés a jelenlegi mappában és almappákban
-type-to-search-enter-path = Elérési út megadása
+type-to-search-enter-path = Elérési út megnyitása
 # Context menu
 add-to-sidebar = Hozzáadás az oldalsávhoz
 compress = Tömörítés…
@@ -373,7 +373,7 @@ remove-from-recents = Eltávolítás a legutóbbiak közül
 
 change-wallpaper = Háttérkép cseréje…
 desktop-appearance = Asztali megjelenés…
-display-settings = Képernyő-beállítások…
+display-settings = Kijelzőbeállítások…
 
 # Menu
 
@@ -406,7 +406,7 @@ grid-view = Rácsnézet
 list-view = Listanézet
 show-hidden-files = Rejtett fájlok megjelenítése
 list-directories-first = Könyvtárak listázása először
-gallery-preview = Galéria előnézet
+gallery-preview = Galéria-előnézet
 menu-settings = Beállítások…
 menu-about = A COSMIC Fájlok névjegye…
 
@@ -415,8 +415,8 @@ menu-about = A COSMIC Fájlok névjegye…
 sort = Rendezés
 sort-a-z = A-Z
 sort-z-a = Z-A
-sort-newest-first = Legújabb előre
-sort-oldest-first = Legrégibb előre
+sort-newest-first = Legújabb elöl
+sort-oldest-first = Legrégibb elöl
 sort-smallest-to-largest = Legkisebbtől a legnagyobbig
 sort-largest-to-smallest = Legnagyobbtól a legkisebbig
 repository = Tároló
@@ -445,3 +445,4 @@ context-action-confirm-warning =
        *[other] elemen
     } fog lefutni.
 run = Futtatás
+rename-confirm = Átnevezés
