@@ -71,6 +71,7 @@ pub fn context_menu<'a>(
         color.alpha *= 0.75;
         TextStyle {
             color: Some(color.into()),
+            ..Default::default()
         }
     }
     fn disabled_style(theme: &cosmic::Theme) -> TextStyle {
@@ -78,6 +79,7 @@ pub fn context_menu<'a>(
         color.alpha *= 0.5;
         TextStyle {
             color: Some(color.into()),
+            ..Default::default()
         }
     }
 

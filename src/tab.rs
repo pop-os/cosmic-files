@@ -7580,7 +7580,10 @@ mod tests {
                 // Text editor content may add a trailing newline
                 assert_eq!(content.text().trim_end(), "ab");
             }
-            _ => panic!("expected Text thumbnail with valid prefix only, got {:?}", thumb),
+            _ => panic!(
+                "expected Text thumbnail with valid prefix only, got {:?}",
+                thumb
+            ),
         }
         Ok(())
     }
