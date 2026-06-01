@@ -416,6 +416,7 @@ pub enum Message {
     PendingPauseAll(bool),
     PermanentlyDelete(Option<Entity>),
     Preview(Option<Entity>),
+    ReloadMimeAppCache,
     ReorderTab(ReorderEvent),
     RescanRecents,
     RescanTrash,
@@ -448,7 +449,6 @@ pub enum Message {
         Option<Vec<PathBuf>>,
     ),
     TabView(Option<Entity>, tab::View),
-    TerminalDefault(Box<str>),
     TimeConfigChange(TimeConfig),
     ToggleContextPage(ContextPage),
     ToggleFoldersFirst,
@@ -4221,6 +4221,9 @@ impl Application for App {
                 let paths: Box<[_]> = self.selected_paths(entity_opt).collect();
                 return self.operation(Operation::RemoveFromRecents { paths });
             }
+            Message::ReloadMimeAppCache => {
+                self.mime_app_cache.reload();
+            }
             Message::RescanRecents => {
                 return self.rescan_recents();
             }
@@ -4794,7 +4797,6 @@ impl Application for App {
                     tab.refresh_cut(&paths);
                 }
             }
-            Message::TerminalDefault(command) => {}
             Message::TimeConfigChange(time_config) => {
                 self.config.tab.military_time = time_config.military_time;
                 return self.update_config();
@@ -6770,6 +6772,22 @@ impl Application for App {
                                 log::warn!("failed to create file watcher: {err:?}");
                             }
                         }
+
+                        std::future::pending().await
+                    },
+                )
+            }),
+            Subscription::run(|| {
+                eprintln!("loading mime app watcher");
+                stream::channel(
+                    1,
+                    |mut output: futures::channel::mpsc::Sender<Message>| async move {
+                        mime_app::watch(move || {
+                            futures::executor::block_on(async {
+                                _ = output.send(Message::ReloadMimeAppCache).await;
+                            })
+                        })
+                        .await;
 
                         std::future::pending().await
                     },

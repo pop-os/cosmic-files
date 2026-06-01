@@ -6,14 +6,63 @@ use bstr::{BString, ByteSlice, ByteVec};
 use cosmic::desktop;
 use cosmic::widget;
 pub use mime_guess::Mime;
+use notify_debouncer_full::notify;
 use rustc_hash::FxHashMap;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, atomic};
-use std::time::Instant;
+use std::time::{self, Instant};
 use std::{fs, io, process};
+
+pub async fn watch(mut emitter: impl FnMut() + 'static + Send) {
+    let watcher_result = notify_debouncer_full::new_debouncer(
+        time::Duration::from_millis(250),
+        Some(time::Duration::from_millis(250)),
+        move |event_res: notify_debouncer_full::DebounceEventResult| {
+            let Ok(events) = event_res else {
+                return;
+            };
+
+            if events.iter().any(|event| {
+                event.kind.is_create() || event.kind.is_modify() || event.kind.is_remove()
+            }) {
+                emitter();
+            }
+        },
+    );
+
+    if let Ok(mut watcher) = watcher_result {
+        let system_paths = cosmic_mime_apps::list_paths();
+        let local_paths = (|| {
+            let base_dirs = xdg::BaseDirectories::new();
+            let Some(home) = base_dirs.get_config_home() else {
+                return Err(std::io::Error::other("XDG config home not set"));
+            };
+
+            let Ok(desktop) = std::env::var("XDG_CURRENT_DESKTOP") else {
+                return Err(std::io::Error::other("XDG_CURRENT_DESKTOP unset"));
+            };
+
+            let default_mimeapps = home.join("mimeapps.list");
+            let desktop_mimeapps =
+                home.join([&desktop.to_ascii_lowercase(), "-mimeapps.list"].concat());
+
+            Ok([desktop_mimeapps, default_mimeapps])
+        })()
+        .ok();
+
+        for path in system_paths
+            .iter()
+            .chain(local_paths.as_ref().into_iter().flatten())
+        {
+            _ = watcher.watch(path.as_path(), notify::RecursiveMode::NonRecursive);
+        }
+
+        std::future::pending().await
+    }
+}
 
 pub fn exec_to_command(
     exec: &str,
