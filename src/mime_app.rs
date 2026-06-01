@@ -6,6 +6,7 @@ use bstr::{BString, ByteSlice, ByteVec};
 use cosmic::desktop;
 use cosmic::widget;
 pub use mime_guess::Mime;
+#[cfg(feature = "desktop")]
 use notify_debouncer_full::notify;
 use rustc_hash::FxHashMap;
 use std::ffi::OsStr;
@@ -16,6 +17,7 @@ use std::sync::{Arc, atomic};
 use std::time::{self, Instant};
 use std::{fs, io, process};
 
+#[cfg(feature = "desktop")]
 pub async fn watch(mut emitter: impl FnMut() + 'static + Send) {
     let watcher_result = notify_debouncer_full::new_debouncer(
         time::Duration::from_millis(250),

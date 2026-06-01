@@ -6777,8 +6777,8 @@ impl Application for App {
                     },
                 )
             }),
+            #[cfg(feature = "desktop")]
             Subscription::run(|| {
-                eprintln!("loading mime app watcher");
                 stream::channel(
                     1,
                     |mut output: futures::channel::mpsc::Sender<Message>| async move {
