@@ -1757,7 +1757,6 @@ pub enum Message {
     DirectorySize(PathBuf, DirSize),
     ImageDecoded(PathBuf, u32, u32, Vec<u8>, Option<(u32, u32)>, u64), // path, width, height, pixels, display_size, generation
     CopyPath,
-    Ignore,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -2351,7 +2350,7 @@ impl Item {
                             .padding(8)
                             .into(),
                     )
-                    .on_input(|_| Message::Ignore),
+                    .read_only(),
             );
         }
         details = details.push(widget::text::body(fl!(
@@ -3331,7 +3330,6 @@ impl Tab {
         let mod_shift = modifiers.contains(Modifiers::SHIFT) && self.mode.multiple();
         let last_context_menu = self.context_menu;
         match message {
-            Message::Ignore => {}
             Message::AddNetworkDrive => {
                 commands.push(Command::AddNetworkDrive);
             }
