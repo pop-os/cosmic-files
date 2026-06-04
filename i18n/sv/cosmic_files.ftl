@@ -418,3 +418,4 @@ context-action-confirm-warning =
        *[other] objekt
     }.
 run = Kör
+rename-confirm = Byt namn

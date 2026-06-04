@@ -414,3 +414,4 @@ context-action-confirm-warning =
        *[other] kohdetta
     }.
 run = Suorita
+rename-confirm = Nimeä uudelleen
