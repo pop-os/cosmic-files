@@ -327,3 +327,4 @@ context-action-confirm-warning =
         [one] στοιχείο
        *[other] στοιχεία
     }.
+rename-confirm = Μετονομασία

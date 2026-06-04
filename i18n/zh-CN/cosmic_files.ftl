@@ -445,3 +445,4 @@ context-action-confirm-warning =
        *[other] 项目
     } 上运行。
 context-action = 环境行动
+rename-confirm = 重命名

@@ -6,7 +6,7 @@ use cosmic::app::{Core, Task, context_drawer};
 use cosmic::iced::core::SmolStr;
 use cosmic::iced::core::widget::operation;
 use cosmic::iced::futures::{self, SinkExt};
-use cosmic::iced::keyboard::key::Named;
+use cosmic::iced::keyboard::key::{Named, Physical};
 use cosmic::iced::keyboard::{Event as KeyEvent, Key, Modifiers};
 use cosmic::iced::platform_specific::shell::{self as iced_winit, SurfaceIdWrapper};
 use cosmic::iced::widget::scrollable;
@@ -456,7 +456,7 @@ enum Message {
     Escape,
     Filename(String),
     Filter(usize),
-    Key(Modifiers, Key, Option<SmolStr>),
+    Key(Modifiers, Key, Physical, Option<SmolStr>),
     ModifiersChanged(Modifiers),
     MounterItems(MounterKey, MounterItems),
     Mouse(window::Id, mouse::Button),
@@ -825,9 +825,10 @@ impl App {
 
     fn update_config(&mut self) -> Task<Message> {
         self.core.window.show_context = self.flags.config.dialog.show_details;
-        self.tab.config = self.flags.config.dialog_tab();
+        let config = self.flags.config.dialog_tab();
+        self.tab.config.view = config.view;
         self.update_nav_model();
-        self.update(Message::TabMessage(tab::Message::Config(self.tab.config)))
+        self.update(Message::TabMessage(tab::Message::Config(config)))
     }
 
     fn with_dialog_config<F: Fn(&mut DialogConfig)>(&mut self, f: F) -> Task<Message> {
@@ -1393,7 +1394,10 @@ impl Application for App {
             Message::Config(config) => {
                 if config != self.flags.config {
                     log::info!("update config");
+                    // Don't overwrite military time
+                    let military_time = self.flags.config.tab.military_time;
                     self.flags.config = config;
+                    self.flags.config.tab.military_time = military_time;
                     return self.update_config();
                 }
             }
@@ -1446,16 +1450,16 @@ impl Application for App {
                 }
                 return self.rescan_tab(None);
             }
-            Message::Key(modifiers, key, text) => {
+            Message::Key(modifiers, key, physical_key, text) => {
                 for (key_bind, action) in &self.key_binds {
-                    if key_bind.matches(modifiers, &key) {
+                    if key_bind.matches(modifiers, &key, Some(&physical_key)) {
                         return self.update(Message::from(action.message()));
                     }
                 }
 
                 // Check key binds from accept label
                 if let Some(key_bind) = &self.accept_label.key_bind_opt
-                    && key_bind.matches(modifiers, &key)
+                    && key_bind.matches(modifiers, &key, Some(&physical_key))
                 {
                     return self.update(if self.flags.kind.save() {
                         Message::Save(false)
@@ -2046,11 +2050,14 @@ impl Application for App {
                 },
                 Event::Keyboard(KeyEvent::KeyPressed {
                     key,
+                    physical_key,
                     modifiers,
                     text,
                     ..
                 }) => match status {
-                    event::Status::Ignored => Some(Message::Key(modifiers, key, text)),
+                    event::Status::Ignored => {
+                        Some(Message::Key(modifiers, key, physical_key, text))
+                    }
                     event::Status::Captured => {
                         if key == Key::Named(Named::Escape) {
                             Some(Message::Escape)

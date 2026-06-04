@@ -7,6 +7,7 @@ use cosmic::iced::clipboard::dnd::DndAction;
 use cosmic::iced::core::SmolStr;
 use cosmic::iced::core::widget::operation::focusable::unfocus;
 use cosmic::iced::futures::{self, SinkExt};
+use cosmic::iced::keyboard::key::Physical;
 use cosmic::iced::keyboard::{Event as KeyEvent, Key, Modifiers};
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use cosmic::iced::platform_specific::shell::wayland::commands::overlap_notify::overlap_notify;
@@ -355,7 +356,7 @@ pub enum Message {
     ExtractToResult(DialogResult),
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     Focused(window::Id),
-    Key(window::Id, Modifiers, Key, Option<SmolStr>),
+    Key(window::Id, Modifiers, Key, Physical, Option<SmolStr>),
     LaunchUrl(String),
     MaybeExit,
     ModifiersChanged(window::Id, Modifiers),
@@ -415,6 +416,7 @@ pub enum Message {
     PendingPauseAll(bool),
     PermanentlyDelete(Option<Entity>),
     Preview(Option<Entity>),
+    ReloadMimeAppCache,
     ReorderTab(ReorderEvent),
     RescanRecents,
     RescanTrash,
@@ -558,7 +560,7 @@ pub enum DialogPage {
         path: PathBuf,
         mime: mime_guess::Mime,
         selected: usize,
-        store_opt: Option<MimeApp>,
+        store_opt: Option<Arc<MimeApp>>,
     },
     PermanentlyDelete {
         paths: Box<[PathBuf]>,
@@ -2272,7 +2274,7 @@ impl App {
         .into()
     }
 
-    fn get_apps_for_mime(&self, mime_type: &Mime) -> Vec<(&MimeApp, MimeAppMatch)> {
+    fn get_apps_for_mime(&self, mime_type: &Mime) -> Vec<(&Arc<MimeApp>, MimeAppMatch)> {
         let mut results = Vec::new();
 
         let mut dedupe = FxHashSet::default();
@@ -3351,7 +3353,7 @@ impl Application for App {
                     return dialog.update(dialog_message);
                 }
             }
-            Message::Key(window_id, modifiers, key, text) => {
+            Message::Key(window_id, modifiers, key, physical_key, text) => {
                 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
                 let in_surface_ids = self.surface_ids.values().any(|id| *id == window_id);
                 #[cfg(not(all(feature = "wayland", feature = "desktop-applet")))]
@@ -3359,7 +3361,7 @@ impl Application for App {
                 if self.core.main_window_id() == Some(window_id) || in_surface_ids {
                     let entity = self.tab_model.active();
                     for (key_bind, action) in &self.key_binds {
-                        if key_bind.matches(modifiers, &key) {
+                        if key_bind.matches(modifiers, &key, Some(&physical_key)) {
                             return self.update(action.message(Some(entity)));
                         }
                     }
@@ -4218,6 +4220,9 @@ impl Application for App {
             Message::RemoveFromRecents(entity_opt) => {
                 let paths: Box<[_]> = self.selected_paths(entity_opt).collect();
                 return self.operation(Operation::RemoveFromRecents { paths });
+            }
+            Message::ReloadMimeAppCache => {
+                self.mime_app_cache.reload();
             }
             Message::RescanRecents => {
                 return self.rescan_recents();
@@ -5981,7 +5986,7 @@ impl Application for App {
                             widget::button::custom(
                                 widget::row::with_children([
                                     icon(app.icon.clone()).size(32).into(),
-                                    if app.is_default && !displayed_default {
+                                    if app.is_default() && !displayed_default {
                                         displayed_default = true;
                                         widget::text::body(fl!(
                                             "default-app",
@@ -6633,11 +6638,14 @@ impl Application for App {
                 },
                 Event::Keyboard(KeyEvent::KeyPressed {
                     key,
+                    physical_key,
                     modifiers,
                     text,
                     ..
                 }) => match status {
-                    event::Status::Ignored => Some(Message::Key(window_id, modifiers, key, text)),
+                    event::Status::Ignored => {
+                        Some(Message::Key(window_id, modifiers, key, physical_key, text))
+                    }
                     event::Status::Captured => None,
                 },
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
@@ -6764,6 +6772,22 @@ impl Application for App {
                                 log::warn!("failed to create file watcher: {err:?}");
                             }
                         }
+
+                        std::future::pending().await
+                    },
+                )
+            }),
+            #[cfg(feature = "desktop")]
+            Subscription::run(|| {
+                stream::channel(
+                    1,
+                    |mut output: futures::channel::mpsc::Sender<Message>| async move {
+                        mime_app::watch(move || {
+                            futures::executor::block_on(async {
+                                _ = output.send(Message::ReloadMimeAppCache).await;
+                            })
+                        })
+                        .await;
 
                         std::future::pending().await
                     },

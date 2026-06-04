@@ -392,3 +392,4 @@ context-action-confirm-warning =
        *[other] 項目
     } 上執行。
 run = 執行
+rename-confirm = 重新命名

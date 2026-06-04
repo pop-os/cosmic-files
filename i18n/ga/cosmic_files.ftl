@@ -442,3 +442,4 @@ context-action-confirm-warning =
        *[other] míreanna
     }.
 run = Rith
+rename-confirm = Athainmnigh

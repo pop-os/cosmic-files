@@ -6,13 +6,65 @@ use bstr::{BString, ByteSlice, ByteVec};
 use cosmic::desktop;
 use cosmic::widget;
 pub use mime_guess::Mime;
+#[cfg(feature = "desktop")]
+use notify_debouncer_full::notify;
 use rustc_hash::FxHashMap;
-use std::cmp::Ordering;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, atomic};
+use std::time::{self, Instant};
 use std::{fs, io, process};
+
+#[cfg(feature = "desktop")]
+pub async fn watch(mut emitter: impl FnMut() + 'static + Send) {
+    let watcher_result = notify_debouncer_full::new_debouncer(
+        time::Duration::from_millis(250),
+        Some(time::Duration::from_millis(250)),
+        move |event_res: notify_debouncer_full::DebounceEventResult| {
+            let Ok(events) = event_res else {
+                return;
+            };
+
+            if events.iter().any(|event| {
+                event.kind.is_create() || event.kind.is_modify() || event.kind.is_remove()
+            }) {
+                emitter();
+            }
+        },
+    );
+
+    if let Ok(mut watcher) = watcher_result {
+        let system_paths = cosmic_mime_apps::list_paths();
+        let local_paths = (|| {
+            let base_dirs = xdg::BaseDirectories::new();
+            let Some(home) = base_dirs.get_config_home() else {
+                return Err(std::io::Error::other("XDG config home not set"));
+            };
+
+            let Ok(desktop) = std::env::var("XDG_CURRENT_DESKTOP") else {
+                return Err(std::io::Error::other("XDG_CURRENT_DESKTOP unset"));
+            };
+
+            let default_mimeapps = home.join("mimeapps.list");
+            let desktop_mimeapps =
+                home.join([&desktop.to_ascii_lowercase(), "-mimeapps.list"].concat());
+
+            Ok([desktop_mimeapps, default_mimeapps])
+        })()
+        .ok();
+
+        for path in system_paths
+            .iter()
+            .chain(local_paths.as_ref().into_iter().flatten())
+        {
+            _ = watcher.watch(path.as_path(), notify::RecursiveMode::NonRecursive);
+        }
+
+        std::future::pending().await
+    }
+}
 
 pub fn exec_to_command(
     exec: &str,
@@ -133,7 +185,7 @@ pub struct MimeApp {
     pub name: String,
     pub exec: Option<String>,
     pub icon: widget::icon::Handle,
-    pub is_default: bool,
+    is_default: Arc<AtomicBool>,
 }
 
 impl MimeApp {
@@ -145,6 +197,10 @@ impl MimeApp {
             self.path.as_deref(),
             path_opt,
         )
+    }
+
+    pub fn is_default(&self) -> bool {
+        self.is_default.load(atomic::Ordering::SeqCst)
     }
 }
 
@@ -169,24 +225,16 @@ impl From<&desktop::DesktopEntryData> for MimeApp {
                 }
                 desktop::fde::IconSource::Path(path) => widget::icon::from_path(path.clone()),
             },
-            is_default: false,
+            is_default: Arc::new(AtomicBool::new(false)),
         }
     }
 }
 
-#[cfg(feature = "desktop")]
-fn filename_eq(path_opt: &Option<PathBuf>, filename: &str) -> bool {
-    path_opt
-        .as_ref()
-        .and_then(|path| path.file_name())
-        .is_some_and(|x| x == filename)
-}
-
 pub struct MimeAppCache {
-    apps: Vec<MimeApp>,
-    cache: FxHashMap<Mime, Vec<MimeApp>>,
+    apps: Vec<Arc<MimeApp>>,
+    cache: FxHashMap<Mime, Vec<Arc<MimeApp>>>,
     icons: FxHashMap<Mime, Box<[widget::icon::Handle]>>,
-    terminals: Vec<MimeApp>,
+    terminals: Vec<Arc<MimeApp>>,
 }
 
 impl MimeAppCache {
@@ -204,10 +252,12 @@ impl MimeAppCache {
     #[cfg(not(feature = "desktop"))]
     pub fn reload(&mut self) {}
 
-    // Only available when using desktop feature of libcosmic, which only works on Unix-likes
+    /// Reload mime types and their known app associations and defaults.
     #[cfg(feature = "desktop")]
     pub fn reload(&mut self) {
         use crate::localize::LANGUAGE_SORTER;
+        use cosmic::desktop::fde;
+        use std::borrow::Cow;
 
         let start = Instant::now();
 
@@ -216,107 +266,111 @@ impl MimeAppCache {
         self.icons.clear();
         self.terminals.clear();
 
-        //TODO: get proper locale?
-        let locale = &[];
-
-        // Load desktop applications by supported mime types
-        //TODO: hashmap for all apps by id?
-        let all_apps: Box<[_]> = desktop::load_applications(locale, false, None).collect();
-        for app in &all_apps {
-            //TODO: just collect apps that can be executed with a file argument?
-            if !app.mime_types.is_empty() {
-                self.apps.push(MimeApp::from(app));
-            }
-            for mime in &app.mime_types {
-                let apps = self
-                    .cache
-                    .entry(mime.clone())
-                    .or_insert_with(|| Vec::with_capacity(1));
-                if !apps.iter().any(|x| x.id == app.id) {
-                    apps.push(MimeApp::from(app));
-                }
-            }
-            for category in &app.categories {
-                if category == "TerminalEmulator" {
-                    self.terminals.push(MimeApp::from(app));
-                    break;
-                }
-            }
-        }
-
         let mut list = cosmic_mime_apps::List::default();
-
         let paths = cosmic_mime_apps::list_paths();
         list.load_from_paths(&paths);
+        let locales = fde::get_languages_from_env();
+        for desktop_entry in fde::Iter::new(fde::default_paths()).entries(Some(&locales)) {
+            let name = desktop_entry
+                .name(&locales)
+                .unwrap_or_else(|| Cow::Borrowed(desktop_entry.id()));
 
-        for (mime, filenames) in list
-            .added_associations
-            .iter()
-            .chain(list.default_apps.iter())
-        {
-            for filename in filenames {
-                log::trace!("add {mime}={filename}");
-                let apps = self
-                    .cache
-                    .entry(mime.clone())
-                    .or_insert_with(|| Vec::with_capacity(1));
-                if !apps.iter().any(|x| filename_eq(&x.path, filename)) {
-                    if let Some(app) = all_apps.iter().find(|&x| filename_eq(&x.path, filename)) {
-                        apps.push(MimeApp::from(app));
+            let app = Arc::new(MimeApp {
+                id: desktop_entry.appid.clone(),
+                path: Some(desktop_entry.path.clone()),
+                name: name.into(),
+                exec: desktop_entry.exec().map(String::from),
+                icon: {
+                    let icon = desktop_entry.icon().unwrap_or_default();
+                    if icon.starts_with('/') {
+                        cosmic::widget::icon::from_path(PathBuf::from(icon))
                     } else {
-                        log::info!(
-                            "failed to add association for {mime:?}: application {filename:?} not found"
-                        );
+                        cosmic::widget::icon::from_name(icon).size(32).handle()
+                    }
+                },
+                is_default: Arc::new(AtomicBool::new(false)),
+            });
+
+            tracing::info!(target: "mime-apps", id = app.id, "detected desktop entry");
+
+            self.apps.push(app.clone());
+
+            if desktop_entry
+                .categories()
+                .into_iter()
+                .flatten()
+                .any(|c| c == "TerminalEmulator")
+            {
+                self.terminals.push(app.clone());
+            }
+
+            // Cache associations defined by the desktop entry.
+            let mime_types = desktop_entry.mime_type().unwrap_or_else(Vec::new);
+            for mime in mime_types.iter().filter_map(|m| m.parse::<Mime>().ok()) {
+                let apps = self.cache.entry(mime.clone()).or_default();
+                if apps.iter().all(|cached_app| cached_app.id != app.id) {
+                    apps.push(app.clone());
+                }
+            }
+        }
+
+        // Cache added associations from mimeapps lists.
+        for (added_mime, added_apps) in &list.added_associations {
+            for added_app in added_apps {
+                if let Some(app) = self
+                    .apps
+                    .iter()
+                    .find(|cached| cached.id.as_str() == added_app.as_ref())
+                {
+                    let apps = self.cache.entry(added_mime.clone()).or_default();
+                    if apps.iter().all(|cached_app| cached_app.id != app.id) {
+                        apps.push(app.clone());
                     }
                 }
             }
         }
 
-        for (mime, filenames) in list.removed_associations.iter() {
-            for filename in filenames {
-                log::trace!("remove {mime}={filename}");
-                if let Some(apps) = self.cache.get_mut(mime) {
-                    apps.retain(|x| !filename_eq(&x.path, filename));
+        // Remove associations
+        for (removed_mime, removed_apps) in &list.removed_associations {
+            for removed_app in removed_apps {
+                if let Some(app) = self
+                    .apps
+                    .iter()
+                    .find(|cached| cached.id.as_str() == removed_app.as_ref())
+                    && let Some(apps) = self.cache.get_mut(removed_mime)
+                {
+                    apps.retain(|cached_app| cached_app.id != app.id);
                 }
             }
         }
 
-        for (mime, filenames) in list.default_apps.iter() {
-            for filename in filenames {
-                log::trace!("default {mime}={filename}");
-                if let Some(apps) = self.cache.get_mut(mime) {
-                    let mut found = false;
-                    for app in apps.iter_mut() {
-                        if filename_eq(&app.path, filename) {
-                            app.is_default = true;
-                            found = true;
-                        } else {
-                            app.is_default = false;
-                        }
-                    }
+        // Fetch defaults and sort apps by their default precedence.
+        for (mime, mut apps) in std::mem::take(&mut self.cache).into_iter() {
+            let defaults = list.default_app_for(&mime);
+            let cache = self
+                .cache
+                .entry(mime.clone())
+                .or_insert_with(|| Vec::with_capacity(apps.len()));
+
+            // Sort cached apps for this mime by default precedence.
+            for default in defaults.into_iter().flatten() {
+                let default = default.strip_suffix(".desktop").unwrap_or(default.as_ref());
+                apps.retain(|app| {
+                    let found = app.id.as_str() == default;
                     if found {
-                        break;
+                        app.is_default.store(true, atomic::Ordering::Relaxed);
+                        cache.push(app.clone());
                     }
-                    log::debug!(
-                        "failed to set default for {mime:?}: application {filename:?} not found"
-                    );
-                }
-            }
-        }
 
-        // Sort apps by name
-        self.apps
-            .sort_by(|a, b| match (a.is_default, b.is_default) {
-                (true, false) => Ordering::Less,
-                (false, true) => Ordering::Greater,
-                _ => LANGUAGE_SORTER.compare(&a.name, &b.name),
-            });
-        for apps in self.cache.values_mut() {
-            apps.sort_by(|a, b| match (a.is_default, b.is_default) {
-                (true, false) => Ordering::Less,
-                (false, true) => Ordering::Greater,
-                _ => LANGUAGE_SORTER.compare(&a.name, &b.name),
-            });
+                    !found
+                });
+            }
+
+            // Sort remaining apps by name
+            apps.sort_by(|a, b| LANGUAGE_SORTER.compare(&a.name, &b.name));
+            cache.extend_from_slice(&apps);
+
+            tracing::debug!(target: "mime-apps", mime = mime.essence_str(), apps = ?(cache.iter().map(|app| &*app.id).collect::<Vec<&str>>()), "mime defaults found")
         }
 
         // Copy icons to special cache
@@ -329,14 +383,14 @@ impl MimeAppCache {
         }));
 
         let elapsed = start.elapsed();
-        log::info!("loaded mime app cache in {elapsed:?}");
+        tracing::info!(target: "mime-apps", "loaded mime app cache in {elapsed:?}");
     }
 
-    pub fn apps(&self) -> &[MimeApp] {
+    pub fn apps(&self) -> &[Arc<MimeApp>] {
         &self.apps
     }
 
-    pub fn get(&self, key: &Mime) -> &[MimeApp] {
+    pub fn get(&self, key: &Mime) -> &[Arc<MimeApp>] {
         self.cache.get(key).map_or(&[], Vec::as_slice)
     }
 
@@ -359,7 +413,7 @@ impl MimeAppCache {
             .map(|string| string.trim().replace(".desktop", ""))
     }
 
-    pub fn terminal(&self) -> Option<&MimeApp> {
+    pub fn terminal(&self) -> Option<&Arc<MimeApp>> {
         //TODO: consider rules in https://github.com/Vladimir-csp/xdg-terminal-exec
         // The current approach works but might not adhere to the spec (yet)
 

@@ -98,7 +98,7 @@ permanently-delete-question = Slett permanent
 permanently-delete-warning = Er du sukker på om du vil permanent slette { $target }? Dette kan ikke angres.
 rename-file = Endre filnavn
 rename-folder = Endre mappenavn
-replace-title = "{ $filename }" finnes allerede på denne plasseringen.
+replace-title = «{ $filename }» finnes allerede på denne plasseringen
 replace-warning = Vil du bytte den ut med filen du lagrer? Dette vil overskrive innholdet.
 replace-warning-operation = Vil du erstatte den? Dette vil overskrive innholdet.
 original-file = Orginalfil
@@ -122,8 +122,8 @@ read-write = Kun skrive- og lesbar
 read-write-execute = Lesbar, skrivbar og kjørbar
 favorite-path-error = Feil ved åpning av mappen
 favorite-path-error-description =
-    Kunne ikke åpne "{ $path }".
-    Den kan ikke eksistere eller så har du ikke tilgang til å åpne den.
+    Klarte ikke åpne «{ $path }».
+    «{ $path }» finnes ikke eller så har du ikke tilgang til å åpne den.
 
     Vil du fjerne den fra sidepanelet?
 keep = Behold
@@ -140,7 +140,7 @@ zoom-out = Zoom ut
 cut = Klipp ut
 set-and-launch = Still inn og start
 domain = Domene
-enter-server-address = Angi serveradresse
+enter-server-address = Angi tjeneradresse
 network-drive-description =
     Serveradresser inkluderer ett protokollprefiks og en addresse.
     Examples: ssh://192.168.0.1, ftp://[2001:db8::1]
