@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use bstr::{BString, ByteSlice, ByteVec};
-#[cfg(feature = "desktop")]
-use cosmic::desktop;
 use cosmic::widget;
 pub use mime_guess::Mime;
 #[cfg(feature = "desktop")]
@@ -186,6 +184,7 @@ pub struct MimeApp {
     pub exec: Option<String>,
     pub icon: widget::icon::Handle,
     is_default: Arc<AtomicBool>,
+    pub no_display: bool,
 }
 
 impl MimeApp {
@@ -208,25 +207,6 @@ impl MimeApp {
 impl AsRef<str> for MimeApp {
     fn as_ref(&self) -> &str {
         &self.name
-    }
-}
-
-#[cfg(feature = "desktop")]
-impl From<&desktop::DesktopEntryData> for MimeApp {
-    fn from(app: &desktop::DesktopEntryData) -> Self {
-        Self {
-            id: app.id.clone(),
-            path: app.path.clone(),
-            name: app.name.clone(),
-            exec: app.exec.clone(),
-            icon: match &app.icon {
-                desktop::fde::IconSource::Name(name) => {
-                    widget::icon::from_name(name.as_str()).size(32).handle()
-                }
-                desktop::fde::IconSource::Path(path) => widget::icon::from_path(path.clone()),
-            },
-            is_default: Arc::new(AtomicBool::new(false)),
-        }
     }
 }
 
@@ -271,9 +251,7 @@ impl MimeAppCache {
         list.load_from_paths(&paths);
         let locales = fde::get_languages_from_env();
 
-        let desktop_entries = fde::Iter::new(fde::default_paths())
-            .entries(Some(&locales))
-            .filter(move |de| !de.no_display());
+        let desktop_entries = fde::Iter::new(fde::default_paths()).entries(Some(&locales));
 
         for desktop_entry in desktop_entries {
             let name = desktop_entry
@@ -294,6 +272,7 @@ impl MimeAppCache {
                     }
                 },
                 is_default: Arc::new(AtomicBool::new(false)),
+                no_display: desktop_entry.no_display(),
             });
 
             tracing::info!(target: "mime-apps", id = app.id, "detected desktop entry");
