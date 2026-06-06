@@ -270,7 +270,12 @@ impl MimeAppCache {
         let paths = cosmic_mime_apps::list_paths();
         list.load_from_paths(&paths);
         let locales = fde::get_languages_from_env();
-        for desktop_entry in fde::Iter::new(fde::default_paths()).entries(Some(&locales)) {
+
+        let desktop_entries = fde::Iter::new(fde::default_paths())
+            .entries(Some(&locales))
+            .filter(move |de| !de.no_display());
+
+        for desktop_entry in desktop_entries {
             let name = desktop_entry
                 .name(&locales)
                 .unwrap_or_else(|| Cow::Borrowed(desktop_entry.id()));
