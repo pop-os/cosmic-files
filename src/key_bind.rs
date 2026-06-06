@@ -39,7 +39,7 @@ pub fn key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
     bind!([Ctrl, Shift], Key::Character("n".into()), NewFolder);
     bind!([], Key::Named(Named::Enter), Open);
     bind!([Ctrl], Key::Character(" ".into()), Preview);
-    bind!([], Key::Character(" ".into()), Gallery);
+    bind!([Shift], Key::Character(" ".into()), Gallery);
 
     bind!([Ctrl], Key::Character("h".into()), ToggleShowHidden);
     bind!([Ctrl], Key::Character("a".into()), SelectAll);
