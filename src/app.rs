@@ -2302,14 +2302,20 @@ impl App {
         }
 
         // Add other apps
-        results.extend(
-            self.mime_app_cache
+        results.extend({
+            let mut apps = self
+                .mime_app_cache
                 .apps()
                 .iter()
                 .filter(|mime_app| !mime_app.no_display)
                 .filter(|&mime_app| dedupe.insert(&mime_app.id))
-                .map(|mime_app| (mime_app, MimeAppMatch::Other)),
-        );
+                .map(|mime_app| (mime_app, MimeAppMatch::Other))
+                .collect::<Vec<_>>();
+            apps.sort_by(|(a, _), (b, _)| {
+                crate::localize::LANGUAGE_SORTER.compare(&a.name, &b.name)
+            });
+            apps
+        });
 
         results
     }
