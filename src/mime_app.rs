@@ -272,7 +272,9 @@ impl MimeAppCache {
                     }
                 },
                 is_default: Arc::new(AtomicBool::new(false)),
-                no_display: desktop_entry.no_display(),
+                no_display: desktop_entry
+                    .mime_type()
+                    .is_none_or(|supported| supported.is_empty()),
             });
 
             tracing::info!(target: "mime-apps", id = app.id, "detected desktop entry");
