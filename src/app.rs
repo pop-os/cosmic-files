@@ -5992,7 +5992,7 @@ impl Application for App {
                         widget::mouse_area(
                             widget::button::custom(
                                 widget::row::with_children([
-                                    icon(app.icon.clone()).size(32).into(),
+                                    icon(app.icon()).size(32).into(),
                                     if app.is_default() && !displayed_default {
                                         displayed_default = true;
                                         widget::text::body(fl!(
