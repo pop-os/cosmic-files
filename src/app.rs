@@ -2307,7 +2307,7 @@ impl App {
                 .mime_app_cache
                 .apps()
                 .iter()
-                .filter(|mime_app| !mime_app.no_display)
+                .filter(|mime_app| !mime_app.no_display())
                 .filter(|&mime_app| dedupe.insert(&mime_app.id))
                 .map(|mime_app| (mime_app, MimeAppMatch::Other))
                 .collect::<Vec<_>>();

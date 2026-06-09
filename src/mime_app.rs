@@ -185,7 +185,7 @@ pub struct MimeApp {
     icon_name: Box<str>,
     icon: std::sync::OnceLock<widget::icon::Handle>,
     is_default: Arc<AtomicBool>,
-    pub no_display: bool,
+    no_display: Arc<AtomicBool>,
 }
 
 impl MimeApp {
@@ -200,7 +200,11 @@ impl MimeApp {
     }
 
     pub fn is_default(&self) -> bool {
-        self.is_default.load(atomic::Ordering::SeqCst)
+        self.is_default.load(atomic::Ordering::Relaxed)
+    }
+
+    pub fn no_display(&self) -> bool {
+        self.no_display.load(atomic::Ordering::Relaxed)
     }
 
     pub fn icon(&self) -> widget::icon::Handle {
@@ -277,9 +281,7 @@ impl MimeAppCache {
                 icon_name: desktop_entry.icon().unwrap_or_default().into(),
                 icon: std::sync::OnceLock::new(),
                 is_default: Arc::new(AtomicBool::new(false)),
-                no_display: desktop_entry
-                    .mime_type()
-                    .is_none_or(|supported| supported.is_empty()),
+                no_display: Arc::new(AtomicBool::new(false)),
             });
 
             tracing::info!(target: "mime-apps", id = app.id, "detected desktop entry");
@@ -362,6 +364,19 @@ impl MimeAppCache {
             cache.extend_from_slice(&apps);
 
             tracing::debug!(target: "mime-apps", mime = mime.essence_str(), apps = ?(cache.iter().map(|app| &*app.id).collect::<Vec<&str>>()), "mime defaults found")
+        }
+
+        let associated: rustc_hash::FxHashSet<&str> = self
+            .cache
+            .values()
+            .flatten()
+            .map(|app| app.id.as_str())
+            .collect();
+        for app in &self.apps {
+            app.no_display.store(
+                !associated.contains(app.id.as_str()),
+                atomic::Ordering::Relaxed,
+            );
         }
 
         let elapsed = start.elapsed();
