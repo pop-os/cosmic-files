@@ -1,6 +1,6 @@
 [package]
 name = "cosmic-files-applet"
-version = "1.0.15"
+version = "1.0.16"
 edition = "2024"
 
 [dependencies]
