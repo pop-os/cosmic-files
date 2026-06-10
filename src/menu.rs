@@ -107,18 +107,25 @@ pub fn context_menu<'a>(
 
     let (sort_name, sort_direction, _) = tab.sort_options();
     let sort_item = |label, variant| {
-        menu_item(
-            format!(
-                "{} {}",
-                label,
-                match (sort_name == variant, sort_direction) {
-                    (true, true) => "\u{2B07}",
-                    (true, false) => "\u{2B06}",
-                    _ => "",
-                }
-            ),
-            Action::ToggleSort(variant),
+        let key = find_key(&Action::ToggleSort(variant));
+        let leading: Element<'a, tab::Message> = if sort_name == variant {
+            let icon_name = if sort_direction {
+                "view-sort-ascending-symbolic"
+            } else {
+                "view-sort-descending-symbolic"
+            };
+            widget::icon::from_name(icon_name).size(14).into()
+        } else {
+            space::horizontal().width(Length::Fixed(14.0)).into()
+        };
+        menu_button!(
+            leading,
+            space::horizontal().width(Length::Fixed(theme::spacing().space_xxs.into())),
+            text::body(label),
+            space::horizontal(),
+            text::body(key).class(theme::Text::Custom(key_style))
         )
+        .on_press(tab::Message::ContextAction(Action::ToggleSort(variant)))
         .into()
     };
 
