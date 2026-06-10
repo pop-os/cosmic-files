@@ -182,9 +182,10 @@ pub struct MimeApp {
     pub path: Option<PathBuf>,
     pub name: String,
     pub exec: Option<String>,
-    pub icon: widget::icon::Handle,
+    icon_name: Box<str>,
+    icon: std::sync::OnceLock<widget::icon::Handle>,
     is_default: Arc<AtomicBool>,
-    pub no_display: bool,
+    no_display: Arc<AtomicBool>,
 }
 
 impl MimeApp {
@@ -199,7 +200,24 @@ impl MimeApp {
     }
 
     pub fn is_default(&self) -> bool {
-        self.is_default.load(atomic::Ordering::SeqCst)
+        self.is_default.load(atomic::Ordering::Relaxed)
+    }
+
+    pub fn no_display(&self) -> bool {
+        self.no_display.load(atomic::Ordering::Relaxed)
+    }
+
+    pub fn icon(&self) -> widget::icon::Handle {
+        self.icon
+            .get_or_init(|| {
+                let name = &*self.icon_name;
+                if name.starts_with('/') {
+                    cosmic::widget::icon::from_path(PathBuf::from(name))
+                } else {
+                    cosmic::widget::icon::from_name(name).size(32).handle()
+                }
+            })
+            .clone()
     }
 }
 
@@ -213,7 +231,6 @@ impl AsRef<str> for MimeApp {
 pub struct MimeAppCache {
     apps: Vec<Arc<MimeApp>>,
     cache: FxHashMap<Mime, Vec<Arc<MimeApp>>>,
-    icons: FxHashMap<Mime, Box<[widget::icon::Handle]>>,
     terminals: Vec<Arc<MimeApp>>,
 }
 
@@ -222,7 +239,6 @@ impl MimeAppCache {
         let mut mime_app_cache = Self {
             apps: Vec::new(),
             cache: FxHashMap::default(),
-            icons: FxHashMap::default(),
             terminals: Vec::new(),
         };
         mime_app_cache.reload();
@@ -243,7 +259,6 @@ impl MimeAppCache {
 
         self.apps.clear();
         self.cache.clear();
-        self.icons.clear();
         self.terminals.clear();
 
         let mut list = cosmic_mime_apps::List::default();
@@ -263,18 +278,10 @@ impl MimeAppCache {
                 path: Some(desktop_entry.path.clone()),
                 name: name.into(),
                 exec: desktop_entry.exec().map(String::from),
-                icon: {
-                    let icon = desktop_entry.icon().unwrap_or_default();
-                    if icon.starts_with('/') {
-                        cosmic::widget::icon::from_path(PathBuf::from(icon))
-                    } else {
-                        cosmic::widget::icon::from_name(icon).size(32).handle()
-                    }
-                },
+                icon_name: desktop_entry.icon().unwrap_or_default().into(),
+                icon: std::sync::OnceLock::new(),
                 is_default: Arc::new(AtomicBool::new(false)),
-                no_display: desktop_entry
-                    .mime_type()
-                    .is_none_or(|supported| supported.is_empty()),
+                no_display: Arc::new(AtomicBool::new(false)),
             });
 
             tracing::info!(target: "mime-apps", id = app.id, "detected desktop entry");
@@ -359,14 +366,18 @@ impl MimeAppCache {
             tracing::debug!(target: "mime-apps", mime = mime.essence_str(), apps = ?(cache.iter().map(|app| &*app.id).collect::<Vec<&str>>()), "mime defaults found")
         }
 
-        // Copy icons to special cache
-        //TODO: adjust dropdown API so this is no longer needed
-        self.icons.extend(self.cache.iter().map(|(mime, apps)| {
-            (
-                mime.clone(),
-                apps.iter().map(|app| app.icon.clone()).collect(),
-            )
-        }));
+        let associated: rustc_hash::FxHashSet<&str> = self
+            .cache
+            .values()
+            .flatten()
+            .map(|app| app.id.as_str())
+            .collect();
+        for app in &self.apps {
+            app.no_display.store(
+                !associated.contains(app.id.as_str()),
+                atomic::Ordering::Relaxed,
+            );
+        }
 
         let elapsed = start.elapsed();
         tracing::info!(target: "mime-apps", "loaded mime app cache in {elapsed:?}");
@@ -380,8 +391,10 @@ impl MimeAppCache {
         self.cache.get(key).map_or(&[], Vec::as_slice)
     }
 
-    pub fn icons(&self, key: &Mime) -> &[widget::icon::Handle] {
-        self.icons.get(key).map_or(&[], Box::as_ref)
+    pub fn icons(&self, key: &Mime) -> Vec<widget::icon::Handle> {
+        self.cache
+            .get(key)
+            .map_or_else(Vec::new, |apps| apps.iter().map(|app| app.icon()).collect())
     }
 
     fn get_default_terminal(&self) -> Option<String> {

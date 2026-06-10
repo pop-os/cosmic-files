@@ -2381,7 +2381,7 @@ impl Item {
                                 mime_apps.iter().position(|x| x.is_default()),
                                 move |index| index,
                             )
-                            .icons(Cow::Borrowed(mime_app_cache.icons(&self.mime))),
+                            .icons(Cow::Owned(mime_app_cache.icons(&self.mime))),
                         )
                         .map(|index| {
                             let mime_app = &mime_apps[index];
@@ -6465,7 +6465,7 @@ impl Tab {
                                 mime_apps.iter().position(|x| x.is_default()),
                                 move |index| (index, mime_closure.clone()),
                             )
-                            .icons(Cow::Borrowed(mime_app_cache.icons(&mime))),
+                            .icons(Cow::Owned(mime_app_cache.icons(&mime))),
                         )
                         .map(|(index, mime)| {
                             let mime_app = &mime_apps[index];

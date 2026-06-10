@@ -2307,7 +2307,7 @@ impl App {
                 .mime_app_cache
                 .apps()
                 .iter()
-                .filter(|mime_app| !mime_app.no_display)
+                .filter(|mime_app| !mime_app.no_display())
                 .filter(|&mime_app| dedupe.insert(&mime_app.id))
                 .map(|mime_app| (mime_app, MimeAppMatch::Other))
                 .collect::<Vec<_>>();
@@ -5992,7 +5992,7 @@ impl Application for App {
                         widget::mouse_area(
                             widget::button::custom(
                                 widget::row::with_children([
-                                    icon(app.icon.clone()).size(32).into(),
+                                    icon(app.icon()).size(32).into(),
                                     if app.is_default() && !displayed_default {
                                         displayed_default = true;
                                         widget::text::body(fl!(
