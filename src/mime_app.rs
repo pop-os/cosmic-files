@@ -6,7 +6,7 @@ use cosmic::widget;
 pub use mime_guess::Mime;
 #[cfg(feature = "desktop")]
 use notify_debouncer_full::notify;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
@@ -176,6 +176,13 @@ pub fn exec_to_command(
     Some(commands)
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MimeAppMatch {
+    Exact,
+    Related,
+    Other,
+}
+
 #[derive(Clone, Debug)]
 pub struct MimeApp {
     pub id: String,
@@ -243,6 +250,48 @@ impl MimeAppCache {
         };
         mime_app_cache.reload();
         mime_app_cache
+    }
+
+    pub fn get_apps_for_mime(&self, mime_type: &Mime) -> Vec<(&Arc<MimeApp>, MimeAppMatch)> {
+        let mut results = Vec::new();
+
+        let mut dedupe = FxHashSet::default();
+
+        // start with exact matches
+        results.extend(
+            self.get(mime_type)
+                .iter()
+                .filter(|&mime_app| dedupe.insert(&mime_app.id))
+                .map(|mime_app| (mime_app, MimeAppMatch::Exact)),
+        );
+
+        // grab matches based off of subclass / parent mime type
+        if let Some(parent_types) = crate::mime_icon::parent_mime_types(mime_type) {
+            for parent_type in parent_types {
+                results.extend(
+                    self.get(&parent_type)
+                        .iter()
+                        .filter(|&mime_app| dedupe.insert(&mime_app.id))
+                        .map(|mime_app| (mime_app, MimeAppMatch::Related)),
+                );
+            }
+        }
+
+        results.extend({
+            let mut apps = self
+                .apps()
+                .iter()
+                .filter(|mime_app| !mime_app.no_display())
+                .filter(|&mime_app| dedupe.insert(&mime_app.id))
+                .map(|mime_app| (mime_app, MimeAppMatch::Other))
+                .collect::<Vec<_>>();
+            apps.sort_by(|(a, _), (b, _)| {
+                crate::localize::LANGUAGE_SORTER.compare(&a.name, &b.name)
+            });
+            apps
+        });
+
+        results
     }
 
     #[cfg(not(feature = "desktop"))]
