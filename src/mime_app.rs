@@ -11,7 +11,7 @@ use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, atomic};
+use std::sync::{Arc, RwLock, atomic};
 use std::time::{self, Instant};
 use std::{fs, io, process};
 
@@ -191,7 +191,7 @@ pub struct MimeApp {
     pub exec: Option<String>,
     icon_name: Box<str>,
     icon: std::sync::OnceLock<widget::icon::Handle>,
-    is_default: Arc<AtomicBool>,
+    is_default: Arc<RwLock<FxHashSet<Box<str>>>>,
     no_display: Arc<AtomicBool>,
 }
 
@@ -206,8 +206,8 @@ impl MimeApp {
         )
     }
 
-    pub fn is_default(&self) -> bool {
-        self.is_default.load(atomic::Ordering::Relaxed)
+    pub fn is_default(&self, mime: &Mime) -> bool {
+        self.is_default.read().unwrap().contains(mime.essence_str())
     }
 
     pub fn no_display(&self) -> bool {
@@ -343,7 +343,7 @@ impl MimeAppCache {
                 exec: desktop_entry.exec().map(String::from),
                 icon_name: desktop_entry.icon().unwrap_or_default().into(),
                 icon: std::sync::OnceLock::new(),
-                is_default: Arc::new(AtomicBool::new(false)),
+                is_default: Arc::new(RwLock::default()),
                 no_display: Arc::new(AtomicBool::new(false)),
             });
 
@@ -414,7 +414,7 @@ impl MimeAppCache {
                 apps.retain(|app| {
                     let found = app.id.as_str() == default;
                     if found {
-                        app.is_default.store(true, atomic::Ordering::Relaxed);
+                        app.is_default.write().unwrap().insert(default.into());
                         cache.push(app.clone());
                     }
 

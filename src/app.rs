@@ -5940,7 +5940,7 @@ impl Application for App {
                             widget::button::custom(
                                 widget::row::with_children([
                                     icon(app.icon()).size(32).into(),
-                                    if app.is_default() && !displayed_default {
+                                    if app.is_default(mime) && !displayed_default {
                                         displayed_default = true;
                                         widget::text::body(fl!(
                                             "default-app",

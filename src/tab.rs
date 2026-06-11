@@ -2378,7 +2378,7 @@ impl Item {
                                     .iter()
                                     .map(|app| Cow::Owned(app.name.clone()))
                                     .collect::<Vec<Cow<'static, str>>>(),
-                                mime_apps.iter().position(|x| x.is_default()),
+                                mime_apps.iter().position(|x| x.is_default(&self.mime)),
                                 move |index| index,
                             )
                             .icons(Cow::Owned(mime_app_cache.icons(&self.mime))),
@@ -6462,7 +6462,7 @@ impl Tab {
                                     .iter()
                                     .map(|app| Cow::Owned(app.name.clone()))
                                     .collect::<Vec<Cow<'static, str>>>(),
-                                mime_apps.iter().position(|x| x.is_default()),
+                                mime_apps.iter().position(|x| x.is_default(&mime)),
                                 move |index| (index, mime_closure.clone()),
                             )
                             .icons(Cow::Owned(mime_app_cache.icons(&mime))),
