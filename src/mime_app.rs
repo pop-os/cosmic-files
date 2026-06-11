@@ -266,6 +266,7 @@ impl MimeAppCache {
 
         let include_mime = match mime_type.type_().as_str() {
             "audio" => Some("video/mp4".parse::<Mime>().expect("video/mp4 mime")),
+            "text" => Some(mime_guess::mime::TEXT_PLAIN),
             _ => None,
         };
 
