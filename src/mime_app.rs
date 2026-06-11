@@ -254,7 +254,6 @@ impl MimeAppCache {
 
     pub fn get_apps_for_mime(&self, mime_type: &Mime) -> Vec<(&Arc<MimeApp>, MimeAppMatch)> {
         let mut results = Vec::new();
-
         let mut dedupe = FxHashSet::default();
 
         // start with exact matches
@@ -264,6 +263,20 @@ impl MimeAppCache {
                 .filter(|&mime_app| dedupe.insert(&mime_app.id))
                 .map(|mime_app| (mime_app, MimeAppMatch::Exact)),
         );
+
+        let include_mime = match mime_type.type_().as_str() {
+            "audio" => Some("video/mp4".parse::<Mime>().expect("video/mp4 mime")),
+            _ => None,
+        };
+
+        if let Some(mime) = include_mime {
+            results.extend(
+                self.get(&mime)
+                    .iter()
+                    .filter(|&mime_app| dedupe.insert(&mime_app.id))
+                    .map(|mime_app| (mime_app, MimeAppMatch::Exact)),
+            );
+        }
 
         // grab matches based off of subclass / parent mime type
         if let Some(parent_types) = crate::mime_icon::parent_mime_types(mime_type) {
