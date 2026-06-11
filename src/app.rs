@@ -3180,7 +3180,7 @@ impl Application for App {
                             selected,
                             ..
                         } => {
-                            let available_apps = self.mime_app_cache.get_apps_for_mime(&mime);
+                            let available_apps = self.mime_app_cache.get_apps_for_mime(&mime, true);
 
                             if let Some((app, _)) = available_apps.get(selected) {
                                 if let Some(mut command) =
@@ -5918,7 +5918,7 @@ impl Application for App {
                 };
 
                 let mut column = widget::list_column();
-                let available_apps = self.mime_app_cache.get_apps_for_mime(mime);
+                let available_apps = self.mime_app_cache.get_apps_for_mime(mime, true);
                 let item_height = 32.0;
                 let mut displayed_default = false;
                 let mut last_kind = MimeAppMatch::Exact;

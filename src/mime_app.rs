@@ -252,7 +252,11 @@ impl MimeAppCache {
         mime_app_cache
     }
 
-    pub fn get_apps_for_mime(&self, mime_type: &Mime) -> Vec<(&Arc<MimeApp>, MimeAppMatch)> {
+    pub fn get_apps_for_mime(
+        &self,
+        mime_type: &Mime,
+        include_other: bool,
+    ) -> Vec<(&Arc<MimeApp>, MimeAppMatch)> {
         let mut results = Vec::new();
         let mut dedupe = FxHashSet::default();
 
@@ -291,19 +295,21 @@ impl MimeAppCache {
             }
         }
 
-        results.extend({
-            let mut apps = self
-                .apps()
-                .iter()
-                .filter(|mime_app| !mime_app.no_display())
-                .filter(|&mime_app| dedupe.insert(&mime_app.id))
-                .map(|mime_app| (mime_app, MimeAppMatch::Other))
-                .collect::<Vec<_>>();
-            apps.sort_by(|(a, _), (b, _)| {
-                crate::localize::LANGUAGE_SORTER.compare(&a.name, &b.name)
+        if include_other {
+            results.extend({
+                let mut apps = self
+                    .apps()
+                    .iter()
+                    .filter(|mime_app| !mime_app.no_display())
+                    .filter(|&mime_app| dedupe.insert(&mime_app.id))
+                    .map(|mime_app| (mime_app, MimeAppMatch::Other))
+                    .collect::<Vec<_>>();
+                apps.sort_by(|(a, _), (b, _)| {
+                    crate::localize::LANGUAGE_SORTER.compare(&a.name, &b.name)
+                });
+                apps
             });
-            apps
-        });
+        }
 
         results
     }
@@ -411,15 +417,28 @@ impl MimeAppCache {
             // Sort cached apps for this mime by default precedence.
             for default in defaults.into_iter().flatten() {
                 let default = default.strip_suffix(".desktop").unwrap_or(default.as_ref());
+                let mut found_any = false;
                 apps.retain(|app| {
                     let found = app.id.as_str() == default;
                     if found {
-                        app.is_default.write().unwrap().insert(default.into());
+                        app.is_default
+                            .write()
+                            .unwrap()
+                            .insert(mime.essence_str().into());
                         cache.push(app.clone());
+                        found_any = true;
                     }
 
                     !found
                 });
+
+                if !found_any && let Some(app) = self.apps.iter().find(|app| app.id == default) {
+                    app.is_default
+                        .write()
+                        .unwrap()
+                        .insert(mime.essence_str().into());
+                    cache.push(app.clone());
+                }
             }
 
             // Sort remaining apps by name
