@@ -78,6 +78,7 @@ pub fn mime_for_path(
     let mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
     // Try the shared mime info cache first
     let mut gb = mime_icon_cache.shared_mime_info.guess_mime_type();
+    gb.zero_size(false);
     if remote {
         if let Some(file_name) = path.file_name().and_then(std::ffi::OsStr::to_str) {
             gb.file_name(file_name);

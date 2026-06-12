@@ -67,7 +67,7 @@ use crate::config::{
 use crate::dialog::{Dialog, DialogKind, DialogMessage, DialogResult, DialogSettings};
 use crate::key_bind::key_binds;
 use crate::localize::LANGUAGE_SORTER;
-use crate::mime_app::{self, MimeApp, MimeAppCache};
+use crate::mime_app::{self, MimeApp, MimeAppCache, MimeAppMatch};
 use crate::mounter::{
     MOUNTERS, MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage,
 };
@@ -655,13 +655,6 @@ impl DialogPages {
 }
 
 pub struct FavoriteIndex(usize);
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum MimeAppMatch {
-    Exact,
-    Related,
-    Other,
-}
 
 pub struct MounterData(MounterKey, MounterItem);
 
@@ -2274,52 +2267,6 @@ impl App {
         .into()
     }
 
-    fn get_apps_for_mime(&self, mime_type: &Mime) -> Vec<(&Arc<MimeApp>, MimeAppMatch)> {
-        let mut results = Vec::new();
-
-        let mut dedupe = FxHashSet::default();
-
-        // start with exact matches
-        results.extend(
-            self.mime_app_cache
-                .get(mime_type)
-                .iter()
-                .filter(|&mime_app| dedupe.insert(&mime_app.id))
-                .map(|mime_app| (mime_app, MimeAppMatch::Exact)),
-        );
-
-        // grab matches based off of subclass / parent mime type
-        if let Some(parent_types) = mime_icon::parent_mime_types(mime_type) {
-            for parent_type in parent_types {
-                results.extend(
-                    self.mime_app_cache
-                        .get(&parent_type)
-                        .iter()
-                        .filter(|&mime_app| dedupe.insert(&mime_app.id))
-                        .map(|mime_app| (mime_app, MimeAppMatch::Related)),
-                );
-            }
-        }
-
-        // Add other apps
-        results.extend({
-            let mut apps = self
-                .mime_app_cache
-                .apps()
-                .iter()
-                .filter(|mime_app| !mime_app.no_display())
-                .filter(|&mime_app| dedupe.insert(&mime_app.id))
-                .map(|mime_app| (mime_app, MimeAppMatch::Other))
-                .collect::<Vec<_>>();
-            apps.sort_by(|(a, _), (b, _)| {
-                crate::localize::LANGUAGE_SORTER.compare(&a.name, &b.name)
-            });
-            apps
-        });
-
-        results
-    }
-
     // Update favorites based on renaming or moving dirs.
     fn update_favorites(&mut self, path_changes: &[(impl AsRef<Path>, impl AsRef<Path>)]) -> bool {
         let mut favorites_changed = false;
@@ -3233,7 +3180,7 @@ impl Application for App {
                             selected,
                             ..
                         } => {
-                            let available_apps = self.get_apps_for_mime(&mime);
+                            let available_apps = self.mime_app_cache.get_apps_for_mime(&mime, true);
 
                             if let Some((app, _)) = available_apps.get(selected) {
                                 if let Some(mut command) =
@@ -5971,7 +5918,7 @@ impl Application for App {
                 };
 
                 let mut column = widget::list_column();
-                let available_apps = self.get_apps_for_mime(mime);
+                let available_apps = self.mime_app_cache.get_apps_for_mime(mime, true);
                 let item_height = 32.0;
                 let mut displayed_default = false;
                 let mut last_kind = MimeAppMatch::Exact;
@@ -5993,7 +5940,7 @@ impl Application for App {
                             widget::button::custom(
                                 widget::row::with_children([
                                     icon(app.icon()).size(32).into(),
-                                    if app.is_default() && !displayed_default {
+                                    if app.is_default(mime) && !displayed_default {
                                         displayed_default = true;
                                         widget::text::body(fl!(
                                             "default-app",

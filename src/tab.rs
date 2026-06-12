@@ -2368,23 +2368,24 @@ impl Item {
         )));
         let mut settings = Vec::new();
         if let Some(mime_app_cache) = mime_app_cache_opt {
-            let mime_apps = mime_app_cache.get(&self.mime);
+            let mime_apps = mime_app_cache.get_apps_for_mime(&self.mime, false);
             if !mime_apps.is_empty() {
+                let (names, icons) = mime_apps
+                    .iter()
+                    .map(|(app, _)| (Cow::Owned(app.name.clone()), app.icon()))
+                    .collect::<(Vec<_>, Vec<_>)>();
                 settings.push(
                     widget::settings::item::builder(fl!("open-with")).control(
                         Element::from(
                             widget::dropdown(
-                                mime_apps
-                                    .iter()
-                                    .map(|app| Cow::Owned(app.name.clone()))
-                                    .collect::<Vec<Cow<'static, str>>>(),
-                                mime_apps.iter().position(|x| x.is_default()),
+                                names,
+                                mime_apps.iter().position(|(x, _)| x.is_default(&self.mime)),
                                 move |index| index,
                             )
-                            .icons(Cow::Owned(mime_app_cache.icons(&self.mime))),
+                            .icons(Cow::Owned(icons)),
                         )
-                        .map(|index| {
-                            let mime_app = &mime_apps[index];
+                        .map(move |index| {
+                            let mime_app = &mime_apps[index].0;
                             Message::SetOpenWith(self.mime.clone(), mime_app.id.clone())
                         }),
                     ),
@@ -6451,24 +6452,25 @@ impl Tab {
                 .and_then(|(mime, _)| mime.parse::<Mime>().ok())
             && let Some(mime_app_cache) = mime_app_cache_opt
         {
-            let mime_apps = mime_app_cache.get(&mime);
+            let mime_apps = mime_app_cache.get_apps_for_mime(&mime, false);
             if !mime_apps.is_empty() {
                 let mime_closure = mime.clone();
+                let (names, icons) = mime_apps
+                    .iter()
+                    .map(|(app, _)| (Cow::Owned(app.name.clone()), app.icon()))
+                    .collect::<(Vec<_>, Vec<_>)>();
                 settings.push(
                     widget::settings::item::builder(fl!("open-with")).control(
                         Element::from(
                             widget::dropdown(
-                                mime_apps
-                                    .iter()
-                                    .map(|app| Cow::Owned(app.name.clone()))
-                                    .collect::<Vec<Cow<'static, str>>>(),
-                                mime_apps.iter().position(|x| x.is_default()),
+                                names,
+                                mime_apps.iter().position(|(x, _)| x.is_default(&mime)),
                                 move |index| (index, mime_closure.clone()),
                             )
-                            .icons(Cow::Owned(mime_app_cache.icons(&mime))),
+                            .icons(Cow::Owned(icons)),
                         )
-                        .map(|(index, mime)| {
-                            let mime_app = &mime_apps[index];
+                        .map(move |(index, mime)| {
+                            let mime_app = &mime_apps[index].0;
                             Message::SetOpenWith(mime, mime_app.id.clone())
                         }),
                     ),
