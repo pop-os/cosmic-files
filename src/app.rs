@@ -2525,9 +2525,17 @@ impl Application for App {
         .on_middle_press(|entity| {
             cosmic::Action::App(Message::NavMenuAction(NavMenuAction::OpenInNewTab(entity)))
         })
-        .context_menu(self.nav_context_menu(self.nav_bar_context_id))
-        .close_icon(icon::from_name("media-eject-symbolic").size(16).icon())
-        .into_container();
+        .context_menu(self.nav_context_menu())
+        .close_icon(icon::from_name("media-eject-symbolic").size(16).icon());
+
+        #[cfg(feature = "wayland")]
+        {
+            nav = nav
+                .window_id_maybe(self.core().main_window_id())
+                .on_surface_action(|m| cosmic::Action::Cosmic(cosmic::app::Action::Surface(m)))
+        }
+
+        let mut nav = nav.into_container();
 
         if !self.core.is_condensed() {
             nav = nav.max_width(280);
@@ -2538,97 +2546,100 @@ impl Application for App {
         ))
     }
 
-    fn nav_context_menu(
-        &self,
-        entity: widget::nav_bar::Id,
-    ) -> Option<Vec<widget::menu::Tree<cosmic::Action<Self::Message>>>> {
-        let favorite_index_opt = self.nav_model.data::<FavoriteIndex>(entity);
-        let location_opt = self.nav_model.data::<Location>(entity);
+    fn nav_context_menu(&self) -> Option<Vec<widget::menu::Tree<cosmic::Action<Self::Message>>>> {
+        let items = self.nav_model.iter().map(|entity| {
+            let favorite_index_opt = self.nav_model.data::<FavoriteIndex>(entity);
+            let location_opt = self.nav_model.data::<Location>(entity);
 
-        let mut items = Vec::with_capacity(7);
+            let mut items: Vec<widget::menu::Item<NavMenuAction, String>> = Vec::with_capacity(7);
 
-        if location_opt
-            .and_then(Location::path_opt)
-            .is_some_and(|x| x.is_file())
-        {
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("open"),
-                None,
-                NavMenuAction::Open(entity),
-            ));
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("menu-open-with"),
-                None,
-                NavMenuAction::OpenWith(entity),
-            ));
-        } else {
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("open-in-new-tab"),
-                None,
-                NavMenuAction::OpenInNewTab(entity),
-            ));
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("open-in-new-window"),
-                None,
-                NavMenuAction::OpenInNewWindow(entity),
-            ));
-        }
-        if let Some(path) = location_opt.and_then(Location::path_opt) {
-            let selected_dir = usize::from(path.is_dir());
-            let action_items: Vec<_> = self
-                .config
-                .context_actions
-                .iter()
-                .enumerate()
-                .filter(|(_, action)| action.matches_selection(1, selected_dir))
-                .map(|(i, action)| {
-                    cosmic::widget::menu::Item::Button(
-                        action.name.clone(),
-                        None,
-                        NavMenuAction::RunContextAction(entity, i),
-                    )
-                })
-                .collect();
-
-            if !action_items.is_empty() {
-                items.push(cosmic::widget::menu::Item::Divider);
-                items.extend(action_items);
+            if location_opt
+                .and_then(Location::path_opt)
+                .is_some_and(|x| x.is_file())
+            {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("open"),
+                    None,
+                    NavMenuAction::Open(entity),
+                ));
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("menu-open-with"),
+                    None,
+                    NavMenuAction::OpenWith(entity),
+                ));
+            } else {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("open-in-new-tab"),
+                    None,
+                    NavMenuAction::OpenInNewTab(entity),
+                ));
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("open-in-new-window"),
+                    None,
+                    NavMenuAction::OpenInNewWindow(entity),
+                ));
             }
-        }
-        items.push(cosmic::widget::menu::Item::Divider);
-        if matches!(location_opt, Some(Location::Path(..))) {
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("show-details"),
-                None,
-                NavMenuAction::Preview(entity),
-            ));
-        }
-        items.push(cosmic::widget::menu::Item::Divider);
-        if favorite_index_opt.is_some() {
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("remove-from-sidebar"),
-                None,
-                NavMenuAction::RemoveFromSidebar(entity),
-            ));
-        }
+            if let Some(path) = location_opt.and_then(Location::path_opt) {
+                let selected_dir = usize::from(path.is_dir());
+                let action_items: Vec<_> = self
+                    .config
+                    .context_actions
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, action)| action.matches_selection(1, selected_dir))
+                    .map(|(i, action)| {
+                        cosmic::widget::menu::Item::Button(
+                            action.name.clone(),
+                            None,
+                            NavMenuAction::RunContextAction(entity, i),
+                        )
+                    })
+                    .collect();
 
-        if matches!(location_opt, Some(Location::Recents)) && tab::has_recents() {
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("clear-recents-history"),
-                None,
-                NavMenuAction::ClearRecents,
-            ));
-        }
+                if !action_items.is_empty() {
+                    items.push(cosmic::widget::menu::Item::Divider);
+                    items.extend(action_items);
+                }
+            }
+            items.push(cosmic::widget::menu::Item::Divider);
+            if matches!(location_opt, Some(Location::Path(..))) {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("show-details"),
+                    None,
+                    NavMenuAction::Preview(entity),
+                ));
+            }
+            items.push(cosmic::widget::menu::Item::Divider);
+            if favorite_index_opt.is_some() {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("remove-from-sidebar"),
+                    None,
+                    NavMenuAction::RemoveFromSidebar(entity),
+                ));
+            }
 
-        if matches!(location_opt, Some(Location::Trash)) && !Trash::is_empty() {
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("empty-trash"),
-                None,
-                NavMenuAction::EmptyTrash,
-            ));
-        }
+            if matches!(location_opt, Some(Location::Recents)) && tab::has_recents() {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("clear-recents-history"),
+                    None,
+                    NavMenuAction::ClearRecents,
+                ));
+            }
 
-        Some(cosmic::widget::menu::items(&HashMap::new(), items))
+            if matches!(location_opt, Some(Location::Trash)) && !Trash::is_empty() {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("empty-trash"),
+                    None,
+                    NavMenuAction::EmptyTrash,
+                ));
+            }
+            items
+        });
+
+        Some(cosmic::widget::menu::nav_context(
+            &HashMap::new(),
+            items.collect(),
+        ))
     }
 
     fn nav_model(&self) -> Option<&segmented_button::SingleSelectModel> {
