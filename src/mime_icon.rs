@@ -15,28 +15,21 @@ struct MimeIconKey {
     size: u16,
 }
 
-struct MimeIconCache {
+#[derive(Default)]
+pub struct MimeIconCache {
     cache: FxHashMap<MimeIconKey, Option<icon::Handle>>,
     #[cfg(unix)]
-    shared_mime_info: xdg_mime::SharedMimeInfo,
+    pub shared_mime_info: xdg_mime::SharedMimeInfo,
 }
 
 impl MimeIconCache {
-    pub fn new() -> Self {
-        Self {
-            cache: FxHashMap::default(),
-            #[cfg(unix)]
-            shared_mime_info: xdg_mime::SharedMimeInfo::new(),
-        }
-    }
-
     #[cfg(not(unix))]
     pub fn get(&mut self, _key: MimeIconKey) -> Option<icon::Handle> {
         None
     }
 
     #[cfg(unix)]
-    pub fn get(&mut self, key: MimeIconKey) -> Option<icon::Handle> {
+    fn get(&mut self, key: MimeIconKey) -> Option<icon::Handle> {
         self.cache
             .entry(key)
             .or_insert_with_key(|key| {
@@ -56,8 +49,9 @@ impl MimeIconCache {
             .clone()
     }
 }
-static MIME_ICON_CACHE: LazyLock<Mutex<MimeIconCache>> =
-    LazyLock::new(|| Mutex::new(MimeIconCache::new()));
+
+pub static MIME_ICON_CACHE: LazyLock<Mutex<MimeIconCache>> =
+    LazyLock::new(|| Mutex::new(MimeIconCache::default()));
 
 #[cfg(not(unix))]
 pub fn mime_for_path(
