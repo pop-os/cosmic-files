@@ -1,17 +1,30 @@
-use cosmic::{
-    Application, Element,
-    app::{self, Core, Settings, Task},
-    executor,
-    iced::{Subscription, window},
-    widget,
-};
+use cosmic::app::{self, Core, Settings, Task};
+use cosmic::iced::{Subscription, window};
+use cosmic::{Application, Element, executor, widget};
 use cosmic_files::dialog::{
     Dialog, DialogChoice, DialogChoiceOption, DialogFilter, DialogFilterPattern, DialogKind,
     DialogMessage, DialogResult, DialogSettings,
 };
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+    let log_format = tracing_subscriber::fmt::format()
+        .pretty()
+        .without_time()
+        .with_line_number(true)
+        .with_file(true)
+        .with_target(false)
+        .with_thread_names(true);
+
+    let log_layer = tracing_subscriber::fmt::Layer::default()
+        .with_writer(std::io::stderr)
+        .event_format(log_format);
+
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::from_env("RUST_LOG"))
+        .with(log_layer)
+        .init();
 
     let settings = Settings::default();
     app::run::<App>(settings, ())?;

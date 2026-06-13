@@ -1,58 +1,46 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
-use cosmic::{
-    Application, ApplicationExt, Element,
-    app::{Core, Task, context_drawer, cosmic::Cosmic},
-    cosmic_config, cosmic_theme, executor,
-    iced::core::widget::operation,
-    iced::platform_specific::shell::{self as iced_winit, SurfaceIdWrapper},
-    iced::widget::scrollable::AbsoluteOffset,
-    iced::{
-        self, Alignment, Event, Length, Size, Subscription,
-        core::SmolStr,
-        event,
-        futures::{self, SinkExt},
-        keyboard::{Event as KeyEvent, Key, Modifiers, key::Named},
-        mouse, stream,
-        widget::scrollable,
-        window,
-    },
-    theme,
-    widget::{
-        self, Operation,
-        menu::{Action as MenuAction, KeyBind, key_bind::Modifier},
-        segmented_button,
-    },
+use cosmic::app::cosmic::Cosmic;
+use cosmic::app::{Core, Task, context_drawer};
+use cosmic::iced::core::SmolStr;
+use cosmic::iced::core::widget::operation;
+use cosmic::iced::futures::{self, SinkExt};
+use cosmic::iced::keyboard::key::{Named, Physical};
+use cosmic::iced::keyboard::{Event as KeyEvent, Key, Modifiers};
+use cosmic::iced::platform_specific::shell::{self as iced_winit, SurfaceIdWrapper};
+use cosmic::iced::widget::scrollable;
+use cosmic::iced::widget::scrollable::AbsoluteOffset;
+use cosmic::iced::{
+    self, Alignment, Event, Length, Size, Subscription, event, mouse, stream, window,
 };
+use cosmic::widget::menu::key_bind::Modifier;
+use cosmic::widget::menu::{Action as MenuAction, KeyBind};
+use cosmic::widget::{self, Operation, segmented_button};
+use cosmic::{Application, ApplicationExt, Element, cosmic_config, cosmic_theme, executor, theme};
 use mime_guess::{Mime, mime};
-use notify_debouncer_full::{
-    DebouncedEvent, Debouncer, RecommendedCache, new_debouncer,
-    notify::{self, RecommendedWatcher},
-};
+use notify_debouncer_full::notify::{self, RecommendedWatcher};
+use notify_debouncer_full::{DebouncedEvent, Debouncer, RecommendedCache, new_debouncer};
 use recently_used_xbel::update_recently_used;
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::{
-    any::TypeId,
-    collections::{HashMap, VecDeque},
-    env, fmt, fs,
-    path::PathBuf,
-    time::{self, Instant},
-};
+use std::any::TypeId;
+use std::collections::{HashMap, VecDeque};
+use std::path::PathBuf;
+use std::time::{self, Instant};
+use std::{env, fmt, fs};
 
-use crate::{
-    app::{
-        Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind, REPLACE_BUTTON_ID,
-    },
-    config::{Config, DialogConfig, Favorite, TIME_CONFIG_ID, ThumbCfg, TimeConfig, TypeToSearch},
-    fl, home_dir,
-    key_bind::key_binds,
-    localize::LANGUAGE_SORTER,
-    menu,
-    mounter::{MOUNTERS, MounterItem, MounterItems, MounterKey, MounterMessage},
-    tab::{self, ItemMetadata, Location, SearchLocation, Tab},
-    zoom::{zoom_in_view, zoom_out_view, zoom_to_default},
+use crate::app::{
+    Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind, REPLACE_BUTTON_ID,
 };
+use crate::config::{
+    Config, DialogConfig, Favorite, TIME_CONFIG_ID, ThumbCfg, TimeConfig, TypeToSearch,
+};
+use crate::key_bind::key_binds;
+use crate::localize::LANGUAGE_SORTER;
+use crate::mounter::{MOUNTERS, MounterItem, MounterItems, MounterKey, MounterMessage};
+use crate::tab::{self, ItemMetadata, Location, SearchLocation, Tab};
+use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
+use crate::{fl, home_dir, menu};
 
 #[derive(Clone, Debug)]
 pub struct DialogMessage(cosmic::Action<Message>);
@@ -441,13 +429,8 @@ impl<M: Send + 'static> Dialog<M> {
 
 #[derive(Clone, Debug)]
 enum DialogPage {
-    NewFolder {
-        parent: PathBuf,
-        name: String,
-    },
-    Replace {
-        filename: String,
-    },
+    NewFolder { parent: PathBuf, name: String },
+    Replace { filename: String },
 }
 
 #[derive(Clone, Debug)]
@@ -473,7 +456,7 @@ enum Message {
     Escape,
     Filename(String),
     Filter(usize),
-    Key(Modifiers, Key, Option<SmolStr>),
+    Key(Modifiers, Key, Physical, Option<SmolStr>),
     ModifiersChanged(Modifiers),
     MounterItems(MounterKey, MounterItems),
     Mouse(window::Id, mouse::Button),
@@ -492,7 +475,7 @@ enum Message {
     TabMessage(tab::Message),
     TabRescan(
         Location,
-        Option<tab::Item>,
+        Option<Box<tab::Item>>,
         Vec<tab::Item>,
         Option<Vec<PathBuf>>,
     ),
@@ -592,7 +575,7 @@ impl App {
             space_s,
             space_l,
             ..
-        } = theme::active().cosmic().spacing;
+        } = theme::spacing();
         let is_condensed = self.core().is_condensed();
 
         let mut col = widget::column::with_capacity(2).spacing(space_xxs);
@@ -600,6 +583,7 @@ impl App {
             col = col.push(
                 widget::text_input("", filename)
                     .id(self.filename_id.clone())
+                    .double_click_select_delimiter('.')
                     .on_input(Message::Filename)
                     .on_submit(|_| Message::Save(false)),
             );
@@ -841,9 +825,10 @@ impl App {
 
     fn update_config(&mut self) -> Task<Message> {
         self.core.window.show_context = self.flags.config.dialog.show_details;
-        self.tab.config = self.flags.config.dialog_tab();
+        let config = self.flags.config.dialog_tab();
+        self.tab.config.view = config.view;
         self.update_nav_model();
-        self.update(Message::TabMessage(tab::Message::Config(self.tab.config)))
+        self.update(Message::TabMessage(tab::Message::Config(config)))
     }
 
     fn with_dialog_config<F: Fn(&mut DialogConfig)>(&mut self, f: F) -> Task<Message> {
@@ -906,6 +891,8 @@ impl App {
             if let Some(path) = favorite.path_opt() {
                 let name = if matches!(favorite, Favorite::Home) {
                     fl!("home")
+                } else if let Favorite::Network { name, .. } = favorite {
+                    name.clone()
                 } else if let Some(file_name) = path.file_name().and_then(|x| x.to_str()) {
                     file_name.to_string()
                 } else {
@@ -1129,7 +1116,7 @@ impl Application for App {
     }
 
     fn dialog(&self) -> Option<Element<'_, Message>> {
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+        let cosmic_theme::Spacing { space_xxs, .. } = theme::spacing();
 
         //TODO: should gallery view just be a dialog?
         if self.tab.gallery {
@@ -1407,7 +1394,10 @@ impl Application for App {
             Message::Config(config) => {
                 if config != self.flags.config {
                     log::info!("update config");
+                    // Don't overwrite military time
+                    let military_time = self.flags.config.tab.military_time;
                     self.flags.config = config;
+                    self.flags.config.tab.military_time = military_time;
                     return self.update_config();
                 }
             }
@@ -1460,16 +1450,16 @@ impl Application for App {
                 }
                 return self.rescan_tab(None);
             }
-            Message::Key(modifiers, key, text) => {
+            Message::Key(modifiers, key, physical_key, text) => {
                 for (key_bind, action) in &self.key_binds {
-                    if key_bind.matches(modifiers, &key) {
+                    if key_bind.matches(modifiers, &key, Some(&physical_key)) {
                         return self.update(Message::from(action.message()));
                     }
                 }
 
                 // Check key binds from accept label
                 if let Some(key_bind) = &self.accept_label.key_bind_opt
-                    && key_bind.matches(modifiers, &key)
+                    && key_bind.matches(modifiers, &key, Some(&physical_key))
                 {
                     return self.update(if self.flags.kind.save() {
                         Message::Save(false)
@@ -1962,6 +1952,16 @@ impl Application for App {
                     if self.search_get().is_some() {
                         return widget::text_input::focus(self.search_id.clone());
                     }
+                    if let DialogKind::SaveFile { filename } = &self.flags.kind {
+                        return Task::batch([
+                            widget::text_input::focus(self.filename_id.clone()),
+                            widget::text_input::select_until_last(
+                                self.filename_id.clone(),
+                                filename,
+                                '.',
+                            ),
+                        ]);
+                    }
                     return widget::text_input::focus(self.filename_id.clone());
                 }
             }
@@ -2011,7 +2011,7 @@ impl Application for App {
 
     /// Creates a view after each update.
     fn view(&self) -> Element<'_, Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+        let cosmic_theme::Spacing { space_xxs, .. } = theme::spacing();
 
         let mut col = widget::column::with_capacity(2);
 
@@ -2031,7 +2031,7 @@ impl Application for App {
         }
 
         col = col.push(
-                self.tab
+            self.tab
                 .view(&self.key_binds, &self.modifiers, false, &[])
                 .map(Message::TabMessage),
         );
@@ -2050,11 +2050,14 @@ impl Application for App {
                 },
                 Event::Keyboard(KeyEvent::KeyPressed {
                     key,
+                    physical_key,
                     modifiers,
                     text,
                     ..
                 }) => match status {
-                    event::Status::Ignored => Some(Message::Key(modifiers, key, text)),
+                    event::Status::Ignored => {
+                        Some(Message::Key(modifiers, key, physical_key, text))
+                    }
                     event::Status::Captured => {
                         if key == Key::Named(Named::Escape) {
                             Some(Message::Escape)

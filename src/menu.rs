@@ -1,29 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use cosmic::{
-    Element,
-    app::Core,
-    iced::{
-        Alignment, Background, Border, Length, advanced::widget::text::Style as TextStyle,
-        keyboard::Modifiers,
-    },
-    theme,
-    widget::{
-        self, Row, button, column, container, divider,
-        menu::{self, ItemHeight, ItemWidth, MenuBar, key_bind::KeyBind},
-        responsive_menu_bar, space, text,
-    },
+use cosmic::app::Core;
+use cosmic::iced::advanced::widget::text::Style as TextStyle;
+use cosmic::iced::keyboard::Modifiers;
+use cosmic::iced::{Alignment, Background, Border, Length};
+use cosmic::widget::menu::key_bind::KeyBind;
+use cosmic::widget::menu::{self, ItemHeight, ItemWidth, MenuBar};
+use cosmic::widget::{
+    self, Row, button, column, container, divider, responsive_menu_bar, space, text,
 };
+use cosmic::{Element, theme};
 use i18n_embed::LanguageLoader;
 use mime_guess::Mime;
-use std::{collections::HashMap, sync::LazyLock};
+use std::collections::HashMap;
+use std::sync::LazyLock;
 
-use crate::{
-    app::{Action, Message},
-    config::{Config, ContextActionPreset},
-    fl,
-    tab::{self, HeadingOptions, Location, LocationMenuAction, SearchLocation, Tab},
-};
+use crate::app::{Action, Message};
+use crate::config::{Config, ContextActionPreset};
+use crate::fl;
+use crate::tab::{self, HeadingOptions, Location, LocationMenuAction, SearchLocation, Tab};
+use crate::trash::{Trash, TrashExt};
 
 static MENU_ID: LazyLock<cosmic::widget::Id> =
     LazyLock::new(|| cosmic::widget::Id::new("responsive-menu"));
@@ -37,7 +33,7 @@ macro_rules! menu_button {
             .height(Length::Fixed(24.0))
             .align_y(Alignment::Center)
         )
-        .padding([theme::active().cosmic().spacing.space_xxs, 16])
+        .padding([theme::spacing().space_xxs, 16])
         .width(Length::Fill)
         .class(theme::Button::MenuItem)
     );
@@ -75,6 +71,7 @@ pub fn context_menu<'a>(
         color.alpha *= 0.75;
         TextStyle {
             color: Some(color.into()),
+            ..Default::default()
         }
     }
     fn disabled_style(theme: &cosmic::Theme) -> TextStyle {
@@ -82,6 +79,7 @@ pub fn context_menu<'a>(
         color.alpha *= 0.5;
         TextStyle {
             color: Some(color.into()),
+            ..Default::default()
         }
     }
 
@@ -109,18 +107,25 @@ pub fn context_menu<'a>(
 
     let (sort_name, sort_direction, _) = tab.sort_options();
     let sort_item = |label, variant| {
-        menu_item(
-            format!(
-                "{} {}",
-                label,
-                match (sort_name == variant, sort_direction) {
-                    (true, true) => "\u{2B07}",
-                    (true, false) => "\u{2B06}",
-                    _ => "",
-                }
-            ),
-            Action::ToggleSort(variant),
+        let key = find_key(&Action::ToggleSort(variant));
+        let leading: Element<'a, tab::Message> = if sort_name == variant {
+            let icon_name = if sort_direction {
+                "view-sort-ascending-symbolic"
+            } else {
+                "view-sort-descending-symbolic"
+            };
+            widget::icon::from_name(icon_name).size(14).into()
+        } else {
+            space::horizontal().width(Length::Fixed(14.0)).into()
+        };
+        menu_button!(
+            leading,
+            space::horizontal().width(Length::Fixed(theme::spacing().space_xxs.into())),
+            text::body(label),
+            space::horizontal(),
+            text::body(key).class(theme::Text::Custom(key_style))
         )
+        .on_press(tab::Message::ContextAction(Action::ToggleSort(variant)))
         .into()
     };
 
@@ -142,12 +147,11 @@ pub fn context_menu<'a>(
                     Some(Location::Trash) | Some(Location::Search(SearchLocation::Trash, ..)) => {
                         selected_trash_only = true
                     }
-                    Some(Location::Path(path)) => {
+                    Some(Location::Path(path))
                         if selected == 1
-                            && path.extension().and_then(|s| s.to_str()) == Some("desktop")
-                        {
-                            selected_desktop_entry = Some(&**path);
-                        }
+                            && path.extension().and_then(|s| s.to_str()) == Some("desktop") =>
+                    {
+                        selected_desktop_entry = Some(&**path);
                     }
                     _ => (),
                 }
@@ -192,7 +196,7 @@ pub fn context_menu<'a>(
         ) => {
             if selected_trash_only {
                 children.push(menu_item(fl!("open"), Action::Open).into());
-                if !trash::os_limited::is_empty().unwrap_or(true) {
+                if !Trash::is_empty() {
                     children.push(menu_item(fl!("empty-trash"), Action::EmptyTrash).into());
                 }
             } else if let Some(entry) = selected_desktop_entry {
@@ -578,7 +582,7 @@ pub fn dialog_menu(
     ])
     .item_height(ItemHeight::Dynamic(40))
     .item_width(ItemWidth::Uniform(360))
-    .spacing(theme::active().cosmic().spacing.space_xxxs.into())
+    .spacing(theme::spacing().space_xxxs.into())
     .into()
 }
 
@@ -633,7 +637,7 @@ pub fn menu_bar<'a>(
     responsive_menu_bar()
         .item_height(ItemHeight::Dynamic(40))
         .item_width(ItemWidth::Uniform(360))
-        .spacing(theme::active().cosmic().spacing.space_xxxs.into())
+        .spacing(theme::spacing().space_xxxs.into())
         .into_element(
             core,
             key_binds,

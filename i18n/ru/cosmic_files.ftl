@@ -195,7 +195,7 @@ dark = Тёмная
 light = Светлая
 # Context menu
 add-to-sidebar = Добавить на боковую панель
-compress = Сжать
+compress = Сжать...
 extract-here = Распаковать
 new-file = Новый файл…
 new-folder = Новая папка…
@@ -380,3 +380,13 @@ keywords = Папка;Менеджер;
 show-recents = «Недавние документы» в бок. панели
 clear-recents-history = Очистить историю недавних
 copy-path = Копировать путь
+mixed = Смешанные
+context-action = Контекстная команда
+context-action-confirm-title = Выполнить «{ $name }»?
+context-action-confirm-warning =
+    Команда затронет { $items } { $items ->
+        [one] элемент
+       *[other] элем.
+    }.
+run = Выполнить
+rename-confirm = Переименовать

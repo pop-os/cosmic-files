@@ -3,11 +3,9 @@
 use cosmic::widget::icon;
 use mime_guess::Mime;
 use rustc_hash::FxHashMap;
-use std::{
-    fs,
-    path::Path,
-    sync::{LazyLock, Mutex},
-};
+use std::fs;
+use std::path::Path;
+use std::sync::{LazyLock, Mutex};
 
 pub const FALLBACK_MIME_ICON: &str = "text-x-generic";
 
@@ -19,6 +17,7 @@ struct MimeIconKey {
 
 struct MimeIconCache {
     cache: FxHashMap<MimeIconKey, Option<icon::Handle>>,
+    #[cfg(unix)]
     shared_mime_info: xdg_mime::SharedMimeInfo,
 }
 
@@ -26,10 +25,17 @@ impl MimeIconCache {
     pub fn new() -> Self {
         Self {
             cache: FxHashMap::default(),
+            #[cfg(unix)]
             shared_mime_info: xdg_mime::SharedMimeInfo::new(),
         }
     }
 
+    #[cfg(not(unix))]
+    pub fn get(&mut self, _key: MimeIconKey) -> Option<icon::Handle> {
+        None
+    }
+
+    #[cfg(unix)]
     pub fn get(&mut self, key: MimeIconKey) -> Option<icon::Handle> {
         self.cache
             .entry(key)
@@ -39,7 +45,7 @@ impl MimeIconCache {
                     return None;
                 }
                 let icon_name = icon_names.remove(0);
-                let mut named = icon::from_name(icon_name).size(key.size);
+                let mut named = icon::from_name(icon_name).prefer_svg(true).size(key.size);
                 if !icon_names.is_empty() {
                     let fallback_names =
                         icon_names.into_iter().map(std::borrow::Cow::from).collect();
@@ -53,6 +59,16 @@ impl MimeIconCache {
 static MIME_ICON_CACHE: LazyLock<Mutex<MimeIconCache>> =
     LazyLock::new(|| Mutex::new(MimeIconCache::new()));
 
+#[cfg(not(unix))]
+pub fn mime_for_path(
+    path: impl AsRef<Path>,
+    metadata_opt: Option<&fs::Metadata>,
+    remote: bool,
+) -> Mime {
+    mime_guess::from_path(path).first_or_octet_stream()
+}
+
+#[cfg(unix)]
 pub fn mime_for_path(
     path: impl AsRef<Path>,
     metadata_opt: Option<&fs::Metadata>,
@@ -62,6 +78,7 @@ pub fn mime_for_path(
     let mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
     // Try the shared mime info cache first
     let mut gb = mime_icon_cache.shared_mime_info.guess_mime_type();
+    gb.zero_size(false);
     if remote {
         if let Some(file_name) = path.file_name().and_then(std::ffi::OsStr::to_str) {
             gb.file_name(file_name);
@@ -96,12 +113,20 @@ pub fn mime_icon(mime: Mime, size: u16) -> icon::Handle {
     let mut mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
     match mime_icon_cache.get(MimeIconKey { mime, size }) {
         Some(handle) => handle,
-        None => icon::from_name(FALLBACK_MIME_ICON).size(size).handle(),
+        None => icon::from_name(FALLBACK_MIME_ICON)
+            .prefer_svg(true)
+            .size(size)
+            .handle(),
     }
 }
 
+#[cfg(not(unix))]
+pub fn parent_mime_types(_mime: &Mime) -> Option<Vec<Mime>> {
+    None
+}
+
+#[cfg(unix)]
 pub fn parent_mime_types(mime: &Mime) -> Option<Vec<Mime>> {
     let mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
-
     mime_icon_cache.shared_mime_info.get_parents_aliased(mime)
 }

@@ -1,26 +1,24 @@
-use crate::{
-    app::{ArchiveType, DialogPage, Message, REPLACE_BUTTON_ID},
-    archive,
-    config::IconSizes,
-    fl,
-    spawn_detached::spawn_detached,
-    tab,
-};
-use cosmic::iced::futures::{self, SinkExt, StreamExt, channel::mpsc::Sender, stream};
-use std::{
-    borrow::Cow,
-    fmt::Formatter,
-    fs,
-    io::{self, Read, Write},
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use crate::app::{ArchiveType, DialogPage, Message, REPLACE_BUTTON_ID};
+use crate::config::IconSizes;
+use crate::spawn_detached::spawn_detached;
+use crate::{archive, fl, tab};
+use cosmic::iced::futures::channel::mpsc::Sender;
+use cosmic::iced::futures::{self, SinkExt, StreamExt, stream};
+use std::borrow::Cow;
+use std::fmt::Formatter;
+use std::fs;
+use std::io::{self, Read, Write};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tokio::sync::{Mutex as TokioMutex, mpsc};
 use walkdir::WalkDir;
 use zip::AesMode::Aes256;
 
 pub use self::controller::{Controller, ControllerState};
 pub mod controller;
+
+pub use notifiers::*;
+mod notifiers;
 
 pub use self::reader::OpReader;
 pub mod reader;
@@ -36,7 +34,7 @@ async fn handle_replace(
     conflict_count: usize,
 ) -> ReplaceResult {
     let item_from = match tab::item_from_path(file_from, IconSizes::default()) {
-        Ok(ok) => ok,
+        Ok(ok) => Box::new(ok),
         Err(err) => {
             log::warn!("{err}");
             return ReplaceResult::Cancel;
@@ -44,7 +42,7 @@ async fn handle_replace(
     };
 
     let item_to = match tab::item_from_path(file_to, IconSizes::default()) {
-        Ok(ok) => ok,
+        Ok(ok) => Box::new(ok),
         Err(err) => {
             log::warn!("{err}");
             return ReplaceResult::Cancel;
@@ -111,7 +109,7 @@ async fn copy_or_move(
         );
 
         // Handle duplicate file names by renaming paths
-        let mut from_to_pairs: Vec<(PathBuf, PathBuf)> = paths
+        let from_to_pairs_iter = paths
             .into_iter()
             .zip(std::iter::repeat(to.as_path()))
             .filter_map(|(from, to)| {
@@ -129,36 +127,46 @@ async fn copy_or_move(
                     //TODO: how to handle from missing file name?
                     None
                 }
-            })
-            .collect();
+            });
 
         // Attempt quick and simple renames
         //TODO: allow rename to be used for directories in recursive context?
-        if matches!(method, Method::Move { .. }) {
-            from_to_pairs.retain(|(from, to)| {
-                //TODO: show replace dialog here?
-                if to.exists() {
-                    return true;
-                }
 
-                //TODO: use compio::fs::rename?
-                match fs::rename(from, to) {
-                    Ok(()) => {
-                        log::info!("renamed {} to {}", from.display(), to.display());
-                        false
+        let from_to_pairs: Vec<(PathBuf, PathBuf)> = if matches!(method, Method::Move { .. }) {
+            from_to_pairs_iter
+                .map(|(from, to)| async move {
+                    //TODO: show replace dialog here?
+                    if to.exists() {
+                        return Some((from, to));
                     }
-                    Err(err) => {
-                        log::info!(
-                            "failed to rename {} to {}, fallback to recursive move: {}",
-                            from.display(),
-                            to.display(),
-                            err
-                        );
-                        true
+
+                    match compio::fs::rename(&from, &to).await {
+                        Ok(()) => {
+                            log::info!("renamed {} to {}", from.display(), to.display());
+                            None
+                        }
+                        Err(err) => {
+                            log::info!(
+                                "failed to rename {} to {}, fallback to recursive move: {}",
+                                from.display(),
+                                to.display(),
+                                err
+                            );
+                            Some((from, to))
+                        }
                     }
-                }
-            });
-        }
+                })
+                .collect::<cosmic::iced::futures::stream::FuturesOrdered<_>>()
+                .fold(Vec::new(), |mut pairs, pair| async move {
+                    if let Some(pair) = pair {
+                        pairs.push(pair);
+                    }
+                    pairs
+                })
+                .await
+        } else {
+            from_to_pairs_iter.collect()
+        };
 
         let mut context = Context::new(controller.clone());
 
@@ -216,7 +224,7 @@ pub async fn sync_to_disk(
         }
     }))
     .buffer_unordered(32)
-    .collect::<Vec<_>>()
+    .collect::<()>()
     .await;
 
     // Sync directories to disk
@@ -226,7 +234,7 @@ pub async fn sync_to_disk(
         }
     }))
     .buffer_unordered(16)
-    .collect::<Vec<_>>()
+    .collect::<()>()
     .await;
 }
 
@@ -1112,7 +1120,9 @@ impl Operation {
             #[cfg(target_os = "macos")]
             Self::Restore { .. } => {
                 // TODO: add support for macos
-                return OperationError::from_msg("Restoring from trash is not supported on macos");
+                return Err(OperationError::from_msg(
+                    "Restoring from trash is not supported on macos",
+                ));
             }
             #[cfg(not(target_os = "macos"))]
             Self::Restore { items } => {
@@ -1228,29 +1238,24 @@ fn wrap_compio_spawn_error(err: Box<dyn std::any::Any + Send>) -> OperationError
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        fs::{self, File},
-        io,
-        path::PathBuf,
-        sync::{Arc, Mutex},
-    };
+    use std::fs::{self, File};
+    use std::io;
+    use std::path::PathBuf;
+    use std::sync::{Arc, Mutex};
 
-    use cosmic::iced::futures::{StreamExt, channel::mpsc, future};
+    use cosmic::iced::futures::channel::mpsc;
+    use cosmic::iced::futures::{StreamExt, future};
     use log::debug;
     use test_log::test;
     use tokio::sync;
 
     use super::{Controller, Operation, OperationError, OperationSelection, ReplaceResult};
-    use crate::{
-        app::{
-            DialogPage, Message,
-            test_utils::{
-                NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED, empty_fs, filter_dirs,
-                filter_files, simple_fs,
-            },
-        },
-        fl,
+    use crate::app::test_utils::{
+        NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED, empty_fs, filter_dirs, filter_files,
+        simple_fs,
     };
+    use crate::app::{DialogPage, Message};
+    use crate::fl;
 
     /// Simple wrapper around `[Operation::Copy]`
     pub async fn operation_copy(

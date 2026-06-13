@@ -48,7 +48,7 @@ build-debug *args:
 
 # Compiles with release profile
 build-release *args: (build-debug '--release' args)
- 
+
 # Compiles applet with release profile
 build-release-applet *args:
     cargo build --package {{applet-name}} --release {{args}}
@@ -111,7 +111,7 @@ uninstall:
 vendor:
     #!/usr/bin/env bash
     mkdir -p .cargo
-    cargo vendor --sync Cargo.toml | head -n -1 > .cargo/config.toml
+    cargo vendor --locked --sync Cargo.toml | head -n -1 > .cargo/config.toml
     echo 'directory = "vendor"' >> .cargo/config.toml
     echo >> .cargo/config.toml
     echo '[env]' >> .cargo/config.toml

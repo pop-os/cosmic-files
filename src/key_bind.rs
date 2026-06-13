@@ -1,11 +1,10 @@
-use cosmic::{
-    iced::core::keyboard::key::Named,
-    iced::keyboard::Key,
-    widget::menu::key_bind::{KeyBind, Modifier},
-};
+use cosmic::iced::core::keyboard::key::Named;
+use cosmic::iced::keyboard::Key;
+use cosmic::widget::menu::key_bind::{KeyBind, Modifier};
 use std::collections::HashMap;
 
-use crate::{app::Action, tab};
+use crate::app::Action;
+use crate::tab;
 
 //TODO: load from config
 pub fn key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {

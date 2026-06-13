@@ -1,155 +1,171 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
-#[cfg(feature = "desktop")]
-use cosmic::desktop;
+use bstr::{BString, ByteSlice, ByteVec};
 use cosmic::widget;
 pub use mime_guess::Mime;
-use rustc_hash::FxHashMap;
-use std::{
-    cmp::Ordering,
-    ffi::OsStr,
-    fs, io,
-    path::{Path, PathBuf},
-    process,
-    time::Instant,
-};
+#[cfg(feature = "desktop")]
+use notify_debouncer_full::notify;
+use rustc_hash::{FxHashMap, FxHashSet};
+use std::ffi::OsStr;
+use std::os::unix::ffi::OsStrExt;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, RwLock, atomic};
+use std::time::{self, Instant};
+use std::{fs, io, process};
 
-// Supported exec key field codes
-const EXEC_HANDLERS: [&str; 4] = ["%f", "%F", "%u", "%U"];
-// Deprecated field codes. The spec advises to ignore these handlers.
-const DEPRECATED_HANDLERS: [&str; 6] = ["%d", "%D", "%n", "%N", "%v", "%m"];
+#[cfg(feature = "desktop")]
+pub async fn watch(mut emitter: impl FnMut() + 'static + Send) {
+    let watcher_result = notify_debouncer_full::new_debouncer(
+        time::Duration::from_millis(250),
+        Some(time::Duration::from_millis(250)),
+        move |event_res: notify_debouncer_full::DebounceEventResult| {
+            let Ok(events) = event_res else {
+                return;
+            };
+
+            if events.iter().any(|event| {
+                event.kind.is_create() || event.kind.is_modify() || event.kind.is_remove()
+            }) {
+                emitter();
+            }
+        },
+    );
+
+    if let Ok(mut watcher) = watcher_result {
+        let system_paths = cosmic_mime_apps::list_paths();
+        let local_paths = (|| {
+            let base_dirs = xdg::BaseDirectories::new();
+            let Some(home) = base_dirs.get_config_home() else {
+                return Err(std::io::Error::other("XDG config home not set"));
+            };
+
+            let Ok(desktop) = std::env::var("XDG_CURRENT_DESKTOP") else {
+                return Err(std::io::Error::other("XDG_CURRENT_DESKTOP unset"));
+            };
+
+            let default_mimeapps = home.join("mimeapps.list");
+            let desktop_mimeapps =
+                home.join([&desktop.to_ascii_lowercase(), "-mimeapps.list"].concat());
+
+            Ok([desktop_mimeapps, default_mimeapps])
+        })()
+        .ok();
+
+        for path in system_paths
+            .iter()
+            .chain(local_paths.as_ref().into_iter().flatten())
+        {
+            _ = watcher.watch(path.as_path(), notify::RecursiveMode::NonRecursive);
+        }
+
+        std::future::pending().await
+    }
+}
 
 pub fn exec_to_command(
     exec: &str,
+    entry_name: &str,
+    entry_path: Option<&Path>,
     path_opt: &[impl AsRef<OsStr>],
 ) -> Option<Vec<process::Command>> {
-    let args_vec = shlex::split(exec)?;
-    let program = args_vec.first()?;
-    // Skip program to make indexing easier
-    let args_vec = &args_vec[1..];
+    let arguments = shlex::split(exec)?;
 
-    // Base Command instance(s)
-    // 1. We may need to launch multiple of the same process.
-    // 2. Each of those processes will need to be passed args from exec.
-    // 3. Each of those args may appear in any order.
-    // 4. Arg order should be preserved.
-    //
-    // So, we'll go through exec in two passes. The first pass handles paths (%f etc) and args up
-    // to the field code followed by the second which passes extra, non-% args to each processes.
-    //
-    // While it'd be marginally faster to process everything in one pass, that's problematic:
-    // 1. path_opt may need to be cloned because it may be moved on each iteration (borrowck
-    //    doesn't know we'll only use it once)
-    // 2. We have to keep track of which modifier (%f etc) we've used/seen already
-    // 3. We have to keep track of which processes received non-modifier args which gets messy fast
-    // 4. `exec` is likely small so looping over it twice is not a big deal
-    let field_code_pos = args_vec
+    if arguments.is_empty() {
+        tracing::error!("command does not contain any arguments");
+        return None;
+    }
+
+    let mut commands = Vec::new();
+
+    let paths = path_opt
         .iter()
-        .position(|arg| EXEC_HANDLERS.contains(&arg.as_str()));
-    let args_handler = field_code_pos.and_then(|i| args_vec.get(i));
-    // msrv
-    // .inspect(|handler| log::trace!("Found paths handler: {handler} for exec: {exec}"));
-    // Number of args before the field code.
-    // This won't be an off by one err below because take is not zero indexed.
-    let field_code_pos = field_code_pos.unwrap_or_default();
-    let mut processes = match args_handler.map(String::as_str) {
-        Some("%f") => {
-            let mut processes = Vec::with_capacity(path_opt.len());
+        .map(AsRef::as_ref)
+        .map(Some)
+        // Add a single `None` if no path was given.
+        .chain(std::iter::repeat_n(
+            None,
+            if path_opt.is_empty() { 1 } else { 0 },
+        ));
 
-            for path in path_opt.iter().map(AsRef::as_ref) {
-                // TODO: %f and %F need to handle non-file URLs (see spec)
-                if from_file_or_dir(path).is_none() {
-                    log::warn!("Desktop file expects a file path instead of a URL: {path:?}");
+    for path in paths {
+        let mut batch_process = false;
+        let mut args = Vec::with_capacity(arguments.len());
+        let mut field_code_used = false;
+
+        for argument in arguments.iter().skip(1) {
+            let mut new_argument = BString::new(Vec::with_capacity(argument.capacity()));
+            let mut chars = argument.chars();
+            while let Some(char) = chars.next() {
+                // https://specifications.freedesktop.org/desktop-entry/latest/exec-variables.html
+                if char == '%' {
+                    match chars.next() {
+                        Some('%') => new_argument.push_char(char),
+                        Some('c') => new_argument.push_str(entry_name),
+                        Some('k') => {
+                            if let Some(path) = entry_path {
+                                new_argument.push_str(path.as_os_str().as_bytes());
+                            }
+                        }
+
+                        // %f and %u behave the same in a file manager.
+                        Some('f' | 'u') => {
+                            if let Some(path) = path
+                                && !field_code_used
+                            {
+                                // TODO: files on remote file systems should be copied to a temporary local file.
+                                batch_process = true;
+                                field_code_used = true;
+                                new_argument.push_str(path.as_bytes());
+                            }
+                        }
+
+                        // %F and %U behave the same in a file manager.
+                        Some('F') | Some('U') => {
+                            if !field_code_used && new_argument.is_empty() {
+                                field_code_used = true;
+                                for path in path_opt.iter().map(AsRef::as_ref) {
+                                    args.push(BString::new(path.as_bytes().to_owned()));
+                                }
+                            }
+                        }
+
+                        _ => (),
+                    }
+                } else {
+                    new_argument.push_char(char);
                 }
-
-                // Passing multiple paths to %f should open an instance per path
-                let mut process = process::Command::new(program);
-                process.args(
-                    args_vec
-                        .iter()
-                        .map(AsRef::as_ref)
-                        .take(field_code_pos)
-                        .chain(std::iter::once(path)),
-                );
-                processes.push(process);
             }
 
-            processes
-        }
-        Some("%F") => {
-            // TODO: %f and %F need to handle non-file URLs (see spec)
-            for invalid in path_opt
-                .iter()
-                .map(AsRef::as_ref)
-                .filter(|&path| from_file_or_dir(path).is_none())
-            {
-                log::warn!("Desktop file expects a file path instead of a URL: {invalid:?}");
+            if !new_argument.is_empty() {
+                args.push(new_argument);
             }
-
-            // Launch one instance with all args
-            let mut process = process::Command::new(program);
-            process.args(
-                args_vec
-                    .iter()
-                    .map(OsStr::new)
-                    .take(field_code_pos)
-                    .chain(path_opt.iter().map(AsRef::as_ref)),
-            );
-
-            vec![process]
         }
-        Some("%u") => path_opt
-            .iter()
-            .map(|path| {
-                let mut process = process::Command::new(program);
-                process.args(
-                    args_vec
-                        .iter()
-                        .map(OsStr::new)
-                        .take(field_code_pos)
-                        .chain(std::iter::once(path.as_ref())),
-                );
-                process
-            })
-            .collect(),
-        Some("%U") => {
-            let mut process = process::Command::new(program);
-            process.args(
-                args_vec
-                    .iter()
-                    .map(OsStr::new)
-                    .take(field_code_pos)
-                    .chain(path_opt.iter().map(AsRef::as_ref)),
-            );
-            vec![process]
-        }
-        Some(invalid) => unreachable!("All valid variants were checked; got: {invalid}"),
-        None => vec![process::Command::new(program)],
-    };
 
-    // Pass 2: Add remaining arguments that are not % to each process
-    for arg in args_vec.iter().skip(field_code_pos) {
-        match arg.as_str() {
-            // Consume path field codes or fail on codes we don't handle yet
-            field_code if arg.starts_with('%') => {
-                if !EXEC_HANDLERS.contains(&field_code)
-                    && !DEPRECATED_HANDLERS.contains(&field_code)
-                {
-                    log::warn!("unsupported Exec code {field_code:?} in {exec:?}");
+        let mut command = process::Command::new(&arguments[0]);
+
+        for arg in args {
+            match arg.to_os_str() {
+                Ok(arg) => {
+                    command.arg(arg);
+                }
+                Err(_) => {
+                    tracing::error!("invalid string encoding in command");
                     return None;
                 }
             }
-            arg => {
-                for process in &mut processes {
-                    process.arg(arg);
-                }
-            }
+        }
+
+        commands.push(command);
+
+        if !batch_process {
+            break;
         }
     }
 
     #[cfg(debug_assertions)]
-    for command in &processes {
+    for command in &commands {
         log::debug!(
             "Parsed program {} with args: {:?}",
             command.get_program().to_string_lossy(),
@@ -157,13 +173,14 @@ pub fn exec_to_command(
         );
     }
 
-    Some(processes)
+    Some(commands)
 }
 
-fn from_file_or_dir(path: impl AsRef<Path>) -> Option<url::Url> {
-    url::Url::from_file_path(&path)
-        .ok()
-        .or_else(|| url::Url::from_directory_path(&path).ok())
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MimeAppMatch {
+    Exact,
+    Related,
+    Other,
 }
 
 #[derive(Clone, Debug)]
@@ -172,14 +189,42 @@ pub struct MimeApp {
     pub path: Option<PathBuf>,
     pub name: String,
     pub exec: Option<String>,
-    pub icon: widget::icon::Handle,
-    pub is_default: bool,
+    icon_name: Box<str>,
+    icon: std::sync::OnceLock<widget::icon::Handle>,
+    is_default: Arc<RwLock<FxHashSet<Box<str>>>>,
+    no_display: Arc<AtomicBool>,
 }
 
 impl MimeApp {
     //TODO: move to libcosmic, support multiple files
     pub fn command<O: AsRef<OsStr>>(&self, path_opt: &[O]) -> Option<Vec<process::Command>> {
-        exec_to_command(self.exec.as_deref()?, path_opt)
+        exec_to_command(
+            self.exec.as_deref()?,
+            &self.name,
+            self.path.as_deref(),
+            path_opt,
+        )
+    }
+
+    pub fn is_default(&self, mime: &Mime) -> bool {
+        self.is_default.read().unwrap().contains(mime.essence_str())
+    }
+
+    pub fn no_display(&self) -> bool {
+        self.no_display.load(atomic::Ordering::Relaxed)
+    }
+
+    pub fn icon(&self) -> widget::icon::Handle {
+        self.icon
+            .get_or_init(|| {
+                let name = &*self.icon_name;
+                if name.starts_with('/') {
+                    cosmic::widget::icon::from_path(PathBuf::from(name))
+                } else {
+                    cosmic::widget::icon::from_name(name).size(32).handle()
+                }
+            })
+            .clone()
     }
 }
 
@@ -190,38 +235,10 @@ impl AsRef<str> for MimeApp {
     }
 }
 
-#[cfg(feature = "desktop")]
-impl From<&desktop::DesktopEntryData> for MimeApp {
-    fn from(app: &desktop::DesktopEntryData) -> Self {
-        Self {
-            id: app.id.clone(),
-            path: app.path.clone(),
-            name: app.name.clone(),
-            exec: app.exec.clone(),
-            icon: match &app.icon {
-                desktop::fde::IconSource::Name(name) => {
-                    widget::icon::from_name(name.as_str()).size(32).handle()
-                }
-                desktop::fde::IconSource::Path(path) => widget::icon::from_path(path.clone()),
-            },
-            is_default: false,
-        }
-    }
-}
-
-#[cfg(feature = "desktop")]
-fn filename_eq(path_opt: &Option<PathBuf>, filename: &str) -> bool {
-    path_opt
-        .as_ref()
-        .and_then(|path| path.file_name())
-        .is_some_and(|x| x == filename)
-}
-
 pub struct MimeAppCache {
-    apps: Vec<MimeApp>,
-    cache: FxHashMap<Mime, Vec<MimeApp>>,
-    icons: FxHashMap<Mime, Box<[widget::icon::Handle]>>,
-    terminals: Vec<MimeApp>,
+    apps: Vec<Arc<MimeApp>>,
+    cache: FxHashMap<Mime, Vec<Arc<MimeApp>>>,
+    terminals: Vec<Arc<MimeApp>>,
 }
 
 impl MimeAppCache {
@@ -229,154 +246,237 @@ impl MimeAppCache {
         let mut mime_app_cache = Self {
             apps: Vec::new(),
             cache: FxHashMap::default(),
-            icons: FxHashMap::default(),
             terminals: Vec::new(),
         };
         mime_app_cache.reload();
         mime_app_cache
     }
 
+    pub fn get_apps_for_mime(
+        &self,
+        mime_type: &Mime,
+        include_other: bool,
+    ) -> Vec<(&Arc<MimeApp>, MimeAppMatch)> {
+        let mut results = Vec::new();
+        let mut dedupe = FxHashSet::default();
+
+        // start with exact matches
+        results.extend(
+            self.get(mime_type)
+                .iter()
+                .filter(|&mime_app| dedupe.insert(&mime_app.id))
+                .map(|mime_app| (mime_app, MimeAppMatch::Exact)),
+        );
+
+        let include_mime = match mime_type.type_().as_str() {
+            "audio" => Some("video/mp4".parse::<Mime>().expect("video/mp4 mime")),
+            "text" => Some(mime_guess::mime::TEXT_PLAIN),
+            _ => None,
+        };
+
+        if let Some(mime) = include_mime {
+            results.extend(
+                self.get(&mime)
+                    .iter()
+                    .filter(|&mime_app| dedupe.insert(&mime_app.id))
+                    .map(|mime_app| (mime_app, MimeAppMatch::Exact)),
+            );
+        }
+
+        // grab matches based off of subclass / parent mime type
+        if let Some(parent_types) = crate::mime_icon::parent_mime_types(mime_type) {
+            for parent_type in parent_types {
+                results.extend(
+                    self.get(&parent_type)
+                        .iter()
+                        .filter(|&mime_app| dedupe.insert(&mime_app.id))
+                        .map(|mime_app| (mime_app, MimeAppMatch::Related)),
+                );
+            }
+        }
+
+        if include_other {
+            results.extend({
+                let mut apps = self
+                    .apps()
+                    .iter()
+                    .filter(|mime_app| !mime_app.no_display())
+                    .filter(|&mime_app| dedupe.insert(&mime_app.id))
+                    .map(|mime_app| (mime_app, MimeAppMatch::Other))
+                    .collect::<Vec<_>>();
+                apps.sort_by(|(a, _), (b, _)| {
+                    crate::localize::LANGUAGE_SORTER.compare(&a.name, &b.name)
+                });
+                apps
+            });
+        }
+
+        results
+    }
+
     #[cfg(not(feature = "desktop"))]
     pub fn reload(&mut self) {}
 
-    // Only available when using desktop feature of libcosmic, which only works on Unix-likes
+    /// Reload mime types and their known app associations and defaults.
     #[cfg(feature = "desktop")]
     pub fn reload(&mut self) {
         use crate::localize::LANGUAGE_SORTER;
+        use cosmic::desktop::fde;
+        use std::borrow::Cow;
 
         let start = Instant::now();
 
         self.apps.clear();
         self.cache.clear();
-        self.icons.clear();
         self.terminals.clear();
 
-        //TODO: get proper locale?
-        let locale = &[];
-
-        // Load desktop applications by supported mime types
-        //TODO: hashmap for all apps by id?
-        let all_apps: Box<[_]> = desktop::load_applications(locale, false, None).collect();
-        for app in &all_apps {
-            //TODO: just collect apps that can be executed with a file argument?
-            if !app.mime_types.is_empty() {
-                self.apps.push(MimeApp::from(app));
-            }
-            for mime in &app.mime_types {
-                let apps = self
-                    .cache
-                    .entry(mime.clone())
-                    .or_insert_with(|| Vec::with_capacity(1));
-                if !apps.iter().any(|x| x.id == app.id) {
-                    apps.push(MimeApp::from(app));
-                }
-            }
-            for category in &app.categories {
-                if category == "TerminalEmulator" {
-                    self.terminals.push(MimeApp::from(app));
-                    break;
-                }
-            }
-        }
-
         let mut list = cosmic_mime_apps::List::default();
-
         let paths = cosmic_mime_apps::list_paths();
         list.load_from_paths(&paths);
+        let locales = fde::get_languages_from_env();
 
-        for (mime, filenames) in list
-            .added_associations
-            .iter()
-            .chain(list.default_apps.iter())
-        {
-            for filename in filenames {
-                log::trace!("add {mime}={filename}");
-                let apps = self
-                    .cache
-                    .entry(mime.clone())
-                    .or_insert_with(|| Vec::with_capacity(1));
-                if !apps.iter().any(|x| filename_eq(&x.path, filename)) {
-                    if let Some(app) = all_apps.iter().find(|&x| filename_eq(&x.path, filename)) {
-                        apps.push(MimeApp::from(app));
-                    } else {
-                        log::info!(
-                            "failed to add association for {mime:?}: application {filename:?} not found"
-                        );
+        let desktop_entries = fde::Iter::new(fde::default_paths()).entries(Some(&locales));
+
+        for desktop_entry in desktop_entries {
+            let name = desktop_entry
+                .name(&locales)
+                .unwrap_or_else(|| Cow::Borrowed(desktop_entry.id()));
+
+            let app = Arc::new(MimeApp {
+                id: desktop_entry.appid.clone(),
+                path: Some(desktop_entry.path.clone()),
+                name: name.into(),
+                exec: desktop_entry.exec().map(String::from),
+                icon_name: desktop_entry.icon().unwrap_or_default().into(),
+                icon: std::sync::OnceLock::new(),
+                is_default: Arc::new(RwLock::default()),
+                no_display: Arc::new(AtomicBool::new(false)),
+            });
+
+            tracing::info!(target: "mime-apps", id = app.id, "detected desktop entry");
+
+            self.apps.push(app.clone());
+
+            if desktop_entry
+                .categories()
+                .into_iter()
+                .flatten()
+                .any(|c| c == "TerminalEmulator")
+            {
+                self.terminals.push(app.clone());
+            }
+
+            // Cache associations defined by the desktop entry.
+            let mime_types = desktop_entry.mime_type().unwrap_or_else(Vec::new);
+            for mime in mime_types.iter().filter_map(|m| m.parse::<Mime>().ok()) {
+                let apps = self.cache.entry(mime.clone()).or_default();
+                if apps.iter().all(|cached_app| cached_app.id != app.id) {
+                    apps.push(app.clone());
+                }
+            }
+        }
+
+        // Cache added associations from mimeapps lists.
+        for (added_mime, added_apps) in &list.added_associations {
+            for added_app in added_apps {
+                if let Some(app) = self
+                    .apps
+                    .iter()
+                    .find(|cached| cached.id.as_str() == added_app.as_ref())
+                {
+                    let apps = self.cache.entry(added_mime.clone()).or_default();
+                    if apps.iter().all(|cached_app| cached_app.id != app.id) {
+                        apps.push(app.clone());
                     }
                 }
             }
         }
 
-        for (mime, filenames) in list.removed_associations.iter() {
-            for filename in filenames {
-                log::trace!("remove {mime}={filename}");
-                if let Some(apps) = self.cache.get_mut(mime) {
-                    apps.retain(|x| !filename_eq(&x.path, filename));
+        // Remove associations
+        for (removed_mime, removed_apps) in &list.removed_associations {
+            for removed_app in removed_apps {
+                if let Some(app) = self
+                    .apps
+                    .iter()
+                    .find(|cached| cached.id.as_str() == removed_app.as_ref())
+                    && let Some(apps) = self.cache.get_mut(removed_mime)
+                {
+                    apps.retain(|cached_app| cached_app.id != app.id);
                 }
             }
         }
 
-        for (mime, filenames) in list.default_apps.iter() {
-            for filename in filenames {
-                log::trace!("default {mime}={filename}");
-                if let Some(apps) = self.cache.get_mut(mime) {
-                    let mut found = false;
-                    for app in apps.iter_mut() {
-                        if filename_eq(&app.path, filename) {
-                            app.is_default = true;
-                            found = true;
-                        } else {
-                            app.is_default = false;
-                        }
-                    }
+        // Fetch defaults and sort apps by their default precedence.
+        for (mime, mut apps) in std::mem::take(&mut self.cache).into_iter() {
+            let defaults = list.default_app_for(&mime);
+            let cache = self
+                .cache
+                .entry(mime.clone())
+                .or_insert_with(|| Vec::with_capacity(apps.len()));
+
+            // Sort cached apps for this mime by default precedence.
+            for default in defaults.into_iter().flatten() {
+                let default = default.strip_suffix(".desktop").unwrap_or(default.as_ref());
+                let mut found_any = false;
+                apps.retain(|app| {
+                    let found = app.id.as_str() == default;
                     if found {
-                        break;
+                        app.is_default
+                            .write()
+                            .unwrap()
+                            .insert(mime.essence_str().into());
+                        cache.push(app.clone());
+                        found_any = true;
                     }
-                    log::debug!(
-                        "failed to set default for {mime:?}: application {filename:?} not found"
-                    );
+
+                    !found
+                });
+
+                if !found_any && let Some(app) = self.apps.iter().find(|app| app.id == default) {
+                    app.is_default
+                        .write()
+                        .unwrap()
+                        .insert(mime.essence_str().into());
+                    cache.push(app.clone());
                 }
             }
+
+            // Sort remaining apps by name
+            apps.sort_by(|a, b| LANGUAGE_SORTER.compare(&a.name, &b.name));
+            cache.extend_from_slice(&apps);
+
+            tracing::debug!(target: "mime-apps", mime = mime.essence_str(), apps = ?(cache.iter().map(|app| &*app.id).collect::<Vec<&str>>()), "mime defaults found")
         }
 
-        // Sort apps by name
-        self.apps
-            .sort_by(|a, b| match (a.is_default, b.is_default) {
-                (true, false) => Ordering::Less,
-                (false, true) => Ordering::Greater,
-                _ => LANGUAGE_SORTER.compare(&a.name, &b.name),
-            });
-        for apps in self.cache.values_mut() {
-            apps.sort_by(|a, b| match (a.is_default, b.is_default) {
-                (true, false) => Ordering::Less,
-                (false, true) => Ordering::Greater,
-                _ => LANGUAGE_SORTER.compare(&a.name, &b.name),
-            });
+        let associated: rustc_hash::FxHashSet<&str> = self
+            .cache
+            .values()
+            .flatten()
+            .map(|app| app.id.as_str())
+            .collect();
+        for app in &self.apps {
+            app.no_display.store(
+                !associated.contains(app.id.as_str()),
+                atomic::Ordering::Relaxed,
+            );
         }
-
-        // Copy icons to special cache
-        //TODO: adjust dropdown API so this is no longer needed
-        self.icons.extend(self.cache.iter().map(|(mime, apps)| {
-            (
-                mime.clone(),
-                apps.iter().map(|app| app.icon.clone()).collect(),
-            )
-        }));
 
         let elapsed = start.elapsed();
-        log::info!("loaded mime app cache in {elapsed:?}");
+        tracing::info!(target: "mime-apps", "loaded mime app cache in {elapsed:?}");
     }
 
-    pub fn apps(&self) -> &[MimeApp] {
+    pub fn apps(&self) -> &[Arc<MimeApp>] {
         &self.apps
     }
 
-    pub fn get(&self, key: &Mime) -> &[MimeApp] {
+    pub fn get(&self, key: &Mime) -> &[Arc<MimeApp>] {
         self.cache.get(key).map_or(&[], Vec::as_slice)
     }
 
-    pub fn icons(&self, key: &Mime) -> &[widget::icon::Handle] {
-        self.icons.get(key).map_or(&[], Box::as_ref)
+    pub fn icons(&self, key: &Mime) -> Vec<widget::icon::Handle> {
+        self.cache
+            .get(key)
+            .map_or_else(Vec::new, |apps| apps.iter().map(|app| app.icon()).collect())
     }
 
     fn get_default_terminal(&self) -> Option<String> {
@@ -394,7 +494,7 @@ impl MimeAppCache {
             .map(|string| string.trim().replace(".desktop", ""))
     }
 
-    pub fn terminal(&self) -> Option<&MimeApp> {
+    pub fn terminal(&self) -> Option<&Arc<MimeApp>> {
         //TODO: consider rules in https://github.com/Vladimir-csp/xdg-terminal-exec
         // The current approach works but might not adhere to the spec (yet)
 
@@ -476,10 +576,42 @@ mod tests {
     use super::exec_to_command;
 
     #[test]
+    fn keys_within_words() {
+        let exec = "/usr/bin/foo --option=%f";
+        let paths = ["file1"];
+        let commands = exec_to_command(exec, "keys_within_words", None, &paths)
+            .expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+
+        assert_eq!("/usr/bin/foo", command.get_program().to_str().unwrap());
+        assert_eq!(
+            "--option=file1",
+            command.get_args().next().unwrap().to_str().unwrap()
+        );
+    }
+
+    #[test]
+    fn no_path_f_field_code() {
+        let exec = "/usr/bin/foo %f";
+        let paths: [&str; 0] = [];
+        let commands = exec_to_command(exec, "no_path_f_field_code", None, &paths)
+            .expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+
+        assert_eq!("/usr/bin/foo", command.get_program().to_str().unwrap());
+        assert_eq!(0, command.get_args().len());
+    }
+
+    #[test]
     fn one_path_f_field_code() {
         let exec = "/usr/bin/foo %f";
         let paths = ["file1"];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let commands = exec_to_command(exec, "one_path_f_field_code", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();
@@ -494,31 +626,40 @@ mod tests {
     #[test]
     #[allow(non_snake_case)]
     fn one_path_F_field_code() {
-        let exec = "/usr/bin/bar %F";
-        let paths = ["cat"];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let exec = "/usr/bin/cosmic-term -w %F";
+        let paths = ["/home/user"];
+        let commands = exec_to_command(exec, "one_path_F_field_code", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();
+        let mut args = command.get_args();
 
-        assert_eq!("/usr/bin/bar", command.get_program().to_str().unwrap());
-        assert_eq!("cat", command.get_args().next().unwrap().to_str().unwrap());
+        assert_eq!(
+            "/usr/bin/cosmic-term",
+            command.get_program().to_str().unwrap()
+        );
+        assert_eq!("-w", args.next().unwrap().to_str().unwrap());
+        assert_eq!(paths[0], args.next().unwrap().to_str().unwrap());
     }
 
     #[test]
     fn one_path_u_field_code() {
-        let exec = "/usr/bin/foobar %u";
-        let paths = ["/home/josh/krumpli"];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let exec = "/usr/bin/cosmic-term -w %u";
+        let paths = ["/home/user"];
+        let commands = exec_to_command(exec, "one_path_u_field_code", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();
+        let mut args = command.get_args();
 
-        assert_eq!("/usr/bin/foobar", command.get_program().to_str().unwrap());
         assert_eq!(
-            *paths.first().unwrap(),
-            command.get_args().next().unwrap().to_str().unwrap()
+            "/usr/bin/cosmic-term",
+            command.get_program().to_str().unwrap()
         );
+        assert_eq!("-w", args.next().unwrap().to_str().unwrap());
+        assert_eq!(paths[0], args.next().unwrap().to_str().unwrap());
     }
 
     #[test]
@@ -526,7 +667,8 @@ mod tests {
     fn one_path_U_field_code() {
         let exec = "/usr/bin/rmrfbye %U";
         let paths = ["/"];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let commands = exec_to_command(exec, "one_path_U_field_code", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();
@@ -542,7 +684,8 @@ mod tests {
             "/usr/share/games/psp/miku.iso",
             "/usr/share/games/psp/eternia.iso",
         ];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let commands = exec_to_command(exec, "mult_path_f_field_code", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(paths.len(), commands.len());
         for (command, path) in commands.into_iter().zip(paths.iter()) {
@@ -562,7 +705,8 @@ mod tests {
             "/usr/share/games/doom2/hr.wad",
             "/usr/share/games/doom2/hrmus.wad",
         ];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let commands = exec_to_command(exec, "mult_path_F_field_code", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();
@@ -584,7 +728,8 @@ mod tests {
             "https://redox-os.org/",
             "https://system76.com/",
         ];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let commands = exec_to_command(exec, "mult_path_u_field_code", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(paths.len(), commands.len());
         for (command, path) in commands.into_iter().zip(paths.iter()) {
@@ -607,7 +752,8 @@ mod tests {
             "frieren01.mkv",
             "rtmp://example.org/this/video/doesnt/exist.avi",
         ];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let commands = exec_to_command(exec, "mult_path_U_field_code", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();
@@ -635,7 +781,8 @@ mod tests {
             "@@u",
         ];
         let paths = ["file1.rs", "file2.rs"];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let commands = exec_to_command(exec, "flatpak_style_exec", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();
@@ -658,7 +805,8 @@ mod tests {
             "file:///usr/share/games/roguelike/mods/mod1",
             "file:///usr/share/games/roguelike/mods/mod2",
         ];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let commands = exec_to_command(exec, "multiple_field_codes", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();
@@ -691,7 +839,8 @@ mod tests {
         ];
         let paths = ["rust_game_dev.pdf", "superhero_ferris.epub"];
         let args_trailing = ["@@"];
-        let commands = exec_to_command(exec, &paths).expect("Should parse valid exec");
+        let commands = exec_to_command(exec, "sandwiched_field_code", None, &paths)
+            .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();

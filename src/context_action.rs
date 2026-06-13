@@ -4,7 +4,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{mime_app, spawn_detached::spawn_detached};
+use crate::mime_app;
+use crate::spawn_detached::spawn_detached;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ContextActionSelection {
@@ -46,7 +47,7 @@ impl ContextActionPreset {
         }
 
         for step in &self.steps {
-            let Some(commands) = mime_app::exec_to_command(step, paths) else {
+            let Some(commands) = mime_app::exec_to_command(step, &self.name, None, paths) else {
                 log::warn!(
                     "failed to parse context action {:?}: invalid Exec {:?}",
                     self.name,

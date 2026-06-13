@@ -1,11 +1,10 @@
 use cosmic::iced::{core as iced_core, widget as iced_widget};
 use iced_core::event::Event;
-use iced_core::layout;
-use iced_core::mouse;
-use iced_core::overlay;
-use iced_core::renderer;
 use iced_core::widget::{Operation, Tree};
-use iced_core::{Clipboard, Element, Layout, Length, Rectangle, Shell, Vector, Widget};
+use iced_core::{
+    Clipboard, Element, Layout, Length, Rectangle, Shell, Vector, Widget, layout, mouse, overlay,
+    renderer,
+};
 
 pub fn loaded_image<'a, Message: 'static, Theme>(
     handle: <cosmic::Renderer as iced_core::image::Renderer>::Handle,

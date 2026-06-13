@@ -1,16 +1,14 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
+#[cfg(feature = "desktop")]
 use cosmic::desktop::fde::GenericEntry;
 use mime_guess::Mime;
 use rustc_hash::FxHashMap;
-use std::{
-    fs,
-    path::Path,
-    process,
-    sync::{LazyLock, Mutex},
-    time::Instant,
-};
+use std::path::Path;
+use std::sync::{LazyLock, Mutex};
+use std::time::Instant;
+use std::{fs, process};
 
 #[derive(Clone, Debug)]
 pub struct Thumbnailer {

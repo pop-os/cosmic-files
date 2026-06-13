@@ -2,12 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::iced::clipboard::mime::{AllowedMimeTypes, AsMimeTypes};
-use std::{
-    borrow::Cow,
-    error::Error,
-    path::{Path, PathBuf},
-    str,
-};
+use std::borrow::Cow;
+use std::error::Error;
+use std::path::{Path, PathBuf};
+use std::str;
 use url::Url;
 
 #[derive(Clone, Copy, Debug)]
@@ -132,7 +130,7 @@ impl TryFrom<(Vec<u8>, String)> for ClipboardPaste {
         match mime.as_str() {
             "text/uri-list" => {
                 let text = str::from_utf8(&data)?;
-                let lines = text.lines();
+                let _lines = text.lines();
 
                 for line in text.lines() {
                     let url = Url::parse(line)?;

@@ -17,7 +17,7 @@ size = Velikost
 
 ## Empty Trash Dialog
 
-empty-trash = Vysypat koš
+empty-trash = Vyprázdnit koš
 empty-trash-warning = Položky v koši budou trvale smazány
 
 ## New File/Folder Dialog
@@ -176,7 +176,7 @@ set-executable-and-launch-description = Chcete povolit spouštění souboru „{
 set-and-launch = Povolit a spustit
 open-with = Otevřít pomocí
 other = Ostatní
-none = Žádný
+none = Žádné
 icon-size-and-spacing = Velikost a rozestupy ikon
 grid-spacing = Rozestupy mřížky
 deleting =
@@ -195,8 +195,8 @@ deleted =
         [few] položky
        *[other] položek
     } z koše
-emptying-trash = Vysypávání koše ({ $progress })...
-emptied-trash = Koš vysypán
+emptying-trash = Vyprazdňování koše ({ $progress })...
+emptied-trash = Koš vyprázdněn
 restoring =
     Obnovování { $items } { $items ->
         [one] položky
@@ -403,7 +403,7 @@ sort-largest-to-smallest = Od největšího po nejmenší
 gallery-preview = Náhled galerie
 sort = Řazení
 sort-a-z = A-Z
-empty-trash-title = Vysypat koš?
+empty-trash-title = Vyprázdnit koš?
 type-to-search-select = Vybere první shodující se soubor nebo složku
 pasted-image = Vložený obrázek
 pasted-text = Vložený text
@@ -417,3 +417,14 @@ move-to-title = Vyberte cíl přesunutí
 show-recents = Složka „Nedávné“ v postranním panelu
 copy-path = Kopírovat cestu
 clear-recents-history = Vymazat historii „Nedávné“
+mixed = Různé
+context-action = Kontextová akce
+context-action-confirm-title = Spustit „{ $name }“?
+context-action-confirm-warning =
+    Tato akce se spustí pro { $items } { $items ->
+        [one] položku
+        [few] položky
+       *[other] položek
+    }.
+run = Spustit
+rename-confirm = Přejmenovat
