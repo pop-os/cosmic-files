@@ -321,6 +321,7 @@ impl MimeAppCache {
     #[cfg(feature = "desktop")]
     pub fn reload(&mut self) {
         use crate::localize::LANGUAGE_SORTER;
+        use crate::mime_icon;
         use cosmic::desktop::fde;
         use std::borrow::Cow;
 
@@ -334,8 +335,10 @@ impl MimeAppCache {
         let paths = cosmic_mime_apps::list_paths();
         list.load_from_paths(&paths);
         let locales = fde::get_languages_from_env();
-
         let desktop_entries = fde::Iter::new(fde::default_paths()).entries(Some(&locales));
+        let mime_icon_cache = mime_icon::MIME_ICON_CACHE.lock().unwrap();
+        let shared_mime_info = &mime_icon_cache.shared_mime_info;
+        let mut aliased_mimes = FxHashMap::default();
 
         for desktop_entry in desktop_entries {
             let name = desktop_entry
@@ -368,7 +371,18 @@ impl MimeAppCache {
 
             // Cache associations defined by the desktop entry.
             let mime_types = desktop_entry.mime_type().unwrap_or_else(Vec::new);
-            for mime in mime_types.iter().filter_map(|m| m.parse::<Mime>().ok()) {
+            let associated_mime_types = mime_types.iter().filter_map(|m| {
+                m.parse::<Mime>().ok().map(|mime| {
+                    if let Some(unaliased) = shared_mime_info.unalias_mime_type(&mime) {
+                        aliased_mimes.insert(unaliased.clone(), mime);
+                        return unaliased;
+                    }
+
+                    mime
+                })
+            });
+
+            for mime in associated_mime_types {
                 let apps = self.cache.entry(mime.clone()).or_default();
                 if apps.iter().all(|cached_app| cached_app.id != app.id) {
                     apps.push(app.clone());
@@ -377,7 +391,14 @@ impl MimeAppCache {
         }
 
         // Cache added associations from mimeapps lists.
-        for (added_mime, added_apps) in &list.added_associations {
+        for (mut added_mime, added_apps) in &list.added_associations {
+            let _unaliased;
+            if let Some(unaliased) = shared_mime_info.unalias_mime_type(added_mime) {
+                aliased_mimes.insert(unaliased.clone(), added_mime.clone());
+                _unaliased = unaliased;
+                added_mime = &_unaliased;
+            }
+
             for added_app in added_apps {
                 if let Some(app) = self
                     .apps
@@ -393,7 +414,14 @@ impl MimeAppCache {
         }
 
         // Remove associations
-        for (removed_mime, removed_apps) in &list.removed_associations {
+        for (mut removed_mime, removed_apps) in &list.removed_associations {
+            let _unaliased;
+            if let Some(unaliased) = shared_mime_info.unalias_mime_type(removed_mime) {
+                aliased_mimes.insert(unaliased.clone(), removed_mime.clone());
+                _unaliased = unaliased;
+                removed_mime = &_unaliased;
+            }
+
             for removed_app in removed_apps {
                 if let Some(app) = self
                     .apps
@@ -409,13 +437,21 @@ impl MimeAppCache {
         // Fetch defaults and sort apps by their default precedence.
         for (mime, mut apps) in std::mem::take(&mut self.cache).into_iter() {
             let defaults = list.default_app_for(&mime);
+            let aliased_defaults = aliased_mimes
+                .get(&mime)
+                .and_then(|mime| list.default_app_for(mime));
+
             let cache = self
                 .cache
                 .entry(mime.clone())
                 .or_insert_with(|| Vec::with_capacity(apps.len()));
 
             // Sort cached apps for this mime by default precedence.
-            for default in defaults.into_iter().flatten() {
+            for default in defaults
+                .into_iter()
+                .flatten()
+                .chain(aliased_defaults.into_iter().flatten())
+            {
                 let default = default.strip_suffix(".desktop").unwrap_or(default.as_ref());
                 let mut found_any = false;
                 apps.retain(|app| {
