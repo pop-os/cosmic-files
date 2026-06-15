@@ -1790,12 +1790,28 @@ impl Application for App {
                                             SctkPopupSettings, SctkPositioner,
                                         };
                                         use cosmic::iced::Rectangle;
+                                        use cosmic::widget::menu::StyleSheet as _;
+
                                         let window_id = window::Id::unique();
                                         self.context_menu_window = Some(window_id);
                                         let autosize_id = widget::Id::unique();
+                                        let t = self.core.system_theme();
+                                        let styling = t.appearance(
+                                            &cosmic::theme::menu_bar::MenuBarStyle::Default,
+                                            false,
+                                        );
+                                        let rad = styling.menu_border_radius;
                                         commands.push(self.update(Message::Surface(
                                             cosmic::surface::action::app_popup(
-                                                |_| Default::default(),
+                                                move |_| cosmic::surface::action::LiveSettings {
+                                                    corners: Some(iced::runtime::platform_specific::wayland::CornerRadius {
+                                                        top_left: rad[0] as u32,
+                                                        top_right: rad[1] as u32,
+                                                        bottom_left: rad[2] as u32,
+                                                        bottom_right: rad[3] as u32,
+                                                    }),
+                                                    ..Default::default()
+                                                },
                                                 move |app: &mut Self| -> SctkPopupSettings {
                                                     let anchor_rect = Rectangle {
                                                         x: point.x as i32,

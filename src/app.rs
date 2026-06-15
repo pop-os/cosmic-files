@@ -4496,9 +4496,10 @@ impl Application for App {
                                     use cctk::wayland_protocols::xdg::shell::client::xdg_positioner::{
                                         Anchor, Gravity,
                                     };
-                                    use cosmic::iced::runtime::platform_specific::wayland::popup::{
+                                    use cosmic::{iced::runtime::platform_specific::wayland::popup::{
                                         SctkPopupSettings, SctkPositioner,
-                                    };
+                                    }, widget::menu::StyleSheet as _};
+
                                     let window_id = WindowId::unique();
                                     self.windows.insert(
                                         window_id,
@@ -4508,10 +4509,24 @@ impl Application for App {
                                         )),
                                     );
                                     commands.push(self.update(Message::CheckClipboard));
+                                    let t = self.core.system_theme();
+                                    let styling = t.appearance(
+                                        &cosmic::theme::menu_bar::MenuBarStyle::Default,
+                                        false,
+                                    );
+                                    let rad = styling.menu_border_radius;
+
                                     commands.push(self.update(Message::Surface(
                                         cosmic::surface::action::app_popup(
-                                            |_| Default::default(),
-                                            move |app: &mut Self| -> SctkPopupSettings {
+                                        move |_| cosmic::surface::action::LiveSettings {
+                                                    corners: Some(iced::runtime::platform_specific::wayland::CornerRadius {
+                                                        top_left: rad[0] as u32,
+                                                        top_right: rad[1] as u32,
+                                                        bottom_left: rad[2] as u32,
+                                                        bottom_right: rad[3] as u32,
+                                                    }),
+                                                    ..Default::default()
+                                                },                                            move |app: &mut Self| -> SctkPopupSettings {
                                                 let anchor_rect = Rectangle {
                                                     x: point.x as i32,
                                                     y: point.y as i32,

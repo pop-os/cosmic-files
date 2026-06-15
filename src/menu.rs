@@ -441,7 +441,7 @@ pub fn context_menu<'a>(
         //TODO: move style to libcosmic
         .style(|theme| {
             let cosmic = theme.cosmic();
-            let component = &cosmic.background(theme.transparent).component;
+            let component = &cosmic.background(theme.transparent);
             container::Style {
                 icon_color: Some(component.on.into()),
                 text_color: Some(component.on.into()),
