@@ -3130,6 +3130,14 @@ impl Tab {
         item.pos_opt.get()
     }
 
+    fn dehighlight_all(&mut self) {
+        if let Some(items) = self.items_opt.as_mut() {
+            for item in items.iter_mut() {
+                item.highlighted = false;
+            }
+        }
+    }
+
     pub(crate) fn select_focus_scroll(&mut self) -> Option<AbsoluteOffset> {
         let items = self.items_opt.as_ref()?;
         let item = items.get(self.select_focus?)?;
@@ -3820,6 +3828,7 @@ impl Tab {
                 }
             }
             Message::ItemDown => {
+                self.dehighlight_all();
                 if let Some(edit_location) = &mut self.edit_location {
                     edit_location.select(true);
                 } else if self.gallery {
@@ -3862,6 +3871,7 @@ impl Tab {
                 }
             }
             Message::ItemLeft => {
+                self.dehighlight_all();
                 if self.gallery {
                     commands.append(&mut self.update(Message::GalleryPrevious, modifiers));
                 } else {
@@ -3920,6 +3930,7 @@ impl Tab {
                 }
             }
             Message::ItemRight => {
+                self.dehighlight_all();
                 if self.gallery {
                     commands.append(&mut self.update(Message::GalleryNext, modifiers));
                 } else {
@@ -3961,6 +3972,7 @@ impl Tab {
                 }
             }
             Message::ItemUp => {
+                self.dehighlight_all();
                 if let Some(edit_location) = &mut self.edit_location {
                     edit_location.select(false);
                 } else if self.gallery {
