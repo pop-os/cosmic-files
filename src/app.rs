@@ -6495,7 +6495,6 @@ impl Application for App {
                         })
                         .drag_id(self.tab_drag_id),
                 )
-                .class(style::Container::Background)
                 .width(Length::Fill)
                 .padding([0, space_s]),
             );
