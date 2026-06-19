@@ -158,12 +158,27 @@ fn button_appearance(
     accent: bool,
     condensed_radius: bool,
     desktop: bool,
+    feedback: bool,
 ) -> widget::button::Style {
     let cosmic = theme.cosmic();
     let mut appearance = widget::button::Style::new();
     if selected {
         if accent {
-            appearance.background = Some(Color::from(cosmic.accent_color()).into());
+            if feedback {
+                let a = Color::from(cosmic.accent_color());
+                appearance.background = Some(
+                    {
+                        let mut c = a;
+                        c.r = (c.r + 0.03).min(1.0);
+                        c.g = (c.g + 0.03).min(1.0);
+                        c.b = (c.b + 0.03).min(1.0);
+                        c
+                    }
+                    .into(),
+                );
+            } else {
+                appearance.background = Some(Color::from(cosmic.accent_color()).into());
+            }
             appearance.icon_color = Some(Color::from(cosmic.on_accent_color()));
             if cut {
                 appearance.text_color = Some(Color::from(cosmic.accent.on_disabled));
@@ -218,6 +233,7 @@ fn button_style(
     accent: bool,
     condensed_radius: bool,
     desktop: bool,
+    feedback: bool,
 ) -> theme::Button {
     //TODO: move to libcosmic?
     theme::Button::Custom {
@@ -231,6 +247,7 @@ fn button_style(
                 accent,
                 condensed_radius,
                 desktop,
+                feedback,
             )
         }),
         disabled: Box::new(move |theme| {
@@ -243,6 +260,7 @@ fn button_style(
                 accent,
                 condensed_radius,
                 desktop,
+                feedback,
             )
         }),
         hovered: Box::new(move |focused, theme| {
@@ -255,6 +273,7 @@ fn button_style(
                 accent,
                 condensed_radius,
                 desktop,
+                feedback,
             )
         }),
         pressed: Box::new(move |focused, theme| {
@@ -267,6 +286,7 @@ fn button_style(
                 accent,
                 condensed_radius,
                 desktop,
+                feedback,
             )
         }),
     }
@@ -2680,6 +2700,7 @@ pub struct Tab {
     select_range: Option<(usize, usize)>,
     clicked: Option<usize>,
     selected_clicked: bool,
+    click_feedback: Option<Instant>,
     last_right_click: Option<usize>,
     search_context: Option<SearchContext>,
     date_time_formatter: DateTimeFormatter<fieldsets::YMDT>,
@@ -2801,6 +2822,7 @@ impl Tab {
             clicked: None,
             dnd_hovered: None,
             selected_clicked: false,
+            click_feedback: None,
             last_right_click: None,
             search_context: None,
             date_time_formatter: date_time_formatter(config.military_time),
@@ -3399,6 +3421,7 @@ impl Tab {
                         }
                     }
                 }
+                self.click_feedback = None;
             }
             Message::DragEnd => {
                 self.clicked = None;
@@ -3427,6 +3450,7 @@ impl Tab {
             }
             Message::Click(click_i_opt) => {
                 self.selected_clicked = false;
+                self.click_feedback = None;
                 self.context_menu = None;
                 self.edit_location = None;
                 self.location_context_menu_index = None;
@@ -3532,6 +3556,8 @@ impl Tab {
                                 if !item.selected {
                                     self.clicked = click_i_opt;
                                     item.selected = true;
+                                } else {
+                                    self.click_feedback = Some(Instant::now());
                                 }
                                 self.select_range = Some((i, i));
                                 self.select_focus = click_i_opt;
@@ -5438,6 +5464,9 @@ impl Tab {
         let mut drag_s_i = 0;
 
         let mut column = widget::column::with_capacity(2);
+        let click_feedback = self
+            .click_feedback
+            .map_or(false, |t| t.elapsed() < Duration::from_millis(500));
         if let Some(items) = self.column_sort() {
             let mut count = 0;
             let mut col = 0;
@@ -5484,6 +5513,7 @@ impl Tab {
                             false,
                             false,
                             false,
+                            click_feedback && item.selected,
                         ))
                         .into(),
                         widget::tooltip(
@@ -5497,6 +5527,7 @@ impl Tab {
                                     true,
                                     true,
                                     matches!(self.mode, Mode::Desktop),
+                                    click_feedback && item.selected,
                                 )),
                             widget::text::body(&item.name),
                             widget::tooltip::Position::Bottom,
@@ -5651,6 +5682,7 @@ impl Tab {
                                 false,
                                 false,
                                 false,
+                                click_feedback && item.selected,
                             )),
                             widget::button::custom(Item::grid_display_name(
                                 item.display_name.clone(),
@@ -5665,6 +5697,7 @@ impl Tab {
                                 true,
                                 true,
                                 false,
+                                click_feedback && item.selected,
                             )),
                         ];
 
@@ -5754,6 +5787,9 @@ impl Tab {
         };
 
         let mut drag_items = Vec::new();
+        let click_feedback = self
+            .click_feedback
+            .map_or(false, |t| t.elapsed() < Duration::from_millis(500));
         if let Some(items) = self.column_sort() {
             let mut count = 0;
             let mut hidden = 0;
@@ -5934,6 +5970,7 @@ impl Tab {
                                     true,
                                     true,
                                     false,
+                                    click_feedback && item.selected,
                                 )),
                         )
                         .on_press(move |_| Message::Click(Some(i)))

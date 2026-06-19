@@ -656,6 +656,9 @@ fn update<Message: Clone>(
     {
         if !recent_click {
             state.prev_click = None;
+            if let Some(message) = widget.on_release.as_ref() {
+                shell.publish(message(cursor.position_in(layout_bounds)));
+            }
             return;
         }
         state.drag_initiated = None;
