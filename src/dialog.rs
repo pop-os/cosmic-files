@@ -483,6 +483,7 @@ enum Message {
     TimeConfigChange(TimeConfig),
     ToggleFoldersFirst,
     ToggleShowHidden,
+    TypeSelectClear,
     ZoomDefault,
     ZoomIn,
     ZoomOut,
@@ -1451,6 +1452,43 @@ impl Application for App {
                 return self.rescan_tab(None);
             }
             Message::Key(modifiers, key, physical_key, text) => {
+                // When typing-to-select, backspace edits it and escape clears it
+                if matches!(self.flags.config.type_to_search, TypeToSearch::SelectByPrefix)
+                    && !modifiers.logo()
+                    && !modifiers.control()
+                    && !modifiers.alt()
+                    && !self.type_select_prefix.is_empty()
+                    && self
+                        .type_select_last_key
+                        .is_some_and(|last_key| last_key.elapsed() < tab::TYPE_SELECT_TIMEOUT)
+                {
+                    match &key {
+                        Key::Named(Named::Backspace) => {
+                            self.type_select_prefix.pop();
+                            self.type_select_last_key = Some(Instant::now());
+                            if !self.type_select_prefix.is_empty() {
+                                self.tab.select_by_prefix(&self.type_select_prefix);
+                                if let Some(offset) = self.tab.select_focus_scroll() {
+                                    return scrollable::scroll_to(
+                                        self.tab.scrollable_id.clone(),
+                                        AbsoluteOffset {
+                                            x: Some(offset.x),
+                                            y: Some(offset.y),
+                                        },
+                                    );
+                                }
+                            }
+                            return Task::none();
+                        }
+                        Key::Named(Named::Escape) => {
+                            self.type_select_prefix.clear();
+                            self.type_select_last_key = None;
+                            return Task::none();
+                        }
+                        _ => {}
+                    }
+                }
+
                 for (key_bind, action) in &self.key_binds {
                     if key_bind.matches(modifiers, &key, Some(&physical_key)) {
                         return self.update(Message::from(action.message()));
@@ -1984,6 +2022,17 @@ impl Application for App {
                     config.show_hidden = !config.show_hidden;
                 });
             }
+            Message::TypeSelectClear => {
+                // Clear the type-to-select buffer once it has gone idle, which also hides the
+                // type-ahead indicator. A no-op if a newer keystroke re-armed the timer.
+                let expired = self
+                    .type_select_last_key
+                    .is_none_or(|last_key| last_key.elapsed() >= tab::TYPE_SELECT_TIMEOUT);
+                if expired {
+                    self.type_select_prefix.clear();
+                    self.type_select_last_key = None;
+                }
+            }
             Message::ZoomDefault => {
                 return self.with_dialog_config(|config| {
                     zoom_to_default(config.view, &mut config.icon_sizes);
@@ -2011,7 +2060,9 @@ impl Application for App {
 
     /// Creates a view after each update.
     fn view(&self) -> Element<'_, Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::spacing();
+        let cosmic_theme::Spacing {
+            space_xxs, space_s, ..
+        } = theme::spacing();
 
         let mut col = widget::column::with_capacity(2);
 
@@ -2036,7 +2087,36 @@ impl Application for App {
                 .map(Message::TabMessage),
         );
 
-        col.into()
+        let content: Element<_> = col.into();
+
+        // Floating type-ahead indicator anchored to the bottom-right while typing to select.
+        if matches!(self.flags.config.type_to_search, TypeToSearch::SelectByPrefix)
+            && !self.type_select_prefix.is_empty()
+        {
+            let chip = widget::container(
+                widget::row::with_children(vec![
+                    widget::icon::from_name("system-search-symbolic")
+                        .size(16)
+                        .into(),
+                    widget::text::body(self.type_select_prefix.clone()).into(),
+                ])
+                .spacing(space_xxs)
+                .align_y(Alignment::Center),
+            )
+            .padding([space_xxs, space_s])
+            .class(theme::Container::Tooltip);
+
+            // A transparent, fill-sized layer pins the chip. It does not capture input.
+            let overlay = widget::container(chip)
+                .align_right(Length::Fill)
+                .align_bottom(Length::Fill)
+                .padding(space_s);
+
+            return cosmic::iced::widget::Stack::with_children(vec![content, overlay.into()])
+                .into();
+        }
+
+        content
     }
 
     fn subscription(&self) -> Subscription<Message> {
@@ -2186,6 +2266,17 @@ impl Application for App {
                 iced::time::every(time::Duration::from_millis(10))
                     .with(scroll_speed)
                     .map(|(scroll_speed, _)| Message::ScrollTab(scroll_speed)),
+            );
+        }
+
+        // While a type-to-select prefix is active, poll so the buffer (and its indicator)
+        // can be cleared once the timeout elapses.
+        if matches!(self.flags.config.type_to_search, TypeToSearch::SelectByPrefix)
+            && !self.type_select_prefix.is_empty()
+        {
+            subscriptions.push(
+                iced::time::every(time::Duration::from_millis(200))
+                    .map(|_| Message::TypeSelectClear),
             );
         }
 
