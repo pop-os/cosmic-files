@@ -1336,6 +1336,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "cosmic-bg-config"
+version = "1.0.3"
+source = "git+https://github.com/pop-os/cosmic-bg#b1ca4c180ab29dd185472b777ab0abdb1f96ccaf"
+dependencies = [
+ "cosmic-config",
+ "derive_setters",
+ "image",
+ "serde",
+ "tracing",
+]
+
+[[package]]
 name = "cosmic-client-toolkit"
 version = "0.2.0"
 source = "git+https://github.com/pop-os/cosmic-protocols?rev=c253ec1#c253ec1d6804afbcdf250f5cc37ae1194bba7bd2"
@@ -1387,6 +1399,7 @@ dependencies = [
  "bstr",
  "bzip2",
  "compio",
+ "cosmic-bg-config",
  "cosmic-client-toolkit",
  "cosmic-mime-apps",
  "dirs 6.0.0",
