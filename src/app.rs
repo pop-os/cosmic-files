@@ -82,7 +82,7 @@ use crate::tab::{
 };
 use crate::trash::{Trash, TrashExt};
 use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
-use crate::{FxOrderMap, context_action, fl, home_dir, menu, mime_icon};
+use crate::{FxOrderMap, context_action, fl, home_dir, menu, mime_icon, mouse_area};
 
 static PERMANENT_DELETE_BUTTON_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("permanent-delete-button"));
@@ -456,6 +456,9 @@ pub enum Message {
     Undo(usize),
     UndoTrash(widget::ToastId, Arc<[PathBuf]>),
     UndoTrashStart(Vec<TrashItem>),
+    NavResize(Option<Rectangle>),
+    NavResizeSave,
+    NavResizeReset,
     WindowClose,
     WindowCloseRequested(window::Id),
     WindowMaximize(window::Id, bool),
@@ -758,6 +761,8 @@ pub struct App {
     type_select_prefix: String,
     type_select_last_key: Option<Instant>,
     nav_drag_id: DragId,
+    nav_width: f32,
+    nav_resize_state: Option<(f32, Option<f32>)>,
     tab_drag_id: DragId,
     auto_scroll_speed: Option<i16>,
     file_dialog_opt: Option<Dialog<Message>>,
@@ -2393,6 +2398,7 @@ impl Application for App {
                 ),
             ]);
 
+        let nav_width = flags.config.nav_width as f32;
         let mut app = Self {
             core,
             about,
@@ -2441,6 +2447,8 @@ impl Application for App {
             type_select_prefix: String::new(),
             type_select_last_key: None,
             nav_drag_id: DragId::new(),
+            nav_width,
+            nav_resize_state: None,
             tab_drag_id: DragId::new(),
             auto_scroll_speed: None,
             file_dialog_opt: None,
@@ -2495,7 +2503,7 @@ impl Application for App {
 
         let nav_model = self.nav_model()?;
 
-        let mut nav = cosmic::widget::nav_bar(nav_model, |entity| {
+        let nav = cosmic::widget::nav_bar(nav_model, |entity| {
             cosmic::Action::Cosmic(cosmic::app::Action::NavBar(entity))
         })
         .drag_id(self.nav_drag_id)
@@ -2514,7 +2522,24 @@ impl Application for App {
         .into_container();
 
         if !self.core.is_condensed() {
-            nav = nav.max_width(280);
+            let handle = mouse_area::MouseArea::new(
+                widget::container(space::vertical().height(Length::Fill)).padding([0, 3]),
+            )
+            .on_drag(|rect| cosmic::Action::App(Message::NavResize(rect)))
+            .on_release(|_| cosmic::Action::App(Message::NavResizeSave))
+            .on_drag_end(|_| cosmic::Action::App(Message::NavResizeSave))
+            .on_double_click(|_| cosmic::Action::App(Message::NavResizeReset))
+            .drag_unclipped();
+
+            return Some(
+                widget::row::with_children([
+                    nav.width(Length::Fixed(self.nav_width))
+                        .height(Length::Fill)
+                        .into(),
+                    handle.into(),
+                ])
+                .into(),
+            );
         }
 
         Some(Element::from(
@@ -2909,6 +2934,7 @@ impl Application for App {
                     let show_details = self.config.show_details;
                     let military_time = self.config.tab.military_time;
                     self.config = config;
+                    self.nav_width = self.config.nav_width as f32;
                     self.config.show_details = show_details;
                     self.config.tab.military_time = military_time;
                     return self.update_config();
@@ -4807,6 +4833,31 @@ impl Application for App {
             }
             Message::UndoTrashStart(items) => {
                 return self.operation(Operation::Restore { items });
+            }
+            Message::NavResize(rect_opt) => {
+                if self.nav_resize_state.is_none() {
+                    self.nav_resize_state = Some((self.nav_width, None));
+                }
+                if let Some(rect) = rect_opt {
+                    if let Some((start_width, ref mut click_opt)) = self.nav_resize_state {
+                        let click = click_opt.get_or_insert(rect.x);
+                        let edge = rect.x + rect.width;
+                        let delta = if edge > *click + 1.0 {
+                            rect.width
+                        } else {
+                            rect.x - *click
+                        };
+                        self.nav_width = (start_width + delta).clamp(160.0, 600.0);
+                    }
+                }
+            }
+            Message::NavResizeSave => {
+                self.nav_resize_state = None;
+                config_set!(nav_width, self.nav_width as u16);
+            }
+            Message::NavResizeReset => {
+                self.nav_width = 280.0;
+                config_set!(nav_width, 280);
             }
             Message::WindowClose => {
                 if let Some(window_id) = self.core.main_window_id() {
