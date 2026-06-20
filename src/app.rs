@@ -456,6 +456,7 @@ pub enum Message {
     Undo(usize),
     UndoTrash(widget::ToastId, Arc<[PathBuf]>),
     UndoTrashStart(Vec<TrashItem>),
+    NavResizeStart(Option<iced::Point>),
     NavResize(Option<Rectangle>),
     NavResizeSave,
     NavResizeReset,
@@ -762,7 +763,7 @@ pub struct App {
     type_select_last_key: Option<Instant>,
     nav_drag_id: DragId,
     nav_width: f32,
-    nav_resize_state: Option<(f32, Option<f32>)>,
+    nav_resize_state: Option<(f32, Option<(f32, f32)>)>,
     tab_drag_id: DragId,
     auto_scroll_speed: Option<i16>,
     file_dialog_opt: Option<Dialog<Message>>,
@@ -2525,6 +2526,7 @@ impl Application for App {
             let handle = mouse_area::MouseArea::new(
                 widget::container(space::vertical().height(Length::Fill)).padding([0, 3]),
             )
+            .on_press(|point| cosmic::Action::App(Message::NavResizeStart(point)))
             .on_drag(|rect| cosmic::Action::App(Message::NavResize(rect)))
             .on_release(|_| cosmic::Action::App(Message::NavResizeSave))
             .on_drag_end(|_| cosmic::Action::App(Message::NavResizeSave))
@@ -4834,20 +4836,25 @@ impl Application for App {
             Message::UndoTrashStart(items) => {
                 return self.operation(Operation::Restore { items });
             }
+            Message::NavResizeStart(_point) => {
+                self.nav_resize_state = Some((self.nav_width, None));
+            }
             Message::NavResize(rect_opt) => {
-                if self.nav_resize_state.is_none() {
-                    self.nav_resize_state = Some((self.nav_width, None));
-                }
                 if let Some(rect) = rect_opt {
                     if let Some((start_width, ref mut click_opt)) = self.nav_resize_state {
-                        let click = click_opt.get_or_insert(rect.x);
-                        let edge = rect.x + rect.width;
-                        let delta = if edge > *click + 1.0 {
-                            rect.width
+                        // First frame: just record the reference point, no resize
+                        if click_opt.is_none() {
+                            *click_opt = Some((rect.x, rect.width));
                         } else {
-                            rect.x - *click
-                        };
-                        self.nav_width = (start_width + delta).clamp(160.0, 600.0);
+                            let (first_x, _first_w) = click_opt.unwrap();
+                            // If rect.x is stable → right drag; else → left drag
+                            let delta: f32 = if (rect.x - first_x).abs() < 1.0 {
+                                rect.width
+                            } else {
+                                -rect.width
+                            };
+                            self.nav_width = (start_width + delta).clamp(160.0, 600.0);
+                        }
                     }
                 }
             }
