@@ -167,10 +167,16 @@ pub struct Config {
     pub context_actions: Vec<ContextActionPreset>,
     pub thumb_cfg: ThumbCfg,
     pub favorites: Vec<Favorite>,
+    #[serde(default = "default_nav_width")]
+    pub nav_width: u16,
     pub show_details: bool,
     pub show_recents: bool,
     pub tab: TabConfig,
     pub type_to_search: TypeToSearch,
+}
+
+const fn default_nav_width() -> u16 {
+    280
 }
 
 impl Config {
@@ -231,6 +237,7 @@ impl Default for Config {
                 Favorite::Pictures,
                 Favorite::Videos,
             ],
+            nav_width: 280,
             show_details: false,
             show_recents: true,
             tab: TabConfig::default(),

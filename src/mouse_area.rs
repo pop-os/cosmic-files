@@ -41,6 +41,7 @@ pub struct MouseArea<'a, Message> {
     on_enter: Option<Box<dyn OnEnterExit<'a, Message>>>,
     on_exit: Option<Box<dyn OnEnterExit<'a, Message>>>,
     show_drag_rect: bool,
+    drag_unclipped: bool,
 }
 
 impl<'a, Message> MouseArea<'a, Message> {
@@ -200,6 +201,12 @@ impl<'a, Message> MouseArea<'a, Message> {
         self
     }
 
+    #[must_use]
+    pub const fn drag_unclipped(mut self) -> Self {
+        self.drag_unclipped = true;
+        self
+    }
+
     /// Sets the widget's unique identifier.
     #[must_use]
     pub fn with_id(mut self, id: Id) -> Self {
@@ -312,6 +319,7 @@ impl<'a, Message> MouseArea<'a, Message> {
             on_exit: None,
             on_scroll: None,
             show_drag_rect: false,
+            drag_unclipped: false,
         }
     }
 }
@@ -408,6 +416,9 @@ where
         viewport: &Rectangle,
         renderer: &Renderer,
     ) -> mouse::Interaction {
+        if self.drag_unclipped && cursor.is_over(layout.bounds()) {
+            return mouse::Interaction::ResizingHorizontally;
+        }
         self.content.as_widget().mouse_interaction(
             &tree.children[0],
             layout,
@@ -785,12 +796,15 @@ fn update<Message: Clone>(
     }
 
     if let Some((message, drag_rect)) = widget.on_drag.as_ref().zip(state.drag_rect(cursor)) {
-        shell.publish(message(drag_rect.intersection(&layout_bounds).map(
-            |mut rect| {
+        let publish_rect = if widget.drag_unclipped {
+            Some(drag_rect)
+        } else {
+            drag_rect.intersection(&layout_bounds).map(|mut rect| {
                 rect.x -= layout_bounds.x;
                 rect.y -= layout_bounds.y;
                 rect
-            },
-        )));
+            })
+        };
+        shell.publish(message(publish_rect));
     }
 }
