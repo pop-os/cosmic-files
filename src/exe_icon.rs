@@ -3,40 +3,46 @@
 use cosmic::widget::icon;
 use std::io::Read;
 use std::path::Path;
-use std::process::Command;
 
 pub fn exe_icon(path: &Path) -> Option<icon::Handle> {
     if path.extension()?.to_str()? != "exe" {
         return None;
     }
-    let mut hdr = [0u8; 2];
-    std::fs::File::open(path).ok()?.read_exact(&mut hdr).ok()?;
-    if &hdr != b"MZ" {
-        return None;
-    }
-    let ico = Command::new("wrestool")
-        .args(["-x", "-t", "14"])
-        .arg(path)
-        .output()
+    let mut data = Vec::new();
+    std::fs::File::open(path)
+        .ok()?
+        .read_to_end(&mut data)
         .ok()?;
-    if !ico.status.success() || ico.stdout.len() < 6 {
+    if data.len() < 64 || &data[..2] != b"MZ" {
         return None;
     }
-    let buf = &ico.stdout;
-    let count = u16::from_le_bytes([buf[4], buf[5]]) as usize;
+
+    let file = pelite::PeFile::from_bytes(&data).ok()?;
+    let resources = file.resources().ok()?;
+
+    // Write the first ICO group to a vec, then parse it
+    let mut ico = Vec::new();
+    let (_name, group) = resources.icons().next()?.ok()?;
+    group.write(&mut ico).ok()?;
+
+    if ico.len() < 6 {
+        return None;
+    }
+    let count = u16::from_le_bytes([ico[4], ico[5]]) as usize;
+
     let mut best: Option<(u32, u32, u32, Vec<u8>)> = None;
 
     for i in 0..count.min(32) {
         let e = 6 + i * 16;
-        if buf.len() < e + 16 {
+        if ico.len() < e + 16 {
             break;
         }
-        let sz = u32::from_le_bytes([buf[e + 8], buf[e + 9], buf[e + 10], buf[e + 11]]) as usize;
-        let off = u32::from_le_bytes([buf[e + 12], buf[e + 13], buf[e + 14], buf[e + 15]]) as usize;
-        if off + sz > buf.len() {
+        let sz = u32::from_le_bytes([ico[e + 8], ico[e + 9], ico[e + 10], ico[e + 11]]) as usize;
+        let off = u32::from_le_bytes([ico[e + 12], ico[e + 13], ico[e + 14], ico[e + 15]]) as usize;
+        if off + sz > ico.len() {
             continue;
         }
-        let d = &buf[off..off + sz];
+        let d = &ico[off..off + sz];
 
         let dec = if d.starts_with(b"\x89PNG") {
             decode(d)
