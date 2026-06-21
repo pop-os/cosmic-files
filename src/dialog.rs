@@ -1459,8 +1459,10 @@ impl Application for App {
             }
             Message::Key(modifiers, key, physical_key, text) => {
                 // When typing-to-select, backspace edits it
-                if matches!(self.flags.config.type_to_search, TypeToSearch::SelectByPrefix)
-                    && !modifiers.logo()
+                if matches!(
+                    self.flags.config.type_to_search,
+                    TypeToSearch::SelectByPrefix
+                ) && !modifiers.logo()
                     && !modifiers.control()
                     && !modifiers.alt()
                     && !self.type_select_prefix.is_empty()
@@ -2084,8 +2086,10 @@ impl Application for App {
         let content: Element<_> = col.into();
 
         // Floating type-ahead indicator anchored to the bottom-right while typing to select.
-        if matches!(self.flags.config.type_to_search, TypeToSearch::SelectByPrefix)
-            && !self.type_select_prefix.is_empty()
+        if matches!(
+            self.flags.config.type_to_search,
+            TypeToSearch::SelectByPrefix
+        ) && !self.type_select_prefix.is_empty()
         {
             let chip = widget::container(
                 widget::row::with_children(vec![
@@ -2265,8 +2269,10 @@ impl Application for App {
 
         // While a type-to-select prefix is active, poll so the buffer (and its indicator)
         // can be cleared once the timeout elapses.
-        if matches!(self.flags.config.type_to_search, TypeToSearch::SelectByPrefix)
-            && !self.type_select_prefix.is_empty()
+        if matches!(
+            self.flags.config.type_to_search,
+            TypeToSearch::SelectByPrefix
+        ) && !self.type_select_prefix.is_empty()
         {
             subscriptions.push(
                 iced::time::every(time::Duration::from_millis(200))
