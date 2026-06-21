@@ -1348,6 +1348,12 @@ impl Application for App {
             return self.search_set(None);
         }
 
+        if !self.type_select_prefix.is_empty() {
+            self.type_select_prefix.clear();
+            self.type_select_last_key = None;
+            return Task::none();
+        }
+
         let had_focused_button = self.tab.select_focus_id().is_some();
         if self.tab.select_none() {
             if had_focused_button {
@@ -1452,41 +1458,29 @@ impl Application for App {
                 return self.rescan_tab(None);
             }
             Message::Key(modifiers, key, physical_key, text) => {
-                // When typing-to-select, backspace edits it and escape clears it
+                // When typing-to-select, backspace edits it
                 if matches!(self.flags.config.type_to_search, TypeToSearch::SelectByPrefix)
                     && !modifiers.logo()
                     && !modifiers.control()
                     && !modifiers.alt()
                     && !self.type_select_prefix.is_empty()
-                    && self
-                        .type_select_last_key
-                        .is_some_and(|last_key| last_key.elapsed() < tab::TYPE_SELECT_TIMEOUT)
+                    && matches!(key, Key::Named(Named::Backspace))
                 {
-                    match &key {
-                        Key::Named(Named::Backspace) => {
-                            self.type_select_prefix.pop();
-                            self.type_select_last_key = Some(Instant::now());
-                            if !self.type_select_prefix.is_empty() {
-                                self.tab.select_by_prefix(&self.type_select_prefix);
-                                if let Some(offset) = self.tab.select_focus_scroll() {
-                                    return scrollable::scroll_to(
-                                        self.tab.scrollable_id.clone(),
-                                        AbsoluteOffset {
-                                            x: Some(offset.x),
-                                            y: Some(offset.y),
-                                        },
-                                    );
-                                }
-                            }
-                            return Task::none();
+                    self.type_select_prefix.pop();
+                    self.type_select_last_key = Some(Instant::now());
+                    if !self.type_select_prefix.is_empty() {
+                        self.tab.select_by_prefix(&self.type_select_prefix);
+                        if let Some(offset) = self.tab.select_focus_scroll() {
+                            return scrollable::scroll_to(
+                                self.tab.scrollable_id.clone(),
+                                AbsoluteOffset {
+                                    x: Some(offset.x),
+                                    y: Some(offset.y),
+                                },
+                            );
                         }
-                        Key::Named(Named::Escape) => {
-                            self.type_select_prefix.clear();
-                            self.type_select_last_key = None;
-                            return Task::none();
-                        }
-                        _ => {}
                     }
+                    return Task::none();
                 }
 
                 for (key_bind, action) in &self.key_binds {

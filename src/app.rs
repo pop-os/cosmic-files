@@ -2782,6 +2782,12 @@ impl Application for App {
                 return Task::none();
             }
 
+            if !self.type_select_prefix.is_empty() {
+                self.type_select_prefix.clear();
+                self.type_select_last_key = None;
+                return Task::none();
+            }
+
             let had_focused_button = tab.select_focus_id().is_some();
             if tab.select_none() {
                 if had_focused_button {
@@ -3316,44 +3322,32 @@ impl Application for App {
                 if self.core.main_window_id() == Some(window_id) || in_surface_ids {
                     let entity = self.tab_model.active();
 
-                    // When typing-to-select, backspace edits it and escape clears it
+                    // When typing-to-select, backspace edits it
                     if matches!(self.mode, Mode::App)
                         && matches!(self.config.type_to_search, TypeToSearch::SelectByPrefix)
                         && !modifiers.logo()
                         && !modifiers.control()
                         && !modifiers.alt()
                         && !self.type_select_prefix.is_empty()
-                        && self
-                            .type_select_last_key
-                            .is_some_and(|last_key| last_key.elapsed() < tab::TYPE_SELECT_TIMEOUT)
+                        && matches!(key, Key::Named(Named::Backspace))
                     {
-                        match &key {
-                            Key::Named(Named::Backspace) => {
-                                self.type_select_prefix.pop();
-                                self.type_select_last_key = Some(Instant::now());
-                                if !self.type_select_prefix.is_empty()
-                                    && let Some(tab) = self.tab_model.data_mut::<Tab>(entity)
-                                {
-                                    tab.select_by_prefix(&self.type_select_prefix);
-                                    if let Some(offset) = tab.select_focus_scroll() {
-                                        return scrollable::scroll_to(
-                                            tab.scrollable_id.clone(),
-                                            AbsoluteOffset {
-                                                x: Some(offset.x),
-                                                y: Some(offset.y),
-                                            },
-                                        );
-                                    }
-                                }
-                                return Task::none();
+                        self.type_select_prefix.pop();
+                        self.type_select_last_key = Some(Instant::now());
+                        if !self.type_select_prefix.is_empty()
+                            && let Some(tab) = self.tab_model.data_mut::<Tab>(entity)
+                        {
+                            tab.select_by_prefix(&self.type_select_prefix);
+                            if let Some(offset) = tab.select_focus_scroll() {
+                                return scrollable::scroll_to(
+                                    tab.scrollable_id.clone(),
+                                    AbsoluteOffset {
+                                        x: Some(offset.x),
+                                        y: Some(offset.y),
+                                    },
+                                );
                             }
-                            Key::Named(Named::Escape) => {
-                                self.type_select_prefix.clear();
-                                self.type_select_last_key = None;
-                                return Task::none();
-                            }
-                            _ => {}
                         }
+                        return Task::none();
                     }
 
                     for (key_bind, action) in &self.key_binds {
