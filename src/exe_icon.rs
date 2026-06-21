@@ -6,34 +6,61 @@ use std::path::Path;
 use std::process::Command;
 
 /// Extract the embedded icon from a Windows PE executable using wrestool.
+/// Only attempts extraction for .exe files.
 pub fn exe_icon(path: &Path) -> Option<icon::Handle> {
-    let mut header = [0u8; 2];
-    if std::fs::File::open(path)
-        .ok()?
-        .read_exact(&mut header)
-        .is_err()
-    {
+    // Fast extension check — skip non-executables without touching the file
+    let ext = path.extension()?.to_str()?;
+    if ext != "exe" {
         return None;
     }
+
+    // PE check
+    let mut header = [0u8; 2];
+    std::fs::File::open(path)
+        .ok()?
+        .read_exact(&mut header)
+        .ok()?;
     if &header != b"MZ" {
         return None;
     }
 
-    log::info!("exe_icon called for {}", path.display());
+    // Single wrestool call for the ICO group
+    let output = Command::new("wrestool")
+        .args(["-x", "-t", "14"])
+        .arg(path)
+        .output()
+        .ok()?;
+    if !output.status.success() || output.stdout.len() < 6 {
+        return None;
+    }
 
-    // Extract individual RT_ICON entries, pick the largest decodable one
+    // Parse ICO container: 6-byte header + count × 16-byte directory entries
+    let ico = &output.stdout;
+    let count = u16::from_le_bytes([ico[4], ico[5]]) as usize;
+
     let mut best: Option<(u32, u32, u32, Vec<u8>)> = None;
-    for id in (1..=20).rev() {
-        let output = Command::new("wrestool")
-            .args(["-x", "--raw", "-t", "3", "-n", &id.to_string()])
-            .arg(path)
-            .output()
-            .ok()?;
-        if output.stdout.is_empty() || !output.status.success() {
+
+    for i in 0..count.min(32) {
+        let e = 6 + i * 16;
+        if ico.len() < e + 16 {
+            break;
+        }
+        let size = u32::from_le_bytes([ico[e + 8], ico[e + 9], ico[e + 10], ico[e + 11]]) as usize;
+        let off = u32::from_le_bytes([ico[e + 12], ico[e + 13], ico[e + 14], ico[e + 15]]) as usize;
+        if off + size > ico.len() {
             continue;
         }
-        log::info!("exe_icon: id={} {} bytes", id, output.stdout.len());
-        if let Some((w, h, rgba)) = decode_icon(&output.stdout) {
+        let data = &ico[off..off + size];
+
+        // Try PNG (modern executables)
+        let decoded = if data.starts_with(b"\x89PNG") {
+            decode(data)
+        } else {
+            // Try DIB (older executables)
+            bmp_from_dib(data).and_then(|bmp| decode(&bmp))
+        };
+
+        if let Some((w, h, rgba)) = decoded {
             let pixels = w as u32 * h as u32;
             match &best {
                 Some((best_px, _, _, _)) if *best_px >= pixels => {}
@@ -41,27 +68,12 @@ pub fn exe_icon(path: &Path) -> Option<icon::Handle> {
             }
         }
     }
+
     best.map(|(_, w, h, rgba)| icon::from_raster_pixels(w, h, rgba))
 }
 
-fn decode_icon(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
-    if let Some(result) = try_decode(data) {
-        log::info!("exe_icon: decoded direct ({} bytes)", data.len());
-        return Some(result);
-    }
-    if let Some(bmp) = bmp_from_dib(data) {
-        if let Some(result) = try_decode(&bmp) {
-            log::info!("exe_icon: decoded DIB->BMP ({} bytes raw)", data.len());
-            return Some(result);
-        }
-    }
-    log::info!("exe_icon: decode failed for {} bytes", data.len());
-    None
-}
-
-fn try_decode(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
-    use image::ImageReader;
-    let img = ImageReader::new(std::io::Cursor::new(data))
+fn decode(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    let img = image::ImageReader::new(std::io::Cursor::new(data))
         .with_guessed_format()
         .ok()?
         .decode()
@@ -71,8 +83,8 @@ fn try_decode(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     Some((w, h, img.into_raw()))
 }
 
-/// Prepend a BITMAPFILEHEADER to raw DIB data so the image crate can decode it.
-/// Icon DIBs store height as 2x (XOR + AND mask); we halve it and strip the AND mask.
+/// Prepend a BITMAPFILEHEADER to raw DIB data.
+/// Icon DIBs store height as 2x (XOR + AND mask); halve it and strip the mask.
 fn bmp_from_dib(data: &[u8]) -> Option<Vec<u8>> {
     if data.len() < 40 {
         return None;
@@ -111,10 +123,9 @@ fn bmp_from_dib(data: &[u8]) -> Option<Vec<u8>> {
     let mut bmp = Vec::with_capacity(file_size);
     bmp.extend_from_slice(b"BM");
     bmp.extend_from_slice(&(file_size as u32).to_le_bytes());
-    bmp.extend_from_slice(&0u32.to_le_bytes()); // reserved
+    bmp.extend_from_slice(&0u32.to_le_bytes());
     bmp.extend_from_slice(&off.to_le_bytes());
     bmp.extend_from_slice(&data[..data_end]);
-    // Fix height: offset 8 in DIB = offset 22 in BMP
     bmp[22..26].copy_from_slice(&image_h.to_le_bytes());
 
     Some(bmp)
