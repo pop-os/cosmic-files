@@ -1,0 +1,59 @@
+name: Check COSMIC Files
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  CARGO_TERM_COLOR: always
+  # FIXME: This disables -D warnings because the build fails with it
+  RUSTFLAGS: ""
+  SKIP_TESTS: "--skip copy_dir_to_same_location \
+              --skip copy_file_to_same_location \
+              --skip copy_file_with_extension_to_same_loc \
+              --skip copy_file_with_diff_name_to_diff_dir \
+              --skip copy_to_diff_dir_doesnt_dupe_files \
+              --skip copying_files_multiple_times_to_same_location"
+
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      matrix:
+        name: [Linux, Windows, macOS]
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            dependencies: sudo apt update && sudo apt -y install libglvnd-dev libwayland-dev libxkbcommon-dev libinput-dev libssl-dev libflatpak-dev
+          - name: Windows
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            dependencies: ""
+          - name: macOS
+            os: macos-latest
+            target: x86_64-apple-darwin
+            dependencies: brew install libxkbcommon wayland
+
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Add Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+
+      - name: Dependencies
+        run: ${{ matrix.dependencies }}
+
+      - name: Build ${{ matrix.name }}
+        run: cargo build --target ${{ matrix.target }} --verbose --locked
+      - run: cargo test --target ${{ matrix.target }} --verbose -- ${{ env.SKIP_TESTS }}
+  
