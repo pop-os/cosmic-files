@@ -7,27 +7,22 @@ use crate::config::IconSizes;
 use crate::tab::{Item, SearchItem};
 
 fn percent_decode(s: &str) -> Option<String> {
-    let mut r = String::with_capacity(s.len());
-    let mut b = s.bytes();
+    let (mut r, mut b) = (String::with_capacity(s.len()), s.bytes());
     while let Some(c) = b.next() {
         if c == b'%' {
-            let hi = b.next().and_then(hex)?;
-            let lo = b.next().and_then(hex)?;
-            r.push((hi << 4 | lo) as char);
+            let (hi, lo) = (b.next()?, b.next()?);
+            let h = |x: u8| match x {
+                b'0'..=b'9' => Some(x - b'0'),
+                b'a'..=b'f' => Some(x - b'a' + 10),
+                b'A'..=b'F' => Some(x - b'A' + 10),
+                _ => None,
+            };
+            r.push((h(hi)? << 4 | h(lo)?) as char);
         } else {
             r.push(c as char);
         }
     }
     Some(r)
-}
-
-fn hex(b: u8) -> Option<u8> {
-    match b {
-        b'0'..=b'9' => Some(b - b'0'),
-        b'a'..=b'f' => Some(b - b'a' + 10),
-        b'A'..=b'F' => Some(b - b'A' + 10),
-        _ => None,
-    }
 }
 
 pub trait TrashExt {
@@ -93,30 +88,17 @@ pub fn trash_item_path(item: &trash::TrashItem) -> Option<PathBuf> {
 /// - The top-level trashed item is `folder`
 /// - Read `~/.local/share/Trash/info/folder.trashinfo` to get the original path
 /// - Compute: `<original_path>/sub/file.txt`
-pub fn original_path_for_trash_child(trash_path: &Path) -> Option<PathBuf> {
-    let trash_files = trash_path.ancestors().find(|a| a.ends_with("files"))?;
-    let trash_root = trash_files.parent()?;
-    let top_name = trash_path
-        .strip_prefix(trash_files)
-        .ok()?
-        .components()
-        .next()?;
-
-    let info_path = trash_root
-        .join("info")
-        .join(top_name)
-        .with_extension("trashinfo");
-    let info = std::fs::read_to_string(&info_path).ok()?;
-    let original = info
-        .lines()
-        .find_map(|line| line.strip_prefix("Path="))?
-        .trim();
-    let original = percent_decode(original)?;
-
-    let relative = trash_path.strip_prefix(trash_files.join(top_name)).ok()?;
-    let mut result = PathBuf::from(&original);
-    if !relative.as_os_str().is_empty() {
-        result.push(relative);
+pub fn original_path_for_trash_child(p: &Path) -> Option<PathBuf> {
+    let files = p.ancestors().find(|a| a.ends_with("files"))?;
+    let root = files.parent()?;
+    let top = p.strip_prefix(files).ok()?.components().next()?;
+    let info =
+        std::fs::read_to_string(root.join("info").join(top).with_extension("trashinfo")).ok()?;
+    let orig = percent_decode(info.lines().find_map(|l| l.strip_prefix("Path="))?.trim())?;
+    let rel = p.strip_prefix(files.join(top)).ok()?;
+    let mut result = PathBuf::from(&orig);
+    if !rel.as_os_str().is_empty() {
+        result.push(rel);
     }
     Some(result)
 }
