@@ -24,6 +24,7 @@ name = Име
 modified = Променян
 trashed-on = Изтрит
 size = Размер
+extension = Тип
 # Progress footer
 details = Подробности
 dismiss = Отмяна на съобщението

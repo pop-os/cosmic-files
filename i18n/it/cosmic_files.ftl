@@ -26,6 +26,7 @@ name = Nome
 modified = Modificato
 trashed-on = Cestinato
 size = Dimensione
+extension = Tipo
 # Progress footer
 details = Dettagli
 dismiss = Nascondi messaggio

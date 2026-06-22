@@ -23,6 +23,7 @@ name = Pavadinimas
 modified = Modifikuota
 trashed-on = Ištrinta
 size = Dydis
+extension = Tipas
 details = Išsami informacija
 dismiss = Atmesti pranešimą
 operations-running =

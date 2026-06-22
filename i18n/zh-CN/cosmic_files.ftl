@@ -24,6 +24,7 @@ name = 名称
 modified = 修改时间
 trashed-on = 删除时间
 size = 大小
+extension = 类型
 # Progress footer
 details = 详细信息
 dismiss = 清除消息

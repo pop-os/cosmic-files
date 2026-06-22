@@ -11,6 +11,7 @@ trash = Koš
 name = Název
 modified = Datum změny
 size = Velikost
+extension = Typ
 
 # Dialogs
 

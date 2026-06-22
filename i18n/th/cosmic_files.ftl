@@ -23,6 +23,7 @@ name = ชื่อ
 modified = แก้ไขล่าสุด
 trashed-on = ถูกทิ้ง
 size = ขนาด
+extension = ชนิด
 # Progress footer
 details = รายละเอียด
 dismiss = ไม่สนใจข้อความ

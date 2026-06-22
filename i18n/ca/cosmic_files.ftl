@@ -24,6 +24,7 @@ name = Nom
 modified = Modificat
 trashed-on = Mogut a la paperera
 size = Mida
+extension = Tipus
 # Progress footer
 details = Detalls
 dismiss = Descarta el missatge

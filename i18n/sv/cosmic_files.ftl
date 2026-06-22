@@ -107,6 +107,7 @@ name = Namn
 modified = Ändrad
 trashed-on = Kastad
 size = Storlek
+extension = Typ
 # Framstegssidfot
 details = Detaljer
 dismiss = Avfärda meddelande

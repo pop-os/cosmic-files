@@ -23,6 +23,7 @@ name = ಹೆಸರು
 modified = ಮಾರ್ಪಡಿಸಿದ ದಿನಾಂಕ
 trashed-on = ಕಸದಲ್ಲಿ ಹಾಕಿದ ದಿನ
 size = ಗಾತ್ರ
+extension = ಪ್ರಕಾರ
 
 # Dialogs
 

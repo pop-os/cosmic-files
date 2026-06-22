@@ -26,6 +26,7 @@ name = Név
 modified = Módosítva
 trashed-on = Kukába helyezve
 size = Méret
+extension = Típus
 # Progress footer
 details = Részletek
 dismiss = Üzenet bezárása

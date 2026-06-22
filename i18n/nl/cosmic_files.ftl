@@ -24,6 +24,7 @@ name = Naam
 modified = Gewijzigd
 trashed-on = Verwijderd op
 size = Grootte
+extension = Type
 # Progress footer
 details = Details
 dismiss = Bericht negeren

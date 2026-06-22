@@ -22,6 +22,7 @@ grid-spacing = Jarak antar kisi
 modified = Dimodifikasi
 trashed-on = Dibuang
 size = Ukuran
+extension = Jenis
 details = Rincian
 dismiss = Abaikan pesan
 operations-running =

@@ -21,6 +21,7 @@ name = ਨਾਂ
 modified = ਸੋਧ ਕੀਤੀ
 trashed-on = ਰੱਦੀ 'ਚ ਭੇਜਿਆ
 size = ਆਕਾਰ
+extension = ਕਿਸਮ
 details = ਵੇਰਵੇ
 dismiss = ਸੁਨੇਹੇ ਨੂੰ ਖ਼ਾਰਜ ਕਰੋ
 operations-running =

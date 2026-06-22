@@ -11,6 +11,7 @@ recents = الأحدث
 name = الاسم
 modified = مُعدل
 size = الحجم
+extension = نوع
 
 # Dialogs
 

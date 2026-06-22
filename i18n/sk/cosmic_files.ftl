@@ -26,6 +26,7 @@ name = Názov
 modified = Upravené
 trashed-on = Vymazané
 size = Veľkosť
+extension = Typ
 # Progress footer
 details = Podrobnosti
 dismiss = Zavrieť správu

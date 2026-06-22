@@ -24,6 +24,7 @@ name = Name
 modified = Geändert
 trashed-on = In den Papierkorb verschoben
 size = Größe
+extension = Typ
 # Fortschrittsfußzeile
 details = Details
 dismiss = Meldung verwerfen

@@ -24,6 +24,7 @@ name = Назва
 modified = Зменена
 trashed-on = Дата выдалення
 size = Памер
+extension = Тып
 # Progress footer
 details = Падрабязнасці
 dismiss = Адхіліць паведамленне

@@ -24,6 +24,7 @@ name = نام
 modified = زمان تغییر
 trashed-on = زمان حذف
 size = حجم
+extension = نوع
 # Progress footer
 details = جزئیات
 dismiss = بستن پیام

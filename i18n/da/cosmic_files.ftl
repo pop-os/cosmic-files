@@ -23,6 +23,7 @@ name = Navn
 modified = Ændret
 trashed-on = Smidt ud
 size = Størrelse
+extension = Type
 # Progress footer
 details = Detaljer
 dismiss = Afvis besked
