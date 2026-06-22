@@ -1,10 +1,34 @@
 use cosmic::widget;
 use regex::Regex;
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::config::IconSizes;
 use crate::tab::{Item, SearchItem};
+
+fn percent_decode(s: &str) -> Option<String> {
+    let mut r = String::with_capacity(s.len());
+    let mut b = s.bytes();
+    while let Some(c) = b.next() {
+        if c == b'%' {
+            let hi = b.next().and_then(hex)?;
+            let lo = b.next().and_then(hex)?;
+            r.push((hi << 4 | lo) as char);
+        } else {
+            r.push(c as char);
+        }
+    }
+    Some(r)
+}
+
+fn hex(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
 
 pub trait TrashExt {
     fn is_empty() -> bool {
@@ -47,6 +71,59 @@ pub trait TrashExt {
         .size(icon_size)
         .handle()
     }
+}
+
+/// Derive the actual filesystem path of a trashed item from its .trashinfo path
+/// (or return the id directly if it's already a filesystem path).
+pub fn trash_item_path(item: &trash::TrashItem) -> Option<PathBuf> {
+    let id_path = Path::new(&item.id);
+    if id_path.extension().map_or(false, |e| e == "trashinfo") {
+        let trash_root = id_path.parent()?.parent()?;
+        let file_name = id_path.file_stem()?;
+        Some(trash_root.join("files").join(file_name))
+    } else {
+        Some(PathBuf::from(&item.id))
+    }
+}
+
+/// For a path inside a trash `files/` directory, reconstruct the original path
+/// by reading the parent `.trashinfo` file.
+///
+/// Given `~/.local/share/Trash/files/folder/sub/file.txt`:
+/// - The top-level trashed item is `folder`
+/// - Read `~/.local/share/Trash/info/folder.trashinfo` to get the original path
+/// - Compute: `<original_path>/sub/file.txt`
+pub fn original_path_for_trash_child(trash_path: &Path) -> Option<PathBuf> {
+    let trash_files = trash_path.ancestors().find(|a| a.ends_with("files"))?;
+    let trash_root = trash_files.parent()?;
+    let top_name = trash_path
+        .strip_prefix(trash_files)
+        .ok()?
+        .components()
+        .next()?;
+
+    let info_path = trash_root
+        .join("info")
+        .join(top_name)
+        .with_extension("trashinfo");
+    let info = std::fs::read_to_string(&info_path).ok()?;
+    let original = info
+        .lines()
+        .find_map(|line| line.strip_prefix("Path="))?
+        .trim();
+    let original = percent_decode(original)?;
+
+    let relative = trash_path.strip_prefix(trash_files.join(top_name)).ok()?;
+    let mut result = PathBuf::from(&original);
+    if !relative.as_os_str().is_empty() {
+        result.push(relative);
+    }
+    Some(result)
+}
+
+/// Check whether a path is inside any trash `files/` directory.
+pub fn is_trash_path(path: &Path) -> bool {
+    path.ancestors().any(|a| a.ends_with("files"))
 }
 
 pub struct Trash;
