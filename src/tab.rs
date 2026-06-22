@@ -1724,6 +1724,8 @@ pub enum Message {
     GoPrevious,
     ItemDown,
     ItemLeft,
+    ItemPageDown,
+    ItemPageUp,
     ItemRight,
     ItemUp,
     Location(Location),
@@ -3173,6 +3175,23 @@ impl Tab {
         }
     }
 
+    fn rows_per_page(&self) -> usize {
+        let viewport_height = self
+            .item_view_size_opt
+            .get()
+            .map_or(0.0, |s| s.height);
+        let row_height = self
+            .select_focus
+            .and_then(|i| self.items_opt.as_ref()?.get(i))
+            .and_then(|item| item.rect_opt.get())
+            .map_or(0.0, |r| r.height);
+        if row_height > 0.0 && viewport_height > 0.0 {
+            (viewport_height / row_height).floor() as usize
+        } else {
+            1
+        }
+    }
+
     fn select_range_start_pos_opt(&self) -> Option<(usize, usize)> {
         let items = self.items_opt.as_ref()?;
         let item = items.get(self.select_range.map(|r| r.0)?)?;
@@ -3868,6 +3887,100 @@ impl Tab {
                     if let Some(id) = self.select_focus_id() {
                         commands.push(Command::Iced(widget::button::focus(id).into()));
                     }
+                }
+            }
+            Message::ItemPageDown => {
+                self.dehighlight_all();
+                if let Some((row, col)) =
+                    self.select_focus_pos_opt().or(self.select_last_pos_opt())
+                {
+                    if self.select_focus.is_none() {
+                        self.select_position(row, col, mod_shift);
+                    }
+
+                    let rows_per_page = self.rows_per_page().max(1);
+                    let target_row = row.saturating_add(rows_per_page);
+
+                    if !self.select_position(target_row, col, mod_shift) {
+                        // Fall back to the last item at or before target_row
+                        let best = self
+                            .items_opt
+                            .as_ref()
+                            .and_then(|items| {
+                                items
+                                    .iter()
+                                    .filter_map(|item| item.pos_opt.get())
+                                    .filter(|(r, _)| *r <= target_row)
+                                    .max()
+                            });
+                        if let Some((best_row, best_col)) = best {
+                            self.select_position(best_row, best_col, mod_shift);
+                        }
+                    }
+                } else {
+                    self.select_position(0, 0, mod_shift);
+                }
+                if let Some(offset) = self.select_focus_scroll() {
+                    commands.push(Command::Iced(
+                        scrollable::scroll_to(
+                            self.scrollable_id.clone(),
+                            AbsoluteOffset {
+                                x: Some(offset.x),
+                                y: Some(offset.y),
+                            },
+                        )
+                        .into(),
+                    ));
+                }
+                if let Some(id) = self.select_focus_id() {
+                    commands.push(Command::Iced(widget::button::focus(id).into()));
+                }
+            }
+            Message::ItemPageUp => {
+                self.dehighlight_all();
+                if let Some((row, col)) =
+                    self.select_focus_pos_opt().or(self.select_first_pos_opt())
+                {
+                    if self.select_focus.is_none() {
+                        self.select_position(row, col, mod_shift);
+                    }
+
+                    let rows_per_page = self.rows_per_page().max(1);
+                    let target_row = row.saturating_sub(rows_per_page);
+
+                    if !self.select_position(target_row, col, mod_shift) {
+                        // Fall back to the first item at or after target_row
+                        let best = self
+                            .items_opt
+                            .as_ref()
+                            .and_then(|items| {
+                                items
+                                    .iter()
+                                    .filter_map(|item| item.pos_opt.get())
+                                    .filter(|(r, _)| *r >= target_row)
+                                    .min()
+                            });
+                        if let Some((best_row, best_col)) = best {
+                            self.select_position(best_row, best_col, mod_shift);
+                        }
+                    }
+                } else {
+                    self.select_position(0, 0, mod_shift);
+                }
+                if let Some(offset) = self.select_focus_scroll() {
+                    commands.push(Command::Iced(
+                        scrollable::scroll_to(
+                            self.scrollable_id.clone(),
+                            AbsoluteOffset {
+                                x: Some(offset.x),
+                                y: Some(offset.y),
+                            },
+                        )
+                        .into(),
+                    ));
+                }
+                if let Some(id) = self.select_focus_id() {
+                    commands.push(Command::Iced(widget::button::focus(id).into()));
                 }
             }
             Message::ItemLeft => {
