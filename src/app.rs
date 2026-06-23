@@ -345,6 +345,10 @@ pub enum Message {
     CosmicSettings(&'static str),
     Cut(Option<Entity>),
     Delete(Option<Entity>),
+    DeleteClassified {
+        trash_paths: Vec<PathBuf>,
+        dialog_paths: Vec<PathBuf>,
+    },
     DesktopConfig(DesktopConfig),
     DesktopViewOptions,
     DesktopDialogs(bool),
@@ -424,6 +428,7 @@ pub enum Message {
     ReorderTab(ReorderEvent),
     RescanRecents,
     RescanTrash,
+    TrashEmpty,
     RemoveFromRecents(Option<Entity>),
     Rename(Option<Entity>),
     ReplaceResult(ReplaceResult),
@@ -1214,25 +1219,51 @@ impl App {
 
     // This wrapper ensures that local folders use trash and remote folders permanently delete with a dialog
     fn delete(&mut self, paths: impl IntoIterator<Item = PathBuf>) -> Task<Message> {
-        let mut dialog_paths = Vec::new();
-        let mut trash_paths = Vec::new();
-
-        for path in paths {
-            //TODO: is there a smarter way to check this? (like checking for trash folders)
-            let can_trash = match path.metadata() {
-                Ok(metadata) => matches!(tab::fs_kind(&metadata), tab::FsKind::Local),
-                Err(err) => {
-                    log::warn!("failed to get metadata for {}: {}", path.display(), err);
-                    false
+        let paths: Vec<PathBuf> = paths.into_iter().collect();
+        // Classifying trash vs permanent-delete stats each path, which blocks on slow mounts;
+        // do it off-thread and finish in Message::DeleteClassified.
+        Task::future(async move {
+            let (trash_paths, dialog_paths) = tokio::task::spawn_blocking(move || {
+                let mut trash_paths = Vec::new();
+                let mut dialog_paths = Vec::new();
+                for path in paths {
+                    //TODO: is there a smarter way to check this? (like checking for trash folders)
+                    let can_trash = match path.metadata() {
+                        Ok(metadata) => matches!(tab::fs_kind(&metadata), tab::FsKind::Local),
+                        Err(err) => {
+                            log::warn!("failed to get metadata for {}: {}", path.display(), err);
+                            false
+                        }
+                    };
+                    if can_trash {
+                        trash_paths.push(path);
+                    } else {
+                        dialog_paths.push(path);
+                    }
                 }
-            };
-            if can_trash {
-                trash_paths.push(path);
-            } else {
-                dialog_paths.push(path);
-            }
-        }
+                (trash_paths, dialog_paths)
+            })
+            .await
+            .unwrap_or_else(|err| {
+                // Surface a panic in the classification task rather than silently dropping
+                // the delete; fall back to deleting nothing.
+                log::warn!("failed to classify paths for deletion: {err}");
+                (Vec::new(), Vec::new())
+            });
+            cosmic::action::app(Message::DeleteClassified {
+                trash_paths,
+                dialog_paths,
+            })
+        })
+    }
 
+    // Trash the local paths and/or open the permanent-delete dialog, once `delete` has
+    // classified them off-thread.
+    fn delete_classified(
+        &mut self,
+        trash_paths: Vec<PathBuf>,
+        dialog_paths: Vec<PathBuf>,
+    ) -> Task<Message> {
         let mut tasks = Vec::new();
         if !dialog_paths.is_empty() {
             tasks.push(self.update(Message::DialogPush(
@@ -1389,6 +1420,8 @@ impl App {
         commands.push(self.rescan_operation_selection(op_sel));
         // Manually rescan any trash tabs after any operation is completed
         commands.push(self.rescan_trash());
+        // An operation may have changed the trash; refresh its cached state off-thread.
+        commands.push(self.refresh_trash_state());
 
         Task::batch(commands)
     }
@@ -1556,6 +1589,17 @@ impl App {
             .map(|(entity, location)| self.update_tab(entity, location, None));
 
         Task::batch(commands)
+    }
+
+    /// Recompute the cached trash empty/full state off-thread. Walking the trash blocks on
+    /// slow mounts, so it must never run inline in `update`/`view`. [`Message::TrashEmpty`]
+    /// then repaints the nav icon from the refreshed cache.
+    fn refresh_trash_state(&self) -> Task<Message> {
+        Task::future(async move {
+            // Discard the returned value: the handler repaints from the cache, not from here.
+            let _ = tokio::task::spawn_blocking(Trash::refresh_is_empty).await;
+            cosmic::action::app(Message::TrashEmpty)
+        })
     }
 
     fn rescan_recents(&mut self) -> Task<Message> {
@@ -1768,15 +1812,10 @@ impl App {
                     fl!("filesystem")
                 };
                 nav_model = nav_model.insert(move |b| {
+                    // Favorites are directories; use the folder icon without stat-ing the
+                    // path, which would block the GUI thread on slow/network mounts.
                     b.text(name.clone())
-                        .icon(
-                            icon::icon(if path.is_dir() {
-                                tab::folder_icon_symbolic(&path, 16)
-                            } else {
-                                icon::from_name("text-x-generic-symbolic").size(16).handle()
-                            })
-                            .size(16),
-                        )
+                        .icon(icon::icon(tab::folder_icon_symbolic(&path, 16)).size(16))
                         .data(match favorite {
                             Favorite::Network { uri, name, path } => {
                                 Location::Network(uri.clone(), name.clone(), Some(path.to_owned()))
@@ -2453,7 +2492,12 @@ impl Application for App {
             layer_sizes: FxHashMap::default(),
         };
 
-        let mut commands = vec![app.update_config(), app.update(Message::CheckClipboard)];
+        let mut commands = vec![
+            app.update_config(),
+            app.update(Message::CheckClipboard),
+            // Compute the trash empty/full state off-thread so the nav icon never blocks init.
+            app.refresh_trash_state(),
+        ];
 
         for location in flags.locations {
             if let Some(path) = location.path_opt()
@@ -2608,7 +2652,7 @@ impl Application for App {
             ));
         }
 
-        if matches!(location_opt, Some(Location::Trash)) && !Trash::is_empty() {
+        if matches!(location_opt, Some(Location::Trash)) && !Trash::is_empty_cached() {
             items.push(cosmic::widget::menu::Item::Button(
                 fl!("empty-trash"),
                 None,
@@ -3025,6 +3069,12 @@ impl Application for App {
                         }
                     }
                 }
+            }
+            Message::DeleteClassified {
+                trash_paths,
+                dialog_paths,
+            } => {
+                return self.delete_classified(trash_paths, dialog_paths);
             }
             Message::DesktopConfig(config) => {
                 if config != self.config.desktop {
@@ -3620,58 +3670,21 @@ impl Application for App {
             Message::NotifyEvents(events) => {
                 log::debug!("{events:?}");
 
+                // Reload any tab whose directory an event touched, via update_tab so the I/O
+                // runs in a background task — reading metadata here, on the GUI thread, would
+                // block on slow mounts.
                 let mut needs_reload = Vec::new();
                 let entities: Box<[_]> = self.tab_model.iter().collect();
                 for entity in entities {
-                    if let Some(tab) = self.tab_model.data_mut::<Tab>(entity)
+                    if let Some(tab) = self.tab_model.data::<Tab>(entity)
                         && let Some(path) = tab.location.path_opt()
                     {
-                        let mut contains_change = false;
-                        for event in &events {
-                            for event_path in &event.paths {
-                                if event_path.starts_with(path) {
-                                    if let notify::EventKind::Modify(
-                                        notify::event::ModifyKind::Metadata(_)
-                                        | notify::event::ModifyKind::Data(_),
-                                    ) = event.kind
-                                    {
-                                        // If metadata or data changed, find the matching item and reload it
-                                        //TODO: this could be further optimized by looking at what exactly changed
-                                        if let Some(items) = &mut tab.items_opt {
-                                            for item in items.iter_mut() {
-                                                if item.path_opt() == Some(event_path) {
-                                                    //TODO: reload more, like mime types?
-                                                    match fs::metadata(event_path) {
-                                                        Ok(new_metadata) => {
-                                                            if let ItemMetadata::Path {
-                                                                metadata,
-                                                                ..
-                                                            } = &mut item.metadata
-                                                            {
-                                                                *metadata = new_metadata;
-                                                            }
-                                                        }
-
-                                                        Err(err) => {
-                                                            log::warn!(
-                                                                "failed to reload metadata for {}: {}",
-                                                                path.display(),
-                                                                err
-                                                            );
-                                                        }
-                                                    }
-                                                    //TODO item.thumbnail_opt =
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        // Any other events reload the whole tab
-                                        contains_change = true;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
+                        let contains_change = events.iter().any(|event| {
+                            event
+                                .paths
+                                .iter()
+                                .any(|event_path| event_path.starts_with(path))
+                        });
                         if contains_change {
                             needs_reload.push((entity, tab.location.clone()));
                         }
@@ -4186,7 +4199,16 @@ impl Application for App {
                 return self.rescan_recents();
             }
             Message::RescanTrash => {
-                // Update trash icon if empty/full
+                // Refresh the cached state off-thread (Message::TrashEmpty repaints the icon)
+                // and rescan tabs.
+                return Task::batch([
+                    self.refresh_trash_state(),
+                    self.rescan_trash(),
+                    self.update_desktop(),
+                ]);
+            }
+            Message::TrashEmpty => {
+                // Cache was refreshed off-thread; repaint the nav-bar trash icon from it.
                 let maybe_entity = self.nav_model.iter().find(|&entity| {
                     self.nav_model
                         .data::<Location>(entity)
@@ -4196,8 +4218,6 @@ impl Application for App {
                     self.nav_model
                         .icon_set(entity, icon::icon(Trash::icon_symbolic(16)));
                 }
-
-                return Task::batch([self.rescan_trash(), self.update_desktop()]);
             }
             Message::Rename(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());

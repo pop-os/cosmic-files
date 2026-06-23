@@ -2722,12 +2722,12 @@ fn folder_name<P: AsRef<Path>>(path: P) -> (String, bool) {
                 found_home = true;
                 fl!("home")
             } else {
-                match (get_filename_from_path(path), fs::metadata(path)) {
-                    (Ok(name), Ok(metadata)) => {
-                        let is_gvfs = fs_kind(&metadata) == FsKind::Gvfs;
-                        display_name_for_file(path, &name, is_gvfs, false)
-                    }
-                    _ => name.to_string_lossy().into_owned(),
+                // Name from the path component only. folder_name runs on the GUI thread for
+                // every tab title and breadcrumb, so it must not stat (which a gvfs friendly-
+                // name lookup would do, blocking on slow mounts).
+                match get_filename_from_path(path) {
+                    Ok(name) => display_name_for_file(path, &name, false, false),
+                    Err(_) => name.to_string_lossy().into_owned(),
                 }
             }
         }
@@ -7204,7 +7204,7 @@ fn text_editor_class(
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::{fs, io};
 
     use cosmic::iced::mouse::ScrollDelta;
@@ -7216,7 +7216,8 @@ mod tests {
     use test_log::test;
 
     use super::{
-        ItemMetadata, ItemThumbnail, Location, Message, Tab, respond_to_scroll_direction, scan_path,
+        ItemMetadata, ItemThumbnail, Location, Message, Tab, folder_name,
+        respond_to_scroll_direction, scan_path,
     };
     use crate::app::test_utils::{
         NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED, assert_eq_tab_path, empty_fs,
@@ -7359,6 +7360,37 @@ mod tests {
         assert!(actual.is_empty());
 
         Ok(())
+    }
+
+    #[test]
+    fn folder_name_derives_last_path_component() {
+        // No '.' or '_' in the component, so Item::display_name leaves it untouched.
+        let (name, found_home) = folder_name("/srv/data/Projects");
+        assert_eq!(name, "Projects");
+        assert!(!found_home);
+    }
+
+    #[test]
+    fn folder_name_does_not_stat_the_path() {
+        // A non-existent path still yields its final component: the name comes from the path
+        // alone, with no stat (which is what keeps folder_name safe on the GUI thread).
+        let missing = "/this/path/does/not/exist/Documents";
+        assert!(!Path::new(missing).exists());
+
+        let (name, found_home) = folder_name(missing);
+        assert_eq!(name, "Documents");
+        assert!(!found_home);
+    }
+
+    #[test]
+    fn folder_name_flags_the_home_directory() {
+        let home = crate::home_dir();
+        // The "/" fallback (no resolvable home) has no final component to match; only assert
+        // the flag when home resolves to a named directory.
+        if home.file_name().is_some() {
+            let (_name, found_home) = folder_name(&home);
+            assert!(found_home);
+        }
     }
 
     #[test]

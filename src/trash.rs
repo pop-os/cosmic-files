@@ -2,12 +2,30 @@ use cosmic::widget;
 use regex::Regex;
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::config::IconSizes;
 use crate::tab::{Item, SearchItem};
 
+/// Cached trash empty/full state. The real check walks every mount and blocks on slow ones,
+/// so it runs off-thread via [`TrashExt::refresh_is_empty`]; GUI code reads the cache via
+/// [`TrashExt::is_empty_cached`].
+static TRASH_IS_EMPTY: AtomicBool = AtomicBool::new(true);
+
 pub trait TrashExt {
     fn is_empty() -> bool {
+        true
+    }
+
+    /// Last known empty state, read without touching the filesystem. Safe on the GUI thread.
+    fn is_empty_cached() -> bool {
+        TRASH_IS_EMPTY.load(Ordering::Relaxed)
+    }
+
+    /// Recompute and cache the state, returning the fresh value. Blocks on I/O across every
+    /// mount — call only from a background thread.
+    fn refresh_is_empty() -> bool {
+        TRASH_IS_EMPTY.store(true, Ordering::Relaxed);
         true
     }
 
@@ -28,8 +46,9 @@ pub trait TrashExt {
 
     fn scan_search<F: Fn(SearchItem) -> bool + Sync>(_callback: F, _regex: &Regex) {}
 
+    // Icons read the cached empty state so they are safe to build on the GUI thread.
     fn icon(icon_size: u16) -> widget::icon::Handle {
-        widget::icon::from_name(if Self::is_empty() {
+        widget::icon::from_name(if Self::is_empty_cached() {
             "user-trash"
         } else {
             "user-trash-full"
@@ -39,7 +58,7 @@ pub trait TrashExt {
     }
 
     fn icon_symbolic(icon_size: u16) -> widget::icon::Handle {
-        widget::icon::from_name(if Self::is_empty() {
+        widget::icon::from_name(if Self::is_empty_cached() {
             "user-trash-symbolic"
         } else {
             "user-trash-full-symbolic"
@@ -62,8 +81,15 @@ pub struct Trash;
     )
 ))]
 impl TrashExt for Trash {
+    // Walks the trash dir on every mount and blocks on slow ones; never call on the GUI thread.
     fn is_empty() -> bool {
         trash::os_limited::is_empty().unwrap_or(true)
+    }
+
+    fn refresh_is_empty() -> bool {
+        let is_empty = Self::is_empty();
+        TRASH_IS_EMPTY.store(is_empty, Ordering::Relaxed);
+        is_empty
     }
 
     fn entries() -> usize {
