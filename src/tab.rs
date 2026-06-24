@@ -1771,6 +1771,7 @@ pub enum Message {
     DirectorySize(PathBuf, DirSize),
     Checksums(PathBuf, ChecksumState),
     CalculateChecksums(PathBuf),
+    CopyChecksum(String),
     ImageDecoded(PathBuf, u32, u32, Vec<u8>, Option<(u32, u32)>, u64), // path, width, height, pixels, display_size, generation
 }
 
@@ -2549,7 +2550,8 @@ impl Item {
         if let Some(metadata) = self.file_metadata() {
             if !metadata.is_dir() {
                 if let Some(path) = self.path_opt() {
-                    let mut checksums_section = widget::column::with_capacity(4).spacing(space_xxxs);
+                    let mut checksums_section =
+                        widget::column::with_capacity(4).spacing(space_xxxs);
 
                     match &self.checksums {
                         ChecksumState::NotCalculated => {
@@ -2559,29 +2561,50 @@ impl Item {
                             );
                         }
                         ChecksumState::Calculating => {
-                            checksums_section =
-                                checksums_section.push(widget::text::body(fl!("calculating")));
+                            checksums_section = checksums_section.push(
+                                widget::row::with_capacity(2)
+                                    .align_y(Alignment::Center)
+                                    .spacing(space_xxxs)
+                                    .push(widget::indeterminate_circular().size(16.0))
+                                    .push(widget::text::body(fl!("calculating"))),
+                            );
                         }
                         ChecksumState::Calculated(checksums) => {
                             checksums_section =
                                 checksums_section.push(widget::text::heading(fl!("checksums")));
-                            // The full checksums exceed the available width in the
-                            // properties panel, so they are ellipsized for display and
-                            // shown in full on hover. SHA512 is computed but not shown.
+                            // The hex digests are usually wider than the panel. Let the
+                            // text widget fill the available width and middle-ellipsize
+                            // only what actually overflows (keeping both ends visible),
+                            // with the full value on hover and a copy button alongside.
+                            // SHA512 is computed but not shown.
                             for (label, value) in [
                                 ("MD5", &checksums.md5),
                                 ("SHA1", &checksums.sha1),
                                 ("SHA256", &checksums.sha256),
                             ] {
-                                checksums_section = checksums_section.push(widget::tooltip(
-                                    widget::text::body(format!(
-                                        "{label}: {}",
-                                        ellipsize_checksum(value)
-                                    ))
-                                    .wrapping(text::Wrapping::None),
+                                let value_text = widget::tooltip(
+                                    widget::text::body(format!("{label}: {value}"))
+                                        .font(cosmic::font::mono())
+                                        .width(Length::Fill)
+                                        .wrapping(text::Wrapping::None)
+                                        .ellipsize(text::Ellipsize::Middle(
+                                            text::EllipsizeHeightLimit::Lines(1),
+                                        )),
                                     widget::text::body(value.clone()),
                                     widget::tooltip::Position::Bottom,
-                                ));
+                                );
+                                let copy_button = widget::button::icon(
+                                    widget::icon::from_name("edit-copy-symbolic").size(16),
+                                )
+                                .on_press(Message::CopyChecksum(value.clone()))
+                                .tooltip(fl!("copy"));
+                                checksums_section = checksums_section.push(
+                                    widget::row::with_capacity(2)
+                                        .align_y(Alignment::Center)
+                                        .spacing(space_xxxs)
+                                        .push(value_text)
+                                        .push(copy_button),
+                                );
                             }
                         }
                         ChecksumState::Error(err) => {
@@ -2795,19 +2818,6 @@ async fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, 
 /// Shorten a checksum for display by keeping its start and end with an ellipsis
 /// in the middle, so it fits within the properties panel width. The full value
 /// is still available on hover. Checksums are hex (ASCII), so byte slicing is safe.
-fn ellipsize_checksum(checksum: &str) -> String {
-    const KEEP: usize = 8;
-    if checksum.len() > KEEP * 2 + 1 {
-        format!(
-            "{}…{}",
-            &checksum[..KEEP],
-            &checksum[checksum.len() - KEEP..]
-        )
-    } else {
-        checksum.to_string()
-    }
-}
-
 /// Calculate file checksums (MD5, SHA1, SHA256, SHA512).
 async fn calculate_checksums(path: &Path) -> Result<FileChecksums, String> {
     let path = path.to_path_buf();
@@ -3305,10 +3315,7 @@ impl Tab {
     }
 
     fn rows_per_page(&self) -> usize {
-        let viewport_height = self
-            .item_view_size_opt
-            .get()
-            .map_or(0.0, |s| s.height);
+        let viewport_height = self.item_view_size_opt.get().map_or(0.0, |s| s.height);
         let row_height = self
             .select_focus
             .and_then(|i| self.items_opt.as_ref()?.get(i))
@@ -4020,8 +4027,7 @@ impl Tab {
             }
             Message::ItemPageDown => {
                 self.dehighlight_all();
-                if let Some((row, col)) =
-                    self.select_focus_pos_opt().or(self.select_last_pos_opt())
+                if let Some((row, col)) = self.select_focus_pos_opt().or(self.select_last_pos_opt())
                 {
                     if self.select_focus.is_none() {
                         self.select_position(row, col, mod_shift);
@@ -4032,16 +4038,13 @@ impl Tab {
 
                     if !self.select_position(target_row, col, mod_shift) {
                         // Fall back to the last item at or before target_row
-                        let best = self
-                            .items_opt
-                            .as_ref()
-                            .and_then(|items| {
-                                items
-                                    .iter()
-                                    .filter_map(|item| item.pos_opt.get())
-                                    .filter(|(r, _)| *r <= target_row)
-                                    .max()
-                            });
+                        let best = self.items_opt.as_ref().and_then(|items| {
+                            items
+                                .iter()
+                                .filter_map(|item| item.pos_opt.get())
+                                .filter(|(r, _)| *r <= target_row)
+                                .max()
+                        });
                         if let Some((best_row, best_col)) = best {
                             self.select_position(best_row, best_col, mod_shift);
                         }
@@ -4079,16 +4082,13 @@ impl Tab {
 
                     if !self.select_position(target_row, col, mod_shift) {
                         // Fall back to the first item at or after target_row
-                        let best = self
-                            .items_opt
-                            .as_ref()
-                            .and_then(|items| {
-                                items
-                                    .iter()
-                                    .filter_map(|item| item.pos_opt.get())
-                                    .filter(|(r, _)| *r >= target_row)
-                                    .min()
-                            });
+                        let best = self.items_opt.as_ref().and_then(|items| {
+                            items
+                                .iter()
+                                .filter_map(|item| item.pos_opt.get())
+                                .filter(|(r, _)| *r >= target_row)
+                                .min()
+                        });
                         if let Some((best_row, best_col)) = best {
                             self.select_position(best_row, best_col, mod_shift);
                         }
@@ -4835,6 +4835,9 @@ impl Tab {
                     })
                     .into(),
                 ));
+            }
+            Message::CopyChecksum(value) => {
+                commands.push(Command::Iced(cosmic::iced::clipboard::write(value).into()));
             }
         }
 
