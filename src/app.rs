@@ -1009,6 +1009,12 @@ impl App {
             .and_then(|first| first.as_ref().parent())
             .map(Path::to_path_buf)
         {
+            let mut tasks = Vec::new();
+            if let Some(old_dialog) = self.file_dialog_opt.take() {
+                let old_id = old_dialog.window_id();
+                self.windows.remove(&old_id);
+                tasks.push(window::close(old_id));
+            }
             let (mut dialog, dialog_task) = Dialog::new(
                 DialogSettings::new()
                     .kind(DialogKind::OpenFolder)
@@ -1025,7 +1031,9 @@ impl App {
                 ))),
             );
             self.file_dialog_opt = Some(dialog);
-            Task::batch([set_title_task, dialog_task])
+            tasks.push(set_title_task);
+            tasks.push(dialog_task);
+            Task::batch(tasks)
         } else {
             Task::none()
         }
