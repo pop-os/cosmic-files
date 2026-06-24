@@ -25,12 +25,10 @@ use icu::datetime::{DateTimeFormatter, DateTimeFormatterPreferences, fieldsets};
 use icu::locale::preferences::extensions::unicode::keywords::HourCycle;
 use image::{DynamicImage, ImageReader};
 use jiff_icu::ConvertFrom;
-use md5::Md5;
 use mime_guess::{Mime, mime};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
-use sha1::Sha1;
-use sha2::{Digest, Sha256, Sha512};
+use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 use std::cell::Cell;
 use std::cmp::{Ordering, Reverse};
@@ -1799,13 +1797,11 @@ pub enum DirSize {
     Error(String),
 }
 
-/// Computed file checksums.
+/// Checksums computed for a file. Only SHA256 is currently exposed; see
+/// [`calculate_checksums`] for how to add more.
 #[derive(Clone, Debug, Default)]
 pub struct FileChecksums {
-    pub md5: String,
-    pub sha1: String,
     pub sha256: String,
-    pub sha512: String,
 }
 
 /// State of checksum computation for a file.
@@ -2546,76 +2542,53 @@ impl Item {
         }
         column = column.push(details);
 
-        // Checksums section for files (not directories)
-        if let Some(metadata) = self.file_metadata() {
-            if !metadata.is_dir() {
-                if let Some(path) = self.path_opt() {
-                    let mut checksums_section =
-                        widget::column::with_capacity(4).spacing(space_xxxs);
-
-                    match &self.checksums {
-                        ChecksumState::NotCalculated => {
-                            checksums_section = checksums_section.push(
-                                widget::button::standard(fl!("calculate-checksums"))
-                                    .on_press(Message::CalculateChecksums(path.clone())),
-                            );
-                        }
-                        ChecksumState::Calculating => {
-                            checksums_section = checksums_section.push(
-                                widget::row::with_capacity(2)
-                                    .align_y(Alignment::Center)
-                                    .spacing(space_xxxs)
-                                    .push(widget::indeterminate_circular().size(16.0))
-                                    .push(widget::text::body(fl!("calculating"))),
-                            );
-                        }
-                        ChecksumState::Calculated(checksums) => {
-                            checksums_section =
-                                checksums_section.push(widget::text::heading(fl!("checksums")));
-                            // The hex digests are usually wider than the panel. Let the
-                            // text widget fill the available width and middle-ellipsize
-                            // only what actually overflows (keeping both ends visible),
-                            // with the full value on hover and a copy button alongside.
-                            // SHA512 is computed but not shown.
-                            for (label, value) in [
-                                ("MD5", &checksums.md5),
-                                ("SHA1", &checksums.sha1),
-                                ("SHA256", &checksums.sha256),
-                            ] {
-                                let value_text = widget::tooltip(
-                                    widget::text::body(format!("{label}: {value}"))
-                                        .font(cosmic::font::mono())
-                                        .width(Length::Fill)
-                                        .wrapping(text::Wrapping::None)
-                                        .ellipsize(text::Ellipsize::Middle(
-                                            text::EllipsizeHeightLimit::Lines(1),
-                                        )),
-                                    widget::text::body(value.clone()),
-                                    widget::tooltip::Position::Bottom,
-                                );
-                                let copy_button = widget::button::icon(
-                                    widget::icon::from_name("edit-copy-symbolic").size(16),
-                                )
-                                .on_press(Message::CopyChecksum(value.clone()))
-                                .tooltip(fl!("copy"));
-                                checksums_section = checksums_section.push(
-                                    widget::row::with_capacity(2)
-                                        .align_y(Alignment::Center)
-                                        .spacing(space_xxxs)
-                                        .push(value_text)
-                                        .push(copy_button),
-                                );
-                            }
-                        }
-                        ChecksumState::Error(err) => {
-                            checksums_section = checksums_section
-                                .push(widget::text::body(format!("{}: {}", fl!("error"), err)));
-                        }
-                    }
-
-                    column = column.push(checksums_section);
+        if let Some(metadata) = self.file_metadata()
+            && !metadata.is_dir()
+            && let Some(path) = self.path_opt()
+        {
+            let control: Element<'_, Message> = match &self.checksums {
+                ChecksumState::NotCalculated => widget::button::standard(fl!("calculate"))
+                    .on_press(Message::CalculateChecksums(path.clone()))
+                    .into(),
+                ChecksumState::Calculating => widget::row::with_capacity(2)
+                    .align_y(Alignment::Center)
+                    .spacing(space_xxxs)
+                    .push(widget::indeterminate_circular().size(16.0))
+                    .push(widget::text::body(fl!("calculating")))
+                    .into(),
+                ChecksumState::Calculated(checksums) => {
+                    let value = checksums.sha256.clone();
+                    // Middle-ellipsize the digest to fit, full value on hover.
+                    let value_text = widget::tooltip(
+                        widget::text::body(value.clone())
+                            .font(cosmic::font::mono())
+                            .width(Length::Fill)
+                            .wrapping(text::Wrapping::None)
+                            .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
+                                1,
+                            ))),
+                        widget::text::body(value.clone()),
+                        widget::tooltip::Position::Bottom,
+                    );
+                    let copy_button = widget::button::icon(
+                        widget::icon::from_name("edit-copy-symbolic").size(16),
+                    )
+                    .on_press(Message::CopyChecksum(value.clone()))
+                    .tooltip(fl!("copy"));
+                    widget::row::with_capacity(2)
+                        .align_y(Alignment::Center)
+                        .spacing(space_xxxs)
+                        .push(value_text)
+                        .push(copy_button)
+                        .into()
                 }
-            }
+                ChecksumState::Error(err) => {
+                    widget::text::body(format!("{}: {}", fl!("error"), err)).into()
+                }
+            };
+            settings.push(
+                widget::settings::item::builder(fl!("checksum", kind = "SHA256")).control(control),
+            );
         }
 
         if let Some(path) = self.path_opt()
@@ -2815,19 +2788,14 @@ async fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, 
     Ok(total)
 }
 
-/// Shorten a checksum for display by keeping its start and end with an ellipsis
-/// in the middle, so it fits within the properties panel width. The full value
-/// is still available on hover. Checksums are hex (ASCII), so byte slicing is safe.
-/// Calculate file checksums (MD5, SHA1, SHA256, SHA512).
+/// Calculate file checksums in a single pass over the file. To add another
+/// digest, hash it alongside `sha256_hasher` in the loop below and add a field
+/// to [`FileChecksums`]; the file is only read once.
 async fn calculate_checksums(path: &Path) -> Result<FileChecksums, String> {
     let path = path.to_path_buf();
     tokio::task::spawn_blocking(move || {
         let mut file = File::open(&path).map_err(|e| e.to_string())?;
-
-        let mut md5_hasher = Md5::new();
-        let mut sha1_hasher = Sha1::new();
         let mut sha256_hasher = Sha256::new();
-        let mut sha512_hasher = Sha512::new();
 
         let mut buffer = [0u8; 8192];
         loop {
@@ -2835,17 +2803,11 @@ async fn calculate_checksums(path: &Path) -> Result<FileChecksums, String> {
             if bytes_read == 0 {
                 break;
             }
-            md5_hasher.update(&buffer[..bytes_read]);
-            sha1_hasher.update(&buffer[..bytes_read]);
             sha256_hasher.update(&buffer[..bytes_read]);
-            sha512_hasher.update(&buffer[..bytes_read]);
         }
 
         Ok(FileChecksums {
-            md5: format!("{:x}", md5_hasher.finalize()),
-            sha1: format!("{:x}", sha1_hasher.finalize()),
             sha256: format!("{:x}", sha256_hasher.finalize()),
-            sha512: format!("{:x}", sha512_hasher.finalize()),
         })
     })
     .await
@@ -4793,10 +4755,10 @@ impl Tab {
             }
             Message::Checksums(path, checksum_state) => {
                 let location = Location::Path(path);
-                if let Some(ref mut item) = self.parent_item_opt {
-                    if item.location_opt.as_ref() == Some(&location) {
-                        item.checksums = checksum_state.clone();
-                    }
+                if let Some(ref mut item) = self.parent_item_opt
+                    && item.location_opt.as_ref() == Some(&location)
+                {
+                    item.checksums = checksum_state.clone();
                 }
                 if let Some(ref mut items) = self.items_opt {
                     for item in items.iter_mut() {
@@ -4808,12 +4770,11 @@ impl Tab {
                 }
             }
             Message::CalculateChecksums(path) => {
-                // Set state to Calculating and trigger the computation
                 let location = Location::Path(path.clone());
-                if let Some(ref mut item) = self.parent_item_opt {
-                    if item.location_opt.as_ref() == Some(&location) {
-                        item.checksums = ChecksumState::Calculating;
-                    }
+                if let Some(ref mut item) = self.parent_item_opt
+                    && item.location_opt.as_ref() == Some(&location)
+                {
+                    item.checksums = ChecksumState::Calculating;
                 }
                 if let Some(ref mut items) = self.items_opt {
                     for item in items.iter_mut() {
@@ -4823,7 +4784,6 @@ impl Tab {
                         }
                     }
                 }
-                // Launch async checksum calculation
                 commands.push(Command::Iced(
                     cosmic::Task::future(async move {
                         match calculate_checksums(&path).await {
