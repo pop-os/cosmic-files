@@ -758,6 +758,8 @@ pub struct App {
     tab_dnd_hover: Option<(Entity, Instant)>,
     type_select_prefix: String,
     type_select_last_key: Option<Instant>,
+    // Focus to restore when each prefix character is removed with Backspace.
+    type_select_focus_stack: Vec<Option<usize>>,
     nav_drag_id: DragId,
     tab_drag_id: DragId,
     auto_scroll_speed: Option<i16>,
@@ -2441,6 +2443,7 @@ impl Application for App {
             tab_dnd_hover: None,
             type_select_prefix: String::new(),
             type_select_last_key: None,
+            type_select_focus_stack: Vec::new(),
             nav_drag_id: DragId::new(),
             tab_drag_id: DragId::new(),
             auto_scroll_speed: None,
@@ -2784,6 +2787,7 @@ impl Application for App {
 
             if !self.type_select_prefix.is_empty() {
                 self.type_select_prefix.clear();
+                self.type_select_focus_stack.clear();
                 self.type_select_last_key = None;
                 return Task::none();
             }
@@ -3332,11 +3336,10 @@ impl Application for App {
                         && matches!(key, Key::Named(Named::Backspace))
                     {
                         self.type_select_prefix.pop();
+                        let restore = self.type_select_focus_stack.pop().flatten();
                         self.type_select_last_key = Some(Instant::now());
-                        if !self.type_select_prefix.is_empty()
-                            && let Some(tab) = self.tab_model.data_mut::<Tab>(entity)
-                        {
-                            tab.select_by_prefix(&self.type_select_prefix);
+                        if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                            tab.select_focus_set(restore);
                             if let Some(offset) = tab.select_focus_scroll() {
                                 return scrollable::scroll_to(
                                     tab.scrollable_id.clone(),
@@ -3396,13 +3399,14 @@ impl Application for App {
                                     && last_key.elapsed() >= tab::TYPE_SELECT_TIMEOUT
                                 {
                                     self.type_select_prefix.clear();
+                                    self.type_select_focus_stack.clear();
                                 }
 
-                                // Accumulate character and select
-                                self.type_select_prefix.push_str(&text.to_lowercase());
                                 self.type_select_last_key = Some(Instant::now());
 
                                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                                    self.type_select_focus_stack.push(tab.select_focus());
+                                    self.type_select_prefix.push_str(&text.to_lowercase());
                                     tab.select_by_prefix(&self.type_select_prefix);
                                     if let Some(offset) = tab.select_focus_scroll() {
                                         return scrollable::scroll_to(
@@ -4354,6 +4358,7 @@ impl Application for App {
                     .is_none_or(|last_key| last_key.elapsed() >= tab::TYPE_SELECT_TIMEOUT);
                 if expired {
                     self.type_select_prefix.clear();
+                    self.type_select_focus_stack.clear();
                     self.type_select_last_key = None;
                 }
             }
@@ -4500,6 +4505,7 @@ impl Application for App {
                             self.tab_model.text_set(entity, tab_title);
                             // clear the prefix selection buffer when changing location
                             self.type_select_prefix.clear();
+                            self.type_select_focus_stack.clear();
                             commands.push(Task::batch([
                                 self.update_title(),
                                 self.update_watcher(),

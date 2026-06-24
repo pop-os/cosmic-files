@@ -3124,6 +3124,20 @@ impl Tab {
         Some(item.button_id.clone())
     }
 
+    pub(crate) fn select_focus(&self) -> Option<usize> {
+        self.select_focus
+    }
+
+    /// Selects exactly the item at the given focus index, deselecting all others.
+    pub(crate) fn select_focus_set(&mut self, focus: Option<usize>) {
+        self.select_focus = focus;
+        if let Some(ref mut items) = self.items_opt {
+            for (i, item) in items.iter_mut().enumerate() {
+                item.selected = Some(i) == focus;
+            }
+        }
+    }
+
     fn select_focus_pos_opt(&self) -> Option<(usize, usize)> {
         let items = self.items_opt.as_ref()?;
         let item = items.get(self.select_focus?)?;

@@ -565,6 +565,8 @@ struct App {
     auto_scroll_speed: Option<i16>,
     type_select_prefix: String,
     type_select_last_key: Option<Instant>,
+    // Focus to restore when each prefix character is removed with Backspace.
+    type_select_focus_stack: Vec<Option<usize>>,
 }
 
 impl App {
@@ -1075,6 +1077,7 @@ impl Application for App {
             auto_scroll_speed: None,
             type_select_prefix: String::new(),
             type_select_last_key: None,
+            type_select_focus_stack: Vec::new(),
         };
 
         let commands = Task::batch([
@@ -1350,6 +1353,7 @@ impl Application for App {
 
         if !self.type_select_prefix.is_empty() {
             self.type_select_prefix.clear();
+            self.type_select_focus_stack.clear();
             self.type_select_last_key = None;
             return Task::none();
         }
@@ -1469,18 +1473,17 @@ impl Application for App {
                     && matches!(key, Key::Named(Named::Backspace))
                 {
                     self.type_select_prefix.pop();
+                    let restore = self.type_select_focus_stack.pop().flatten();
                     self.type_select_last_key = Some(Instant::now());
-                    if !self.type_select_prefix.is_empty() {
-                        self.tab.select_by_prefix(&self.type_select_prefix);
-                        if let Some(offset) = self.tab.select_focus_scroll() {
-                            return scrollable::scroll_to(
-                                self.tab.scrollable_id.clone(),
-                                AbsoluteOffset {
-                                    x: Some(offset.x),
-                                    y: Some(offset.y),
-                                },
-                            );
-                        }
+                    self.tab.select_focus_set(restore);
+                    if let Some(offset) = self.tab.select_focus_scroll() {
+                        return scrollable::scroll_to(
+                            self.tab.scrollable_id.clone(),
+                            AbsoluteOffset {
+                                x: Some(offset.x),
+                                y: Some(offset.y),
+                            },
+                        );
                     }
                     return Task::none();
                 }
@@ -1533,9 +1536,10 @@ impl Application for App {
                                 && last_key.elapsed() >= tab::TYPE_SELECT_TIMEOUT
                             {
                                 self.type_select_prefix.clear();
+                                self.type_select_focus_stack.clear();
                             }
 
-                            // Accumulate character and select
+                            self.type_select_focus_stack.push(self.tab.select_focus());
                             self.type_select_prefix.push_str(&text.to_lowercase());
                             self.type_select_last_key = Some(Instant::now());
 
@@ -2026,6 +2030,7 @@ impl Application for App {
                     .is_none_or(|last_key| last_key.elapsed() >= tab::TYPE_SELECT_TIMEOUT);
                 if expired {
                     self.type_select_prefix.clear();
+                    self.type_select_focus_stack.clear();
                     self.type_select_last_key = None;
                 }
             }
