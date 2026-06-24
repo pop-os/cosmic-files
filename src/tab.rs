@@ -1701,6 +1701,7 @@ pub enum Message {
     Config(TabConfig),
     ContextAction(Action),
     ContextMenu(Option<Point>, Option<window::Id>),
+    OpenContextMenuKeyboard,
     LocationContextMenuPoint(Option<Point>),
     LocationContextMenuIndex(Option<Point>, Option<usize>),
     LocationMenuAction(LocationMenuAction),
@@ -3613,6 +3614,37 @@ impl Tab {
                     for item in items.iter_mut() {
                         item.selected = false;
                     }
+                }
+            }
+            Message::OpenContextMenuKeyboard => {
+                if self.context_menu.is_some() {
+                    self.context_menu = None;
+                } else {
+                    self.edit_location = None;
+                    self.location_context_menu_index = None;
+
+                    // Anchor near the focused item, with fallback to the last selected item
+                    let anchor_rect = self
+                        .select_focus
+                        .and_then(|i| self.items_opt.as_ref()?.get(i))
+                        .and_then(|item| item.rect_opt.get())
+                        .or_else(|| {
+                            self.items_opt.as_ref().and_then(|items| {
+                                items
+                                    .iter()
+                                    .rev()
+                                    .find(|item| item.selected)
+                                    .and_then(|item| item.rect_opt.get())
+                            })
+                        });
+
+                    // Fall back to top-left if no item is focused or selected
+                    let point = match anchor_rect {
+                        Some(rect) => Point::new(rect.x, rect.y + rect.height),
+                        None => Point::ORIGIN,
+                    };
+
+                    self.context_menu = Some(point);
                 }
             }
             Message::LocationContextMenuPoint(point_opt) => {

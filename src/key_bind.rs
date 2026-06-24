@@ -44,6 +44,8 @@ pub fn key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
     bind!([], Key::Named(Named::Enter), Open);
     bind!([Ctrl], Key::Character(" ".into()), Preview);
     bind!([], Key::Character(" ".into()), Gallery);
+    bind!([], Key::Named(Named::ContextMenu), OpenContextMenu);
+    bind!([Shift], Key::Named(Named::F10), OpenContextMenu);
 
     bind!([Ctrl], Key::Character("h".into()), ToggleShowHidden);
     bind!([Ctrl], Key::Character("a".into()), SelectAll);
