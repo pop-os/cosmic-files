@@ -11,7 +11,7 @@ use cosmic::widget::{
 };
 use cosmic::{Element, theme};
 use i18n_embed::LanguageLoader;
-use mime_guess::Mime;
+use mime_guess::{Mime, mime};
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
@@ -248,6 +248,11 @@ pub fn context_menu<'a>(
                 if !action_items.is_empty() {
                     children.push(divider::horizontal::light().into());
                     children.extend(action_items);
+                }
+                if selected_types.iter().any(|t| t.type_() == mime::IMAGE) {
+                    children.push(divider::horizontal::light().into());
+                    children
+                        .push(menu_item(fl!("set-as-wallpaper"), Action::SetAsWallpaper).into());
                 }
                 children.push(divider::horizontal::light().into());
                 if selected_mount_point == 0 {

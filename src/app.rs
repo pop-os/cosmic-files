@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::app::{self, Core, Task, context_drawer};
-use cosmic::cosmic_config::{self, ConfigSet};
+use cosmic::cosmic_config::{self, ConfigGet, ConfigSet};
 use cosmic::iced::clipboard::dnd::DndAction;
 use cosmic::iced::core::SmolStr;
 use cosmic::iced::core::widget::operation::focusable::unfocus;
@@ -55,6 +55,8 @@ use tokio::sync::mpsc;
 use trash::TrashItem;
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use wayland_client::{Proxy, protocol::wl_output::WlOutput};
+
+use cosmic_bg_config::{Entry, Source};
 
 use crate::clipboard::{
     ClipboardCache, ClipboardCopy, ClipboardKind, ClipboardPaste, ClipboardPasteImage,
@@ -140,6 +142,7 @@ pub enum Action {
     CosmicSettingsDesktop,
     CosmicSettingsDisplays,
     CosmicSettingsWallpaper,
+    SetAsWallpaper,
     DesktopViewOptions,
     Delete,
     EditHistory,
@@ -213,6 +216,7 @@ impl Action {
             Self::CosmicSettingsDesktop => Message::CosmicSettings("desktop"),
             Self::CosmicSettingsDisplays => Message::CosmicSettings("displays"),
             Self::CosmicSettingsWallpaper => Message::CosmicSettings("wallpaper"),
+            Self::SetAsWallpaper => Message::SetAsWallpaper(entity_opt),
             Self::Delete => Message::Delete(entity_opt),
             Self::DesktopViewOptions => Message::DesktopViewOptions,
             Self::EditHistory => Message::ToggleContextPage(ContextPage::EditHistory),
@@ -435,6 +439,7 @@ pub enum Message {
     SearchInput(String),
     SetShowDetails(bool),
     SetShowRecents(bool),
+    SetAsWallpaper(Option<Entity>),
     SetTypeToSearch(TypeToSearch),
     SystemThemeModeChange,
     Size(window::Id, Size),
@@ -2994,13 +2999,34 @@ impl Application for App {
                 self.toasts.remove(id);
             }
             Message::CosmicSettings(arg) => {
-                //TODO: use special settings URL scheme instead?
                 let mut command = process::Command::new("cosmic-settings");
                 command.arg(arg);
                 match spawn_detached(&mut command) {
                     Ok(()) => {}
                     Err(err) => {
                         log::warn!("failed to run cosmic-settings {arg}: {err}");
+                    }
+                }
+            }
+            Message::SetAsWallpaper(entity_opt) => {
+                if let Some(path) = self.selected_paths(entity_opt).next() {
+                    if let Ok(context) = cosmic_bg_config::context() {
+                        let _ = context.set_same_on_all(true);
+                        let entry = Entry::new("all".into(), Source::Path(path.clone()));
+                        if let Ok(mut config) = cosmic_bg_config::Config::load(&context) {
+                            let _ = config.set_entry(&context, entry);
+                        }
+                    }
+                    // Register in cosmic-settings wallpaper config
+                    if let Ok(ctx) =
+                        cosmic_config::Config::new("com.system76.CosmicSettings.Wallpaper", 1)
+                    {
+                        if let Ok(mut images) = ctx.get::<Vec<PathBuf>>("custom-images") {
+                            if !images.contains(&path) {
+                                images.push(path);
+                                let _ = ctx.set("custom-images", images);
+                            }
+                        }
                     }
                 }
             }
