@@ -2571,12 +2571,14 @@ impl Application for App {
         }
         if let Some(path) = location_opt.and_then(Location::path_opt) {
             let selected_dir = usize::from(path.is_dir());
+            let path_string = path.to_string_lossy().into_owned();
+            let selected_paths = [path_string];
             let action_items: Vec<_> = self
                 .config
                 .context_actions
                 .iter()
                 .enumerate()
-                .filter(|(_, action)| action.matches_selection(1, selected_dir))
+                .filter(|(_, action)| action.matches_selection(1, selected_dir, &selected_paths))
                 .map(|(i, action)| {
                     cosmic::widget::menu::Item::Button(
                         action.name.clone(),

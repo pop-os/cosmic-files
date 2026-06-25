@@ -135,6 +135,8 @@ pub fn context_menu<'a>(
     let mut selected_desktop_entry = None;
     let mut selected_types: Vec<Mime> = vec![];
     let mut selected_mount_point = 0;
+    let mut selected_files: Vec<String> = vec![];
+
     if let Some(items) = tab.items_opt() {
         for item in items {
             if item.selected {
@@ -147,11 +149,13 @@ pub fn context_menu<'a>(
                     Some(Location::Trash) | Some(Location::Search(SearchLocation::Trash, ..)) => {
                         selected_trash_only = true
                     }
-                    Some(Location::Path(path))
-                        if selected == 1
-                            && path.extension().and_then(|s| s.to_str()) == Some("desktop") =>
-                    {
-                        selected_desktop_entry = Some(&**path);
+                    Some(Location::Path(path)) => {
+                        if selected == 1 && path.extension().and_then(|s| s.to_str()) == Some("desktop") {
+                            selected_desktop_entry = Some(&**path);
+                        }
+
+                        let path_str = path.to_string_lossy().into_owned();
+                        selected_files.push(path_str);
                     }
                     _ => (),
                 }
@@ -162,11 +166,11 @@ pub fn context_menu<'a>(
     selected_types.sort_unstable();
     selected_types.dedup();
     selected_trash_only = selected_trash_only && selected == 1;
-    let context_action_items = |selected: usize, selected_dir: usize| {
+    let context_action_items = |selected: usize, selected_dir: usize, paths: &[String]| {
         context_actions
             .iter()
             .enumerate()
-            .filter(|(_, action)| action.matches_selection(selected, selected_dir))
+            .filter(|(_, action)| action.matches_selection(selected, selected_dir, paths))
             .map(|(i, action)| menu_item(action.name.clone(), Action::RunContextAction(i)).into())
             .collect::<Vec<Element<'a, tab::Message>>>()
     };
@@ -217,7 +221,7 @@ pub fn context_menu<'a>(
                 }
                 // Should this simply bypass trash and remove the shortcut?
                 children.push(menu_item(fl!("move-to-trash"), Action::Delete).into());
-                let action_items = context_action_items(selected, selected_dir);
+                let action_items = context_action_items(selected, selected_dir, &selected_files);
                 if !action_items.is_empty() {
                     children.push(divider::horizontal::light().into());
                     children.extend(action_items);
@@ -244,7 +248,7 @@ pub fn context_menu<'a>(
                     children
                         .push(menu_item(fl!("open-in-new-window"), Action::OpenInNewWindow).into());
                 }
-                let action_items = context_action_items(selected, selected_dir);
+                let action_items = context_action_items(selected, selected_dir, &selected_files);
                 if !action_items.is_empty() {
                     children.push(divider::horizontal::light().into());
                     children.extend(action_items);
