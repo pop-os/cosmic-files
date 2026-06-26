@@ -1,11 +1,11 @@
 cosmic-files = Fitxers del COSMIC
 empty-folder = Carpeta buida
-empty-folder-hidden = Carpeta buida (té elements ocults)
+empty-folder-hidden = Carpeta buida (conté elements ocults)
 no-results = No s'ha trobat cap resultat
 filesystem = Sistema de fitxers
 home = Inici
 networks = Xarxes
-notification-in-progress = Hi ha operacions amb fitxers en curs.
+notification-in-progress = Operacions de fitxers en curs
 trash = Paperera
 recents = Recents
 undo = Desfés
@@ -29,14 +29,14 @@ details = Detalls
 dismiss = Descarta el missatge
 operations-running =
     { $running } { $running ->
-        [one] operacion
+        [one] operació
        *[other] operacions
     } en curs ({ $percent }%)...
 operations-running-finished =
     { $running }{ $running ->
-        [one] operacion
+        [one] operació
        *[other] operacions
-    } en curs ({ $percent }%), { $finished } acabat...
+    } en curs ({ $percent }%), { $finished } acabada/es...
 pause = Pausa
 resume = Reprèn
 
@@ -54,7 +54,7 @@ extract-password-required = Cal una contrasenya
 ## Empty Trash Dialog
 
 empty-trash = Buida la paperera
-empty-trash-warning = Voleu suprimir permanentment tots els fitxers de la paperera?
+empty-trash-warning = Els elements dins la Paperera s'eliminaran permanentment
 
 ## Mount Error Dialog
 
@@ -64,12 +64,12 @@ mount-error = No es pot accedir a la unitat
 
 create-new-file = Crea un nou fitxer
 create-new-folder = Crea una nova carpeta
-file-name = Nom del fixer
+file-name = Nom del fitxer
 folder-name = Nom de la carpeta
-file-already-exists = Ja existeix un fitxer amb aquest nom.
-folder-already-exists = Ja existeix una carpeta amb aquest nom.
-name-hidden = Els noms que comencin amb "." seran ocults.
-name-invalid = El nom no pot ser "{ $filename }".
+file-already-exists = Ja existeix un fitxer amb aquest nom
+folder-already-exists = Ja existeix una carpeta amb aquest nom
+name-hidden = Els noms que comencin amb "." s'ocultaran.
+name-invalid = El nom no pot ser "{ $filename }"
 name-no-slashes = El nom no pot contenir barres.
 
 ## Open/Save Dialog
@@ -353,3 +353,13 @@ sort-oldest-first = Primer més antics
 sort-smallest-to-largest = De petit a gran
 sort-largest-to-smallest = De gran a petit
 run = Executa
+extract-to-title = Extreu a una carpeta
+empty-trash-title = Voleu buidar la paperera?
+extract-to = Extreu a...
+delete = Suprimeix
+comment = Gestor de fitxers de l'escriptori COSMIC
+copy-to-title = Escolliu el destí de la còpia
+copy-to-button-label = Copia
+move-to-title = Escolliu el destí del trasllat
+move-to-button-label = Mou
+keywords = Carpeta;Fitxers;Arxius;Gestor;Explorador;

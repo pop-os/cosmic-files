@@ -388,3 +388,4 @@ context-action-confirm-warning =
     }.
 context-action = Контекстна дія
 rename-confirm = Перейменувати
+mixed = Змішано
