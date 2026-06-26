@@ -17,7 +17,7 @@ desktop-view-options = Asztali nézet beállításai…
 show-on-desktop = Megjelenítés az asztalon
 desktop-folder-content = Asztal mappa tartalma
 mounted-drives = Csatolt meghajtók
-trash-folder-icon = Kuka ikonja
+trash-folder-icon = Kuka ikon
 icon-size-and-spacing = Ikonméret és távolság
 icon-size = Ikonméret
 grid-spacing = Rácsköz
@@ -57,8 +57,8 @@ extract-to-title = Kibontási cél kiválasztása
 
 ## Empty Trash Dialog
 
-empty-trash = Kuka ürítése
-empty-trash-warning = A kukában lévő összes elem véglegesen törölve lesz
+empty-trash = A Kuka ürítése
+empty-trash-warning = A Kukában lévő összes elem véglegesen törölve lesz
 
 ## Mount Error Dialog
 
@@ -103,7 +103,7 @@ related-apps = Hasonló alkalmazások
 selected-items = A(z) { $items } kijelölt elem
 permanently-delete-question = Végleges törlés?
 delete = Törlés
-permanently-delete-warning = { $target } véglegesen törölve lesz. A művelet nem visszavonható.
+permanently-delete-warning = { $target } véglegesen törölve lesz. A művelet nem vonható vissza.
 
 ## Rename Dialog
 
@@ -251,13 +251,13 @@ deleting =
     { $items } { $items ->
         [one] elem
        *[other] elem
-    } törlése a kukából ({ $progress })…
+    } törlése a Kukából ({ $progress })…
 deleted =
     { $items } { $items ->
         [one] elem
        *[other] elem
-    } törölve a kukából
-emptying-trash = { trash } kiürítése ({ $progress })…
+    } törölve a Kukából
+emptying-trash = { trash } ürítése ({ $progress })…
 emptied-trash = { trash } kiürítve
 extracting =
     { $items } { $items ->
@@ -309,12 +309,12 @@ restoring =
     { $items } { $items ->
         [one] elem
        *[other] elem
-    } visszaállítása a kukából ({ $progress })…
+    } visszaállítása a Kukából ({ $progress })…
 restored =
     { $items } { $items ->
         [one] elem
        *[other] elem
-    } visszaállítva a kukából
+    } visszaállítva a Kukából
 unknown-folder = ismeretlen mappa
 
 ## Open with
@@ -349,7 +349,7 @@ light = Világos
 ### Type to Search
 
 type-to-search = Gépeléssel keresés
-type-to-search-recursive = Keresés a jelenlegi mappában és almappákban
+type-to-search-recursive = Keresés a jelenlegi mappában és az almappákban
 type-to-search-enter-path = Elérési út megnyitása
 # Context menu
 add-to-sidebar = Hozzáadás az oldalsávhoz
@@ -360,8 +360,8 @@ extract-here = Kibontás
 new-file = Új fájl…
 new-folder = Új mappa…
 open-in-terminal = Megnyitás a terminálban
-move-to-trash = Kukába helyezés
-restore-from-trash = Visszaállítás a kukából
+move-to-trash = Áthelyezés a Kukába
+restore-from-trash = Visszaállítás a Kukából
 remove-from-sidebar = Eltávolítás az oldalsávról
 sort-by-name = Név szerinti rendezés
 sort-by-modified = Módosítás szerinti rendezés
@@ -372,7 +372,7 @@ remove-from-recents = Eltávolítás a legutóbbiak közül
 ## Desktop
 
 change-wallpaper = Háttérkép cseréje…
-desktop-appearance = Asztali megjelenés…
+desktop-appearance = Asztal megjelenése…
 display-settings = Kijelzőbeállítások…
 
 # Menu
@@ -422,7 +422,7 @@ sort-largest-to-smallest = Legnagyobbtól a legkisebbig
 repository = Tároló
 support = Támogatás
 progress-failed = { $percent }%, sikertelen
-empty-trash-title = Kuka ürítése?
+empty-trash-title = Kiüríted a Kukát?
 type-to-search-select = Kijelöli az első egyező fájlt vagy mappát
 pasted-image = Beillesztett kép
 pasted-text = Beillesztett szöveg
