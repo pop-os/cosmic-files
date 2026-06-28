@@ -303,6 +303,9 @@ item-created = Created: {$created}
 item-modified = Modified: {$modified}
 item-accessed = Accessed: {$accessed}
 calculating = Calculating...
+checksum = {$kind} checksum
+calculate = Calculate
+error = Error
 
 ## Settings
 settings = Settings

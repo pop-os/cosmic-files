@@ -327,3 +327,4 @@ context-action-confirm-warning =
        *[other] нәрсеге
     }.
 run = Орындау
+rename-confirm = Атын өзгерту

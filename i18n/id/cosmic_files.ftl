@@ -327,3 +327,4 @@ context-action-confirm-warning =
         [one] item
        *[other] item
     }.
+rename-confirm = Ganti nama
