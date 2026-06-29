@@ -877,6 +877,8 @@ pub fn item_from_trash_entry(
     let name = entry.name.to_string_lossy().into_owned();
     let display_name = Item::display_name(&name);
 
+    let location = crate::trash::trash_item_path(&entry).map(Location::Path);
+
     let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) = match metadata.size
     {
         trash::TrashItemSize::Entries(_) => (
@@ -904,7 +906,7 @@ pub fn item_from_trash_entry(
         is_mount_point: false,
         metadata: ItemMetadata::Trash { metadata, entry },
         hidden: false,
-        location_opt: None,
+        location_opt: location,
         image_dimensions: (mime.type_() == mime::IMAGE)
             .then(|| image::image_dimensions(&original_path).ok())
             .flatten(),
@@ -923,6 +925,31 @@ pub fn item_from_trash_entry(
         cut: false,
         checksums: ChecksumState::default(),
     }
+}
+
+fn item_from_trash_child(
+    path: PathBuf,
+    name: String,
+    metadata: fs::Metadata,
+    sizes: IconSizes,
+) -> Option<Item> {
+    let original_path = crate::trash::original_path_for_trash_child(&path)?;
+    let entry = trash::TrashItem {
+        id: path.as_os_str().to_os_string(),
+        name: std::ffi::OsString::from(&name),
+        original_parent: original_path.parent()?.to_path_buf(),
+        time_deleted: 0,
+    };
+    let size = if metadata.is_dir() {
+        trash::TrashItemSize::Entries(0)
+    } else {
+        trash::TrashItemSize::Bytes(metadata.len())
+    };
+    Some(item_from_trash_entry(
+        entry,
+        trash::TrashItemMetadata { size },
+        sizes,
+    ))
 }
 
 fn get_filename_from_path(path: &Path) -> Result<String, String> {
@@ -1040,7 +1067,12 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                             })
                             .ok()?;
 
-                        Some(item_from_entry(path, name, metadata, sizes))
+                        let trash = crate::trash::is_trash_path(tab_path);
+                        if trash {
+                            item_from_trash_child(path, name, metadata, sizes)
+                        } else {
+                            Some(item_from_entry(path, name, metadata, sizes))
+                        }
                     })
                     .collect();
             }
