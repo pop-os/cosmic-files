@@ -674,11 +674,16 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
                 desktop_icon_handle(&icon_name, sizes.list_condensed()),
             )
         } else {
+            let exe_icon = exe_icon_for_mime(&path);
             (
                 mime.clone(),
-                mime_icon(mime.clone(), sizes.grid()),
-                mime_icon(mime.clone(), sizes.list()),
-                mime_icon(mime, sizes.list_condensed()),
+                exe_icon
+                    .clone()
+                    .unwrap_or_else(|| mime_icon(mime.clone(), sizes.grid())),
+                exe_icon
+                    .clone()
+                    .unwrap_or_else(|| mime_icon(mime.clone(), sizes.list())),
+                exe_icon.unwrap_or_else(|| mime_icon(mime, sizes.list_condensed())),
             )
         }
     };
@@ -741,6 +746,10 @@ pub fn item_from_search_item(search_item: SearchItem, sizes: IconSizes) -> Item 
         SearchItem::Path(path, name, metadata) => item_from_entry(path, name, metadata, sizes),
         SearchItem::Trash(entry, metadata) => item_from_trash_entry(entry, metadata, sizes),
     }
+}
+
+fn exe_icon_for_mime(path: &Path) -> Option<widget::icon::Handle> {
+    crate::exe_icon::exe_icon(path)
 }
 
 pub fn item_from_entry(
@@ -814,11 +823,16 @@ pub fn item_from_entry(
                     desktop_icon_handle(&icon_name, sizes.list_condensed()),
                 )
             } else {
+                let exe_icon = exe_icon_for_mime(&path);
                 (
                     mime.clone(),
-                    mime_icon(mime.clone(), sizes.grid()),
-                    mime_icon(mime.clone(), sizes.list()),
-                    mime_icon(mime, sizes.list_condensed()),
+                    exe_icon
+                        .clone()
+                        .unwrap_or_else(|| mime_icon(mime.clone(), sizes.grid())),
+                    exe_icon
+                        .clone()
+                        .unwrap_or_else(|| mime_icon(mime.clone(), sizes.list())),
+                    exe_icon.unwrap_or_else(|| mime_icon(mime, sizes.list_condensed())),
                 )
             }
         };
