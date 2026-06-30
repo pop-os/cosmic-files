@@ -24,6 +24,7 @@ name = Nume
 modified = Modificat
 trashed-on = Șters
 size = Dimensiune
+extension = Tip
 # Progress footer
 details = Detalii
 dismiss = Închide mesajul

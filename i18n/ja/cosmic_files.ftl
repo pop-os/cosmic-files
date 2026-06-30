@@ -13,6 +13,7 @@ undo = 元に戻す
 name = 名前
 modified = 更新日
 size = サイズ
+extension = 種類
 
 # Dialogs
 

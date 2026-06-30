@@ -634,6 +634,17 @@ fn display_name_for_file(path: &Path, name: &str, get_from_gvfs: bool, is_deskto
     Item::display_name(name)
 }
 
+fn display_extension(mime: &Mime) -> String {
+    mime.to_string()
+        .rsplit('/')
+        .next()
+        .unwrap_or("")
+        .rsplit('.')
+        .next()
+        .unwrap_or("")
+        .to_owned()
+}
+
 #[cfg(feature = "gvfs")]
 pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconSizes) -> Item {
     let file_name = file_info
@@ -699,6 +710,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
     }
 
     let display_name = display_name_for_file(&path, &file_info.display_name(), false, is_desktop);
+    let extension_text = display_extension(&mime);
     let hidden = file_name.starts_with('.');
 
     Item {
@@ -733,6 +745,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
         dir_size,
         cut: false,
         checksums: ChecksumState::default(),
+        extension_text,
     }
 }
 
@@ -839,6 +852,7 @@ pub fn item_from_entry(
     }
 
     let display_name = display_name_for_file(&path, &name, is_gvfs, is_desktop);
+    let extension_text = display_extension(&mime);
 
     Item {
         name,
@@ -865,6 +879,7 @@ pub fn item_from_entry(
         dir_size,
         cut: false,
         checksums: ChecksumState::default(),
+        extension_text,
     }
 }
 
@@ -900,6 +915,8 @@ pub fn item_from_trash_entry(
         }
     };
 
+    let extension_text = display_extension(&mime);
+
     Item {
         name,
         display_name,
@@ -924,6 +941,7 @@ pub fn item_from_trash_entry(
         dir_size: DirSize::NotDirectory,
         cut: false,
         checksums: ChecksumState::default(),
+        extension_text,
     }
 }
 
@@ -1356,6 +1374,8 @@ pub fn scan_desktop(
             )
         };
 
+        let extension_text = display_extension(&mime);
+
         items.push(Item {
             name,
             display_name,
@@ -1378,6 +1398,7 @@ pub fn scan_desktop(
             dir_size: DirSize::NotDirectory,
             cut: false,
             checksums: ChecksumState::default(),
+            extension_text,
         });
     }
 
@@ -2298,6 +2319,7 @@ pub struct Item {
     pub overlaps_drag_rect: bool,
     pub dir_size: DirSize,
     pub checksums: ChecksumState,
+    pub extension_text: String,
 }
 
 impl Item {
@@ -2695,6 +2717,7 @@ pub enum HeadingOptions {
     Modified,
     Size,
     TrashedOn,
+    Type,
 }
 
 impl fmt::Display for HeadingOptions {
@@ -2704,6 +2727,7 @@ impl fmt::Display for HeadingOptions {
             Self::Modified => write!(f, "{}", fl!("modified")),
             Self::Size => write!(f, "{}", fl!("size")),
             Self::TrashedOn => write!(f, "{}", fl!("trashed-on")),
+            Self::Type => write!(f, "{}", fl!("extension")),
         }
     }
 }
@@ -2715,6 +2739,7 @@ impl HeadingOptions {
             Self::Modified.to_string(),
             Self::Size.to_string(),
             Self::TrashedOn.to_string(),
+            Self::Type.to_string(),
         ]
     }
 }
@@ -5015,6 +5040,23 @@ impl Tab {
                     }
                 });
             }
+            HeadingOptions::Type => items.sort_by(|a, b| {
+                if folders_first {
+                    match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
+                        (true, false) => Ordering::Less,
+                        (false, true) => Ordering::Greater,
+                        _ => check_reverse(
+                            LANGUAGE_SORTER.compare(&a.1.extension_text, &b.1.extension_text),
+                            sort_direction,
+                        ),
+                    }
+                } else {
+                    check_reverse(
+                        LANGUAGE_SORTER.compare(&a.1.extension_text, &b.1.extension_text),
+                        sort_direction,
+                    )
+                }
+            }),
         }
         Some(items)
     }
@@ -5307,6 +5349,7 @@ impl Tab {
         let name_width = 300.0;
         let modified_width = 200.0;
         let size_width = 100.0;
+        let extension_width = 100.0;
         let condensed = size.width < (name_width + modified_width + size_width);
 
         let (sort_name, sort_direction, _) = self.sort_options();
@@ -5347,6 +5390,11 @@ impl Tab {
                 )
             },
             heading_item(fl!("size"), Length::Fixed(size_width), HeadingOptions::Size),
+            heading_item(
+                fl!("extension"),
+                Length::Fixed(extension_width),
+                HeadingOptions::Type,
+            ),
         ])
         .align_y(Alignment::Center)
         .height(Length::Fixed((space_m + 4).into()))
@@ -6004,6 +6052,7 @@ impl Tab {
         let name_width = 300.0;
         let modified_width = 200.0;
         let size_width = 100.0;
+        let extension_width = 100.0;
         let condensed = size.width < (name_width + modified_width + size_width);
         let is_search = matches!(self.location, Location::Search(..));
         let icon_size = if condensed || is_search {
@@ -6178,6 +6227,9 @@ impl Tab {
                             widget::text::body(size_text.clone())
                                 .width(Length::Fixed(size_width))
                                 .into(),
+                            widget::text::body(item.extension_text.clone())
+                                .width(Length::Fixed(extension_width))
+                                .into(),
                         ])
                         .height(Length::Fixed(f32::from(row_height)))
                         .align_y(Alignment::Center)
@@ -6196,6 +6248,9 @@ impl Tab {
                                 .into(),
                             widget::text::body(size_text.clone())
                                 .width(Length::Fixed(size_width))
+                                .into(),
+                            widget::text::body(item.extension_text.clone())
+                                .width(Length::Fixed(extension_width))
                                 .into(),
                         ])
                         .height(Length::Fixed(f32::from(row_height)))

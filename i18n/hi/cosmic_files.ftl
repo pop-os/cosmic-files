@@ -23,6 +23,7 @@ name = नाम
 modified = संशोधित तिथि
 trashed-on = कचरे में डालने की तिथि
 size = आकार
+extension = प्रकार
 
 # Dialogs
 

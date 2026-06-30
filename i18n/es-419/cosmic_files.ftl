@@ -23,6 +23,7 @@ name = Nombre
 modified = Modificado
 trashed-on = Enviado a la papelera
 size = Tamaño
+extension = Tipo
 
 # Dialogs
 

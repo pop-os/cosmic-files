@@ -14,6 +14,7 @@ today = 今天
 name = 名稱
 modified = 修改日期
 size = 大小
+extension = 類型
 
 # Dialogs
 

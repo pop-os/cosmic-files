@@ -20,6 +20,7 @@ name = Isem
 modified = Ittusnifel
 trashed-on = Yettwakkes ɣer tqecwalt n yiḍumman
 size = Tiddi
+extension = Asissen
 details = Talqayt
 pause = Serǧu
 resume = Kemmel

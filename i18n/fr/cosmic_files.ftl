@@ -24,6 +24,7 @@ name = Nom
 modified = Modifié
 trashed-on = Mis à la corbeille
 size = Taille
+extension = Type
 # Progress footer
 details = Détails
 dismiss = Ignorer le message

@@ -13,6 +13,7 @@ undo = Anular
 name = Nome
 modified = Modificado
 size = Tamanho
+extension = Tipo
 
 # Dialogs
 

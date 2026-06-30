@@ -24,6 +24,7 @@ name = Ainm
 modified = Mionathraithe
 trashed-on = Curtha sa bhruscar
 size = Méid
+extension = Cineál
 # Progress footer
 details = Sonraí
 dismiss = Diúltaigh an teachtaireacht

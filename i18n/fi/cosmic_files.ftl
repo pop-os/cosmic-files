@@ -27,6 +27,7 @@ name = Nimi
 modified = Muokattu
 trashed-on = Siirretty roskakoriin
 size = Koko
+extension = Tyyppi
 
 # Dialogs
 

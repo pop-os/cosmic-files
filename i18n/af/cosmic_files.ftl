@@ -10,6 +10,7 @@ open-file = Oop 'n lêer
 connect = Konnekteer
 password = Wagwoord
 name = Naam
+extension = Tipe
 empty-folder = Leë vouer
 empty-folder-hidden = Leë vouer (met versteekte items)
 no-results = Geen resultate gevind nie
