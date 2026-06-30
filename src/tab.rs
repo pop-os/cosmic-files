@@ -2367,10 +2367,8 @@ impl Item {
                 widget::image(handle.clone()).into()
             }
             ItemThumbnail::Svg(handle) => widget::svg(handle.clone()).into(),
-            ItemThumbnail::Text(content) => widget::text_editor(content)
-                .class(cosmic::theme::iced::TextEditor::Custom(Box::new(
-                    text_editor_class,
-                )))
+            ItemThumbnail::Text(content) => widget::text_editor::text_editor(content)
+                .style(text_editor_class)
                 .width(THUMBNAIL_SIZE as f32)
                 .height(Length::Fixed(THUMBNAIL_SIZE as f32))
                 .padding(spacing.space_xxs)
@@ -2421,7 +2419,7 @@ impl Item {
         );
 
         let mut details = widget::column::with_capacity(8).spacing(space_xxxs);
-        details = details.push(widget::text::heading(self.name.clone()));
+        details = details.push(widget::selectable_text::heading(self.name.clone()));
         details = details.push(widget::text::body(fl!(
             "type",
             mime = self.mime.to_string()
@@ -2478,21 +2476,21 @@ impl Item {
             let time_formatter = time_formatter(military_time);
 
             if let Ok(time) = metadata.created() {
-                details = details.push(widget::text::body(fl!(
+                details = details.push(widget::selectable_text::body(fl!(
                     "item-created",
                     created = format_time(time, &date_time_formatter, &time_formatter).to_string()
                 )));
             }
 
             if let Ok(time) = metadata.modified() {
-                details = details.push(widget::text::body(fl!(
+                details = details.push(widget::selectable_text::body(fl!(
                     "item-modified",
                     modified = format_time(time, &date_time_formatter, &time_formatter).to_string()
                 )));
             }
 
             if let Ok(time) = metadata.accessed() {
-                details = details.push(widget::text::body(fl!(
+                details = details.push(widget::selectable_text::body(fl!(
                     "item-accessed",
                     accessed = format_time(time, &date_time_formatter, &time_formatter).to_string()
                 )));
@@ -5159,9 +5157,11 @@ impl Tab {
                 }
                 ItemThumbnail::Text(text) => {
                     element_opt = Some(
-                        widget::container(widget::text_editor(text).padding(space_xxs).class(
-                            cosmic::theme::iced::TextEditor::Custom(Box::new(text_editor_class)),
-                        ))
+                        widget::container(
+                            widget::text_editor::text_editor(text)
+                                .padding(space_xxs)
+                                .style(text_editor_class),
+                        )
                         .center(Length::Fill)
                         .into(),
                     );
