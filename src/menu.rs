@@ -18,7 +18,9 @@ use std::sync::LazyLock;
 use crate::app::{Action, Message};
 use crate::config::{Config, ContextActionPreset};
 use crate::fl;
-use crate::tab::{self, HeadingOptions, Location, LocationMenuAction, SearchLocation, Tab};
+use crate::tab::{
+    self, HeadingOptions, ItemMetadata, Location, LocationMenuAction, SearchLocation, Tab,
+};
 use crate::trash::{Trash, TrashExt};
 
 static MENU_ID: LazyLock<cosmic::widget::Id> =
@@ -137,6 +139,7 @@ pub fn context_menu<'a>(
     let mut selected_mount_point = 0;
     let mut selected_files: Vec<String> = vec![];
 
+    let mut any_trash_item = false;
     if let Some(items) = tab.items_opt() {
         for item in items {
             if item.selected {
@@ -158,6 +161,9 @@ pub fn context_menu<'a>(
                         selected_files.push(path_str);
                     }
                     _ => (),
+                }
+                if matches!(&item.metadata, ItemMetadata::Trash { .. }) {
+                    any_trash_item = true;
                 }
                 selected_types.push(item.mime.clone());
             }
@@ -280,27 +286,38 @@ pub fn context_menu<'a>(
 
                 //TODO: Print?
                 children.push(menu_item(fl!("show-details"), Action::Preview).into());
-                if matches!(tab.mode, tab::Mode::App) {
+                if any_trash_item {
                     children.push(divider::horizontal::light().into());
-                    children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
-                }
-                children.push(divider::horizontal::light().into());
-                if tab.location.is_recents() {
                     children.push(
-                        menu_item(fl!("remove-from-recents"), Action::RemoveFromRecents).into(),
+                        menu_item(fl!("restore-from-trash"), Action::RestoreFromTrash).into(),
                     );
                     children.push(divider::horizontal::light().into());
-                }
-                if selected_mount_point == 0 {
-                    if modifiers.shift() && !modifiers.control() {
-                        children.push(
-                            menu_item(fl!("delete-permanently"), Action::PermanentlyDelete).into(),
-                        );
-                    } else {
-                        children.push(menu_item(fl!("move-to-trash"), Action::Delete).into());
+                    children.push(menu_item(fl!("delete-permanently"), Action::Delete).into());
+                } else {
+                    if matches!(tab.mode, tab::Mode::App) {
+                        children.push(divider::horizontal::light().into());
+                        children
+                            .push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
                     }
-                } else if selected == 1 {
-                    children.push(menu_item(fl!("eject"), Action::Eject).into());
+                    children.push(divider::horizontal::light().into());
+                    if tab.location.is_recents() {
+                        children.push(
+                            menu_item(fl!("remove-from-recents"), Action::RemoveFromRecents).into(),
+                        );
+                        children.push(divider::horizontal::light().into());
+                    }
+                    if selected_mount_point == 0 {
+                        if modifiers.shift() && !modifiers.control() {
+                            children.push(
+                                menu_item(fl!("delete-permanently"), Action::PermanentlyDelete)
+                                    .into(),
+                            );
+                        } else {
+                            children.push(menu_item(fl!("move-to-trash"), Action::Delete).into());
+                        }
+                    } else if selected == 1 {
+                        children.push(menu_item(fl!("eject"), Action::Eject).into());
+                    }
                 }
             } else {
                 //TODO: need better designs for menu with no selection
