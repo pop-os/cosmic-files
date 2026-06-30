@@ -1351,7 +1351,7 @@ dependencies = [
 [[package]]
 name = "cosmic-config"
 version = "1.0.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e7f278d17f0cf8275173ab127a9b47fdd7440d9a"
+source = "git+https://github.com/hojjatabdollahi/libcosmic.git?branch=hojjat%2Fselect-popup#04ef622d5641e30fd10cff487f9bb1dfd2843c9b"
 dependencies = [
  "atomicwrites",
  "cosmic-config-derive",
@@ -1372,7 +1372,7 @@ dependencies = [
 [[package]]
 name = "cosmic-config-derive"
 version = "1.0.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e7f278d17f0cf8275173ab127a9b47fdd7440d9a"
+source = "git+https://github.com/hojjatabdollahi/libcosmic.git?branch=hojjat%2Fselect-popup#04ef622d5641e30fd10cff487f9bb1dfd2843c9b"
 dependencies = [
  "quote",
  "syn",
@@ -1498,7 +1498,7 @@ dependencies = [
 [[package]]
 name = "cosmic-settings-config"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/cosmic-settings-daemon#75c0480f1315ec96ec3eb216fc939f93f57d7612"
+source = "git+https://github.com/pop-os/cosmic-settings-daemon#276fef9834b05c57b67e8ba36b74bea1ba690cee"
 dependencies = [
  "cosmic-config",
  "ron 0.11.0",
@@ -1543,7 +1543,7 @@ dependencies = [
 [[package]]
 name = "cosmic-theme"
 version = "1.0.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e7f278d17f0cf8275173ab127a9b47fdd7440d9a"
+source = "git+https://github.com/hojjatabdollahi/libcosmic.git?branch=hojjat%2Fselect-popup#04ef622d5641e30fd10cff487f9bb1dfd2843c9b"
 dependencies = [
  "almost",
  "configparser",
@@ -2852,7 +2852,7 @@ dependencies = [
  "log",
  "presser",
  "thiserror 2.0.18",
- "windows 0.62.2",
+ "windows 0.56.0",
 ]
 
 [[package]]
@@ -3075,7 +3075,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.2",
+ "windows-core 0.56.0",
 ]
 
 [[package]]
@@ -3090,7 +3090,7 @@ dependencies = [
 [[package]]
 name = "iced"
 version = "0.14.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e7f278d17f0cf8275173ab127a9b47fdd7440d9a"
+source = "git+https://github.com/hojjatabdollahi/libcosmic.git?branch=hojjat%2Fselect-popup#04ef622d5641e30fd10cff487f9bb1dfd2843c9b"
 dependencies = [
  "dnd",
  "iced_accessibility",
@@ -3111,7 +3111,7 @@ dependencies = [
 [[package]]
 name = "iced_accessibility"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e7f278d17f0cf8275173ab127a9b47fdd7440d9a"
+source = "git+https://github.com/hojjatabdollahi/libcosmic.git?branch=hojjat%2Fselect-popup#04ef622d5641e30fd10cff487f9bb1dfd2843c9b"
 dependencies = [
  "accesskit",
  "accesskit_winit",
@@ -3120,7 +3120,7 @@ dependencies = [
 [[package]]
 name = "iced_core"
 version = "0.14.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e7f278d17f0cf8275173ab127a9b47fdd7440d9a"
+source = "git+https://github.com/hojjatabdollahi/libcosmic.git?branch=hojjat%2Fselect-popup#04ef622d5641e30fd10cff487f9bb1dfd2843c9b"
 dependencies = [
  "bitflags 2.13.0",
  "bytes",
@@ -3145,7 +3145,7 @@ dependencies = [
 [[package]]
 name = "iced_debug"
 version = "0.14.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e7f278d17f0cf8275173ab127a9b47fdd7440d9a"
+source = "git+https://github.com/hojjatabdollahi/libcosmic.git?branch=hojjat%2Fselect-popup#04ef622d5641e30fd10cff487f9bb1dfd2843c9b"
 dependencies = [
  "iced_core",
  "iced_futures",
@@ -3155,7 +3155,7 @@ dependencies = [
 [[package]]
 name = "iced_futures"
 version = "0.14.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e7f278d17f0cf8275173ab127a9b47fdd7440d9a"
+source = "git+https://github.com/hojjatabdollahi/libcosmic.git?branch=hojjat%2Fselect-popup#04ef622d5641e30fd10cff487f9bb1dfd2843c9b"
 dependencies = [
  "futures",
  "iced_core",
@@ -3169,7 +3169,7 @@ dependencies = [
 [[package]]
 name = "iced_graphics"
 version = "0.14.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e7f278d17f0cf8275173ab127a9b47fdd7440d9a"
+source = "git+https://github.com/hojjatabdollahi/libcosmic.git?branch=hojjat%2Fselect-popup#04ef622d5641e30fd10cff487f9bb1dfd2843c9b"
 dependencies = [
  "bitflags 2.13.0",
  "bytemuck",
@@ -3190,7 +3190,7 @@ dependencies = [
 [[package]]
 name = "iced_program"
 version = "0.14.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e7f278d17f0cf8275173ab127a9b47fdd7440d9a"
+source = "git+https://github.com/hojjatabdollahi/libcosmic.git?branch=hojjat%2Fselect-popup#04ef622d5641e30fd10cff487f9bb1dfd2843c9b"
 dependencies = [
  "iced_graphics",
  "iced_runtime",
@@ -3199,7 +3199,7 @@ dependencies = [
 [[package]]
 name = "iced_renderer"
 version = "0.14.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e7f278d17f0cf8275173ab127a9b47fdd7440d9a"
+source = "git+https://github.com/hojjatabdollahi/libcosmic.git?branch=hojjat%2Fselect-popup#04ef622d5641e30fd10cff487f9bb1dfd2843c9b"
 dependencies = [
  "iced_graphics",
  "iced_tiny_skia",
@@ -3211,7 +3211,7 @@ dependencies = [
 [[package]]
 name = "iced_runtime"
 version = "0.14.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e7f278d17f0cf8275173ab127a9b47fdd7440d9a"
+source = "git+https://github.com/hojjatabdollahi/libcosmic.git?branch=hojjat%2Fselect-popup#04ef622d5641e30fd10cff487f9bb1dfd2843c9b"
 dependencies = [
  "bytes",
  "cosmic-client-toolkit",
@@ -3226,7 +3226,7 @@ dependencies = [
 [[package]]
 name = "iced_tiny_skia"
 version = "0.14.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e7f278d17f0cf8275173ab127a9b47fdd7440d9a"
+source = "git+https://github.com/hojjatabdollahi/libcosmic.git?branch=hojjat%2Fselect-popup#04ef622d5641e30fd10cff487f9bb1dfd2843c9b"
 dependencies = [
  "bytemuck",
  "cosmic-text",
@@ -3243,7 +3243,7 @@ dependencies = [
 [[package]]
 name = "iced_wgpu"
 version = "0.14.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e7f278d17f0cf8275173ab127a9b47fdd7440d9a"
+source = "git+https://github.com/hojjatabdollahi/libcosmic.git?branch=hojjat%2Fselect-popup#04ef622d5641e30fd10cff487f9bb1dfd2843c9b"
 dependencies = [
  "as-raw-xcb-connection",
  "bitflags 2.13.0",
@@ -3274,7 +3274,7 @@ dependencies = [
 [[package]]
 name = "iced_widget"
 version = "0.14.2"
-source = "git+https://github.com/pop-os/libcosmic.git#e7f278d17f0cf8275173ab127a9b47fdd7440d9a"
+source = "git+https://github.com/hojjatabdollahi/libcosmic.git?branch=hojjat%2Fselect-popup#04ef622d5641e30fd10cff487f9bb1dfd2843c9b"
 dependencies = [
  "cosmic-client-toolkit",
  "dnd",
@@ -3292,7 +3292,7 @@ dependencies = [
 [[package]]
 name = "iced_winit"
 version = "0.14.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e7f278d17f0cf8275173ab127a9b47fdd7440d9a"
+source = "git+https://github.com/hojjatabdollahi/libcosmic.git?branch=hojjat%2Fselect-popup#04ef622d5641e30fd10cff487f9bb1dfd2843c9b"
 dependencies = [
  "cosmic-client-toolkit",
  "cursor-icon",
@@ -4402,7 +4402,7 @@ checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 [[package]]
 name = "libcosmic"
 version = "1.0.0"
-source = "git+https://github.com/pop-os/libcosmic.git#e7f278d17f0cf8275173ab127a9b47fdd7440d9a"
+source = "git+https://github.com/hojjatabdollahi/libcosmic.git?branch=hojjat%2Fselect-popup#04ef622d5641e30fd10cff487f9bb1dfd2843c9b"
 dependencies = [
  "apply",
  "ashpd 0.12.3",
