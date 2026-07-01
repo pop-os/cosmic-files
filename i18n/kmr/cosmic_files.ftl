@@ -328,3 +328,6 @@ write-only = Tenê nivîsandin
 trashed-on = Li Jêbirdankê hatiye avêtin
 mixed = Tevlihev
 type-to-search-select = Pel an peldanka yekem a lihevhatî hildibijêre
+calculate = Bijmêre
+error = Şaşetî
+checksum = Tevahiya { $kind } kontrol bike

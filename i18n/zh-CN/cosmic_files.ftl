@@ -25,7 +25,7 @@ modified = 修改时间
 trashed-on = 删除时间
 size = 大小
 # Progress footer
-details = 详细信息
+details = 详情
 dismiss = 清除消息
 operations-running =
     正在进行 { $running } { $running ->
@@ -446,3 +446,6 @@ context-action-confirm-warning =
     } 上运行。
 context-action = 环境行动
 rename-confirm = 重命名
+calculate = 计算
+error = 错误
+checksum = { $kind } 校验和

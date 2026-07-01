@@ -11,7 +11,7 @@ recents = Zuletzt verwendet
 undo = Rückgängig
 today = Heute
 # Optionen für die Desktop-Ansicht
-desktop-view-options = Optionen für die Desktop-Ansicht…
+desktop-view-options = Optionen für die Desktop-Ansicht ...
 show-on-desktop = Auf Desktop anzeigen
 desktop-folder-content = Inhalt des Desktop-Ordners
 mounted-drives = Eingehängte Laufwerke
@@ -31,12 +31,12 @@ operations-running =
     { $running } { $running ->
         [one] laufender Vorgang
        *[other] laufende Vorgänge
-    } ({ $percent } %)...
+    } ({ $percent } %) ...
 operations-running-finished =
     { $running } { $running ->
         [one] laufender Vorgang
        *[other] laufende Vorgänge
-    } ({ $percent } %), { $finished } abgeschlossen...
+    } ({ $percent } %), { $finished } abgeschlossen ...
 pause = Pause
 resume = Fortsetzen
 
@@ -50,7 +50,7 @@ create-archive = Archiv erstellen
 ## Entpacken-Dialog
 
 extract-password-required = Passwort erforderlich
-extract-to = Entpacken nach...
+extract-to = Entpacken nach ...
 extract-to-title = In Ordner entpacken
 
 ## Dialog zum Leeren des Papierkorbs
@@ -179,7 +179,7 @@ keep = Behalten
 add-network-drive = Netzlaufwerk hinzufügen
 connect = Verbinden
 connect-anonymously = Anonym verbinden
-connecting = Wird verbunden...
+connecting = Wird verbunden ...
 domain = Domain
 enter-server-address = Serveradresse eingeben
 network-drive-description =
@@ -218,7 +218,7 @@ compressing =
     { $items } { $items ->
         [one] Element wird
        *[other] Elemente werden
-    } von „{ $from }“ nach „{ $to }“ komprimiert ({ $progress })...
+    } von „{ $from }“ nach „{ $to }“ komprimiert ({ $progress }) ...
 compressed =
     { $items } { $items ->
         [one] Element wurde
@@ -231,7 +231,7 @@ copying =
     { $items } { $items ->
         [one] Element wird
        *[other] Elemente werden
-    } von „{ $from }“ nach „{ $to }“ kopiert ({ $progress })...
+    } von „{ $from }“ nach „{ $to }“ kopiert ({ $progress }) ...
 copied =
     { $items } { $items ->
         [one] Element wurde
@@ -241,19 +241,19 @@ deleting =
     { $items } { $items ->
         [one] Element wird
        *[other] Elemente werden
-    } aus dem { trash } gelöscht ({ $progress })...
+    } aus dem { trash } gelöscht ({ $progress }) ...
 deleted =
     { $items } { $items ->
         [one] Element wurde
        *[other] Elemente wurden
     } aus dem { trash } gelöscht
-emptying-trash = { trash } wird geleert ({ $progress })...
+emptying-trash = { trash } wird geleert ({ $progress }) ...
 emptied-trash = { trash } geleert
 extracting =
     { $items } { $items ->
         [one] Element wird
        *[other] Elemente werden
-    } von „{ $from }“ nach „{ $to }“ entpackt ({ $progress })...
+    } von „{ $from }“ nach „{ $to }“ entpackt ({ $progress }) ...
 extracted =
     { $items } { $items ->
         [one] Element wurde
@@ -267,7 +267,7 @@ moving =
     { $items } { $items ->
         [one] Element wird
        *[other] Elemente werden
-    } von „{ $from }“ nach „{ $to }“ verschoben ({ $progress })...
+    } von „{ $from }“ nach „{ $to }“ verschoben ({ $progress }) ...
 moved =
     { $items } { $items ->
         [one] Element wurde
@@ -289,7 +289,7 @@ restoring =
     { $items } { $items ->
         [one] Element wird
        *[other] Elemente werden
-    } aus dem { trash } wiederhergestellt ({ $progress })...
+    } aus dem { trash } wiederhergestellt ({ $progress }) ...
 restored =
     { $items } { $items ->
         [one] Element wurde
@@ -299,7 +299,7 @@ unknown-folder = unbekannter Ordner
 
 ## Öffnen mit
 
-menu-open-with = Öffnen mit...
+menu-open-with = Öffnen mit ...
 default-app = { $name } (Standard)
 
 ## Details anzeigen
@@ -311,7 +311,7 @@ item-size = Größe: { $size }
 item-created = Erstellt: { $created }
 item-modified = Geändert: { $modified }
 item-accessed = Zugegriffen: { $accessed }
-calculating = Wird berechnet...
+calculating = Wird berechnet ...
 
 ## Einstellungen
 
@@ -333,11 +333,11 @@ type-to-search-recursive = Durchsucht den aktuellen Ordner und alle Unterordner
 type-to-search-enter-path = Gib den Pfad zum Verzeichnis oder zur Datei ein
 # Kontextmenü
 add-to-sidebar = Zur Seitenleiste hinzufügen
-compress = Komprimieren...
+compress = Komprimieren ...
 delete-permanently = Endgültig löschen
 extract-here = Entpacken
-new-file = Neue Datei...
-new-folder = Neuer Ordner...
+new-file = Neue Datei ...
+new-folder = Neuer Ordner ...
 open-in-terminal = Im Terminal öffnen
 move-to-trash = In den Papierkorb verschieben
 restore-from-trash = Aus dem Papierkorb wiederherstellen
@@ -349,9 +349,9 @@ sort-by-trashed = Nach Löschzeitpunkt sortieren
 
 ## Desktop
 
-change-wallpaper = Hintergrundbild ändern...
-desktop-appearance = Desktop-Aussehen...
-display-settings = Anzeigeeinstellungen...
+change-wallpaper = Hintergrundbild ändern ...
+desktop-appearance = Desktop-Aussehen ...
+display-settings = Anzeigeeinstellungen ...
 
 # Menü
 
@@ -362,7 +362,7 @@ file = Datei
 new-tab = Neuer Tab
 new-window = Neues Fenster
 reload-folder = Ordner neu laden
-rename = Umbenennen...
+rename = Umbenennen ...
 close-tab = Tab schließen
 quit = Beenden
 
@@ -385,8 +385,8 @@ list-view = Listenansicht
 show-hidden-files = Versteckte Dateien anzeigen
 list-directories-first = Verzeichnisse zuerst auflisten
 gallery-preview = Galerie-Vorschau
-menu-settings = Einstellungen...
-menu-about = Über COSMIC Dateien...
+menu-settings = Einstellungen ...
+menu-about = Über COSMIC Dateien ...
 
 ## Sortieren
 
@@ -418,7 +418,7 @@ type-to-search-select = Wählt die erste übereinstimmende Datei oder den ersten
 pasted-image = Eingefügtes Bild
 pasted-text = Eingefügter Text
 pasted-video = Eingefügtes Video
-copy-to = Kopieren nach...
+copy-to = Kopieren nach ...
 show-recents = Ordner zuletzt verwendeter Elemente in der Seitenleiste
 clear-recents-history = Verlauf zuletzt verwendeter Elemente leeren
 comment = Dateimanager für den COSMIC Desktop
@@ -426,7 +426,7 @@ keywords = Ordner;Manager;
 move-to-button-label = Verschieben
 move-to-title = Verschiebeziel auswählen
 remove-from-recents = Aus den zuletzt verwendeten Elementen entfernen
-move-to = Verschieben nach...
+move-to = Verschieben nach ...
 copy-path = Pfad kopieren
 mixed = Gemischt
 context-action = Kontextaktion
@@ -438,3 +438,6 @@ context-action-confirm-warning =
     }.
 run = Ausführen
 rename-confirm = Umbenennen
+checksum = { $kind } Prüfsumme
+calculate = Berechnen
+error = Fehler
