@@ -164,6 +164,7 @@ pub enum Action {
     NewFile,
     NewFolder,
     Open,
+    OpenContextMenu,
     OpenInNewTab,
     OpenInNewWindow,
     OpenItemLocation,
@@ -239,6 +240,9 @@ impl Action {
             Self::NewFile => Message::NewItem(entity_opt, false),
             Self::NewFolder => Message::NewItem(entity_opt, true),
             Self::Open => Message::TabMessage(entity_opt, tab::Message::Open(None)),
+            Self::OpenContextMenu => {
+                Message::TabMessage(entity_opt, tab::Message::OpenContextMenuKeyboard)
+            }
             Self::OpenInNewTab => Message::OpenInNewTab(entity_opt),
             Self::OpenInNewWindow => Message::OpenInNewWindow(entity_opt),
             Self::OpenItemLocation => Message::OpenItemLocation(entity_opt),
