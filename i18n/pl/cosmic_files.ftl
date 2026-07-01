@@ -27,7 +27,7 @@ modified = Zmodyfikowano
 trashed-on = Wyrzucono do kosza
 size = Rozmiar
 # Progress footer
-details = Detale
+details = Szczegóły
 dismiss = Odrzuć wiadomość
 operations-running =
     { $running } bieżące { $running ->
@@ -390,7 +390,7 @@ new-window = Nowe okno
 reload-folder = Odśwież katalog
 rename = Zmień nazwę…
 close-tab = Zamknij kartę
-quit = Zamknij
+quit = Zakończ
 
 ## Edit
 
@@ -447,3 +447,6 @@ context-action-confirm-warning =
     }.
 run = Uruchom
 rename-confirm = Zmień nazwę
+checksum = { $kind } suma kontrolna
+calculate = Oblicz
+error = Błąd

@@ -386,7 +386,7 @@ new-window = Új ablak
 reload-folder = Mappa újratöltése
 rename = Átnevezés…
 close-tab = Lap bezárása
-quit = Kilépés
+quit = Leállítás
 
 ## Edit
 
@@ -446,3 +446,6 @@ context-action-confirm-warning =
     } fog lefutni.
 run = Futtatás
 rename-confirm = Átnevezés
+checksum = { $kind } ellenőrzőösszeg
+calculate = Számítás
+error = Hiba

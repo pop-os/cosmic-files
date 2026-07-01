@@ -188,7 +188,7 @@ settings = Параметры
 
 ### Appearance
 
-appearance = Оформление
+appearance = Внешний вид
 theme = Тема
 match-desktop = Как в системе
 dark = Тёмная
@@ -218,7 +218,7 @@ new-tab = Новая вкладка
 new-window = Новое окно
 rename = Переименовать…
 close-tab = Закрыть вкладку
-quit = Выйти
+quit = Завершить
 
 ## Edit
 
@@ -390,3 +390,6 @@ context-action-confirm-warning =
     }.
 run = Выполнить
 rename-confirm = Переименовать
+checksum = Хеш-сумма { $kind }
+calculate = Вычислить
+error = Ошибка

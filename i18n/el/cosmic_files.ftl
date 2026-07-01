@@ -328,3 +328,6 @@ context-action-confirm-warning =
        *[other] στοιχεία
     }.
 rename-confirm = Μετονομασία
+checksum = Άθροισμα ελέγχου { $kind }
+calculate = Υπολογισμός
+error = Σφάλμα

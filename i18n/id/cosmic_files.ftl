@@ -249,7 +249,7 @@ settings = Pengaturan
 single-click = Klik sekali untuk membuka
 appearance = Tampilan
 theme = Tema
-match-desktop = Cocokkan desktop
+match-desktop = Cocok desktop
 dark = Gelap
 light = Terang
 type-to-search = Ketik untuk mencari
@@ -328,3 +328,6 @@ context-action-confirm-warning =
        *[other] item
     }.
 rename-confirm = Ganti nama
+checksum = { $kind } checksum
+calculate = Hitung
+error = Galat

@@ -446,3 +446,6 @@ context-action-confirm-warning =
 run = Exécuter
 context-action = Action contextuelle
 rename-confirm = Renommer
+calculate = Calculer
+error = Erreur
+checksum = { $kind } Somme de contrôle
