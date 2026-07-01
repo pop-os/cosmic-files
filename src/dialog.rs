@@ -40,7 +40,7 @@ use crate::localize::LANGUAGE_SORTER;
 use crate::mounter::{MOUNTERS, MounterItem, MounterItems, MounterKey, MounterMessage};
 use crate::tab::{self, ItemMetadata, Location, SearchLocation, Tab};
 use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
-use crate::{fl, home_dir, menu};
+use crate::{fl, home_dir, menu, mime_icon};
 
 #[derive(Clone, Debug)]
 pub struct DialogMessage(cosmic::Action<Message>);
@@ -1919,11 +1919,13 @@ impl Application for App {
                         items.retain(|item| {
                             // Directories are always shown
                             item.metadata.is_dir()
+                                // Check for mime type match (first because it is faster)
                                     || mimes.iter().any(|filter_mime| {
                                         if filter_mime.subtype() == mime::STAR {
                                             filter_mime.type_() == item.mime.type_()
                                         } else {
                                             *filter_mime == item.mime
+                                                || mime_icon::is_mime_subclass_of(&item.mime, filter_mime)
                                         }
                                     })
                                 // Check for glob match (last because it is slower)
