@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::app::{self, Core, Task, context_drawer};
+use cosmic::core::Auto;
 use cosmic::cosmic_config::{self, ConfigSet};
 use cosmic::iced::clipboard::dnd::DndAction;
 use cosmic::iced::core::SmolStr;
@@ -27,7 +28,7 @@ use cosmic::iced::{
         IcedMargin, IcedOutput, SctkLayerSurfaceSettings,
     },
     platform_specific::shell::wayland::commands::layer_surface::{
-        Anchor, KeyboardInteractivity, Layer, destroy_layer_surface, get_layer_surface,
+        Anchor, KeyboardInteractivity, Layer, destroy_layer_surface,
     },
 };
 use cosmic::widget::about::About;
@@ -2405,6 +2406,9 @@ impl Application for App {
                 ),
             ]);
 
+        if matches!(flags.mode, Mode::Desktop) {
+            core.set_auto_blur(Auto::Window | Auto::Popup);
+        }
         let mut app = Self {
             core,
             about,
@@ -2521,9 +2525,17 @@ impl Application for App {
         .on_middle_press(|entity| {
             cosmic::Action::App(Message::NavMenuAction(NavMenuAction::OpenInNewTab(entity)))
         })
-        .context_menu(self.nav_context_menu(self.nav_bar_context_id))
-        .close_icon(icon::from_name("media-eject-symbolic").size(16).icon())
-        .into_container();
+        .context_menu(self.nav_context_menu())
+        .close_icon(icon::from_name("media-eject-symbolic").size(16).icon());
+
+        #[cfg(feature = "wayland")]
+        {
+            nav = nav
+                .window_id_maybe(self.core().main_window_id())
+                .on_surface_action(|m| cosmic::Action::Cosmic(cosmic::app::Action::Surface(m)))
+        }
+
+        let mut nav = nav.into_container();
 
         if !self.core.is_condensed() {
             nav = nav.max_width(280);
@@ -2534,97 +2546,100 @@ impl Application for App {
         ))
     }
 
-    fn nav_context_menu(
-        &self,
-        entity: widget::nav_bar::Id,
-    ) -> Option<Vec<widget::menu::Tree<cosmic::Action<Self::Message>>>> {
-        let favorite_index_opt = self.nav_model.data::<FavoriteIndex>(entity);
-        let location_opt = self.nav_model.data::<Location>(entity);
+    fn nav_context_menu(&self) -> Option<Vec<widget::menu::Tree<cosmic::Action<Self::Message>>>> {
+        let items = self.nav_model.iter().map(|entity| {
+            let favorite_index_opt = self.nav_model.data::<FavoriteIndex>(entity);
+            let location_opt = self.nav_model.data::<Location>(entity);
 
-        let mut items = Vec::with_capacity(7);
+            let mut items: Vec<widget::menu::Item<NavMenuAction, String>> = Vec::with_capacity(7);
 
-        if location_opt
-            .and_then(Location::path_opt)
-            .is_some_and(|x| x.is_file())
-        {
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("open"),
-                None,
-                NavMenuAction::Open(entity),
-            ));
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("menu-open-with"),
-                None,
-                NavMenuAction::OpenWith(entity),
-            ));
-        } else {
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("open-in-new-tab"),
-                None,
-                NavMenuAction::OpenInNewTab(entity),
-            ));
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("open-in-new-window"),
-                None,
-                NavMenuAction::OpenInNewWindow(entity),
-            ));
-        }
-        if let Some(path) = location_opt.and_then(Location::path_opt) {
-            let selected_dir = usize::from(path.is_dir());
-            let action_items: Vec<_> = self
-                .config
-                .context_actions
-                .iter()
-                .enumerate()
-                .filter(|(_, action)| action.matches_selection(1, selected_dir))
-                .map(|(i, action)| {
-                    cosmic::widget::menu::Item::Button(
-                        action.name.clone(),
-                        None,
-                        NavMenuAction::RunContextAction(entity, i),
-                    )
-                })
-                .collect();
-
-            if !action_items.is_empty() {
-                items.push(cosmic::widget::menu::Item::Divider);
-                items.extend(action_items);
+            if location_opt
+                .and_then(Location::path_opt)
+                .is_some_and(|x| x.is_file())
+            {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("open"),
+                    None,
+                    NavMenuAction::Open(entity),
+                ));
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("menu-open-with"),
+                    None,
+                    NavMenuAction::OpenWith(entity),
+                ));
+            } else {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("open-in-new-tab"),
+                    None,
+                    NavMenuAction::OpenInNewTab(entity),
+                ));
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("open-in-new-window"),
+                    None,
+                    NavMenuAction::OpenInNewWindow(entity),
+                ));
             }
-        }
-        items.push(cosmic::widget::menu::Item::Divider);
-        if matches!(location_opt, Some(Location::Path(..))) {
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("show-details"),
-                None,
-                NavMenuAction::Preview(entity),
-            ));
-        }
-        items.push(cosmic::widget::menu::Item::Divider);
-        if favorite_index_opt.is_some() {
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("remove-from-sidebar"),
-                None,
-                NavMenuAction::RemoveFromSidebar(entity),
-            ));
-        }
+            if let Some(path) = location_opt.and_then(Location::path_opt) {
+                let selected_dir = usize::from(path.is_dir());
+                let action_items: Vec<_> = self
+                    .config
+                    .context_actions
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, action)| action.matches_selection(1, selected_dir))
+                    .map(|(i, action)| {
+                        cosmic::widget::menu::Item::Button(
+                            action.name.clone(),
+                            None,
+                            NavMenuAction::RunContextAction(entity, i),
+                        )
+                    })
+                    .collect();
 
-        if matches!(location_opt, Some(Location::Recents)) && tab::has_recents() {
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("clear-recents-history"),
-                None,
-                NavMenuAction::ClearRecents,
-            ));
-        }
+                if !action_items.is_empty() {
+                    items.push(cosmic::widget::menu::Item::Divider);
+                    items.extend(action_items);
+                }
+            }
+            items.push(cosmic::widget::menu::Item::Divider);
+            if matches!(location_opt, Some(Location::Path(..))) {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("show-details"),
+                    None,
+                    NavMenuAction::Preview(entity),
+                ));
+            }
+            items.push(cosmic::widget::menu::Item::Divider);
+            if favorite_index_opt.is_some() {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("remove-from-sidebar"),
+                    None,
+                    NavMenuAction::RemoveFromSidebar(entity),
+                ));
+            }
 
-        if matches!(location_opt, Some(Location::Trash)) && !Trash::is_empty() {
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("empty-trash"),
-                None,
-                NavMenuAction::EmptyTrash,
-            ));
-        }
+            if matches!(location_opt, Some(Location::Recents)) && tab::has_recents() {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("clear-recents-history"),
+                    None,
+                    NavMenuAction::ClearRecents,
+                ));
+            }
 
-        Some(cosmic::widget::menu::items(&HashMap::new(), items))
+            if matches!(location_opt, Some(Location::Trash)) && !Trash::is_empty() {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("empty-trash"),
+                    None,
+                    NavMenuAction::EmptyTrash,
+                ));
+            }
+            items
+        });
+
+        Some(cosmic::widget::menu::nav_context(
+            &HashMap::new(),
+            items.collect(),
+        ))
     }
 
     fn nav_model(&self) -> Option<&segmented_button::SingleSelectModel> {
@@ -4481,9 +4496,10 @@ impl Application for App {
                                     use cctk::wayland_protocols::xdg::shell::client::xdg_positioner::{
                                         Anchor, Gravity,
                                     };
-                                    use cosmic::iced::runtime::platform_specific::wayland::popup::{
+                                    use cosmic::{iced::runtime::platform_specific::wayland::popup::{
                                         SctkPopupSettings, SctkPositioner,
-                                    };
+                                    }, widget::menu::StyleSheet as _};
+
                                     let window_id = WindowId::unique();
                                     self.windows.insert(
                                         window_id,
@@ -4493,9 +4509,24 @@ impl Application for App {
                                         )),
                                     );
                                     commands.push(self.update(Message::CheckClipboard));
+                                    let t = self.core.system_theme();
+                                    let styling = t.appearance(
+                                        &cosmic::theme::menu_bar::MenuBarStyle::Default,
+                                        false,
+                                    );
+                                    let rad = styling.menu_border_radius;
+
                                     commands.push(self.update(Message::Surface(
                                         cosmic::surface::action::app_popup(
-                                            move |app: &mut Self| -> SctkPopupSettings {
+                                        move |_| cosmic::surface::action::LiveSettings {
+                                                    corners: Some(iced::runtime::platform_specific::wayland::CornerRadius {
+                                                        top_left: rad[0] as u32,
+                                                        top_right: rad[1] as u32,
+                                                        bottom_left: rad[2] as u32,
+                                                        bottom_right: rad[3] as u32,
+                                                    }),
+                                                    ..Default::default()
+                                                },                                            move |app: &mut Self| -> SctkPopupSettings {
                                                 let anchor_rect = Rectangle {
                                                     x: point.x as i32,
                                                     y: point.y as i32,
@@ -5264,24 +5295,37 @@ impl Application for App {
                             .insert(surface_id, Window::new(WindowKind::Desktop(entity)));
                         return Task::batch([
                             command,
-                            get_layer_surface(SctkLayerSurfaceSettings {
-                                id: surface_id,
-                                layer: Layer::Bottom,
-                                keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                                input_zone: None,
-                                anchor: Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT,
-                                output: IcedOutput::Output(output),
-                                namespace: "cosmic-files-applet".into(),
-                                size: Some((None, None)),
-                                margin: IcedMargin {
-                                    top: 0,
-                                    bottom: 0,
-                                    left: 0,
-                                    right: 0,
-                                },
-                                exclusive_zone: 0,
-                                size_limits: Limits::NONE.min_width(1.0).min_height(1.0),
-                            }),
+                            cosmic::task::message(cosmic::action::cosmic(
+                                cosmic::app::Action::Surface(
+                                    cosmic::surface::action::app_layer_shell(
+                                        |_| Default::default(),
+                                        move |_: &mut App| SctkLayerSurfaceSettings {
+                                            id: surface_id,
+                                            layer: Layer::Bottom,
+                                            keyboard_interactivity: KeyboardInteractivity::OnDemand,
+                                            input_zone: None,
+                                            anchor: Anchor::TOP
+                                                | Anchor::BOTTOM
+                                                | Anchor::LEFT
+                                                | Anchor::RIGHT,
+                                            output: IcedOutput::Output(output.clone()),
+                                            namespace: "cosmic-files-applet".into(),
+                                            size: Some((None, None)),
+                                            margin: IcedMargin {
+                                                top: 0,
+                                                bottom: 0,
+                                                left: 0,
+                                                right: 0,
+                                            },
+                                            exclusive_zone: 0,
+                                            size_limits: Limits::NONE
+                                                .min_width(1.0)
+                                                .min_height(1.0),
+                                        },
+                                        None,
+                                    ),
+                                ),
+                            )),
                             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
                             overlap_notify(surface_id, true),
                         ]);
@@ -6451,7 +6495,6 @@ impl Application for App {
                         })
                         .drag_id(self.tab_drag_id),
                 )
-                .class(style::Container::Background)
                 .width(Length::Fill)
                 .padding([0, space_s]),
             );
