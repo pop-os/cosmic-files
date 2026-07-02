@@ -28,6 +28,7 @@ name = Name
 modified = Modified
 trashed-on = Trashed
 size = Size
+filetype = Type
 
 # Progress footer
 details = Details
