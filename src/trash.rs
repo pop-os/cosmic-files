@@ -105,7 +105,15 @@ pub fn original_path_for_trash_child(p: &Path) -> Option<PathBuf> {
 
 /// Check whether a path is inside any trash `files/` directory.
 pub fn is_trash_path(path: &Path) -> bool {
-    path.ancestors().any(|a| a.ends_with("files"))
+    path.ancestors().any(is_trash_files_dir)
+}
+
+/// Whether `dir` is the `files/` directory of an XDG trash bin: it is named
+/// `files` and has the sibling `info/` directory that the FreeDesktop trash
+/// specification requires. This distinguishes a real trash bin from an ordinary
+/// user folder that merely happens to be named `files`.
+fn is_trash_files_dir(dir: &Path) -> bool {
+    dir.ends_with("files") && dir.parent().is_some_and(|bin| bin.join("info").is_dir())
 }
 
 pub struct Trash;
@@ -202,3 +210,45 @@ impl TrashExt for Trash {
     )
 )))]
 impl TrashExt for Trash {}
+
+#[cfg(test)]
+mod tests {
+    use super::is_trash_path;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn plain_folder_named_files_is_not_trash() {
+        let tmp = tempdir().unwrap();
+        let files = tmp.path().join("files");
+        let child = files.join("child.txt");
+        fs::create_dir(&files).unwrap();
+        fs::write(&child, b"").unwrap();
+
+        assert!(!is_trash_path(&files));
+        assert!(!is_trash_path(&child));
+    }
+
+    #[test]
+    fn trash_files_dir_with_sibling_info_is_trash() {
+        let tmp = tempdir().unwrap();
+        let bin = tmp.path().join("Trash");
+        let files = bin.join("files");
+        fs::create_dir_all(&files).unwrap();
+        fs::create_dir_all(bin.join("info")).unwrap();
+
+        assert!(is_trash_path(&files));
+        assert!(is_trash_path(&files.join("deleted.txt")));
+        assert!(is_trash_path(&files.join("dir/nested.txt")));
+    }
+
+    #[test]
+    fn files_dir_without_info_dir_is_not_trash() {
+        let tmp = tempdir().unwrap();
+        let files = tmp.path().join("files");
+        fs::create_dir(&files).unwrap();
+        fs::write(tmp.path().join("info"), b"").unwrap();
+
+        assert!(!is_trash_path(&files));
+    }
+}
