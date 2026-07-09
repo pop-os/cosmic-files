@@ -70,6 +70,11 @@ pub enum Favorite {
         name: String,
         path: PathBuf,
     },
+    /// A path with a custom name chosen by the user
+    Named {
+        path: PathBuf,
+        name: String,
+    },
 }
 
 impl Favorite {
@@ -98,6 +103,38 @@ impl Favorite {
             Self::Videos => dirs::video_dir(),
             Self::Path(path) => Some(path.clone()),
             Self::Network { path, .. } => Some(path.clone()),
+            Self::Named { path, .. } => Some(path.clone()),
+        }
+    }
+
+    /// Name shown in the sidebar, or `None` if the path has no usable file name
+    pub fn display_name(&self) -> Option<String> {
+        match self {
+            Self::Home => Some(crate::fl!("home")),
+            Self::Named { name, .. } | Self::Network { name, .. } => Some(name.clone()),
+            _ => self
+                .path_opt()?
+                .file_name()
+                .and_then(|x| x.to_str())
+                .map(ToString::to_string),
+        }
+    }
+
+    /// Return this favorite renamed with a custom name chosen by the user
+    pub fn with_name(&self, name: &str) -> Self {
+        match self {
+            Self::Network { uri, path, .. } => Self::Network {
+                uri: uri.clone(),
+                name: name.to_string(),
+                path: path.clone(),
+            },
+            other => match other.path_opt() {
+                Some(path) => Self::Named {
+                    path,
+                    name: name.to_string(),
+                },
+                None => other.clone(),
+            },
         }
     }
 }
@@ -384,4 +421,67 @@ pub const TIME_CONFIG_ID: &str = "com.system76.CosmicAppletTime";
 #[version = 1]
 pub struct TimeConfig {
     pub military_time: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn favorite_with_name_converts_path_to_named() {
+        let favorite = Favorite::Path(PathBuf::from("/some/dir"));
+        assert_eq!(
+            favorite.with_name("Custom"),
+            Favorite::Named {
+                path: PathBuf::from("/some/dir"),
+                name: "Custom".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn favorite_with_name_updates_network_in_place() {
+        let favorite = Favorite::Network {
+            uri: "sftp://example.com/".to_string(),
+            name: "example.com".to_string(),
+            path: PathBuf::from("/run/mount/example"),
+        };
+        assert_eq!(
+            favorite.with_name("Custom"),
+            Favorite::Network {
+                uri: "sftp://example.com/".to_string(),
+                name: "Custom".to_string(),
+                path: PathBuf::from("/run/mount/example"),
+            }
+        );
+    }
+
+    #[test]
+    fn favorite_with_name_converts_special_folder_to_named() {
+        let home = dirs::home_dir().unwrap();
+        assert_eq!(
+            Favorite::Home.with_name("Custom"),
+            Favorite::Named {
+                path: home,
+                name: "Custom".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn favorite_display_name() {
+        assert_eq!(
+            Favorite::Path(PathBuf::from("/some/dir")).display_name(),
+            Some("dir".to_string())
+        );
+        assert_eq!(Favorite::Path(PathBuf::from("/")).display_name(), None);
+        assert_eq!(
+            Favorite::Named {
+                path: PathBuf::from("/some/dir"),
+                name: "Custom".to_string(),
+            }
+            .display_name(),
+            Some("Custom".to_string())
+        );
+    }
 }

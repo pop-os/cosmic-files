@@ -109,6 +109,11 @@ permanently-delete-warning = Deseja realmente excluir permanentemente { $target 
 rename-file = Renomear arquivo
 rename-folder = Renomear pasta
 
+## Rename Favorite Dialog
+
+rename-favorite = Renomear item da barra lateral
+favorite-name = Nome do item
+
 ## Replace Dialog
 
 replace = Substituir

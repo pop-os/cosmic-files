@@ -321,6 +321,7 @@ pub enum NavMenuAction {
     Preview(segmented_button::Entity),
     RunContextAction(segmented_button::Entity, usize),
     RemoveFromSidebar(segmented_button::Entity),
+    RenameFavorite(segmented_button::Entity),
 }
 
 impl MenuAction for NavMenuAction {
@@ -574,6 +575,10 @@ pub enum DialogPage {
     },
     DeleteTrash {
         items: Vec<TrashItem>,
+    },
+    RenameFavorite {
+        entity: Entity,
+        name: String,
     },
     RenameItem {
         from: PathBuf,
@@ -1769,15 +1774,9 @@ impl App {
 
         for (favorite_i, favorite) in self.config.favorites.iter().enumerate() {
             if let Some(path) = favorite.path_opt() {
-                let name = if matches!(favorite, Favorite::Home) {
-                    fl!("home")
-                } else if let Favorite::Network { name, .. } = favorite {
-                    name.clone()
-                } else if let Some(file_name) = path.file_name().and_then(|x| x.to_str()) {
-                    file_name.to_string()
-                } else {
-                    fl!("filesystem")
-                };
+                let name = favorite
+                    .display_name()
+                    .unwrap_or_else(|| fl!("filesystem"));
                 nav_model = nav_model.insert(move |b| {
                     b.text(name.clone())
                         .icon(
@@ -2290,15 +2289,33 @@ impl App {
             .favorites
             .iter()
             .map(|favorite| {
-                if let Favorite::Path(path) = favorite {
-                    for (from, to) in path_changes.iter().map(|(f, t)| (f.as_ref(), t.as_ref())) {
-                        if path.starts_with(from)
-                            && let Ok(relative) = path.strip_prefix(from)
+                match favorite {
+                    Favorite::Path(path) => {
+                        for (from, to) in path_changes.iter().map(|(f, t)| (f.as_ref(), t.as_ref()))
                         {
-                            favorites_changed = true;
-                            return Favorite::from_path(to.join(relative));
+                            if path.starts_with(from)
+                                && let Ok(relative) = path.strip_prefix(from)
+                            {
+                                favorites_changed = true;
+                                return Favorite::from_path(to.join(relative));
+                            }
                         }
                     }
+                    Favorite::Named { path, name } => {
+                        for (from, to) in path_changes.iter().map(|(f, t)| (f.as_ref(), t.as_ref()))
+                        {
+                            if path.starts_with(from)
+                                && let Ok(relative) = path.strip_prefix(from)
+                            {
+                                favorites_changed = true;
+                                return Favorite::Named {
+                                    path: to.join(relative),
+                                    name: name.clone(),
+                                };
+                            }
+                        }
+                    }
+                    _ => {}
                 }
                 favorite.clone()
             })
@@ -2614,6 +2631,11 @@ impl Application for App {
             items.push(cosmic::widget::menu::Item::Divider);
             if favorite_index_opt.is_some() {
                 items.push(cosmic::widget::menu::Item::Button(
+                    fl!("rename-confirm"),
+                    None,
+                    NavMenuAction::RenameFavorite(entity),
+                ));
+                items.push(cosmic::widget::menu::Item::Button(
                     fl!("remove-from-sidebar"),
                     None,
                     NavMenuAction::RemoveFromSidebar(entity),
@@ -2904,7 +2926,8 @@ impl Application for App {
                     } else {
                         Favorite::from_path(path)
                     };
-                    if !favorites.contains(&favorite) {
+                    let favorite_path = favorite.path_opt();
+                    if !favorites.iter().any(|f| f.path_opt() == favorite_path) {
                         favorites.push(favorite);
                     }
                 }
@@ -3261,6 +3284,18 @@ impl Application for App {
                         }
                         DialogPage::DeleteTrash { items } => {
                             tasks.push(self.operation(Operation::DeleteTrash { items }));
+                        }
+                        DialogPage::RenameFavorite { entity, name } => {
+                            if let Some(FavoriteIndex(favorite_i)) =
+                                self.nav_model.data::<FavoriteIndex>(entity)
+                            {
+                                let mut favorites = self.config.favorites.clone();
+                                if let Some(favorite) = favorites.get_mut(*favorite_i) {
+                                    *favorite = favorite.with_name(name.trim());
+                                    config_set!(favorites, favorites);
+                                    tasks.push(self.update_config());
+                                }
+                            }
                         }
                         DialogPage::RenameItem {
                             from, parent, name, ..
@@ -4487,7 +4522,8 @@ impl Application for App {
                         tab::Command::AddToSidebar(path) => {
                             let mut favorites = self.config.favorites.clone();
                             let favorite = Favorite::from_path(path);
-                            if !favorites.contains(&favorite) {
+                            let favorite_path = favorite.path_opt();
+                            if !favorites.iter().any(|f| f.path_opt() == favorite_path) {
                                 favorites.push(favorite);
                             }
                             config_set!(favorites, favorites);
@@ -5269,6 +5305,26 @@ impl Application for App {
                         favorites.remove(*favorite_i);
                         config_set!(favorites, favorites);
                         return self.update_config();
+                    }
+                }
+
+                NavMenuAction::RenameFavorite(entity) => {
+                    if let Some(favorite) = self
+                        .nav_model
+                        .data::<FavoriteIndex>(entity)
+                        .and_then(|FavoriteIndex(favorite_i)| {
+                            self.config.favorites.get(*favorite_i)
+                        })
+                    {
+                        let name = favorite
+                            .display_name()
+                            .unwrap_or_else(|| fl!("filesystem"));
+                        return Task::batch([
+                            self.dialog_pages
+                                .push_back(DialogPage::RenameFavorite { entity, name }),
+                            widget::text_input::focus(self.dialog_text_input.clone()),
+                            widget::text_input::select_all(self.dialog_text_input.clone()),
+                        ]);
                     }
                 }
             },
@@ -6163,6 +6219,40 @@ impl Application for App {
                         "permanently-delete-warning",
                         target = target
                     )))
+            }
+            DialogPage::RenameFavorite { entity, name } => {
+                let entity = *entity;
+                let complete_maybe = if name.trim().is_empty() {
+                    None
+                } else {
+                    Some(Message::DialogComplete)
+                };
+
+                widget::dialog()
+                    .title(fl!("rename-favorite"))
+                    .primary_action(
+                        widget::button::suggested(fl!("rename-confirm"))
+                            .on_press_maybe(complete_maybe.clone()),
+                    )
+                    .secondary_action(
+                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                    )
+                    .control(
+                        widget::column::with_children([
+                            widget::text::body(fl!("favorite-name")).into(),
+                            widget::text_input("", name.as_str())
+                                .id(self.dialog_text_input.clone())
+                                .on_input(move |name| {
+                                    Message::DialogUpdate(DialogPage::RenameFavorite {
+                                        entity,
+                                        name,
+                                    })
+                                })
+                                .on_submit_maybe(complete_maybe.map(|maybe| move |_| maybe.clone()))
+                                .into(),
+                        ])
+                        .spacing(space_xxs),
+                    )
             }
             DialogPage::RenameItem {
                 from,
