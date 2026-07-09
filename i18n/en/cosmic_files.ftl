@@ -118,6 +118,10 @@ rename-file = Rename file
 rename-folder = Rename folder
 rename-confirm = Rename
 
+## Rename Favorite Dialog
+rename-favorite = Rename sidebar item
+favorite-name = Item name
+
 ## Replace Dialog
 replace = Replace
 replace-title = "{$filename}" already exists in this location
