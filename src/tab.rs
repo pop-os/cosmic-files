@@ -1104,6 +1104,7 @@ pub fn scan_search<F: Fn(SearchItem) -> bool + Sync>(
     search_location: &SearchLocation,
     term: &str,
     show_hidden: bool,
+    filter: SearchFilter,
     callback: F,
 ) {
     if term.is_empty() {
@@ -1135,11 +1136,17 @@ pub fn scan_search<F: Fn(SearchItem) -> bool + Sync>(
             return;
         }
     };
+    let content_regex = regex::RegexBuilder::new(&regex::escape(term))
+        .case_insensitive(true)
+        .build()
+        .expect("an escaped search term is always a valid regular expression");
+
     match search_location {
         SearchLocation::Path(tab_path) => {
             ignore::WalkBuilder::new(tab_path)
                 .standard_filters(false)
                 .hidden(!show_hidden)
+                .max_depth((!filter.recursive).then_some(1))
                 //TODO: only use this on supported targets
                 .same_file_system(true)
                 .build_parallel()
@@ -1155,21 +1162,27 @@ pub fn scan_search<F: Fn(SearchItem) -> bool + Sync>(
                             return ignore::WalkState::Skip;
                         };
 
-                        if regex.is_match(file_name) {
-                            let path = entry.path();
+                        let path = entry.path();
+                        let metadata = match entry.metadata() {
+                            Ok(ok) => ok,
+                            Err(err) => {
+                                log::warn!(
+                                    "failed to read metadata for entry at {}: {}",
+                                    path.display(),
+                                    err
+                                );
+                                return ignore::WalkState::Continue;
+                            }
+                        };
 
-                            let metadata = match entry.metadata() {
-                                Ok(ok) => ok,
-                                Err(err) => {
-                                    log::warn!(
-                                        "failed to read metadata for entry at {}: {}",
-                                        path.display(),
-                                        err
-                                    );
-                                    return ignore::WalkState::Continue;
-                                }
-                            };
-
+                        if matches_search_filter(
+                            path,
+                            file_name,
+                            &metadata,
+                            &regex,
+                            &content_regex,
+                            filter,
+                        ) {
                             if !callback(SearchItem::Path(
                                 path.to_path_buf(),
                                 file_name.to_string(),
@@ -1200,9 +1213,16 @@ pub fn scan_search<F: Fn(SearchItem) -> bool + Sync>(
                     let file_name = path.file_name();
                     if let Some(file_name) = file_name {
                         let file_name = file_name.to_string_lossy();
-                        if regex.is_match(&file_name) {
-                            match path.metadata() {
-                                Ok(metadata) => {
+                        match path.metadata() {
+                            Ok(metadata) => {
+                                if matches_search_filter(
+                                    &path,
+                                    &file_name,
+                                    &metadata,
+                                    &regex,
+                                    &content_regex,
+                                    filter,
+                                ) {
                                     if !callback(SearchItem::Path(
                                         path.to_path_buf(),
                                         file_name.to_string(),
@@ -1211,15 +1231,15 @@ pub fn scan_search<F: Fn(SearchItem) -> bool + Sync>(
                                         break;
                                     }
                                 }
-                                Err(err) => {
-                                    log::warn!(
-                                        "failed to read metadata for entry at {}: {}",
-                                        path.display(),
-                                        err
-                                    );
-                                }
-                            };
-                        }
+                            }
+                            Err(err) => {
+                                log::warn!(
+                                    "failed to read metadata for entry at {}: {}",
+                                    path.display(),
+                                    err
+                                );
+                            }
+                        };
                     }
                 }
             }
@@ -1227,6 +1247,133 @@ pub fn scan_search<F: Fn(SearchItem) -> bool + Sync>(
         SearchLocation::Trash => {
             Trash::scan_search(callback, &regex);
         }
+    }
+}
+
+const SEARCH_CONTENT_MAX_BYTES: u64 = 4 * 1024 * 1024;
+
+fn matches_search_filter(
+    path: &Path,
+    file_name: &str,
+    metadata: &Metadata,
+    filename_regex: &regex::Regex,
+    content_regex: &regex::Regex,
+    filter: SearchFilter,
+) -> bool {
+    if let Some(date) = filter.date
+        && !matches_search_date(metadata, date)
+    {
+        return false;
+    }
+
+    let filename_matches = filename_regex.is_match(file_name);
+    let needs_mime = !filter.file_types.is_empty()
+        || (!filename_matches
+            && filter.text_matching == SearchTextMatching::ContentAndFilename
+            && metadata.is_file());
+    let mime = needs_mime.then(|| mime_for_path(path, Some(metadata), false));
+
+    if !filter.file_types.is_empty()
+        && !SearchFileType::ALL.into_iter().any(|file_type| {
+            filter.file_types.contains(file_type)
+                && matches_search_file_type(metadata, mime.as_ref().unwrap(), file_type)
+        })
+    {
+        return false;
+    }
+
+    if filename_matches {
+        return true;
+    }
+
+    filter.text_matching == SearchTextMatching::ContentAndFilename
+        && metadata.is_file()
+        && metadata.len() <= SEARCH_CONTENT_MAX_BYTES
+        && mime.as_ref().is_some_and(is_text_searchable)
+        && File::open(path)
+            .ok()
+            .and_then(|file| {
+                let mut contents = String::new();
+                file.take(SEARCH_CONTENT_MAX_BYTES + 1)
+                    .read_to_string(&mut contents)
+                    .ok()
+                    .map(|_| contents)
+            })
+            .is_some_and(|contents| content_regex.is_match(&contents))
+}
+
+fn matches_search_date(metadata: &Metadata, date: SearchDate) -> bool {
+    let Ok(modified) = metadata.modified() else {
+        return false;
+    };
+    let Ok(modified_zoned) = jiff::Zoned::try_from(modified) else {
+        return false;
+    };
+    let now = jiff::Zoned::now();
+
+    match date {
+        SearchDate::Today => modified_zoned.date() == now.date(),
+        SearchDate::Yesterday => now
+            .date()
+            .yesterday()
+            .is_ok_and(|yesterday| modified_zoned.date() == yesterday),
+        SearchDate::PastWeek => modified >= SystemTime::now() - Duration::from_secs(7 * 86_400),
+        SearchDate::PastMonth => modified >= SystemTime::now() - Duration::from_secs(30 * 86_400),
+        SearchDate::PastYear => modified >= SystemTime::now() - Duration::from_secs(365 * 86_400),
+    }
+}
+
+fn is_text_searchable(mime: &Mime) -> bool {
+    mime.type_() == mime::TEXT
+        || matches!(
+            mime.essence_str(),
+            "application/json" | "application/xml" | "application/x-yaml"
+        )
+}
+
+fn matches_search_file_type(metadata: &Metadata, mime: &Mime, file_type: SearchFileType) -> bool {
+    if file_type == SearchFileType::Folders {
+        return metadata.is_dir();
+    }
+    if metadata.is_dir() {
+        return false;
+    }
+
+    match file_type {
+        SearchFileType::Text => mime.type_() == mime::TEXT,
+        SearchFileType::Audio => mime.type_() == mime::AUDIO,
+        SearchFileType::Images => mime.type_() == mime::IMAGE,
+        SearchFileType::Pdf => *mime == "application/pdf",
+        SearchFileType::Videos => mime.type_() == mime::VIDEO,
+        SearchFileType::Documents => matches_office_type(mime, "x-office-document"),
+        SearchFileType::Spreadsheets => matches_office_type(mime, "x-office-spreadsheet"),
+        SearchFileType::Folders => false,
+    }
+}
+
+fn matches_office_type(mime: &Mime, generic_icon: &str) -> bool {
+    #[cfg(feature = "gvfs")]
+    if gio::content_type_get_generic_icon_name(mime.essence_str()).as_deref() == Some(generic_icon)
+    {
+        return true;
+    }
+
+    match generic_icon {
+        "x-office-document" => matches!(
+            mime.essence_str(),
+            "application/msword"
+                | "application/rtf"
+                | "application/vnd.oasis.opendocument.text"
+                | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ),
+        "x-office-spreadsheet" => matches!(
+            mime.essence_str(),
+            "application/vnd.ms-excel"
+                | "application/vnd.oasis.opendocument.spreadsheet"
+                | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                | "text/csv"
+        ),
+        _ => false,
     }
 }
 
@@ -1465,6 +1612,87 @@ pub enum SearchLocation {
     Trash,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct SearchFilter {
+    pub file_types: SearchFileTypes,
+    pub date: Option<SearchDate>,
+    pub text_matching: SearchTextMatching,
+    pub recursive: bool,
+}
+
+impl Default for SearchFilter {
+    fn default() -> Self {
+        Self {
+            file_types: SearchFileTypes::default(),
+            date: None,
+            text_matching: SearchTextMatching::default(),
+            recursive: true,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SearchFileType {
+    Text,
+    Audio,
+    Documents,
+    Folders,
+    Images,
+    Pdf,
+    Spreadsheets,
+    Videos,
+}
+
+impl SearchFileType {
+    const ALL: [Self; 8] = [
+        Self::Text,
+        Self::Audio,
+        Self::Documents,
+        Self::Folders,
+        Self::Images,
+        Self::Pdf,
+        Self::Spreadsheets,
+        Self::Videos,
+    ];
+
+    const fn bit(self) -> u16 {
+        1 << self as u16
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct SearchFileTypes(u16);
+
+impl SearchFileTypes {
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    pub const fn contains(self, file_type: SearchFileType) -> bool {
+        self.0 & file_type.bit() != 0
+    }
+
+    pub fn toggle(&mut self, file_type: SearchFileType) {
+        self.0 ^= file_type.bit();
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SearchDate {
+    Today,
+    Yesterday,
+    PastWeek,
+    PastMonth,
+    PastYear,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum SearchTextMatching {
+    #[default]
+    ContentAndFilename,
+    FilenameOnly,
+}
+
 impl std::fmt::Display for SearchLocation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -1497,7 +1725,7 @@ pub enum Location {
     Network(String, String, Option<PathBuf>),
     Path(PathBuf),
     Recents,
-    Search(SearchLocation, String, bool, Instant),
+    Search(SearchLocation, String, bool, SearchFilter, Instant),
     Trash,
 }
 
@@ -1584,10 +1812,11 @@ impl Location {
                 Self::Desktop(path, display.clone(), *desktop_config)
             }
             Self::Path(..) => Self::Path(path),
-            Self::Search(SearchLocation::Path(_), term, show_hidden, time) => Self::Search(
+            Self::Search(SearchLocation::Path(_), term, show_hidden, filter, time) => Self::Search(
                 SearchLocation::Path(path),
                 term.clone(),
                 *show_hidden,
+                *filter,
                 *time,
             ),
 
@@ -3743,11 +3972,14 @@ impl Tab {
                     self.date_time_formatter = date_time_formatter(self.config.military_time);
                     self.time_formatter = time_formatter(self.config.military_time);
                 }
-                if show_hidden_changed && let Location::Search(path, term, ..) = &self.location {
+                if show_hidden_changed
+                    && let Location::Search(path, term, _, filter, _) = &self.location
+                {
                     cd = Some(Location::Search(
                         path.clone(),
                         term.clone(),
                         self.config.show_hidden,
+                        *filter,
                         Instant::now(),
                     ));
                 }
@@ -7225,11 +7457,13 @@ impl Tab {
         }
 
         // Load search items incrementally
-        if let Location::Search(search_location, term, show_hidden, start) = &self.location {
+        if let Location::Search(search_location, term, show_hidden, filter, start) = &self.location
+        {
             let location = self.location.clone();
             let search_location = search_location.clone();
             let term = term.clone();
             let show_hidden = *show_hidden;
+            let filter = *filter;
             let start = *start;
             #[derive(Debug, Hash, Clone)]
             struct Wrapper {
@@ -7237,6 +7471,7 @@ impl Tab {
                 search_location: SearchLocation,
                 term: String,
                 show_hidden: bool,
+                filter: SearchFilter,
                 start: Instant,
             }
 
@@ -7246,6 +7481,7 @@ impl Tab {
                     search_location: search_location.clone(),
                     term: term.clone(),
                     show_hidden,
+                    filter,
                     start,
                 },
                 |wrapper| {
@@ -7258,6 +7494,7 @@ impl Tab {
                                 search_location,
                                 term,
                                 show_hidden,
+                                filter,
                                 start,
                             } = wrapper;
                             //TODO: optimal size?
@@ -7284,6 +7521,7 @@ impl Tab {
                                         &search_location,
                                         &term,
                                         show_hidden,
+                                        filter,
                                         move |search_item| -> bool {
                                             // Don't send if the result is too old
                                             if let Some(last_modified) =
@@ -7474,6 +7712,7 @@ fn text_editor_class(
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
+    use std::sync::{Arc, Mutex};
     use std::{fs, io};
 
     use cosmic::iced::mouse::ScrollDelta;
@@ -7485,13 +7724,113 @@ mod tests {
     use test_log::test;
 
     use super::{
-        ItemMetadata, ItemThumbnail, Location, Message, Tab, respond_to_scroll_direction, scan_path,
+        ItemMetadata, ItemThumbnail, Location, Message, SearchFileType, SearchFilter,
+        SearchLocation, SearchTextMatching, Tab, matches_search_filter,
+        respond_to_scroll_direction, scan_path, scan_search,
     };
     use crate::app::test_utils::{
         NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED, assert_eq_tab_path, empty_fs,
         eq_path_item, filter_dirs, read_dir_sorted, simple_fs, tab_click_new,
     };
     use crate::config::{IconSizes, TabConfig, ThumbCfg};
+
+    #[test]
+    fn search_content_matching_can_be_disabled() -> io::Result<()> {
+        let temp = TempDir::new()?;
+        let path = temp.path().join("notes.txt");
+        fs::write(&path, "A searchable needle inside the file")?;
+        let metadata = path.metadata()?;
+        let filename_regex = regex::Regex::new("^needle$").unwrap();
+        let content_regex = regex::RegexBuilder::new("needle")
+            .case_insensitive(true)
+            .build()
+            .unwrap();
+
+        assert!(matches_search_filter(
+            &path,
+            "notes.txt",
+            &metadata,
+            &filename_regex,
+            &content_regex,
+            SearchFilter::default(),
+        ));
+        assert!(!matches_search_filter(
+            &path,
+            "notes.txt",
+            &metadata,
+            &filename_regex,
+            &content_regex,
+            SearchFilter {
+                text_matching: SearchTextMatching::FilenameOnly,
+                ..SearchFilter::default()
+            },
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn non_recursive_search_skips_subfolders() -> io::Result<()> {
+        let temp = TempDir::new()?;
+        fs::write(temp.path().join("top.txt"), "top")?;
+        fs::create_dir(temp.path().join("nested"))?;
+        fs::write(temp.path().join("nested/deep.txt"), "deep")?;
+        let results = Arc::new(Mutex::new(Vec::new()));
+        let callback_results = results.clone();
+
+        scan_search(
+            &SearchLocation::Path(temp.path().to_path_buf()),
+            "*.txt",
+            true,
+            SearchFilter {
+                recursive: false,
+                ..SearchFilter::default()
+            },
+            move |item| {
+                if let super::SearchItem::Path(path, ..) = item {
+                    callback_results.lock().unwrap().push(path);
+                }
+                true
+            },
+        );
+
+        let results = results.lock().unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].file_name().unwrap(), "top.txt");
+        Ok(())
+    }
+
+    #[test]
+    fn search_accepts_any_selected_file_type() -> io::Result<()> {
+        let temp = TempDir::new()?;
+        let path = temp.path().join("notes.txt");
+        fs::write(&path, "notes")?;
+        let metadata = path.metadata()?;
+        let filename_regex = regex::Regex::new(".*").unwrap();
+        let content_regex = regex::Regex::new("notes").unwrap();
+        let mut filter = SearchFilter::default();
+        filter.file_types.toggle(SearchFileType::Images);
+
+        assert!(!matches_search_filter(
+            &path,
+            "notes.txt",
+            &metadata,
+            &filename_regex,
+            &content_regex,
+            filter,
+        ));
+
+        filter.file_types.toggle(SearchFileType::Text);
+        assert!(matches_search_filter(
+            &path,
+            "notes.txt",
+            &metadata,
+            &filename_regex,
+            &content_regex,
+            filter,
+        ));
+        Ok(())
+    }
 
     // Boilerplate for tab tests. Checks if simulated clicks selected items.
     fn tab_selects_item(

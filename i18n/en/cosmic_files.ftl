@@ -33,6 +33,29 @@ filetype-folder = Folder
 filetype-program = Program
 filetype-binary = Binary
 
+# Search filters
+search-current-folder = Search current folder
+search-scope = Search Scope
+search-subfolders = Search subfolders
+search-file-types = File Types
+search-type-text = Text
+search-type-audio = Audio
+search-type-documents = Documents
+search-type-folders = Folders
+search-type-images = Images
+search-type-pdf = PDF
+search-type-spreadsheets = Spreadsheets
+search-type-videos = Videos
+search-date-modified = Date Modified
+search-date-today = Today
+search-date-yesterday = Yesterday
+search-date-past-week = Past Week
+search-date-past-month = Past Month
+search-date-past-year = Past Year
+search-text-matching = Text Matching
+search-content-and-filename = Content & Filename
+search-only-filename = Only Filename
+
 # Progress footer
 details = Details
 dismiss = Dismiss message

@@ -78,8 +78,8 @@ use crate::operation::{
 };
 use crate::spawn_detached::spawn_detached;
 use crate::tab::{
-    self, HOVER_DURATION, HeadingOptions, ItemMetadata, Location, SORT_OPTION_FALLBACK,
-    SearchLocation, Tab,
+    self, HOVER_DURATION, HeadingOptions, ItemMetadata, Location, SORT_OPTION_FALLBACK, SearchDate,
+    SearchFileType, SearchFilter, SearchLocation, SearchTextMatching, Tab,
 };
 use crate::trash::{Trash, TrashExt};
 use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
@@ -433,7 +433,12 @@ pub enum Message {
     ScrollTab(i16),
     SearchActivate,
     SearchClear,
+    SearchDate(Option<SearchDate>),
+    SearchFileType(SearchFileType),
+    SearchFilterPopup(bool),
     SearchInput(String),
+    SearchRecursive(bool),
+    SearchTextMatching(SearchTextMatching),
     SetShowDetails(bool),
     SetShowRecents(bool),
     SetTypeToSearch(TypeToSearch),
@@ -745,6 +750,7 @@ pub struct App {
     failed_operations: BTreeMap<u64, (Operation, Controller, String)>,
     scrollable_id: widget::Id,
     search_id: widget::Id,
+    search_filter_popup: bool,
     size: Option<Size>,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     layer_sizes: FxHashMap<window::Id, Size>,
@@ -1595,6 +1601,30 @@ impl App {
         }
     }
 
+    fn search_filter_get(&self) -> SearchFilter {
+        let entity = self.tab_model.active();
+        self.tab_model
+            .data::<Tab>(entity)
+            .and_then(|tab| match &tab.location {
+                Location::Search(_, _, _, filter, _) => Some(*filter),
+                _ => None,
+            })
+            .unwrap_or_default()
+    }
+
+    fn search_filter_set_active(&mut self, filter: SearchFilter) -> Task<Message> {
+        let Some(term) = self.search_get().map(str::to_owned) else {
+            return Task::none();
+        };
+        let entity = self.tab_model.active();
+        if let Some(tab) = self.tab_model.data_mut::<Tab>(entity)
+            && let Location::Search(_, _, _, current_filter, _) = &mut tab.location
+        {
+            *current_filter = filter;
+        }
+        self.search_set(entity, Some(term), None)
+    }
+
     fn search_set_active(&mut self, term_opt: Option<String>) -> Task<Message> {
         let entity = self.tab_model.active();
         self.search_set(entity, term_opt, None)
@@ -1608,6 +1638,18 @@ impl App {
     ) -> Task<Message> {
         let mut title_location_opt = None;
         if let Some(tab) = self.tab_model.data_mut::<Tab>(tab) {
+            let search_filter = match &tab.location {
+                Location::Search(_, _, _, filter, _) => *filter,
+                _ => SearchFilter {
+                    recursive: self.config.search_recursive,
+                    text_matching: if self.config.search_content_and_filename {
+                        SearchTextMatching::ContentAndFilename
+                    } else {
+                        SearchTextMatching::FilenameOnly
+                    },
+                    ..SearchFilter::default()
+                },
+            };
             let location_opt = match term_opt {
                 Some(term) => {
                     let search_location = if let Some(path) = tab.location.path_opt() {
@@ -1626,6 +1668,7 @@ impl App {
                                 search_location,
                                 term,
                                 tab.config.show_hidden,
+                                search_filter,
                                 Instant::now(),
                             ),
                             true,
@@ -2326,6 +2369,189 @@ impl App {
     }
 }
 
+impl App {
+    fn search_filter_view(&self) -> Element<'_, Message> {
+        let filter = self.search_filter_get();
+        let chip = |label: String,
+                    icon_name: Option<&'static str>,
+                    selected: bool,
+                    message: Message|
+         -> Element<'_, Message> {
+            let mut button = widget::button::standard(label).class(if selected {
+                theme::Button::Suggested
+            } else {
+                theme::Button::Standard
+            });
+            if let Some(icon_name) = icon_name {
+                button = button.leading_icon(icon::from_name(icon_name).size(16));
+            }
+            button.on_press(message).into()
+        };
+
+        let file_types = [
+            (
+                SearchFileType::Text,
+                fl!("search-type-text"),
+                "text-x-generic-symbolic",
+            ),
+            (
+                SearchFileType::Audio,
+                fl!("search-type-audio"),
+                "audio-x-generic-symbolic",
+            ),
+            (
+                SearchFileType::Documents,
+                fl!("search-type-documents"),
+                "x-office-document-symbolic",
+            ),
+            (
+                SearchFileType::Folders,
+                fl!("search-type-folders"),
+                "folder-symbolic",
+            ),
+            (
+                SearchFileType::Images,
+                fl!("search-type-images"),
+                "image-x-generic-symbolic",
+            ),
+            (
+                SearchFileType::Pdf,
+                fl!("search-type-pdf"),
+                "application-pdf-symbolic",
+            ),
+            (
+                SearchFileType::Spreadsheets,
+                fl!("search-type-spreadsheets"),
+                "x-office-spreadsheet-symbolic",
+            ),
+            (
+                SearchFileType::Videos,
+                fl!("search-type-videos"),
+                "video-x-generic-symbolic",
+            ),
+        ];
+        let mut file_type_column =
+            widget::column::with_children([widget::text::heading(fl!("search-file-types")).into()])
+                .spacing(6);
+        for types in file_types.chunks(3) {
+            let mut row = widget::row::with_capacity(types.len()).spacing(6);
+            for &(file_type, ref label, icon_name) in types {
+                let selected = filter.file_types.contains(file_type);
+                row = row.push(chip(
+                    label.clone(),
+                    Some(icon_name),
+                    selected,
+                    Message::SearchFileType(file_type),
+                ));
+            }
+            file_type_column = file_type_column.push(row);
+        }
+
+        let dates = [
+            (SearchDate::Today, fl!("search-date-today")),
+            (SearchDate::Yesterday, fl!("search-date-yesterday")),
+            (SearchDate::PastWeek, fl!("search-date-past-week")),
+            (SearchDate::PastMonth, fl!("search-date-past-month")),
+            (SearchDate::PastYear, fl!("search-date-past-year")),
+        ];
+        let mut date_column =
+            widget::column::with_children([
+                widget::text::heading(fl!("search-date-modified")).into()
+            ])
+            .spacing(6);
+        for dates in dates.chunks(3) {
+            let mut row = widget::row::with_capacity(dates.len()).spacing(6);
+            for &(date, ref label) in dates {
+                let selected = filter.date == Some(date);
+                row = row.push(chip(
+                    label.clone(),
+                    None,
+                    selected,
+                    Message::SearchDate((!selected).then_some(date)),
+                ));
+            }
+            date_column = date_column.push(row);
+        }
+
+        let text_matching = widget::column::with_children([
+            widget::text::heading(fl!("search-text-matching")).into(),
+            widget::row::with_children([
+                chip(
+                    fl!("search-content-and-filename"),
+                    None,
+                    filter.text_matching == SearchTextMatching::ContentAndFilename,
+                    Message::SearchTextMatching(SearchTextMatching::ContentAndFilename),
+                ),
+                chip(
+                    fl!("search-only-filename"),
+                    None,
+                    filter.text_matching == SearchTextMatching::FilenameOnly,
+                    Message::SearchTextMatching(SearchTextMatching::FilenameOnly),
+                ),
+            ])
+            .spacing(6)
+            .into(),
+        ])
+        .spacing(6);
+
+        let search_scope = widget::column::with_children([
+            widget::text::heading(fl!("search-scope")).into(),
+            widget::row::with_children([
+                widget::text::body(fl!("search-subfolders"))
+                    .width(Length::Fill)
+                    .into(),
+                widget::toggler(filter.recursive)
+                    .on_toggle(Message::SearchRecursive)
+                    .into(),
+            ])
+            .align_y(Alignment::Center)
+            .into(),
+        ])
+        .spacing(6);
+
+        widget::container(
+            widget::column::with_children([
+                search_scope.into(),
+                file_type_column.into(),
+                date_column.into(),
+                text_matching.into(),
+            ])
+            .spacing(18),
+        )
+        .width(Length::Fixed(390.0))
+        .padding(16)
+        .class(theme::Container::Dropdown)
+        .into()
+    }
+
+    fn search_input<'a>(&'a self, term: &'a str, width: Length) -> Element<'a, Message> {
+        let clear = widget::button::custom(icon::from_name("edit-clear-symbolic").size(16))
+            .class(theme::Button::Icon)
+            .on_press(Message::SearchClear)
+            .padding(8);
+        let filter_button =
+            widget::button::custom(icon::from_name("view-filter-symbolic").size(16))
+                .class(theme::Button::Icon)
+                .selected(self.search_filter_get() != SearchFilter::default())
+                .on_press(Message::SearchFilterPopup(!self.search_filter_popup))
+                .padding(8);
+        let mut popover = widget::popover(filter_button)
+            .position(widget::popover::Position::Bottom)
+            .modal(false)
+            .on_close(Message::SearchFilterPopup(false));
+        if self.search_filter_popup {
+            popover = popover.popup(self.search_filter_view());
+        }
+
+        widget::text_input::search_input(fl!("search-current-folder"), term)
+            .width(width)
+            .id(self.search_id.clone())
+            .on_input(Message::SearchInput)
+            .trailing_icon(widget::row::with_children([clear.into(), popover.into()]).into())
+            .into()
+    }
+}
+
 /// Implement [`Application`] to integrate with COSMIC.
 impl Application for App {
     /// Default async executor to use with the app.
@@ -2444,6 +2670,7 @@ impl Application for App {
             failed_operations: BTreeMap::new(),
             scrollable_id: widget::Id::new("File Scrollable"),
             search_id: widget::Id::new("File Search"),
+            search_filter_popup: false,
             size: None,
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             surface_ids: FxHashMap::default(),
@@ -4322,10 +4549,39 @@ impl Application for App {
                 return Task::batch(tasks);
             }
             Message::SearchClear => {
+                self.search_filter_popup = false;
                 return Task::batch([self.close_context_menus(), self.search_set_active(None)]);
+            }
+            Message::SearchDate(date) => {
+                let mut filter = self.search_filter_get();
+                filter.date = date;
+                return self.search_filter_set_active(filter);
+            }
+            Message::SearchFileType(file_type) => {
+                let mut filter = self.search_filter_get();
+                filter.file_types.toggle(file_type);
+                return self.search_filter_set_active(filter);
+            }
+            Message::SearchFilterPopup(open) => {
+                self.search_filter_popup = open;
             }
             Message::SearchInput(input) => {
                 return self.search_set_active(Some(input));
+            }
+            Message::SearchRecursive(recursive) => {
+                config_set!(search_recursive, recursive);
+                let mut filter = self.search_filter_get();
+                filter.recursive = recursive;
+                return self.search_filter_set_active(filter);
+            }
+            Message::SearchTextMatching(text_matching) => {
+                config_set!(
+                    search_content_and_filename,
+                    text_matching == SearchTextMatching::ContentAndFilename
+                );
+                let mut filter = self.search_filter_get();
+                filter.text_matching = text_matching;
+                return self.search_filter_set_active(filter);
             }
             Message::SetShowDetails(show_details) => {
                 config_set!(show_details, show_details);
@@ -6433,14 +6689,7 @@ impl Application for App {
                         .into(),
                 );
             } else {
-                elements.push(
-                    widget::text_input::search_input("", term)
-                        .width(Length::Fixed(240.0))
-                        .id(self.search_id.clone())
-                        .on_clear(Message::SearchClear)
-                        .on_input(Message::SearchInput)
-                        .into(),
-                );
+                elements.push(self.search_input(term, Length::Fixed(360.0)));
             }
         } else {
             elements.push(
@@ -6465,16 +6714,8 @@ impl Application for App {
         if self.core.is_condensed()
             && let Some(term) = self.search_get()
         {
-            tab_column = tab_column.push(
-                widget::container(
-                    widget::text_input::search_input("", term)
-                        .width(Length::Fill)
-                        .id(self.search_id.clone())
-                        .on_clear(Message::SearchClear)
-                        .on_input(Message::SearchInput),
-                )
-                .padding(space_xxs),
-            );
+            tab_column = tab_column
+                .push(widget::container(self.search_input(term, Length::Fill)).padding(space_xxs));
         }
 
         if self.tab_model.len() > 1 {
