@@ -60,7 +60,7 @@ use crate::large_image::{
     should_use_tiling,
 };
 use crate::localize::{LANGUAGE_SORTER, LOCALE};
-use crate::mime_icon::{mime_for_path, mime_icon};
+use crate::mime_icon::{mime_for_path, mime_icon, mime_type_description};
 use crate::mounter::MOUNTERS;
 use crate::operation::{Controller, OperationError};
 use crate::thumbnail_cacher::{CachedThumbnail, ThumbnailCacher, ThumbnailSize};
@@ -2367,6 +2367,18 @@ impl Item {
         }
     }
 
+    fn type_description(&self) -> String {
+        #[cfg(unix)]
+        let is_executable = match &self.metadata {
+            ItemMetadata::Path { metadata, .. } => metadata.mode() & 0o111 != 0,
+            _ => false,
+        };
+        #[cfg(not(unix))]
+        let is_executable = false;
+
+        mime_type_description(&self.mime, is_executable)
+    }
+
     fn preview(&self) -> Element<'_, Message> {
         let spacing = cosmic::theme::spacing();
         // This loads the image only if thumbnailing worked
@@ -2443,7 +2455,7 @@ impl Item {
         details = details.push(widget::text::heading(self.name.clone()));
         details = details.push(widget::text::body(fl!(
             "type",
-            mime = self.mime.to_string()
+            mime = self.type_description()
         )));
         let mut settings = Vec::new();
         if let Some(mime_app_cache) = mime_app_cache_opt {
@@ -5048,11 +5060,11 @@ impl Tab {
                         }
                     }
 
-                    let a_type = a.1.mime.essence_str();
-                    let b_type = b.1.mime.essence_str();
+                    let a_type = a.1.type_description();
+                    let b_type = b.1.type_description();
 
                     let type_order =
-                        check_reverse(LANGUAGE_SORTER.compare(a_type, b_type), sort_direction);
+                        check_reverse(LANGUAGE_SORTER.compare(&a_type, &b_type), sort_direction);
 
                     type_order
                         .then_with(|| LANGUAGE_SORTER.compare(&a.1.display_name, &b.1.display_name))
@@ -6188,7 +6200,7 @@ impl Tab {
                             None => format_size(size_opt.unwrap_or_default()),
                         },
                     };
-                    let type_text = item.mime.essence_str().to_string();
+                    let type_text = item.type_description();
 
                     let row = if condensed {
                         widget::row::with_children([
