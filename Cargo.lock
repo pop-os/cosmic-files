@@ -1397,6 +1397,7 @@ dependencies = [
  "gio",
  "glib",
  "glob",
+ "globset",
  "i18n-embed",
  "i18n-embed-fl",
  "icu",
