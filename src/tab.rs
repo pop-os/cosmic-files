@@ -1123,7 +1123,10 @@ pub fn scan_search<F: Fn(SearchItem) -> bool + Sync>(
         .strip_prefix("(?-u)") // avoid errors like `failed to glob2regex with pattern = (?-u)^.*\.toml$, term = *.toml`
         .unwrap_or(glob_value.regex());
 
-    let regex = match regex::Regex::new(pattern) {
+    let regex = match regex::RegexBuilder::new(pattern)
+        .case_insensitive(true)
+        .build()
+    {
         Ok(regex) => regex,
         Err(err) => {
             log::error!(
