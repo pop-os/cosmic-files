@@ -788,7 +788,7 @@ impl App {
 
                 search_location.map(|search_location| {
                     let search_filter = match &self.tab.location {
-                        Location::Search(_, _, _, filter, _) => *filter,
+                        Location::Search(_, _, _, filter, _) => filter.clone(),
                         _ => tab::SearchFilter {
                             recursive: self.flags.config.search_recursive,
                             text_matching: if self.flags.config.search_content_and_filename {

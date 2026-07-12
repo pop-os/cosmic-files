@@ -12,6 +12,7 @@ trash = Trash
 recents = Recents
 undo = Undo
 today = Today
+add = Add
 
 # Desktop view options
 desktop-view-options = Desktop view options...
@@ -37,6 +38,7 @@ filetype-binary = Binary
 search-current-folder = Search current folder
 search-scope = Search Scope
 search-subfolders = Search subfolders
+search-raw-regex = Use raw regex
 search-file-types = File Types
 search-type-text = Text
 search-type-audio = Audio
@@ -55,6 +57,9 @@ search-date-past-year = Past Year
 search-text-matching = Text Matching
 search-content-and-filename = Content & Filename
 search-only-filename = Only Filename
+search-add-file-type = Add File Type
+search-file-type-placeholder = Search file types
+search-file-type-loading = Loading file types…
 
 # Progress footer
 details = Details

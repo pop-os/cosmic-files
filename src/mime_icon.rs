@@ -103,6 +103,28 @@ pub fn mime_for_path(
     mime_guess::from_path(path).first_or_octet_stream()
 }
 
+/// Guesses a MIME type from a filename without opening the file.
+///
+/// This uses the same shared MIME database as [`mime_for_path`] on Unix, which
+/// keeps filter candidates consistent with the MIME values used by scanning.
+#[cfg(unix)]
+pub fn mime_for_name(path: impl AsRef<Path>) -> Option<Mime> {
+    let path = path.as_ref();
+    let file_name = path.file_name()?.to_str()?;
+    MIME_ICON_CACHE
+        .lock()
+        .unwrap()
+        .shared_mime_info
+        .get_mime_types_from_file_name(file_name)
+        .into_iter()
+        .next()
+}
+
+#[cfg(not(unix))]
+pub fn mime_for_name(path: impl AsRef<Path>) -> Option<Mime> {
+    mime_guess::from_path(path).first()
+}
+
 #[cfg(unix)]
 pub fn mime_for_path(
     path: impl AsRef<Path>,
@@ -172,4 +194,15 @@ pub fn is_mime_subclass_of(mime_type: &Mime, base: &Mime) -> bool {
     mime_icon_cache
         .shared_mime_info
         .mime_type_subclass(mime_type, base)
+}
+
+#[cfg(unix)]
+pub fn mime_types_equal(a: &Mime, b: &Mime) -> bool {
+    let mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
+    mime_icon_cache.shared_mime_info.mime_type_equal(a, b)
+}
+
+#[cfg(not(unix))]
+pub fn mime_types_equal(a: &Mime, b: &Mime) -> bool {
+    a == b
 }

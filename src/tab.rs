@@ -1100,294 +1100,6 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
     items
 }
 
-pub fn scan_search<F: Fn(SearchItem) -> bool + Sync>(
-    search_location: &SearchLocation,
-    term: &str,
-    show_hidden: bool,
-    filter: SearchFilter,
-    callback: F,
-) {
-    if term.is_empty() {
-        return;
-    }
-
-    let glob_value = match globset::Glob::new(term) {
-        Ok(glob) => glob,
-        Err(err) => {
-            log::warn!("failed to parse glob {term:?}: {err}");
-            return;
-        }
-    };
-
-    let pattern = glob_value
-        .regex()
-        .strip_prefix("(?-u)") // avoid errors like `failed to glob2regex with pattern = (?-u)^.*\.toml$, term = *.toml`
-        .unwrap_or(glob_value.regex());
-
-    let regex = match regex::RegexBuilder::new(pattern)
-        .case_insensitive(true)
-        .build()
-    {
-        Ok(regex) => regex,
-        Err(err) => {
-            log::error!(
-                "failed to compile glob regex: pattern={pattern:?}, term={term:?}, error={err}"
-            );
-            return;
-        }
-    };
-    let content_regex = regex::RegexBuilder::new(&regex::escape(term))
-        .case_insensitive(true)
-        .build()
-        .expect("an escaped search term is always a valid regular expression");
-
-    match search_location {
-        SearchLocation::Path(tab_path) => {
-            ignore::WalkBuilder::new(tab_path)
-                .standard_filters(false)
-                .hidden(!show_hidden)
-                .max_depth((!filter.recursive).then_some(1))
-                //TODO: only use this on supported targets
-                .same_file_system(true)
-                .build_parallel()
-                .run(|| {
-                    Box::new(|entry_res| {
-                        let Ok(entry) = entry_res else {
-                            // Skip invalid entries
-                            return ignore::WalkState::Skip;
-                        };
-
-                        let Some(file_name) = entry.file_name().to_str() else {
-                            // Skip anything with an invalid name
-                            return ignore::WalkState::Skip;
-                        };
-
-                        let path = entry.path();
-                        let metadata = match entry.metadata() {
-                            Ok(ok) => ok,
-                            Err(err) => {
-                                log::warn!(
-                                    "failed to read metadata for entry at {}: {}",
-                                    path.display(),
-                                    err
-                                );
-                                return ignore::WalkState::Continue;
-                            }
-                        };
-
-                        if matches_search_filter(
-                            path,
-                            file_name,
-                            &metadata,
-                            &regex,
-                            &content_regex,
-                            filter,
-                        ) {
-                            if !callback(SearchItem::Path(
-                                path.to_path_buf(),
-                                file_name.to_string(),
-                                metadata,
-                            )) {
-                                return ignore::WalkState::Quit;
-                            }
-                        }
-
-                        ignore::WalkState::Continue
-                    })
-                });
-        }
-        SearchLocation::Recents => {
-            let recent_files = match recently_used_xbel::parse_file() {
-                Ok(recent_files) => recent_files,
-                Err(err) => {
-                    log::warn!("Error reading recent files: {err:?}");
-                    return;
-                }
-            };
-
-            for bookmark in recent_files.bookmarks {
-                let path = uri_to_path(bookmark.href);
-                if let Some(path) = path
-                    && path.exists()
-                {
-                    let file_name = path.file_name();
-                    if let Some(file_name) = file_name {
-                        let file_name = file_name.to_string_lossy();
-                        match path.metadata() {
-                            Ok(metadata) => {
-                                if matches_search_filter(
-                                    &path,
-                                    &file_name,
-                                    &metadata,
-                                    &regex,
-                                    &content_regex,
-                                    filter,
-                                ) {
-                                    if !callback(SearchItem::Path(
-                                        path.to_path_buf(),
-                                        file_name.to_string(),
-                                        metadata,
-                                    )) {
-                                        break;
-                                    }
-                                }
-                            }
-                            Err(err) => {
-                                log::warn!(
-                                    "failed to read metadata for entry at {}: {}",
-                                    path.display(),
-                                    err
-                                );
-                            }
-                        };
-                    }
-                }
-            }
-        }
-        SearchLocation::Trash => {
-            Trash::scan_search(callback, &regex);
-        }
-    }
-}
-
-const SEARCH_CONTENT_MAX_BYTES: u64 = 4 * 1024 * 1024;
-
-fn matches_search_filter(
-    path: &Path,
-    file_name: &str,
-    metadata: &Metadata,
-    filename_regex: &regex::Regex,
-    content_regex: &regex::Regex,
-    filter: SearchFilter,
-) -> bool {
-    if let Some(date) = filter.date
-        && !matches_search_date(metadata, date)
-    {
-        return false;
-    }
-
-    let filename_matches = filename_regex.is_match(file_name);
-    let needs_mime = !filter.file_types.is_empty()
-        || (!filename_matches
-            && filter.text_matching == SearchTextMatching::ContentAndFilename
-            && metadata.is_file());
-    let mime = needs_mime.then(|| mime_for_path(path, Some(metadata), false));
-
-    if !filter.file_types.is_empty()
-        && !SearchFileType::ALL.into_iter().any(|file_type| {
-            filter.file_types.contains(file_type)
-                && matches_search_file_type(metadata, mime.as_ref().unwrap(), file_type)
-        })
-    {
-        return false;
-    }
-
-    if filename_matches {
-        return true;
-    }
-
-    filter.text_matching == SearchTextMatching::ContentAndFilename
-        && metadata.is_file()
-        && metadata.len() <= SEARCH_CONTENT_MAX_BYTES
-        && mime.as_ref().is_some_and(is_text_searchable)
-        && File::open(path)
-            .ok()
-            .and_then(|file| {
-                let mut contents = String::new();
-                file.take(SEARCH_CONTENT_MAX_BYTES + 1)
-                    .read_to_string(&mut contents)
-                    .ok()
-                    .map(|_| contents)
-            })
-            .is_some_and(|contents| content_regex.is_match(&contents))
-}
-
-fn matches_search_date(metadata: &Metadata, date: SearchDate) -> bool {
-    let Ok(modified) = metadata.modified() else {
-        return false;
-    };
-    let Ok(modified_zoned) = jiff::Zoned::try_from(modified) else {
-        return false;
-    };
-    let now = jiff::Zoned::now();
-
-    match date {
-        SearchDate::Today => modified_zoned.date() == now.date(),
-        SearchDate::Yesterday => now
-            .date()
-            .yesterday()
-            .is_ok_and(|yesterday| modified_zoned.date() == yesterday),
-        SearchDate::PastWeek => modified >= SystemTime::now() - Duration::from_secs(7 * 86_400),
-        SearchDate::PastMonth => modified >= SystemTime::now() - Duration::from_secs(30 * 86_400),
-        SearchDate::PastYear => modified >= SystemTime::now() - Duration::from_secs(365 * 86_400),
-    }
-}
-
-fn is_text_searchable(mime: &Mime) -> bool {
-    mime.type_() == mime::TEXT
-        || matches!(
-            mime.essence_str(),
-            "application/json" | "application/xml" | "application/x-yaml"
-        )
-}
-
-fn matches_search_file_type(metadata: &Metadata, mime: &Mime, file_type: SearchFileType) -> bool {
-    if file_type == SearchFileType::Folders {
-        return metadata.is_dir();
-    }
-    if metadata.is_dir() {
-        return false;
-    }
-
-    match file_type {
-        SearchFileType::Text => mime.type_() == mime::TEXT,
-        SearchFileType::Audio => mime.type_() == mime::AUDIO,
-        SearchFileType::Images => mime.type_() == mime::IMAGE,
-        SearchFileType::Pdf => *mime == "application/pdf",
-        SearchFileType::Videos => mime.type_() == mime::VIDEO,
-        SearchFileType::Documents => matches_office_type(mime, "x-office-document"),
-        SearchFileType::Spreadsheets => matches_office_type(mime, "x-office-spreadsheet"),
-        SearchFileType::Folders => false,
-    }
-}
-
-fn matches_office_type(mime: &Mime, generic_icon: &str) -> bool {
-    #[cfg(feature = "gvfs")]
-    if gio::content_type_get_generic_icon_name(mime.essence_str()).as_deref() == Some(generic_icon)
-    {
-        return true;
-    }
-
-    match generic_icon {
-        "x-office-document" => matches!(
-            mime.essence_str(),
-            "application/msword"
-                | "application/rtf"
-                | "application/vnd.oasis.opendocument.text"
-                | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        ),
-        "x-office-spreadsheet" => matches!(
-            mime.essence_str(),
-            "application/vnd.ms-excel"
-                | "application/vnd.oasis.opendocument.spreadsheet"
-                | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                | "text/csv"
-        ),
-        _ => false,
-    }
-}
-
-fn uri_to_path(uri: String) -> Option<PathBuf> {
-    uri.parse::<url::Url>().ok().and_then(|url| {
-        //TODO support for external drive or cloud?
-        if url.scheme() == "file" {
-            url.to_file_path().ok()
-        } else {
-            None
-        }
-    })
-}
-
 pub fn has_recents() -> bool {
     match recently_used_xbel::parse_file() {
         Ok(recent_files) => !recent_files.bookmarks.is_empty(),
@@ -1605,109 +1317,11 @@ impl EditLocation {
     }
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub enum SearchLocation {
-    Path(PathBuf),
-    Recents,
-    Trash,
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct SearchFilter {
-    pub file_types: SearchFileTypes,
-    pub date: Option<SearchDate>,
-    pub text_matching: SearchTextMatching,
-    pub recursive: bool,
-}
-
-impl Default for SearchFilter {
-    fn default() -> Self {
-        Self {
-            file_types: SearchFileTypes::default(),
-            date: None,
-            text_matching: SearchTextMatching::default(),
-            recursive: true,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum SearchFileType {
-    Text,
-    Audio,
-    Documents,
-    Folders,
-    Images,
-    Pdf,
-    Spreadsheets,
-    Videos,
-}
-
-impl SearchFileType {
-    const ALL: [Self; 8] = [
-        Self::Text,
-        Self::Audio,
-        Self::Documents,
-        Self::Folders,
-        Self::Images,
-        Self::Pdf,
-        Self::Spreadsheets,
-        Self::Videos,
-    ];
-
-    const fn bit(self) -> u16 {
-        1 << self as u16
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
-pub struct SearchFileTypes(u16);
-
-impl SearchFileTypes {
-    pub const fn is_empty(self) -> bool {
-        self.0 == 0
-    }
-
-    pub const fn contains(self, file_type: SearchFileType) -> bool {
-        self.0 & file_type.bit() != 0
-    }
-
-    pub fn toggle(&mut self, file_type: SearchFileType) {
-        self.0 ^= file_type.bit();
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum SearchDate {
-    Today,
-    Yesterday,
-    PastWeek,
-    PastMonth,
-    PastYear,
-}
-
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
-pub enum SearchTextMatching {
-    #[default]
-    ContentAndFilename,
-    FilenameOnly,
-}
-
-impl std::fmt::Display for SearchLocation {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Path(path) => write!(f, "{}", path.display()),
-            Self::Recents => write!(f, "recents"),
-            Self::Trash => write!(f, "trash"),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum SearchItem {
-    Path(PathBuf, String, fs::Metadata),
-    Trash(TrashItem, TrashItemMetadata),
-}
+use crate::search::uri_to_path;
+pub use crate::search::{
+    SearchDate, SearchFileType, SearchFileTypes, SearchFilter, SearchItem, SearchLocation,
+    SearchTextMatching, scan_search,
+};
 
 impl From<Location> for EditLocation {
     fn from(location: Location) -> Self {
@@ -1816,7 +1430,7 @@ impl Location {
                 SearchLocation::Path(path),
                 term.clone(),
                 *show_hidden,
-                *filter,
+                filter.clone(),
                 *time,
             ),
 
@@ -3979,7 +3593,7 @@ impl Tab {
                         path.clone(),
                         term.clone(),
                         self.config.show_hidden,
-                        *filter,
+                        filter.clone(),
                         Instant::now(),
                     ));
                 }
@@ -4763,29 +4377,26 @@ impl Tab {
                 }
             }
             Message::SearchReady(finished) => {
+                let (sort_name, sort_direction, folders_first) = self.sort_options();
                 if let Some(context) = &mut self.search_context {
                     if let Some(items) = &mut self.items_opt {
                         if finished || context.ready.swap(false, atomic::Ordering::SeqCst) {
                             let duration = Instant::now();
                             while let Ok(search_item) = context.results_rx.try_recv() {
-                                //TODO: combine this with column_sort logic, they must match!
-                                let index =
-                                    if let SearchItem::Path(_, _, ref metadata) = search_item {
-                                        let item_modified = metadata.modified().ok();
-                                        match items.binary_search_by(|other| {
-                                            item_modified.cmp(&other.metadata.modified())
-                                        }) {
-                                            Ok(index) => index,
-                                            Err(index) => index,
-                                        }
-                                    } else {
-                                        items.len()
-                                    };
+                                let item = item_from_search_item(search_item, IconSizes::default());
+                                let index = items
+                                    .binary_search_by(|other| {
+                                        Self::compare_items(
+                                            other,
+                                            &item,
+                                            sort_name,
+                                            sort_direction,
+                                            folders_first,
+                                        )
+                                    })
+                                    .unwrap_or_else(|index| index);
 
                                 if index < MAX_SEARCH_RESULTS {
-                                    //TODO: use correct IconSizes
-                                    let item =
-                                        item_from_search_item(search_item, IconSizes::default());
                                     items.insert(index, item);
                                 }
                                 // Ensure that updates make it to the GUI in a timely manner
@@ -4796,11 +4407,12 @@ impl Tab {
                         }
                         if items.len() >= MAX_SEARCH_RESULTS {
                             items.truncate(MAX_SEARCH_RESULTS);
-                            if let Some(last_modified) =
-                                items.last().and_then(|item| item.metadata.modified())
-                            {
-                                *context.last_modified_opt.write().unwrap() = Some(last_modified);
-                            }
+                            *context.last_modified_opt.write().unwrap() =
+                                if sort_name == HeadingOptions::Modified && !sort_direction {
+                                    items.last().and_then(|item| item.metadata.modified())
+                                } else {
+                                    None
+                                };
                         }
                     } else {
                         log::warn!("search ready but items array is empty");
@@ -4953,24 +4565,29 @@ impl Tab {
                 );
             }
             Message::ToggleSort(heading_option) => {
-                if !matches!(self.location, Location::Search(..)) {
-                    let heading_sort = if self.sort_name == heading_option {
-                        !self.sort_direction
-                    } else {
-                        // Default modified to descending, and others to ascending.
-                        heading_option != HeadingOptions::Modified
-                    };
+                let heading_sort = if self.sort_name == heading_option {
+                    !self.sort_direction
+                } else {
+                    // Default modified to descending, and others to ascending.
+                    heading_option != HeadingOptions::Modified
+                };
 
-                    if !matches!(self.location, Location::Desktop(..)) {
-                        commands.push(Command::SetSort(
-                            self.location.normalize().to_string(),
-                            heading_option,
-                            heading_sort,
-                        ));
-                    }
+                if !matches!(self.location, Location::Desktop(..) | Location::Search(..)) {
+                    commands.push(Command::SetSort(
+                        self.location.normalize().to_string(),
+                        heading_option,
+                        heading_sort,
+                    ));
+                }
 
-                    self.sort_direction = heading_sort;
-                    self.sort_name = heading_option;
+                self.sort_direction = heading_sort;
+                self.sort_name = heading_option;
+                if let Location::Search(_, _, _, _, start) = &mut self.location {
+                    // Restart the bounded top-k scan so discarded results from
+                    // the previous ordering cannot bias the new ordering.
+                    *start = Instant::now();
+                    self.items_opt = Some(Vec::new());
+                    self.search_context = None;
                 }
             }
             Message::Drop(Some((to, mut from))) => {
@@ -5176,137 +4793,99 @@ impl Tab {
     }
 
     pub(crate) const fn sort_options(&self) -> (HeadingOptions, bool, bool) {
-        match self.location {
-            Location::Search(..) => (HeadingOptions::Modified, false, false),
-            _ => (
-                self.sort_name,
-                self.sort_direction,
-                self.config.folders_first,
-            ),
+        (
+            self.sort_name,
+            self.sort_direction,
+            self.config.folders_first,
+        )
+    }
+
+    fn compare_items(
+        a: &Item,
+        b: &Item,
+        sort_name: HeadingOptions,
+        sort_direction: bool,
+        folders_first: bool,
+    ) -> Ordering {
+        let order = |ord: Ordering| if sort_direction { ord } else { ord.reverse() };
+        let folders = || {
+            folders_first.then(|| match (a.metadata.is_dir(), b.metadata.is_dir()) {
+                (true, false) => Ordering::Less,
+                (false, true) => Ordering::Greater,
+                _ => Ordering::Equal,
+            })
+        };
+        if let Some(folder_order) = folders()
+            && folder_order != Ordering::Equal
+        {
+            return folder_order;
+        }
+
+        match sort_name {
+            HeadingOptions::Name => {
+                order(LANGUAGE_SORTER.compare(&a.display_name, &b.display_name))
+            }
+            HeadingOptions::Modified => order(a.metadata.modified().cmp(&b.metadata.modified())),
+            HeadingOptions::Size => {
+                let size = |item: &Item| match &item.metadata {
+                    ItemMetadata::Path {
+                        metadata,
+                        children_opt,
+                    } => {
+                        if metadata.is_dir() {
+                            (true, children_opt.unwrap_or_default() as u64)
+                        } else {
+                            (false, metadata.len())
+                        }
+                    }
+                    ItemMetadata::Trash { metadata, .. } => match metadata.size {
+                        trash::TrashItemSize::Entries(entries) => (true, entries as u64),
+                        trash::TrashItemSize::Bytes(bytes) => (false, bytes),
+                    },
+                    ItemMetadata::SimpleDir { entries } => (true, *entries),
+                    ItemMetadata::SimpleFile { size } => (false, *size),
+                    #[cfg(feature = "gvfs")]
+                    ItemMetadata::GvfsPath {
+                        size_opt,
+                        children_opt,
+                        ..
+                    } => match children_opt {
+                        Some(children) => (true, *children as u64),
+                        None => (false, size_opt.unwrap_or_default()),
+                    },
+                };
+                let (a_is_dir, a_size) = size(a);
+                let (b_is_dir, b_size) = size(b);
+                match (a_is_dir, b_is_dir) {
+                    (true, false) => Ordering::Less,
+                    (false, true) => Ordering::Greater,
+                    _ => order(a_size.cmp(&b_size)),
+                }
+            }
+            HeadingOptions::TrashedOn => {
+                let deleted = |item: &Item| match &item.metadata {
+                    ItemMetadata::Trash { entry, .. } => Some(entry.time_deleted),
+                    _ => None,
+                };
+                if folders_first {
+                    order(deleted(a).cmp(&deleted(b)))
+                } else {
+                    order(deleted(b).cmp(&deleted(a)))
+                }
+            }
+            HeadingOptions::FileType => {
+                order(LANGUAGE_SORTER.compare(&a.type_description(), &b.type_description()))
+                    .then_with(|| LANGUAGE_SORTER.compare(&a.display_name, &b.display_name))
+            }
         }
     }
 
     fn column_sort(&self) -> Option<Vec<(usize, &Item)>> {
-        let check_reverse = |ord: Ordering, sort: bool| {
-            if sort { ord } else { ord.reverse() }
-        };
         let mut items: Vec<_> = self.items_opt.as_ref()?.iter().enumerate().collect();
         let (sort_name, sort_direction, folders_first) = self.sort_options();
-        match sort_name {
-            HeadingOptions::Size => {
-                items.sort_by(|a, b| {
-                    // entries take precedence over size
-                    let get_size = |x: &Item| match &x.metadata {
-                        ItemMetadata::Path {
-                            metadata,
-                            children_opt,
-                        } => {
-                            if metadata.is_dir() {
-                                (true, children_opt.unwrap_or_default() as u64)
-                            } else {
-                                (false, metadata.len())
-                            }
-                        }
-                        ItemMetadata::Trash { metadata, .. } => match metadata.size {
-                            trash::TrashItemSize::Entries(entries) => (true, entries as u64),
-                            trash::TrashItemSize::Bytes(bytes) => (false, bytes),
-                        },
-                        ItemMetadata::SimpleDir { entries } => (true, *entries),
-                        ItemMetadata::SimpleFile { size } => (false, *size),
-                        #[cfg(feature = "gvfs")]
-                        ItemMetadata::GvfsPath {
-                            size_opt,
-                            children_opt,
-                            ..
-                        } => match children_opt {
-                            Some(child_count) => (true, *child_count as u64),
-                            None => (false, size_opt.unwrap_or_default()),
-                        },
-                    };
-                    let (a_is_entry, a_size) = get_size(a.1);
-                    let (b_is_entry, b_size) = get_size(b.1);
-
-                    //TODO: use folders_first?
-                    match (a_is_entry, b_is_entry) {
-                        (true, false) => Ordering::Less,
-                        (false, true) => Ordering::Greater,
-                        _ => check_reverse(a_size.cmp(&b_size), sort_direction),
-                    }
-                });
-            }
-            HeadingOptions::Name => items.sort_by(|a, b| {
-                if folders_first {
-                    match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
-                        (true, false) => Ordering::Less,
-                        (false, true) => Ordering::Greater,
-                        _ => check_reverse(
-                            LANGUAGE_SORTER.compare(&a.1.display_name, &b.1.display_name),
-                            sort_direction,
-                        ),
-                    }
-                } else {
-                    check_reverse(
-                        LANGUAGE_SORTER.compare(&a.1.display_name, &b.1.display_name),
-                        sort_direction,
-                    )
-                }
-            }),
-            HeadingOptions::Modified => {
-                items.sort_by(|a, b| {
-                    let a_modified = a.1.metadata.modified();
-                    let b_modified = b.1.metadata.modified();
-                    if folders_first {
-                        match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
-                            (true, false) => Ordering::Less,
-                            (false, true) => Ordering::Greater,
-                            _ => check_reverse(a_modified.cmp(&b_modified), sort_direction),
-                        }
-                    } else {
-                        check_reverse(a_modified.cmp(&b_modified), sort_direction)
-                    }
-                });
-            }
-            HeadingOptions::TrashedOn => {
-                let time_deleted = |x: &Item| match &x.metadata {
-                    ItemMetadata::Trash { entry, .. } => Some(entry.time_deleted),
-                    _ => None,
-                };
-
-                items.sort_by(|a, b| {
-                    let a_time_deleted = time_deleted(a.1);
-                    let b_time_deleted = time_deleted(b.1);
-                    if folders_first {
-                        match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
-                            (true, false) => Ordering::Less,
-                            (false, true) => Ordering::Greater,
-                            _ => check_reverse(a_time_deleted.cmp(&b_time_deleted), sort_direction),
-                        }
-                    } else {
-                        check_reverse(b_time_deleted.cmp(&a_time_deleted), sort_direction)
-                    }
-                });
-            }
-            HeadingOptions::FileType => {
-                items.sort_by(|a, b| {
-                    if folders_first {
-                        match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
-                            (true, false) => return Ordering::Less,
-                            (false, true) => return Ordering::Greater,
-                            _ => {}
-                        }
-                    }
-
-                    let a_type = a.1.type_description();
-                    let b_type = b.1.type_description();
-
-                    let type_order =
-                        check_reverse(LANGUAGE_SORTER.compare(&a_type, &b_type), sort_direction);
-
-                    type_order
-                        .then_with(|| LANGUAGE_SORTER.compare(&a.1.display_name, &b.1.display_name))
-                });
-            }
-        }
+        items.sort_by(|a, b| {
+            Self::compare_items(a.1, b.1, sort_name, sort_direction, folders_first)
+        });
         Some(items)
     }
 
@@ -7463,7 +7042,7 @@ impl Tab {
             let search_location = search_location.clone();
             let term = term.clone();
             let show_hidden = *show_hidden;
-            let filter = *filter;
+            let filter = filter.clone();
             let start = *start;
             #[derive(Debug, Hash, Clone)]
             struct Wrapper {
@@ -7725,8 +7304,8 @@ mod tests {
 
     use super::{
         ItemMetadata, ItemThumbnail, Location, Message, SearchFileType, SearchFilter,
-        SearchLocation, SearchTextMatching, Tab, matches_search_filter,
-        respond_to_scroll_direction, scan_path, scan_search,
+        SearchLocation, SearchTextMatching, Tab, respond_to_scroll_direction, scan_path,
+        scan_search,
     };
     use crate::app::test_utils::{
         NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED, assert_eq_tab_path, empty_fs,
@@ -7739,32 +7318,36 @@ mod tests {
         let temp = TempDir::new()?;
         let path = temp.path().join("notes.txt");
         fs::write(&path, "A searchable needle inside the file")?;
-        let metadata = path.metadata()?;
-        let filename_regex = regex::Regex::new("^needle$").unwrap();
-        let content_regex = regex::RegexBuilder::new("needle")
-            .case_insensitive(true)
-            .build()
-            .unwrap();
-
-        assert!(matches_search_filter(
-            &path,
-            "notes.txt",
-            &metadata,
-            &filename_regex,
-            &content_regex,
+        let found = Arc::new(Mutex::new(0));
+        let output = found.clone();
+        scan_search(
+            &SearchLocation::Path(temp.path().to_path_buf()),
+            "needle",
+            true,
             SearchFilter::default(),
-        ));
-        assert!(!matches_search_filter(
-            &path,
-            "notes.txt",
-            &metadata,
-            &filename_regex,
-            &content_regex,
+            move |_| {
+                *output.lock().unwrap() += 1;
+                true
+            },
+        );
+        assert_eq!(*found.lock().unwrap(), 1);
+
+        let found = Arc::new(Mutex::new(0));
+        let output = found.clone();
+        scan_search(
+            &SearchLocation::Path(temp.path().to_path_buf()),
+            "needle",
+            true,
             SearchFilter {
                 text_matching: SearchTextMatching::FilenameOnly,
                 ..SearchFilter::default()
             },
-        ));
+            move |_| {
+                *output.lock().unwrap() += 1;
+                true
+            },
+        );
+        assert_eq!(*found.lock().unwrap(), 0);
 
         Ok(())
     }
@@ -7805,30 +7388,36 @@ mod tests {
         let temp = TempDir::new()?;
         let path = temp.path().join("notes.txt");
         fs::write(&path, "notes")?;
-        let metadata = path.metadata()?;
-        let filename_regex = regex::Regex::new(".*").unwrap();
-        let content_regex = regex::Regex::new("notes").unwrap();
         let mut filter = SearchFilter::default();
         filter.file_types.toggle(SearchFileType::Images);
-
-        assert!(!matches_search_filter(
-            &path,
-            "notes.txt",
-            &metadata,
-            &filename_regex,
-            &content_regex,
-            filter,
-        ));
+        let found = Arc::new(Mutex::new(0));
+        let output = found.clone();
+        scan_search(
+            &SearchLocation::Path(temp.path().to_path_buf()),
+            "notes",
+            true,
+            filter.clone(),
+            move |_| {
+                *output.lock().unwrap() += 1;
+                true
+            },
+        );
+        assert_eq!(*found.lock().unwrap(), 0);
 
         filter.file_types.toggle(SearchFileType::Text);
-        assert!(matches_search_filter(
-            &path,
-            "notes.txt",
-            &metadata,
-            &filename_regex,
-            &content_regex,
+        let found = Arc::new(Mutex::new(0));
+        let output = found.clone();
+        scan_search(
+            &SearchLocation::Path(temp.path().to_path_buf()),
+            "notes",
+            true,
             filter,
-        ));
+            move |_| {
+                *output.lock().unwrap() += 1;
+                true
+            },
+        );
+        assert_eq!(*found.lock().unwrap(), 1);
         Ok(())
     }
 
