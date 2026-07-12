@@ -15,7 +15,7 @@ use std::io::Read;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 use trash::{TrashItem, TrashItemMetadata};
 
 use crate::mime_icon::{mime_for_name, mime_for_path};
@@ -133,41 +133,53 @@ pub struct MimeCandidate {
     pub count: u64,
 }
 
-/// Maps MIME aliases used by extension-only fallback databases to the
-/// canonical type from the system shared MIME database.
+/// Maps MIME aliases to the canonical type from the system shared MIME
+/// database. Extension guesses are deliberately not used here: a MIME can
+/// cover several extensions that the shared database assigns to distinct
+/// types (notably Windows executables and batch files).
 pub fn canonical_mime(mime: Mime) -> Mime {
-    let Some(extension) =
-        mime_guess::get_mime_extensions(&mime).and_then(|extensions| extensions.first())
-    else {
-        return mime;
-    };
-    mime_for_name(PathBuf::from(format!("file.{extension}"))).unwrap_or(mime)
+    let mime = crate::mime_icon::unalias_mime_type(mime);
+    // Keep compatibility with values emitted by older versions of this
+    // dialog. These are intentionally exact mappings rather than an
+    // extension-based guess, which is not one-to-one for many MIME types.
+    match mime.essence_str() {
+        "text/x-rust" => "text/rust".parse().expect("valid static MIME"),
+        "text/x-toml" => "application/toml".parse().expect("valid static MIME"),
+        _ => mime,
+    }
+}
+
+pub fn canonical_mime_types(mimes: impl IntoIterator<Item = Mime>) -> Vec<Mime> {
+    let mut known = HashSet::new();
+    mimes
+        .into_iter()
+        .map(canonical_mime)
+        .filter(|mime| known.insert(mime.clone()))
+        .collect()
 }
 
 /// Lists MIME types known to the freedesktop shared MIME database. Types found
 /// in the current directory are ranked first by their actual frequency.
 pub fn mime_type_candidates(root: Option<PathBuf>, excluded: Arc<[Mime]>) -> Vec<MimeCandidate> {
-    let excluded: HashSet<Mime> = excluded.iter().cloned().collect();
-    let mut counts = HashMap::<Mime, u64>::new();
-    if let Some(root) = root
-        && let Ok(entries) = fs::read_dir(root)
-    {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if let Ok(metadata) = entry.metadata()
-                && metadata.is_file()
-                && let Some(mime) = mime_for_name(&path)
-            {
-                *counts
-                    // Candidate ranking only needs a stable type estimate. Avoid
-                    // opening every file and running the shared MIME magic
-                    // database just to populate this dialog.
-                    .entry(mime)
-                    .or_default() += 1;
-            }
-        }
-    }
+    let mut candidates = Vec::new();
+    mime_type_candidate_updates(root, excluded, |update, _complete| {
+        candidates = update;
+        true
+    });
+    candidates
+}
 
+/// Sends an initial system MIME list before scanning `root`, then updated
+/// rankings at most twice per second and one final update.
+pub fn mime_type_candidate_updates(
+    root: Option<PathBuf>,
+    excluded: Arc<[Mime]>,
+    mut callback: impl FnMut(Vec<MimeCandidate>, bool) -> bool,
+) {
+    let excluded: HashSet<Mime> = canonical_mime_types(excluded.iter().cloned())
+        .into_iter()
+        .collect();
+    let mut counts = HashMap::<Mime, u64>::new();
     let mut known = HashSet::<Mime>::new();
     #[cfg(feature = "gvfs")]
     known.extend(
@@ -192,7 +204,7 @@ pub fn mime_type_candidates(root: Option<PathBuf>, excluded: Arc<[Mime]>) -> Vec
             read_known_mimes(&directory.join("mime/types"), &mut known);
         }
     }
-    known.extend(counts.keys().cloned());
+    known = canonical_mime_types(known).into_iter().collect();
     known.retain(|mime| {
         !excluded.contains(mime)
             && *mime != "application/pdf"
@@ -201,7 +213,41 @@ pub fn mime_type_candidates(root: Option<PathBuf>, excluded: Arc<[Mime]>) -> Vec
             && *mime != mime::APPLICATION_OCTET_STREAM
     });
 
+    let Some(entries) = root.and_then(|root| fs::read_dir(root).ok()) else {
+        callback(build_mime_candidates(&known, &counts), true);
+        return;
+    };
+    if !callback(build_mime_candidates(&known, &counts), false) {
+        return;
+    }
+
+    let mut last_update = Instant::now();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if let Ok(metadata) = entry.metadata()
+            && metadata.is_file()
+            && let Some(mime) = mime_for_name(&path)
+        {
+            let mime = canonical_mime(mime);
+            if mime != mime::APPLICATION_OCTET_STREAM && !excluded.contains(&mime) {
+                known.insert(mime.clone());
+                *counts.entry(mime).or_default() += 1;
+            }
+        }
+        if last_update.elapsed() >= Duration::from_millis(500) {
+            if !callback(build_mime_candidates(&known, &counts), false) {
+                return;
+            }
+            last_update = Instant::now();
+        }
+    }
+    callback(build_mime_candidates(&known, &counts), true);
+}
+
+fn build_mime_candidates(known: &HashSet<Mime>, counts: &HashMap<Mime, u64>) -> Vec<MimeCandidate> {
     let mut candidates = known
+        .iter()
+        .cloned()
         .into_iter()
         .map(|mime| {
             let description = crate::mime_icon::mime_type_description(&mime, false);
@@ -619,6 +665,59 @@ mod tests {
         assert_eq!(
             canonical_mime("text/x-toml".parse().unwrap()),
             "application/toml".parse::<Mime>().unwrap()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn windows_program_mime_does_not_become_batch_file() {
+        let program = "application/x-msdownload".parse::<Mime>().unwrap();
+        let batch = "application/x-bat".parse::<Mime>().unwrap();
+
+        assert_eq!(canonical_mime(program.clone()), program);
+        assert_eq!(canonical_mime(batch.clone()), batch);
+        assert_ne!(canonical_mime(program), canonical_mime(batch));
+    }
+
+    #[test]
+    fn mime_candidate_updates_publish_before_and_after_directory_counts() {
+        let temp = tempfile::TempDir::new().unwrap();
+        fs::write(temp.path().join("one.rs"), b"").unwrap();
+        fs::write(temp.path().join("two.rs"), b"").unwrap();
+        let expected = canonical_mime(mime_for_name("file.rs").expect("Rust MIME type"));
+        let mut updates = Vec::new();
+
+        mime_type_candidate_updates(
+            Some(temp.path().to_path_buf()),
+            Arc::default(),
+            |candidates, complete| {
+                updates.push((candidates, complete));
+                true
+            },
+        );
+
+        assert!(updates.len() >= 2);
+        assert!(!updates.first().unwrap().1);
+        assert_eq!(
+            updates
+                .first()
+                .unwrap()
+                .0
+                .iter()
+                .find(|candidate| candidate.mime == expected)
+                .map(|candidate| candidate.count),
+            Some(0)
+        );
+        assert!(updates.last().unwrap().1);
+        assert_eq!(
+            updates
+                .last()
+                .unwrap()
+                .0
+                .iter()
+                .find(|candidate| candidate.mime == expected)
+                .map(|candidate| candidate.count),
+            Some(2)
         );
     }
 

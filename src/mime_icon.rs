@@ -202,7 +202,22 @@ pub fn mime_types_equal(a: &Mime, b: &Mime) -> bool {
     mime_icon_cache.shared_mime_info.mime_type_equal(a, b)
 }
 
+#[cfg(unix)]
+pub fn unalias_mime_type(mime: Mime) -> Mime {
+    MIME_ICON_CACHE
+        .lock()
+        .unwrap()
+        .shared_mime_info
+        .unalias_mime_type(&mime)
+        .unwrap_or(mime)
+}
+
 #[cfg(not(unix))]
 pub fn mime_types_equal(a: &Mime, b: &Mime) -> bool {
     a == b
+}
+
+#[cfg(not(unix))]
+pub fn unalias_mime_type(mime: Mime) -> Mime {
+    mime
 }

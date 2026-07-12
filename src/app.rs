@@ -76,7 +76,7 @@ use crate::operation::{
     Controller, Operation, OperationError, OperationErrorType, OperationSelection, ReplaceResult,
     copy_unique_path,
 };
-use crate::search::{MimeCandidate, canonical_mime};
+use crate::search::{MimeCandidate, canonical_mime, canonical_mime_types};
 use crate::spawn_detached::spawn_detached;
 use crate::tab::{
     self, HOVER_DURATION, HeadingOptions, ItemMetadata, Location, SORT_OPTION_FALLBACK, SearchDate,
@@ -437,7 +437,7 @@ pub enum Message {
     SearchDate(Option<SearchDate>),
     SearchFileType(SearchFileType),
     SearchCustomFileTypeDialog,
-    SearchCustomFileTypeCandidates(Vec<MimeCandidate>),
+    SearchCustomFileTypeCandidates(u64, Vec<MimeCandidate>),
     SearchCustomFileTypeQuery(String),
     SearchCustomFileTypeSelect(Mime),
     SearchCustomFileTypeToggle(Mime),
@@ -537,6 +537,7 @@ impl AsRef<str> for ArchiveType {
 #[derive(Clone, Debug)]
 pub enum DialogPage {
     SearchFileType {
+        request_id: u64,
         query: String,
         candidates: Vec<MimeCandidate>,
         selected: Option<Mime>,
@@ -766,6 +767,7 @@ pub struct App {
     search_id: widget::Id,
     search_filter_popup: bool,
     search_custom_file_type_hovered: Option<Mime>,
+    search_custom_file_type_request_id: u64,
     size: Option<Size>,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     layer_sizes: FxHashMap<window::Id, Size>,
@@ -1658,13 +1660,13 @@ impl App {
                 _ => SearchFilter {
                     recursive: self.config.search_recursive,
                     raw_regex: self.config.search_raw_regex,
-                    custom_file_types: self
-                        .config
-                        .search_custom_file_types
-                        .iter()
-                        .filter_map(|value| value.parse().ok().map(canonical_mime))
-                        .collect::<Vec<_>>()
-                        .into(),
+                    custom_file_types: canonical_mime_types(
+                        self.config
+                            .search_custom_file_types
+                            .iter()
+                            .filter_map(|value| value.parse().ok()),
+                    )
+                    .into(),
                     text_matching: if self.config.search_content_and_filename {
                         SearchTextMatching::ContentAndFilename
                     } else {
@@ -2484,12 +2486,12 @@ impl App {
             }
             file_type_column = file_type_column.push(row);
         }
-        let custom_file_types = self
-            .config
-            .search_custom_file_types
-            .iter()
-            .filter_map(|value| value.parse::<Mime>().ok().map(canonical_mime))
-            .collect::<Vec<_>>();
+        let custom_file_types = canonical_mime_types(
+            self.config
+                .search_custom_file_types
+                .iter()
+                .filter_map(|value| value.parse::<Mime>().ok()),
+        );
         for types in custom_file_types.chunks(3) {
             let mut row = widget::row::with_capacity(types.len()).spacing(6);
             for mime in types {
@@ -2798,6 +2800,7 @@ impl Application for App {
             search_id: widget::Id::new("File Search"),
             search_filter_popup: false,
             search_custom_file_type_hovered: None,
+            search_custom_file_type_request_id: 0,
             size: None,
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             surface_ids: FxHashMap::default(),
@@ -3480,19 +3483,19 @@ impl Application for App {
                         DialogPage::SearchFileType { selected, .. } => {
                             if let Some(mime) = selected {
                                 let mut filter = self.search_filter_get();
-                                let mut custom = filter.custom_file_types.to_vec();
+                                let mime = canonical_mime(mime);
+                                let mut custom =
+                                    canonical_mime_types(filter.custom_file_types.iter().cloned());
                                 if !custom.contains(&mime) {
                                     custom.push(mime.clone());
                                 }
                                 filter.custom_file_types = custom.into();
-                                let mut values = self
-                                    .config
-                                    .search_custom_file_types
-                                    .iter()
-                                    .filter_map(|value| {
-                                        value.parse::<Mime>().ok().map(canonical_mime)
-                                    })
-                                    .collect::<Vec<_>>();
+                                let mut values = canonical_mime_types(
+                                    self.config
+                                        .search_custom_file_types
+                                        .iter()
+                                        .filter_map(|value| value.parse::<Mime>().ok()),
+                                );
                                 if !values.contains(&mime) {
                                     values.push(mime);
                                 }
@@ -4716,6 +4719,9 @@ impl Application for App {
             }
             Message::SearchCustomFileTypeDialog => {
                 self.search_filter_popup = false;
+                self.search_custom_file_type_request_id =
+                    self.search_custom_file_type_request_id.wrapping_add(1);
+                let request_id = self.search_custom_file_type_request_id;
                 let root = self
                     .tab_model
                     .data::<Tab>(self.tab_model.active())
@@ -4723,34 +4729,64 @@ impl Application for App {
                         Location::Search(SearchLocation::Path(path), ..) => Some(path.clone()),
                         _ => None,
                     });
-                let excluded = self
-                    .config
-                    .search_custom_file_types
-                    .iter()
-                    .filter_map(|value| value.parse().ok().map(canonical_mime))
-                    .collect::<Vec<_>>()
-                    .into();
+                let excluded = canonical_mime_types(
+                    self.config
+                        .search_custom_file_types
+                        .iter()
+                        .filter_map(|value| value.parse().ok()),
+                )
+                .into();
                 return Task::batch([
                     self.push_dialog(
                         DialogPage::SearchFileType {
+                            request_id,
                             query: String::new(),
                             candidates: Vec::new(),
                             selected: None,
                         },
                         Some(self.dialog_text_input.clone()),
                     ),
-                    Task::perform(
-                        async move { crate::search::mime_type_candidates(root, excluded) },
-                        |candidates| {
-                            cosmic::Action::App(Message::SearchCustomFileTypeCandidates(candidates))
+                    cosmic::Task::stream(stream::channel(
+                        2,
+                        move |mut output: futures::channel::mpsc::Sender<Message>| async move {
+                            let (updates_tx, mut updates_rx) = mpsc::channel(2);
+                            let worker = tokio::task::spawn_blocking(move || {
+                                crate::search::mime_type_candidate_updates(
+                                    root,
+                                    excluded,
+                                    |candidates, _complete| {
+                                        updates_tx.blocking_send(candidates).is_ok()
+                                    },
+                                );
+                            });
+                            while let Some(candidates) = updates_rx.recv().await {
+                                if output
+                                    .send(Message::SearchCustomFileTypeCandidates(
+                                        request_id, candidates,
+                                    ))
+                                    .await
+                                    .is_err()
+                                {
+                                    break;
+                                }
+                            }
+                            // If the UI task was cancelled, close the receiver so
+                            // the blocking worker stops instead of waiting on a
+                            // full update channel.
+                            drop(updates_rx);
+                            let _ = worker.await;
                         },
-                    ),
+                    ))
+                    .map(cosmic::Action::App),
                 ]);
             }
-            Message::SearchCustomFileTypeCandidates(candidates) => {
+            Message::SearchCustomFileTypeCandidates(request_id, candidates) => {
                 if let Some(DialogPage::SearchFileType {
-                    candidates: value, ..
+                    request_id: active_request_id,
+                    candidates: value,
+                    ..
                 }) = self.dialog_pages.front_mut()
+                    && *active_request_id == request_id
                 {
                     *value = candidates;
                 }
@@ -4770,8 +4806,9 @@ impl Application for App {
                 }
             }
             Message::SearchCustomFileTypeToggle(mime) => {
+                let mime = canonical_mime(mime);
                 let mut filter = self.search_filter_get();
-                let mut selected = filter.custom_file_types.to_vec();
+                let mut selected = canonical_mime_types(filter.custom_file_types.iter().cloned());
                 if let Some(index) = selected.iter().position(|value| value == &mime) {
                     selected.remove(index);
                 } else {
@@ -4785,22 +4822,24 @@ impl Application for App {
             }
             Message::SearchCustomFileTypeRemove(mime) => {
                 self.search_custom_file_type_hovered = None;
+                let mime = canonical_mime(mime);
                 let mut filter = self.search_filter_get();
-                filter.custom_file_types = filter
-                    .custom_file_types
-                    .iter()
-                    .filter(|value| **value != mime)
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .into();
-                let values = self
-                    .config
-                    .search_custom_file_types
-                    .iter()
-                    .filter_map(|value| value.parse::<Mime>().ok().map(canonical_mime))
-                    .filter(|value| value != &mime)
-                    .map(|value| value.to_string())
-                    .collect::<Vec<_>>();
+                filter.custom_file_types =
+                    canonical_mime_types(filter.custom_file_types.iter().cloned())
+                        .into_iter()
+                        .filter(|value| value != &mime)
+                        .collect::<Vec<_>>()
+                        .into();
+                let values = canonical_mime_types(
+                    self.config
+                        .search_custom_file_types
+                        .iter()
+                        .filter_map(|value| value.parse::<Mime>().ok()),
+                )
+                .into_iter()
+                .filter(|value| value != &mime)
+                .map(|value| value.to_string())
+                .collect::<Vec<_>>();
                 config_set!(search_custom_file_types, values);
                 return self.search_filter_set_active(filter);
             }
@@ -6053,6 +6092,7 @@ impl Application for App {
                 query,
                 candidates,
                 selected,
+                ..
             } => {
                 let needle = query.to_lowercase();
                 let mut list = widget::list_column();
