@@ -453,7 +453,11 @@ impl Op {
             }
         }
 
-        let (from_file, metadata, to_file) = cosmic::iced::futures::join!(
+        // Open source and destination files using compio.
+        // If the destination is on a GVfs FUSE mount (e.g., MTP device), compio's
+        // io_uring/IOCP backend may fail to open or write to it. In that case,
+        // we fall back to gio::File which uses the GVfs D-Bus backend directly.
+        let (from_file_open_result, metadata, to_file_open_result) = cosmic::iced::futures::join!(
             async {
                 compio::fs::OpenOptions::new()
                     .read(true)
@@ -469,12 +473,37 @@ impl Op {
                     .write(true)
                     .open(&self.to)
                     .await
-                    .with_context(|| format!("failed to open {} for writing", self.to.display()))
             }
         );
 
-        let from_file = from_file?;
-        let mut to_file = to_file?;
+        let from_file = from_file_open_result?;
+
+        let mut to_file = match to_file_open_result {
+            Ok(file) => file,
+            #[cfg(not(feature = "gvfs"))]
+            Err(why) => {
+                _ = from_file.close().await;
+                return Err(anyhow::anyhow!(
+                    "failed to open {} for writing: {}",
+                    self.to.display(),
+                    why
+                ).into());
+            }
+            #[cfg(feature = "gvfs")]
+            Err(why) => {
+                tracing::warn!(
+                    "compio failed to open {} for writing: {}. Falling back to gio.",
+                    self.to.display(),
+                    why
+                );
+                _ = from_file.close().await;
+                return self
+                    .gio_file_copy(ctx, progress)
+                    .await
+                    .map(|_| true)
+                    .map_err(Into::into);
+            }
+        };
         progress.total_bytes = metadata.as_ref().map(|m| m.len());
         (ctx.on_progress)(self, &progress);
 
