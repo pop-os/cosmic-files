@@ -421,6 +421,27 @@ impl LargeImageManager {
         self.decoding_images.remove(&path);
     }
 
+    /// Store a decode error only if it belongs to the current generation.
+    /// Returns true if stored, false if the failed decode has been superseded.
+    pub fn store_error_with_generation(
+        &mut self,
+        path: PathBuf,
+        error: String,
+        generation: u64,
+    ) -> bool {
+        if self.decode_generations.get(&path).copied() != Some(generation) {
+            log::info!(
+                "Discarding outdated decode error for {} (generation {})",
+                path.display(),
+                generation
+            );
+            return false;
+        }
+
+        self.store_error(path, error);
+        true
+    }
+
     pub fn clear_error(&mut self, path: &Path) {
         self.decode_errors.remove(path);
     }
@@ -446,8 +467,6 @@ impl LargeImageManager {
         );
         self.decoded_images.clear();
         self.decoded_display_sizes.clear();
-        self.decoding_images.clear();
-        self.decode_generations.clear();
         self.decode_errors.clear();
     }
 
@@ -611,5 +630,45 @@ impl LargeImageManager {
             );
         }
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LargeImageManager;
+    use cosmic::widget;
+    use std::path::PathBuf;
+
+    fn image_handle() -> widget::image::Handle {
+        widget::image::Handle::from_rgba(1, 1, vec![0, 0, 0, 255])
+    }
+
+    #[test]
+    fn clear_cache_preserves_in_flight_decode_state() {
+        let path = PathBuf::from("/tmp/in-flight.png");
+        let mut manager = LargeImageManager::new();
+        assert!(manager.try_start_decode(&path, 7));
+
+        manager.clear_cache();
+
+        assert!(manager.is_decoding(&path));
+        assert!(!manager.store_decoded_with_generation(path.clone(), image_handle(), None, 6));
+        assert!(manager.store_decoded_with_generation(path.clone(), image_handle(), None, 7));
+    }
+
+    #[test]
+    fn outdated_decode_error_does_not_replace_current_decode() {
+        let path = PathBuf::from("/tmp/redecoded.png");
+        let mut manager = LargeImageManager::new();
+        assert!(manager.try_start_decode(&path, 1));
+        assert!(manager.store_decoded_with_generation(path.clone(), image_handle(), None, 1));
+        manager.clear_cache();
+        assert!(manager.try_start_decode(&path, 2));
+
+        let stored =
+            manager.store_error_with_generation(path.clone(), "stale failure".to_string(), 1);
+        assert!(!stored);
+        assert!(manager.is_decoding(&path));
+        assert!(manager.get_error(&path).is_none());
     }
 }

@@ -63,7 +63,7 @@ use crate::localize::{LANGUAGE_SORTER, LOCALE};
 use crate::mime_icon::{mime_for_path, mime_icon};
 use crate::mounter::MOUNTERS;
 use crate::operation::{Controller, OperationError};
-use crate::pdf_preview::{decode_pdf_preview, is_pdf_mime, try_decode_pdf};
+use crate::pdf_preview::{PdfPreviewError, decode_pdf_preview, is_pdf_mime, try_decode_pdf};
 use crate::thumbnail_cacher::{CachedThumbnail, ThumbnailCacher, ThumbnailSize};
 use crate::thumbnailer::thumbnailer;
 use crate::trash::{Trash, TrashExt};
@@ -1810,8 +1810,8 @@ pub enum Message {
     CalculateChecksums(PathBuf),
     CopyChecksum(String),
     ImageDecoded(PathBuf, u32, u32, Vec<u8>, Option<(u32, u32)>, u64), // path, width, height, pixels, display_size, generation
-    ImageDecodeFailed(PathBuf),
-    PdfPreviewFailed(PathBuf),
+    ImageDecodeFailed(PathBuf, u64),
+    PdfPreviewFailed(PathBuf, PdfPreviewError),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -3418,11 +3418,12 @@ impl Tab {
             }
             return vec![Command::Iced(
                 cosmic::iced::Task::perform(decode_pdf_preview(path.clone()), move |result| {
-                    result
-                        .map(|(path, w, h, pixels)| {
+                    match result {
+                        Ok((path, w, h, pixels)) => {
                             Message::ImageDecoded(path, w, h, pixels, None, 0)
-                        })
-                        .unwrap_or_else(|| Message::PdfPreviewFailed(path.clone()))
+                        }
+                        Err(error) => Message::PdfPreviewFailed(path.clone(), error),
+                    }
                 })
                 .into(),
             )];
@@ -3473,7 +3474,9 @@ impl Tab {
                                     generation,
                                 )
                             })
-                            .unwrap_or_else(|| Message::ImageDecodeFailed(path_fail.clone()))
+                            .unwrap_or_else(|| {
+                                Message::ImageDecodeFailed(path_fail.clone(), generation)
+                            })
                     },
                 )
                 .into(),
@@ -4715,13 +4718,19 @@ impl Tab {
                     generation,
                 );
             }
-            Message::ImageDecodeFailed(path) => {
-                self.large_image_manager
-                    .store_error(path, fl!("failed-to-generate-preview"));
+            Message::ImageDecodeFailed(path, generation) => {
+                self.large_image_manager.store_error_with_generation(
+                    path,
+                    fl!("failed-to-generate-preview"),
+                    generation,
+                );
             }
-            Message::PdfPreviewFailed(path) => {
-                self.large_image_manager
-                    .store_error(path, fl!("failed-to-generate-preview"));
+            Message::PdfPreviewFailed(path, error) => {
+                let message = match error {
+                    PdfPreviewError::MissingThumbnailer => fl!("missing-pdf-thumbnailer"),
+                    PdfPreviewError::Failed => fl!("failed-to-generate-preview"),
+                };
+                self.large_image_manager.store_error(path, message);
             }
             Message::ToggleSort(heading_option) => {
                 if !matches!(self.location, Location::Search(..)) {
@@ -5118,6 +5127,8 @@ impl Tab {
         } = theme::spacing();
 
         //TODO: display error messages when image not found?
+        let preview_error_text = |msg: &str| widget::text(format!("⚠ {}", msg)).size(13);
+        let preview_loading_text = || widget::text(fl!("loading-preview")).size(14);
         let mut name_opt = None;
         let mut element_opt: Option<Element<Message>> = None;
         if let Some(index) = self.select_focus
@@ -5130,9 +5141,30 @@ impl Tab {
                 .as_ref()
                 .unwrap_or(&ItemThumbnail::NotImage)
             {
-                ItemThumbnail::NotImage => {}
+                ItemThumbnail::NotImage => {
+                    // PDFs without a cached thumbnail (e.g. no thumbnailer installed) still go
+                    // through the large-image decode flow, so show its state instead of nothing
+                    if let Some(path) = item.path_opt()
+                        && is_pdf_mime(&item.mime)
+                    {
+                        let content: Option<cosmic::Element<'_, Message>> =
+                            if let Some(error_msg) = self.large_image_manager.get_error(path) {
+                                Some(preview_error_text(error_msg).into())
+                            } else if self.large_image_manager.is_decoding(path) {
+                                Some(preview_loading_text().into())
+                            } else {
+                                self.large_image_manager
+                                    .get_decoded(path)
+                                    .map(|handle| widget::image(handle.clone()).into())
+                            };
+                        if let Some(content) = content {
+                            element_opt =
+                                Some(widget::container(content).center(Length::Fill).into());
+                        }
+                    }
+                }
                 ItemThumbnail::Image(handle, original_dims) => {
-                    // Single path for both images and PDFs: large_image_manager holds decoded previews
+                    // Images and PDFs with a thumbnail: large_image_manager holds decoded previews
                     let (is_loading, error_msg_opt, image_handle) =
                         if let Some(path) = item.path_opt() {
                             if let Some(error_msg) = self.large_image_manager.get_error(path) {
@@ -5173,14 +5205,14 @@ impl Tab {
                         if let Some(error_msg) = error_msg_opt {
                             widget::column::with_capacity(2)
                                 .push(widget::image(image_handle))
-                                .push(widget::text(format!("⚠ {}", error_msg)).size(13))
+                                .push(preview_error_text(&error_msg))
                                 .padding(space_xs)
                                 .align_x(cosmic::iced::Alignment::Center)
                                 .into()
                         } else if is_loading {
                             widget::column::with_capacity(2)
                                 .push(widget::image(image_handle))
-                                .push(widget::text(fl!("loading-preview")).size(14))
+                                .push(preview_loading_text())
                                 .padding(space_xs)
                                 .align_x(cosmic::iced::Alignment::Center)
                                 .into()

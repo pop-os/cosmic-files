@@ -4,7 +4,7 @@
 //! Large PDF preview for detail pane and gallery using evince-thumbnailer at higher resolution.
 
 use crate::large_image::LargeImageManager;
-use mime_guess::Mime;
+use mime_guess::{Mime, mime};
 use std::path::{Path, PathBuf};
 
 /// Size in pixels for the large PDF preview (first page) in preview pane and gallery.
@@ -12,7 +12,16 @@ pub const PDF_PREVIEW_SIZE: u32 = 1024;
 
 /// Returns true if the MIME type is application/pdf.
 pub fn is_pdf_mime(mime: &Mime) -> bool {
-    mime.type_() == "application" && mime.subtype() == "pdf"
+    mime.type_() == mime::APPLICATION && mime.subtype() == mime::PDF
+}
+
+/// Reason a PDF preview could not be generated.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PdfPreviewError {
+    /// No PDF thumbnailer (e.g. evince-thumbnailer) is installed.
+    MissingThumbnailer,
+    /// A thumbnailer was found but failed to produce a preview.
+    Failed,
 }
 
 /// Starts PDF preview decode via the shared large-image manager. Caller should spawn
@@ -23,10 +32,15 @@ pub fn try_decode_pdf(manager: &mut LargeImageManager, path: &Path) -> bool {
 }
 
 /// Runs the PDF thumbnailer (e.g. evince-thumbnailer) at larger size and returns RGBA pixels.
-pub async fn decode_pdf_preview(path: PathBuf) -> Option<(PathBuf, u32, u32, Vec<u8>)> {
+pub async fn decode_pdf_preview(
+    path: PathBuf,
+) -> Result<(PathBuf, u32, u32, Vec<u8>), PdfPreviewError> {
     tokio::task::spawn_blocking(move || {
-        let mime: Mime = "application/pdf".parse().ok()?;
-        let thumbnailers = crate::thumbnailer::thumbnailer(&mime);
+        let thumbnailers = crate::thumbnailer::thumbnailer(&mime::APPLICATION_PDF);
+        if thumbnailers.is_empty() {
+            log::warn!("no PDF thumbnailer installed for {}", path.display());
+            return Err(PdfPreviewError::MissingThumbnailer);
+        }
         for thumb in thumbnailers {
             let is_evince = thumb.exec.starts_with("evince-thumbnailer ");
             // evince-thumbnailer often runs under apparmor and cannot write to cache dirs
@@ -39,25 +53,34 @@ pub async fn decode_pdf_preview(path: PathBuf) -> Option<(PathBuf, u32, u32, Vec
                     continue;
                 }
             };
-            let mut cmd = thumb.command(&path, file.path(), PDF_PREVIEW_SIZE)?;
-            if cmd.status().ok()?.success() {
-                let reader = image::ImageReader::open(file.path())
+            let Some(mut cmd) = thumb.command(&path, file.path(), PDF_PREVIEW_SIZE) else {
+                continue;
+            };
+            let success = cmd.status().map(|s| s.success()).unwrap_or(false);
+            if success {
+                let decoded = image::ImageReader::open(file.path())
                     .and_then(image::ImageReader::with_guessed_format)
-                    .ok()?;
-                let img = reader.decode().ok()?;
+                    .map_err(image::ImageError::IoError)
+                    .and_then(|reader| reader.decode());
+                let img = match decoded {
+                    Ok(img) => img,
+                    Err(e) => {
+                        log::warn!("pdf preview decode {}: {}", path.display(), e);
+                        continue;
+                    }
+                };
                 let rgba = img.into_rgba8();
                 let (w, h) = (rgba.width(), rgba.height());
                 let pixels = rgba.into_raw();
                 log::debug!("Decoded PDF preview {}x{} for {}", w, h, path.display());
-                return Some((path, w, h, pixels));
+                return Ok((path, w, h, pixels));
             }
         }
         log::warn!("No thumbnailer produced preview for {}", path.display());
-        None
+        Err(PdfPreviewError::Failed)
     })
     .await
-    .ok()
-    .flatten()
+    .map_err(|_| PdfPreviewError::Failed)?
 }
 
 #[cfg(test)]
