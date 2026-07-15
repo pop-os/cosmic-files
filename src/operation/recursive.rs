@@ -500,7 +500,7 @@ impl Op {
                 return self
                     .gio_file_copy(ctx, progress)
                     .await
-                    .map(|_| true)
+                    .map(|()| true)
                     .map_err(Into::into);
             }
         };
