@@ -486,12 +486,7 @@ impl Op {
                 ).into());
             }
             #[cfg(feature = "gvfs")]
-            Err(why) => {
-                tracing::warn!(
-                    "compio failed to open {} for writing: {}. Falling back to gio.",
-                    self.to.display(),
-                    why
-                );
+            Err(_why) => {
                 _ = from_file.close().await;
                 return self
                     .gio_file_copy(ctx, progress)
