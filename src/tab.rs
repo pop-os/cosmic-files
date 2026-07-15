@@ -345,24 +345,21 @@ fn tab_complete(path: &Path) -> Result<Vec<(String, PathBuf)>, Box<dyn Error>> {
     Ok(completions)
 }
 
-//TODO: translate, add more levels?
-fn format_size(size: u64) -> String {
-    const KB: u64 = 1000;
-    const MB: u64 = 1000 * KB;
-    const GB: u64 = 1000 * MB;
-    const TB: u64 = 1000 * GB;
-
-    if size >= TB {
-        format!("{:.1} TB", size as f64 / TB as f64)
-    } else if size >= GB {
-        format!("{:.1} GB", size as f64 / GB as f64)
-    } else if size >= MB {
-        format!("{:.1} MB", size as f64 / MB as f64)
-    } else if size >= KB {
-        format!("{:.1} KB", size as f64 / KB as f64)
+fn format_size(size: u64, use_binary_units: bool) -> String {
+    let (base, units): (u64, [&str; 4]) = if use_binary_units {
+        (1024, ["KiB", "MiB", "GiB", "TiB"])
     } else {
-        format!("{size} B")
+        (1000, ["KB", "MB", "GB", "TB"])
+    };
+
+    for (index, unit) in units.iter().enumerate().rev() {
+        let divisor = base.pow((index + 1) as u32);
+        if size >= divisor {
+            return format!("{:.1} {unit}", size as f64 / divisor as f64);
+        }
     }
+
+    format!("{size} B")
 }
 
 const MODE_SHIFT_USER: u32 = 6;
@@ -2001,8 +1998,8 @@ impl ItemThumbnail {
                     "skipping internal {} thumbnailer for {}: file size {} is larger than {}",
                     thumbnailer,
                     path.display(),
-                    format_size(size),
-                    format_size(max_size)
+                    format_size(size, true),
+                    format_size(max_size, true)
                 );
                 false
             }
@@ -2411,6 +2408,7 @@ impl Item {
         &'a self,
         mime_app_cache_opt: Option<&'a mime_app::MimeAppCache>,
         military_time: bool,
+        use_binary_units: bool,
     ) -> Element<'a, Message> {
         let cosmic_theme::Spacing {
             space_xxxs,
@@ -2466,7 +2464,7 @@ impl Item {
                 }
                 let size = match &self.dir_size {
                     DirSize::Calculating(_) => fl!("calculating"),
-                    DirSize::Directory(size) => format_size(*size),
+                    DirSize::Directory(size) => format_size(*size, use_binary_units),
                     DirSize::NotDirectory => String::new(),
                     DirSize::Error(err) => err.clone(),
                 };
@@ -2476,7 +2474,7 @@ impl Item {
             } else {
                 details = details.push(widget::text::body(fl!(
                     "item-size",
-                    size = format_size(metadata.len())
+                    size = format_size(metadata.len(), use_binary_units)
                 )));
             }
 
@@ -2646,7 +2644,12 @@ impl Item {
         column.into()
     }
 
-    pub fn replace_view(&self, heading: String, military_time: bool) -> Element<'_, Message> {
+    pub fn replace_view(
+        &self,
+        heading: String,
+        military_time: bool,
+        use_binary_units: bool,
+    ) -> Element<'_, Message> {
         let cosmic_theme::Spacing { space_xxxs, .. } = theme::spacing();
 
         let mut row = widget::row::with_capacity(2).spacing(space_xxxs);
@@ -2669,7 +2672,7 @@ impl Item {
             } else {
                 column = column.push(widget::text::body(format!(
                     "Size: {}",
-                    format_size(metadata.len())
+                    format_size(metadata.len(), use_binary_units)
                 )));
             }
             if let Ok(time) = metadata.modified() {
@@ -6002,6 +6005,7 @@ impl Tab {
         let TabConfig {
             show_hidden,
             icon_sizes,
+            use_binary_units,
             ..
         } = self.config;
 
@@ -6105,7 +6109,7 @@ impl Tab {
                                     String::new()
                                 }
                             } else {
-                                format_size(metadata.len())
+                                format_size(metadata.len(), use_binary_units)
                             }
                         }
                         ItemMetadata::Trash { metadata, .. } => match metadata.size {
@@ -6117,7 +6121,9 @@ impl Tab {
                                     format!("{entries} items")
                                 }
                             }
-                            trash::TrashItemSize::Bytes(bytes) => format_size(bytes),
+                            trash::TrashItemSize::Bytes(bytes) => {
+                                format_size(bytes, use_binary_units)
+                            }
                         },
                         ItemMetadata::SimpleDir { entries } => {
                             //TODO: translate
@@ -6127,7 +6133,7 @@ impl Tab {
                                 format!("{entries} items")
                             }
                         }
-                        ItemMetadata::SimpleFile { size } => format_size(*size),
+                        ItemMetadata::SimpleFile { size } => format_size(*size, use_binary_units),
                         #[cfg(feature = "gvfs")]
                         ItemMetadata::GvfsPath {
                             size_opt,
@@ -6141,7 +6147,7 @@ impl Tab {
                                     format!("{child_count} items")
                                 }
                             }
-                            None => format_size(size_opt.unwrap_or_default()),
+                            None => format_size(size_opt.unwrap_or_default(), use_binary_units),
                         },
                     };
 
@@ -6734,7 +6740,7 @@ impl Tab {
             } else if let Some(error) = dir_size_error {
                 error
             } else {
-                format_size(total_size)
+                format_size(total_size, self.config.use_binary_units)
             }
         };
 

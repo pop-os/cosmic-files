@@ -310,6 +310,7 @@ error = Error
 ## Settings
 settings = Settings
 single-click = Single click to open
+use-binary-units = Use binary file size units (KiB, MiB, GiB)
 show-recents = Recents folder in the sidebar
 
 ### Appearance
