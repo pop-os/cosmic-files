@@ -479,11 +479,7 @@ impl Op {
             #[cfg(not(feature = "gvfs"))]
             Err(why) => {
                 _ = from_file.close().await;
-                return Err(anyhow::anyhow!(
-                    "failed to open {} for writing: {}",
-                    self.to.display(),
-                    why
-                ).into());
+                return Err(why).with_context(|| format!("failed to open {} for writing", self.to.display()));
             }
             #[cfg(feature = "gvfs")]
             Err(_why) => {
