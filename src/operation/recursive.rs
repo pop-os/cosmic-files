@@ -453,10 +453,6 @@ impl Op {
             }
         }
 
-        // Open source and destination files using compio.
-        // If the destination is on a GVfs FUSE mount (e.g., MTP device), compio's
-        // io_uring/IOCP backend may fail to open or write to it. In that case,
-        // we fall back to gio::File which uses the GVfs D-Bus backend directly.
         let (from_file_open_result, metadata, to_file_open_result) = cosmic::iced::futures::join!(
             async {
                 compio::fs::OpenOptions::new()
