@@ -316,6 +316,9 @@ item-created = Créé : { $created }
 item-modified = Modifié : { $modified }
 item-accessed = Consulté : { $accessed }
 calculating = Calcul en cours...
+checksum = Somme de contrôle { $kind }
+calculate = Calculer
+error = Erreur
 
 ## Settings
 
