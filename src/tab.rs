@@ -320,6 +320,80 @@ pub fn folder_icon_symbolic(path: &PathBuf, icon_size: u16) -> widget::icon::Han
     .handle()
 }
 
+/// EXPERIMENTAL (RFC): per-item sync status, for overlaying a status emblem on
+/// an item's icon — the visual cue a sync client (Dropbox/Nextcloud/…) shows.
+/// In this prototype the source is a `.sync-status` file a client drops in a
+/// directory; the real cross-ecosystem source convention (in-dir file vs xattr
+/// vs D-Bus) is a design discussion. See docs at the sync-status render hook.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SyncStatus {
+    Synced,
+    Syncing,
+    Pending,
+    Excluded,
+    /// Available in the cloud but not downloaded to this device (on-demand /
+    /// placeholder). Shown with a cloud emblem; dimming the icon itself is a
+    /// follow-up once `Icon::opacity()` lands (pop-os/libcosmic#1367).
+    OnlineOnly,
+}
+
+impl SyncStatus {
+    /// Themed freedesktop emblem name composited onto the icon's corner.
+    fn emblem_name(self) -> &'static str {
+        match self {
+            SyncStatus::Synced => "emblem-ok",
+            SyncStatus::Syncing => "emblem-synchronizing",
+            SyncStatus::Pending => "emblem-new",
+            SyncStatus::Excluded => "emblem-important",
+            SyncStatus::OnlineOnly => "emblem-web",
+        }
+    }
+
+    fn parse(s: &str) -> Option<Self> {
+        match s.trim() {
+            "synced" => Some(SyncStatus::Synced),
+            "syncing" => Some(SyncStatus::Syncing),
+            "pending" => Some(SyncStatus::Pending),
+            "excluded" => Some(SyncStatus::Excluded),
+            "online" | "online-only" | "cloud" => Some(SyncStatus::OnlineOnly),
+            _ => None,
+        }
+    }
+}
+
+/// EXPERIMENTAL (RFC): build an item's icon widget, overlaying a sync-status
+/// emblem in the bottom-right corner when a status is present. Falls back to
+/// the plain icon otherwise, so non-synced items render exactly as before.
+/// Uses the same `stack!`+padding compositing the multi-select preview uses.
+fn item_icon<'a>(
+    handle: widget::icon::Handle,
+    size: u16,
+    status: Option<SyncStatus>,
+) -> Element<'a, Message> {
+    let base = widget::icon::icon(handle)
+        .content_fit(ContentFit::Contain)
+        .size(size);
+    match status {
+        Some(status) => {
+            let em = ((size as f32) * 0.45).round().clamp(8.0, size as f32) as u16;
+            let pad = size.saturating_sub(em);
+            let emblem = widget::icon::icon(
+                widget::icon::from_name(status.emblem_name())
+                    .prefer_svg(true)
+                    .size(em)
+                    .handle(),
+            )
+            .size(em);
+            stack![
+                widget::container(base),
+                widget::container(emblem).padding(padding::top(pad).left(pad)),
+            ]
+            .into()
+        }
+        None => base.into(),
+    }
+}
+
 //TODO: replace with Path::has_trailing_sep when stable
 fn has_trailing_sep(path: &Path) -> bool {
     path.as_os_str()
@@ -764,6 +838,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
         dir_size,
         cut: false,
         checksums: ChecksumState::default(),
+        sync_status: None,
     }
 }
 
@@ -896,6 +971,7 @@ pub fn item_from_entry(
         dir_size,
         cut: false,
         checksums: ChecksumState::default(),
+        sync_status: None,
     }
 }
 
@@ -955,6 +1031,7 @@ pub fn item_from_trash_entry(
         dir_size: DirSize::NotDirectory,
         cut: false,
         checksums: ChecksumState::default(),
+        sync_status: None,
     }
 }
 
@@ -1120,6 +1197,28 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
     for item in &mut items {
         if hidden_files.contains(&item.name) {
             item.hidden = true;
+        }
+    }
+    // EXPERIMENTAL (RFC): per-item sync-status emblems. A sync client may drop a
+    // `.sync-status` file in a directory — one `<name>=<synced|syncing|pending|
+    // excluded>` per line — and we overlay a matching emblem on those items.
+    // This is a prototype source to demonstrate the render hook; the real
+    // cross-ecosystem convention (in-dir file vs xattr vs D-Bus) is TBD. The
+    // existing directory watcher re-runs this scan when the file changes, so
+    // status updates live for free.
+    if let Ok(contents) = fs::read_to_string(tab_path.join(".sync-status")) {
+        let mut statuses = std::collections::HashMap::new();
+        for line in contents.lines() {
+            if let Some((name, state)) = line.split_once('=') {
+                if let Some(status) = SyncStatus::parse(state) {
+                    statuses.insert(name.trim().to_string(), status);
+                }
+            }
+        }
+        if !statuses.is_empty() {
+            for item in &mut items {
+                item.sync_status = statuses.get(&item.name).copied();
+            }
         }
     }
     items
@@ -1409,6 +1508,7 @@ pub fn scan_desktop(
             dir_size: DirSize::NotDirectory,
             cut: false,
             checksums: ChecksumState::default(),
+            sync_status: None,
         });
     }
 
@@ -2329,6 +2429,8 @@ pub struct Item {
     pub overlaps_drag_rect: bool,
     pub dir_size: DirSize,
     pub checksums: ChecksumState,
+    /// EXPERIMENTAL (RFC): sync-status emblem overlay; `None` = render as before.
+    pub sync_status: Option<SyncStatus>,
 }
 
 impl Item {
@@ -5785,9 +5887,7 @@ impl Tab {
                     //TODO: one focus group per grid item (needs custom widget)
                     let buttons: Vec<Element<Message>> = vec![
                         widget::button::custom(
-                            widget::icon::icon(item.icon_handle_grid.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_sizes.grid()),
+                            item_icon(item.icon_handle_grid.clone(), icon_sizes.grid(), item.sync_status),
                         )
                         .padding(space_xxxs)
                         .class(button_style(
@@ -5951,9 +6051,7 @@ impl Tab {
                     if *row == r && *col == c {
                         let buttons = vec![
                             widget::button::custom(
-                                widget::icon::icon(item.icon_handle_grid.clone())
-                                    .content_fit(ContentFit::Contain)
-                                    .size(icon_sizes.grid()),
+                                item_icon(item.icon_handle_grid.clone(), icon_sizes.grid(), item.sync_status),
                             )
                             .on_press(Message::Click(Some(*i)))
                             .padding(space_xxxs)
@@ -6172,9 +6270,7 @@ impl Tab {
 
                     let row = if condensed {
                         widget::row::with_children([
-                            widget::icon::icon(item.icon_handle_list_condensed.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_size)
+                            item_icon(item.icon_handle_list_condensed.clone(), icon_size, item.sync_status)
                                 .into(),
                             widget::column::with_children([
                                 Item::list_display_name(item.display_name.clone()).into(),
@@ -6189,9 +6285,7 @@ impl Tab {
                         .spacing(space_xxs)
                     } else if is_search {
                         widget::row::with_children([
-                            widget::icon::icon(item.icon_handle_list_condensed.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_size)
+                            item_icon(item.icon_handle_list_condensed.clone(), icon_size, item.sync_status)
                                 .into(),
                             widget::column::with_children([
                                 Item::list_display_name(item.display_name.clone()).into(),
@@ -6215,9 +6309,7 @@ impl Tab {
                         .spacing(space_xxs)
                     } else {
                         widget::row::with_children([
-                            widget::icon::icon(item.icon_handle_list.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_size)
+                            item_icon(item.icon_handle_list.clone(), icon_size, item.sync_status)
                                 .into(),
                             Item::list_display_name(item.display_name.clone())
                                 .width(Length::Fill)
@@ -6284,9 +6376,7 @@ impl Tab {
                             )
                         } else if condensed {
                             widget::row::with_children([
-                                widget::icon::icon(item.icon_handle_list_condensed.clone())
-                                    .content_fit(ContentFit::Contain)
-                                    .size(icon_size)
+                                item_icon(item.icon_handle_list_condensed.clone(), icon_size, item.sync_status)
                                     .into(),
                                 widget::column::with_children([
                                     Item::list_display_name(item.display_name.clone()).into(),
@@ -6301,9 +6391,7 @@ impl Tab {
                             .into()
                         } else if is_search {
                             widget::row::with_children([
-                                widget::icon::icon(item.icon_handle_list_condensed.clone())
-                                    .content_fit(ContentFit::Contain)
-                                    .size(icon_size)
+                                item_icon(item.icon_handle_list_condensed.clone(), icon_size, item.sync_status)
                                     .into(),
                                 widget::column::with_children([
                                     Item::list_display_name(item.display_name.clone()).into(),
@@ -6327,9 +6415,7 @@ impl Tab {
                             .into()
                         } else {
                             widget::row::with_children([
-                                widget::icon::icon(item.icon_handle_list.clone())
-                                    .content_fit(ContentFit::Contain)
-                                    .size(icon_size)
+                                item_icon(item.icon_handle_list.clone(), icon_size, item.sync_status)
                                     .into(),
                                 Item::list_display_name(item.display_name.clone())
                                     .width(Length::Fill)
