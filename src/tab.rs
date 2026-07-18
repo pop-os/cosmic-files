@@ -279,7 +279,26 @@ fn button_style(
     }
 }
 
+/// Reads a per-folder custom icon from a `.directory` file's `Icon=` key, if
+/// present. This is the freedesktop convention KDE/Dolphin uses, letting apps
+/// (sync clients, project tools) brand a folder. The value is either a themed
+/// icon name or an absolute path to an image, mirroring `desktop_icon_handle`.
+fn custom_folder_icon(path: &Path, icon_size: u16) -> Option<widget::icon::Handle> {
+    let contents = fs::read_to_string(path.join(".directory")).ok()?;
+    let icon = contents
+        .lines()
+        .find_map(|line| line.strip_prefix("Icon="))?
+        .trim();
+    if icon.is_empty() {
+        return None;
+    }
+    Some(desktop_icon_handle(icon, icon_size))
+}
+
 pub fn folder_icon(path: &PathBuf, icon_size: u16) -> widget::icon::Handle {
+    if let Some(handle) = custom_folder_icon(path, icon_size) {
+        return handle;
+    }
     widget::icon::from_name(SPECIAL_DIRS.get(path).map_or("folder", |x| *x))
         .prefer_svg(true)
         .size(icon_size)
@@ -287,6 +306,12 @@ pub fn folder_icon(path: &PathBuf, icon_size: u16) -> widget::icon::Handle {
 }
 
 pub fn folder_icon_symbolic(path: &PathBuf, icon_size: u16) -> widget::icon::Handle {
+    // A custom `.directory` icon (see `custom_folder_icon`) is a branded image,
+    // not part of the symbolic theme, so honor it directly — this is what makes
+    // a branded folder recognizable in the sidebar too, not just the main view.
+    if let Some(handle) = custom_folder_icon(path, icon_size) {
+        return handle;
+    }
     widget::icon::from_name(format!(
         "{}-symbolic",
         SPECIAL_DIRS.get(path).map_or("folder", |x| *x)
