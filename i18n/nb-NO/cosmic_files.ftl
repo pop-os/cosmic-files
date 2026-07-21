@@ -38,6 +38,7 @@ icon-size-and-spacing = Ikonstørrelse og avstand
 icon-size = Ikonstørrelse
 grid-spacing = Rutenettavstand
 size = Størrelse
+extension = Type
 details = Detaljer
 dismiss = Avvis beskjed
 operations-running =

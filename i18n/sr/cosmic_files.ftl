@@ -14,6 +14,7 @@ dark = Тамна
 settings = Подешавања
 replace = Замени
 size = Величина
+extension = Тип
 sort-newest-first = Најновије прво
 default-app = { $name } (подразумевано)
 renamed = Преименована „{ $from }“ у „{ $to }“

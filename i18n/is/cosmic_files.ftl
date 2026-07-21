@@ -42,6 +42,7 @@ grid-spacing = Bil í reitayfirliti
 modified = Breytt
 trashed-on = Sett í rusl
 size = Stærð
+extension = Tegund
 details = Upplýsingar
 dismiss = Hunsa skilaboð
 operations-running =

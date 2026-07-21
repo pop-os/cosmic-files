@@ -22,6 +22,7 @@ name = Аты
 modified = Өзгертілген
 trashed-on = Қоқыс шелегіне тасталған
 size = Өлшемі
+extension = Түрі
 details = Ақпараты
 dismiss = Хабарламаны елемеу
 operations-running =

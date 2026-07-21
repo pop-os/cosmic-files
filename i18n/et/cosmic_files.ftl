@@ -44,6 +44,7 @@ menu-settings = Seadistused...
 modified = Muudetud
 trashed-on = Visatud prügikasti
 size = Suurus
+extension = Tüüp
 details = Üksikasjad
 pause = Peata
 resume = Jätka

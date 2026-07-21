@@ -15,6 +15,7 @@ name = Имя
 modified = Изменено
 trashed-on = Удалено
 size = Размер
+extension = Тип
 
 # Dialogs
 

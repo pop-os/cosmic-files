@@ -23,6 +23,7 @@ name = Ad
 modified = Değiştirildi
 trashed-on = Çöpe atılma
 size = Boyut
+extension = Tür
 # Progress footer
 details = Detaylar
 dismiss = Mesajı kapat

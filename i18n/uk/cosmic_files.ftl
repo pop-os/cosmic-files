@@ -10,6 +10,7 @@ undo = Скасувати
 name = Назва
 modified = Змінено
 size = Розмір
+extension = Тип
 
 # Dialogs
 

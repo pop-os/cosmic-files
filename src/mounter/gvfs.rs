@@ -3,6 +3,7 @@ use cosmic::iced::{Subscription, stream};
 use cosmic::{Task, widget};
 use gio::glib;
 use gio::prelude::*;
+use mime_guess::Mime;
 use std::any::TypeId;
 use std::cell::Cell;
 use std::future::pending;
@@ -182,7 +183,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
             };
             (
                 //TODO: get mime from content_type?
-                "inode/directory".parse().unwrap(),
+                "inode/directory".parse::<Mime>().unwrap(),
                 file_icon(sizes.grid()),
                 file_icon(sizes.list()),
                 file_icon(sizes.list_condensed()),
@@ -193,6 +194,16 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
         let hidden = name.starts_with('.')
             || info.boolean(gio::FILE_ATTRIBUTE_STANDARD_IS_HIDDEN)
             || hidden_files.contains(&name);
+
+        let extension_text = mime
+            .to_string()
+            .rsplit('/')
+            .next()
+            .unwrap_or("")
+            .rsplit('.')
+            .next()
+            .unwrap_or("")
+            .to_owned();
 
         items.push(tab::Item {
             name,
@@ -217,6 +228,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
             dir_size: DirSize::NotDirectory,
             cut: false,
             checksums: ChecksumState::default(),
+            extension_text,
         });
     }
     Ok(items)

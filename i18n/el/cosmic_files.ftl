@@ -61,6 +61,7 @@ file = Αρχείο
 today = Σήμερα
 compress = Συμπίεση...
 size = Μέγεθος
+extension = Τύπος
 related-apps = Σχετικές εφαρμογές
 zoom-in = Μεγέθυνση
 select-all = Επιλογή όλων

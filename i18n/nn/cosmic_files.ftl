@@ -6,5 +6,6 @@ password = Passord
 settings = Innstillingar
 skip = Hopp over
 name = Namn
+extension = Type
 save = Lagra
 delete = Slett

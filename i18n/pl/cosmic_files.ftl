@@ -26,6 +26,7 @@ name = Nazwa
 modified = Zmodyfikowano
 trashed-on = Wyrzucono do kosza
 size = Rozmiar
+extension = Typ
 # Progress footer
 details = Detale
 dismiss = Odrzuć wiadomość
