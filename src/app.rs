@@ -4,6 +4,7 @@
 use cosmic::app::{self, Core, Task, context_drawer};
 use cosmic::core::Auto;
 use cosmic::cosmic_config::{self, ConfigSet};
+use cosmic::iced::advanced::text::{Ellipsize, EllipsizeHeightLimit};
 use cosmic::iced::clipboard::dnd::DndAction;
 use cosmic::iced::core::SmolStr;
 use cosmic::iced::core::widget::operation::focusable::unfocus;
@@ -18,7 +19,7 @@ use cosmic::iced::widget::scrollable;
 use cosmic::iced::widget::scrollable::AbsoluteOffset;
 use cosmic::iced::window::{self, Event as WindowEvent, Id as WindowId};
 use cosmic::iced::{
-    self, Alignment, Event, Length, Rectangle, Size, Subscription, event, mouse, stream,
+    self, Alignment, Event, Length, Rectangle, Size, Subscription, Vector, event, mouse, stream,
 };
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use cosmic::iced::{
@@ -111,6 +112,12 @@ static MOUNT_ERROR_TRY_AGAIN_BUTTON_ID: LazyLock<widget::Id> =
 
 pub(crate) static REPLACE_BUTTON_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("replace-button"));
+
+fn resize_nav_width(width: f32, last_delta_x: &mut f32, delta_x: f32) -> f32 {
+    let movement = delta_x - *last_delta_x;
+    *last_delta_x = delta_x;
+    (width + movement).clamp(160.0, 600.0)
+}
 
 #[derive(Clone, Debug)]
 pub enum Mode {
@@ -461,8 +468,8 @@ pub enum Message {
     Undo(usize),
     UndoTrash(widget::ToastId, Arc<[PathBuf]>),
     UndoTrashStart(Vec<TrashItem>),
-    NavResizeStart(Option<iced::Point>),
-    NavResize(Option<Rectangle>),
+    NavResizeStart,
+    NavResize(Vector),
     NavResizeSave,
     NavResizeReset,
     WindowClose,
@@ -768,7 +775,7 @@ pub struct App {
     type_select_last_key: Option<Instant>,
     nav_drag_id: DragId,
     nav_width: f32,
-    nav_resize_state: Option<(f32, Option<(f32, f32)>)>,
+    nav_resize_last_delta: Option<f32>,
     tab_drag_id: DragId,
     auto_scroll_speed: Option<i16>,
     file_dialog_opt: Option<Dialog<Message>>,
@@ -2465,7 +2472,7 @@ impl Application for App {
             type_select_last_key: None,
             nav_drag_id: DragId::new(),
             nav_width,
-            nav_resize_state: None,
+            nav_resize_last_delta: None,
             tab_drag_id: DragId::new(),
             auto_scroll_speed: None,
             file_dialog_opt: None,
@@ -2520,22 +2527,22 @@ impl Application for App {
 
         let nav_model = self.nav_model()?;
 
-        let nav = cosmic::widget::nav_bar(nav_model, |entity| {
-            cosmic::Action::Cosmic(cosmic::app::Action::NavBar(entity))
-        })
-        .drag_id(self.nav_drag_id)
-        .on_dnd_enter(|entity, _| cosmic::Action::App(Message::DndEnterNav(entity)))
-        .on_dnd_leave(|_| cosmic::Action::App(Message::DndExitNav))
-        .on_dnd_drop(|entity, data, action| {
-            cosmic::Action::App(Message::DndDropNav(entity, data, action))
-        })
-        .on_context(|entity| cosmic::Action::App(Message::NavBarContext(entity)))
-        .on_close(|entity| cosmic::Action::App(Message::NavBarClose(entity)))
-        .on_middle_press(|entity| {
-            cosmic::Action::App(Message::NavMenuAction(NavMenuAction::OpenInNewTab(entity)))
-        })
-        .context_menu(self.nav_context_menu())
-        .close_icon(icon::from_name("media-eject-symbolic").size(16).icon());
+        let mut nav = segmented_button::vertical(nav_model)
+            .on_activate(|entity| cosmic::Action::Cosmic(cosmic::app::Action::NavBar(entity)))
+            .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1)))
+            .drag_id(self.nav_drag_id)
+            .on_dnd_enter(|entity, _| cosmic::Action::App(Message::DndEnterNav(entity)))
+            .on_dnd_leave(|_| cosmic::Action::App(Message::DndExitNav))
+            .on_dnd_drop(|entity, data, action| {
+                cosmic::Action::App(Message::DndDropNav(entity, data, action))
+            })
+            .on_context(|entity| cosmic::Action::App(Message::NavBarContext(entity)))
+            .on_close(|entity| cosmic::Action::App(Message::NavBarClose(entity)))
+            .on_middle_press(|entity| {
+                cosmic::Action::App(Message::NavMenuAction(NavMenuAction::OpenInNewTab(entity)))
+            })
+            .context_menu(self.nav_context_menu())
+            .close_icon(icon::from_name("media-eject-symbolic").size(16).icon());
 
         #[cfg(feature = "wayland")]
         {
@@ -2544,14 +2551,29 @@ impl Application for App {
                 .on_surface_action(|m| cosmic::Action::Cosmic(cosmic::app::Action::Surface(m)))
         }
 
-        let mut nav = nav.into_container();
+        let nav_theme = theme::active();
+        let space_s = nav_theme.cosmic().space_s();
+        let space_xxs = nav_theme.cosmic().space_xxs();
+        let nav = nav
+            .button_height(32)
+            .button_padding([space_s, space_xxs, space_s, space_xxs])
+            .button_spacing(space_xxs)
+            .spacing(space_xxs)
+            .style(theme::SegmentedButton::NavBar);
+        let nav = widget::container(nav).padding(space_xxs);
+        let nav = widget::scrollable(nav)
+            .class(style::iced::Scrollable::Minimal)
+            .height(Length::Fill);
+        let nav = widget::container(nav)
+            .height(Length::Fill)
+            .class(theme::Container::custom(widget::nav_bar::nav_bar_style));
 
         if !self.core.is_condensed() {
             let handle = mouse_area::MouseArea::new(
                 widget::container(space::vertical().height(Length::Fill)).padding([0, 3]),
             )
-            .on_press(|point| cosmic::Action::App(Message::NavResizeStart(point)))
-            .on_drag(|rect| cosmic::Action::App(Message::NavResize(rect)))
+            .on_press(|_| cosmic::Action::App(Message::NavResizeStart))
+            .on_drag_delta(|delta| cosmic::Action::App(Message::NavResize(delta)))
             .on_release(|_| cosmic::Action::App(Message::NavResizeSave))
             .on_drag_end(|_| cosmic::Action::App(Message::NavResizeSave))
             .on_double_click(|_| cosmic::Action::App(Message::NavResizeReset))
@@ -4879,30 +4901,16 @@ impl Application for App {
             Message::UndoTrashStart(items) => {
                 return self.operation(Operation::Restore { items });
             }
-            Message::NavResizeStart(_point) => {
-                self.nav_resize_state = Some((self.nav_width, None));
+            Message::NavResizeStart => {
+                self.nav_resize_last_delta = Some(0.0);
             }
-            Message::NavResize(rect_opt) => {
-                if let Some(rect) = rect_opt {
-                    if let Some((start_width, ref mut click_opt)) = self.nav_resize_state {
-                        // First frame: just record the reference point, no resize
-                        if click_opt.is_none() {
-                            *click_opt = Some((rect.x, rect.width));
-                        } else {
-                            let (first_x, _first_w) = click_opt.unwrap();
-                            // If rect.x is stable → right drag; else → left drag
-                            let delta: f32 = if (rect.x - first_x).abs() < 1.0 {
-                                rect.width
-                            } else {
-                                -rect.width
-                            };
-                            self.nav_width = (start_width + delta).clamp(160.0, 600.0);
-                        }
-                    }
+            Message::NavResize(delta) => {
+                if let Some(last_delta_x) = &mut self.nav_resize_last_delta {
+                    self.nav_width = resize_nav_width(self.nav_width, last_delta_x, delta.x);
                 }
             }
             Message::NavResizeSave => {
-                self.nav_resize_state = None;
+                self.nav_resize_last_delta = None;
                 config_set!(nav_width, self.nav_width as u16);
             }
             Message::NavResizeReset => {
@@ -7118,6 +7126,27 @@ impl Application for App {
         }));
 
         Subscription::batch(subscriptions)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resize_nav_width;
+
+    #[test]
+    fn nav_resize_reverses_immediately() {
+        let mut last_delta_x = 0.0;
+        let mut width = resize_nav_width(280.0, &mut last_delta_x, -100.0);
+        assert_eq!(width, 180.0);
+
+        width = resize_nav_width(width, &mut last_delta_x, -60.0);
+        assert_eq!(width, 220.0);
+
+        width = resize_nav_width(width, &mut last_delta_x, 400.0);
+        assert_eq!(width, 600.0);
+
+        width = resize_nav_width(width, &mut last_delta_x, 390.0);
+        assert_eq!(width, 590.0);
     }
 }
 

@@ -22,6 +22,7 @@ pub struct MouseArea<'a, Message> {
     content: Element<'a, Message>,
     on_auto_scroll: Option<Box<dyn OnAutoScroll<'a, Message>>>,
     on_drag: Option<Box<dyn OnDrag<'a, Message>>>,
+    on_drag_delta: Option<Box<dyn OnDragDelta<'a, Message>>>,
     on_double_click: Option<Box<dyn OnMouseButton<'a, Message>>>,
     on_press: Option<Box<dyn OnMouseButton<'a, Message>>>,
     on_drag_end: Option<Box<dyn OnMouseButton<'a, Message>>>,
@@ -56,6 +57,13 @@ impl<'a, Message> MouseArea<'a, Message> {
     #[must_use]
     pub fn on_drag(mut self, message: impl OnDrag<'a, Message>) -> Self {
         self.on_drag = Some(Box::new(message));
+        self
+    }
+
+    /// The message to emit with the signed displacement from the drag origin.
+    #[must_use]
+    pub fn on_drag_delta(mut self, message: impl OnDragDelta<'a, Message>) -> Self {
+        self.on_drag_delta = Some(Box::new(message));
         self
     }
 
@@ -224,6 +232,9 @@ impl<'a, Message, F> OnMouseButton<'a, Message> for F where F: Fn(Option<Point>)
 pub trait OnDrag<'a, Message>: Fn(Option<Rectangle>) -> Message + 'a {}
 impl<'a, Message, F> OnDrag<'a, Message> for F where F: Fn(Option<Rectangle>) -> Message + 'a {}
 
+pub trait OnDragDelta<'a, Message>: Fn(Vector) -> Message + 'a {}
+impl<'a, Message, F> OnDragDelta<'a, Message> for F where F: Fn(Vector) -> Message + 'a {}
+
 pub trait OnResize<'a, Message>: Fn(Rectangle) -> Message + 'a {}
 impl<'a, Message, F> OnResize<'a, Message> for F where F: Fn(Rectangle) -> Message + 'a {}
 
@@ -248,6 +259,13 @@ struct State {
 }
 
 impl State {
+    fn drag_delta(&self, cursor: mouse::Cursor) -> Option<Vector> {
+        let drag_source = self.drag_initiated?;
+        let position = cursor.position().or(self.last_virtual_position)?;
+
+        (position.distance(drag_source) > 1.0).then(|| position - drag_source)
+    }
+
     fn drag_rect(&self, cursor: mouse::Cursor) -> Option<Rectangle> {
         if let Some(drag_source) = self.drag_initiated
             && let Some(position) = cursor.position().or(self.last_virtual_position)
@@ -300,6 +318,7 @@ impl<'a, Message> MouseArea<'a, Message> {
             content: content.into(),
             on_auto_scroll: None,
             on_drag: None,
+            on_drag_delta: None,
             on_drag_end: None,
             on_double_click: None,
             on_press: None,
@@ -628,7 +647,7 @@ fn update<Message: Clone>(
                 }
             }
         }
-        if widget.on_drag.is_some() {
+        if widget.on_drag.is_some() || widget.on_drag_delta.is_some() {
             state.drag_initiated = cursor.position();
         }
 
@@ -806,5 +825,32 @@ fn update<Message: Clone>(
             })
         };
         shell.publish(message(publish_rect));
+    }
+
+    if let Some((message, drag_delta)) = widget.on_drag_delta.as_ref().zip(state.drag_delta(cursor))
+    {
+        shell.publish(message(drag_delta));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn drag_delta_preserves_direction_when_reversing() {
+        let state = State {
+            drag_initiated: Some(Point::new(200.0, 10.0)),
+            ..State::default()
+        };
+
+        let left = state.drag_delta(mouse::Cursor::Available(Point::new(150.0, 10.0)));
+        let back_toward_origin =
+            state.drag_delta(mouse::Cursor::Available(Point::new(180.0, 10.0)));
+        let right = state.drag_delta(mouse::Cursor::Available(Point::new(240.0, 10.0)));
+
+        assert_eq!(left, Some(Vector::new(-50.0, 0.0)));
+        assert_eq!(back_toward_origin, Some(Vector::new(-20.0, 0.0)));
+        assert_eq!(right, Some(Vector::new(40.0, 0.0)));
     }
 }
