@@ -346,7 +346,7 @@ impl Default for TabConfig {
             military_time: false,
             show_hidden: false,
             single_click: false,
-            use_binary_units: true,
+            use_binary_units: false,
             view: View::List,
         }
     }
