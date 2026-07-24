@@ -619,11 +619,53 @@ fn desktop_icon_handle(icon: &str, size: u16) -> widget::icon::Handle {
     if icon_path.is_absolute() && icon_path.exists() {
         widget::icon::from_path(icon_path.to_path_buf())
     } else {
-        widget::icon::from_name(icon)
-            .prefer_svg(true)
-            .size(size)
-            .handle()
+        themed_icon_handle(icon, size)
     }
+}
+
+fn icon_path_is_cosmic_family(path: &Path) -> bool {
+    path.components().any(|c| {
+        matches!(
+            c.as_os_str().to_str(),
+            Some("Cosmic" | "Pop" | "pop-os-branding")
+        )
+    })
+}
+
+/// Resolve a themed icon name with Cosmic fidelity.
+///
+/// Many Cosmic icons exist only as `*-symbolic`. Looking up the bare name can
+/// inherit a foreign full-color icon (e.g. Humanity) via the theme chain, which
+/// looks wrong next to Cosmic UI. Absolute paths are handled by callers and are
+/// unchanged here.
+fn themed_icon_handle(icon: &str, size: u16) -> widget::icon::Handle {
+    let resolve = |name: &str| {
+        let named = widget::icon::from_name(name).prefer_svg(true).size(size);
+        named.clone().path().map(|path| (path, named))
+    };
+
+    if !icon.ends_with("-symbolic") {
+        let symbolic = format!("{icon}-symbolic");
+        match (resolve(icon), resolve(symbolic.as_str())) {
+            (Some((base_path, base_named)), Some((sym_path, sym_named))) => {
+                if icon_path_is_cosmic_family(&base_path) {
+                    return base_named.handle();
+                }
+                if icon_path_is_cosmic_family(&sym_path) {
+                    return sym_named.handle();
+                }
+                return base_named.handle();
+            }
+            (None, Some((_, sym_named))) => return sym_named.handle(),
+            (Some((_, base_named)), None) => return base_named.handle(),
+            (None, None) => {}
+        }
+    }
+
+    widget::icon::from_name(icon)
+        .prefer_svg(true)
+        .size(size)
+        .handle()
 }
 
 #[cfg(feature = "desktop")]

@@ -2650,6 +2650,18 @@ impl Application for App {
     }
 
     fn on_nav_select(&mut self, entity: Entity) -> Task<Self::Message> {
+        // Re-read per-folder `.directory` icons when activating a favorite so the
+        // sidebar picks up icon changes without requiring a new window.
+        if self.nav_model.data::<FavoriteIndex>(entity).is_some()
+            && let Some(Location::Path(path)) = self.nav_model.data::<Location>(entity).cloned()
+            && path.is_dir()
+        {
+            self.nav_model.icon_set(
+                entity,
+                icon::icon(tab::folder_icon_symbolic(&path, 16)).size(16),
+            );
+        }
+
         self.nav_model.activate(entity);
         if let Some(location) = self.nav_model.data::<Location>(entity) {
             let should_open = match location {
