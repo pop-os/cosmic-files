@@ -1778,14 +1778,16 @@ impl App {
                 };
                 nav_model = nav_model.insert(move |b| {
                     b.text(name.clone())
-                        .icon(
-                            icon::icon(if path.is_dir() {
-                                tab::folder_icon_symbolic(&path, 16)
-                            } else {
-                                icon::from_name("text-x-generic-symbolic").size(16).handle()
-                            })
-                            .size(16),
-                        )
+                        .icon(if path.is_dir() {
+                            tab::folder_nav_icon(&path, 16)
+                        } else {
+                            icon::icon(
+                                icon::from_name("text-x-generic-symbolic")
+                                    .size(16)
+                                    .handle(),
+                            )
+                            .size(16)
+                        })
                         .data(match favorite {
                             Favorite::Network { uri, name, path } => {
                                 Location::Network(uri.clone(), name.clone(), Some(path.to_owned()))
@@ -2656,10 +2658,8 @@ impl Application for App {
             && let Some(Location::Path(path)) = self.nav_model.data::<Location>(entity).cloned()
             && path.is_dir()
         {
-            self.nav_model.icon_set(
-                entity,
-                icon::icon(tab::folder_icon_symbolic(&path, 16)).size(16),
-            );
+            self.nav_model
+                .icon_set(entity, tab::folder_nav_icon(&path, 16));
         }
 
         self.nav_model.activate(entity);

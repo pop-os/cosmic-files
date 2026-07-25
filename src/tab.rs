@@ -320,6 +320,14 @@ pub fn folder_icon_symbolic(path: &PathBuf, icon_size: u16) -> widget::icon::Han
     .handle()
 }
 
+/// Sidebar/nav folder icon that keeps image aspect ratio (pad, don't squash).
+/// Matches the main view, which uses [`ContentFit::Contain`] for item icons.
+pub fn folder_nav_icon(path: &PathBuf, icon_size: u16) -> widget::icon::Icon {
+    widget::icon::icon(folder_icon_symbolic(path, icon_size))
+        .size(icon_size)
+        .content_fit(ContentFit::Contain)
+}
+
 //TODO: replace with Path::has_trailing_sep when stable
 fn has_trailing_sep(path: &Path) -> bool {
     path.as_os_str()
