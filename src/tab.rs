@@ -625,10 +625,54 @@ fn get_desktop_file_icon(path: &Path) -> Option<String> {
 fn desktop_icon_handle(icon: &str, size: u16) -> widget::icon::Handle {
     let icon_path = Path::new(icon);
     if icon_path.is_absolute() && icon_path.exists() {
-        widget::icon::from_path(icon_path.to_path_buf())
+        icon_handle_from_image_path(icon_path)
     } else {
         themed_icon_handle(icon, size)
     }
+}
+
+/// Load a raster image path as an icon, padding non-square images to a square
+/// with transparent margins. Nav/segmented-button layouts allocate a square
+/// and historically fill it; without padding a wide logo (e.g. 1920×1201)
+/// gets squashed. SVG and already-square rasters keep the cheap path handle.
+fn icon_handle_from_image_path(path: &Path) -> widget::icon::Handle {
+    if path.extension().is_some_and(|ext| ext == "svg") {
+        return widget::icon::from_path(path.to_path_buf());
+    }
+    padded_square_raster_handle(path)
+        .unwrap_or_else(|| widget::icon::from_path(path.to_path_buf()))
+}
+
+fn padded_square_raster_handle(path: &Path) -> Option<widget::icon::Handle> {
+    let img = ImageReader::open(path)
+        .ok()?
+        .with_guessed_format()
+        .ok()?
+        .decode()
+        .ok()?
+        .into_rgba8();
+    let (w, h) = (img.width(), img.height());
+    if w == 0 || h == 0 || w == h {
+        return None;
+    }
+
+    // Cap work for huge brand assets used as tiny sidebar icons.
+    const MAX_SIDE: u32 = 256;
+    let img = if w.max(h) > MAX_SIDE {
+        let scale = MAX_SIDE as f32 / w.max(h) as f32;
+        let nw = ((w as f32) * scale).round().max(1.0) as u32;
+        let nh = ((h as f32) * scale).round().max(1.0) as u32;
+        image::imageops::resize(&img, nw, nh, image::imageops::FilterType::Triangle)
+    } else {
+        img
+    };
+    let (w, h) = (img.width(), img.height());
+    let side = w.max(h);
+    let mut square = image::RgbaImage::new(side, side);
+    let x = (side - w) / 2;
+    let y = (side - h) / 2;
+    image::imageops::overlay(&mut square, &img, i64::from(x), i64::from(y));
+    Some(widget::icon::from_raster_pixels(side, side, square.into_raw()))
 }
 
 fn icon_path_is_cosmic_family(path: &Path) -> bool {
