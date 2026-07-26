@@ -383,7 +383,6 @@ view = Ansicht
 grid-view = Rasteransicht
 list-view = Listenansicht
 show-hidden-files = Versteckte Dateien anzeigen
-show-mounted-disks = Eingehängte Datenträger anzeigen
 list-directories-first = Verzeichnisse zuerst auflisten
 gallery-preview = Galerie-Vorschau
 menu-settings = Einstellungen...

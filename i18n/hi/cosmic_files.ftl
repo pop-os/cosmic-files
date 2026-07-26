@@ -270,7 +270,6 @@ view = दृश्य
 grid-view = ग्रिड दृश्य
 list-view = सूची दृश्य
 show-hidden-files = छिपी हुई फाइलें दिखाएँ
-show-mounted-disks = माउंट की गई डिस्क दिखाएँ
 list-directories-first = सबसे पहले डाइरेक्ट्री दिखाएँ
 menu-settings = सेटिंग्स...
 menu-about = कॉस्मिक फाइल्स के बारे में...

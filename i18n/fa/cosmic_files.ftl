@@ -331,7 +331,6 @@ view = نمایش
 grid-view = نمایش شبکه‌ای
 list-view = نمایش فهرستی
 show-hidden-files = نمایش فایل‌های مخفی
-show-mounted-disks = نمایش دیسک‌های متصل‌شده
 list-directories-first = نمایش پوشه‌ها در ابتدا
 gallery-preview = پیش‌نمایش گالری
 menu-settings = تنظیمات...

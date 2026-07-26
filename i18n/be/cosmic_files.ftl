@@ -400,7 +400,6 @@ view = Выгляд
 grid-view = Рэжым сеткі
 list-view = Рэжым спіса
 show-hidden-files = Паказваць схаваныя файлы
-show-mounted-disks = Паказаць змантаваныя дыскі
 list-directories-first = Размяшчаць папкі перад файламі
 gallery-preview = Папярэдні прагляд
 menu-settings = Налады...

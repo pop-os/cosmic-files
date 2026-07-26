@@ -158,7 +158,6 @@ zoom-out = ਜ਼ੂਮ ਆਉਟ
 view = ਵੇਖੋ
 grid-view = ਗਰਿੱਡ ਝਲਕ
 show-hidden-files = ਲੁਕਵੀਆਂ ਫ਼ਾਇਲਾਂ ਨੂੰ ਵੇਖੋ
-show-mounted-disks = ਮਾਊਂਟ ਕੀਤੀਆਂ ਡਿਸਕਾਂ ਦਿਖਾਓ
 menu-settings = ਸੈਟਿੰਗਾਂ...
 list-directories-first = ਡਾਇਰੈਕਟਰੀਆਂ ਨੂੰ ਪਹਿਲਾਂ ਵੇਖੋ
 sort = ਲੜੀਬੱਧ

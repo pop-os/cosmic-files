@@ -289,7 +289,6 @@ view = Rodymas
 grid-view = Tinklelio išdėstymas
 list-view = Sąrašo išdėstymas
 show-hidden-files = Rodyti paslėptus failus
-show-mounted-disks = Rādīt piemontētos diskus
 list-directories-first = Pirmiau pateikti aplankus
 gallery-preview = Galerijos peržiūra
 menu-settings = Nuostatos...

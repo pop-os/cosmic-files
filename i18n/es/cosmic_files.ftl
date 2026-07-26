@@ -395,7 +395,6 @@ view = Vista
 grid-view = Vista de cuadrícula
 list-view = Vista de lista
 show-hidden-files = Mostrar archivos ocultos
-show-mounted-disks = Mostrar discos montados
 list-directories-first = Enumerar los directorios primero
 gallery-preview = Vista previa de la galería
 menu-settings = Configuración...

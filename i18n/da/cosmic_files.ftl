@@ -292,7 +292,6 @@ view = Visning
 grid-view = Gitter-visning
 list-view = Liste-visning
 show-hidden-files = Vis skjulte filer
-show-mounted-disks = Vis monterede diske
 list-directories-first = List mapper først
 gallery-preview = Galleri-forhåndsvisning
 menu-settings = Indstillinger...
