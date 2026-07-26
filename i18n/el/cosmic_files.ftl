@@ -251,6 +251,7 @@ operations-running-finished =
 sort-by-name = Ταξινόμηση κατά όνομα
 edit-history = Ιστορικό επεξεργασιών
 show-hidden-files = Εμφάνιση κρυφών αρχείων
+show-mounted-disks = Εμφάνιση προσαρτημένων δίσκων
 progress-failed = { $percent }%, απέτυχε
 item-accessed = Ημερομηνία πρόσβασης: { $accessed }
 extract-to-title = Αποσυμπίεση σε φάκελο

@@ -158,6 +158,7 @@ delete-permanently = Kkes i lebda
 grid-view = Askan s iẓiki
 list-view = Askan s tebdart
 show-hidden-files = Sken ifuyla uffiren
+show-mounted-disks = Sken iḍebsiyen yettwasbedden
 gallery-preview = Taskant n temidelt
 menu-about = Ɣef Ifuyla COSMIC…
 sort = Asmizzwer

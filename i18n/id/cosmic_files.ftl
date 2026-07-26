@@ -292,6 +292,7 @@ grid-view = Tampilan kisi
 list-view = Tampilan daftar
 gallery-preview = Tampilan galeri
 show-hidden-files = Tampilkan berkas tersembunyi
+show-mounted-disks = Tampilkan disk yang dipasang
 list-directories-first = Daftar direktori terlebih dahulu
 menu-settings = Pengaturan...
 menu-about = Tentang Berkas COSMIC...

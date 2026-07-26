@@ -221,6 +221,7 @@ view = 表示
 grid-view = グリッドの表示
 list-view = リストの表示
 show-hidden-files = 隠しファイルを表示
+show-mounted-disks = マウントされたディスクを表示
 list-directories-first = フォルダを最初に表示
 menu-settings = 設定...
 menu-about = COSMICファイルについて...

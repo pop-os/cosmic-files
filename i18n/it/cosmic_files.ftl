@@ -385,6 +385,7 @@ view = Visualizza
 grid-view = Visualizzazione a griglia
 list-view = Visualizzazione a elenco
 show-hidden-files = Mostra file nascosti
+show-mounted-disks = Mostra i dischi montati
 list-directories-first = Mostra prima le cartelle
 gallery-preview = Anteprima immagine
 menu-settings = Impostazioni...

@@ -441,6 +441,7 @@ view = Zobraziť
 grid-view = Zobrazenie mriežky
 list-view = Zobrazenie zoznamu
 show-hidden-files = Zobraziť skryté súbory
+show-mounted-disks = Prikaži priklopljene diske
 list-directories-first = Najskôr priečinky
 gallery-preview = Náhľad galérie
 menu-settings = Nastavenia...

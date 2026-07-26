@@ -57,6 +57,8 @@ use trash::TrashItem;
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use wayland_client::{Proxy, protocol::wl_output::WlOutput};
 
+use sysinfo::Disks;
+
 use crate::clipboard::{
     ClipboardCache, ClipboardCopy, ClipboardKind, ClipboardPaste, ClipboardPasteImage,
     ClipboardPasteText, ClipboardPasteVideo,
@@ -190,6 +192,7 @@ pub enum Action {
     TabPrev,
     TabViewGrid,
     TabViewList,
+    ToggleMountedDisks,
     ToggleFoldersFirst,
     ToggleShowHidden,
     ToggleSort(HeadingOptions),
@@ -269,6 +272,7 @@ impl Action {
             Self::TabPrev => Message::TabPrev,
             Self::TabViewGrid => Message::TabView(entity_opt, tab::View::Grid),
             Self::TabViewList => Message::TabView(entity_opt, tab::View::List),
+            Self::ToggleMountedDisks => Message::ToggleMountedDisks,
             Self::ToggleFoldersFirst => Message::ToggleFoldersFirst,
             Self::ToggleShowHidden => Message::ToggleShowHidden,
             Self::ToggleSort(sort) => {
@@ -456,6 +460,7 @@ pub enum Message {
     TabView(Option<Entity>, tab::View),
     TimeConfigChange(TimeConfig),
     ToggleContextPage(ContextPage),
+    ToggleMountedDisks,
     ToggleFoldersFirst,
     ToggleShowHidden,
     Undo(usize),
@@ -1819,6 +1824,30 @@ impl App {
                     ))
                     .divider_above()
             });
+        }
+
+        if self.config.tab.show_mounted_disks {
+            let disks = Disks::new_with_refreshed_list();
+
+            for (i, disk) in disks.into_iter().enumerate() {
+                let mount_point = disk.mount_point().to_path_buf();
+                let name = disk.name().to_string_lossy().into_owned();
+
+                nav_model = nav_model.insert(|b| {
+                    let mut item = b
+                        .icon(icon::icon(
+                            icon::from_name("disks-symbolic").size(16).handle(),
+                        ))
+                        .text(name.clone())
+                        .data(Location::MountedDisk(mount_point));
+
+                    if i == 0 {
+                        item = item.divider_above();
+                    }
+
+                    item
+                });
+            }
         }
 
         // Collect all mounter items
@@ -4430,6 +4459,11 @@ impl Application for App {
                     return self.update_config();
                 }
             }
+            Message::ToggleMountedDisks => {
+                let mut config = self.config.tab;
+                config.show_mounted_disks = !config.show_mounted_disks;
+                return self.update(Message::TabConfig(config));
+            }
             Message::ToggleFoldersFirst => {
                 let mut config = self.config.tab;
                 config.folders_first = !config.folders_first;
@@ -4880,6 +4914,7 @@ impl Application for App {
                         Some(
                             Location::Desktop(path, ..)
                             | Location::Path(path)
+                            | Location::MountedDisk(path, ..)
                             | Location::Search(SearchLocation::Path(path), ..),
                         ) => {
                             command.arg(path);
@@ -5158,6 +5193,9 @@ impl Application for App {
                         Some(Location::Path(path)) => {
                             self.open_tab(Location::Path(path.clone()), false, None)
                         }
+                        Some(Location::MountedDisk(path)) => {
+                            self.open_tab(Location::Path(path.clone()), false, None)
+                        }
                         Some(Location::Recents) => self.open_tab(Location::Recents, false, None),
                         Some(Location::Trash) => self.open_tab(Location::Trash, false, None),
                         _ => Task::none(),
@@ -5174,6 +5212,9 @@ impl Application for App {
                                 let mut command = process::Command::new(&exe);
                                 match location {
                                     Location::Path(path) => {
+                                        command.arg(path);
+                                    }
+                                    Location::MountedDisk(path) => {
                                         command.arg(path);
                                     }
                                     Location::Trash => {

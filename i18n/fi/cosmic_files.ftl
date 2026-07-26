@@ -280,6 +280,7 @@ view = Näytä
 grid-view = Ruudukkonäkymä
 list-view = Listanäkymä
 show-hidden-files = Näytä piilotetut tiedostot
+show-mounted-disks = Näytä liitetyt levyt
 list-directories-first = Näytä kansiot ensin
 gallery-preview = Gallerian esikatselu
 menu-settings = Asetukset…

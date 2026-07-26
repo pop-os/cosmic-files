@@ -209,6 +209,7 @@ impl Config {
             icon_sizes: self.dialog.icon_sizes,
             military_time: self.tab.military_time,
             show_hidden: self.dialog.show_hidden,
+            show_mounted_disks: self.tab.show_mounted_disks,
             single_click: false,
             view: self.dialog.view,
         }
@@ -327,6 +328,8 @@ pub struct TabConfig {
     /// 24 hour clock; this is neither serialized nor deserialized because we use the user's global
     /// preference rather than save it
     pub military_time: bool,
+    /// Show mounted disks
+    pub show_mounted_disks: bool,
     /// Show hidden files and folders
     pub show_hidden: bool,
     /// Single click to open
@@ -343,6 +346,7 @@ impl Default for TabConfig {
             military_time: false,
             show_hidden: false,
             single_click: false,
+            show_mounted_disks: true,
             view: View::List,
         }
     }

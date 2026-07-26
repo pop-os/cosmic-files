@@ -247,6 +247,7 @@ sort-z-a = Z-A
 operations-running-finished = { $running }개의 작업 진행 중 ({ $percent }%), { $finished } 완료됨...
 sort = 정렬
 show-hidden-files = 숨긴 파일 표시
+show-mounted-disks = 마운트된 디스크 표시
 trash-folder-icon = 휴지통 아이콘
 extracting = "{ $from }"에서 "{ $to }"(으)로 { $items }개의 항목을 압축 해제 중 ({ $progress })...
 permanently-deleted = { $items }개의 항목을 영구적으로 제거했습니다

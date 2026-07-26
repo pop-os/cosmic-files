@@ -41,3 +41,4 @@ default-size = Standaardgrootte
 zoom-out = Zoem uit
 zoom-in = Zoem in
 menu-settings = Instellings…
+show-mounted-disks = Afgebeelde skywe wys

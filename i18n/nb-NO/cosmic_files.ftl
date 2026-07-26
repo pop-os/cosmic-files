@@ -292,6 +292,7 @@ rename = Gi nytt navn…
 grid-view = Rutevisning
 list-view = Rutenettvisning
 show-hidden-files = Vis skjulte filer
+show-mounted-disks = Vis monterte disker
 list-directories-first = List mapper først
 gallery-preview = Galleriforhåndsvisning
 menu-about = Om COSMIC Filer...

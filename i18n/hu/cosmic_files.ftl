@@ -405,6 +405,7 @@ view = Nézet
 grid-view = Rácsnézet
 list-view = Listanézet
 show-hidden-files = Rejtett fájlok megjelenítése
+show-mounted-disks = Csatolt lemezek megjelenítése
 list-directories-first = Könyvtárak listázása először
 gallery-preview = Galéria-előnézet
 menu-settings = Beállítások…

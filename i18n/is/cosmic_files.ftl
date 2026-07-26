@@ -247,6 +247,7 @@ view = Skoða
 grid-view = Reitayfirlit
 list-view = Listayfirlit
 show-hidden-files = Sýna faldar skrár
+show-mounted-disks = Sýna tengda diska
 list-directories-first = Hafa möppur fremst
 gallery-preview = Forskoðun myndasafns
 menu-settings = Stillingar...

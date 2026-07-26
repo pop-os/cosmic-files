@@ -129,6 +129,7 @@ view = Zobrazení
 grid-view = Zobrazit jako mřížku
 list-view = Zobrazit jako seznam
 show-hidden-files = Zobrazit skryté soubory
+show-mounted-disks = Zobrazit připojené disky
 list-directories-first = Řadit nejprve složky
 menu-settings = Nastavení...
 menu-about = O aplikaci Soubory COSMIC...

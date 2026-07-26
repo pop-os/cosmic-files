@@ -391,6 +391,7 @@ view = Beeld
 grid-view = Rasterweergave
 list-view = Lijstweergave
 show-hidden-files = Verborgen bestanden tonen
+show-mounted-disks = Gemonteerde schijven weergeven
 list-directories-first = Mappen bovenaan weergeven
 gallery-preview = Galerijweergave
 menu-settings = Instellingen…

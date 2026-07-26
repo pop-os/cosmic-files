@@ -270,6 +270,7 @@ view = ದೃಶ್ಯ
 grid-view = ಗ್ರೀಡ್ ವೀಕ್ಷಣೆ
 list-view = ಪಟ್ಟಿಯ ವೀಕ್ಷಣೆ
 show-hidden-files = ಮರೆಮಾಡಿದ ಫೈಲ್‌ಗಳನ್ನು ತೋರಿಸಿ
+show-mounted-disks = ಮೌಂಟ್ ಮಾಡಲಾದ ಡಿಸ್ಕ್‌ಗಳನ್ನು ತೋರಿಸಿ
 list-directories-first = ಡೈರೆಕ್ಟರಿಗಳನ್ನು ಮೊದಲು ತೋರಿಸಿ
 menu-settings = ಸೆಟ್ಟಿಂಗ್‌ಗಳು...
 menu-about = COSMIC ಫೈಲ್ ಬಗ್ಗೆ...

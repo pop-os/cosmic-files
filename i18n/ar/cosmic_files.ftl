@@ -129,6 +129,7 @@ view = عرض
 grid-view = عرض الشبكة
 list-view = عرض اللائحة
 show-hidden-files = أظهر الملفات المخفية
+show-mounted-disks = মাউন্ট করা ডিস্কগুলি দেখান
 list-directories-first = اسرد المجلدات اولاً
 menu-settings = الإعدادات...
 menu-about = عن مدير ملفات COSMIC...
