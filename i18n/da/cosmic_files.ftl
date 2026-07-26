@@ -219,6 +219,7 @@ unknown-folder = ukendt mappe
 
 menu-open-with = Åbn med...
 default-app = { $name } (standardindstilling)
+search-application = Søg efter appnavn
 
 ## Show details
 

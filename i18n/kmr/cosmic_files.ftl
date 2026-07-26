@@ -264,6 +264,7 @@ restoring =
 icon-size-and-spacing = Mezinahiya îkonan û valahiya di navbera wan de
 type-to-search-enter-path = Riya rêgehê yan jî pelê têdixîne
 menu-open-with = Veke bi...
+search-application = Li gorî navê sepanê bigere
 original-file = Pelê resen
 read-write-execute = Xwendin, nivîsandin û xebitandin
 calculating = Tê jimartin...

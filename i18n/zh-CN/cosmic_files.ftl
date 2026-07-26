@@ -319,6 +319,7 @@ unknown-folder = 未知文件夹
 
 menu-open-with = 打开方式…
 default-app = { $name }（默认）
+search-application = 按应用名称搜索
 
 ## Show details
 

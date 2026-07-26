@@ -135,6 +135,7 @@ menu-about = Σχετικά με τα Αρχεία COSMIC...
 setting-executable-and-launching = Ορισμός του «{ $name }» ως εκτελέσιμου και εκκίνηση
 open-multiple-files = Άνοιγμα πολλαπλών αρχείων
 menu-open-with = Άνοιγμα με...
+search-application = Αναζήτηση με όνομα εφαρμογής
 extracted =
     Έγινε αποσυμπίεση { $items } { $items ->
         [one] στοιχείου

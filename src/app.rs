@@ -566,6 +566,7 @@ pub enum DialogPage {
         mime: mime_guess::Mime,
         selected: usize,
         store_opt: Option<Arc<MimeApp>>,
+        search_app_name: String,
     },
     PermanentlyDelete {
         paths: Box<[PathBuf]>,
@@ -3845,6 +3846,7 @@ impl Application for App {
                                     .and_then(|mime| {
                                         self.mime_app_cache.get(&mime).first().cloned()
                                     }),
+                                search_app_name: String::new(),
                             },
                             Some(CONFIRM_OPEN_WITH_BUTTON_ID.clone()),
                         );
@@ -5110,6 +5112,7 @@ impl Application for App {
                                             .and_then(|mime| {
                                                 self.mime_app_cache.get(&mime).first().cloned()
                                             }),
+                                        search_app_name: String::new(),
                                     },
                                     None,
                                 );
@@ -5966,6 +5969,7 @@ impl Application for App {
                 mime,
                 selected,
                 store_opt,
+                search_app_name,
                 ..
             } => {
                 let name = match path.file_name() {
@@ -5974,7 +5978,13 @@ impl Application for App {
                 };
 
                 let mut column = widget::list_column();
-                let available_apps = self.mime_app_cache.get_apps_for_mime(mime, true);
+                let mut available_apps = self.mime_app_cache.get_apps_for_mime(mime, true);
+                available_apps.retain(|(app, _)| {
+                    app.name
+                        .to_lowercase()
+                        .trim()
+                        .contains(search_app_name.to_lowercase().as_str().trim())
+                });
                 let item_height = 32.0;
                 let mut displayed_default = false;
                 let mut last_kind = MimeAppMatch::Exact;
@@ -6037,6 +6047,24 @@ impl Application for App {
                     )
                     .secondary_action(
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                    )
+                    .control(
+                        widget::column::with_children([
+                            widget::text::body(fl!("search-application")).into(),
+                            widget::text_input("", search_app_name)
+                                .id(self.dialog_text_input.clone())
+                                .on_input(move |search_app_name| {
+                                    Message::DialogUpdate(DialogPage::OpenWith {
+                                        path: path.clone(),
+                                        mime: mime.clone(),
+                                        selected: *selected,
+                                        store_opt: store_opt.clone(),
+                                        search_app_name,
+                                    })
+                                })
+                                .into(),
+                        ])
+                        .spacing(space_xxs),
                     )
                     .control(widget::scrollable(column).height({
                         let max_size = self

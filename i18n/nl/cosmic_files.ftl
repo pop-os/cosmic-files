@@ -309,6 +309,7 @@ unknown-folder = Onbekende map
 
 menu-open-with = Openen met…
 default-app = { $name } (standaard)
+search-application = Zoeken op appnaam
 
 ## Show details
 

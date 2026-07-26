@@ -204,6 +204,7 @@ unknown-folder = अज्ञात फ़ोल्डर
 
 menu-open-with = इसके साथ खोलें
 default-app = { $name } (डिफ़ॉल्ट)
+search-application = ऐप के नाम से खोजें
 
 ## Show details
 

@@ -293,6 +293,7 @@ unknown-folder = unknown folder
 ## Open with
 menu-open-with = Open with...
 default-app = {$name} (default)
+search-application = Search by app name
 
 ## Show details
 show-details = Show details

@@ -301,6 +301,7 @@ unknown-folder = cartella sconosciuta
 
 menu-open-with = Apri con...
 default-app = { $name } (predefinito)
+search-application = Cerca per nome dell'app
 
 ## Show details
 

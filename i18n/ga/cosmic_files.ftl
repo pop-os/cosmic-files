@@ -288,6 +288,7 @@ unknown-folder = Fillteán anaithnid
 
 menu-open-with = Oscail le...
 default-app = { $name } (réamhshocraithe)
+search-application = Cuardaigh de réir ainm na haipe
 
 ## Show details
 

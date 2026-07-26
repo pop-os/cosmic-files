@@ -105,6 +105,7 @@ history = ਅਤੀਤ
 pending = ਬਕਾਇਆ
 progress = { $percent }%
 menu-open-with = Open with...ਨਾਲ ਖੋਲ੍ਹੋ
+search-application = ਐਪ ਦੇ ਨਾਮ ਨਾਲ ਖੋਜੋ
 default-app = { $name } (ਮੂਲ)
 show-details = ਵੇਰਵਿਆਂ ਨੂੰ ਵੇਖੋ
 type = ਕਿਸਮ: { $mime }
