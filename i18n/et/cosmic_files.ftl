@@ -123,7 +123,6 @@ progress-failed = { $percent }%, ebaõnnestus
 progress-paused = { $percent }%, peatatud
 unknown-folder = tundmatu kaust
 menu-open-with = Ava rakendusega…
-search-application = Otsi rakenduse nime järgi
 default-app = { $name } (vaikimisi)
 show-details = Näita üksikasju
 type = Tüüp: { $mime }

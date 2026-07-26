@@ -323,7 +323,6 @@ unknown-folder = pasta desconhecida
 
 menu-open-with = Abrir com...
 default-app = { $name } (padrão)
-search-application = Pesquisar pelo nome do aplicativo
 
 ## Show details
 

@@ -66,7 +66,6 @@ setting-executable-and-launching = Подешавање „{ $name }“ као �
 open-multiple-files = Отвори више датотека
 default-size = Подразумевана величина
 menu-open-with = Отвори програмом...
-search-application = Претражи по називу апликације
 extracted =
     Извлачено { $items } { $items ->
         [one] ставка

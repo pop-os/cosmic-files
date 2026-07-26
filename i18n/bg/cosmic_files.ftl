@@ -322,7 +322,6 @@ unknown-folder = неизвестна папка
 
 menu-open-with = Отваряне с...
 default-app = { $name } (стандартно)
-search-application = Търсене по име на приложението
 
 ## Show details
 

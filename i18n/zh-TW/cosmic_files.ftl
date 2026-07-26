@@ -179,7 +179,6 @@ unknown-folder = 不明資料夾
 
 menu-open-with = 開啟檔案...
 default-app = { $name } （預設）
-search-application = 依應用程式名稱搜尋
 
 ## Show details
 

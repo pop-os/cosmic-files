@@ -265,7 +265,6 @@ unknown-folder = carpeta desconeguda
 
 menu-open-with = Obre amb...
 default-app = { $name } (per defecte)
-search-application = Cerca pel nom de l'aplicació
 
 ## Show details
 

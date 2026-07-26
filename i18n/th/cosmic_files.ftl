@@ -219,7 +219,6 @@ unknown-folder = แฟ้มที่ไม่รู้จัก
 
 menu-open-with = เปิดด้วย...
 default-app = { $name } (ค่าเริ่มต้น)
-search-application = ค้นหาตามชื่อแอป
 
 ## Show details
 

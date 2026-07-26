@@ -357,7 +357,6 @@ unknown-folder = neznámy priečinok
 
 menu-open-with = Otvoriť pomocou...
 default-app = { $name } (predvolené)
-search-application = Hľadať podľa názvu aplikácie
 
 ## Show details
 

@@ -235,7 +235,6 @@ restored =
     } { trash } ішінен қалпына келтірілді
 unknown-folder = белгісіз бума
 menu-open-with = Көмегімен ашу...
-search-application = Қолданба атауы бойынша іздеу
 default-app = { $name } (әдепкі)
 show-details = Мәліметтерді көрсету
 type = Түрі: { $mime }

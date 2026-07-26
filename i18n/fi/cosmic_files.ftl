@@ -212,7 +212,6 @@ unknown-folder = tuntematon kansio
 
 menu-open-with = Avaa sovelluksella…
 default-app = { $name } (oletus)
-search-application = Hae sovelluksen nimellä
 
 ## Show details
 

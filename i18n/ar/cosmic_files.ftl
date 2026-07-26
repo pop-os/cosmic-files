@@ -73,7 +73,6 @@ copy_noun = نسخ
 
 menu-open-with = افتح ب‍استخدام...
 default-app = { $name } (المبدئي)
-search-application = البحث حسب اسم التطبيق
 
 ## Properties
 

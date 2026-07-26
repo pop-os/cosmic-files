@@ -234,7 +234,6 @@ unknown-folder = okänd mapp
 
 menu-open-with = Öppna med...
 default-app = { $name } (standard)
-search-application = Sök efter appnamn
 
 ## Visa detaljer
 

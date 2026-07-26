@@ -198,7 +198,6 @@ set-executable-and-launched = Atur "{ $name }" sebagai dijalankan dan diluncurka
 setting-permissions = Mengatur izin untuk "{ $name }" ke { $mode }
 set-permissions = Atur izin untuk "{ $name }" ke { $mode }
 menu-open-with = Buka dengan...
-search-application = Cari berdasarkan nama aplikasi
 unknown-folder = map yang tidak diketahui
 default-app = { $name } (bawaan)
 show-details = Tampilkan rincian

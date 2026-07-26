@@ -205,7 +205,6 @@ set-executable-and-launched = Stilla „{ $name }“ sem keyranlega og ræst
 setting-permissions = Stilli heimildir fyrir „{ $name }“ á { $mode }
 unknown-folder = óþekkt mappa
 menu-open-with = Opna með...
-search-application = Leita eftir heiti forrits
 default-app = { $name } (sjálfgefið)
 show-details = Sýna upplýsingar
 type = Gerð: { $mime }

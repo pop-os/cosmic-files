@@ -121,7 +121,6 @@ unknown-folder = невідома тека
 
 menu-open-with = Відкрити за допомогою...
 default-app = { $name } (звичайний)
-search-application = Пошук за назвою застосунку
 
 ## Properties
 

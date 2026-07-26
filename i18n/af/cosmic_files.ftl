@@ -41,4 +41,3 @@ default-size = Standaardgrootte
 zoom-out = Zoem uit
 zoom-in = Zoem in
 menu-settings = Instellings…
-search-application = Soek volgens programnaam

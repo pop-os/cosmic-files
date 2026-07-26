@@ -227,7 +227,6 @@ unknown-folder = bilinmeyen klasör
 
 menu-open-with = Birlikte aç...
 default-app = { $name } (varsayılan)
-search-application = Uygulama adına göre ara
 
 ## Show details
 

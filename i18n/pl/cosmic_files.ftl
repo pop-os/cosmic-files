@@ -325,7 +325,6 @@ unknown-folder = nieznany katalog
 
 menu-open-with = Otwórz za pomocą…
 default-app = { $name } (domyślnie)
-search-application = Wyszukaj według nazwy aplikacji
 
 ## Show details
 

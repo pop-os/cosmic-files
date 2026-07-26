@@ -140,7 +140,6 @@ renaming = Asnifel n yisem "{ $from }" ɣer "{ $to }"
 renamed = Yettwasenfel yisem n "{ $from }" ɣer "{ $to }"
 unknown-folder = akaram arussin
 menu-open-with = Ldi s…
-search-application = Nadi s yisem n usnas
 default-app = { $name } (amezwer)
 show-details = Sken talqayt
 type = Anaw: { $mime }

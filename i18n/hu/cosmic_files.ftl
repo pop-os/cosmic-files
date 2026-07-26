@@ -321,7 +321,6 @@ unknown-folder = ismeretlen mappa
 
 menu-open-with = Megnyitás mással…
 default-app = { $name } (alapértelmezett)
-search-application = Keresés alkalmazásnév alapján
 
 ## Show details
 

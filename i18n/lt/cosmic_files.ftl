@@ -235,7 +235,6 @@ restored =
     } iš { trash }
 unknown-folder = nežinomas aplankas
 menu-open-with = Atidaryti su...
-search-application = Ieškoti pagal programėlės pavadinimą
 default-app = { $name } (numatytas)
 show-details = Rodyti išsamią informaciją
 type = Tipas: { $mime }

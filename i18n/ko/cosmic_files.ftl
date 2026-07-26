@@ -51,7 +51,6 @@ complete = 완료
 
 menu-open-with = 다른 앱으로 열기
 default-app = { $name } (기본)
-search-application = 앱 이름으로 검색
 
 ## Properties
 

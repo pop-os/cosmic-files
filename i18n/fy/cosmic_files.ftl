@@ -9,4 +9,3 @@ cosmic-files = COSMIC Bestannen
 empty-folder = Lege map
 empty-folder-hidden = Lege map (mei ferburgen bestannen)
 no-results = Gjin resultaten fûn
-search-application = Sykje op appnamme
