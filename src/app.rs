@@ -1832,13 +1832,18 @@ impl App {
             for (i, disk) in disks.into_iter().enumerate() {
                 let mount_point = disk.mount_point().to_path_buf();
                 let name = disk.name().to_string_lossy().into_owned();
+                let usage_percents: u64 = 100 * disk.available_space() / disk.total_space();
 
                 nav_model = nav_model.insert(|b| {
                     let mut item = b
                         .icon(icon::icon(
                             icon::from_name("disks-symbolic").size(16).handle(),
                         ))
-                        .text(name.clone())
+                        .text(fl!(
+                            "disk-name-and-usage",
+                            disk_name = name.clone(),
+                            space = usage_percents
+                        ))
                         .data(Location::MountedDisk(mount_point));
 
                     if i == 0 {

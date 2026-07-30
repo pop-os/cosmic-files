@@ -265,6 +265,7 @@ trash-folder-icon = Значок папки корзины
 icon-size-and-spacing = Размер и отступы значков
 icon-size = Размер значка
 grid-spacing = Отступ по сетке
+disk-name-and-usage = {$disk_name} (Занято: {$space}%)
 pause = Приостановить
 resume = Продолжить
 extract-password-required = Требуется пароль

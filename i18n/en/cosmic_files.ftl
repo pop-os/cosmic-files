@@ -22,6 +22,7 @@ trash-folder-icon = Trash folder icon
 icon-size-and-spacing = Icon size and spacing
 icon-size = Icon size
 grid-spacing = Grid spacing
+disk-name-and-usage = {$disk_name} (Usage: {$space}%)
 
 # List view
 name = Name
