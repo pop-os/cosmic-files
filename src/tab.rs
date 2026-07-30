@@ -60,7 +60,7 @@ use crate::large_image::{
     should_use_tiling,
 };
 use crate::localize::{LANGUAGE_SORTER, LOCALE};
-use crate::mime_icon::{mime_for_path, mime_icon};
+use crate::mime_icon::{mime_for_path, mime_icon, mime_type_description};
 use crate::mounter::MOUNTERS;
 use crate::operation::{Controller, OperationError};
 use crate::thumbnail_cacher::{CachedThumbnail, ThumbnailCacher, ThumbnailSize};
@@ -1113,134 +1113,6 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
     items
 }
 
-pub fn scan_search<F: Fn(SearchItem) -> bool + Sync>(
-    search_location: &SearchLocation,
-    term: &str,
-    show_hidden: bool,
-    callback: F,
-) {
-    if term.is_empty() {
-        return;
-    }
-
-    let pattern = regex::escape(term);
-    let regex = match regex::RegexBuilder::new(&pattern)
-        .case_insensitive(true)
-        .build()
-    {
-        Ok(ok) => ok,
-        Err(err) => {
-            log::warn!("failed to parse regex {pattern:?}: {err}");
-            return;
-        }
-    };
-
-    match search_location {
-        SearchLocation::Path(tab_path) => {
-            ignore::WalkBuilder::new(tab_path)
-                .standard_filters(false)
-                .hidden(!show_hidden)
-                //TODO: only use this on supported targets
-                .same_file_system(true)
-                .build_parallel()
-                .run(|| {
-                    Box::new(|entry_res| {
-                        let Ok(entry) = entry_res else {
-                            // Skip invalid entries
-                            return ignore::WalkState::Skip;
-                        };
-
-                        let Some(file_name) = entry.file_name().to_str() else {
-                            // Skip anything with an invalid name
-                            return ignore::WalkState::Skip;
-                        };
-
-                        if regex.is_match(file_name) {
-                            let path = entry.path();
-
-                            let metadata = match entry.metadata() {
-                                Ok(ok) => ok,
-                                Err(err) => {
-                                    log::warn!(
-                                        "failed to read metadata for entry at {}: {}",
-                                        path.display(),
-                                        err
-                                    );
-                                    return ignore::WalkState::Continue;
-                                }
-                            };
-
-                            if !callback(SearchItem::Path(
-                                path.to_path_buf(),
-                                file_name.to_string(),
-                                metadata,
-                            )) {
-                                return ignore::WalkState::Quit;
-                            }
-                        }
-
-                        ignore::WalkState::Continue
-                    })
-                });
-        }
-        SearchLocation::Recents => {
-            let recent_files = match recently_used_xbel::parse_file() {
-                Ok(recent_files) => recent_files,
-                Err(err) => {
-                    log::warn!("Error reading recent files: {err:?}");
-                    return;
-                }
-            };
-
-            for bookmark in recent_files.bookmarks {
-                let path = uri_to_path(bookmark.href);
-                if let Some(path) = path
-                    && path.exists()
-                {
-                    let file_name = path.file_name();
-                    if let Some(file_name) = file_name {
-                        let file_name = file_name.to_string_lossy();
-                        if regex.is_match(&file_name) {
-                            match path.metadata() {
-                                Ok(metadata) => {
-                                    if !callback(SearchItem::Path(
-                                        path.to_path_buf(),
-                                        file_name.to_string(),
-                                        metadata,
-                                    )) {
-                                        break;
-                                    }
-                                }
-                                Err(err) => {
-                                    log::warn!(
-                                        "failed to read metadata for entry at {}: {}",
-                                        path.display(),
-                                        err
-                                    );
-                                }
-                            };
-                        }
-                    }
-                }
-            }
-        }
-        SearchLocation::Trash => {
-            Trash::scan_search(callback, &regex);
-        }
-    }
-}
-
-fn uri_to_path(uri: String) -> Option<PathBuf> {
-    uri.parse::<url::Url>().ok().and_then(|url| {
-        //TODO support for external drive or cloud?
-        if url.scheme() == "file" {
-            url.to_file_path().ok()
-        } else {
-            None
-        }
-    })
-}
-
 pub fn has_recents() -> bool {
     match recently_used_xbel::parse_file() {
         Ok(recent_files) => !recent_files.bookmarks.is_empty(),
@@ -1458,28 +1330,11 @@ impl EditLocation {
     }
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub enum SearchLocation {
-    Path(PathBuf),
-    Recents,
-    Trash,
-}
-
-impl std::fmt::Display for SearchLocation {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Path(path) => write!(f, "{}", path.display()),
-            Self::Recents => write!(f, "recents"),
-            Self::Trash => write!(f, "trash"),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum SearchItem {
-    Path(PathBuf, String, fs::Metadata),
-    Trash(TrashItem, TrashItemMetadata),
-}
+use crate::search::uri_to_path;
+pub use crate::search::{
+    SearchDate, SearchFileType, SearchFileTypes, SearchFilter, SearchItem, SearchLocation,
+    SearchTextMatching, scan_search,
+};
 
 impl From<Location> for EditLocation {
     fn from(location: Location) -> Self {
@@ -1497,7 +1352,7 @@ pub enum Location {
     Network(String, String, Option<PathBuf>),
     Path(PathBuf),
     Recents,
-    Search(SearchLocation, String, bool, Instant),
+    Search(SearchLocation, String, bool, SearchFilter, Instant),
     Trash,
 }
 
@@ -1584,10 +1439,11 @@ impl Location {
                 Self::Desktop(path, display.clone(), *desktop_config)
             }
             Self::Path(..) => Self::Path(path),
-            Self::Search(SearchLocation::Path(_), term, show_hidden, time) => Self::Search(
+            Self::Search(SearchLocation::Path(_), term, show_hidden, filter, time) => Self::Search(
                 SearchLocation::Path(path),
                 term.clone(),
                 *show_hidden,
+                filter.clone(),
                 *time,
             ),
 
@@ -2367,6 +2223,18 @@ impl Item {
         }
     }
 
+    fn type_description(&self) -> String {
+        #[cfg(unix)]
+        let is_executable = match &self.metadata {
+            ItemMetadata::Path { metadata, .. } => metadata.mode() & 0o111 != 0,
+            _ => false,
+        };
+        #[cfg(not(unix))]
+        let is_executable = false;
+
+        mime_type_description(&self.mime, is_executable)
+    }
+
     fn preview(&self) -> Element<'_, Message> {
         let spacing = cosmic::theme::spacing();
         // This loads the image only if thumbnailing worked
@@ -2443,7 +2311,7 @@ impl Item {
         details = details.push(widget::text::heading(self.name.clone()));
         details = details.push(widget::text::body(fl!(
             "type",
-            mime = self.mime.to_string()
+            mime = self.type_description()
         )));
         let mut settings = Vec::new();
         if let Some(mime_app_cache) = mime_app_cache_opt {
@@ -2714,8 +2582,12 @@ pub enum HeadingOptions {
     Modified,
     Size,
     TrashedOn,
+    FileType,
+    FileType,
 }
 
+///
+///
 impl fmt::Display for HeadingOptions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -2723,6 +2595,8 @@ impl fmt::Display for HeadingOptions {
             Self::Modified => write!(f, "{}", fl!("modified")),
             Self::Size => write!(f, "{}", fl!("size")),
             Self::TrashedOn => write!(f, "{}", fl!("trashed-on")),
+            Self::FileType => write!(f, "{}", "FileType"),
+            Self::FileType => write!(f, "{}", "FileType"),
         }
     }
 }
@@ -2734,6 +2608,8 @@ impl HeadingOptions {
             Self::Modified.to_string(),
             Self::Size.to_string(),
             Self::TrashedOn.to_string(),
+            Self::FileType.to_string(),
+            Self::FileType.to_string(),
         ]
     }
 }
@@ -3723,11 +3599,14 @@ impl Tab {
                     self.date_time_formatter = date_time_formatter(self.config.military_time);
                     self.time_formatter = time_formatter(self.config.military_time);
                 }
-                if show_hidden_changed && let Location::Search(path, term, ..) = &self.location {
+                if show_hidden_changed
+                    && let Location::Search(path, term, _, filter, _) = &self.location
+                {
                     cd = Some(Location::Search(
                         path.clone(),
                         term.clone(),
                         self.config.show_hidden,
+                        filter.clone(),
                         Instant::now(),
                     ));
                 }
@@ -4511,29 +4390,26 @@ impl Tab {
                 }
             }
             Message::SearchReady(finished) => {
+                let (sort_name, sort_direction, folders_first) = self.sort_options();
                 if let Some(context) = &mut self.search_context {
                     if let Some(items) = &mut self.items_opt {
                         if finished || context.ready.swap(false, atomic::Ordering::SeqCst) {
                             let duration = Instant::now();
                             while let Ok(search_item) = context.results_rx.try_recv() {
-                                //TODO: combine this with column_sort logic, they must match!
-                                let index =
-                                    if let SearchItem::Path(_, _, ref metadata) = search_item {
-                                        let item_modified = metadata.modified().ok();
-                                        match items.binary_search_by(|other| {
-                                            item_modified.cmp(&other.metadata.modified())
-                                        }) {
-                                            Ok(index) => index,
-                                            Err(index) => index,
-                                        }
-                                    } else {
-                                        items.len()
-                                    };
+                                let item = item_from_search_item(search_item, IconSizes::default());
+                                let index = items
+                                    .binary_search_by(|other| {
+                                        Self::compare_items(
+                                            other,
+                                            &item,
+                                            sort_name,
+                                            sort_direction,
+                                            folders_first,
+                                        )
+                                    })
+                                    .unwrap_or_else(|index| index);
 
                                 if index < MAX_SEARCH_RESULTS {
-                                    //TODO: use correct IconSizes
-                                    let item =
-                                        item_from_search_item(search_item, IconSizes::default());
                                     items.insert(index, item);
                                 }
                                 // Ensure that updates make it to the GUI in a timely manner
@@ -4544,11 +4420,12 @@ impl Tab {
                         }
                         if items.len() >= MAX_SEARCH_RESULTS {
                             items.truncate(MAX_SEARCH_RESULTS);
-                            if let Some(last_modified) =
-                                items.last().and_then(|item| item.metadata.modified())
-                            {
-                                *context.last_modified_opt.write().unwrap() = Some(last_modified);
-                            }
+                            *context.last_modified_opt.write().unwrap() =
+                                if sort_name == HeadingOptions::Modified && !sort_direction {
+                                    items.last().and_then(|item| item.metadata.modified())
+                                } else {
+                                    None
+                                };
                         }
                     } else {
                         log::warn!("search ready but items array is empty");
@@ -4701,24 +4578,29 @@ impl Tab {
                 );
             }
             Message::ToggleSort(heading_option) => {
-                if !matches!(self.location, Location::Search(..)) {
-                    let heading_sort = if self.sort_name == heading_option {
-                        !self.sort_direction
-                    } else {
-                        // Default modified to descending, and others to ascending.
-                        heading_option != HeadingOptions::Modified
-                    };
+                let heading_sort = if self.sort_name == heading_option {
+                    !self.sort_direction
+                } else {
+                    // Default modified to descending, and others to ascending.
+                    heading_option != HeadingOptions::Modified
+                };
 
-                    if !matches!(self.location, Location::Desktop(..)) {
-                        commands.push(Command::SetSort(
-                            self.location.normalize().to_string(),
-                            heading_option,
-                            heading_sort,
-                        ));
-                    }
+                if !matches!(self.location, Location::Desktop(..) | Location::Search(..)) {
+                    commands.push(Command::SetSort(
+                        self.location.normalize().to_string(),
+                        heading_option,
+                        heading_sort,
+                    ));
+                }
 
-                    self.sort_direction = heading_sort;
-                    self.sort_name = heading_option;
+                self.sort_direction = heading_sort;
+                self.sort_name = heading_option;
+                if let Location::Search(_, _, _, _, start) = &mut self.location {
+                    // Restart the bounded top-k scan so discarded results from
+                    // the previous ordering cannot bias the new ordering.
+                    *start = Instant::now();
+                    self.items_opt = Some(Vec::new());
+                    self.search_context = None;
                 }
             }
             Message::Drop(Some((to, mut from))) => {
@@ -4924,117 +4806,99 @@ impl Tab {
     }
 
     pub(crate) const fn sort_options(&self) -> (HeadingOptions, bool, bool) {
-        match self.location {
-            Location::Search(..) => (HeadingOptions::Modified, false, false),
-            _ => (
-                self.sort_name,
-                self.sort_direction,
-                self.config.folders_first,
-            ),
+        (
+            self.sort_name,
+            self.sort_direction,
+            self.config.folders_first,
+        )
+    }
+
+    fn compare_items(
+        a: &Item,
+        b: &Item,
+        sort_name: HeadingOptions,
+        sort_direction: bool,
+        folders_first: bool,
+    ) -> Ordering {
+        let order = |ord: Ordering| if sort_direction { ord } else { ord.reverse() };
+        let folders = || {
+            folders_first.then(|| match (a.metadata.is_dir(), b.metadata.is_dir()) {
+                (true, false) => Ordering::Less,
+                (false, true) => Ordering::Greater,
+                _ => Ordering::Equal,
+            })
+        };
+        if let Some(folder_order) = folders()
+            && folder_order != Ordering::Equal
+        {
+            return folder_order;
+        }
+
+        match sort_name {
+            HeadingOptions::Name => {
+                order(LANGUAGE_SORTER.compare(&a.display_name, &b.display_name))
+            }
+            HeadingOptions::Modified => order(a.metadata.modified().cmp(&b.metadata.modified())),
+            HeadingOptions::Size => {
+                let size = |item: &Item| match &item.metadata {
+                    ItemMetadata::Path {
+                        metadata,
+                        children_opt,
+                    } => {
+                        if metadata.is_dir() {
+                            (true, children_opt.unwrap_or_default() as u64)
+                        } else {
+                            (false, metadata.len())
+                        }
+                    }
+                    ItemMetadata::Trash { metadata, .. } => match metadata.size {
+                        trash::TrashItemSize::Entries(entries) => (true, entries as u64),
+                        trash::TrashItemSize::Bytes(bytes) => (false, bytes),
+                    },
+                    ItemMetadata::SimpleDir { entries } => (true, *entries),
+                    ItemMetadata::SimpleFile { size } => (false, *size),
+                    #[cfg(feature = "gvfs")]
+                    ItemMetadata::GvfsPath {
+                        size_opt,
+                        children_opt,
+                        ..
+                    } => match children_opt {
+                        Some(children) => (true, *children as u64),
+                        None => (false, size_opt.unwrap_or_default()),
+                    },
+                };
+                let (a_is_dir, a_size) = size(a);
+                let (b_is_dir, b_size) = size(b);
+                match (a_is_dir, b_is_dir) {
+                    (true, false) => Ordering::Less,
+                    (false, true) => Ordering::Greater,
+                    _ => order(a_size.cmp(&b_size)),
+                }
+            }
+            HeadingOptions::TrashedOn => {
+                let deleted = |item: &Item| match &item.metadata {
+                    ItemMetadata::Trash { entry, .. } => Some(entry.time_deleted),
+                    _ => None,
+                };
+                if folders_first {
+                    order(deleted(a).cmp(&deleted(b)))
+                } else {
+                    order(deleted(b).cmp(&deleted(a)))
+                }
+            }
+            HeadingOptions::FileType => {
+                order(LANGUAGE_SORTER.compare(&a.type_description(), &b.type_description()))
+                    .then_with(|| LANGUAGE_SORTER.compare(&a.display_name, &b.display_name))
+            }
         }
     }
 
     fn column_sort(&self) -> Option<Vec<(usize, &Item)>> {
-        let check_reverse = |ord: Ordering, sort: bool| {
-            if sort { ord } else { ord.reverse() }
-        };
         let mut items: Vec<_> = self.items_opt.as_ref()?.iter().enumerate().collect();
         let (sort_name, sort_direction, folders_first) = self.sort_options();
-        match sort_name {
-            HeadingOptions::Size => {
-                items.sort_by(|a, b| {
-                    // entries take precedence over size
-                    let get_size = |x: &Item| match &x.metadata {
-                        ItemMetadata::Path {
-                            metadata,
-                            children_opt,
-                        } => {
-                            if metadata.is_dir() {
-                                (true, children_opt.unwrap_or_default() as u64)
-                            } else {
-                                (false, metadata.len())
-                            }
-                        }
-                        ItemMetadata::Trash { metadata, .. } => match metadata.size {
-                            trash::TrashItemSize::Entries(entries) => (true, entries as u64),
-                            trash::TrashItemSize::Bytes(bytes) => (false, bytes),
-                        },
-                        ItemMetadata::SimpleDir { entries } => (true, *entries),
-                        ItemMetadata::SimpleFile { size } => (false, *size),
-                        #[cfg(feature = "gvfs")]
-                        ItemMetadata::GvfsPath {
-                            size_opt,
-                            children_opt,
-                            ..
-                        } => match children_opt {
-                            Some(child_count) => (true, *child_count as u64),
-                            None => (false, size_opt.unwrap_or_default()),
-                        },
-                    };
-                    let (a_is_entry, a_size) = get_size(a.1);
-                    let (b_is_entry, b_size) = get_size(b.1);
-
-                    //TODO: use folders_first?
-                    match (a_is_entry, b_is_entry) {
-                        (true, false) => Ordering::Less,
-                        (false, true) => Ordering::Greater,
-                        _ => check_reverse(a_size.cmp(&b_size), sort_direction),
-                    }
-                });
-            }
-            HeadingOptions::Name => items.sort_by(|a, b| {
-                if folders_first {
-                    match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
-                        (true, false) => Ordering::Less,
-                        (false, true) => Ordering::Greater,
-                        _ => check_reverse(
-                            LANGUAGE_SORTER.compare(&a.1.display_name, &b.1.display_name),
-                            sort_direction,
-                        ),
-                    }
-                } else {
-                    check_reverse(
-                        LANGUAGE_SORTER.compare(&a.1.display_name, &b.1.display_name),
-                        sort_direction,
-                    )
-                }
-            }),
-            HeadingOptions::Modified => {
-                items.sort_by(|a, b| {
-                    let a_modified = a.1.metadata.modified();
-                    let b_modified = b.1.metadata.modified();
-                    if folders_first {
-                        match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
-                            (true, false) => Ordering::Less,
-                            (false, true) => Ordering::Greater,
-                            _ => check_reverse(a_modified.cmp(&b_modified), sort_direction),
-                        }
-                    } else {
-                        check_reverse(a_modified.cmp(&b_modified), sort_direction)
-                    }
-                });
-            }
-            HeadingOptions::TrashedOn => {
-                let time_deleted = |x: &Item| match &x.metadata {
-                    ItemMetadata::Trash { entry, .. } => Some(entry.time_deleted),
-                    _ => None,
-                };
-
-                items.sort_by(|a, b| {
-                    let a_time_deleted = time_deleted(a.1);
-                    let b_time_deleted = time_deleted(b.1);
-                    if folders_first {
-                        match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
-                            (true, false) => Ordering::Less,
-                            (false, true) => Ordering::Greater,
-                            _ => check_reverse(a_time_deleted.cmp(&b_time_deleted), sort_direction),
-                        }
-                    } else {
-                        check_reverse(b_time_deleted.cmp(&a_time_deleted), sort_direction)
-                    }
-                });
-            }
-        }
+        items.sort_by(|a, b| {
+            Self::compare_items(a.1, b.1, sort_name, sort_direction, folders_first)
+        });
         Some(items)
     }
 
@@ -5326,7 +5190,10 @@ impl Tab {
         let name_width = 300.0;
         let modified_width = 200.0;
         let size_width = 100.0;
-        let condensed = size.width < (name_width + modified_width + size_width);
+        let type_width = 160.0;
+        let condensed = size.width < (name_width + modified_width + size_width + type_width);
+        let type_width = 160.0;
+        let condensed = size.width < (name_width + modified_width + size_width + type_width);
 
         let (sort_name, sort_direction, _) = self.sort_options();
         let heading_item = |name, width, msg| {
@@ -5366,6 +5233,16 @@ impl Tab {
                 )
             },
             heading_item(fl!("size"), Length::Fixed(size_width), HeadingOptions::Size),
+            heading_item(
+                fl!("filetype"),
+                Length::Fixed(type_width),
+                HeadingOptions::FileType,
+            ),
+            heading_item(
+                fl!("filetype"),
+                Length::Fixed(type_width),
+                HeadingOptions::FileType,
+            ),
         ])
         .align_y(Alignment::Center)
         .height(Length::Fixed((space_m + 4).into()))
@@ -6023,7 +5900,10 @@ impl Tab {
         let name_width = 300.0;
         let modified_width = 200.0;
         let size_width = 100.0;
-        let condensed = size.width < (name_width + modified_width + size_width);
+        let type_width = 160.0;
+        let condensed = size.width < (name_width + modified_width + size_width + type_width);
+        let type_width = 160.0;
+        let condensed = size.width < (name_width + modified_width + size_width + type_width);
         let is_search = matches!(self.location, Location::Search(..));
         let icon_size = if condensed || is_search {
             icon_sizes.list_condensed()
@@ -6157,6 +6037,7 @@ impl Tab {
                             None => format_size(size_opt.unwrap_or_default()),
                         },
                     };
+                    let type_text = item.type_description();
 
                     let row = if condensed {
                         widget::row::with_children([
@@ -6197,6 +6078,12 @@ impl Tab {
                             widget::text::body(size_text.clone())
                                 .width(Length::Fixed(size_width))
                                 .into(),
+                            widget::text::body(type_text.clone())
+                                .width(Length::Fixed(type_width))
+                                .into(),
+                            widget::text::body(type_text.clone())
+                                .width(Length::Fixed(type_width))
+                                .into(),
                         ])
                         .height(Length::Fixed(f32::from(row_height)))
                         .align_y(Alignment::Center)
@@ -6215,6 +6102,12 @@ impl Tab {
                                 .into(),
                             widget::text::body(size_text.clone())
                                 .width(Length::Fixed(size_width))
+                                .into(),
+                            widget::text::body(type_text.clone())
+                                .width(Length::Fixed(type_width))
+                                .into(),
+                            widget::text::body(type_text.clone())
+                                .width(Length::Fixed(type_width))
                                 .into(),
                         ])
                         .height(Length::Fixed(f32::from(row_height)))
@@ -6309,6 +6202,12 @@ impl Tab {
                                 widget::text::body(size_text.clone())
                                     .width(Length::Fixed(size_width))
                                     .into(),
+                                widget::text::body(type_text.clone())
+                                    .width(Length::Fixed(type_width))
+                                    .into(),
+                                widget::text::body(type_text.clone())
+                                    .width(Length::Fixed(type_width))
+                                    .into(),
                             ])
                             .align_y(Alignment::Center)
                             .spacing(space_xxs)
@@ -6327,6 +6226,12 @@ impl Tab {
                                     .into(),
                                 widget::text::body(size_text)
                                     .width(Length::Fixed(size_width))
+                                    .into(),
+                                widget::text::body(type_text.clone())
+                                    .width(Length::Fixed(type_width))
+                                    .into(),
+                                widget::text::body(type_text.clone())
+                                    .width(Length::Fixed(type_width))
                                     .into(),
                             ])
                             .align_y(Alignment::Center)
@@ -7145,11 +7050,13 @@ impl Tab {
         }
 
         // Load search items incrementally
-        if let Location::Search(search_location, term, show_hidden, start) = &self.location {
+        if let Location::Search(search_location, term, show_hidden, filter, start) = &self.location
+        {
             let location = self.location.clone();
             let search_location = search_location.clone();
             let term = term.clone();
             let show_hidden = *show_hidden;
+            let filter = filter.clone();
             let start = *start;
             #[derive(Debug, Hash, Clone)]
             struct Wrapper {
@@ -7157,6 +7064,7 @@ impl Tab {
                 search_location: SearchLocation,
                 term: String,
                 show_hidden: bool,
+                filter: SearchFilter,
                 start: Instant,
             }
 
@@ -7166,6 +7074,7 @@ impl Tab {
                     search_location: search_location.clone(),
                     term: term.clone(),
                     show_hidden,
+                    filter,
                     start,
                 },
                 |wrapper| {
@@ -7178,6 +7087,7 @@ impl Tab {
                                 search_location,
                                 term,
                                 show_hidden,
+                                filter,
                                 start,
                             } = wrapper;
                             //TODO: optimal size?
@@ -7204,6 +7114,7 @@ impl Tab {
                                         &search_location,
                                         &term,
                                         show_hidden,
+                                        filter,
                                         move |search_item| -> bool {
                                             // Don't send if the result is too old
                                             if let Some(last_modified) =
@@ -7394,6 +7305,7 @@ fn text_editor_class(
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
+    use std::sync::{Arc, Mutex};
     use std::{fs, io};
 
     use cosmic::iced::mouse::ScrollDelta;
@@ -7405,13 +7317,123 @@ mod tests {
     use test_log::test;
 
     use super::{
-        ItemMetadata, ItemThumbnail, Location, Message, Tab, respond_to_scroll_direction, scan_path,
+        ItemMetadata, ItemThumbnail, Location, Message, SearchFileType, SearchFilter,
+        SearchLocation, SearchTextMatching, Tab, respond_to_scroll_direction, scan_path,
+        scan_search,
     };
     use crate::app::test_utils::{
         NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED, assert_eq_tab_path, empty_fs,
         eq_path_item, filter_dirs, read_dir_sorted, simple_fs, tab_click_new,
     };
     use crate::config::{IconSizes, TabConfig, ThumbCfg};
+
+    #[test]
+    fn search_content_matching_can_be_disabled() -> io::Result<()> {
+        let temp = TempDir::new()?;
+        let path = temp.path().join("notes.txt");
+        fs::write(&path, "A searchable needle inside the file")?;
+        let found = Arc::new(Mutex::new(0));
+        let output = found.clone();
+        scan_search(
+            &SearchLocation::Path(temp.path().to_path_buf()),
+            "needle",
+            true,
+            SearchFilter::default(),
+            move |_| {
+                *output.lock().unwrap() += 1;
+                true
+            },
+        );
+        assert_eq!(*found.lock().unwrap(), 1);
+
+        let found = Arc::new(Mutex::new(0));
+        let output = found.clone();
+        scan_search(
+            &SearchLocation::Path(temp.path().to_path_buf()),
+            "needle",
+            true,
+            SearchFilter {
+                text_matching: SearchTextMatching::FilenameOnly,
+                ..SearchFilter::default()
+            },
+            move |_| {
+                *output.lock().unwrap() += 1;
+                true
+            },
+        );
+        assert_eq!(*found.lock().unwrap(), 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn non_recursive_search_skips_subfolders() -> io::Result<()> {
+        let temp = TempDir::new()?;
+        fs::write(temp.path().join("top.txt"), "top")?;
+        fs::create_dir(temp.path().join("nested"))?;
+        fs::write(temp.path().join("nested/deep.txt"), "deep")?;
+        let results = Arc::new(Mutex::new(Vec::new()));
+        let callback_results = results.clone();
+
+        scan_search(
+            &SearchLocation::Path(temp.path().to_path_buf()),
+            "*.txt",
+            true,
+            SearchFilter {
+                recursive: false,
+                ..SearchFilter::default()
+            },
+            move |item| {
+                if let super::SearchItem::Path(path, ..) = item {
+                    callback_results.lock().unwrap().push(path);
+                }
+                true
+            },
+        );
+
+        let results = results.lock().unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].file_name().unwrap(), "top.txt");
+        Ok(())
+    }
+
+    #[test]
+    fn search_accepts_any_selected_file_type() -> io::Result<()> {
+        let temp = TempDir::new()?;
+        let path = temp.path().join("notes.txt");
+        fs::write(&path, "notes")?;
+        let mut filter = SearchFilter::default();
+        filter.file_types.toggle(SearchFileType::Images);
+        let found = Arc::new(Mutex::new(0));
+        let output = found.clone();
+        scan_search(
+            &SearchLocation::Path(temp.path().to_path_buf()),
+            "notes",
+            true,
+            filter.clone(),
+            move |_| {
+                *output.lock().unwrap() += 1;
+                true
+            },
+        );
+        assert_eq!(*found.lock().unwrap(), 0);
+
+        filter.file_types.toggle(SearchFileType::Text);
+        let found = Arc::new(Mutex::new(0));
+        let output = found.clone();
+        scan_search(
+            &SearchLocation::Path(temp.path().to_path_buf()),
+            "notes",
+            true,
+            filter,
+            move |_| {
+                *output.lock().unwrap() += 1;
+                true
+            },
+        );
+        assert_eq!(*found.lock().unwrap(), 1);
+        Ok(())
+    }
 
     // Boilerplate for tab tests. Checks if simulated clicks selected items.
     fn tab_selects_item(

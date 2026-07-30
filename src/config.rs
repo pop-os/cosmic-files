@@ -169,6 +169,10 @@ pub struct Config {
     pub favorites: Vec<Favorite>,
     pub show_details: bool,
     pub show_recents: bool,
+    pub search_recursive: bool,
+    pub search_content_and_filename: bool,
+    pub search_raw_regex: bool,
+    pub search_custom_file_types: Vec<String>,
     pub tab: TabConfig,
     pub type_to_search: TypeToSearch,
 }
@@ -233,6 +237,10 @@ impl Default for Config {
             ],
             show_details: false,
             show_recents: true,
+            search_recursive: true,
+            search_content_and_filename: true,
+            search_raw_regex: false,
+            search_custom_file_types: Vec::new(),
             tab: TabConfig::default(),
             type_to_search: TypeToSearch::Recursive,
         }
