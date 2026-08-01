@@ -60,7 +60,7 @@ use crate::large_image::{
     should_use_tiling,
 };
 use crate::localize::{LANGUAGE_SORTER, LOCALE};
-use crate::mime_icon::{mime_for_path, mime_icon};
+use crate::mime_icon::{mime_for_path, mime_icon, mime_type_description};
 use crate::mounter::MOUNTERS;
 use crate::operation::{Controller, OperationError};
 use crate::thumbnail_cacher::{CachedThumbnail, ThumbnailCacher, ThumbnailSize};
@@ -2367,6 +2367,18 @@ impl Item {
         }
     }
 
+    fn type_description(&self) -> String {
+        #[cfg(unix)]
+        let is_executable = match &self.metadata {
+            ItemMetadata::Path { metadata, .. } => metadata.mode() & 0o111 != 0,
+            _ => false,
+        };
+        #[cfg(not(unix))]
+        let is_executable = false;
+
+        mime_type_description(&self.mime, is_executable)
+    }
+
     fn preview(&self) -> Element<'_, Message> {
         let spacing = cosmic::theme::spacing();
         // This loads the image only if thumbnailing worked
@@ -2443,7 +2455,7 @@ impl Item {
         details = details.push(widget::text::heading(self.name.clone()));
         details = details.push(widget::text::body(fl!(
             "type",
-            mime = self.mime.to_string()
+            mime = self.type_description()
         )));
         let mut settings = Vec::new();
         if let Some(mime_app_cache) = mime_app_cache_opt {
@@ -2714,8 +2726,10 @@ pub enum HeadingOptions {
     Modified,
     Size,
     TrashedOn,
+    FileType,
 }
 
+///
 impl fmt::Display for HeadingOptions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -2723,6 +2737,7 @@ impl fmt::Display for HeadingOptions {
             Self::Modified => write!(f, "{}", fl!("modified")),
             Self::Size => write!(f, "{}", fl!("size")),
             Self::TrashedOn => write!(f, "{}", fl!("trashed-on")),
+            Self::FileType => write!(f, "{}", "FileType"),
         }
     }
 }
@@ -2734,6 +2749,7 @@ impl HeadingOptions {
             Self::Modified.to_string(),
             Self::Size.to_string(),
             Self::TrashedOn.to_string(),
+            Self::FileType.to_string(),
         ]
     }
 }
@@ -5034,6 +5050,26 @@ impl Tab {
                     }
                 });
             }
+            HeadingOptions::FileType => {
+                items.sort_by(|a, b| {
+                    if folders_first {
+                        match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
+                            (true, false) => return Ordering::Less,
+                            (false, true) => return Ordering::Greater,
+                            _ => {}
+                        }
+                    }
+
+                    let a_type = a.1.type_description();
+                    let b_type = b.1.type_description();
+
+                    let type_order =
+                        check_reverse(LANGUAGE_SORTER.compare(&a_type, &b_type), sort_direction);
+
+                    type_order
+                        .then_with(|| LANGUAGE_SORTER.compare(&a.1.display_name, &b.1.display_name))
+                });
+            }
         }
         Some(items)
     }
@@ -5326,7 +5362,8 @@ impl Tab {
         let name_width = 300.0;
         let modified_width = 200.0;
         let size_width = 100.0;
-        let condensed = size.width < (name_width + modified_width + size_width);
+        let type_width = 160.0;
+        let condensed = size.width < (name_width + modified_width + size_width + type_width);
 
         let (sort_name, sort_direction, _) = self.sort_options();
         let heading_item = |name, width, msg| {
@@ -5366,6 +5403,11 @@ impl Tab {
                 )
             },
             heading_item(fl!("size"), Length::Fixed(size_width), HeadingOptions::Size),
+            heading_item(
+                fl!("filetype"),
+                Length::Fixed(type_width),
+                HeadingOptions::FileType,
+            ),
         ])
         .align_y(Alignment::Center)
         .height(Length::Fixed((space_m + 4).into()))
@@ -6023,7 +6065,8 @@ impl Tab {
         let name_width = 300.0;
         let modified_width = 200.0;
         let size_width = 100.0;
-        let condensed = size.width < (name_width + modified_width + size_width);
+        let type_width = 160.0;
+        let condensed = size.width < (name_width + modified_width + size_width + type_width);
         let is_search = matches!(self.location, Location::Search(..));
         let icon_size = if condensed || is_search {
             icon_sizes.list_condensed()
@@ -6157,6 +6200,7 @@ impl Tab {
                             None => format_size(size_opt.unwrap_or_default()),
                         },
                     };
+                    let type_text = item.type_description();
 
                     let row = if condensed {
                         widget::row::with_children([
@@ -6197,6 +6241,9 @@ impl Tab {
                             widget::text::body(size_text.clone())
                                 .width(Length::Fixed(size_width))
                                 .into(),
+                            widget::text::body(type_text.clone())
+                                .width(Length::Fixed(type_width))
+                                .into(),
                         ])
                         .height(Length::Fixed(f32::from(row_height)))
                         .align_y(Alignment::Center)
@@ -6215,6 +6262,9 @@ impl Tab {
                                 .into(),
                             widget::text::body(size_text.clone())
                                 .width(Length::Fixed(size_width))
+                                .into(),
+                            widget::text::body(type_text.clone())
+                                .width(Length::Fixed(type_width))
                                 .into(),
                         ])
                         .height(Length::Fixed(f32::from(row_height)))
@@ -6309,6 +6359,9 @@ impl Tab {
                                 widget::text::body(size_text.clone())
                                     .width(Length::Fixed(size_width))
                                     .into(),
+                                widget::text::body(type_text.clone())
+                                    .width(Length::Fixed(type_width))
+                                    .into(),
                             ])
                             .align_y(Alignment::Center)
                             .spacing(space_xxs)
@@ -6327,6 +6380,9 @@ impl Tab {
                                     .into(),
                                 widget::text::body(size_text)
                                     .width(Length::Fixed(size_width))
+                                    .into(),
+                                widget::text::body(type_text.clone())
+                                    .width(Length::Fixed(type_width))
                                     .into(),
                             ])
                             .align_y(Alignment::Center)
