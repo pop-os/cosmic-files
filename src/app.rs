@@ -4405,7 +4405,9 @@ impl Application for App {
                     tasks.push(Task::future(async move {
                         cosmic::action::app(Message::WindowClose)
                     }));
-                } else if let Some(position) = self.tab_model.position(entity) {
+                } else if entity == self.tab_model.active()
+                    && let Some(position) = self.tab_model.position(entity)
+                {
                     let new_position = if position > 0 {
                         position - 1
                     } else {
