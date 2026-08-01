@@ -314,6 +314,7 @@ item-modified = Дата изменения: { $modified }
 item-accessed = Дата доступа: { $accessed }
 calculating = Вычисление…
 single-click = Открывать одним нажатием
+use-binary-units = Двоичные единицы размера файлов (КиБ, МиБ, ГиБ)
 type-to-search = Поле поиска
 type-to-search-recursive = Поиск в текущей папке и подпапках
 type-to-search-enter-path = Ввод пути к каталогу или файлу

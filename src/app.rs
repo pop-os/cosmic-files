@@ -2149,9 +2149,14 @@ impl App {
         let mut children = Vec::with_capacity(1);
         let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
         let military_time = self.config.tab.military_time;
+        let use_binary_units = self.config.tab.use_binary_units;
         match kind {
             PreviewKind::Custom(PreviewItem(item)) => {
-                children.push(item.preview_view(Some(&self.mime_app_cache), military_time));
+                children.push(item.preview_view(
+                    Some(&self.mime_app_cache),
+                    military_time,
+                    use_binary_units,
+                ));
             }
             PreviewKind::Location(location) => {
                 if let Some(tab) = self.tab_model.data::<Tab>(entity)
@@ -2159,8 +2164,11 @@ impl App {
                 {
                     for item in items {
                         if item.location_opt.as_ref() == Some(location) {
-                            children
-                                .push(item.preview_view(Some(&self.mime_app_cache), military_time));
+                            children.push(item.preview_view(
+                                Some(&self.mime_app_cache),
+                                military_time,
+                                use_binary_units,
+                            ));
                             // Only show one property view to avoid issues like hangs when generating
                             // preview images on thousands of files
                             break;
@@ -2181,9 +2189,11 @@ impl App {
                                 Some(tab.multi_preview_view(Some(&self.mime_app_cache)))
                             }
                             // Exactly one selected item
-                            (Some(item), None) => {
-                                Some(item.preview_view(Some(&self.mime_app_cache), military_time))
-                            }
+                            (Some(item), None) => Some(item.preview_view(
+                                Some(&self.mime_app_cache),
+                                military_time,
+                                use_binary_units,
+                            )),
                             // No selected items
                             _ => None,
                         }
@@ -2196,7 +2206,11 @@ impl App {
                     if children.is_empty()
                         && let Some(item) = &tab.parent_item_opt
                     {
-                        children.push(item.preview_view(Some(&self.mime_app_cache), military_time));
+                        children.push(item.preview_view(
+                            Some(&self.mime_app_cache),
+                            military_time,
+                            use_binary_units,
+                        ));
                     }
                 }
             }
@@ -2266,6 +2280,17 @@ impl App {
                         move |single_click| {
                             Message::TabConfig(TabConfig {
                                 single_click,
+                                ..tab_config
+                            })
+                        },
+                    )
+                })
+                .add({
+                    settings::item::builder(fl!("use-binary-units")).toggler(
+                        tab_config.use_binary_units,
+                        move |use_binary_units| {
+                            Message::TabConfig(TabConfig {
+                                use_binary_units,
                                 ..tab_config
                             })
                         },
@@ -6197,15 +6222,16 @@ impl Application for App {
                 tx,
             } => {
                 let military_time = self.config.tab.military_time;
+                let use_binary_units = self.config.tab.use_binary_units;
                 let dialog = widget::dialog()
                     .title(fl!("replace-title", filename = to.name.as_str()))
                     .body(fl!("replace-warning-operation"))
                     .control(
-                        to.replace_view(fl!("original-file"), military_time)
+                        to.replace_view(fl!("original-file"), military_time, use_binary_units)
                             .map(|x| Message::TabMessage(None, x)),
                     )
                     .control(
-                        from.replace_view(fl!("replace-with"), military_time)
+                        from.replace_view(fl!("replace-with"), military_time, use_binary_units)
                             .map(|x| Message::TabMessage(None, x)),
                     )
                     .primary_action(
