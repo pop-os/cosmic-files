@@ -302,3 +302,47 @@ restored =
         [one] atriði
        *[other] atriði
     } úr { trash }
+
+comment = Skráastjóri fyrir COSMIC-skjáborðið
+keywords = Folder;Manager;Mappa;Skráastjóri;
+copy-to-title = Velja áfangastað afritunar
+copy-to-button-label = Afrita
+
+## Extract Dialog
+empty-trash-title = Tæma rusl?
+move-to-title = Velja áfangastað flutnings
+move-to-button-label = Færa
+
+## New File/Folder Dialog
+context-action = Samhengisaðgerð
+context-action-confirm-title = Keyra „{$name}“?
+context-action-confirm-warning = Þetta mun keyra á {$items} {$items ->
+    [one] atriði
+    *[other] atriðum
+  }.
+run = Keyra
+
+## Permanently delete Dialog
+rename-confirm = Endurnefna
+
+## Replace Dialog
+mixed = Blandað
+### Mode 0
+pasted-image = Innlímd mynd
+pasted-text = Innlímdur texti
+pasted-video = Innlímt myndband
+checksum = {$kind} prófsumma
+calculate = Reikna
+error = Villa
+
+## Settings
+show-recents = Mappan Nýlegt á hliðarstikunni
+
+### Appearance
+type-to-search-select = Velur fyrstu samsvarandi skrá eða möppu
+
+# Context menu
+clear-recents-history = Hreinsa feril nýlegra
+copy-to = Afrita í...
+move-to = Færa í...
+copy-path = Afrita slóð
