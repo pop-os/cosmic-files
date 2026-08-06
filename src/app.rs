@@ -6590,15 +6590,17 @@ impl Application for App {
 
         let entity = self.tab_model.active();
         if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+            let footer = self.selection_footer();
             let tab_view = tab
                 .view(
                     &self.key_binds,
                     &self.modifiers,
+                    footer.as_ref().map_or(0, |_| 48),
                     self.clipboard_has_content(),
                     &self.config.context_actions,
                 )
                 .map(move |message| Message::TabMessage(Some(entity), message));
-            let tab_view = if let Some(footer) = self.selection_footer() {
+            let tab_view = if let Some(footer) = footer {
                 stack([
                     tab_view,
                     widget::container(footer)
@@ -6655,6 +6657,7 @@ impl Application for App {
                             .view(
                                 &self.key_binds,
                                 &window.modifiers,
+                                0,
                                 self.clipboard_has_content(),
                                 &self.config.context_actions,
                             )
