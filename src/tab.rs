@@ -346,7 +346,7 @@ fn tab_complete(path: &Path) -> Result<Vec<(String, PathBuf)>, Box<dyn Error>> {
 }
 
 //TODO: translate, add more levels?
-fn format_size(size: u64) -> String {
+pub(crate) fn format_size(size: u64) -> String {
     const KB: u64 = 1000;
     const MB: u64 = 1000 * KB;
     const GB: u64 = 1000 * MB;
@@ -2319,6 +2319,14 @@ pub struct Item {
     pub checksums: ChecksumState,
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct SelectionStats {
+    pub items: usize,
+    pub size: u64,
+    pub calculating: bool,
+    pub error: Option<String>,
+}
+
 impl Item {
     fn display_name(name: &str) -> String {
         // In order to wrap at periods and underscores, add a zero width space after each one
@@ -3038,6 +3046,40 @@ impl Tab {
         } else {
             Vec::new()
         }
+    }
+
+    pub fn selection_stats(&self) -> SelectionStats {
+        let Some(items) = self.items_opt.as_ref() else {
+            return SelectionStats::default();
+        };
+
+        items.iter().filter(|item| item.selected).fold(
+            SelectionStats::default(),
+            |mut stats, item| {
+                stats.items += 1;
+                if let Some(size) = item.metadata.file_size() {
+                    stats.size = stats.size.saturating_add(size);
+                } else if let Some(metadata) = item.file_metadata() {
+                    stats.size = stats.size.saturating_add(if metadata.is_dir() {
+                        match &item.dir_size {
+                            DirSize::Directory(size) => *size,
+                            DirSize::Calculating(_) => {
+                                stats.calculating = true;
+                                0
+                            }
+                            DirSize::Error(error) => {
+                                stats.error = Some(error.clone());
+                                0
+                            }
+                            _ => 0,
+                        }
+                    } else {
+                        metadata.len()
+                    });
+                }
+                stats
+            },
+        )
     }
 
     pub fn select_all(&mut self) {
@@ -6528,13 +6570,33 @@ impl Tab {
                 if let Some(items) = self.items_opt()
                     && !items.is_empty()
                 {
+                    let stats = self.selection_stats();
+                    let info = (stats.items > 0).then(|| {
+                        let size = if stats.calculating {
+                            fl!("calculating")
+                        } else if let Some(error) = stats.error.as_deref() {
+                            error.to_owned()
+                        } else {
+                            format_size(stats.size)
+                        };
+                        widget::text::body(format!(
+                            "{} | {}",
+                            fl!("items", items = stats.items),
+                            size
+                        ))
+                    });
                     tab_column = tab_column.push(
-                        widget::layer_container(widget::row::with_children([
-                            widget::space::horizontal().into(),
-                            widget::button::standard(fl!("empty-trash"))
-                                .on_press(Message::EmptyTrash)
-                                .into(),
-                        ]))
+                        widget::layer_container(
+                            widget::row::with_children([
+                                info.map(Into::into)
+                                    .unwrap_or_else(|| widget::space::horizontal().into()),
+                                widget::space::horizontal().into(),
+                                widget::button::standard(fl!("empty-trash"))
+                                    .on_press(Message::EmptyTrash)
+                                    .into(),
+                            ])
+                            .align_y(Alignment::Center),
+                        )
                         .padding([space_xxs, space_xs])
                         .layer(cosmic_theme::Layer::Primary)
                         .apply(widget::container)
