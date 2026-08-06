@@ -1909,7 +1909,7 @@ impl ItemMetadata {
             Self::Path { metadata, .. } => metadata.modified().ok(),
             #[cfg(feature = "gvfs")]
             Self::GvfsPath { mtime, .. } => {
-                Some(SystemTime::UNIX_EPOCH + Duration::from_secs(*mtime))
+                SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(*mtime))
             }
             _ => None,
         }
