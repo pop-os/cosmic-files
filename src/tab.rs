@@ -6442,6 +6442,7 @@ impl Tab {
         &'a self,
         key_binds: &'a HashMap<KeyBind, Action>,
         modifiers: &'a Modifiers,
+        bottom_inset: u16,
         size: Size,
         clipboard_paste_available: bool,
         context_actions: &'a [ContextActionPreset],
@@ -6554,7 +6555,9 @@ impl Tab {
                 // id_container with custom id forces the state to be extracted in a diff
                 // pre-processing step
                 widget::id_container(
-                    widget::scrollable(popover)
+                    widget::scrollable(
+                        widget::container(popover).padding(padding::bottom(bottom_inset)),
+                    )
                         .id(self.scrollable_id.clone())
                         .on_scroll(Message::Scroll)
                         .width(Length::Fill)
@@ -6945,6 +6948,7 @@ impl Tab {
         &'a self,
         key_binds: &'a HashMap<KeyBind, Action>,
         modifiers: &'a Modifiers,
+        bottom_inset: u16,
         clipboard_paste_available: bool,
         context_actions: &'a [ContextActionPreset],
     ) -> Element<'a, Message> {
@@ -6953,6 +6957,7 @@ impl Tab {
                 self.view_responsive(
                     key_binds,
                     modifiers,
+                    bottom_inset,
                     size,
                     clipboard_paste_available,
                     context_actions,
