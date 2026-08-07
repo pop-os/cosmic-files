@@ -386,7 +386,7 @@ new-window = Új ablak
 reload-folder = Mappa újratöltése
 rename = Átnevezés…
 close-tab = Lap bezárása
-quit = Leállítás
+quit = Kilépés
 
 ## Edit
 
