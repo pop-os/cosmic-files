@@ -1375,6 +1375,8 @@ impl App {
                     if self.update_favorites(&path_changes) {
                         commands.push(self.update_config());
                     }
+                } else if let Operation::Delete { .. } = op {
+                    commands.push(self.rescan_recents());
                 }
 
                 if matches!(op, Operation::RemoveFromRecents { .. }) {

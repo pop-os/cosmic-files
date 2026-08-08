@@ -1117,6 +1117,7 @@ impl Operation {
             }
             Self::Rename { from, to } => {
                 let controller_clone = controller.clone();
+                let to_clone = to.clone();
 
                 compio::runtime::spawn(async move {
                     let controller = controller_clone;
@@ -1127,6 +1128,18 @@ impl Operation {
                     compio::fs::rename(&from, &to)
                         .await
                         .map_err(|e| OperationError::from_err(e, &controller))?;
+
+                    let _ = tokio::task::spawn_blocking(move || {
+                        recently_used_xbel::update_recently_used(
+                            &to_clone,
+                            "com.system76.CosmicFiles".to_string(),
+                            "cosmic-files".to_string(),
+                            None,
+                        )
+                    })
+                    .await
+                    .map_err(|e| OperationError::from_err(e, &controller))?;
+
                     Result::<_, OperationError>::Ok(OperationSelection {
                         ignored: vec![from],
                         selected: vec![to],
