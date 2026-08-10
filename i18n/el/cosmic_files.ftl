@@ -22,7 +22,7 @@ password = Κωδικός πρόσβασης
 remove = Αφαίρεση
 create = Δημιουργία
 pause = Παύση
-quit = Έξοδος
+quit = Τερματισμός
 calculating = Υπολογισμός...
 keep = Διατήρηση
 edit = Επεξεργασία
@@ -328,3 +328,6 @@ context-action-confirm-warning =
        *[other] στοιχεία
     }.
 rename-confirm = Μετονομασία
+checksum = Άθροισμα ελέγχου { $kind }
+calculate = Υπολογισμός
+error = Σφάλμα

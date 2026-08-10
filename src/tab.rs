@@ -940,11 +940,24 @@ fn item_from_trash_child(
     metadata: fs::Metadata,
     sizes: IconSizes,
 ) -> Option<Item> {
-    let original_path = crate::trash::original_path_for_trash_child(&path)?;
+    let Some(original_path) = crate::trash::original_path_for_trash_child(&path) else {
+        log::warn!(
+            "failed to resolve original path for trash item {}, skipping entry",
+            path.display()
+        );
+        return None;
+    };
+    let Some(original_parent) = original_path.parent() else {
+        log::warn!(
+            "trash item {} has no original parent, skipping entry",
+            path.display()
+        );
+        return None;
+    };
     let entry = trash::TrashItem {
         id: path.as_os_str().to_os_string(),
         name: std::ffi::OsString::from(&name),
-        original_parent: original_path.parent()?.to_path_buf(),
+        original_parent: original_parent.to_path_buf(),
         time_deleted: 0,
     };
     let size = if metadata.is_dir() {
@@ -1034,6 +1047,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
     if !remote_scannable {
         match fs::read_dir(tab_path) {
             Ok(entries) => {
+                let trash = crate::trash::is_trash_path(tab_path);
                 items = entries
                     .filter_map(|entry_res| {
                         let entry = entry_res
@@ -1074,7 +1088,6 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                             })
                             .ok()?;
 
-                        let trash = crate::trash::is_trash_path(tab_path);
                         if trash {
                             item_from_trash_child(path, name, metadata, sizes)
                         } else {
@@ -7071,7 +7084,8 @@ impl Tab {
                                         let path = path.clone();
 
                                         // Acquire semaphore permit
-                                        _ = THUMB_SEMAPHORE.acquire().await;
+                                        let _permit =
+                                            THUMB_SEMAPHORE.acquire().await.unwrap();
 
                                         tokio::task::spawn_blocking(move || {
                                             let start = Instant::now();

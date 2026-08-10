@@ -80,14 +80,14 @@ cancel = Annuler
 create = Créer
 open = Ouvrir
 open-file = Ouvrir le fichier
-open-folder = Ouvrir dossier
+open-folder = Ouvrir le dossier
 open-in-new-tab = Ouvrir dans un nouvel onglet
 open-in-new-window = Ouvrir dans une nouvelle fenêtre
 open-item-location = Ouvrir l'emplacement de l'élément
 open-multiple-files = Ouvrir plusieurs fichiers
 open-multiple-folders = Ouvrir plusieurs dossiers
 save = Enregistrer
-save-file = Enregistrer fichier
+save-file = Enregistrer le fichier
 
 ## Open With Dialog
 
@@ -183,7 +183,7 @@ keep = Conserver
 ## Add Network Drive
 
 add-network-drive = Ajouter un lecteur réseau
-connect = Connecter
+connect = Se connecter
 connect-anonymously = Se connecter anonymement
 connecting = Connexion...
 domain = Domaine
@@ -200,8 +200,8 @@ network-drive-schemes =
     File Transfer Protocol,ftp:// or ftps://
     Network File System,nfs://
     Server Message Block,smb://
-    SSH File Transfer Protocol,sftp:// or ssh://
-    WebDav,dav:// or davs://
+    SSH File Transfer Protocol,sftp:// ou ssh://
+    WebDAV,dav:// ou davs://
 network-drive-error = Impossible d'accéder au lecteur réseau
 password = Mot de passe
 remember-password = Se souvenir du mot de passe
@@ -216,7 +216,7 @@ history = Historique
 no-history = Aucun élément dans l'historique.
 pending = En attente
 progress = { $percent }%
-progress-cancelled = { $percent }%, annulation
+progress-cancelled = { $percent }%, annulé
 progress-paused = { $percent }%, en pause
 failed = Échoué
 complete = Terminé
@@ -253,7 +253,7 @@ deleted =
         [one] élément supprimé
        *[other] éléments supprimés
     } depuis { trash }
-emptying-trash = { trash } en cours de nettoyage ({ $progress })...
+emptying-trash = Nettoyage en cours de { trash } ({ $progress })...
 emptied-trash = { trash } vidée
 extracting =
     Extraction de { $items } { $items ->
@@ -265,7 +265,7 @@ extracted =
         [one] élément extrait
        *[other] éléments extraits
     } depuis "{ $from }" vers "{ $to }"
-setting-executable-and-launching = Paramétrage de "{ $name }" comme exécutable et prêt à être lancé
+setting-executable-and-launching = Définition de "{ $name }" comme exécutable et lancement en cours
 set-executable-and-launched = Défini "{ $name }" comme exécutable et lancé
 moving =
     Déplacement de { $items } { $items ->
@@ -276,7 +276,7 @@ moved =
     { $items } { $items ->
         [one] élément déplacé
        *[other] éléments déplacés
-    } de "{ $from }" à "{ $to }"
+    } de "{ $from }" vers "{ $to }"
 permanently-deleting =
     Suppression définitive de { $items } { $items ->
         [one] élément
@@ -304,7 +304,7 @@ unknown-folder = Dossier inconnu
 ## Open with
 
 menu-open-with = Ouvrir avec...
-default-app = { $name } (défaut)
+default-app = { $name } (par défaut)
 
 ## Show details
 
@@ -345,7 +345,7 @@ new-folder = Nouveau dossier...
 open-in-terminal = Ouvrir dans le terminal
 move-to-trash = Déplacer vers la corbeille
 restore-from-trash = Restaurer depuis la corbeille
-remove-from-sidebar = Supprimer de la barre latérale
+remove-from-sidebar = Retirer de la barre latérale
 sort-by-name = Trier par nom
 sort-by-modified = Trier par date de modification
 sort-by-size = Trier par taille
@@ -408,11 +408,11 @@ removing-from-recents =
        *[other] éléments
     } de { recents }
 other-apps = Autres applications
-set-permissions = Définir les permissions pour "{ $name }" à { $mode }
+set-permissions = Permissions définies pour "{ $name }" à { $mode }
 repository = Dépôt
 support = Support
 eject = Éjecter
-remove-from-recents = Supprimer des récents
+remove-from-recents = Retirer des récents
 empty-trash-title = Vider la corbeille ?
 setting-permissions = Définition des permissions pour "{ $name }" à { $mode }
 removed-from-recents =
@@ -421,9 +421,9 @@ removed-from-recents =
        *[other] éléments supprimés
     } de { recents }
 progress-failed = { $percent }%, échec
-type-to-search-select = Sélectionne le premier fichier ou dossier qui convient
+type-to-search-select = Sélectionne le premier fichier ou dossier correspondant
 pasted-image = Image collée
-pasted-text = Text collé
+pasted-text = Texte collé
 pasted-video = Vidéo collée
 copy-to-title = Sélectionner la destination de la copie
 copy-to-button-label = Copier
@@ -446,3 +446,6 @@ context-action-confirm-warning =
 run = Exécuter
 context-action = Action contextuelle
 rename-confirm = Renommer
+calculate = Calculer
+error = Erreur
+checksum = Somme de contrôle { $kind }
