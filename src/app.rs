@@ -4804,8 +4804,15 @@ impl Application for App {
             }
             Message::ToggleContextPage(context_page) => {
                 //TODO: ensure context menus are closed
+
+                //if `Show details` was enabled in the `View` menu, we need to make sure 
+                //we untick it to keep it synchronized
+                if matches!(self.context_page,ContextPage::Preview(_,_)) {
+                    self.core.window.show_context=false;
+                    self.config.show_details=false;
+                    self.update_nav_model();
+                };
                 if self.context_page == context_page
-                    || matches!(self.context_page, ContextPage::Preview(_, _))
                 {
                     self.set_show_context(!self.core.window.show_context);
                 } else {
