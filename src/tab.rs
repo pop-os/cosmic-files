@@ -1499,6 +1499,7 @@ pub enum Location {
     Recents,
     Search(SearchLocation, String, bool, Instant),
     Trash,
+    MountedDisk(PathBuf),
 }
 
 impl std::fmt::Display for Location {
@@ -1514,6 +1515,9 @@ impl std::fmt::Display for Location {
                 write!(f, "search {} for {}", location, term)
             }
             Self::Trash => write!(f, "trash"),
+            Self::MountedDisk(path) => {
+                write!(f, "Mounted disk {}", path.display())
+            }
         }
     }
 }
@@ -1609,6 +1613,7 @@ impl Location {
                 scan_desktop(path, display, *desktop_config, sizes)
             }
             Self::Path(path) => scan_path(path, sizes),
+            Self::MountedDisk(path) => scan_path(path, sizes),
             Self::Search(..) => {
                 // Search is done incrementally
                 Vec::new()
@@ -1641,6 +1646,7 @@ impl Location {
                 let (name, _) = folder_name(path);
                 name
             }
+            Self::MountedDisk(path) => path.clone().to_string_lossy().into_owned(),
             Self::Search(location, term, ..) => {
                 let name = match location {
                     SearchLocation::Path(path) => folder_name(path).0,
@@ -5478,6 +5484,7 @@ impl Tab {
         match &self.location {
             Location::Desktop(path, ..)
             | Location::Path(path)
+            | Location::MountedDisk(path, ..)
             | Location::Search(SearchLocation::Path(path), ..) => {
                 let excess_str = "...";
                 let excess_width = text_width_body(excess_str);
@@ -7016,8 +7023,7 @@ impl Tab {
                                         let path = path.clone();
 
                                         // Acquire semaphore permit
-                                        let _permit =
-                                            THUMB_SEMAPHORE.acquire().await.unwrap();
+                                        let _permit = THUMB_SEMAPHORE.acquire().await.unwrap();
 
                                         tokio::task::spawn_blocking(move || {
                                             let start = Instant::now();

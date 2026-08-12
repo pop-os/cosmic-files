@@ -195,6 +195,7 @@ pub fn context_menu<'a>(
             tab::Mode::App | tab::Mode::Desktop,
             Location::Desktop(..)
             | Location::Path(..)
+            | Location::MountedDisk(..)
             | Location::Search(SearchLocation::Path(..), ..)
             | Location::Search(SearchLocation::Recents, ..)
             | Location::Recents
@@ -365,6 +366,7 @@ pub fn context_menu<'a>(
             tab::Mode::Dialog(dialog_kind),
             Location::Desktop(..)
             | Location::Path(..)
+            | Location::MountedDisk(..)
             | Location::Search(SearchLocation::Path(..), ..)
             | Location::Search(SearchLocation::Recents, ..)
             | Location::Recents
@@ -575,6 +577,12 @@ pub fn dialog_menu(
                     menu::Item::Button(fl!("zoom-out"), None, Action::ZoomOut),
                     menu::Item::Divider,
                     menu::Item::CheckBox(
+                        fl!("show-mounted-disks"),
+                        None,
+                        tab.config.show_mounted_disks,
+                        Action::ToggleMountedDisks,
+                    ),
+                    menu::Item::CheckBox(
                         fl!("show-hidden-files"),
                         None,
                         tab.config.show_hidden,
@@ -734,6 +742,12 @@ pub fn menu_bar<'a>(
                             Action::TabViewList,
                         ),
                         menu::Item::Divider,
+                        menu::Item::CheckBox(
+                            fl!("show-mounted-disks"),
+                            None,
+                            tab_opt.is_some_and(|tab| tab.config.show_mounted_disks),
+                            Action::ToggleMountedDisks,
+                        ),
                         menu::Item::CheckBox(
                             fl!("show-hidden-files"),
                             None,
