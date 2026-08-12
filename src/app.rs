@@ -2678,10 +2678,14 @@ impl Application for App {
                         })
                         && let Some(mounter) = MOUNTERS.get(&key)
                     {
-                        return mounter.network_drive(uri.clone()).map(move |()| {
-                            cosmic::Action::App(Message::NetworkDriveOpenEntityAfterMount {
-                                entity,
-                            })
+                        return mounter.network_drive(uri.clone()).map(move |mounted| {
+                            if mounted {
+                                cosmic::Action::App(Message::NetworkDriveOpenEntityAfterMount {
+                                    entity,
+                                })
+                            } else {
+                                cosmic::action::none()
+                            }
                         });
                     }
 
@@ -3586,7 +3590,7 @@ impl Application for App {
                         Some((*mounter_key, self.network_drive_input.clone()));
                     return mounter
                         .network_drive(self.network_drive_input.clone())
-                        .map(|()| cosmic::action::none());
+                        .map(|_| cosmic::action::none());
                 }
                 log::warn!(
                     "no mounter found for connecting to {:?}",
