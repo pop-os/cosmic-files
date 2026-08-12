@@ -301,6 +301,7 @@ selected = Selected:
 type = Type:
 items = Items:
 item-size = Size:
+image-dimensions= Dimensions:
 item-created = Created:
 item-modified = Modified:
 item-accessed = Accessed:
