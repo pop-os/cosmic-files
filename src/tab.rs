@@ -1821,6 +1821,7 @@ pub enum Message {
     Checksums(PathBuf, ChecksumState),
     CalculateChecksums(PathBuf),
     CopyChecksum(String),
+    CopyPath,
     ImageDecoded(PathBuf, u32, u32, Vec<u8>, Option<(u32, u32)>, u64), // path, width, height, pixels, display_size, generation
 }
 
@@ -2440,11 +2441,10 @@ impl Item {
         );
 
         let mut details = widget::column::with_capacity(8).spacing(space_xxxs);
-        details = details.push(widget::text::heading(self.name.clone()));
-        details = details.push(widget::text::body(fl!(
-            "type",
-            mime = self.mime.to_string()
-        )));
+        details = details.push(widget::text::title4(self.name.clone()).selectable());
+        details = details.push(widget::text::body(fl!("type")));
+        details = details.push(widget::text::heading(self.mime.to_string()).selectable());
+
         let mut settings = Vec::new();
         if let Some(mime_app_cache) = mime_app_cache_opt {
             let mime_apps = mime_app_cache.get_apps_for_mime(&self.mime, false);
@@ -2472,10 +2472,13 @@ impl Item {
             }
         }
 
-        if let Some(metadata) = self.file_metadata() {
+        let metadata_opt = self.file_metadata();
+        if let Some(metadata) = &metadata_opt {
             if metadata.is_dir() {
                 if let Some(children) = self.metadata.children_count() {
-                    details = details.push(widget::text::body(fl!("items", items = children)));
+                    details = details.push(widget::text::body(fl!("items")));
+                    details =
+                        details.push(widget::text::heading(children.to_string()).selectable());
                 }
                 let size = match &self.dir_size {
                     DirSize::Calculating(_) => fl!("calculating"),
@@ -2484,113 +2487,149 @@ impl Item {
                     DirSize::Error(err) => err.clone(),
                 };
                 if !size.is_empty() {
-                    details = details.push(widget::text::body(fl!("item-size", size = size)));
+                    details = details.push(widget::text::body(fl!("item-size")));
+                    details = details.push(widget::text::heading(size).selectable());
                 }
             } else {
-                details = details.push(widget::text::body(fl!(
-                    "item-size",
-                    size = format_size(metadata.len())
-                )));
-            }
-
-            let date_time_formatter = date_time_formatter(military_time);
-            let time_formatter = time_formatter(military_time);
-
-            if let Ok(time) = metadata.created() {
-                details = details.push(widget::text::body(fl!(
-                    "item-created",
-                    created = format_time(time, &date_time_formatter, &time_formatter).to_string()
-                )));
-            }
-
-            if let Ok(time) = metadata.modified() {
-                details = details.push(widget::text::body(fl!(
-                    "item-modified",
-                    modified = format_time(time, &date_time_formatter, &time_formatter).to_string()
-                )));
-            }
-
-            if let Ok(time) = metadata.accessed() {
-                details = details.push(widget::text::body(fl!(
-                    "item-accessed",
-                    accessed = format_time(time, &date_time_formatter, &time_formatter).to_string()
-                )));
-            }
-
-            #[cfg(unix)]
-            if let Some(path) = self.path_opt() {
-                use std::os::unix::fs::MetadataExt;
-
-                let mode = metadata.mode();
-
-                let user_name = uzers::get_user_by_uid(metadata.uid())
-                    .and_then(|user| user.name().to_str().map(ToOwned::to_owned))
-                    .unwrap_or_default();
-                let user_path = path.clone();
-                settings.push(
-                    widget::settings::item::builder(user_name)
-                        .description(fl!("owner"))
-                        .control(widget::dropdown(
-                            Cow::Borrowed(MODE_NAMES.as_slice()),
-                            Some(get_mode_part(mode, MODE_SHIFT_USER).try_into().unwrap()),
-                            move |selected| {
-                                Message::SetPermissions(
-                                    user_path.clone(),
-                                    set_mode_part(
-                                        mode,
-                                        MODE_SHIFT_USER,
-                                        selected.try_into().unwrap(),
-                                    ),
-                                )
-                            },
-                        )),
-                );
-
-                let group_name = uzers::get_group_by_gid(metadata.gid())
-                    .and_then(|group| group.name().to_str().map(ToOwned::to_owned))
-                    .unwrap_or_default();
-                let group_path = path.clone();
-                settings.push(
-                    widget::settings::item::builder(group_name)
-                        .description(fl!("group"))
-                        .control(widget::dropdown(
-                            Cow::Borrowed(MODE_NAMES.as_slice()),
-                            Some(get_mode_part(mode, MODE_SHIFT_GROUP).try_into().unwrap()),
-                            move |selected| {
-                                Message::SetPermissions(
-                                    group_path.clone(),
-                                    set_mode_part(
-                                        mode,
-                                        MODE_SHIFT_GROUP,
-                                        selected.try_into().unwrap(),
-                                    ),
-                                )
-                            },
-                        )),
-                );
-
-                let other_path = path.clone();
-                settings.push(widget::settings::item::builder(fl!("other")).control(
-                    widget::dropdown(
-                        Cow::Borrowed(MODE_NAMES.as_slice()),
-                        Some(get_mode_part(mode, MODE_SHIFT_OTHER).try_into().unwrap()),
-                        move |selected| {
-                            Message::SetPermissions(
-                                other_path.clone(),
-                                set_mode_part(mode, MODE_SHIFT_OTHER, selected.try_into().unwrap()),
-                            )
-                        },
-                    ),
-                ));
+                details = details.push(widget::text::body(fl!("item-size")));
+                details =
+                    details.push(widget::text::heading(format_size(metadata.len())).selectable());
             }
         }
+
 
         if let Some(path) = self.path_opt()
             && let Ok(img) = image::image_dimensions(path)
         {
+            details = details.push(widget::text::body(fl!("image-dimensions")));
             let (width, height) = img;
-            details = details.push(widget::text::body(format!("{width}x{height}")));
+            details = details.push(widget::text::heading(format!("{width} x {height} pixels")).selectable());
         }
+
+        if let Some(metadata) = metadata_opt {
+            let date_time_formatter = date_time_formatter(military_time);
+            let time_formatter = time_formatter(military_time);
+
+            if let Ok(time) = metadata.created() {
+                details = details.push(widget::text::body(fl!("item-created")));
+                details = details.push(
+                    widget::text::heading(
+                        format_time(time, &date_time_formatter, &time_formatter).to_string(),
+                    )
+                    .selectable(),
+                );
+            }
+
+            if let Ok(time) = metadata.modified() {
+                details = details.push(widget::text::body(fl!("item-modified")));
+                details = details.push(
+                    widget::text::heading(
+                        format_time(time, &date_time_formatter, &time_formatter).to_string(),
+                    )
+                    .selectable(),
+                );
+            }
+
+            if let Ok(time) = metadata.accessed() {
+                details = details.push(widget::text::body(fl!("item-accessed")));
+                details = details.push(
+                    widget::text::heading(
+                        format_time(time, &date_time_formatter, &time_formatter).to_string(),
+                    )
+                    .selectable(),
+                );
+            }
+
+            if let Some(path) = self.path_opt() {
+                details = details.push(widget::text::body(fl!("path")));
+                let path_text = widget::text::heading(path.to_string_lossy()).selectable();
+                let copy_button = widget::button::icon(
+                    widget::icon::from_name("edit-copy-symbolic").size(16),
+                )
+                .on_press(Message::CopyPath)
+                .tooltip(fl!("copy"));
+                let copy_path: Element<'_, Message> = widget::row::with_capacity(2)
+                    .align_y(Alignment::Center)
+                    .spacing(space_xxxs)
+                    .push(path_text)
+                    .push(copy_button)
+                    .into();
+
+                details = details.push(copy_path);
+
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::MetadataExt;
+
+                    let mode = metadata.mode();
+
+                    let user_name = uzers::get_user_by_uid(metadata.uid())
+                        .and_then(|user| user.name().to_str().map(ToOwned::to_owned))
+                        .unwrap_or_default();
+                    let user_path = path.clone();
+                    settings.push(
+                        widget::settings::item::builder(user_name)
+                            .description(fl!("owner"))
+                            .control(widget::dropdown(
+                                Cow::Borrowed(MODE_NAMES.as_slice()),
+                                Some(get_mode_part(mode, MODE_SHIFT_USER).try_into().unwrap()),
+                                move |selected| {
+                                    Message::SetPermissions(
+                                        user_path.clone(),
+                                        set_mode_part(
+                                            mode,
+                                            MODE_SHIFT_USER,
+                                            selected.try_into().unwrap(),
+                                        ),
+                                    )
+                                },
+                            )),
+                    );
+
+                    let group_name = uzers::get_group_by_gid(metadata.gid())
+                        .and_then(|group| group.name().to_str().map(ToOwned::to_owned))
+                        .unwrap_or_default();
+                    let group_path = path.clone();
+                    settings.push(
+                        widget::settings::item::builder(group_name)
+                            .description(fl!("group"))
+                            .control(widget::dropdown(
+                                Cow::Borrowed(MODE_NAMES.as_slice()),
+                                Some(get_mode_part(mode, MODE_SHIFT_GROUP).try_into().unwrap()),
+                                move |selected| {
+                                    Message::SetPermissions(
+                                        group_path.clone(),
+                                        set_mode_part(
+                                            mode,
+                                            MODE_SHIFT_GROUP,
+                                            selected.try_into().unwrap(),
+                                        ),
+                                    )
+                                },
+                            )),
+                    );
+
+                    let other_path = path.clone();
+                    settings.push(widget::settings::item::builder(fl!("other")).control(
+                        widget::dropdown(
+                            Cow::Borrowed(MODE_NAMES.as_slice()),
+                            Some(get_mode_part(mode, MODE_SHIFT_OTHER).try_into().unwrap()),
+                            move |selected| {
+                                Message::SetPermissions(
+                                    other_path.clone(),
+                                    set_mode_part(
+                                        mode,
+                                        MODE_SHIFT_OTHER,
+                                        selected.try_into().unwrap(),
+                                    ),
+                                )
+                            },
+                        ),
+                    ));
+                }
+            }
+        }
+
         column = column.push(details);
 
         if let Some(metadata) = self.file_metadata()
@@ -4850,6 +4889,9 @@ impl Tab {
             Message::CopyChecksum(value) => {
                 commands.push(Command::Iced(cosmic::iced::clipboard::write(value).into()));
             }
+            Message::CopyPath => {
+                commands.push(Command::Action(Action::CopyPath));
+            }
         }
 
         // Scroll to top if needed
@@ -6667,10 +6709,9 @@ impl Tab {
         });
 
         let mut details = widget::column::with_capacity(3).spacing(space_xxxs);
-        details = details.push(widget::text::body(fl!(
-            "items",
-            items = selected_items.len()
-        )));
+        details = details.push(widget::text::body(fl!("selected")));
+        details =
+            details.push(widget::text::heading(selected_items.len().to_string()).selectable());
 
         let mut total_size: u64 = 0;
         let mut mime_type_counts: BTreeMap<String, u64> = BTreeMap::new();
@@ -6736,10 +6777,8 @@ impl Tab {
             mime_type_strings.push("...".to_string());
         }
 
-        details = details.push(widget::text::body(fl!(
-            "type",
-            mime = mime_type_strings.join(", ")
-        )));
+        details = details.push(widget::text::body(fl!("type")));
+        details = details.push(widget::text::heading(mime_type_strings.join(", ")).selectable());
 
         let size = {
             if calculating_dir_size {
@@ -6751,7 +6790,8 @@ impl Tab {
             }
         };
 
-        details = details.push(widget::text::body(fl!("item-size", size = size)));
+        details = details.push(widget::text::body(fl!("item-size")));
+        details = details.push(widget::text::heading(size).selectable());
 
         column = column.push(details);
 
@@ -7016,8 +7056,7 @@ impl Tab {
                                         let path = path.clone();
 
                                         // Acquire semaphore permit
-                                        let _permit =
-                                            THUMB_SEMAPHORE.acquire().await.unwrap();
+                                        let _permit = THUMB_SEMAPHORE.acquire().await.unwrap();
 
                                         tokio::task::spawn_blocking(move || {
                                             let start = Instant::now();

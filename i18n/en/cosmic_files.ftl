@@ -296,12 +296,15 @@ default-app = {$name} (default)
 
 ## Show details
 show-details = Show details
-type = Type: {$mime}
-items = Items: {$items}
-item-size = Size: {$size}
-item-created = Created: {$created}
-item-modified = Modified: {$modified}
-item-accessed = Accessed: {$accessed}
+path = Path:
+selected = Selected:
+type = Type:
+items = Items:
+item-size = Size:
+image-dimensions= Dimensions:
+item-created = Created:
+item-modified = Modified:
+item-accessed = Accessed:
 calculating = Calculating...
 checksum = {$kind} checksum
 calculate = Calculate
