@@ -37,7 +37,7 @@ use cosmic::widget::menu::action::MenuAction;
 use cosmic::widget::menu::key_bind::KeyBind;
 use cosmic::widget::segmented_button::{self, Entity, ReorderEvent};
 use cosmic::widget::{self, icon, settings, space};
-use cosmic::{Application, ApplicationExt, Element, cosmic_theme, executor, style, surface, theme};
+use cosmic::{Application, ApplicationExt, Element, cosmic_theme, executor, surface, theme};
 use mime_guess::Mime;
 use notify_debouncer_full::notify::{self, RecommendedWatcher};
 use notify_debouncer_full::{DebouncedEvent, Debouncer, RecommendedCache, new_debouncer};
@@ -3207,9 +3207,17 @@ impl Application for App {
                             path,
                             mime,
                             selected,
+                            search_app_name,
                             ..
                         } => {
-                            let available_apps = self.mime_app_cache.get_apps_for_mime(&mime, true);
+                            let mut available_apps =
+                                self.mime_app_cache.get_apps_for_mime(&mime, true);
+                            available_apps.retain(|(app, _)| {
+                                app.name
+                                    .to_lowercase()
+                                    .trim()
+                                    .contains(search_app_name.to_lowercase().as_str().trim())
+                            });
 
                             if let Some((app, _)) = available_apps.get(selected) {
                                 if let Some(mut command) =
