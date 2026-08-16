@@ -15,6 +15,8 @@ use std::sync::{Arc, RwLock, atomic};
 use std::time::{self, Instant};
 use std::{fs, io, process};
 
+use crate::exec::{Field, for_each_field_code};
+
 #[cfg(feature = "desktop")]
 pub async fn watch(mut emitter: impl FnMut() + 'static + Send) {
     let watcher_result = notify_debouncer_full::new_debouncer(
@@ -96,47 +98,56 @@ pub fn exec_to_command(
 
         for argument in arguments.iter().skip(1) {
             let mut new_argument = BString::new(Vec::with_capacity(argument.capacity()));
-            let mut chars = argument.chars();
-            while let Some(char) = chars.next() {
-                // https://specifications.freedesktop.org/desktop-entry/latest/exec-variables.html
-                if char == '%' {
-                    match chars.next() {
-                        Some('%') => new_argument.push_char(char),
-                        Some('c') => new_argument.push_str(entry_name),
-                        Some('k') => {
-                            if let Some(path) = entry_path {
-                                new_argument.push_str(path.as_os_str().as_bytes());
-                            }
-                        }
-
-                        // %f and %u behave the same in a file manager.
-                        Some('f' | 'u') => {
-                            if let Some(path) = path
-                                && !field_code_used
-                            {
-                                // TODO: files on remote file systems should be copied to a temporary local file.
-                                batch_process = true;
-                                field_code_used = true;
-                                new_argument.push_str(path.as_bytes());
-                            }
-                        }
-
-                        // %F and %U behave the same in a file manager.
-                        Some('F') | Some('U') => {
-                            if !field_code_used && new_argument.is_empty() {
-                                field_code_used = true;
-                                for path in path_opt.iter().map(AsRef::as_ref) {
-                                    args.push(BString::new(path.as_bytes().to_owned()));
-                                }
-                            }
-                        }
-
-                        _ => (),
-                    }
-                } else {
-                    new_argument.push_char(char);
+            // https://specifications.freedesktop.org/desktop-entry/latest/exec-variables.html
+            for_each_field_code(argument, |field| match field {
+                Field::Literal(literal) => {
+                    new_argument.push_str(literal);
+                    Ok(())
                 }
-            }
+                Field::Code(code) => match code {
+                    Some('%') => {
+                        new_argument.push_char('%');
+                        Ok(())
+                    }
+                    Some('c') => {
+                        new_argument.push_str(entry_name);
+                        Ok(())
+                    }
+                    Some('k') => {
+                        if let Some(path) = entry_path {
+                            new_argument.push_str(path.as_os_str().as_bytes());
+                        }
+                        Ok(())
+                    }
+
+                    // %f and %u behave the same in a file manager.
+                    Some('f' | 'u') => {
+                        if let Some(path) = path
+                            && !field_code_used
+                        {
+                            // TODO: files on remote file systems should be copied to a temporary local file.
+                            batch_process = true;
+                            field_code_used = true;
+                            new_argument.push_str(path.as_bytes());
+                        }
+                        Ok(())
+                    }
+
+                    // %F and %U behave the same in a file manager.
+                    Some('F') | Some('U') => {
+                        if !field_code_used && new_argument.is_empty() {
+                            field_code_used = true;
+                            for path in path_opt.iter().map(AsRef::as_ref) {
+                                args.push(BString::new(path.as_bytes().to_owned()));
+                            }
+                        }
+                        Ok(())
+                    }
+
+                    None | Some(_) => Ok(()),
+                },
+            })
+            .ok()?;
 
             if !new_argument.is_empty() {
                 args.push(new_argument);
