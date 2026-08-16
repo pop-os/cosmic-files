@@ -2983,6 +2983,12 @@ impl Tab {
             .and_then(|items| items.iter().enumerate().find(|i| i.1.highlighted))
             .map(|(i, _)| i);
         let selected = self.selected_locations();
+        let focused = self.select_focus.and_then(|i| {
+            self.items_opt
+                .as_ref()
+                .and_then(|items| items.get(i))
+                .and_then(|item| item.location_opt.clone())
+        });
         for item in &mut items {
             item.selected = false;
             if let Some(location) = &item.location_opt
@@ -2992,6 +2998,13 @@ impl Tab {
             }
         }
         self.items_opt = Some(items);
+        if let Some(location) = focused {
+            self.select_focus = self.items_opt.as_ref().and_then(|items| {
+                items
+                    .iter()
+                    .position(|item| item.location_opt.as_ref() == Some(&location))
+            });
+        }
         if let Some(i) = highlighted
             .zip(self.items_opt.as_mut())
             .and_then(|(h, items)| items.get_mut(h))
