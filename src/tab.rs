@@ -6534,7 +6534,7 @@ impl Tab {
                                 widget::text::body(fl!("items-count", items = items.len()))
                                 .width(Length::Fixed(100.0)),
                             )
-                            .padding([space_xxs, 0])
+                            .padding([space_xxxs, 0, 0, 0])
                             .into(),
                             widget::space::horizontal().into(),
                             widget::button::standard(fl!("empty-trash"))
@@ -6558,7 +6558,7 @@ impl Tab {
                                 widget::text::body(fl!("items-count", items = items.len()))
                                 .width(Length::Fixed(100.0))
                             )
-                            .padding([space_xxs, 0])
+                            .padding([space_xxxs, 0, 0, 0])
                             .into(),
                             widget::space::horizontal().into(),
                             widget::button::standard(fl!("clear-recents-history"))
