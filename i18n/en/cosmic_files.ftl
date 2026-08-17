@@ -333,6 +333,10 @@ copy-to = Copy to...
 delete-permanently = Delete permanently
 eject = Eject
 extract-here = Extract
+items-count = {$items} {$items ->
+    [one] item
+    *[other] items
+}
 new-file = New file...
 new-folder = New folder...
 open-in-terminal = Open in terminal
