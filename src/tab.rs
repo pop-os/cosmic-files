@@ -3863,6 +3863,28 @@ impl Tab {
             }
             Message::EditLocationSubmit => {
                 if let Some(mut edit_location) = self.edit_location.take() {
+                    let typed_opt = match &edit_location.location {
+                        Location::Path(path) => path.to_str().map(str::to_string),
+                        Location::Network(uri, ..) => Some(uri.clone()),
+                        _ => None,
+                    };
+                    let mut typed_uri = false;
+                    if let Some(typed) = typed_opt {
+                        match typed.trim().parse::<url::Url>() {
+                            Ok(url) if url.scheme() != "file" && url.has_host() => {
+                                let uri = url.as_str().to_string();
+                                edit_location =
+                                    Location::Network(uri.clone(), uri, None).normalize().into();
+                                typed_uri = true;
+                            }
+                            Err(_) if matches!(edit_location.location, Location::Network(..)) => {
+                                edit_location =
+                                    Location::Path(PathBuf::from(typed)).normalize().into();
+                            }
+                            _ => {}
+                        }
+                    }
+
                     // Select first completion if current location does not exist
                     if edit_location.selected.is_none()
                         && edit_location
@@ -3878,6 +3900,9 @@ impl Tab {
                     }
 
                     cd = edit_location.resolve();
+                    if cd.is_none() && typed_uri {
+                        cd = Some(edit_location.location);
+                    }
                 }
             }
             Message::EditLocationTab => {
