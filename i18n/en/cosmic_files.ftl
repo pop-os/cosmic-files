@@ -29,6 +29,7 @@ name = Name
 modified = Modified
 trashed-on = Trashed
 size = Size
+bookmarked = Bookmarked
 
 # Progress footer
 details = Details
