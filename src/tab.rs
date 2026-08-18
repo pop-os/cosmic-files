@@ -1230,14 +1230,14 @@ pub fn scan_search<F: Fn(SearchItem) -> bool + Sync>(
             }
         }
         SearchLocation::Bookmarks => {
-            let bookmarks = match user_places_xbel::parse_file() {
-                Ok(bookmarks) => bookmarks,
+            let user_places = match user_places_xbel::read_user_places() {
+                Ok(user_places) => user_places,
                 Err(err) => {
-                    log::warn!("Error reading bookmarks files: {err:?}");
+                    log::warn!("Error reading user-places.xbel file: {err:?}");
                     return;
                 }
             };
-            for bookmark in bookmarks.bookmarks {
+            for bookmark in user_places.bookmarks {
                 let path = uri_to_path(bookmark.href);
                 if let Some(path) = path
                     && path.exists()
@@ -1340,14 +1340,14 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
 }
 
 pub fn user_bookmarks() -> Vec<user_places_xbel::Bookmark> {
-    let bookmarks = match user_places_xbel::parse_file() {
-        Ok(user_places_file) => user_places_file.bookmarks,
+    let user_places = match user_places_xbel::read_user_places() {
+        Ok(user_places) => user_places.bookmarks,
         Err(err) => {
-            log::warn!("Error reading bookmarks files: {err:?}");
+            log::warn!("Error reading user-places.xbel files: {err:?}");
             return Vec::new();
         }
     };
-    return bookmarks;
+    return user_places;
 }
 
 pub fn is_bookmarked(path: PathBuf) -> bool {
@@ -5487,10 +5487,11 @@ impl Tab {
             show_bookmarks = true;
         }
         //TODO: allow resizing?
+        let sort_offset = space_xxs as f32;
         let name_width = 300.0;
-        let modified_width = 200.0;
-        let size_width = 100.0;
-        let bookmarked_width = if show_bookmarks { 40.0 } else { 0.0 };
+        let modified_width = 200.0 + sort_offset;
+        let size_width = 100.0 + sort_offset;
+        let bookmarked_width = if show_bookmarks { 32.0 + sort_offset } else { 0.0 };
         let condensed = size.width < (name_width + modified_width + size_width + bookmarked_width);
 
         let (sort_name, sort_direction, _) = self.sort_options();
@@ -6236,7 +6237,7 @@ impl Tab {
         let name_width = 300.0;
         let modified_width = 200.0;
         let size_width = 100.0;
-        let bookmarked_width = if show_bookmarks { 40.0 } else { 0.0 };
+        let bookmarked_width = if show_bookmarks { 32.0 + (space_xxs as f32 * 2.0) } else { 0.0 };
         let condensed = size.width < (name_width + modified_width + size_width + bookmarked_width);
         let is_search = matches!(self.location, Location::Search(..));
         let icon_size = if condensed || is_search {
@@ -6457,7 +6458,7 @@ impl Tab {
                                             widget::tooltip::Position::Top,
                                         )
                                     })
-                                    .width(Length::Fixed(bookmarked_width + 8.0))   // Align with heading icon 
+                                    .width(Length::Fixed(bookmarked_width))
                                     .into()
                             )
                         };
