@@ -1789,7 +1789,7 @@ impl Location {
         )
     }
 
-    pub fn is_bookmarked(&self) -> bool {
+    pub fn is_bookmarks(&self) -> bool {
         matches!(
             self,
             Location::Bookmarks | Location::Search(SearchLocation::Bookmarks, ..)
@@ -3941,7 +3941,7 @@ impl Tab {
                     }
                     LocationMenuAction::AddToBookmarks(ancestor_index) => {
                         if let Some(path) = path_for_index(ancestor_index) {
-                            let mut paths = Vec::new();
+                          let mut paths = Vec::new();
                             paths.push(path);
                             commands.push(Command::AddToBookmarks(paths));
                         } else {
@@ -4982,11 +4982,9 @@ impl Tab {
             Message::CopyChecksum(value) => {
                 commands.push(Command::Iced(cosmic::iced::clipboard::write(value).into()));
             }
-
             Message::AddToBookmarks(paths) => {
                 commands.push(Command::AddToBookmarks(paths));
             }
-
             Message::RemoveFromBookmarks(paths) => {
                 commands.push(Command::RemoveFromBookmarks(paths));
             }
@@ -5482,11 +5480,17 @@ impl Tab {
         w += f32::from(space_s);
 
         let is_trash = self.location.is_trash();
+        let mut show_bookmarks = self.config.show_bookmarks;
+        if is_trash {
+            show_bookmarks = false;
+        } else if self.location.is_bookmarks() {
+            show_bookmarks = true;
+        }
         //TODO: allow resizing?
         let name_width = 300.0;
         let modified_width = 200.0;
         let size_width = 100.0;
-        let bookmarked_width = if is_trash { 0.0 } else { 50.0 };
+        let bookmarked_width = if show_bookmarks { 40.0 } else { 0.0 };
         let condensed = size.width < (name_width + modified_width + size_width + bookmarked_width);
 
         let (sort_name, sort_direction, _) = self.sort_options();
@@ -5549,7 +5553,7 @@ impl Tab {
             HeadingOptions::Size,
             "",
         ),);
-        if !is_trash {
+        if show_bookmarks {
             heading_cols.push(heading_item(
                 fl!("bookmarked"),
                 Length::Fixed(bookmarked_width.into()),
@@ -6219,12 +6223,20 @@ impl Tab {
             ..
         } = self.config;
 
+        let mut show_bookmarks = self.config.show_bookmarks;
+        let is_trash = self.location.is_trash();
+        if is_trash {
+            show_bookmarks = false;
+        } else if self.location.is_bookmarks() {
+            show_bookmarks = true;
+        }
+
         let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
         //TODO: allow resizing?
         let name_width = 300.0;
         let modified_width = 200.0;
         let size_width = 100.0;
-        let bookmarked_width = 50.0;
+        let bookmarked_width = if show_bookmarks { 40.0 } else { 0.0 };
         let condensed = size.width < (name_width + modified_width + size_width + bookmarked_width);
         let is_search = matches!(self.location, Location::Search(..));
         let icon_size = if condensed || is_search {
@@ -6280,6 +6292,13 @@ impl Tab {
                     Size::new(size.width - f32::from(2 * space_s), f32::from(row_height)),
                 );
                 item.rect_opt.set(Some(item_rect));
+
+                let mut item_path_vec = Vec::new();
+                if show_bookmarks {
+                    if let Some(path) = item.path_opt() {
+                        item_path_vec.push(path.to_path_buf());
+                    }
+                }
 
                 // Only build elements if visible (for performance)
                 let button_row = if item_rect.intersects(&visible_rect) {
@@ -6360,133 +6379,93 @@ impl Tab {
                         },
                     };
 
-                    let row = if condensed {
-                        widget::row::with_children([
+                    // Choose the child columns to show in the row
+                    let mut children = Vec::new();
+
+                    if condensed || is_search {
+                        children.push(
                             widget::icon::icon(item.icon_handle_list_condensed.clone())
                                 .content_fit(ContentFit::Contain)
                                 .size(icon_size)
-                                .into(),
+                                .into()
+                        );
+                    } else {
+                        children.push(
+                            widget::icon::icon(item.icon_handle_list.clone())
+                                .content_fit(ContentFit::Contain)
+                                .size(icon_size)
+                                .into()
+                        );
+                    }
+
+                    if condensed {
+                        children.push(
                             widget::column::with_children([
                                 Item::list_display_name(item.display_name.clone()).into(),
                                 //TODO: translate?
                                 widget::text::caption(format!("{modified_text} - {size_text}"))
                                     .into(),
                             ])
-                            .into(),
-                        ])
-                        .height(Length::Fixed(f32::from(row_height)))
-                        .align_y(Alignment::Center)
-                        .spacing(space_xxs)
-                    } else if is_search {
+                            .into()
+                        );
 
-                        let mut item_path_vec = Vec::new();
-                        if let Some(path) = item.path_opt() {
-                            item_path_vec.push(path.to_path_buf());
-                        }
-
-                        widget::row::with_children([
-                            widget::icon::icon(item.icon_handle_list_condensed.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_size)
-                                .into(),
-                            widget::column::with_children([
-                                Item::list_display_name(item.display_name.clone()).into(),
-                                widget::text::caption(match item.path_opt() {
-                                    Some(path) => path.display().to_string(),
-                                    None => String::new(),
-                                })
-                                .into(),
-                            ])
-                            .width(Length::Fill)
-                            .into(),
-                            widget::text::body(modified_text.clone())
-                                .width(Length::Fixed(modified_width))
-                                .into(),
-                            widget::container(if item.bookmarked {
-                                    widget::tooltip(
-                                        widget::button::icon(widget::icon::from_name("starred-symbolic").size(16))
-                                        .on_press(Message::RemoveFromBookmarks(item_path_vec)),
-                                        widget::text::body(fl!("remove-from-bookmarks")),
-                                        widget::tooltip::Position::Top,
-                                    )
-                                } else {
-                                    widget::tooltip(
-                                        widget::button::icon(widget::icon::from_name("non-starred-symbolic").size(16))
-                                        .on_press(Message::AddToBookmarks(item_path_vec)),
-                                        widget::text::body(fl!("add-to-bookmarks")),
-                                        widget::tooltip::Position::Top,
-                                    )
-                                })
-                                .width(Length::Fixed(bookmarked_width))
-                                .padding(padding::right(10))
-                                .into(),
-                        ])
-                        .height(Length::Fixed(f32::from(row_height)))
-                        .align_y(Alignment::Center)
-                        .spacing(space_xxs)
-                    } else if self.location.is_trash() {
-                        widget::row::with_children([
-                            widget::icon::icon(item.icon_handle_list.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_size)
-                                .into(),
-                            Item::list_display_name(item.display_name.clone())
-                                .width(Length::Fill)
-                                .into(),
-                            widget::text::body(modified_text.clone())
-                                .width(Length::Fixed(modified_width))
-                                .into(),
-                            widget::text::body(size_text.clone())
-                                .width(Length::Fixed(size_width))
-                                .into(),
-                        ])
-                        .height(Length::Fixed(f32::from(row_height)))
-                        .align_y(Alignment::Center)
-                        .spacing(space_xxs)
                     } else {
-
-                        let mut item_path_vec = Vec::new();
-                        if let Some(path) = item.path_opt() {
-                            item_path_vec.push(path.to_path_buf());
-                        }
-
-                        widget::row::with_children([
-                            widget::icon::icon(item.icon_handle_list.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_size)
-                                .into(),
-                            Item::list_display_name(item.display_name.clone())
+                        children.push(
+                            if is_search {
+                                widget::column::with_children([
+                                    Item::list_display_name(item.display_name.clone()).into(),
+                                    widget::text::caption(match item.path_opt() {
+                                        Some(path) => path.display().to_string(),
+                                        None => String::new(),
+                                    })
+                                    .into(),
+                                ])
                                 .width(Length::Fill)
-                                .into(),
+                                .into()
+                            } else {
+                                Item::list_display_name(item.display_name.clone())
+                                    .width(Length::Fill)
+                                    .into()
+                            }
+                        );
+                        children.push(
                             widget::text::body(modified_text.clone())
                                 .width(Length::Fixed(modified_width))
-                                .into(),
-                            widget::text::body(size_text.clone())
-                                .width(Length::Fixed(size_width))
-                                .into(),
-                            widget::container(if item.bookmarked {
-                                    widget::tooltip(
-                                        widget::button::icon(widget::icon::from_name("starred-symbolic").size(16))
-                                        .on_press(Message::RemoveFromBookmarks(item_path_vec)),
-                                        widget::text::body(fl!("remove-from-bookmarks")),
-                                        widget::tooltip::Position::Top,
-                                    )
-                                } else {
-                                    widget::tooltip(
-                                        widget::button::icon(widget::icon::from_name("non-starred-symbolic").size(16))
-                                        .on_press(Message::AddToBookmarks(item_path_vec)),
-                                        widget::text::body(fl!("add-to-bookmarks")),
-                                        widget::tooltip::Position::Top,
-                                    )
-                                })
-                                .width(Length::Fixed(bookmarked_width))
-                                .padding(padding::right(10))
-                                .into(),
-                        ])
-                        .height(Length::Fixed(f32::from(row_height)))
-                        .align_y(Alignment::Center)
-                        .spacing(space_xxs)
+                                .into()
+                        );
+                        if !is_search {
+                            children.push(
+                                widget::text::body(size_text.clone())
+                                    .width(Length::Fixed(size_width))
+                                    .into()
+                            );
+                        }
+                        if show_bookmarks {
+                            children.push(
+                                widget::container(if item.bookmarked {
+                                        widget::tooltip(
+                                            widget::button::icon(widget::icon::from_name("starred-symbolic").size(16))
+                                            .on_press(Message::RemoveFromBookmarks(item_path_vec)),
+                                            widget::text::body(fl!("remove-from-bookmarks")),
+                                            widget::tooltip::Position::Top,
+                                        )
+                                    } else {
+                                        widget::tooltip(
+                                            widget::button::icon(widget::icon::from_name("non-starred-symbolic").size(16))
+                                            .on_press(Message::AddToBookmarks(item_path_vec)),
+                                            widget::text::body(fl!("add-to-bookmarks")),
+                                            widget::tooltip::Position::Top,
+                                        )
+                                    })
+                                    .width(Length::Fixed(bookmarked_width + 8.0))   // Align with heading icon 
+                                    .into()
+                            )
+                        };
                     };
+                    let row = widget::row::with_children(children)
+                    .height(Length::Fixed(f32::from(row_height)))
+                    .align_y(Alignment::Center)
+                    .spacing(space_xxs);
 
                     let button = |row| {
                         let mouse_area = crate::mouse_area::MouseArea::new(

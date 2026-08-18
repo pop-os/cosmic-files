@@ -329,7 +329,7 @@ error = Error
 settings = Settings
 single-click = Single click to open
 show-recents = Recents folder in the sidebar
-show-bookmarks = Bookmarks folder in the sidebar
+show-bookmarks = Show bookmarks
 
 ### Appearance
 appearance = Appearance

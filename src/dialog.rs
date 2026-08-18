@@ -780,7 +780,7 @@ impl App {
                     Some(SearchLocation::Path(path.clone()))
                 } else if self.tab.location.is_recents() {
                     Some(SearchLocation::Recents)
-                } else if self.tab.location.is_bookmarked() {
+                } else if self.tab.location.is_bookmarks() {
                     Some(SearchLocation::Bookmarks)
                 } else if self.tab.location.is_trash() {
                     Some(SearchLocation::Trash)

@@ -312,7 +312,7 @@ pub fn context_menu<'a>(
                             ).into());
                         }
                     }
-                    if matches!(tab.mode, tab::Mode::App) && selected == selected_dir {
+                    if matches!(tab.mode, tab::Mode::App) && selected > 0 && selected == selected_dir {
                         children.push(menu_item(
                             fl!("add-to-sidebar"),
                             Action::AddToSidebar).into()
@@ -718,7 +718,7 @@ pub fn menu_bar<'a>(
                         menu_button_optional(
                             fl!("add-to-sidebar"),
                             Action::AddToSidebar,
-                            selected > 0,
+                            selected_dir > 0 && selected_dir == selected,
                         ),
                         menu::Item::Divider,
                         menu_button_optional(
