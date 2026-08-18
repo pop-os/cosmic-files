@@ -6374,7 +6374,9 @@ impl Tab {
                     height: s.height - f32::from(top_deduct),
                 }));
 
-            let spacer_height = size.height - y - f32::from(top_deduct);
+            let minimum_spacer_height = f32::from(space_xxs) * 8f32; // Room for a single toast message not to overlap the last files.
+            let wanted_spacer_height = size.height - y - f32::from(top_deduct);
+            let spacer_height = f32::max(minimum_spacer_height, wanted_spacer_height);
             if spacer_height > 0. {
                 column = column.push(widget::container(space::vertical().height(spacer_height)));
             }
