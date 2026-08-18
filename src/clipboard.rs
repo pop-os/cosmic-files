@@ -130,9 +130,22 @@ impl AsMimeTypes for ClipboardCopy {
                             ),
                         }
                     }
-                    let file_transfer = ashpd::documents::FileTransfer::new().await?;
-                    let key = file_transfer.start_transfer(false, true).await?; // XXX args
-                    file_transfer.add_files(&key, &files).await?;
+                    let file_transfer =
+                        ashpd::documents::file_transfer::FileTransfer::new().await?;
+                    let key = file_transfer
+                        .start_transfer(
+                            ashpd::documents::file_transfer::StartTransferOptions::default()
+                                .set_writeable(false)
+                                .set_auto_stop(true),
+                        )
+                        .await?;
+                    file_transfer
+                        .add_files(
+                            &key,
+                            &files,
+                            ashpd::documents::file_transfer::AddFilesOptions::default(),
+                        )
+                        .await?;
                     Ok(key)
                 });
                 match res {
