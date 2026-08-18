@@ -1,35 +1,43 @@
-cosmic-files = COSMIC Filer
+cosmic-files = COSMIC Filhåndtering
 empty-folder = Tom mappe
-empty-folder-hidden = Tom mappe (har skjulte filer)
-no-results = Ingen resultater
+empty-folder-hidden = Tom mappe (har skjulte emner)
+no-results = Fandt ingen resultater
 filesystem = Filsystem
 home = Hjem
 networks = Netværk
-notification-in-progress = Filoperationer er igangværende.
-trash = Skraldespand
+notification-in-progress = Fil-operationer er igang.
+trash = Papirkurv
 recents = Seneste
 undo = Fortryd
 today = I dag
 # Desktop view options
-desktop-view-options = Indstillinger for skrivebordsudseende...
-show-on-desktop = Vis på Skrivebordet
-desktop-folder-content = Indhold på Skrivebordet
+desktop-view-options = Valgmuligheder for skrivebordsvisning...
+show-on-desktop = Vis på Skrivebord
+desktop-folder-content = Skrivebords-mappeindhold
 mounted-drives = Monterede drev
-trash-folder-icon = Skraldespandsikon
-icon-size-and-spacing = Ikonstørrelse og afstand
+trash-folder-icon = Papirkurv-ikon
+icon-size-and-spacing = Ikonstørrelse og -afstand
 icon-size = Ikonstørrelse
 # List view
 name = Navn
 modified = Ændret
-trashed-on = Smidt ud
+trashed-on = Kasseret
 size = Størrelse
 # Progress footer
 details = Detaljer
-dismiss = Afvis besked
-operations-running = { $running } operationer er i gang ({ $percent }%)...
-operations-running-finished = { $running } operationer er i gang ({ $percent }%), { $finished } færdiggjort...
+dismiss = Luk meddelelse
+operations-running =
+    { $running } { $running ->
+        [one] operation
+       *[other] operationer
+    } kører ({ $percent }%)...
+operations-running-finished =
+    { $running } { $running ->
+        [one] operation
+       *[other] operationer
+    } kører ({ $percent }%), { $finished } færdig...
 pause = Pause
-resume = Fortsæt
+resume = Genoptag
 
 # Dialogs
 
@@ -40,12 +48,12 @@ create-archive = Opret arkiv
 
 ## Empty Trash Dialog
 
-empty-trash = Tøm skraldespand
-empty-trash-warning = Er du sikker på du vil slette alle objekter i Skraldespanden permanent?
+empty-trash = Tøm papirkurv
+empty-trash-warning = Emner i Papirkurv-mappen vil blive slettet permanent
 
 ## Mount Error Dialog
 
-mount-error = Kan ikke tilgå drev
+mount-error = Ude af stand til at tilgå drev
 
 ## New File/Folder Dialog
 
@@ -53,22 +61,22 @@ create-new-file = Opret ny fil
 create-new-folder = Opret ny mappe
 file-name = Filnavn
 folder-name = Mappenavn
-file-already-exists = En fil med det navn eksisterer allerede.
-folder-already-exists = En mappe med det navn eksisterer allerede.
-name-hidden = Navne begyndende med "." vil blive skjult.
-name-invalid = Navn kan ikke være "{ $filename }".
-name-no-slashes = Navn kan ikke indeholde skråstreg.
+file-already-exists = En fil med det navn eksisterer allerede
+folder-already-exists = En mappe med det navn eksisterer allerede
+name-hidden = Navne begyndende med "." vil være skjulte
+name-invalid = Navn må ikke være "{ $filename }"
+name-no-slashes = Navn må ikke indeholde skråstreger
 
 ## Open/Save Dialog
 
-cancel = Annullér
+cancel = Annuller
 create = Opret
 open = Åbn
 open-file = Åbn fil
 open-folder = Åbn mappe
-open-in-new-tab = Åbn i ny fane
+open-in-new-tab = Åbn i nyt faneblad
 open-in-new-window = Åbn i nyt vindue
-open-item-location = Åbn placering for objekt
+open-item-location = Åbn emne-placering
 open-multiple-files = Åbn flere filer
 open-multiple-folders = Åbn flere mapper
 save = Gem
@@ -87,20 +95,20 @@ rename-folder = Omdøb mappe
 ## Replace Dialog
 
 replace = Erstat
-replace-title = "{ $filename }" eksisterer allerede på denne placering.
-replace-warning = Vil du erstatte den med den du er ved at gemme? Hvis du erstatter den, overskriver du dens indhold.
-replace-warning-operation = Vil du erstatte den? Hvis du erstatter den, overskriver du dens indhold.
+replace-title = "{ $filename }" eksisterer allerede i denne placering.
+replace-warning = Ønsker du at erstatte den med den, du er ved at gemme? Erstatning af den vil overskrive dens indhold.
+replace-warning-operation = Ønsker du at erstatte den? Erstatning af den vil overskrive dens indhold.
 original-file = Original fil
 replace-with = Erstat med
-apply-to-all = Anvend for alle
+apply-to-all = Anvend på alle
 keep-both = Behold begge
 skip = Spring over
 
 ## Set as Executable and Launch Dialog
 
-set-executable-and-launch = Indstil som eksekverbar fil og start
-set-executable-and-launch-description = Vil du indstille "{ $name }" som en eksekverbar fil og starte den?
-set-and-launch = Indstil og start
+set-executable-and-launch = Angiv som eksekverbar og start
+set-executable-and-launch-description = Vil du angive "{ $name }" som eksekverbar og starte den?
+set-and-launch = Angiv og start
 
 ## Metadata Dialog
 
@@ -239,12 +247,12 @@ settings = Indstillinger
 
 appearance = Udseende
 theme = Tema
-match-desktop = Match skrivebord
-dark = Mørk
-light = Lys
+match-desktop = Følg skrivebordets indstillinger
+dark = Mørkt
+light = Lyst
 # Context menu
 add-to-sidebar = Tilføj til sidebjælke
-compress = Komprimér
+compress = Komprimer…
 extract-here = Extract
 new-file = Ny fil...
 new-folder = Ny mappe...
@@ -280,15 +288,15 @@ quit = Afslut
 edit = Redigér
 cut = Klip
 copy = Kopiér
-paste = Sæt ind
-select-all = Vælg alt
+paste = Indsæt
+select-all = Vælg alle
 
 ## View
 
 zoom-in = Zoom ind
 default-size = Standardstørrelse
 zoom-out = Zoom ud
-view = Visning
+view = Vis
 grid-view = Gitter-visning
 list-view = Liste-visning
 show-hidden-files = Vis skjulte filer
@@ -306,3 +314,102 @@ sort-newest-first = Nyeste først
 sort-oldest-first = Ældste først
 sort-smallest-to-largest = Mindste til største
 sort-largest-to-smallest = Største til mindste
+delete = Slet
+run = Kør
+repository = Pakkearkiv
+grid-spacing = Gitter-afstand
+extract-password-required = Adgangskode påkrævet
+extract-to = Udpak Til...
+extract-to-title = Udpak til mappe
+empty-trash-title = Tøm papirkurv?
+keywords = Mappe;Håndtering;
+comment = Filhåndteringsprogram til COSMIC-skrivebordet
+copy-to-title = Vælg kopi destination
+copy-to-button-label = Kopier
+move-to-title = Vælg flytte destination
+move-to-button-label = Flyt
+deleted =
+    Slettede { $items } { $items ->
+        [one] element
+       *[other] elementer
+    } fra papirkurven
+removing-from-recents =
+    Fjerner { $items } { $items ->
+        [one] element
+       *[other] elementer
+    } fra { recents }
+type-to-search-enter-path = Indtast stien til mappen eller filen
+permanently-deleting =
+    Sletter permanent { $items } { $items ->
+        [one] element
+       *[other] elementer
+    }
+execute-only = Kun kørsel
+removed-from-recents =
+    Fjernede { $items } { $items ->
+        [one] element
+       *[other] elementer
+    } fra { recents }
+permanently-deleted =
+    Slettede permanent { $items } { $items ->
+        [one] element
+       *[other] elementer
+    }
+write-only = Kun skrivning
+remove = Fjern
+context-action = Konteksthandling
+context-action-confirm-title = Kør “{ $name }”?
+context-action-confirm-warning =
+    This will run on { $items } { $items ->
+        [one] item
+       *[other] items
+    }.
+selected-items = De { $items } valgte elementer
+mixed = Blandet
+none = Ingen
+write-execute = Skriv og kør
+read-only = Kun læsning
+read-execute = Læs og kør
+read-write = Læs og skriv
+read-write-execute = Læs, skriv og kør
+keep = Behold
+support = Support
+progress-failed = { $percent } %, mislykkedes
+pasted-image = Indsat billede
+pasted-text = Indsat tekst
+pasted-video = Indsat video
+deleting =
+    Sletter { $items } { $items ->
+        [one] element
+       *[other] elementer
+    } fra { trash } ({ $progress })...
+setting-permissions = Indstiller tilladelser for “{ $name }” til { $mode }
+set-permissions = Sæt tilladelser for “{ $name }” til { $mode }
+show-recents = Seneste-mappe i sidepanelet
+type-to-search = Skriv for at søge
+type-to-search-recursive = Søger i den aktuelle mappe og alle undermapper
+type-to-search-select = Vælger den første matchende fil eller mappe
+clear-recents-history = Ryd seneste historik
+copy-to = Kopiér til…
+delete-permanently = Slet permanent
+eject = Skub ud
+move-to = Flyt til…
+remove-from-recents = Fjern fra seneste
+reload-folder = Genindlæs mappe
+copy-path = Kopiér sti
+rename-confirm = Omdøb
+calculate = Udregn
+error = Fejl
+checksum = { $kind }-kontrolsum
+other-apps = Andre applikationer
+related-apps = Relaterede applikationer
+permanently-delete-question = Slet permanent?
+permanently-delete-warning = { $target } vil blive slettet permanent. Denne handling kan ikke fortrydes.
+open-with = Åbn med
+favorite-path-error = Fejl ved åbning af sti
+favorite-path-error-description =
+    Ude af stand til at åbne "{ $path }"
+    "{ $path }" Eksisterer muligvis ikke, eller du har måske ikketilladelse til at åbne den
+
+    Ønsker du at fjerne den fra sidebjælken?
+single-click = Enkelt klik for at åbne
