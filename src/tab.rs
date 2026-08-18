@@ -847,6 +847,8 @@ pub fn item_from_entry(
 
     let display_name = display_name_for_file(&path, &name, is_gvfs, is_desktop);
 
+    let bookmarked = is_bookmarked(path.clone());
+
     Item {
         name,
         display_name,
@@ -868,7 +870,7 @@ pub fn item_from_entry(
         rect_opt: Cell::new(None),
         selected: false,
         highlighted: false,
-        bookmarked: false,
+        bookmarked: bookmarked,
         overlaps_drag_rect: false,
         dir_size,
         cut: false,
@@ -1337,18 +1339,27 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
     recents.into_iter().take(50).map(|(item, _)| item).collect()
 }
 
-pub fn scan_bookmarks(sizes: IconSizes) -> Vec<Item> {
-    let bookmarked_files = match user_places_xbel::parse_file() {
-        Ok(bookmarked_files) => bookmarked_files,
+pub fn user_bookmarks() -> Vec<user_places_xbel::Bookmark> {
+    let bookmarks = match user_places_xbel::parse_file() {
+        Ok(user_places_file) => user_places_file.bookmarks,
         Err(err) => {
             log::warn!("Error reading bookmarks files: {err:?}");
             return Vec::new();
         }
     };
-    let mut bookmarks: Vec<_> = bookmarked_files
-        .bookmarks
-        .into_iter()
-        .filter_map(|bookmark| {
+    return bookmarks;
+}
+
+pub fn is_bookmarked(path: PathBuf) -> bool {
+    let bookmarked_paths: Vec<PathBuf> = user_bookmarks().into_iter().filter_map(|bookmark| {
+        Some(uri_to_path(bookmark.href)?)
+    })
+    .collect();
+    return bookmarked_paths.contains(&path);
+}
+
+pub fn scan_bookmarks(sizes: IconSizes) -> Vec<Item> {
+    let mut bookmarks: Vec<_> = user_bookmarks().into_iter().filter_map(|bookmark| {
             let path = uri_to_path(bookmark.href)?;
             let last_edit = bookmark.modified.parse::<jiff::Timestamp>().ok()?;
             let last_visit = bookmark.visited.parse::<jiff::Timestamp>().ok()?;
@@ -1839,6 +1850,7 @@ pub enum Command {
     OpenInNewWindow(PathBuf),
     OpenTrash,
     Preview(PreviewKind),
+    RemoveFromBookmarks(Vec<PathBuf>),
     RunContextAction(usize),
     SetOpenWith(Mime, String),
     SetPermissions(PathBuf, u32),
@@ -1852,6 +1864,7 @@ pub enum Command {
 pub enum Message {
     AddNetworkDrive,
     AutoScroll(Option<f32>),
+    AddToBookmarks(Vec<PathBuf>),
     Click(Option<usize>),
     DoubleClick(Option<usize>),
     ClickRelease(Option<usize>),
@@ -1901,6 +1914,7 @@ pub enum Message {
     SelectFirst,
     SelectLast,
     SetOpenWith(Mime, String),
+    RemoveFromBookmarks(Vec<PathBuf>),
     RunContextAction(usize),
     SetPermissions(PathBuf, u32),
     ShiftPermissions(Option<(PathBuf, u32)>, u32, u32),
@@ -2037,11 +2051,6 @@ impl ItemMetadata {
             ItemMetadata::GvfsPath { children_opt, .. } => children_opt.as_ref(),
             _ => None,
         }
-    }
-
-    pub fn is_bookmarked(&self) -> bool {
-        // TODO: Cache bookmarked to query for list
-        return false;
     }
 }
 
@@ -4653,8 +4662,10 @@ impl Tab {
 
                                 if index < MAX_SEARCH_RESULTS {
                                     //TODO: use correct IconSizes
-                                    let item =
-                                        item_from_search_item(search_item, IconSizes::default());
+                                    let item = item_from_search_item(
+                                        search_item,
+                                        IconSizes::default(),
+                                    );
                                     items.insert(index, item);
                                 }
                                 // Ensure that updates make it to the GUI in a timely manner
@@ -4971,6 +4982,15 @@ impl Tab {
             Message::CopyChecksum(value) => {
                 commands.push(Command::Iced(cosmic::iced::clipboard::write(value).into()));
             }
+
+            Message::AddToBookmarks(paths) => {
+                commands.push(Command::AddToBookmarks(paths));
+            }
+
+            Message::RemoveFromBookmarks(paths) => {
+                commands.push(Command::RemoveFromBookmarks(paths));
+            }
+
         }
 
         // Scroll to top if needed
@@ -5137,8 +5157,8 @@ impl Tab {
             }
             HeadingOptions::Bookmarked => {
                 items.sort_by(|a, b| {
-                    let a_bookmarked = a.1.metadata.is_bookmarked();
-                    let b_bookmarked = b.1.metadata.is_bookmarked();
+                    let a_bookmarked = a.1.bookmarked;
+                    let b_bookmarked = b.1.bookmarked;
                     if folders_first {
                         match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
                             (true, false) => Ordering::Less,
@@ -5461,20 +5481,29 @@ impl Tab {
         row = row.push(widget::space::horizontal().width(Length::Fixed(space_s.into())));
         w += f32::from(space_s);
 
+        let is_trash = self.location.is_trash();
         //TODO: allow resizing?
         let name_width = 300.0;
         let modified_width = 200.0;
         let size_width = 100.0;
-        let bookmarked_width = (icon_size + 2 * space_xxs) as f32;
+        let bookmarked_width = if is_trash { 0.0 } else { 50.0 };
         let condensed = size.width < (name_width + modified_width + size_width + bookmarked_width);
 
         let (sort_name, sort_direction, _) = self.sort_options();
-        let heading_item = |name, width, msg| {
+        let heading_item = |name, width, msg, icon_name| {
             let mut row = widget::row::with_capacity(2)
                 .align_y(Alignment::Center)
                 .spacing(space_xxxs)
                 .width(width);
-            row = row.push(widget::text::heading(name));
+            if icon_name != "" {
+                row = row.push(widget::tooltip(
+                    widget::icon::from_name(icon_name).size(16).icon(),
+                    widget::text::body(name),
+                    widget::tooltip::Position::Bottom,
+                ));
+            } else {
+                row = row.push(widget::text::heading(name));
+            }
             match (sort_name == msg, sort_direction) {
                 (true, true) => {
                     row = row.push(widget::icon::from_name("pan-down-symbolic").size(16));
@@ -5490,24 +5519,46 @@ impl Tab {
                 .into()
         };
 
-        let heading_row = widget::row::with_children([
-            heading_item(fl!("name"), Length::Fill, HeadingOptions::Name),
-            if self.location.is_trash() {
+        let mut heading_cols = Vec::new();
+        heading_cols.push(heading_item(
+            fl!("name"),
+            Length::Fill,
+            HeadingOptions::Name,
+            "",
+        ),);
+        heading_cols.push(
+            if is_trash {
                 heading_item(
                     fl!("trashed-on"),
                     Length::Fixed(modified_width),
                     HeadingOptions::TrashedOn,
+                    "",
                 )
             } else {
                 heading_item(
                     fl!("modified"),
                     Length::Fixed(modified_width),
                     HeadingOptions::Modified,
+                    "",
                 )
             },
-            heading_item(fl!("size"), Length::Fixed(size_width), HeadingOptions::Size),
-            heading_item(fl!("bookmarked"), Length::Fixed(bookmarked_width.into()), HeadingOptions::Bookmarked),
-        ])
+        );
+        heading_cols.push(heading_item(
+            fl!("size"),
+            Length::Fixed(size_width),
+            HeadingOptions::Size,
+            "",
+        ),);
+        if !is_trash {
+            heading_cols.push(heading_item(
+                fl!("bookmarked"),
+                Length::Fixed(bookmarked_width.into()),
+                HeadingOptions::Bookmarked,
+                "starred-symbolic",
+            ),);
+        }
+
+        let heading_row = widget::row::with_children(heading_cols)
         .align_y(Alignment::Center)
         .height(Length::Fixed((space_m + 4).into()))
         .padding([0, space_xxs]);
@@ -6173,7 +6224,7 @@ impl Tab {
         let name_width = 300.0;
         let modified_width = 200.0;
         let size_width = 100.0;
-        let bookmarked_width = (16 + 2 * space_xxs) as f32;
+        let bookmarked_width = 50.0;
         let condensed = size.width < (name_width + modified_width + size_width + bookmarked_width);
         let is_search = matches!(self.location, Location::Search(..));
         let icon_size = if condensed || is_search {
@@ -6232,10 +6283,6 @@ impl Tab {
 
                 // Only build elements if visible (for performance)
                 let button_row = if item_rect.intersects(&visible_rect) {
-                    let mut bookmarked_icon = "non-starred-symbolic";
-                    if item.bookmarked {
-                        bookmarked_icon = "starred-symbolic";
-                    }
                     let modified_text = match &item.metadata {
                         ItemMetadata::Path { metadata, .. } => match metadata.modified() {
                             Ok(time) => self.format_time(time).to_string(),
@@ -6331,6 +6378,12 @@ impl Tab {
                         .align_y(Alignment::Center)
                         .spacing(space_xxs)
                     } else if is_search {
+
+                        let mut item_path_vec = Vec::new();
+                        if let Some(path) = item.path_opt() {
+                            item_path_vec.push(path.to_path_buf());
+                        }
+
                         widget::row::with_children([
                             widget::icon::icon(item.icon_handle_list_condensed.clone())
                                 .content_fit(ContentFit::Contain)
@@ -6349,15 +6402,29 @@ impl Tab {
                             widget::text::body(modified_text.clone())
                                 .width(Length::Fixed(modified_width))
                                 .into(),
-                            widget::icon::from_name(bookmarked_icon)
-                                .size(16)
-                                .icon()
+                            widget::container(if item.bookmarked {
+                                    widget::tooltip(
+                                        widget::button::icon(widget::icon::from_name("starred-symbolic").size(16))
+                                        .on_press(Message::RemoveFromBookmarks(item_path_vec)),
+                                        widget::text::body(fl!("remove-from-bookmarks")),
+                                        widget::tooltip::Position::Top,
+                                    )
+                                } else {
+                                    widget::tooltip(
+                                        widget::button::icon(widget::icon::from_name("non-starred-symbolic").size(16))
+                                        .on_press(Message::AddToBookmarks(item_path_vec)),
+                                        widget::text::body(fl!("add-to-bookmarks")),
+                                        widget::tooltip::Position::Top,
+                                    )
+                                })
+                                .width(Length::Fixed(bookmarked_width))
+                                .padding(padding::right(10))
                                 .into(),
                         ])
                         .height(Length::Fixed(f32::from(row_height)))
                         .align_y(Alignment::Center)
                         .spacing(space_xxs)
-                    } else {
+                    } else if self.location.is_trash() {
                         widget::row::with_children([
                             widget::icon::icon(item.icon_handle_list.clone())
                                 .content_fit(ContentFit::Contain)
@@ -6372,9 +6439,48 @@ impl Tab {
                             widget::text::body(size_text.clone())
                                 .width(Length::Fixed(size_width))
                                 .into(),
-                            widget::icon::from_name(bookmarked_icon)
-                                .size(16)
-                                .icon()
+                        ])
+                        .height(Length::Fixed(f32::from(row_height)))
+                        .align_y(Alignment::Center)
+                        .spacing(space_xxs)
+                    } else {
+
+                        let mut item_path_vec = Vec::new();
+                        if let Some(path) = item.path_opt() {
+                            item_path_vec.push(path.to_path_buf());
+                        }
+
+                        widget::row::with_children([
+                            widget::icon::icon(item.icon_handle_list.clone())
+                                .content_fit(ContentFit::Contain)
+                                .size(icon_size)
+                                .into(),
+                            Item::list_display_name(item.display_name.clone())
+                                .width(Length::Fill)
+                                .into(),
+                            widget::text::body(modified_text.clone())
+                                .width(Length::Fixed(modified_width))
+                                .into(),
+                            widget::text::body(size_text.clone())
+                                .width(Length::Fixed(size_width))
+                                .into(),
+                            widget::container(if item.bookmarked {
+                                    widget::tooltip(
+                                        widget::button::icon(widget::icon::from_name("starred-symbolic").size(16))
+                                        .on_press(Message::RemoveFromBookmarks(item_path_vec)),
+                                        widget::text::body(fl!("remove-from-bookmarks")),
+                                        widget::tooltip::Position::Top,
+                                    )
+                                } else {
+                                    widget::tooltip(
+                                        widget::button::icon(widget::icon::from_name("non-starred-symbolic").size(16))
+                                        .on_press(Message::AddToBookmarks(item_path_vec)),
+                                        widget::text::body(fl!("add-to-bookmarks")),
+                                        widget::tooltip::Position::Top,
+                                    )
+                                })
+                                .width(Length::Fixed(bookmarked_width))
+                                .padding(padding::right(10))
                                 .into(),
                         ])
                         .height(Length::Fixed(f32::from(row_height)))
@@ -6441,10 +6547,17 @@ impl Tab {
                                     //TODO: translate?
                                     widget::text::body(format!("{modified_text} - {size_text}"))
                                         .into(),
-                                    widget::icon::from_name(bookmarked_icon)
-                                        .size(16)
-                                        .icon()
-                                        .into(),
+                                    if item.bookmarked {
+                                        widget::icon::from_name("starred-symbolic")
+                                            .size(16)
+                                            .icon()
+                                            .into()
+                                    } else {
+                                        widget::icon::from_name("non-starred-symbolic")
+                                            .size(16)
+                                            .icon()
+                                            .into()
+                                    },
                                 ])
                                 .into(),
                             ])
@@ -6473,10 +6586,17 @@ impl Tab {
                                 widget::text::body(size_text.clone())
                                     .width(Length::Fixed(size_width))
                                     .into(),
-                                widget::icon::from_name(bookmarked_icon)
-                                    .size(16)
-                                    .icon()
-                                    .into(),
+                                if item.bookmarked {
+                                    widget::icon::from_name("starred-symbolic")
+                                        .size(16)
+                                        .icon()
+                                        .into()
+                                } else {
+                                    widget::icon::from_name("non-starred-symbolic")
+                                        .size(16)
+                                        .icon()
+                                        .into()
+                                },
                             ])
                             .align_y(Alignment::Center)
                             .spacing(space_xxs)
@@ -6496,10 +6616,17 @@ impl Tab {
                                 widget::text::body(size_text)
                                     .width(Length::Fixed(size_width))
                                     .into(),
-                                widget::icon::from_name(bookmarked_icon)
-                                    .size(16)
-                                    .icon()
-                                    .into(),
+                                if item.bookmarked {
+                                    widget::icon::from_name("starred-symbolic")
+                                        .size(16)
+                                        .icon()
+                                        .into()
+                                } else {
+                                    widget::icon::from_name("non-starred-symbolic")
+                                        .size(16)
+                                        .icon()
+                                        .into()
+                                },
                             ])
                             .align_y(Alignment::Center)
                             .spacing(space_xxs)

@@ -346,9 +346,9 @@ type-to-search-select = Selects the first matching file or folder
 
 # Context menu
 add-to-sidebar = Add to sidebar
-add-to-bookmarks = Add to Bookmarks
-remove-from-bookmarks = Remove from Bookmarks
-clear-recents-history = Clear Recents history
+add-to-bookmarks = Add to bookmarks
+remove-from-bookmarks = Remove from bookmarks
+clear-recents-history = Clear recents history
 compress = Compress...
 copy-to = Copy to...
 delete-permanently = Delete permanently
@@ -366,6 +366,7 @@ sort-by-modified = Sort by modified
 sort-by-size = Sort by size
 sort-by-trashed = Sort by delete time
 remove-from-recents = Remove from recents
+no-recents = No recent history
 
 ## Desktop
 change-wallpaper = Change wallpaper...
