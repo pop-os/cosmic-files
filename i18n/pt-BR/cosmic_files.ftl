@@ -388,7 +388,7 @@ new-window = Nova janela
 reload-folder = Recarregar pasta
 rename = Renomear...
 close-tab = Fechar aba
-quit = Sair
+quit = Encerrar
 
 ## Edit
 
