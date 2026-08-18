@@ -1359,10 +1359,8 @@ pub fn is_starred(path: PathBuf) -> bool {
 }
 
 pub fn scan_starred(sizes: IconSizes) -> Vec<Item> {
-    let mut starred: Vec<_> = user_starred().into_iter().filter_map(|bookmark| {
+    let starred: Vec<_> = user_starred().into_iter().filter_map(|bookmark| {
             let path = uri_to_path(bookmark.href)?;
-            let last_edit = bookmark.modified.parse::<jiff::Timestamp>().ok()?;
-            let last_visit = bookmark.visited.parse::<jiff::Timestamp>().ok()?;
             if path.exists() {
                 let file_name = path.file_name()?;
                 let name = file_name.to_string_lossy().to_string();
@@ -1378,15 +1376,14 @@ pub fn scan_starred(sizes: IconSizes) -> Vec<Item> {
                     }
                 };
                 let item = item_from_entry(path, name, metadata, sizes);
-                Some((item, last_edit.min(last_visit)))
+                Some(item)
             } else {
                 log::warn!("starred file path does not exist: {}", path.display());
                 None
             }
         })
         .collect();
-    starred.sort_by_key(|bookmark| Reverse(bookmark.1));
-    starred.into_iter().take(50).map(|(item, _)| item).collect()
+    starred.into_iter().collect()
 }
 
 pub fn scan_network(uri: &str, sizes: IconSizes) -> Vec<Item> {
