@@ -348,7 +348,7 @@ pub struct OperationSelection {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Operation {
-    AddToBookmarks {
+    AddToStarred {
         paths: Vec<PathBuf>,
     },
     /// Compress files
@@ -398,7 +398,7 @@ pub enum Operation {
     RemoveFromRecents {
         paths: Box<[PathBuf]>,
     },
-    RemoveFromBookmarks {
+    RemoveFromStarred {
         paths: Vec<PathBuf>,
     },
     Rename {
@@ -486,7 +486,7 @@ impl Operation {
             ControllerState::Failed => fl!("progress-failed", percent = percent),
         };
         match self {
-            Self::AddToBookmarks { paths } => fl!("adding-to-bookmarks", items = paths.len()),
+            Self::AddToStarred { paths } => fl!("adding-to-starred", items = paths.len()),
             Self::Compress { paths, to, .. } => fl!(
                 "compressing",
                 items = paths.len(),
@@ -545,7 +545,7 @@ impl Operation {
                 fl!("renaming", from = file_name(from), to = file_name(to))
             }
             Self::RemoveFromRecents { paths } => fl!("removing-from-recents", items = paths.len()),
-            Self::RemoveFromBookmarks { paths } => fl!("removing-from-bookmarks", items = paths.len()),
+            Self::RemoveFromStarred { paths } => fl!("removing-from-starred", items = paths.len()),
             Self::Restore { items } => fl!("restoring", items = items.len(), progress = progress()),
             Self::SetExecutableAndLaunch { path } => {
                 fl!("setting-executable-and-launching", name = file_name(path))
@@ -562,7 +562,7 @@ impl Operation {
 
     pub fn completed_text(&self) -> String {
         match self {
-            Self::AddToBookmarks { paths } => fl!("added-to-bookmarks", items = paths.len()),
+            Self::AddToStarred { paths } => fl!("added-to-starred", items = paths.len()),
             Self::Compress { paths, to, .. } => fl!(
                 "compressed",
                 items = paths.len(),
@@ -611,7 +611,7 @@ impl Operation {
             ),
             Self::PermanentlyDelete { paths } => fl!("permanently-deleted", items = paths.len()),
             Self::RemoveFromRecents { paths } => fl!("removed-from-recents", items = paths.len()),
-            Self::RemoveFromBookmarks { paths } => fl!("removed-from-bookmarks", items = paths.len()),
+            Self::RemoveFromStarred { paths } => fl!("removed-from-starred", items = paths.len()),
             Self::Rename { from, to } => fl!("renamed", from = file_name(from), to = file_name(to)),
             Self::Restore { items } => fl!("restored", items = items.len()),
             Self::SetExecutableAndLaunch { path } => {
@@ -639,11 +639,11 @@ impl Operation {
             | Self::Move { .. }
             | Self::PermanentlyDelete { .. }
             | Self::Restore { .. } => true,
-            Self::AddToBookmarks { .. }
+            Self::AddToStarred { .. }
             | Self::NewFile { .. }
             | Self::NewFolder { .. }
             | Self::RemoveFromRecents { .. }
-            | Self::RemoveFromBookmarks { .. }
+            | Self::RemoveFromStarred { .. }
             | Self::Rename { .. }
             | Self::SetExecutableAndLaunch { .. }
             | Self::SetPermissions { .. } => false,
@@ -670,7 +670,7 @@ impl Operation {
 
         //TODO: IF ERROR, RETURN AN Operation THAT CAN UNDO THE CURRENT STATE
         let paths: Result<OperationSelection, OperationError> = match self {
-            Self::AddToBookmarks { paths } => {
+            Self::AddToStarred { paths } => {
                 let paths_clone = paths.clone();
                 let total = paths_clone.len();
                 for (i, path) in paths_clone.into_iter().enumerate() {
@@ -1151,7 +1151,7 @@ impl Operation {
 
                 Ok(OperationSelection::default())
             }
-            Self::RemoveFromBookmarks { paths } => {
+            Self::RemoveFromStarred { paths } => {
                 let _ = tokio::task::spawn_blocking(move || {
                     let path_refs = paths.iter().map(PathBuf::as_path).collect::<Box<[_]>>();
                     user_places_xbel::remove_user_place(&path_refs)

@@ -133,7 +133,7 @@ pub struct Flags {
 pub enum Action {
     About,
     AddToSidebar,
-    AddToBookmarks,
+    AddToStarred,
     Compress,
     Copy,
     CopyPath,
@@ -177,7 +177,7 @@ pub enum Action {
     Preview,
     Reload,
     RemoveFromRecents,
-    RemoveFromBookmarks,
+    RemoveFromStarred,
     Rename,
     RestoreFromTrash,
     SearchActivate,
@@ -208,7 +208,7 @@ impl Action {
         match self {
             Self::About => Message::ToggleContextPage(ContextPage::About),
             Self::AddToSidebar => Message::AddToSidebar(entity_opt),
-            Self::AddToBookmarks => Message::AddToBookmarks(entity_opt),
+            Self::AddToStarred => Message::AddToStarred(entity_opt),
             Self::Compress => Message::Compress(entity_opt),
             Self::Copy => Message::Copy(entity_opt),
             Self::CopyPath => Message::CopyPath(entity_opt),
@@ -256,7 +256,7 @@ impl Action {
             Self::Preview => Message::Preview(entity_opt),
             Self::Reload => Message::TabMessage(entity_opt, tab::Message::Reload),
             Self::RemoveFromRecents => Message::RemoveFromRecents(entity_opt),
-            Self::RemoveFromBookmarks => Message::RemoveFromBookmarks(entity_opt),
+            Self::RemoveFromStarred => Message::RemoveFromStarred(entity_opt),
             Self::Rename => Message::Rename(entity_opt),
             Self::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
             Self::SearchActivate => Message::SearchActivate,
@@ -339,7 +339,7 @@ impl MenuAction for NavMenuAction {
 #[derive(Clone, Debug)]
 pub enum Message {
     AddToSidebar(Option<Entity>),
-    AddToBookmarks(Option<Entity>),
+    AddToStarred(Option<Entity>),
     AppTheme(AppTheme),
     CloseToast(widget::ToastId),
     Compress(Option<Entity>),
@@ -429,10 +429,10 @@ pub enum Message {
     ReloadMimeAppCache,
     ReorderTab(ReorderEvent),
     RescanRecents,
-    RescanBookmarks,
+    RescanStarred,
     RescanTrash,
     RemoveFromRecents(Option<Entity>),
-    RemoveFromBookmarks(Option<Entity>),
+    RemoveFromStarred(Option<Entity>),
     Rename(Option<Entity>),
     ReplaceResult(ReplaceResult),
     RestoreFromTrash(Option<Entity>),
@@ -443,7 +443,7 @@ pub enum Message {
     SearchInput(String),
     SetShowDetails(bool),
     SetShowRecents(bool),
-    SetShowBookmarks(bool),
+    SetShowStarred(bool),
     SetTypeToSearch(TypeToSearch),
     SystemThemeModeChange,
     Size(window::Id, Size),
@@ -485,7 +485,7 @@ pub enum Message {
     DndDropTab(Entity, Option<ClipboardPaste>, DndAction),
     DndDropNav(Entity, Option<ClipboardPaste>, DndAction),
     Recents,
-    Bookmarks,
+    Starred,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     OutputEvent(OutputEvent, WlOutput),
     Cosmic(app::Action),
@@ -1595,14 +1595,14 @@ impl App {
         Task::batch(commands)
     }
 
-    fn rescan_bookmarks(&mut self) -> Task<Message> {
+    fn rescan_starred(&mut self) -> Task<Message> {
         let needs_reload: Box<[_]> = self
             .tab_model
             .iter()
             .filter_map(|entity| {
                 let tab = self.tab_model.data::<Tab>(entity)?;
                 tab.location
-                    .is_bookmarks()
+                    .is_starred()
                     .then_some((entity, tab.location.clone()))
             })
             .collect();
@@ -1642,8 +1642,8 @@ impl App {
                         Some(SearchLocation::Path(path.clone()))
                     } else if tab.location.is_recents() {
                         Some(SearchLocation::Recents)
-                    } else if tab.location.is_bookmarks() {
-                        Some(SearchLocation::Bookmarks)
+                    } else if tab.location.is_starred() {
+                        Some(SearchLocation::Starred)
                     } else if tab.location.is_trash() {
                         Some(SearchLocation::Trash)
                     } else {
@@ -1666,7 +1666,7 @@ impl App {
                     Location::Search(search_location, ..) => match search_location {
                         SearchLocation::Path(path) => Some((Location::Path(path.clone()), false)),
                         SearchLocation::Recents => Some((Location::Recents, false)),
-                        SearchLocation::Bookmarks => Some((Location::Bookmarks, false)),
+                        SearchLocation::Starred => Some((Location::Starred, false)),
                         SearchLocation::Trash => Some((Location::Trash, false)),
                     },
                     _ => None,
@@ -1796,11 +1796,11 @@ impl App {
             });
         }
 
-        if self.config.show_bookmarks {
+        if self.config.show_starred {
             nav_model = nav_model.insert(|b| {
-                b.text(fl!("bookmarks"))
+                b.text(fl!("starred"))
                     .icon(icon::from_name("starred-symbolic"))
-                    .data(Location::Bookmarks)
+                    .data(Location::Starred)
             });
         }
 
@@ -2315,8 +2315,8 @@ impl App {
                         .toggler(self.config.show_recents, Message::SetShowRecents)
                 })
                 .add({
-                    settings::item::builder(fl!("show-bookmarks"))
-                        .toggler(self.config.show_bookmarks, Message::SetShowBookmarks)
+                    settings::item::builder(fl!("show-starred"))
+                        .toggler(self.config.show_starred, Message::SetShowStarred)
                 })
                 .into(),
         ])
@@ -2952,13 +2952,13 @@ impl Application for App {
                 config_set!(favorites, favorites);
                 return self.update_config();
             }
-            Message::AddToBookmarks(entity_opt) => {
+            Message::AddToStarred(entity_opt) => {
                 let mut paths = Vec::new();
                 for path in self.selected_paths(entity_opt) {
                     paths.push(path);
                 }
                 let mut tasks = Vec::new();
-                tasks.push(self.operation(Operation::AddToBookmarks { paths }));
+                tasks.push(self.operation(Operation::AddToStarred { paths }));
                 let entity = self.tab_model.active();
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
                     tasks.push(self.update_tab(entity, tab.location.clone(), None))
@@ -4262,13 +4262,13 @@ impl Application for App {
                 let paths: Box<[_]> = self.selected_paths(entity_opt).collect();
                 return self.operation(Operation::RemoveFromRecents { paths });
             }
-            Message::RemoveFromBookmarks(entity_opt) => {
+            Message::RemoveFromStarred(entity_opt) => {
                 let mut paths = Vec::new();
                 for path in self.selected_paths(entity_opt) {
                     paths.push(path);
                 }
                 let mut tasks = Vec::new();
-                tasks.push(self.operation(Operation::RemoveFromBookmarks { paths }));
+                tasks.push(self.operation(Operation::RemoveFromStarred { paths }));
                 let entity = self.tab_model.active();
                 if let Some(tab) = self.tab_model.data::<Tab>(entity) {
                     tasks.push(self.update_tab(entity, tab.location.clone(), None))
@@ -4281,8 +4281,8 @@ impl Application for App {
             Message::RescanRecents => {
                 return self.rescan_recents();
             }
-            Message::RescanBookmarks => {
-                return self.rescan_bookmarks();
+            Message::RescanStarred => {
+                return self.rescan_starred();
             }
             Message::RescanTrash => {
                 // Update trash icon if empty/full
@@ -4415,10 +4415,10 @@ impl Application for App {
                 config_set!(show_recents, show_recents);
                 return self.update_config();
             }
-            Message::SetShowBookmarks(show_bookmarks) => {
-                config_set!(show_bookmarks, show_bookmarks);
+            Message::SetShowStarred(show_starred) => {
+                config_set!(show_starred, show_starred);
                 let mut config = self.config.tab.clone();
-                config.show_bookmarks = show_bookmarks;
+                config.show_starred = show_starred;
                 config_set!(tab, config);
                 return self.update_config();
             }
@@ -4554,13 +4554,13 @@ impl Application for App {
                             config_set!(favorites, favorites);
                             commands.push(self.update_config());
                         }
-                        tab::Command::AddToBookmarks(paths) => {
-                            commands.push(self.operation(Operation::AddToBookmarks { paths }));
-                            commands.push(self.rescan_bookmarks());
+                        tab::Command::AddToStarred(paths) => {
+                            commands.push(self.operation(Operation::AddToStarred { paths }));
+                            commands.push(self.rescan_starred());
                         }
-                        tab::Command::RemoveFromBookmarks(paths) => {
-                            commands.push(self.operation(Operation::RemoveFromBookmarks { paths }));
-                            commands.push(self.rescan_bookmarks());
+                        tab::Command::RemoveFromStarred(paths) => {
+                            commands.push(self.operation(Operation::RemoveFromStarred { paths }));
+                            commands.push(self.rescan_starred());
                         }
                         tab::Command::AutoScroll(scroll_speed) => {
                             // converting an f32 to an i16 here by multiplying by 10 and casting to i16
@@ -4986,8 +4986,8 @@ impl Application for App {
                         Some(Location::Recents | Location::Search(SearchLocation::Recents, ..)) => {
                             command.arg("--recents");
                         }
-                        Some(Location::Bookmarks | Location::Search(SearchLocation::Bookmarks, ..)) => {
-                            command.arg("--bookmarks");
+                        Some(Location::Starred | Location::Search(SearchLocation::Starred, ..)) => {
+                            command.arg("--starred");
                         }
                         Some(Location::Trash | Location::Search(SearchLocation::Trash, ..)) => {
                             command.arg("--trash");
@@ -5287,8 +5287,8 @@ impl Application for App {
                                     Location::Recents => {
                                         command.arg("--recents");
                                     }
-                                    Location::Bookmarks => {
-                                        command.arg("--bookmarks");
+                                    Location::Starred => {
+                                        command.arg("--starred");
                                     }
                                     _ => {
                                         log::error!(
@@ -5352,9 +5352,9 @@ impl Application for App {
                     return self.open_tab(Location::Recents, false, None);
                 }
             }
-            Message::Bookmarks => {
-                if self.config.show_bookmarks {
-                    return self.open_tab(Location::Bookmarks, false, None);
+            Message::Starred => {
+                if self.config.show_starred {
+                    return self.open_tab(Location::Starred, false, None);
                 }
             }
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
@@ -6614,7 +6614,7 @@ impl Application for App {
                     &self.key_binds,
                     &self.modifiers,
                     self.clipboard_has_content(),
-                    &self.config.show_bookmarks,
+                    &self.config.show_starred,
                     &self.config.context_actions,
                 )
                 .map(move |message| Message::TabMessage(Some(entity), message));
@@ -6644,7 +6644,7 @@ impl Application for App {
                                 &self.key_binds,
                                 &window.modifiers,
                                 self.clipboard_has_content(),
-                                &self.config.show_bookmarks,
+                                &self.config.show_starred,
                                 &self.config.context_actions,
                             )
                             .map(|x| Message::TabMessage(Some(*entity), x)),
@@ -6663,7 +6663,7 @@ impl Application for App {
                                 &self.key_binds,
                                 &window.modifiers,
                                 self.clipboard_has_content(),
-                                &self.config.show_bookmarks,
+                                &self.config.show_starred,
                                 &self.config.context_actions,
                             )
                             .map(move |message| Message::TabMessage(Some(*entity), message)),
@@ -6747,7 +6747,7 @@ impl Application for App {
             not(target_os = "android")
         ))]
         struct RecentsWatcherSubscription;
-        struct BookmarksWatcherSubscription;
+        struct StarredWatcherSubscription;
 
         let mut subscriptions = vec![
             //TODO: filter more events by window id
@@ -7067,13 +7067,13 @@ impl Application for App {
                 not(target_os = "ios"),
                 not(target_os = "android")
             ))]
-            Subscription::run_with(TypeId::of::<BookmarksWatcherSubscription>(), |_| {
+            Subscription::run_with(TypeId::of::<StarredWatcherSubscription>(), |_| {
                 stream::channel(
                     1,
                     |mut output: futures::channel::mpsc::Sender<Message>| async move {
-                        let Some(bookmarks_file) = user_places_xbel::dir() else {
+                        let Some(starred_file) = user_places_xbel::dir() else {
                             log::warn!(
-                                "failed to watch bookmarks changes: .user-places.xbel does not exist"
+                                "failed to watch starred changes: .user-places.xbel does not exist"
                             );
                             return std::future::pending().await;
                         };
@@ -7084,7 +7084,7 @@ impl Application for App {
                             move |event_res: notify_debouncer_full::DebounceEventResult| {
                                 match event_res {
                                     Ok(events) => {
-                                        // Programs differ in how they modify the bookmarks file so the
+                                        // Programs differ in how they modify the starred file so the
                                         // rescan is triggered on any event but access.
                                         if events.iter().any(|event| {
                                             let kind = event.kind;
@@ -7093,16 +7093,16 @@ impl Application for App {
                                                 || kind.is_remove()
                                                 || kind.is_other()
                                         }) && let Err(e) = futures::executor::block_on(async {
-                                            output.send(Message::RescanBookmarks).await
+                                            output.send(Message::RescanStarred).await
                                         }) {
                                             log::warn!(
-                                                "open bookmarks tabs need to be updated but sending message failed: {e:?}"
+                                                "open starred tabs need to be updated but sending message failed: {e:?}"
                                             );
                                         }
                                     }
                                     Err(e) => {
                                         log::warn!(
-                                            "failed to watch bookmarks file for changes: {e:?}"
+                                            "failed to watch starred file for changes: {e:?}"
                                         )
                                     }
                                 }
@@ -7112,11 +7112,11 @@ impl Application for App {
                         match watcher_res {
                             Ok(mut watcher) => {
                                 if let Err(e) = watcher
-                                    .watch(&bookmarks_file, notify::RecursiveMode::NonRecursive)
+                                    .watch(&starred_file, notify::RecursiveMode::NonRecursive)
                                 {
                                     log::warn!(
-                                        "failed to add bookmarks file `{}` to watcher: {}",
-                                        bookmarks_file.display(),
+                                        "failed to add starred file `{}` to watcher: {}",
+                                        starred_file.display(),
                                         e
                                     );
                                 }
@@ -7125,7 +7125,7 @@ impl Application for App {
                                 std::future::pending::<()>().await;
                             }
                             Err(e) => {
-                                log::warn!("failed to create new watcher for bookmarks file: {e:?}")
+                                log::warn!("failed to create new watcher for starred file: {e:?}")
                             }
                         }
 

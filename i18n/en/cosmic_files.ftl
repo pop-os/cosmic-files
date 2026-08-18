@@ -10,7 +10,7 @@ networks = Networks
 notification-in-progress = File operations are in progress
 trash = Trash
 recents = Recents
-bookmarks = Bookmarks
+starred = Starred
 undo = Undo
 today = Today
 
@@ -29,7 +29,7 @@ name = Name
 modified = Modified
 trashed-on = Trashed
 size = Size
-bookmarked = Bookmarked
+starred = Starred
 
 # Progress footer
 details = Details
@@ -280,22 +280,22 @@ removed-from-recents = Removed {$items} {$items ->
         [one] item
         *[other] items
     } from {recents}
-adding-to-bookmarks = Adding {$items} {$items ->
+adding-to-starred = Adding {$items} {$items ->
         [one] item
         *[other] items
-    } to {bookmarks}
-added-to-bookmarks = Added {$items} {$items ->
+    } to {starred}
+added-to-starred = Added {$items} {$items ->
         [one] item
         *[other] items
-    } to {bookmarks}
-removing-from-bookmarks = Removing {$items} {$items ->
+    } to {starred}
+removing-from-starred = Removing {$items} {$items ->
         [one] item
         *[other] items
-    } from {bookmarks}
-removed-from-bookmarks = Removed {$items} {$items ->
+    } from {starred}
+removed-from-starred = Removed {$items} {$items ->
         [one] item
         *[other] items
-    } from {bookmarks}
+    } from {starred}
 renaming = Renaming "{$from}" to "{$to}"
 renamed = Renamed "{$from}" to "{$to}"
 restoring = Restoring {$items} {$items ->
@@ -329,7 +329,7 @@ error = Error
 settings = Settings
 single-click = Single click to open
 show-recents = Recents folder in the sidebar
-show-bookmarks = Show bookmarks
+show-starred = Show starred
 
 ### Appearance
 appearance = Appearance
@@ -346,8 +346,8 @@ type-to-search-select = Selects the first matching file or folder
 
 # Context menu
 add-to-sidebar = Add to sidebar
-add-to-bookmarks = Add to bookmarks
-remove-from-bookmarks = Remove from bookmarks
+add-to-starred = Add to starred
+remove-from-starred = Remove from starred
 clear-recents-history = Clear recents history
 compress = Compress...
 copy-to = Copy to...
