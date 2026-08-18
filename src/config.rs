@@ -167,8 +167,10 @@ pub struct Config {
     pub context_actions: Vec<ContextActionPreset>,
     pub thumb_cfg: ThumbCfg,
     pub favorites: Vec<Favorite>,
+    pub bookmarks: Vec<Favorite>,
     pub show_details: bool,
     pub show_recents: bool,
+    pub show_bookmarks: bool,
     pub tab: TabConfig,
     pub type_to_search: TypeToSearch,
 }
@@ -231,8 +233,10 @@ impl Default for Config {
                 Favorite::Pictures,
                 Favorite::Videos,
             ],
+            bookmarks: vec![],
             show_details: false,
             show_recents: true,
+            show_bookmarks: true,
             tab: TabConfig::default(),
             type_to_search: TypeToSearch::Recursive,
         }

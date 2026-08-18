@@ -1224,6 +1224,46 @@ pub fn scan_search<F: Fn(SearchItem) -> bool + Sync>(
                 }
             }
         }
+        SearchLocation::Bookmarks => {
+            let bookmarks = match user_places_xbel::parse_file() {
+                Ok(bookmarks) => bookmarks,
+                Err(err) => {
+                    log::warn!("Error reading bookmarks files: {err:?}");
+                    return;
+                }
+            };
+            for bookmark in bookmarks.bookmarks {
+                let path = uri_to_path(bookmark.href);
+                if let Some(path) = path
+                    && path.exists()
+                {
+                    let file_name = path.file_name();
+                    if let Some(file_name) = file_name {
+                        let file_name = file_name.to_string_lossy();
+                        if regex.is_match(&file_name) {
+                            match path.metadata() {
+                                Ok(metadata) => {
+                                    if !callback(SearchItem::Path(
+                                        path.to_path_buf(),
+                                        file_name.to_string(),
+                                        metadata,
+                                    )) {
+                                        break;
+                                    }
+                                }
+                                Err(err) => {
+                                    log::warn!(
+                                        "failed to read metadata for entry at {}: {}",
+                                        path.display(),
+                                        err
+                                    );
+                                }
+                            };
+                        }
+                    }
+                }
+            }
+        }
         SearchLocation::Trash => {
             Trash::scan_search(callback, &regex);
         }
@@ -1292,6 +1332,47 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
     recents.sort_by_key(|recent| Reverse(recent.1));
 
     recents.into_iter().take(50).map(|(item, _)| item).collect()
+}
+
+pub fn scan_bookmarks(sizes: IconSizes) -> Vec<Item> {
+    let bookmarked_files = match user_places_xbel::parse_file() {
+        Ok(bookmarked_files) => bookmarked_files,
+        Err(err) => {
+            log::warn!("Error reading bookmarks files: {err:?}");
+            return Vec::new();
+        }
+    };
+    let mut bookmarks: Vec<_> = bookmarked_files
+        .bookmarks
+        .into_iter()
+        .filter_map(|bookmark| {
+            let path = uri_to_path(bookmark.href)?;
+            let last_edit = bookmark.modified.parse::<jiff::Timestamp>().ok()?;
+            let last_visit = bookmark.visited.parse::<jiff::Timestamp>().ok()?;
+            if path.exists() {
+                let file_name = path.file_name()?;
+                let name = file_name.to_string_lossy().to_string();
+                let metadata = match path.metadata() {
+                    Ok(ok) => ok,
+                    Err(err) => {
+                        log::warn!(
+                            "failed to read metadata for entry at {}: {}",
+                            path.display(),
+                            err
+                        );
+                        return None;
+                    }
+                };
+                let item = item_from_entry(path, name, metadata, sizes);
+                Some((item, last_edit.min(last_visit)))
+            } else {
+                log::warn!("bookmarks file path does not exist: {}", path.display());
+                None
+            }
+        })
+        .collect();
+    bookmarks.sort_by_key(|bookmark| Reverse(bookmark.1));
+    bookmarks.into_iter().take(50).map(|(item, _)| item).collect()
 }
 
 pub fn scan_network(uri: &str, sizes: IconSizes) -> Vec<Item> {
@@ -1462,6 +1543,7 @@ impl EditLocation {
 pub enum SearchLocation {
     Path(PathBuf),
     Recents,
+    Bookmarks,
     Trash,
 }
 
@@ -1470,6 +1552,7 @@ impl std::fmt::Display for SearchLocation {
         match self {
             Self::Path(path) => write!(f, "{}", path.display()),
             Self::Recents => write!(f, "recents"),
+            Self::Bookmarks => write!(f, "bookmarks"),
             Self::Trash => write!(f, "trash"),
         }
     }
@@ -1498,6 +1581,7 @@ pub enum Location {
     Path(PathBuf),
     Recents,
     Search(SearchLocation, String, bool, Instant),
+    Bookmarks,
     Trash,
 }
 
@@ -1512,7 +1596,8 @@ impl std::fmt::Display for Location {
             Self::Recents => write!(f, "recents"),
             Self::Search(location, term, ..) => {
                 write!(f, "search {} for {}", location, term)
-            }
+            },
+            Self::Bookmarks => write!(f, "bookmarks"),
             Self::Trash => write!(f, "trash"),
         }
     }
@@ -1613,8 +1698,9 @@ impl Location {
                 // Search is done incrementally
                 Vec::new()
             }
-            Self::Trash => Trash::scan(sizes),
             Self::Recents => scan_recents(sizes),
+            Self::Bookmarks => scan_bookmarks(sizes),
+            Self::Trash => Trash::scan(sizes),
             Self::Network(uri, _, _) => scan_network(uri, sizes),
         };
         let parent_item_opt = match self.path_opt() {
@@ -1644,18 +1730,22 @@ impl Location {
             Self::Search(location, term, ..) => {
                 let name = match location {
                     SearchLocation::Path(path) => folder_name(path).0,
-                    SearchLocation::Trash => fl!("trash"),
                     SearchLocation::Recents => fl!("recents"),
+                    SearchLocation::Bookmarks => fl!("bookmarks"),
+                    SearchLocation::Trash => fl!("trash"),
                 };
 
                 //TODO: translate
                 format!("Search \"{term}\": {name}")
             }
-            Self::Trash => {
-                fl!("trash")
-            }
             Self::Recents => {
                 fl!("recents")
+            }
+            Self::Bookmarks => {
+                fl!("bookmarks")
+            }
+            Self::Trash => {
+                fl!("trash")
             }
             Self::Network(display_name, ..) => display_name.clone(),
         }
@@ -1677,13 +1767,6 @@ impl Location {
         }
     }
 
-    pub fn is_trash(&self) -> bool {
-        matches!(
-            self,
-            Location::Trash | Location::Search(SearchLocation::Trash, ..)
-        )
-    }
-
     pub fn is_recents(&self) -> bool {
         matches!(
             self,
@@ -1691,14 +1774,27 @@ impl Location {
         )
     }
 
-    /// Returns true if this location supports paste operations (not Trash)
+    pub fn is_bookmarked(&self) -> bool {
+        matches!(
+            self,
+            Location::Bookmarks | Location::Search(SearchLocation::Bookmarks, ..)
+        )
+    }
+
+    pub fn is_trash(&self) -> bool {
+        matches!(
+            self,
+            Location::Trash | Location::Search(SearchLocation::Trash, ..)
+        )
+    }
+
+    /// Returns true if this location supports paste operations (not Trash, Recents or Bookmarks)
     pub fn supports_paste(&self) -> bool {
         matches!(
             self,
             Self::Desktop(..)
                 | Self::Path(..)
                 | Self::Search(..)
-                | Self::Recents
                 | Self::Network(_, _, Some(_))
         )
     }
@@ -1723,6 +1819,7 @@ pub enum Command {
     Action(Action),
     AddNetworkDrive,
     AddToSidebar(PathBuf),
+    AddToBookmarks(Vec<PathBuf>),
     AutoScroll(Option<f32>),
     ChangeLocation(String, Location, Option<Vec<PathBuf>>),
     ContextMenu(Option<Point>, Option<window::Id>),
@@ -1830,6 +1927,7 @@ pub enum LocationMenuAction {
     OpenInNewWindow(usize),
     Preview(usize),
     AddToSidebar(usize),
+    AddToBookmarks(usize),
 }
 
 impl MenuAction for LocationMenuAction {
@@ -3819,6 +3917,18 @@ impl Tab {
                             );
                         }
                     }
+                    LocationMenuAction::AddToBookmarks(ancestor_index) => {
+                        if let Some(path) = path_for_index(ancestor_index) {
+                            let mut paths = Vec::new();
+                            paths.push(path);
+                            commands.push(Command::AddToBookmarks(paths));
+                        } else {
+                            log::warn!(
+                                "no ancestor {ancestor_index} for location {:?}",
+                                self.location
+                            );
+                        }
+                    }
                 }
             }
             Message::Drag(rect_opt) => {
@@ -5565,20 +5675,29 @@ impl Tab {
                 }
                 children.reverse();
             }
-            Location::Trash | Location::Search(SearchLocation::Trash, ..) => {
-                children.push(
-                    widget::button::custom(widget::text::heading(fl!("trash")))
-                        .padding(space_xxxs)
-                        .on_press(Message::Location(Location::Trash))
-                        .class(theme::Button::Text)
-                        .into(),
-                );
-            }
             Location::Recents | Location::Search(SearchLocation::Recents, ..) => {
                 children.push(
                     widget::button::custom(widget::text::heading(fl!("recents")))
                         .padding(space_xxxs)
                         .on_press(Message::Location(Location::Recents))
+                        .class(theme::Button::Text)
+                        .into(),
+                );
+            }
+            Location::Bookmarks | Location::Search(SearchLocation::Bookmarks, ..) => {
+                children.push(
+                    widget::button::custom(widget::text::heading(fl!("bookmarks")))
+                        .padding(space_xxxs)
+                        .on_press(Message::Location(Location::Bookmarks))
+                        .class(theme::Button::Text)
+                        .into(),
+                );
+            }
+            Location::Trash | Location::Search(SearchLocation::Trash, ..) => {
+                children.push(
+                    widget::button::custom(widget::text::heading(fl!("trash")))
+                        .padding(space_xxxs)
+                        .on_press(Message::Location(Location::Trash))
                         .class(theme::Button::Text)
                         .into(),
                 );
@@ -5617,7 +5736,7 @@ impl Tab {
             self.location_context_menu_index,
         ) {
             popover = popover
-                .popup(menu::location_context_menu(index))
+                .popup(menu::location_context_menu(index, self.mode.clone()))
                 .position(widget::popover::Position::Point(point));
         }
 
@@ -6402,6 +6521,7 @@ impl Tab {
         modifiers: &'a Modifiers,
         size: Size,
         clipboard_paste_available: bool,
+        show_bookmarks: &'a bool,
         context_actions: &'a [ContextActionPreset],
     ) -> Element<'a, Message> {
         // Update cached size
@@ -6495,6 +6615,7 @@ impl Tab {
                 key_binds,
                 modifiers,
                 clipboard_paste_available,
+                show_bookmarks,
                 context_actions,
             );
             popover = popover
@@ -6524,24 +6645,6 @@ impl Tab {
             tab_column = tab_column.push(popover);
         }
         match &self.location {
-            Location::Trash | Location::Search(SearchLocation::Trash, ..) => {
-                if let Some(items) = self.items_opt()
-                    && !items.is_empty()
-                {
-                    tab_column = tab_column.push(
-                        widget::layer_container(widget::row::with_children([
-                            widget::space::horizontal().into(),
-                            widget::button::standard(fl!("empty-trash"))
-                                .on_press(Message::EmptyTrash)
-                                .into(),
-                        ]))
-                        .padding([space_xxs, space_xs])
-                        .layer(cosmic_theme::Layer::Primary)
-                        .apply(widget::container)
-                        .padding([0, 0, 7, 0]),
-                    );
-                }
-            }
             Location::Recents | Location::Search(SearchLocation::Recents, ..) => {
                 if let Some(items) = self.items_opt()
                     && !items.is_empty()
@@ -6551,6 +6654,24 @@ impl Tab {
                             widget::space::horizontal().into(),
                             widget::button::standard(fl!("clear-recents-history"))
                                 .on_press(Message::ClearRecents)
+                                .into(),
+                        ]))
+                        .padding([space_xxs, space_xs])
+                        .layer(cosmic_theme::Layer::Primary)
+                        .apply(widget::container)
+                        .padding([0, 0, 7, 0]),
+                    );
+                }
+            }
+            Location::Trash | Location::Search(SearchLocation::Trash, ..) => {
+                if let Some(items) = self.items_opt()
+                    && !items.is_empty()
+                {
+                    tab_column = tab_column.push(
+                        widget::layer_container(widget::row::with_children([
+                            widget::space::horizontal().into(),
+                            widget::button::standard(fl!("empty-trash"))
+                                .on_press(Message::EmptyTrash)
                                 .into(),
                         ]))
                         .padding([space_xxs, space_xs])
@@ -6884,6 +7005,7 @@ impl Tab {
         key_binds: &'a HashMap<KeyBind, Action>,
         modifiers: &'a Modifiers,
         clipboard_paste_available: bool,
+        show_bookmarks: &'a bool,
         context_actions: &'a [ContextActionPreset],
     ) -> Element<'a, Message> {
         widget::responsive(move |size| {
@@ -6893,6 +7015,7 @@ impl Tab {
                     modifiers,
                     size,
                     clipboard_paste_available,
+                    show_bookmarks,
                     context_actions,
                 ),
                 Id::new(format!(

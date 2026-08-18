@@ -165,6 +165,13 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 log::warn!("recents feature is disabled in config");
                 continue;
             }
+        } else if &arg == "--bookmarks" {
+            if config.show_bookmarks {
+                Location::Bookmarks
+            } else {
+                log::warn!("bookmarks feature is disabled in config");
+                continue;
+            }
         } else if &arg == "--network" {
             Location::Network("network:///".to_string(), fl!("networks"), None)
         } else {
