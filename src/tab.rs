@@ -735,6 +735,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
         rect_opt: Cell::new(None),
         selected: false,
         highlighted: false,
+        starred: false,
         overlaps_drag_rect: false,
         dir_size,
         cut: false,
@@ -846,6 +847,8 @@ pub fn item_from_entry(
 
     let display_name = display_name_for_file(&path, &name, is_gvfs, is_desktop);
 
+    let starred = is_starred(path.clone());
+
     Item {
         name,
         display_name,
@@ -867,6 +870,7 @@ pub fn item_from_entry(
         rect_opt: Cell::new(None),
         selected: false,
         highlighted: false,
+        starred: starred,
         overlaps_drag_rect: false,
         dir_size,
         cut: false,
@@ -926,6 +930,7 @@ pub fn item_from_trash_entry(
         rect_opt: Cell::new(None),
         selected: false,
         highlighted: false,
+        starred: false,
         overlaps_drag_rect: false,
         dir_size: DirSize::NotDirectory,
         cut: false,
@@ -1224,6 +1229,46 @@ pub fn scan_search<F: Fn(SearchItem) -> bool + Sync>(
                 }
             }
         }
+        SearchLocation::Starred => {
+            let user_places = match user_places_xbel::read_user_places() {
+                Ok(user_places) => user_places,
+                Err(err) => {
+                    log::warn!("Error reading user-places.xbel file: {err:?}");
+                    return;
+                }
+            };
+            for bookmark in user_places.bookmarks {
+                let path = uri_to_path(bookmark.href);
+                if let Some(path) = path
+                    && path.exists()
+                {
+                    let file_name = path.file_name();
+                    if let Some(file_name) = file_name {
+                        let file_name = file_name.to_string_lossy();
+                        if regex.is_match(&file_name) {
+                            match path.metadata() {
+                                Ok(metadata) => {
+                                    if !callback(SearchItem::Path(
+                                        path.to_path_buf(),
+                                        file_name.to_string(),
+                                        metadata,
+                                    )) {
+                                        break;
+                                    }
+                                }
+                                Err(err) => {
+                                    log::warn!(
+                                        "failed to read metadata for entry at {}: {}",
+                                        path.display(),
+                                        err
+                                    );
+                                }
+                            };
+                        }
+                    }
+                }
+            }
+        }
         SearchLocation::Trash => {
             Trash::scan_search(callback, &regex);
         }
@@ -1292,6 +1337,53 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
     recents.sort_by_key(|recent| Reverse(recent.1));
 
     recents.into_iter().take(50).map(|(item, _)| item).collect()
+}
+
+pub fn user_starred() -> Vec<user_places_xbel::Bookmark> {
+    let user_places = match user_places_xbel::read_user_places() {
+        Ok(user_places) => user_places.bookmarks,
+        Err(err) => {
+            log::warn!("Error reading user-places.xbel files: {err:?}");
+            return Vec::new();
+        }
+    };
+    return user_places;
+}
+
+pub fn is_starred(path: PathBuf) -> bool {
+    let starred_paths: Vec<PathBuf> = user_starred().into_iter().filter_map(|bookmark| {
+        Some(uri_to_path(bookmark.href)?)
+    })
+    .collect();
+    return starred_paths.contains(&path);
+}
+
+pub fn scan_starred(sizes: IconSizes) -> Vec<Item> {
+    let starred: Vec<_> = user_starred().into_iter().filter_map(|bookmark| {
+            let path = uri_to_path(bookmark.href)?;
+            if path.exists() {
+                let file_name = path.file_name()?;
+                let name = file_name.to_string_lossy().to_string();
+                let metadata = match path.metadata() {
+                    Ok(ok) => ok,
+                    Err(err) => {
+                        log::warn!(
+                            "failed to read metadata for entry at {}: {}",
+                            path.display(),
+                            err
+                        );
+                        return None;
+                    }
+                };
+                let item = item_from_entry(path, name, metadata, sizes);
+                Some(item)
+            } else {
+                log::warn!("starred file path does not exist: {}", path.display());
+                None
+            }
+        })
+        .collect();
+    starred.into_iter().collect()
 }
 
 pub fn scan_network(uri: &str, sizes: IconSizes) -> Vec<Item> {
@@ -1393,6 +1485,7 @@ pub fn scan_desktop(
             rect_opt: Cell::new(None),
             selected: false,
             highlighted: false,
+            starred: false,
             overlaps_drag_rect: false,
             dir_size: DirSize::NotDirectory,
             cut: false,
@@ -1462,6 +1555,7 @@ impl EditLocation {
 pub enum SearchLocation {
     Path(PathBuf),
     Recents,
+    Starred,
     Trash,
 }
 
@@ -1470,6 +1564,7 @@ impl std::fmt::Display for SearchLocation {
         match self {
             Self::Path(path) => write!(f, "{}", path.display()),
             Self::Recents => write!(f, "recents"),
+            Self::Starred => write!(f, "starred"),
             Self::Trash => write!(f, "trash"),
         }
     }
@@ -1498,6 +1593,7 @@ pub enum Location {
     Path(PathBuf),
     Recents,
     Search(SearchLocation, String, bool, Instant),
+    Starred,
     Trash,
 }
 
@@ -1512,7 +1608,8 @@ impl std::fmt::Display for Location {
             Self::Recents => write!(f, "recents"),
             Self::Search(location, term, ..) => {
                 write!(f, "search {} for {}", location, term)
-            }
+            },
+            Self::Starred => write!(f, "starred"),
             Self::Trash => write!(f, "trash"),
         }
     }
@@ -1613,8 +1710,9 @@ impl Location {
                 // Search is done incrementally
                 Vec::new()
             }
-            Self::Trash => Trash::scan(sizes),
             Self::Recents => scan_recents(sizes),
+            Self::Starred => scan_starred(sizes),
+            Self::Trash => Trash::scan(sizes),
             Self::Network(uri, _, _) => scan_network(uri, sizes),
         };
         let parent_item_opt = match self.path_opt() {
@@ -1644,18 +1742,22 @@ impl Location {
             Self::Search(location, term, ..) => {
                 let name = match location {
                     SearchLocation::Path(path) => folder_name(path).0,
-                    SearchLocation::Trash => fl!("trash"),
                     SearchLocation::Recents => fl!("recents"),
+                    SearchLocation::Starred => fl!("starred"),
+                    SearchLocation::Trash => fl!("trash"),
                 };
 
                 //TODO: translate
                 format!("Search \"{term}\": {name}")
             }
-            Self::Trash => {
-                fl!("trash")
-            }
             Self::Recents => {
                 fl!("recents")
+            }
+            Self::Starred => {
+                fl!("starred")
+            }
+            Self::Trash => {
+                fl!("trash")
             }
             Self::Network(display_name, ..) => display_name.clone(),
         }
@@ -1677,13 +1779,6 @@ impl Location {
         }
     }
 
-    pub fn is_trash(&self) -> bool {
-        matches!(
-            self,
-            Location::Trash | Location::Search(SearchLocation::Trash, ..)
-        )
-    }
-
     pub fn is_recents(&self) -> bool {
         matches!(
             self,
@@ -1691,14 +1786,27 @@ impl Location {
         )
     }
 
-    /// Returns true if this location supports paste operations (not Trash)
+    pub fn is_starred(&self) -> bool {
+        matches!(
+            self,
+            Location::Starred | Location::Search(SearchLocation::Starred, ..)
+        )
+    }
+
+    pub fn is_trash(&self) -> bool {
+        matches!(
+            self,
+            Location::Trash | Location::Search(SearchLocation::Trash, ..)
+        )
+    }
+
+    /// Returns true if this location supports paste operations (not Trash, Recents or Starred)
     pub fn supports_paste(&self) -> bool {
         matches!(
             self,
             Self::Desktop(..)
                 | Self::Path(..)
                 | Self::Search(..)
-                | Self::Recents
                 | Self::Network(_, _, Some(_))
         )
     }
@@ -1723,6 +1831,7 @@ pub enum Command {
     Action(Action),
     AddNetworkDrive,
     AddToSidebar(PathBuf),
+    AddToStarred(Vec<PathBuf>),
     AutoScroll(Option<f32>),
     ChangeLocation(String, Location, Option<Vec<PathBuf>>),
     ContextMenu(Option<Point>, Option<window::Id>),
@@ -1738,6 +1847,7 @@ pub enum Command {
     OpenInNewWindow(PathBuf),
     OpenTrash,
     Preview(PreviewKind),
+    RemoveFromStarred(Vec<PathBuf>),
     RunContextAction(usize),
     SetOpenWith(Mime, String),
     SetPermissions(PathBuf, u32),
@@ -1751,6 +1861,7 @@ pub enum Command {
 pub enum Message {
     AddNetworkDrive,
     AutoScroll(Option<f32>),
+    AddToStarred(Vec<PathBuf>),
     Click(Option<usize>),
     DoubleClick(Option<usize>),
     ClickRelease(Option<usize>),
@@ -1800,6 +1911,7 @@ pub enum Message {
     SelectFirst,
     SelectLast,
     SetOpenWith(Mime, String),
+    RemoveFromStarred(Vec<PathBuf>),
     RunContextAction(usize),
     SetPermissions(PathBuf, u32),
     ShiftPermissions(Option<(PathBuf, u32)>, u32, u32),
@@ -1830,6 +1942,7 @@ pub enum LocationMenuAction {
     OpenInNewWindow(usize),
     Preview(usize),
     AddToSidebar(usize),
+    AddToStarred(usize),
 }
 
 impl MenuAction for LocationMenuAction {
@@ -2313,6 +2426,7 @@ pub struct Item {
     pub rect_opt: Cell<Option<Rectangle>>,
     pub selected: bool,
     pub highlighted: bool,
+    pub starred: bool,
     pub cut: bool,
     pub overlaps_drag_rect: bool,
     pub dir_size: DirSize,
@@ -2711,6 +2825,7 @@ pub enum HeadingOptions {
     Name = 0,
     Modified,
     Size,
+    Starred,
     TrashedOn,
 }
 
@@ -2720,6 +2835,7 @@ impl fmt::Display for HeadingOptions {
             Self::Name => write!(f, "{}", fl!("name")),
             Self::Modified => write!(f, "{}", fl!("modified")),
             Self::Size => write!(f, "{}", fl!("size")),
+            Self::Starred => write!(f, "{}", fl!("starred")),
             Self::TrashedOn => write!(f, "{}", fl!("trashed-on")),
         }
     }
@@ -2731,6 +2847,7 @@ impl HeadingOptions {
             Self::Name.to_string(),
             Self::Modified.to_string(),
             Self::Size.to_string(),
+            Self::Starred.to_string(),
             Self::TrashedOn.to_string(),
         ]
     }
@@ -3819,6 +3936,18 @@ impl Tab {
                             );
                         }
                     }
+                    LocationMenuAction::AddToStarred(ancestor_index) => {
+                        if let Some(path) = path_for_index(ancestor_index) {
+                          let mut paths = Vec::new();
+                            paths.push(path);
+                            commands.push(Command::AddToStarred(paths));
+                        } else {
+                            log::warn!(
+                                "no ancestor {ancestor_index} for location {:?}",
+                                self.location
+                            );
+                        }
+                    }
                 }
             }
             Message::Drag(rect_opt) => {
@@ -4530,8 +4659,10 @@ impl Tab {
 
                                 if index < MAX_SEARCH_RESULTS {
                                     //TODO: use correct IconSizes
-                                    let item =
-                                        item_from_search_item(search_item, IconSizes::default());
+                                    let item = item_from_search_item(
+                                        search_item,
+                                        IconSizes::default(),
+                                    );
                                     items.insert(index, item);
                                 }
                                 // Ensure that updates make it to the GUI in a timely manner
@@ -4848,6 +4979,13 @@ impl Tab {
             Message::CopyChecksum(value) => {
                 commands.push(Command::Iced(cosmic::iced::clipboard::write(value).into()));
             }
+            Message::AddToStarred(paths) => {
+                commands.push(Command::AddToStarred(paths));
+            }
+            Message::RemoveFromStarred(paths) => {
+                commands.push(Command::RemoveFromStarred(paths));
+            }
+
         }
 
         // Scroll to top if needed
@@ -5009,6 +5147,21 @@ impl Tab {
                         }
                     } else {
                         check_reverse(a_modified.cmp(&b_modified), sort_direction)
+                    }
+                });
+            }
+            HeadingOptions::Starred => {
+                items.sort_by(|a, b| {
+                    let a_starred = a.1.starred;
+                    let b_starred = b.1.starred;
+                    if folders_first {
+                        match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
+                            (true, false) => Ordering::Less,
+                            (false, true) => Ordering::Greater,
+                            _ => check_reverse(a_starred.cmp(&b_starred), sort_direction),
+                        }
+                    } else {
+                        check_reverse(a_starred.cmp(&b_starred), sort_direction)
                     }
                 });
             }
@@ -5293,6 +5446,7 @@ impl Tab {
         } = theme::spacing();
 
         let size = self.size_opt.get().unwrap_or(Size::new(0.0, 0.0));
+        let icon_size = 16;
 
         let mut row = widget::row::with_capacity(5)
             .align_y(Alignment::Center)
@@ -5300,7 +5454,7 @@ impl Tab {
         let mut w = 0.0;
 
         let mut prev_button =
-            widget::button::custom(widget::icon::from_name("go-previous-symbolic").size(16))
+            widget::button::custom(widget::icon::from_name("go-previous-symbolic").size(icon_size))
                 .padding(space_xxs)
                 .class(theme::Button::Icon);
         if self.history_i > 0 && !self.history.is_empty() {
@@ -5310,7 +5464,7 @@ impl Tab {
         w += f32::from(space_xxs).mul_add(2.0, 16.0);
 
         let mut next_button =
-            widget::button::custom(widget::icon::from_name("go-next-symbolic").size(16))
+            widget::button::custom(widget::icon::from_name("go-next-symbolic").size(icon_size))
                 .padding(space_xxs)
                 .class(theme::Button::Icon);
         if self.history_i + 1 < self.history.len() {
@@ -5322,19 +5476,36 @@ impl Tab {
         row = row.push(widget::space::horizontal().width(Length::Fixed(space_s.into())));
         w += f32::from(space_s);
 
+        let is_trash = self.location.is_trash();
+        let mut show_starred = self.config.show_starred;
+        if is_trash {
+            show_starred = false;
+        } else if self.location.is_starred() {
+            show_starred = true;
+        }
         //TODO: allow resizing?
-        let name_width = 300.0;
-        let modified_width = 200.0;
-        let size_width = 100.0;
-        let condensed = size.width < (name_width + modified_width + size_width);
+        let sort_offset = space_xxs as f32;
+        let name_width = 260.0;
+        let modified_width = 160.0 + sort_offset;
+        let size_width = 80.0 + sort_offset;
+        let starred_width = if show_starred { 32.0 + sort_offset } else { 0.0 };
+        let condensed = size.width < (name_width + modified_width + size_width + starred_width);
 
         let (sort_name, sort_direction, _) = self.sort_options();
-        let heading_item = |name, width, msg| {
+        let heading_item = |name, width, msg, icon_name| {
             let mut row = widget::row::with_capacity(2)
                 .align_y(Alignment::Center)
                 .spacing(space_xxxs)
                 .width(width);
-            row = row.push(widget::text::heading(name));
+            if icon_name != "" {
+                row = row.push(widget::tooltip(
+                    widget::icon::from_name(icon_name).size(16).icon(),
+                    widget::text::body(name),
+                    widget::tooltip::Position::Bottom,
+                ));
+            } else {
+                row = row.push(widget::text::heading(name));
+            }
             match (sort_name == msg, sort_direction) {
                 (true, true) => {
                     row = row.push(widget::icon::from_name("pan-down-symbolic").size(16));
@@ -5350,23 +5521,70 @@ impl Tab {
                 .into()
         };
 
-        let heading_row = widget::row::with_children([
-            heading_item(fl!("name"), Length::Fill, HeadingOptions::Name),
-            if self.location.is_trash() {
+        let mut heading_cols = Vec::new();
+        heading_cols.push(heading_item(
+            fl!("name"),
+            Length::Fill,
+            HeadingOptions::Name,
+            "",
+        ),);
+        heading_cols.push(
+            if is_trash {
                 heading_item(
                     fl!("trashed-on"),
                     Length::Fixed(modified_width),
                     HeadingOptions::TrashedOn,
+                    "",
                 )
             } else {
                 heading_item(
                     fl!("modified"),
                     Length::Fixed(modified_width),
                     HeadingOptions::Modified,
+                    "",
                 )
             },
-            heading_item(fl!("size"), Length::Fixed(size_width), HeadingOptions::Size),
-        ])
+        );
+        heading_cols.push(heading_item(
+            fl!("size"),
+            Length::Fixed(size_width),
+            HeadingOptions::Size,
+            "",
+        ),);
+        if show_starred {
+            heading_cols.push(heading_item(
+                fl!("starred"),
+                Length::Fixed(starred_width.into()),
+                HeadingOptions::Starred,
+                "starred-symbolic",
+            ),);
+            // heading_cols.push(heading_item(
+            //     fl!("starred"),
+            //     Length::Fixed(starred_width.into()),
+            //     HeadingOptions::Starred,
+            //     "non-starred-symbolic",
+            // ),);
+            // heading_cols.push(heading_item(
+            //     fl!("starred"),
+            //     Length::Fixed(starred_width.into()),
+            //     HeadingOptions::Starred,
+            //     "",
+            // ),);
+            // heading_cols.push(heading_item(
+            //     fl!("star"),
+            //     Length::Fixed(starred_width.into()),
+            //     HeadingOptions::Starred,
+            //     "",
+            // ),);
+            // heading_cols.push(heading_item(
+            //     " ".to_string(),
+            //     Length::Fixed(starred_width.into()),
+            //     HeadingOptions::Starred,
+            //     "",
+            // ),);
+        }
+
+        let heading_row = widget::row::with_children(heading_cols)
         .align_y(Alignment::Center)
         .height(Length::Fixed((space_m + 4).into()))
         .padding([0, space_xxs]);
@@ -5565,20 +5783,29 @@ impl Tab {
                 }
                 children.reverse();
             }
-            Location::Trash | Location::Search(SearchLocation::Trash, ..) => {
-                children.push(
-                    widget::button::custom(widget::text::heading(fl!("trash")))
-                        .padding(space_xxxs)
-                        .on_press(Message::Location(Location::Trash))
-                        .class(theme::Button::Text)
-                        .into(),
-                );
-            }
             Location::Recents | Location::Search(SearchLocation::Recents, ..) => {
                 children.push(
                     widget::button::custom(widget::text::heading(fl!("recents")))
                         .padding(space_xxxs)
                         .on_press(Message::Location(Location::Recents))
+                        .class(theme::Button::Text)
+                        .into(),
+                );
+            }
+            Location::Starred | Location::Search(SearchLocation::Starred, ..) => {
+                children.push(
+                    widget::button::custom(widget::text::heading(fl!("starred")))
+                        .padding(space_xxxs)
+                        .on_press(Message::Location(Location::Starred))
+                        .class(theme::Button::Text)
+                        .into(),
+                );
+            }
+            Location::Trash | Location::Search(SearchLocation::Trash, ..) => {
+                children.push(
+                    widget::button::custom(widget::text::heading(fl!("trash")))
+                        .padding(space_xxxs)
+                        .on_press(Message::Location(Location::Trash))
                         .class(theme::Button::Text)
                         .into(),
                 );
@@ -5617,7 +5844,7 @@ impl Tab {
             self.location_context_menu_index,
         ) {
             popover = popover
-                .popup(menu::location_context_menu(index))
+                .popup(menu::location_context_menu(index, self.mode.clone()))
                 .position(widget::popover::Position::Point(point));
         }
 
@@ -6018,12 +6245,21 @@ impl Tab {
             ..
         } = self.config;
 
+        let mut show_starred = self.config.show_starred;
+        let is_trash = self.location.is_trash();
+        if is_trash {
+            show_starred = false;
+        } else if self.location.is_starred() {
+            show_starred = true;
+        }
+
         let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
         //TODO: allow resizing?
-        let name_width = 300.0;
-        let modified_width = 200.0;
-        let size_width = 100.0;
-        let condensed = size.width < (name_width + modified_width + size_width);
+        let name_width = 260.0;
+        let modified_width = 160.0;
+        let size_width = 80.0;
+        let starred_width = if show_starred { 32.0 + (space_xxs as f32 * 2.0) } else { 0.0 };
+        let condensed = size.width < (name_width + modified_width + size_width + starred_width + space_xxs as f32);
         let is_search = matches!(self.location, Location::Search(..));
         let icon_size = if condensed || is_search {
             icon_sizes.list_condensed()
@@ -6078,6 +6314,13 @@ impl Tab {
                     Size::new(size.width - f32::from(2 * space_s), f32::from(row_height)),
                 );
                 item.rect_opt.set(Some(item_rect));
+
+                let mut item_path_vec = Vec::new();
+                if show_starred {
+                    if let Some(path) = item.path_opt() {
+                        item_path_vec.push(path.to_path_buf());
+                    }
+                }
 
                 // Only build elements if visible (for performance)
                 let button_row = if item_rect.intersects(&visible_rect) {
@@ -6158,69 +6401,93 @@ impl Tab {
                         },
                     };
 
-                    let row = if condensed {
-                        widget::row::with_children([
+                    // Choose the child columns to show in the row
+                    let mut children = Vec::new();
+
+                    if condensed || is_search {
+                        children.push(
                             widget::icon::icon(item.icon_handle_list_condensed.clone())
                                 .content_fit(ContentFit::Contain)
                                 .size(icon_size)
-                                .into(),
+                                .into()
+                        );
+                    } else {
+                        children.push(
+                            widget::icon::icon(item.icon_handle_list.clone())
+                                .content_fit(ContentFit::Contain)
+                                .size(icon_size)
+                                .into()
+                        );
+                    }
+
+                    if condensed {
+                        children.push(
                             widget::column::with_children([
                                 Item::list_display_name(item.display_name.clone()).into(),
                                 //TODO: translate?
                                 widget::text::caption(format!("{modified_text} - {size_text}"))
                                     .into(),
                             ])
-                            .into(),
-                        ])
-                        .height(Length::Fixed(f32::from(row_height)))
-                        .align_y(Alignment::Center)
-                        .spacing(space_xxs)
-                    } else if is_search {
-                        widget::row::with_children([
-                            widget::icon::icon(item.icon_handle_list_condensed.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_size)
-                                .into(),
-                            widget::column::with_children([
-                                Item::list_display_name(item.display_name.clone()).into(),
-                                widget::text::caption(match item.path_opt() {
-                                    Some(path) => path.display().to_string(),
-                                    None => String::new(),
-                                })
-                                .into(),
-                            ])
-                            .width(Length::Fill)
-                            .into(),
-                            widget::text::body(modified_text.clone())
-                                .width(Length::Fixed(modified_width))
-                                .into(),
-                            widget::text::body(size_text.clone())
-                                .width(Length::Fixed(size_width))
-                                .into(),
-                        ])
-                        .height(Length::Fixed(f32::from(row_height)))
-                        .align_y(Alignment::Center)
-                        .spacing(space_xxs)
+                            .into()
+                        );
+
                     } else {
-                        widget::row::with_children([
-                            widget::icon::icon(item.icon_handle_list.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_size)
-                                .into(),
-                            Item::list_display_name(item.display_name.clone())
+                        children.push(
+                            if is_search {
+                                widget::column::with_children([
+                                    Item::list_display_name(item.display_name.clone()).into(),
+                                    widget::text::caption(match item.path_opt() {
+                                        Some(path) => path.display().to_string(),
+                                        None => String::new(),
+                                    })
+                                    .into(),
+                                ])
                                 .width(Length::Fill)
-                                .into(),
+                                .into()
+                            } else {
+                                Item::list_display_name(item.display_name.clone())
+                                    .width(Length::Fill)
+                                    .into()
+                            }
+                        );
+                        children.push(
                             widget::text::body(modified_text.clone())
                                 .width(Length::Fixed(modified_width))
-                                .into(),
-                            widget::text::body(size_text.clone())
-                                .width(Length::Fixed(size_width))
-                                .into(),
-                        ])
-                        .height(Length::Fixed(f32::from(row_height)))
-                        .align_y(Alignment::Center)
-                        .spacing(space_xxs)
+                                .into()
+                        );
+                        if !is_search {
+                            children.push(
+                                widget::text::body(size_text.clone())
+                                    .width(Length::Fixed(size_width))
+                                    .into()
+                            );
+                        }
+                        if show_starred {
+                            children.push(
+                                widget::container(if item.starred {
+                                        widget::tooltip(
+                                            widget::button::icon(widget::icon::from_name("starred-symbolic").size(16))
+                                            .on_press(Message::RemoveFromStarred(item_path_vec)),
+                                            widget::text::body(fl!("remove-from-starred")),
+                                            widget::tooltip::Position::Top,
+                                        )
+                                    } else {
+                                        widget::tooltip(
+                                            widget::button::icon(widget::icon::from_name("non-starred-symbolic").size(16))
+                                            .on_press(Message::AddToStarred(item_path_vec)),
+                                            widget::text::body(fl!("add-to-starred")),
+                                            widget::tooltip::Position::Top,
+                                        )
+                                    })
+                                    .width(Length::Fixed(starred_width))
+                                    .into()
+                            )
+                        };
                     };
+                    let row = widget::row::with_children(children)
+                    .height(Length::Fixed(f32::from(row_height)))
+                    .align_y(Alignment::Center)
+                    .spacing(space_xxs);
 
                     let button = |row| {
                         let mouse_area = crate::mouse_area::MouseArea::new(
@@ -6281,6 +6548,17 @@ impl Tab {
                                     //TODO: translate?
                                     widget::text::body(format!("{modified_text} - {size_text}"))
                                         .into(),
+                                    if item.starred {
+                                        widget::icon::from_name("starred-symbolic")
+                                            .size(16)
+                                            .icon()
+                                            .into()
+                                    } else {
+                                        widget::icon::from_name("non-starred-symbolic")
+                                            .size(16)
+                                            .icon()
+                                            .into()
+                                    },
                                 ])
                                 .into(),
                             ])
@@ -6309,6 +6587,17 @@ impl Tab {
                                 widget::text::body(size_text.clone())
                                     .width(Length::Fixed(size_width))
                                     .into(),
+                                if item.starred {
+                                    widget::icon::from_name("starred-symbolic")
+                                        .size(16)
+                                        .icon()
+                                        .into()
+                                } else {
+                                    widget::icon::from_name("non-starred-symbolic")
+                                        .size(16)
+                                        .icon()
+                                        .into()
+                                },
                             ])
                             .align_y(Alignment::Center)
                             .spacing(space_xxs)
@@ -6328,6 +6617,17 @@ impl Tab {
                                 widget::text::body(size_text)
                                     .width(Length::Fixed(size_width))
                                     .into(),
+                                if item.starred {
+                                    widget::icon::from_name("starred-symbolic")
+                                        .size(16)
+                                        .icon()
+                                        .into()
+                                } else {
+                                    widget::icon::from_name("non-starred-symbolic")
+                                        .size(16)
+                                        .icon()
+                                        .into()
+                                },
                             ])
                             .align_y(Alignment::Center)
                             .spacing(space_xxs)
@@ -6402,6 +6702,7 @@ impl Tab {
         modifiers: &'a Modifiers,
         size: Size,
         clipboard_paste_available: bool,
+        show_starred: &'a bool,
         context_actions: &'a [ContextActionPreset],
     ) -> Element<'a, Message> {
         // Update cached size
@@ -6495,6 +6796,7 @@ impl Tab {
                 key_binds,
                 modifiers,
                 clipboard_paste_available,
+                show_starred,
                 context_actions,
             );
             popover = popover
@@ -6524,24 +6826,6 @@ impl Tab {
             tab_column = tab_column.push(popover);
         }
         match &self.location {
-            Location::Trash | Location::Search(SearchLocation::Trash, ..) => {
-                if let Some(items) = self.items_opt()
-                    && !items.is_empty()
-                {
-                    tab_column = tab_column.push(
-                        widget::layer_container(widget::row::with_children([
-                            widget::space::horizontal().into(),
-                            widget::button::standard(fl!("empty-trash"))
-                                .on_press(Message::EmptyTrash)
-                                .into(),
-                        ]))
-                        .padding([space_xxs, space_xs])
-                        .layer(cosmic_theme::Layer::Primary)
-                        .apply(widget::container)
-                        .padding([0, 0, 7, 0]),
-                    );
-                }
-            }
             Location::Recents | Location::Search(SearchLocation::Recents, ..) => {
                 if let Some(items) = self.items_opt()
                     && !items.is_empty()
@@ -6551,6 +6835,24 @@ impl Tab {
                             widget::space::horizontal().into(),
                             widget::button::standard(fl!("clear-recents-history"))
                                 .on_press(Message::ClearRecents)
+                                .into(),
+                        ]))
+                        .padding([space_xxs, space_xs])
+                        .layer(cosmic_theme::Layer::Primary)
+                        .apply(widget::container)
+                        .padding([0, 0, 7, 0]),
+                    );
+                }
+            }
+            Location::Trash | Location::Search(SearchLocation::Trash, ..) => {
+                if let Some(items) = self.items_opt()
+                    && !items.is_empty()
+                {
+                    tab_column = tab_column.push(
+                        widget::layer_container(widget::row::with_children([
+                            widget::space::horizontal().into(),
+                            widget::button::standard(fl!("empty-trash"))
+                                .on_press(Message::EmptyTrash)
                                 .into(),
                         ]))
                         .padding([space_xxs, space_xs])
@@ -6884,6 +7186,7 @@ impl Tab {
         key_binds: &'a HashMap<KeyBind, Action>,
         modifiers: &'a Modifiers,
         clipboard_paste_available: bool,
+        show_starred: &'a bool,
         context_actions: &'a [ContextActionPreset],
     ) -> Element<'a, Message> {
         widget::responsive(move |size| {
@@ -6893,6 +7196,7 @@ impl Tab {
                     modifiers,
                     size,
                     clipboard_paste_available,
+                    show_starred,
                     context_actions,
                 ),
                 Id::new(format!(
