@@ -37,7 +37,7 @@ use cosmic::widget::menu::action::MenuAction;
 use cosmic::widget::menu::key_bind::KeyBind;
 use cosmic::widget::segmented_button::{self, Entity, ReorderEvent};
 use cosmic::widget::{self, icon, settings, space};
-use cosmic::{Application, ApplicationExt, Element, cosmic_theme, executor, style, surface, theme};
+use cosmic::{Application, ApplicationExt, Element, cosmic_theme, executor, surface, theme};
 use mime_guess::Mime;
 use notify_debouncer_full::notify::{self, RecommendedWatcher};
 use notify_debouncer_full::{DebouncedEvent, Debouncer, RecommendedCache, new_debouncer};
@@ -395,6 +395,7 @@ pub enum Message {
     OpenWithBrowse,
     OpenWithDialog(Option<Entity>),
     OpenWithSelection(usize),
+    OpenWithSearchClear,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     Overlap(window::Id, OverlapNotifyEvent),
     Paste(Option<Entity>),
@@ -566,6 +567,7 @@ pub enum DialogPage {
         mime: mime_guess::Mime,
         selected: usize,
         store_opt: Option<Arc<MimeApp>>,
+        search_app_name: String,
     },
     PermanentlyDelete {
         paths: Box<[PathBuf]>,
@@ -3209,9 +3211,17 @@ impl Application for App {
                             path,
                             mime,
                             selected,
+                            search_app_name,
                             ..
                         } => {
-                            let available_apps = self.mime_app_cache.get_apps_for_mime(&mime, true);
+                            let mut available_apps =
+                                self.mime_app_cache.get_apps_for_mime(&mime, true);
+                            available_apps.retain(|(app, _)| {
+                                app.name
+                                    .to_lowercase()
+                                    .trim()
+                                    .contains(search_app_name.to_lowercase().as_str().trim())
+                            });
 
                             if let Some((app, _)) = available_apps.get(selected) {
                                 if let Some(mut command) =
@@ -3838,26 +3848,38 @@ impl Application for App {
                         let Some(path) = item.path_opt() else {
                             continue;
                         };
-                        return self.push_dialog(
-                            DialogPage::OpenWith {
-                                path: path.clone(),
-                                mime: item.mime.clone(),
-                                selected: 0,
-                                store_opt: "x-scheme-handler/mime"
-                                    .parse::<mime_guess::Mime>()
-                                    .ok()
-                                    .and_then(|mime| {
-                                        self.mime_app_cache.get(&mime).first().cloned()
-                                    }),
-                            },
-                            Some(CONFIRM_OPEN_WITH_BUTTON_ID.clone()),
-                        );
+                        return Task::batch([
+                            self.push_dialog(
+                                DialogPage::OpenWith {
+                                    path: path.clone(),
+                                    mime: item.mime.clone(),
+                                    selected: 0,
+                                    store_opt: "x-scheme-handler/mime"
+                                        .parse::<mime_guess::Mime>()
+                                        .ok()
+                                        .and_then(|mime| {
+                                            self.mime_app_cache.get(&mime).first().cloned()
+                                        }),
+                                    search_app_name: String::new(),
+                                },
+                                Some(CONFIRM_OPEN_WITH_BUTTON_ID.clone()),
+                            ),
+                            widget::text_input::focus(self.dialog_text_input.clone()),
+                        ]);
                     }
                 }
             }
             Message::OpenWithSelection(index) => {
                 if let Some(DialogPage::OpenWith { selected, .. }) = self.dialog_pages.front_mut() {
                     *selected = index;
+                }
+            }
+            Message::OpenWithSearchClear => {
+                if let Some(DialogPage::OpenWith {
+                    search_app_name, ..
+                }) = self.dialog_pages.front_mut()
+                {
+                    *search_app_name = String::new();
                 }
             }
             Message::Paste(entity_opt) => {
@@ -5114,6 +5136,7 @@ impl Application for App {
                                             .and_then(|mime| {
                                                 self.mime_app_cache.get(&mime).first().cloned()
                                             }),
+                                        search_app_name: String::new(),
                                     },
                                     None,
                                 );
@@ -5970,6 +5993,7 @@ impl Application for App {
                 mime,
                 selected,
                 store_opt,
+                search_app_name,
                 ..
             } => {
                 let name = match path.file_name() {
@@ -5978,7 +6002,13 @@ impl Application for App {
                 };
 
                 let mut column = widget::list_column();
-                let available_apps = self.mime_app_cache.get_apps_for_mime(mime, true);
+                let mut available_apps = self.mime_app_cache.get_apps_for_mime(mime, true);
+                available_apps.retain(|(app, _)| {
+                    app.name
+                        .to_lowercase()
+                        .trim()
+                        .contains(search_app_name.to_lowercase().as_str().trim())
+                });
                 let item_height = 32.0;
                 let mut displayed_default = false;
                 let mut last_kind = MimeAppMatch::Exact;
@@ -6041,6 +6071,24 @@ impl Application for App {
                     )
                     .secondary_action(
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                    )
+                    .control(
+                        widget::text_input::search_input(
+                            fl!("search-application"),
+                            search_app_name,
+                        )
+                        .id(self.dialog_text_input.clone())
+                        .on_clear(Message::OpenWithSearchClear)
+                        .on_input(move |search_app_name| {
+                            Message::DialogUpdate(DialogPage::OpenWith {
+                                path: path.clone(),
+                                mime: mime.clone(),
+                                selected: *selected,
+                                store_opt: store_opt.clone(),
+                                search_app_name,
+                            })
+                        })
+                        .on_submit(|_| Message::DialogComplete),
                     )
                     .control(widget::scrollable(column).height({
                         let max_size = self
