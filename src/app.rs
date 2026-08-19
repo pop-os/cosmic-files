@@ -6069,18 +6069,22 @@ impl Application for App {
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
                     )
                     .control(
-                        widget::search_input(fl!("search-application"), search_app_name)
-                            .id(self.dialog_text_input.clone())
-                            .on_clear(Message::OpenWithSearchClear)
-                            .on_input(move |search_app_name| {
-                                Message::DialogUpdate(DialogPage::OpenWith {
-                                    path: path.clone(),
-                                    mime: mime.clone(),
-                                    selected: *selected,
-                                    store_opt: store_opt.clone(),
-                                    search_app_name,
-                                })
-                            }),
+                        widget::text_input::search_input(
+                            fl!("search-application"),
+                            search_app_name,
+                        )
+                        .id(self.dialog_text_input.clone())
+                        .on_clear(Message::OpenWithSearchClear)
+                        .on_input(move |search_app_name| {
+                            Message::DialogUpdate(DialogPage::OpenWith {
+                                path: path.clone(),
+                                mime: mime.clone(),
+                                selected: *selected,
+                                store_opt: store_opt.clone(),
+                                search_app_name,
+                            })
+                        })
+                        .on_submit(|_| Message::DialogComplete),
                     )
                     .control(widget::scrollable(column).height({
                         let max_size = self
