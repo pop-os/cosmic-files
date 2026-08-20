@@ -6573,18 +6573,21 @@ impl Tab {
                                     )),
                                 ])
                             )
+                            .height(Length::Fill)
+                            .align_y(Alignment::Center)
                             .width(Length::Fixed(200.0))),
                             widget::space::horizontal().into(),
                             Element::from(widget::container(
                                     widget::button::standard(fl!("empty-trash"))
                                     .on_press(Message::EmptyTrash),
                                 )
-                                .padding([space_xxs, 0, 0, 0])
+                                .height(Length::Fill)
                                 .align_y(Alignment::Center)
                             ),
                         ]))
                         .padding([space_xxs, space_xs])
                         .layer(cosmic_theme::Layer::Primary)
+                        .height(Length::Fixed(50.0 + (space_xxs as f32 * 2.0)))
                         .apply(widget::container)
                         .padding([0, 0, 7, 0]),
                     );
@@ -6615,18 +6618,21 @@ impl Tab {
                                     )),
                                 ])
                             )
+                            .height(Length::Fill)
+                            .align_y(Alignment::Center)
                             .width(Length::Fixed(120.0))),
                             widget::space::horizontal().into(),
                             Element::from(widget::container(
                                 widget::button::standard(fl!("clear-recents-history"))
                                 .on_press(Message::ClearRecents)
                             )
-                            .padding([space_xxs, 0, 0, 0])
+                            .height(Length::Fill)
                             .align_y(Alignment::Center)
                             ),
                         ]))
                         .padding([space_xxs, space_xs])
                         .layer(cosmic_theme::Layer::Primary)
+                        .height(Length::Fixed(50.0 + (space_xxs as f32 * 2.0)))
                         .apply(widget::container)
                         .padding([0, 0, 7, 0]),
                     );
