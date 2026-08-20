@@ -333,10 +333,6 @@ copy-to = Copy to...
 delete-permanently = Delete permanently
 eject = Eject
 extract-here = Extract
-items-count = {$items} {$items ->
-    [one] item
-    *[other] items
-}
 new-file = New file...
 new-folder = New folder...
 open-in-terminal = Open in terminal
@@ -349,6 +345,32 @@ sort-by-modified = Sort by modified
 sort-by-size = Sort by size
 sort-by-trashed = Sort by delete time
 remove-from-recents = Remove from recents
+
+# Footer bar
+items-count = {$count} {$count ->
+        [one] item
+        *[other] items
+    }
+dirs-count = {$count} {$count ->
+        [one] directory
+        *[other] directories
+    }
+dirs-count-with-items = {$count} {$count ->
+        [one] directory
+        *[other] directories ({$items} {$items ->
+            [one] item
+            *[other] items
+        })
+    }
+files-count = {$count} {$count ->
+        [one] file
+        *[other] files
+    }
+files-count-with-size = {$count} {$count ->
+        [one] file
+        *[other] files
+    } ({$size})
+
 
 ## Desktop
 change-wallpaper = Change wallpaper...
