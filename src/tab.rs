@@ -162,7 +162,7 @@ fn button_appearance(
 ) -> widget::button::Style {
     let cosmic = theme.cosmic();
     let mut appearance = widget::button::Style::new();
-    let mut background = Color::from(cosmic.bg_color());
+    let mut background = Color::TRANSPARENT;
     let mut icon_color = Color::from(cosmic.on_bg_component_color());
     let mut text_color = Color::from(cosmic.on_bg_component_color());
 
@@ -220,16 +220,21 @@ fn button_appearance(
     }
 
     // Ensure legibility of text on the backgrounds
+    let bg_check = if background == Color::TRANSPARENT {
+            Color::from(cosmic.bg_color())
+        } else {
+            background
+    };
     if !text_color.is_readable_on(background) {
-        if Color::from(cosmic.on_bg_color()).is_readable_on(background) {
+        if Color::from(cosmic.on_bg_color()).is_readable_on(bg_check) {
             icon_color = Color::from(cosmic.on_bg_color());
             text_color = Color::from(cosmic.on_bg_color());
         }
-        else if Color::from(cosmic.on_bg_component_color()).is_readable_on(background) {
+        else if Color::from(cosmic.on_bg_component_color()).is_readable_on(bg_check) {
             icon_color = Color::from(cosmic.on_bg_component_color());
             text_color = Color::from(cosmic.on_bg_component_color());
         }
-        else if Color::WHITE.is_readable_on(background) {
+        else if Color::WHITE.is_readable_on(bg_check) {
             icon_color = Color::WHITE;
             text_color = Color::WHITE;
         } else {
@@ -5757,7 +5762,7 @@ impl Tab {
         };
 
         let (cols, column_spacing) = {
-            let width_m1 = width.saturating_sub(item_width + 2 * space_xxs as usize);
+            let width_m1 = width.saturating_sub(item_width + space_xxs as usize);
             let cols_m1 = width_m1 / (item_width + grid_spacing as usize);
             let cols = cols_m1 + 1;
             let spacing = width_m1
@@ -5848,7 +5853,7 @@ impl Tab {
                             // TODO: Merge with button_style()
                             let mut a = widget::container::Style::default();
                             let c = t.cosmic();
-                            let mut background = Color::from(c.bg_color());
+                            let mut background = Color::TRANSPARENT;
                             let mut icon_color = Color::from(c.on_bg_component_color());
                             let mut text_color = Color::from(c.on_bg_component_color());
 
@@ -5898,16 +5903,21 @@ impl Tab {
                             }
 
                             // Ensure legibility of text on the backgrounds
-                            if !text_color.is_readable_on(background) {
-                                if Color::from(c.on_bg_color()).is_readable_on(background) {
+                            let bg_check = if background == Color::TRANSPARENT {
+                                    Color::from(c.bg_color())
+                                } else {
+                                    background
+                            };
+                            if !text_color.is_readable_on(bg_check) {
+                                if Color::from(c.on_bg_color()).is_readable_on(bg_check) {
                                     icon_color = Color::from(c.on_bg_color());
                                     text_color = Color::from(c.on_bg_color());
                                 }
-                                else if Color::from(c.on_bg_component_color()).is_readable_on(background) {
+                                else if Color::from(c.on_bg_component_color()).is_readable_on(bg_check) {
                                     icon_color = Color::from(c.on_bg_component_color());
                                     text_color = Color::from(c.on_bg_component_color());
                                 }
-                                else if Color::WHITE.is_readable_on(background) {
+                                else if Color::WHITE.is_readable_on(bg_check) {
                                     icon_color = Color::WHITE;
                                     text_color = Color::WHITE;
                                 } else {
@@ -5922,15 +5932,13 @@ impl Tab {
                     ])
                     .height(Length::Fill)
                     .width(width as f32)
-                    .align_x(Alignment::Center)
-                    .spacing(space_xxs);
+                    .align_x(Alignment::Center);
 
                     let button = |contents| {
                         let mouse_area = crate::mouse_area::MouseArea::new(
                             widget::button::custom(contents)
                                 .width(Length::Fill)
                                 .id(item.button_id.clone())
-                                .padding(space_xxs)
                                 .class(button_style(
                                     item.selected,
                                     item.highlighted,
