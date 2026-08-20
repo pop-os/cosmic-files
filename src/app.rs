@@ -1272,16 +1272,14 @@ impl App {
             .insert(id, (operation.clone(), controller.clone()));
 
         // Use a task to send operations to the compio runtime thread.
-        cosmic::Task::stream(cosmic::iced::stream::channel(4, move |msg_tx| async move {
+        cosmic::Task::stream(cosmic::iced::stream::channel(4, async move |mut msg_tx| {
             let (tx, rx) = tokio::sync::oneshot::channel();
-
-            let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
 
             let msg_tx_clone = msg_tx.clone();
 
             _ = compio_tx
                 .send(Box::pin(async move {
-                    let msg = match operation.perform(&msg_tx_clone, controller).await {
+                    let msg = match operation.perform(msg_tx_clone, controller).await {
                         Ok(result_paths) => Message::PendingComplete(id, result_paths),
                         Err(err) => Message::PendingError(id, err),
                     };
@@ -1291,7 +1289,7 @@ impl App {
                 .await;
 
             if let Ok(msg) = rx.await {
-                let _ = msg_tx.lock().await.send(msg).await;
+                let _ = msg_tx.send(msg).await;
             }
         }))
         .map(cosmic::Action::App)
