@@ -5875,6 +5875,22 @@ impl Tab {
                                 text_color = Color::from(c.on_bg_color());
                             }
 
+                            // Visually indicate cut items
+                            if item.cut {
+                                let disabled_color = Color::from(
+                                    c.background(t.transparent).component.on_disabled,
+                                );
+                                if !item.highlighted && !item.selected {
+                                    background = Color::from(
+                                        c.background(t.transparent).component.disabled,
+                                    ).scale_alpha(0.1);
+                                    icon_color = disabled_color;
+                                    text_color = disabled_color;
+                                }
+                                icon_color = icon_color.scale_alpha(0.8);
+                                text_color = text_color.scale_alpha(0.8);
+                            }
+
                             // Visually indicate hidden items
                             if item.hidden {
                                 icon_color = icon_color.scale_alpha(0.8);
@@ -6022,7 +6038,8 @@ impl Tab {
                 // Cache content height for scroll clamping on next frame
                 self.content_height_opt.set(Some(max_bottom as f32));
 
-                let top_deduct = 7 * (space_xxs as usize);
+                // TODO: Don't have 'magic' number (10) here
+                let top_deduct = 10 * (space_xxs as usize);
 
                 self.item_view_size_opt
                     .set(self.size_opt.get().map(|s| Size {
@@ -6480,7 +6497,7 @@ impl Tab {
                 };
 
                 count += 1;
-                y += f32::from(row_height);
+                y += f32::from(row_height + space_xxs);
                 column = column.push(button_row);
             }
 
