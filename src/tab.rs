@@ -437,7 +437,9 @@ impl<'a> FormatTime<'a> {
 
 impl Display for FormatTime<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let zoned = jiff::Zoned::try_from(self.time).unwrap();
+        let Ok(zoned) = jiff::Zoned::try_from(self.time) else {
+            return Ok(());
+        };
         let now = jiff::Zoned::now();
         let icu_datetime = DateTime::convert_from(zoned.datetime());
         if zoned.date() == now.date() {
