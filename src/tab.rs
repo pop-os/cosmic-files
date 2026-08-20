@@ -157,64 +157,91 @@ fn button_appearance(
     cut: bool,
     focused: bool,
     accent: bool,
-    condensed_radius: bool,
+    hidden: bool,
     desktop: bool,
 ) -> widget::button::Style {
     let cosmic = theme.cosmic();
     let mut appearance = widget::button::Style::new();
-    if selected {
+    let mut background = Color::TRANSPARENT;
+    let mut icon_color = Color::from(cosmic.on_bg_component_color());
+    let mut text_color = Color::from(cosmic.on_bg_component_color());
+
+    // Button is highlighted (hover, etc)
+    if highlighted {
+        background = Color::from(cosmic.bg_component_color());
         if accent {
-            appearance.background = Some(Color::from(cosmic.accent_color()).into());
-            appearance.icon_color = Some(Color::from(cosmic.on_accent_color()));
-            if cut {
-                appearance.text_color = Some(Color::from(cosmic.accent.on_disabled));
-            } else {
-                appearance.text_color = Some(Color::from(cosmic.on_accent_color()));
-            }
-        } else {
-            appearance.background = Some(Color::from(cosmic.bg_component_color()).into());
+            background = Color::from(cosmic.accent_color());
+            icon_color = Color::from(cosmic.on_accent_color());
+            text_color = Color::from(cosmic.on_accent_color());
         }
-    } else if highlighted {
-        if accent {
-            appearance.background = Some(Color::from(cosmic.bg_component_color()).into());
-            appearance.icon_color = Some(Color::from(cosmic.on_bg_component_color()));
-            appearance.text_color = Some(Color::from(cosmic.on_bg_component_color()));
-            if cut {
-                appearance.text_color = Some(Color::from(
-                    cosmic.background(theme.transparent).component.on_disabled,
-                ));
-            } else {
-                appearance.text_color = Some(Color::from(cosmic.on_bg_component_color()));
-            }
-        } else {
-            appearance.background = Some(Color::from(cosmic.bg_component_color()).into());
-        }
-    } else if desktop {
-        appearance.background = Some(Color::from(cosmic.bg_color()).into());
-        appearance.icon_color = Some(Color::from(cosmic.on_bg_color()));
-        if cut {
-            appearance.text_color = Some(Color::from(
-                cosmic.background(theme.transparent).component.disabled,
-            ));
-        } else {
-            appearance.text_color = Some(Color::from(cosmic.on_bg_color()));
-        }
-    } else if cut {
-        appearance.text_color = Some(Color::from(
-            cosmic.background(theme.transparent).component.on_disabled,
-        ));
+        background = background.scale_alpha(0.5);
     }
+
+    // Button is selected
+    else if selected {
+        background = Color::from(cosmic.bg_component_color());
+        if accent {
+            background = Color::from(cosmic.accent_color());
+            icon_color = Color::from(cosmic.on_accent_color());
+            text_color = Color::from(cosmic.on_accent_color());
+        }
+        background = background.scale_alpha(0.4);
+    }
+
+    // Button is an item on the desktop
+    else if desktop {
+        background = Color::from(cosmic.bg_color());
+        icon_color = Color::from(cosmic.on_bg_color());
+        text_color = Color::from(cosmic.on_bg_color());
+    }
+    
+    // Visually indicate cut items
+    if cut {
+        let disabled_color = Color::from(
+            cosmic.background(theme.transparent).component.on_disabled,
+        );
+        icon_color = disabled_color;
+        text_color = disabled_color;
+        appearance.outline_width = 1.0;
+        appearance.outline_color = disabled_color.scale_alpha(0.25);
+    }
+
+    // Visually indicate hidden items
+    if hidden {
+        icon_color = icon_color.scale_alpha(0.85);
+        text_color = icon_color.scale_alpha(0.85);
+    }
+
+    // Ensure legibility of text on the backgrounds
+    if background != Color::TRANSPARENT && !text_color.is_readable_on(background) {
+        if Color::from(cosmic.on_bg_color()).is_readable_on(background) {
+            text_color = Color::from(cosmic.on_bg_color());
+        }
+        else if Color::from(cosmic.on_bg_component_color()).is_readable_on(background) {
+            text_color = Color::from(cosmic.on_bg_component_color());
+        }
+        else if Color::from_rgba(255.0, 255.0, 255.0, 1.0).is_readable_on(background) {
+            text_color = Color::from_rgba(255.0, 255.0, 255.0, 1.0);
+        } else {
+            text_color = Color::from_rgba(0.0, 0.0, 0.0, 1.0);
+        }
+    }
+
+    appearance.background = Some(background.into());
+    appearance.icon_color = Some(icon_color);
+    appearance.text_color = Some(text_color);
+
     if focused && accent {
         appearance.outline_width = 1.0;
         appearance.outline_color = Color::from(cosmic.accent_color());
         appearance.border_width = 2.0;
         appearance.border_color = Color::TRANSPARENT;
+    } else if focused {
+        appearance.border_width = 2.0;
+        appearance.border_color = Color::from(cosmic.accent_color());
     }
-    if condensed_radius {
-        appearance.border_radius = cosmic.radius_xs().into();
-    } else {
-        appearance.border_radius = cosmic.radius_s().into();
-    }
+
+    appearance.border_radius = cosmic.radius_m().into();
     appearance
 }
 
@@ -223,7 +250,7 @@ fn button_style(
     highlighted: bool,
     cut: bool,
     accent: bool,
-    condensed_radius: bool,
+    hidden: bool,
     desktop: bool,
 ) -> theme::Button {
     //TODO: move to libcosmic?
@@ -236,7 +263,7 @@ fn button_style(
                 cut,
                 focused,
                 accent,
-                condensed_radius,
+                hidden,
                 desktop,
             )
         }),
@@ -248,7 +275,7 @@ fn button_style(
                 cut,
                 false,
                 accent,
-                condensed_radius,
+                hidden,
                 desktop,
             )
         }),
@@ -260,7 +287,7 @@ fn button_style(
                 cut,
                 focused,
                 accent,
-                condensed_radius,
+                hidden,
                 desktop,
             )
         }),
@@ -272,7 +299,7 @@ fn button_style(
                 cut,
                 focused,
                 accent,
-                condensed_radius,
+                hidden,
                 desktop,
             )
         }),
@@ -5705,7 +5732,7 @@ impl Tab {
         }
 
         let text_height = 3 * 20; // 3 lines of text
-        let item_width = (3 * space_xxs + icon_sizes.grid() + 3 * space_xxs) as usize;
+        let item_width = (3 * space_xxs + icon_sizes.grid() + 3 * space_xxs).max(80) as usize;
         let item_height =
             (space_xxxs + icon_sizes.grid() + space_xxxs + text_height + space_xxxs) as usize;
 
@@ -5795,66 +5822,67 @@ impl Tab {
 
                 // Only build elements if visible (for performance)
                 if item_rect.intersects(&visible_rect) {
-                    //TODO: one focus group per grid item (needs custom widget)
-                    let buttons: Vec<Element<Message>> = vec![
-                        widget::button::custom(
-                            widget::icon::icon(item.icon_handle_grid.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_sizes.grid()),
+                    let contents = widget::button::custom(
+                            widget::column::with_children([
+                                Element::from(widget::icon::icon(item.icon_handle_grid.clone())
+                                    .content_fit(ContentFit::Contain)
+                                    .size(icon_sizes.grid())),
+                                Element::from(widget::container(widget::tooltip(
+                                    Item::grid_display_name(&item.display_name),
+                                    widget::text::body(&item.name),
+                                    widget::tooltip::Position::Bottom,
+                                ))),
+                            ])
+                            .align_x(Alignment::Center)
+                            .spacing(space_xxs)
+                            .width(Length::Fill)
                         )
+                        .id(item.button_id.clone())
+                        .width(Length::Fill)
                         .padding(space_xxxs)
                         .class(button_style(
                             item.selected,
                             item.highlighted,
                             item.cut,
-                            false,
-                            false,
-                            false,
-                        ))
-                        .into(),
-                        widget::tooltip(
-                            widget::button::custom(Item::grid_display_name(&item.display_name))
-                                .id(item.button_id.clone())
-                                .padding([0, space_xxxs])
-                                .class(button_style(
-                                    item.selected,
-                                    item.highlighted,
-                                    item.cut,
-                                    true,
-                                    true,
-                                    matches!(self.mode, Mode::Desktop),
-                                )),
-                            widget::text::body(&item.name),
-                            widget::tooltip::Position::Bottom,
-                        )
-                        .into(),
-                    ];
-
-                    let mut column = widget::column::with_capacity(buttons.len())
-                        .align_x(Alignment::Center)
-                        .height(Length::Fixed(item_height as f32))
-                        .width(Length::Fixed(item_width as f32));
-                    for button in buttons {
-                        if self.context_menu.is_some() {
-                            column = column.push(button);
-                        } else {
-                            column = column.push(
-                                mouse_area::MouseArea::new(button)
+                            true,
+                            item.hidden,
+                            matches!(self.mode, Mode::Desktop),
+                        ));
+                    // One focus group per grid item (needs custom widget)
+                    let mouse_area = mouse_area::MouseArea::new(contents)
+                        .on_press(move |_| Message::Click(Some(i)))
+                        .on_double_click(move |_| Message::DoubleClick(Some(i)))
+                        .on_release(move |_| Message::ClickRelease(Some(i)))
+                        .on_middle_press(move |_| Message::MiddleClick(i))
+                        .on_enter(move || Message::HighlightActivate(i))
+                        .on_exit(move || Message::HighlightDeactivate(i));
+                    
+                    let button = Element::from(
+                        widget::container(
+                            if self.context_menu.is_some() {
+                                mouse_area
+                            } else {
+                                mouse_area
                                     .on_right_press_no_capture()
                                     .wayland_on_right_press_window_position()
                                     .on_right_press(move |point_opt| {
                                         Message::RightClick(point_opt, Some(i))
-                                    }),
-                            );
-                        }
-                    }
+                                    })
+                            }
+                        ).width(Length::Fill)
+                    );
 
+                    let column = widget::column::with_children([button])
+                        .align_x(Alignment::Center)
+                        .height(Length::Fixed(item_height as f32))
+                        .width(Length::Fixed(item_width as f32));
                     let column: Element<Message> =
                         if item.metadata.is_dir() && item.location_opt.is_some() {
                             self.dnd_dest(&item.location_opt.clone().unwrap(), column)
                         } else {
                             column.into()
                         };
+                    grid_elements[row].push(column);
 
                     if item.selected {
                         dnd_items.push((i, (row, col), item));
@@ -5863,14 +5891,6 @@ impl Tab {
                         drag_e_i = drag_e_i.max(col);
                         drag_s_i = drag_s_i.max(row);
                     }
-                    let mouse_area = crate::mouse_area::MouseArea::new(column)
-                        .on_press(move |_| Message::Click(Some(i)))
-                        .on_double_click(move |_| Message::DoubleClick(Some(i)))
-                        .on_release(move |_| Message::ClickRelease(Some(i)))
-                        .on_middle_press(move |_| Message::MiddleClick(i))
-                        .on_enter(move || Message::HighlightActivate(i))
-                        .on_exit(move || Message::HighlightDeactivate(i));
-                    grid_elements[row].push(Element::from(mouse_area));
                 } else {
                     // Add a spacer if the row is empty, so scroll works
                     if grid_elements[row].is_empty() {
@@ -5962,40 +5982,42 @@ impl Tab {
                         break;
                     };
                     if *row == r && *col == c {
-                        let buttons = vec![
-                            widget::button::custom(
-                                widget::icon::icon(item.icon_handle_grid.clone())
-                                    .content_fit(ContentFit::Contain)
-                                    .size(icon_sizes.grid()),
+                        let button = Element::from(
+                            widget::container(
+                                widget::tooltip(
+                                    widget::button::custom(
+                                        widget::column::with_children([
+                                            widget::icon::icon(item.icon_handle_grid.clone())
+                                                .content_fit(ContentFit::Contain)
+                                                .size(icon_sizes.grid()).into(),
+                                            Item::grid_display_name(item.display_name.clone()).into(),
+                                        ])
+                                        .align_x(Alignment::Center)
+                                        .spacing(space_xxs)
+                                        .width(Length::Fill)
+                                    )
+                                    .id(item.button_id.clone())
+                                    .on_press(Message::Click(Some(*i)))
+                                    .width(Length::Fill)
+                                    .padding(space_xxxs)
+                                    .class(button_style(
+                                        item.selected,
+                                        item.highlighted,
+                                        item.cut,
+                                        true,
+                                        item.hidden,
+                                        matches!(self.mode, Mode::Desktop),
+                                    )),
+                                    widget::text::body(item.name.clone()),
+                                    widget::tooltip::Position::Bottom,
+                                ),
                             )
-                            .on_press(Message::Click(Some(*i)))
-                            .padding(space_xxxs)
-                            .class(button_style(
-                                item.selected,
-                                item.highlighted,
-                                item.cut,
-                                false,
-                                false,
-                                false,
-                            )),
-                            widget::button::custom(Item::grid_display_name(
-                                item.display_name.clone(),
-                            ))
-                            .id(item.button_id.clone())
-                            .on_press(Message::Click(Some(*i)))
-                            .padding([0, space_xxxs])
-                            .class(button_style(
-                                item.selected,
-                                item.highlighted,
-                                item.cut,
-                                true,
-                                true,
-                                false,
-                            )),
-                        ];
+                            .width(Length::Fill)
+                            .height(Length::Fill)
+                        );
 
                         let column =
-                            widget::column::with_children(buttons.into_iter().map(Element::from))
+                            widget::column::with_children([button])
                                 .align_x(Alignment::Center)
                                 .height(Length::Fixed(item_height as f32))
                                 .width(Length::Fixed(item_width as f32));
@@ -6258,7 +6280,7 @@ impl Tab {
                                     item.highlighted,
                                     item.cut,
                                     true,
-                                    true,
+                                    item.hidden,
                                     false,
                                 )),
                         )
