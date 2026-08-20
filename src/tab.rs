@@ -640,6 +640,41 @@ fn display_name_for_file(path: &Path, name: &str, get_from_gvfs: bool, is_deskto
     Item::display_name(name)
 }
 
+// Whether a dir lives on a remote filesystem, according to GIO.
+#[cfg(feature = "gvfs")]
+fn gvfs_dir_is_remote(dir: &Path) -> bool {
+    static REMOTE_CACHE: LazyLock<RwLock<FxHashMap<PathBuf, bool>>> =
+        LazyLock::new(|| RwLock::new(FxHashMap::default()));
+
+    if let Some(remote) = REMOTE_CACHE.read().unwrap().get(dir) {
+        return *remote;
+    }
+
+    let remote = match gio::prelude::FileExt::query_filesystem_info(
+        &gio::File::for_path(dir),
+        gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE,
+        gio::Cancellable::NONE,
+    ) {
+        Ok(info) => info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE),
+        Err(err) => {
+            log::warn!(
+                "failed to get GIO filesystem info for {}: {}",
+                dir.display(),
+                err
+            );
+
+            //Assume remote so that the "expensive tasks" are rather skipped then actually executed.
+            true
+        }
+    };
+
+    REMOTE_CACHE
+        .write()
+        .unwrap()
+        .insert(dir.to_path_buf(), remote);
+    remote
+}
+
 #[cfg(feature = "gvfs")]
 pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconSizes) -> Item {
     let file_name = file_info
@@ -647,7 +682,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
         .unwrap_or_default();
     let mtime = file_info.attribute_uint64(gio::FILE_ATTRIBUTE_TIME_MODIFIED);
     let mut is_desktop = false;
-    let remote = file_info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE);
+    let remote = path.parent().is_none_or(gvfs_dir_is_remote);
     let is_dir = matches!(file_info.file_type(), gio::FileType::Directory);
 
     let size_opt = (!is_dir).then_some(file_info.size() as u64);
@@ -715,6 +750,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
             mtime,
             size_opt,
             children_opt,
+            is_dir,
         },
         hidden,
         image_dimensions: (!remote && mime.type_() == mime::IMAGE)
@@ -766,23 +802,7 @@ pub fn item_from_entry(
         #[cfg(feature = "gvfs")]
         FsKind::Gvfs => {
             is_gvfs = true;
-            let file = gio::File::for_path(&path);
-
-            match gio::prelude::FileExt::query_filesystem_info(
-                &file,
-                gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE,
-                gio::Cancellable::NONE,
-            ) {
-                Ok(info) => info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE),
-                Err(err) => {
-                    log::warn!(
-                        "failed to get GIO filesystem info for {}: {}",
-                        path.display(),
-                        err
-                    );
-                    true
-                }
-            }
+            path.parent().is_none_or(gvfs_dir_is_remote)
         }
         #[cfg(not(feature = "gvfs"))]
         FsKind::Gvfs => {
@@ -1009,7 +1029,6 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
             // gio crate expects a comma delimited string
             let attr_string = [
                 gio::FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME.as_str(),
-                gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE.as_str(),
                 gio::FILE_ATTRIBUTE_TIME_MODIFIED.as_str(),
                 gio::FILE_ATTRIBUTE_STANDARD_SIZE.as_str(),
                 gio::FILE_ATTRIBUTE_STANDARD_TYPE.as_str(),
@@ -1818,6 +1837,8 @@ pub enum Message {
     HighlightDeactivate(usize),
     HighlightActivate(usize),
     DirectorySize(PathBuf, DirSize),
+    #[cfg(feature = "gvfs")]
+    DirectoryChildren(PathBuf, usize),
     Checksums(PathBuf, ChecksumState),
     CalculateChecksums(PathBuf),
     CopyChecksum(String),
@@ -1886,6 +1907,7 @@ pub enum ItemMetadata {
         mtime: u64,
         size_opt: Option<u64>,
         children_opt: Option<usize>,
+        is_dir: bool,
     },
 }
 
@@ -1900,7 +1922,7 @@ impl ItemMetadata {
             Self::SimpleDir { .. } => true,
             Self::SimpleFile { .. } => false,
             #[cfg(feature = "gvfs")]
-            Self::GvfsPath { children_opt, .. } => children_opt.is_some(),
+            Self::GvfsPath { is_dir, .. } => *is_dir,
         }
     }
 
@@ -4827,6 +4849,20 @@ impl Tab {
                     }
                 }
             }
+            #[cfg(feature = "gvfs")]
+            Message::DirectoryChildren(path, children) => {
+                if let Some(ref mut items) = self.items_opt {
+                    for item in items.iter_mut() {
+                        if item.path_opt() == Some(&path) {
+                            if let ItemMetadata::GvfsPath { children_opt, .. } = &mut item.metadata
+                            {
+                                *children_opt = Some(children);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
             Message::Checksums(path, checksum_state) => {
                 let location = Location::Path(path);
                 if let Some(ref mut item) = self.parent_item_opt
@@ -4988,11 +5024,15 @@ impl Tab {
                         ItemMetadata::GvfsPath {
                             size_opt,
                             children_opt,
+                            is_dir,
                             ..
-                        } => match children_opt {
-                            Some(child_count) => (true, *child_count as u64),
-                            None => (false, size_opt.unwrap_or_default()),
-                        },
+                        } => {
+                            if *is_dir {
+                                (true, children_opt.unwrap_or_default() as u64)
+                            } else {
+                                (false, size_opt.unwrap_or_default())
+                            }
+                        }
                     };
                     let (a_is_entry, a_size) = get_size(a.1);
                     let (b_is_entry, b_size) = get_size(b.1);
@@ -6170,17 +6210,21 @@ impl Tab {
                         ItemMetadata::GvfsPath {
                             size_opt,
                             children_opt,
+                            is_dir,
                             ..
-                        } => match children_opt {
-                            Some(child_count) => {
-                                if *child_count == 1 {
-                                    format!("{child_count} item")
-                                } else {
-                                    format!("{child_count} items")
+                        } => {
+                            if *is_dir {
+                                // Children are not counted on remote filesystems
+                                match children_opt {
+                                    //TODO: translate
+                                    Some(1) => "1 item".to_string(),
+                                    Some(child_count) => format!("{child_count} items"),
+                                    None => String::new(),
                                 }
+                            } else {
+                                format_size(size_opt.unwrap_or_default())
                             }
-                            None => format_size(size_opt.unwrap_or_default()),
-                        },
+                        }
                     };
 
                     let row = if condensed {
@@ -6945,6 +6989,74 @@ impl Tab {
                 let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
                 Rectangle::new(point, size)
             };
+
+            // Count the children of visible directories in the background. Doing it while
+            // scanning costs one directory listing per entry, which stalls remote filesystems.
+            #[cfg(feature = "gvfs")]
+            for item in items {
+                let ItemMetadata::GvfsPath {
+                    children_opt: None,
+                    is_dir: true,
+                    ..
+                } = &item.metadata
+                else {
+                    continue;
+                };
+
+                // Skip items that are not visible, or have no determined rect
+                match item.rect_opt.get() {
+                    Some(rect) if rect.intersects(&visible_rect) => {}
+                    _ => continue,
+                }
+
+                let Some(path) = item.path_opt().cloned() else {
+                    continue;
+                };
+
+                struct ChildrenWrapper(PathBuf);
+                impl Hash for ChildrenWrapper {
+                    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                        self.0.hash(state);
+                    }
+                }
+
+                subscriptions.push(Subscription::run_with(
+                    ChildrenWrapper(path),
+                    |ChildrenWrapper(path)| {
+                        let path = path.clone();
+                        stream::channel(
+                            1,
+                            move |mut output: futures::channel::mpsc::Sender<_>| async move {
+                                let message = {
+                                    let path = path.clone();
+                                    tokio::task::spawn_blocking(move || {
+                                        let children = match fs::read_dir(&path) {
+                                            Ok(entries) => entries.count(),
+                                            Err(err) => {
+                                                log::warn!(
+                                                    "failed to read directory {}: {}",
+                                                    path.display(),
+                                                    err
+                                                );
+                                                0
+                                            }
+                                        };
+                                        Message::DirectoryChildren(path, children)
+                                    })
+                                    .await
+                                    .unwrap()
+                                };
+
+                                if let Err(err) = output.send(message).await {
+                                    log::warn!("failed to send directory children: {err}");
+                                }
+
+                                std::future::pending().await
+                            },
+                        )
+                    },
+                ));
+            }
 
             for item in items {
                 if item.thumbnail_opt.is_some() {
