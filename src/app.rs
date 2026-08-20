@@ -321,7 +321,7 @@ pub enum NavMenuAction {
     Preview(segmented_button::Entity),
     RunContextAction(segmented_button::Entity, usize),
     RemoveFromSidebar(segmented_button::Entity),
-    RenameFavorite(segmented_button::Entity),
+    ChangeSidebarLabel(segmented_button::Entity),
 }
 
 impl MenuAction for NavMenuAction {
@@ -576,9 +576,9 @@ pub enum DialogPage {
     DeleteTrash {
         items: Vec<TrashItem>,
     },
-    RenameFavorite {
+    ChangeSidebarLabel {
         entity: Entity,
-        name: String,
+        label: String,
     },
     RenameItem {
         from: PathBuf,
@@ -2631,9 +2631,9 @@ impl Application for App {
             items.push(cosmic::widget::menu::Item::Divider);
             if favorite_index_opt.is_some() {
                 items.push(cosmic::widget::menu::Item::Button(
-                    fl!("rename-confirm"),
+                    fl!("change-sidebar-label"),
                     None,
-                    NavMenuAction::RenameFavorite(entity),
+                    NavMenuAction::ChangeSidebarLabel(entity),
                 ));
                 items.push(cosmic::widget::menu::Item::Button(
                     fl!("remove-from-sidebar"),
@@ -3285,13 +3285,13 @@ impl Application for App {
                         DialogPage::DeleteTrash { items } => {
                             tasks.push(self.operation(Operation::DeleteTrash { items }));
                         }
-                        DialogPage::RenameFavorite { entity, name } => {
+                        DialogPage::ChangeSidebarLabel { entity, label } => {
                             if let Some(FavoriteIndex(favorite_i)) =
                                 self.nav_model.data::<FavoriteIndex>(entity)
                             {
                                 let mut favorites = self.config.favorites.clone();
                                 if let Some(favorite) = favorites.get_mut(*favorite_i) {
-                                    *favorite = favorite.with_name(name.trim());
+                                    *favorite = favorite.with_label(label.trim());
                                     config_set!(favorites, favorites);
                                     tasks.push(self.update_config());
                                 }
@@ -5308,7 +5308,7 @@ impl Application for App {
                     }
                 }
 
-                NavMenuAction::RenameFavorite(entity) => {
+                NavMenuAction::ChangeSidebarLabel(entity) => {
                     if let Some(favorite) = self
                         .nav_model
                         .data::<FavoriteIndex>(entity)
@@ -5316,12 +5316,12 @@ impl Application for App {
                             self.config.favorites.get(*favorite_i)
                         })
                     {
-                        let name = favorite
+                        let label = favorite
                             .display_name()
                             .unwrap_or_else(|| fl!("filesystem"));
                         return Task::batch([
                             self.dialog_pages
-                                .push_back(DialogPage::RenameFavorite { entity, name }),
+                                .push_back(DialogPage::ChangeSidebarLabel { entity, label }),
                             widget::text_input::focus(self.dialog_text_input.clone()),
                             widget::text_input::select_all(self.dialog_text_input.clone()),
                         ]);
@@ -6220,18 +6220,18 @@ impl Application for App {
                         target = target
                     )))
             }
-            DialogPage::RenameFavorite { entity, name } => {
+            DialogPage::ChangeSidebarLabel { entity, label } => {
                 let entity = *entity;
-                let complete_maybe = if name.trim().is_empty() {
+                let complete_maybe = if label.trim().is_empty() {
                     None
                 } else {
                     Some(Message::DialogComplete)
                 };
 
                 widget::dialog()
-                    .title(fl!("rename-favorite"))
+                    .title(fl!("change-sidebar-label"))
                     .primary_action(
-                        widget::button::suggested(fl!("rename-confirm"))
+                        widget::button::suggested(fl!("save"))
                             .on_press_maybe(complete_maybe.clone()),
                     )
                     .secondary_action(
@@ -6239,13 +6239,13 @@ impl Application for App {
                     )
                     .control(
                         widget::column::with_children([
-                            widget::text::body(fl!("favorite-name")).into(),
-                            widget::text_input("", name.as_str())
+                            widget::text::body(fl!("sidebar-label")).into(),
+                            widget::text_input("", label.as_str())
                                 .id(self.dialog_text_input.clone())
-                                .on_input(move |name| {
-                                    Message::DialogUpdate(DialogPage::RenameFavorite {
+                                .on_input(move |label| {
+                                    Message::DialogUpdate(DialogPage::ChangeSidebarLabel {
                                         entity,
-                                        name,
+                                        label,
                                     })
                                 })
                                 .on_submit_maybe(complete_maybe.map(|maybe| move |_| maybe.clone()))

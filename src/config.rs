@@ -120,8 +120,8 @@ impl Favorite {
         }
     }
 
-    /// Return this favorite renamed with a custom name chosen by the user
-    pub fn with_name(&self, name: &str) -> Self {
+    /// Return this favorite with a custom sidebar label chosen by the user
+    pub fn with_label(&self, name: &str) -> Self {
         match self {
             Self::Network { uri, path, .. } => Self::Network {
                 uri: uri.clone(),
@@ -428,10 +428,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn favorite_with_name_converts_path_to_named() {
+    fn favorite_with_label_converts_path_to_named() {
         let favorite = Favorite::Path(PathBuf::from("/some/dir"));
         assert_eq!(
-            favorite.with_name("Custom"),
+            favorite.with_label("Custom"),
             Favorite::Named {
                 path: PathBuf::from("/some/dir"),
                 name: "Custom".to_string(),
@@ -440,14 +440,14 @@ mod tests {
     }
 
     #[test]
-    fn favorite_with_name_updates_network_in_place() {
+    fn favorite_with_label_updates_network_in_place() {
         let favorite = Favorite::Network {
             uri: "sftp://example.com/".to_string(),
             name: "example.com".to_string(),
             path: PathBuf::from("/run/mount/example"),
         };
         assert_eq!(
-            favorite.with_name("Custom"),
+            favorite.with_label("Custom"),
             Favorite::Network {
                 uri: "sftp://example.com/".to_string(),
                 name: "Custom".to_string(),
@@ -457,10 +457,10 @@ mod tests {
     }
 
     #[test]
-    fn favorite_with_name_converts_special_folder_to_named() {
+    fn favorite_with_label_converts_special_folder_to_named() {
         let home = dirs::home_dir().unwrap();
         assert_eq!(
-            Favorite::Home.with_name("Custom"),
+            Favorite::Home.with_label("Custom"),
             Favorite::Named {
                 path: home,
                 name: "Custom".to_string(),

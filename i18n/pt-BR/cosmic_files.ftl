@@ -109,10 +109,9 @@ permanently-delete-warning = Deseja realmente excluir permanentemente { $target 
 rename-file = Renomear arquivo
 rename-folder = Renomear pasta
 
-## Rename Favorite Dialog
+## Change Sidebar Label Dialog
 
-rename-favorite = Renomear item da barra lateral
-favorite-name = Nome do item
+sidebar-label = Rótulo da barra lateral
 
 ## Replace Dialog
 
@@ -370,6 +369,7 @@ open-in-terminal = Abrir no terminal
 move-to-trash = Mover para a lixeira
 restore-from-trash = Restaurar da lixeira
 remove-from-sidebar = Remover da barra lateral
+change-sidebar-label = Alterar rótulo na barra lateral
 sort-by-name = Ordenar por nome
 sort-by-modified = Ordenar por data de modificação
 sort-by-size = Ordenar por tamanho

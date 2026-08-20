@@ -118,9 +118,8 @@ rename-file = Rename file
 rename-folder = Rename folder
 rename-confirm = Rename
 
-## Rename Favorite Dialog
-rename-favorite = Rename sidebar item
-favorite-name = Item name
+## Change Sidebar Label Dialog
+sidebar-label = Sidebar label
 
 ## Replace Dialog
 replace = Replace
@@ -345,6 +344,7 @@ move-to = Move to...
 move-to-trash = Move to trash
 restore-from-trash = Restore from trash
 remove-from-sidebar = Remove from sidebar
+change-sidebar-label = Change sidebar label
 sort-by-name = Sort by name
 sort-by-modified = Sort by modified
 sort-by-size = Sort by size
