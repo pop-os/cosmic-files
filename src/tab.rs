@@ -6505,7 +6505,7 @@ impl Tab {
                 };
 
                 count += 1;
-                y += f32::from(row_height + space_xxs);
+                y += f32::from(row_height);
                 column = column.push(button_row);
             }
 
