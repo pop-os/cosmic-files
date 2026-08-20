@@ -162,7 +162,7 @@ fn button_appearance(
 ) -> widget::button::Style {
     let cosmic = theme.cosmic();
     let mut appearance = widget::button::Style::new();
-    let mut background = Color::TRANSPARENT;
+    let mut background = Color::from(cosmic.bg_color());
     let mut icon_color = Color::from(cosmic.on_bg_component_color());
     let mut text_color = Color::from(cosmic.on_bg_component_color());
 
@@ -174,7 +174,7 @@ fn button_appearance(
             icon_color = Color::from(cosmic.on_accent_color());
             text_color = Color::from(cosmic.on_accent_color());
         }
-        background = background.scale_alpha(0.5);
+        background = background.scale_alpha(0.85);
     }
 
     // Button is selected
@@ -185,7 +185,7 @@ fn button_appearance(
             icon_color = Color::from(cosmic.on_accent_color());
             text_color = Color::from(cosmic.on_accent_color());
         }
-        background = background.scale_alpha(0.4);
+        background = background.scale_alpha(0.75);
     }
 
     // Button is an item on the desktop
@@ -200,30 +200,41 @@ fn button_appearance(
         let disabled_color = Color::from(
             cosmic.background(theme.transparent).component.on_disabled,
         );
-        icon_color = disabled_color;
-        text_color = disabled_color;
+        if !accent {
+            background = Color::from(
+                cosmic.background(theme.transparent).component.disabled,
+            ).scale_alpha(0.1);
+            icon_color = disabled_color;
+            text_color = disabled_color;
+        }
+        icon_color = icon_color.scale_alpha(0.8);
+        text_color = text_color.scale_alpha(0.8);
         appearance.outline_width = 1.0;
         appearance.outline_color = disabled_color.scale_alpha(0.25);
     }
 
     // Visually indicate hidden items
     if hidden {
-        icon_color = icon_color.scale_alpha(0.85);
-        text_color = icon_color.scale_alpha(0.85);
+        icon_color = icon_color.scale_alpha(0.8);
+        text_color = text_color.scale_alpha(0.8);
     }
 
     // Ensure legibility of text on the backgrounds
-    if background != Color::TRANSPARENT && !text_color.is_readable_on(background) {
+    if !text_color.is_readable_on(background) {
         if Color::from(cosmic.on_bg_color()).is_readable_on(background) {
+            icon_color = Color::from(cosmic.on_bg_color());
             text_color = Color::from(cosmic.on_bg_color());
         }
         else if Color::from(cosmic.on_bg_component_color()).is_readable_on(background) {
+            icon_color = Color::from(cosmic.on_bg_component_color());
             text_color = Color::from(cosmic.on_bg_component_color());
         }
-        else if Color::from_rgba(255.0, 255.0, 255.0, 1.0).is_readable_on(background) {
-            text_color = Color::from_rgba(255.0, 255.0, 255.0, 1.0);
+        else if Color::WHITE.is_readable_on(background) {
+            icon_color = Color::WHITE;
+            text_color = Color::WHITE;
         } else {
-            text_color = Color::from_rgba(0.0, 0.0, 0.0, 1.0);
+            icon_color = Color::BLACK;
+            text_color = Color::BLACK;
         }
     }
 
@@ -5294,10 +5305,9 @@ impl Tab {
             .height(Length::Fill)
             .style(|theme| {
                 let cosmic = theme.cosmic();
-                let mut bg = cosmic.bg_color();
-                bg.alpha = 0.75;
+                let bg = cosmic.bg_color();
                 widget::container::Style {
-                    background: Some(Color::from(bg).into()),
+                    background: Some(Color::from(bg).scale_alpha(0.85).into()),
                     ..Default::default()
                 }
             })
@@ -5747,7 +5757,7 @@ impl Tab {
         };
 
         let (cols, column_spacing) = {
-            let width_m1 = width.saturating_sub(item_width);
+            let width_m1 = width.saturating_sub(item_width + 2 * space_xxs as usize);
             let cols_m1 = width_m1 / (item_width + grid_spacing as usize);
             let cols = cols_m1 + 1;
             let spacing = width_m1
@@ -5822,57 +5832,118 @@ impl Tab {
 
                 // Only build elements if visible (for performance)
                 if item_rect.intersects(&visible_rect) {
-                    let contents = widget::button::custom(
-                            widget::column::with_children([
-                                Element::from(widget::icon::icon(item.icon_handle_grid.clone())
-                                    .content_fit(ContentFit::Contain)
-                                    .size(icon_sizes.grid())),
-                                Element::from(widget::container(widget::tooltip(
-                                    Item::grid_display_name(&item.display_name),
-                                    widget::text::body(&item.name),
-                                    widget::tooltip::Position::Bottom,
-                                ))),
-                            ])
-                            .align_x(Alignment::Center)
-                            .spacing(space_xxs)
-                            .width(Length::Fill)
+                    let contents = widget::column::with_children([
+                        Element::from(widget::container(
+                            widget::icon::icon(item.icon_handle_grid.clone())
+                                .content_fit(ContentFit::Contain)
+                                .size(icon_sizes.grid())
+                        )),
+                        Element::from(widget::container(
+                            widget::tooltip(
+                                Item::grid_display_name(&item.display_name),
+                                widget::text::body(&item.name),
+                                widget::tooltip::Position::Bottom,
+                            )
+                        ).style(|t| {
+                            // TODO: Merge with button_style()
+                            let mut a = widget::container::Style::default();
+                            let c = t.cosmic();
+                            let mut background = Color::from(c.bg_color());
+                            let mut icon_color = Color::from(c.on_bg_component_color());
+                            let mut text_color = Color::from(c.on_bg_component_color());
+
+                            // Button is highlighted (hover, etc)
+                            if item.highlighted {
+                                background = Color::from(c.accent_color());
+                                icon_color = Color::from(c.on_accent_color());
+                                text_color = Color::from(c.on_accent_color());
+                                background = background.scale_alpha(0.75);
+                            }
+
+                            // Button is selected
+                            else if item.selected {
+                                background = Color::from(c.accent_color());
+                                icon_color = Color::from(c.on_accent_color());
+                                text_color = Color::from(c.on_accent_color());
+                                background = background.scale_alpha(0.66);
+                            }
+
+                            // Button is an item on the desktop
+                            else if matches!(self.mode, Mode::Desktop) {
+                                background = Color::from(c.bg_color());
+                                icon_color = Color::from(c.on_bg_color());
+                                text_color = Color::from(c.on_bg_color());
+                            }
+
+                            // Visually indicate hidden items
+                            if item.hidden {
+                                icon_color = icon_color.scale_alpha(0.8);
+                                text_color = text_color.scale_alpha(0.8);
+                            }
+
+                            // Ensure legibility of text on the backgrounds
+                            if !text_color.is_readable_on(background) {
+                                if Color::from(c.on_bg_color()).is_readable_on(background) {
+                                    icon_color = Color::from(c.on_bg_color());
+                                    text_color = Color::from(c.on_bg_color());
+                                }
+                                else if Color::from(c.on_bg_component_color()).is_readable_on(background) {
+                                    icon_color = Color::from(c.on_bg_component_color());
+                                    text_color = Color::from(c.on_bg_component_color());
+                                }
+                                else if Color::WHITE.is_readable_on(background) {
+                                    icon_color = Color::WHITE;
+                                    text_color = Color::WHITE;
+                                } else {
+                                    icon_color = Color::BLACK;
+                                    text_color = Color::BLACK;
+                                }
+                            }
+                            a.icon_color = Some(icon_color);
+                            a.text_color = Some(text_color);
+                            a
+                        })),
+                    ])
+                    .height(Length::Fill)
+                    .width(width as f32)
+                    .align_x(Alignment::Center)
+                    .spacing(space_xxs);
+
+                    let button = |contents| {
+                        let mouse_area = crate::mouse_area::MouseArea::new(
+                            widget::button::custom(contents)
+                                .width(Length::Fill)
+                                .id(item.button_id.clone())
+                                .padding(space_xxs)
+                                .class(button_style(
+                                    item.selected,
+                                    item.highlighted,
+                                    item.cut,
+                                    true,
+                                    item.hidden,
+                                    false,
+                                )),
                         )
-                        .id(item.button_id.clone())
-                        .width(Length::Fill)
-                        .padding(space_xxxs)
-                        .class(button_style(
-                            item.selected,
-                            item.highlighted,
-                            item.cut,
-                            true,
-                            item.hidden,
-                            matches!(self.mode, Mode::Desktop),
-                        ));
-                    // One focus group per grid item (needs custom widget)
-                    let mouse_area = mouse_area::MouseArea::new(contents)
                         .on_press(move |_| Message::Click(Some(i)))
                         .on_double_click(move |_| Message::DoubleClick(Some(i)))
                         .on_release(move |_| Message::ClickRelease(Some(i)))
                         .on_middle_press(move |_| Message::MiddleClick(i))
                         .on_enter(move || Message::HighlightActivate(i))
                         .on_exit(move || Message::HighlightDeactivate(i));
-                    
-                    let button = Element::from(
-                        widget::container(
-                            if self.context_menu.is_some() {
-                                mouse_area
-                            } else {
-                                mouse_area
-                                    .on_right_press_no_capture()
-                                    .wayland_on_right_press_window_position()
-                                    .on_right_press(move |point_opt| {
-                                        Message::RightClick(point_opt, Some(i))
-                                    })
-                            }
-                        ).width(Length::Fill)
-                    );
 
-                    let column = widget::column::with_children([button])
+                        if self.context_menu.is_some() {
+                            mouse_area
+                        } else {
+                            mouse_area
+                                .on_right_press_no_capture()
+                                .wayland_on_right_press_window_position()
+                                .on_right_press(move |point_opt| {
+                                    Message::RightClick(point_opt, Some(i))
+                                })
+                        }
+                    };
+
+                    let column = widget::column::with_children([button(contents).into()])
                         .align_x(Alignment::Center)
                         .height(Length::Fixed(item_height as f32))
                         .width(Length::Fixed(item_width as f32));
@@ -6207,9 +6278,12 @@ impl Tab {
 
                     let row = if condensed {
                         widget::row::with_children([
-                            widget::icon::icon(item.icon_handle_list_condensed.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_size)
+                            widget::container(
+                                widget::icon::icon(item.icon_handle_list_condensed.clone())
+                                    .content_fit(ContentFit::Contain)
+                                    .size(icon_size)
+                                )
+                                .padding([0, 0, 0, space_xxs])
                                 .into(),
                             widget::column::with_children([
                                 Item::list_display_name(item.display_name.clone()).into(),
@@ -6224,9 +6298,12 @@ impl Tab {
                         .spacing(space_xxs)
                     } else if is_search {
                         widget::row::with_children([
-                            widget::icon::icon(item.icon_handle_list_condensed.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_size)
+                            widget::container(
+                                widget::icon::icon(item.icon_handle_list_condensed.clone())
+                                    .content_fit(ContentFit::Contain)
+                                    .size(icon_size)
+                                )
+                                .padding([0, 0, 0, space_xxs])
                                 .into(),
                             widget::column::with_children([
                                 Item::list_display_name(item.display_name.clone()).into(),
@@ -6250,9 +6327,12 @@ impl Tab {
                         .spacing(space_xxs)
                     } else {
                         widget::row::with_children([
-                            widget::icon::icon(item.icon_handle_list.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_size)
+                            widget::container(
+                                widget::icon::icon(item.icon_handle_list.clone())
+                                    .content_fit(ContentFit::Contain)
+                                    .size(icon_size)
+                                )
+                                .padding([0, 0, 0, space_xxs])
                                 .into(),
                             Item::list_display_name(item.display_name.clone())
                                 .width(Length::Fill)
