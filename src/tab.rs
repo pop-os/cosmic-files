@@ -1125,18 +1125,31 @@ pub fn scan_search<F: Fn(SearchItem) -> bool + Sync>(
         return;
     }
 
-    let pattern = regex::escape(term);
-    let regex = match regex::RegexBuilder::new(&pattern)
-        .case_insensitive(true)
-        .build()
-    {
-        Ok(ok) => ok,
+    let glob_value = match globset::Glob::new(term) {
+        Ok(glob) => glob,
         Err(err) => {
-            log::warn!("failed to parse regex {pattern:?}: {err}");
+            log::warn!("failed to parse glob {term:?}: {err}");
             return;
         }
     };
 
+    let pattern = glob_value
+        .regex()
+        .strip_prefix("(?-u)") // avoid errors like `failed to glob2regex with pattern = (?-u)^.*\.toml$, term = *.toml`
+        .unwrap_or(glob_value.regex());
+
+    let regex = match regex::RegexBuilder::new(pattern)
+        .case_insensitive(true)
+        .build()
+    {
+        Ok(regex) => regex,
+        Err(err) => {
+            log::error!(
+                "failed to compile glob regex: pattern={pattern:?}, term={term:?}, error={err}"
+            );
+            return;
+        }
+    };
     match search_location {
         SearchLocation::Path(tab_path) => {
             ignore::WalkBuilder::new(tab_path)
