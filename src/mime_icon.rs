@@ -7,7 +7,48 @@ use std::fs;
 use std::path::Path;
 use std::sync::{LazyLock, Mutex};
 
+use crate::fl;
+
 pub const FALLBACK_MIME_ICON: &str = "text-x-generic";
+
+static MIME_DESCRIPTION_CACHE: LazyLock<Mutex<FxHashMap<(Mime, bool), String>>> =
+    LazyLock::new(|| Mutex::new(FxHashMap::default()));
+
+/// Returns a localized, human-readable description for a MIME type.
+///
+/// This follows Nautilus' detailed type behavior for directories and unknown
+/// files. GIO provides the descriptions from the system shared MIME database.
+pub fn mime_type_description(mime: &Mime, is_executable: bool) -> String {
+    MIME_DESCRIPTION_CACHE
+        .lock()
+        .unwrap()
+        .entry((mime.clone(), is_executable))
+        .or_insert_with(|| mime_type_description_uncached(mime, is_executable))
+        .clone()
+}
+
+fn mime_type_description_uncached(mime: &Mime, _is_executable: bool) -> String {
+    if *mime == "inode/directory" {
+        return fl!("filetype-folder");
+    }
+
+    #[cfg(feature = "gvfs")]
+    {
+        let content_type = mime.essence_str();
+        if gio::content_type_is_unknown(content_type) {
+            return if _is_executable {
+                fl!("filetype-program")
+            } else {
+                fl!("filetype-binary")
+            };
+        }
+
+        gio::content_type_get_description(content_type).to_string()
+    }
+
+    #[cfg(not(feature = "gvfs"))]
+    mime.essence_str().to_string()
+}
 
 #[derive(Debug, Eq, Hash, PartialEq)]
 struct MimeIconKey {
@@ -60,6 +101,28 @@ pub fn mime_for_path(
     remote: bool,
 ) -> Mime {
     mime_guess::from_path(path).first_or_octet_stream()
+}
+
+/// Guesses a MIME type from a filename without opening the file.
+///
+/// This uses the same shared MIME database as [`mime_for_path`] on Unix, which
+/// keeps filter candidates consistent with the MIME values used by scanning.
+#[cfg(unix)]
+pub fn mime_for_name(path: impl AsRef<Path>) -> Option<Mime> {
+    let path = path.as_ref();
+    let file_name = path.file_name()?.to_str()?;
+    MIME_ICON_CACHE
+        .lock()
+        .unwrap()
+        .shared_mime_info
+        .get_mime_types_from_file_name(file_name)
+        .into_iter()
+        .next()
+}
+
+#[cfg(not(unix))]
+pub fn mime_for_name(path: impl AsRef<Path>) -> Option<Mime> {
+    mime_guess::from_path(path).first()
 }
 
 #[cfg(unix)]
@@ -131,4 +194,30 @@ pub fn is_mime_subclass_of(mime_type: &Mime, base: &Mime) -> bool {
     mime_icon_cache
         .shared_mime_info
         .mime_type_subclass(mime_type, base)
+}
+
+#[cfg(unix)]
+pub fn mime_types_equal(a: &Mime, b: &Mime) -> bool {
+    let mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
+    mime_icon_cache.shared_mime_info.mime_type_equal(a, b)
+}
+
+#[cfg(unix)]
+pub fn unalias_mime_type(mime: Mime) -> Mime {
+    MIME_ICON_CACHE
+        .lock()
+        .unwrap()
+        .shared_mime_info
+        .unalias_mime_type(&mime)
+        .unwrap_or(mime)
+}
+
+#[cfg(not(unix))]
+pub fn mime_types_equal(a: &Mime, b: &Mime) -> bool {
+    a == b
+}
+
+#[cfg(not(unix))]
+pub fn unalias_mime_type(mime: Mime) -> Mime {
+    mime
 }

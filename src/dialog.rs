@@ -785,11 +785,24 @@ impl App {
                 };
 
                 search_location.map(|search_location| {
+                    let search_filter = match &self.tab.location {
+                        Location::Search(_, _, _, filter, _) => filter.clone(),
+                        _ => tab::SearchFilter {
+                            recursive: self.flags.config.search_recursive,
+                            text_matching: if self.flags.config.search_content_and_filename {
+                                tab::SearchTextMatching::ContentAndFilename
+                            } else {
+                                tab::SearchTextMatching::FilenameOnly
+                            },
+                            ..tab::SearchFilter::default()
+                        },
+                    };
                     (
                         Location::Search(
                             search_location,
                             term,
                             self.tab.config.show_hidden,
+                            search_filter,
                             Instant::now(),
                         ),
                         true,
