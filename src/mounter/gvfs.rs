@@ -128,19 +128,29 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
         let name = info.name().to_string_lossy().into_owned();
         let display_name = String::from(info.display_name());
 
-        let uri = String::from(file.child(info.name()).uri());
+        let target_uri = info
+            .attribute_as_string(TARGET_URI_ATTRIBUTE)
+            .map(String::from);
+        let child = match &target_uri {
+            Some(target_uri) => gio::File::for_uri(target_uri),
+            None => file.child(info.name()),
+        };
+        let uri = target_uri
+            .clone()
+            .unwrap_or_else(|| String::from(child.uri()));
 
         //TODO: what is the best way to resolve shortcuts?
-        let location = Location::Network(uri, display_name.clone(), file.child(&name).path());
+        let location = Location::Network(uri, display_name.clone(), child.path());
 
         let metadata = if !force_dir && !info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE) {
             let mtime = info.attribute_uint64(gio::FILE_ATTRIBUTE_TIME_MODIFIED);
-            let is_dir = matches!(info.file_type(), gio::FileType::Directory);
-            let size_opt = (!is_dir).then_some(info.size() as u64);
+            let is_dir = matches!(info.file_type(), gio::FileType::Directory)
+                || (matches!(info.file_type(), gio::FileType::Mountable) && target_uri.is_some());
+            let size_opt = (!is_dir).then(|| info.size() as u64);
             let mut children_opt = None;
 
             if is_dir {
-                if let Some(path) = file.child(&name).path() {
+                if let Some(path) = child.path() {
                     //TODO: calculate children in the background (and make it cancellable?)
                     match std::fs::read_dir(&path) {
                         Ok(entries) => {
