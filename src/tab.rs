@@ -2780,6 +2780,7 @@ impl fmt::Debug for SearchContextWrapper {
 pub struct Tab {
     //TODO: make more items private
     pub location: Location,
+    pub search_term: Option<String>,
     pub location_ancestors: Vec<(Location, String)>,
     pub location_title: String,
     pub location_context_menu_point: Option<Point>,
@@ -2927,6 +2928,7 @@ impl Tab {
         let history = vec![location.clone()];
         Self {
             location,
+            search_term: None,
             location_ancestors,
             location_title,
             context_menu: None,
@@ -3479,6 +3481,10 @@ impl Tab {
         self.scroll_opt = None;
         self.select_focus = None;
         self.search_context = None;
+        self.search_term = match &self.location {
+            Location::Search(_, term, ..) => Some(term.clone()),
+            _ => None,
+        };
         if let Some(history_i) = history_i_opt {
             // Navigating in history
             self.history_i = history_i;

@@ -1591,10 +1591,7 @@ impl App {
     fn search_get(&self) -> Option<&str> {
         let entity = self.tab_model.active();
         let tab = self.tab_model.data::<Tab>(entity)?;
-        match &tab.location {
-            Location::Search(_, term, ..) => Some(term),
-            _ => None,
-        }
+        tab.search_term.as_deref()
     }
 
     fn search_set_active(&mut self, term_opt: Option<String>) -> Task<Message> {
@@ -1608,10 +1605,11 @@ impl App {
         term_opt: Option<String>,
         selection_paths: Option<Vec<PathBuf>>,
     ) -> Task<Message> {
+        let focus_field = term_opt.is_some();
         let mut title_location_opt = None;
         if let Some(tab) = self.tab_model.data_mut::<Tab>(tab) {
-            let location_opt = match term_opt {
-                Some(term) => {
+            let location_opt = match &term_opt {
+                Some(term) if !term.is_empty() => {
                     let search_location = if let Some(path) = tab.location.path_opt() {
                         Some(SearchLocation::Path(path.clone()))
                     } else if tab.location.is_recents() {
@@ -1623,45 +1621,44 @@ impl App {
                     };
 
                     search_location.map(|search_location| {
-                        (
-                            Location::Search(
-                                search_location,
-                                term,
-                                tab.config.show_hidden,
-                                Instant::now(),
-                            ),
-                            true,
+                        Location::Search(
+                            search_location,
+                            term.clone(),
+                            tab.config.show_hidden,
+                            Instant::now(),
                         )
                     })
                 }
-                None => match &tab.location {
+                _ => match &tab.location {
                     Location::Search(search_location, ..) => match search_location {
-                        SearchLocation::Path(path) => Some((Location::Path(path.clone()), false)),
-                        SearchLocation::Recents => Some((Location::Recents, false)),
-                        SearchLocation::Trash => Some((Location::Trash, false)),
+                        SearchLocation::Path(path) => Some(Location::Path(path.clone())),
+                        SearchLocation::Recents => Some(Location::Recents),
+                        SearchLocation::Trash => Some(Location::Trash),
                     },
                     _ => None,
                 },
             };
-            if let Some((location, focus_search)) = location_opt {
+            if let Some(location) = location_opt {
                 tab.change_location(&location, None);
-                title_location_opt = Some((tab.title(), tab.location.clone(), focus_search));
+                title_location_opt = Some((tab.title(), tab.location.clone()));
             }
+            tab.search_term = term_opt;
         }
-        if let Some((title, location, focus_search)) = title_location_opt {
+        let focus_task = if focus_field {
+            widget::text_input::focus(self.search_id.clone())
+        } else {
+            Task::none()
+        };
+        if let Some((title, location)) = title_location_opt {
             self.tab_model.text_set(tab, title);
             return Task::batch([
                 self.update_title(),
                 self.update_watcher(),
                 self.rescan_tab(tab, location, selection_paths),
-                if focus_search {
-                    widget::text_input::focus(self.search_id.clone())
-                } else {
-                    Task::none()
-                },
+                focus_task,
             ]);
         }
-        Task::none()
+        focus_task
     }
 
     fn selected_paths(
