@@ -1256,6 +1256,7 @@ impl App {
         if !trash_paths.is_empty() {
             tasks.push(self.operation(Operation::Delete { paths: trash_paths }));
         }
+        tasks.push(self.rescan_recents());
         Task::batch(tasks)
     }
 
@@ -1378,11 +1379,6 @@ impl App {
                         commands.push(self.update_config());
                     }
                 }
-
-                if matches!(op, Operation::RemoveFromRecents { .. }) {
-                    commands.push(self.rescan_recents());
-                }
-
                 self.complete_operations.insert(id, op);
             }
         }
@@ -1400,6 +1396,8 @@ impl App {
         commands.push(self.rescan_operation_selection(op_sel));
         // Manually rescan any trash tabs after any operation is completed
         commands.push(self.rescan_trash());
+        // Manually rescan any Recents tabs after any operation is completed
+        commands.push(self.rescan_recents());
 
         Task::batch(commands)
     }
@@ -1446,6 +1444,8 @@ impl App {
         }
         // Manually rescan any trash tabs after any operation is completed
         tasks.push(self.rescan_trash());
+        // Manually rescan any Recents tabs after any operation is completed
+        tasks.push(self.rescan_recents());
         Task::batch(tasks)
     }
 
@@ -4288,6 +4288,7 @@ impl Application for App {
                                 &last_name,
                                 '.',
                             ),
+                            self.rescan_recents(),
                         ]);
                         return Task::batch(tasks);
                     }
@@ -4312,6 +4313,7 @@ impl Application for App {
             Message::RestoreFromTrash(entity_opt) => {
                 let mut trash_items = Vec::new();
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                let mut tasks = Vec::new();
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity)
                     && let Some(items) = tab.items_opt()
                 {
@@ -4326,8 +4328,10 @@ impl Application for App {
                     }
                 }
                 if !trash_items.is_empty() {
-                    return self.operation(Operation::Restore { items: trash_items });
+                    tasks.push(self.operation(Operation::Restore { items: trash_items }));
                 }
+                tasks.push(self.rescan_recents());
+                return Task::batch(tasks);
             }
             Message::ScrollTab(scroll_speed) => {
                 let entity = self.tab_model.active();
@@ -6877,6 +6881,17 @@ impl Application for App {
                                         {
                                             log::warn!(
                                                 "trash needs to be rescanned but sending message failed: {e:?}"
+                                            );
+                                        }
+
+                                        // Rescan on any event. Keeps the Recents tab synchronised
+                                        if should_rescan
+                                            && let Err(e) = futures::executor::block_on(async {
+                                                output.send(Message::RescanRecents).await
+                                            })
+                                        {
+                                            log::warn!(
+                                                "recents needs to be rescanned but sending message failed: {e:?}"
                                             );
                                         }
                                     }
