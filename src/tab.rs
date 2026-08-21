@@ -1933,6 +1933,10 @@ impl ItemMetadata {
     pub fn children_count(&self) -> Option<&usize> {
         match &self {
             ItemMetadata::Path { children_opt, .. } => children_opt.as_ref(),
+            Self::Trash { metadata, .. } => match &metadata.size {
+                TrashItemSize::Entries(size) => Some(size),
+                TrashItemSize::Bytes(_) => None,
+            },
             #[cfg(feature = "gvfs")]
             ItemMetadata::GvfsPath { children_opt, .. } => children_opt.as_ref(),
             _ => None,
@@ -2668,7 +2672,6 @@ impl Item {
         let mut column = widget::column::with_capacity(3).spacing(space_xxxs);
         column = column.push(widget::text::heading(heading));
 
-        //TODO: translate!
         //TODO: correct display of folder size?
         if let ItemMetadata::Path {
             metadata,
@@ -2677,7 +2680,7 @@ impl Item {
         {
             if metadata.is_dir() {
                 if let Some(children) = children_opt {
-                    column = column.push(widget::text::body(format!("Items: {children}")));
+                    column = column.push(widget::text::body(fl!("items", items = children)));
                 }
             } else {
                 column = column.push(widget::text::body(format!(
@@ -6134,13 +6137,8 @@ impl Tab {
                             children_opt,
                         } => {
                             if metadata.is_dir() {
-                                //TODO: translate
                                 if let Some(children) = children_opt {
-                                    if *children == 1 {
-                                        format!("{children} item")
-                                    } else {
-                                        format!("{children} items")
-                                    }
+                                    fl!("items-count", count = children)
                                 } else {
                                     String::new()
                                 }
@@ -6150,22 +6148,12 @@ impl Tab {
                         }
                         ItemMetadata::Trash { metadata, .. } => match metadata.size {
                             trash::TrashItemSize::Entries(entries) => {
-                                //TODO: translate
-                                if entries == 1 {
-                                    format!("{entries} item")
-                                } else {
-                                    format!("{entries} items")
-                                }
+                                fl!("items-count", count = entries)
                             }
                             trash::TrashItemSize::Bytes(bytes) => format_size(bytes),
                         },
                         ItemMetadata::SimpleDir { entries } => {
-                            //TODO: translate
-                            if *entries == 1 {
-                                format!("{entries} item")
-                            } else {
-                                format!("{entries} items")
-                            }
+                            fl!("items-count", count = entries)
                         }
                         ItemMetadata::SimpleFile { size } => format_size(*size),
                         #[cfg(feature = "gvfs")]
@@ -6175,11 +6163,7 @@ impl Tab {
                             ..
                         } => match children_opt {
                             Some(child_count) => {
-                                if *child_count == 1 {
-                                    format!("{child_count} item")
-                                } else {
-                                    format!("{child_count} items")
-                                }
+                                fl!("items-count", count = child_count)
                             }
                             None => format_size(size_opt.unwrap_or_default()),
                         },
@@ -6555,15 +6539,57 @@ impl Tab {
                 if let Some(items) = self.items_opt()
                     && !items.is_empty()
                 {
+                    let mut dir_count: usize = 0;
+                    let mut dir_items: usize = 0;
+                    let mut file_count: usize = 0;
+                    let mut total_file_size: u64 = 0;
+
+                    for item in items.iter() {
+                        if item.metadata.is_dir() {
+                            dir_count += 1;
+                            if let Some(children) = item.metadata.children_count() {
+                                dir_items = dir_items.saturating_add(*children);
+                            }
+                        } else {
+                            file_count += 1;
+                            total_file_size = total_file_size.saturating_add(
+                                item.metadata.file_size().unwrap_or(0)
+                            );
+                        }
+                    }
                     tab_column = tab_column.push(
                         widget::layer_container(widget::row::with_children([
+                            Element::from(widget::container(
+                                widget::column::with_children([
+                                    Element::from(widget::text::body(
+                                        fl!("files-count-with-size",
+                                            count = file_count,
+                                            size = format_size(total_file_size)
+                                        )
+                                    )),
+                                    Element::from(widget::text::body(
+                                        fl!("dirs-count-with-items",
+                                            count = dir_count, 
+                                            items = dir_items
+                                        )
+                                    )),
+                                ])
+                            )
+                            .height(Length::Fill)
+                            .align_y(Alignment::Center)
+                            .width(Length::Fixed(200.0))),
                             widget::space::horizontal().into(),
-                            widget::button::standard(fl!("empty-trash"))
-                                .on_press(Message::EmptyTrash)
-                                .into(),
+                            Element::from(widget::container(
+                                    widget::button::standard(fl!("empty-trash"))
+                                    .on_press(Message::EmptyTrash),
+                                )
+                                .height(Length::Fill)
+                                .align_y(Alignment::Center)
+                            ),
                         ]))
                         .padding([space_xxs, space_xs])
                         .layer(cosmic_theme::Layer::Primary)
+                        .height(Length::Fixed(50.0 + (space_xxs as f32 * 2.0)))
                         .apply(widget::container)
                         .padding([0, 0, 7, 0]),
                     );
@@ -6573,15 +6599,42 @@ impl Tab {
                 if let Some(items) = self.items_opt()
                     && !items.is_empty()
                 {
+                    let mut dir_count: u64 = 0;
+                    let mut file_count: u64 = 0;
+                    for item in items {
+                        if item.metadata.is_dir() {
+                            dir_count += 1;
+                        } else {
+                            file_count += 1;
+                        }
+                    }
                     tab_column = tab_column.push(
                         widget::layer_container(widget::row::with_children([
+                            Element::from(widget::container(
+                                widget::column::with_children([
+                                    Element::from(widget::text::body(
+                                        fl!("files-count", count = file_count)
+                                    )),
+                                    Element::from(widget::text::body(
+                                        fl!("dirs-count", count = dir_count)
+                                    )),
+                                ])
+                            )
+                            .height(Length::Fill)
+                            .align_y(Alignment::Center)
+                            .width(Length::Fixed(120.0))),
                             widget::space::horizontal().into(),
-                            widget::button::standard(fl!("clear-recents-history"))
+                            Element::from(widget::container(
+                                widget::button::standard(fl!("clear-recents-history"))
                                 .on_press(Message::ClearRecents)
-                                .into(),
+                            )
+                            .height(Length::Fill)
+                            .align_y(Alignment::Center)
+                            ),
                         ]))
                         .padding([space_xxs, space_xs])
                         .layer(cosmic_theme::Layer::Primary)
+                        .height(Length::Fixed(50.0 + (space_xxs as f32 * 2.0)))
                         .apply(widget::container)
                         .padding([0, 0, 7, 0]),
                     );
