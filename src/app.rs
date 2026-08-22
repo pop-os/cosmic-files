@@ -1277,7 +1277,7 @@ impl App {
             .insert(id, (operation.clone(), controller.clone()));
 
         // Use a task to send operations to the compio runtime thread.
-        cosmic::Task::stream(cosmic::iced::stream::channel(4, move |msg_tx| async move {
+        cosmic::Task::stream(cosmic::iced::stream::channel(4, async move |msg_tx| {
             let (tx, rx) = tokio::sync::oneshot::channel();
 
             let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
@@ -6854,7 +6854,7 @@ impl Application for App {
             Subscription::run_with(TypeId::of::<WatcherSubscription>(), |_| {
                 stream::channel(
                     100,
-                    |mut output: futures::channel::mpsc::Sender<Message>| async move {
+                    async |mut output| {
                         let watcher_res = {
                             let mut output = output.clone();
                             new_debouncer(
@@ -6885,9 +6885,9 @@ impl Application for App {
                                         });
 
                                             if !events.is_empty() {
-                                                match futures::executor::block_on(async {
-                                                    output.send(Message::NotifyEvents(events)).await
-                                                }) {
+                                                match futures::executor::block_on(
+                                                    output.send(Message::NotifyEvents(events)),
+                                                ) {
                                                     Ok(()) => {}
                                                     Err(err) => {
                                                         log::warn!(
@@ -6932,11 +6932,11 @@ impl Application for App {
             Subscription::run(|| {
                 stream::channel(
                     1,
-                    |mut output: futures::channel::mpsc::Sender<Message>| async move {
+                    async |mut output| {
                         mime_app::watch(move || {
-                            futures::executor::block_on(async {
-                                _ = output.send(Message::ReloadMimeAppCache).await;
-                            })
+                            _ = futures::executor::block_on(
+                                output.send(Message::ReloadMimeAppCache),
+                            );
                         })
                         .await;
 
@@ -6947,7 +6947,7 @@ impl Application for App {
             Subscription::run_with(TypeId::of::<TrashWatcherSubscription>(), |_| {
                 stream::channel(
                     1,
-                    |mut output: futures::channel::mpsc::Sender<Message>| async move {
+                    async |mut output| {
                         let watcher_res = new_debouncer(
                             time::Duration::from_millis(250),
                             Some(time::Duration::from_millis(250)),
@@ -6961,9 +6961,9 @@ impl Application for App {
                                             events.iter().any(|event| !event.kind.is_access());
 
                                         if should_rescan
-                                            && let Err(e) = futures::executor::block_on(async {
-                                                output.send(Message::RescanTrash).await
-                                            })
+                                            && let Err(e) = futures::executor::block_on(
+                                                output.send(Message::RescanTrash),
+                                            )
                                         {
                                             log::warn!(
                                                 "trash needs to be rescanned but sending message failed: {e:?}"
@@ -7019,7 +7019,7 @@ impl Application for App {
             Subscription::run_with(TypeId::of::<RecentsWatcherSubscription>(), |_| {
                 stream::channel(
                     1,
-                    |mut output: futures::channel::mpsc::Sender<Message>| async move {
+                    async |mut output| {
                         let Some(recents_path) = recently_used_xbel::dir() else {
                             log::warn!(
                                 "failed to watch recents changes: .recently_used.xbel does not exist"
@@ -7041,9 +7041,9 @@ impl Application for App {
                                                 || kind.is_modify()
                                                 || kind.is_remove()
                                                 || kind.is_other()
-                                        }) && let Err(e) = futures::executor::block_on(async {
-                                            output.send(Message::RescanRecents).await
-                                        }) {
+                                        }) && let Err(e) = futures::executor::block_on(
+                                            output.send(Message::RescanRecents),
+                                        ) {
                                             log::warn!(
                                                 "open recents tabs need to be updated but sending message failed: {e:?}"
                                             );
@@ -7134,7 +7134,7 @@ impl Application for App {
                         |_| {
                             stream::channel(
                                 1,
-                                move |mut msg_tx: futures::channel::mpsc::Sender<_>| async move {
+                                async |mut msg_tx| {
                                     tokio::task::spawn_blocking(move || {
                                         match notify_rust::Notification::new()
                                             .summary(&fl!("notification-in-progress"))
@@ -7142,13 +7142,12 @@ impl Application for App {
                                             .show()
                                         {
                                             Ok(notification) => {
-                                                let _ = futures::executor::block_on(async {
+                                                let _ = futures::executor::block_on(
                                                     msg_tx
                                                         .send(Message::Notification(Arc::new(
                                                             Mutex::new(notification),
-                                                        )))
-                                                        .await
-                                                });
+                                                        ))),
+                                                );
                                             }
                                             Err(err) => {
                                                 log::warn!("failed to create notification: {err}");

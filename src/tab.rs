@@ -6,7 +6,7 @@ use cosmic::iced::alignment::Vertical;
 use cosmic::iced::clipboard::dnd::DndAction;
 use cosmic::iced::core::mouse::ScrollDelta;
 use cosmic::iced::core::widget::tree;
-use cosmic::iced::futures::{self, SinkExt};
+use cosmic::iced::futures::SinkExt;
 use cosmic::iced::keyboard::Modifiers;
 use cosmic::iced::widget::scrollable::{self, AbsoluteOffset, Viewport};
 use cosmic::iced::widget::{rule, stack};
@@ -7034,7 +7034,7 @@ impl Tab {
                             } = wrapper.clone();
                             stream::channel(
                                 1,
-                                move |mut output: futures::channel::mpsc::Sender<_>| async move {
+                                async move |mut output| {
                                     while crate::operation::is_actively_writing_to(&path) {
                                         crate::operation::actively_writing_tick().await;
                                     }
@@ -7121,7 +7121,7 @@ impl Tab {
                                 |Wrapper { path, controller }| {
                                     let path = path.clone();
                                     let controller = controller.clone();
-                                    stream::channel(1, |mut output: futures::channel::mpsc::Sender<_>| async move {
+                                    stream::channel(1, async move |mut output| {
                                         let message = {
                                             let start = Instant::now();
                                             match calculate_dir_size(&path, controller).await {
@@ -7199,7 +7199,7 @@ impl Tab {
                     let wrapper = wrapper.clone();
                     stream::channel(
                         2,
-                        move |mut output: futures::channel::mpsc::Sender<Message>| async move {
+                        async move |mut output| {
                             let Wrapper {
                                 location,
                                 search_location,
@@ -7296,7 +7296,7 @@ impl Tab {
                     let path = path.clone();
                     stream::channel(
                         1,
-                        |mut output: futures::channel::mpsc::Sender<_>| async move {
+                        async move |mut output| {
                             let message = {
                                 let path = path.clone();
                                 tokio::task::spawn_blocking(move || {
