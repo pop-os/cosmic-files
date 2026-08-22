@@ -421,6 +421,7 @@ pub enum Message {
     PendingPause(u64, bool),
     PendingPauseAll(bool),
     PermanentlyDelete(Option<Entity>),
+    PendingRestore,
     Preview(Option<Entity>),
     ReloadMimeAppCache,
     ReorderTab(ReorderEvent),
@@ -745,6 +746,7 @@ pub struct App {
     progress_operations: BTreeSet<u64>,
     complete_operations: BTreeMap<u64, Operation>,
     failed_operations: BTreeMap<u64, (Operation, Controller, String)>,
+    progress_operations_dismiss: bool,
     scrollable_id: widget::Id,
     search_id: widget::Id,
     size: Option<Size>,
@@ -1264,6 +1266,10 @@ impl App {
         let controller = Controller::default();
         let compio_tx = self.compio_tx.clone();
 
+        // Reset dismissal for each new operation queue
+        if self.pending_operation_id == 0 {
+            self.progress_operations_dismiss = false;
+        }
         self.pending_operation_id += 1;
         if operation.show_progress_notification() {
             self.progress_operations.insert(id);
@@ -2444,6 +2450,7 @@ impl Application for App {
             progress_operations: BTreeSet::new(),
             complete_operations: BTreeMap::new(),
             failed_operations: BTreeMap::new(),
+            progress_operations_dismiss: false,
             scrollable_id: widget::Id::new("File Scrollable"),
             search_id: widget::Id::new("File Search"),
             size: None,
@@ -4136,7 +4143,10 @@ impl Application for App {
                 return self.handle_completed_operations(vec![(id, op_sel)]);
             }
             Message::PendingDismiss => {
-                self.progress_operations.clear();
+                self.progress_operations_dismiss = true;
+            }
+            Message::PendingRestore => {
+                self.progress_operations_dismiss = false;
             }
             Message::PendingError(id, err) => {
                 return self.handle_operation_errors(vec![(id, err)]);
@@ -6347,7 +6357,9 @@ impl Application for App {
     }
 
     fn footer(&self) -> Option<Element<'_, Message>> {
-        if self.progress_operations.is_empty() {
+        if self.progress_operations.is_empty() 
+            || self.progress_operations_dismiss
+        {
             return None;
         }
 
@@ -6472,8 +6484,9 @@ impl Application for App {
     }
 
     fn header_end(&self) -> Vec<Element<'_, Self::Message>> {
-        let mut elements = Vec::with_capacity(2);
-
+        let mut elements = Vec::<Element<'_, Self::Message>>::new();
+        
+        // Search icon / input
         if let Some(term) = self.search_get() {
             if self.core.is_condensed() {
                 elements.push(
@@ -6500,6 +6513,65 @@ impl Application for App {
                     .on_press(Message::SearchActivate)
                     .padding(8)
                     .into(),
+            );
+        }
+
+        // Progress Icon for long-runing operations
+        if !self.progress_operations.is_empty()
+        {
+            let mut title = String::new();
+            let mut total_progress = 0.0;
+            let mut count = 0;
+            for (op, controller) in self.pending_operations.values() {
+                if op.show_progress_notification() {
+                    let progress = controller.progress();
+                    if title.is_empty() {
+                        title = op.pending_text(progress, controller.state());
+                    }
+                    total_progress += progress;
+                    count += 1;
+                }
+            }
+            let running = count;
+            // Adjust the progress bar so it does not jump around when operations finish
+            for id in &self.progress_operations {
+                if self.complete_operations.contains_key(id) {
+                    total_progress += 1.0;
+                    count += 1;
+                }
+            }
+            let finished = count - running;
+            total_progress /= count as f32;
+            if running >= 1 && (running > 1 || finished > 0) {
+                if finished > 0 {
+                    title = fl!(
+                        "operations-running-finished",
+                        running = running,
+                        finished = finished,
+                        percent = ((total_progress * 100.0) as i32)
+                    );
+                } else {
+                    title = fl!(
+                        "operations-running",
+                        running = running,
+                        percent = ((total_progress * 100.0) as i32)
+                    );
+                }
+            }
+            elements.push(
+                widget::button::custom(
+                    widget::container(
+                        widget::tooltip(
+                            widget::indeterminate_circular().size(20.0),
+                            widget::text::body(title),
+                            widget::tooltip::Position::Bottom,
+                        )
+                    )
+                )
+                .class(theme::Button::Icon)
+                .on_press(Message::PendingRestore)
+                .padding(4)
+                .into()
             );
         }
 
