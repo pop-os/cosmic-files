@@ -49,7 +49,7 @@ use std::future::Future;
 use std::num::NonZeroU16;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{Arc, LazyLock};
 use std::time::{self, Duration, Instant};
 use std::{env, fmt, fs, io, process};
 use tokio::sync::mpsc;
@@ -386,7 +386,7 @@ pub enum Message {
     NetworkResult(MounterKey, String, Result<bool, String>),
     NewItem(Option<Entity>, bool),
     #[cfg(feature = "notify")]
-    Notification(Arc<Mutex<notify_rust::NotificationHandle>>),
+    Notification(Arc<notify_rust::NotificationHandle>),
     NotifyEvents(Vec<DebouncedEvent>),
     NotifyWatcher(WatcherWrapper),
     OpenTerminal(Option<Entity>),
@@ -742,7 +742,7 @@ pub struct App {
     network_drive_connecting: Option<(MounterKey, String)>,
     network_drive_input: String,
     #[cfg(feature = "notify")]
-    notification_opt: Option<Arc<Mutex<notify_rust::NotificationHandle>>>,
+    notification_opt: Option<Arc<notify_rust::NotificationHandle>>,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     overlap: FxHashMap<String, (window::Id, Rectangle)>,
     pending_operation_id: u64,
@@ -1277,16 +1277,14 @@ impl App {
             .insert(id, (operation.clone(), controller.clone()));
 
         // Use a task to send operations to the compio runtime thread.
-        cosmic::Task::stream(cosmic::iced::stream::channel(4, move |msg_tx| async move {
+        cosmic::Task::stream(cosmic::iced::stream::channel(4, async move |mut msg_tx| {
             let (tx, rx) = tokio::sync::oneshot::channel();
-
-            let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
 
             let msg_tx_clone = msg_tx.clone();
 
             _ = compio_tx
                 .send(Box::pin(async move {
-                    let msg = match operation.perform(&msg_tx_clone, controller).await {
+                    let msg = match operation.perform(msg_tx_clone, controller).await {
                         Ok(result_paths) => Message::PendingComplete(id, result_paths),
                         Err(err) => Message::PendingError(id, err),
                     };
@@ -1296,7 +1294,7 @@ impl App {
                 .await;
 
             if let Ok(msg) = rx.await {
-                let _ = msg_tx.lock().await.send(msg).await;
+                let _ = msg_tx.send(msg).await;
             }
         }))
         .map(cosmic::Action::App)
@@ -1872,8 +1870,7 @@ impl App {
                 return Task::future(async move {
                     tokio::task::spawn_blocking(move || {
                         //TODO: this is nasty
-                        let notification_mutex = Arc::try_unwrap(notification_arc).unwrap();
-                        let notification = notification_mutex.into_inner().unwrap();
+                        let notification = Arc::try_unwrap(notification_arc).unwrap();
                         notification.close();
                     })
                     .await
@@ -7145,7 +7142,7 @@ impl Application for App {
                                                 let _ = futures::executor::block_on(async {
                                                     msg_tx
                                                         .send(Message::Notification(Arc::new(
-                                                            Mutex::new(notification),
+                                                            notification,
                                                         )))
                                                         .await
                                                 });

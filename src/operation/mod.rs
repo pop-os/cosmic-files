@@ -9,8 +9,7 @@ use std::fmt::Formatter;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use tokio::sync::{Mutex as TokioMutex, mpsc};
+use tokio::sync::mpsc;
 use walkdir::WalkDir;
 use zip::AesMode::Aes256;
 
@@ -27,7 +26,7 @@ use self::recursive::{Context, Method};
 pub mod recursive;
 
 async fn handle_replace(
-    msg_tx: Arc<TokioMutex<Sender<Message>>>,
+    mut msg_tx: Sender<Message>,
     file_from: PathBuf,
     file_to: PathBuf,
     multiple: bool,
@@ -51,8 +50,6 @@ async fn handle_replace(
 
     let (tx, mut rx) = mpsc::channel(1);
     let _ = msg_tx
-        .lock()
-        .await
         .send(Message::DialogPush(
             DialogPage::Replace {
                 from: item_from,
@@ -90,7 +87,7 @@ async fn copy_or_move(
     paths: Vec<PathBuf>,
     to: PathBuf,
     method: Method,
-    msg_tx: &Arc<TokioMutex<Sender<Message>>>,
+    msg_tx: Sender<Message>,
     controller: Controller,
 ) -> Result<OperationSelection, OperationError> {
     let msg_tx = msg_tx.clone();
@@ -651,7 +648,7 @@ impl Operation {
     /// Perform the operation
     pub async fn perform(
         self,
-        msg_tx: &Arc<TokioMutex<Sender<Message>>>,
+        msg_tx: Sender<Message>,
         controller: Controller,
     ) -> Result<OperationSelection, OperationError> {
         let controller_clone = controller.clone();
@@ -1280,7 +1277,6 @@ mod tests {
     use cosmic::iced::futures::{StreamExt, future};
     use log::debug;
     use test_log::test;
-    use tokio::sync;
 
     use super::{Controller, Operation, OperationError, OperationSelection, ReplaceResult};
     use crate::app::test_utils::{
@@ -1297,18 +1293,9 @@ mod tests {
     ) -> Result<OperationSelection, OperationError> {
         let id = fastrand::u64(0..u64::MAX);
         let (tx, mut rx) = mpsc::channel(1);
-        let paths_clone = paths.clone();
-        let to_clone = to.clone();
 
         // Wrap this into its own future so that it may be polled concurerntly with the message handler.
-        let handle_copy = async move {
-            Operation::Copy {
-                paths: paths_clone,
-                to: to_clone,
-            }
-            .perform(&sync::Mutex::new(tx).into(), Controller::default())
-            .await
-        };
+        let handle_copy = Operation::Copy { paths, to }.perform(tx, Controller::default());
 
         // Concurrently handling messages will prevent the mpsc channel from blocking when full.
         let handle_messages = async move {
