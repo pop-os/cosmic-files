@@ -372,6 +372,7 @@ paste = Paste
 select-all = Select all
 
 ## View
+zoom = Zoom
 zoom-in = Zoom in
 default-size = Default size
 zoom-out = Zoom out
