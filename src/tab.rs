@@ -2355,6 +2355,7 @@ impl Item {
     ) -> widget::Text<'a, cosmic::Theme, cosmic::Renderer> {
         widget::text::body(name)
             .wrapping(text::Wrapping::WordOrGlyph)
+            .align_x(text::Alignment::Center)
             .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
                 3,
             )))
