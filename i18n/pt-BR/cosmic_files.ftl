@@ -109,6 +109,10 @@ permanently-delete-warning = Deseja realmente excluir permanentemente { $target 
 rename-file = Renomear arquivo
 rename-folder = Renomear pasta
 
+## Change Sidebar Label Dialog
+
+sidebar-label = Rótulo da barra lateral
+
 ## Replace Dialog
 
 replace = Substituir
@@ -350,7 +354,7 @@ light = Estilo claro
 
 ### Type to Search
 
-type-to-search = Digite para pesquisar
+type-to-search = Digitar para pesquisar
 type-to-search-recursive = Pesquisa na pasta atual e em todas as subpastas
 type-to-search-enter-path = Insere o caminho do diretório ou arquivo
 # Context menu
@@ -365,6 +369,7 @@ open-in-terminal = Abrir no terminal
 move-to-trash = Mover para a lixeira
 restore-from-trash = Restaurar da lixeira
 remove-from-sidebar = Remover da barra lateral
+change-sidebar-label = Alterar rótulo na barra lateral
 sort-by-name = Ordenar por nome
 sort-by-modified = Ordenar por data de modificação
 sort-by-size = Ordenar por tamanho
