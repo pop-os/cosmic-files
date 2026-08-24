@@ -217,6 +217,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
             dir_size: DirSize::NotDirectory,
             cut: false,
             checksums: ChecksumState::default(),
+            is_symlink: info.boolean(gio::FILE_ATTRIBUTE_STANDARD_IS_SYMLINK),
         });
     }
     Ok(items)
