@@ -18,6 +18,15 @@ use crate::tab::{self, ChecksumState, DirSize, ItemMetadata, ItemThumbnail, Loca
 
 const TARGET_URI_ATTRIBUTE: &str = "standard::target-uri";
 
+// Attributes requested when listing a network directory.
+const SCAN_ATTRIBUTES: &str = "standard::name,\
+standard::display-name,\
+standard::type,\
+standard::size,\
+standard::icon,\
+standard::is-hidden,\
+time::modified";
+
 fn resolve_uri(uri: &str) -> (String, gio::File) {
     let file = gio::File::for_uri(uri);
     // Resolve the target-uri if it exists
@@ -119,9 +128,27 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
         Box::from([])
     };
 
+    // `filesystem::remote` belongs to the filesystem namespace, which `enumerate_children`
+    // never fills in, so it has to be queried once for the directory being listed.
+    let remote = file
+        .query_filesystem_info(
+            gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE,
+            gio::Cancellable::NONE,
+        )
+        .map(|info| info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE))
+        .unwrap_or_else(|err| {
+            log::warn!("failed to get GIO filesystem info for {uri}: {err}");
+            // Assume remote, so per-entry work is skipped rather than retried
+            true
+        });
+
     let mut items = Vec::new();
     for info_res in file
-        .enumerate_children("*", gio::FileQueryInfoFlags::NONE, gio::Cancellable::NONE)
+        .enumerate_children(
+            SCAN_ATTRIBUTES,
+            gio::FileQueryInfoFlags::NONE,
+            gio::Cancellable::NONE,
+        )
         .map_err(err_str)?
     {
         let info = info_res.map_err(err_str)?;
@@ -133,13 +160,17 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
         //TODO: what is the best way to resolve shortcuts?
         let location = Location::Network(uri, display_name.clone(), file.child(&name).path());
 
-        let metadata = if !force_dir && !info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE) {
+        let metadata = if force_dir {
+            ItemMetadata::SimpleDir { entries: 0 }
+        } else {
             let mtime = info.attribute_uint64(gio::FILE_ATTRIBUTE_TIME_MODIFIED);
             let is_dir = matches!(info.file_type(), gio::FileType::Directory);
             let size_opt = (!is_dir).then_some(info.size() as u64);
             let mut children_opt = None;
 
-            if is_dir {
+            // Counting children costs a directory listing per entry, which is far too
+            // expensive on a remote filesystem
+            if is_dir && !remote {
                 if let Some(path) = file.child(&name).path() {
                     //TODO: calculate children in the background (and make it cancellable?)
                     match std::fs::read_dir(&path) {
@@ -159,9 +190,8 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
                 mtime,
                 size_opt,
                 children_opt,
+                is_dir,
             }
-        } else {
-            ItemMetadata::SimpleDir { entries: 0 }
         };
 
         let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) = {
