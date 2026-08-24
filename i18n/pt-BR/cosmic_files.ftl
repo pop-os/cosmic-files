@@ -354,7 +354,7 @@ light = Estilo claro
 
 ### Type to Search
 
-type-to-search = Digite para pesquisar
+type-to-search = Digitar para pesquisar
 type-to-search-recursive = Pesquisa na pasta atual e em todas as subpastas
 type-to-search-enter-path = Insere o caminho do diretório ou arquivo
 # Context menu
