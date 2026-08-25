@@ -5,7 +5,7 @@ no-results = Fandt ingen resultater
 filesystem = Filsystem
 home = Hjem
 networks = Netværk
-notification-in-progress = Fil-operationer er igang.
+notification-in-progress = Fil-operationer er igang
 trash = Papirkurv
 recents = Seneste
 undo = Fortryd
@@ -69,7 +69,7 @@ name-no-slashes = Navn må ikke indeholde skråstreger
 
 ## Open/Save Dialog
 
-cancel = Annuller
+cancel = Afbryd
 create = Opret
 open = Åbn
 open-file = Åbn fil
@@ -95,7 +95,7 @@ rename-folder = Omdøb mappe
 ## Replace Dialog
 
 replace = Erstat
-replace-title = "{ $filename }" eksisterer allerede i denne placering.
+replace-title = "{ $filename }" eksisterer allerede i denne placering
 replace-warning = Ønsker du at erstatte den med den, du er ved at gemme? Erstatning af den vil overskrive dens indhold.
 replace-warning-operation = Ønsker du at erstatte den? Erstatning af den vil overskrive dens indhold.
 original-file = Original fil
@@ -253,7 +253,7 @@ light = Lyst
 # Context menu
 add-to-sidebar = Tilføj til sidebjælke
 compress = Komprimer…
-extract-here = Extract
+extract-here = Uddrag
 new-file = Ny fil...
 new-folder = Ny mappe...
 open-in-terminal = Åbn i terminal
@@ -332,7 +332,7 @@ deleted =
     Slettede { $items } { $items ->
         [one] element
        *[other] elementer
-    } fra papirkurven
+    } fra { trash }
 removing-from-recents =
     Fjerner { $items } { $items ->
         [one] element
@@ -360,7 +360,7 @@ remove = Fjern
 context-action = Konteksthandling
 context-action-confirm-title = Kør “{ $name }”?
 context-action-confirm-warning =
-    This will run on { $items } { $items ->
+    Dette vil køre på { $items } { $items ->
         [one] item
        *[other] items
     }.
