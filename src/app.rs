@@ -70,7 +70,8 @@ use crate::key_bind::key_binds;
 use crate::localize::LANGUAGE_SORTER;
 use crate::mime_app::{self, MimeApp, MimeAppCache, MimeAppMatch};
 use crate::mounter::{
-    MOUNTERS, MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage,
+    DiskUsage, DiskUsageLevel, MOUNTERS, MounterAuth, MounterItem, MounterItems, MounterKey,
+    MounterMessage,
 };
 use crate::operation::{
     Controller, Operation, OperationError, OperationErrorType, OperationSelection, ReplaceResult,
@@ -1774,9 +1775,7 @@ impl App {
 
         for (favorite_i, favorite) in self.config.favorites.iter().enumerate() {
             if let Some(path) = favorite.path_opt() {
-                let name = favorite
-                    .display_name()
-                    .unwrap_or_else(|| fl!("filesystem"));
+                let name = favorite.display_name().unwrap_or_else(|| fl!("filesystem"));
                 nav_model = nav_model.insert(move |b| {
                     b.text(name.clone())
                         .icon(
@@ -1846,8 +1845,11 @@ impl App {
                 if let Some(icon) = item.icon(true) {
                     b = b.icon(icon::icon(icon).size(16));
                 }
-                if item.is_mounted() {
+                if item.can_unmount() {
                     b = b.closable();
+                }
+                if let Some(disk_usage) = item.disk_usage() {
+                    b = b.data(disk_usage);
                 }
                 if i == 0 {
                     b = b.divider_above();
@@ -2530,31 +2532,114 @@ impl Application for App {
 
         let nav_model = self.nav_model()?;
 
-        let mut nav = cosmic::widget::nav_bar(nav_model, |entity| {
-            cosmic::Action::Cosmic(cosmic::app::Action::NavBar(entity))
-        })
-        .drag_id(self.nav_drag_id)
-        .on_dnd_enter(|entity, _| cosmic::Action::App(Message::DndEnterNav(entity)))
-        .on_dnd_leave(|_| cosmic::Action::App(Message::DndExitNav))
-        .on_dnd_drop(|entity, data, action| {
-            cosmic::Action::App(Message::DndDropNav(entity, data, action))
-        })
-        .on_context(|entity| cosmic::Action::App(Message::NavBarContext(entity)))
-        .on_close(|entity| cosmic::Action::App(Message::NavBarClose(entity)))
-        .on_middle_press(|entity| {
-            cosmic::Action::App(Message::NavMenuAction(NavMenuAction::OpenInNewTab(entity)))
-        })
-        .context_menu(self.nav_context_menu())
-        .close_icon(icon::from_name("media-eject-symbolic").size(16).icon());
+        let cosmic_theme::Spacing {
+            space_s, space_xxs, ..
+        } = theme::spacing();
+        const BUTTON_HEIGHT: u16 = 40;
+
+        #[allow(unused_mut)]
+        let mut segmented = segmented_button::vertical(nav_model)
+            .on_activate(|entity| cosmic::Action::Cosmic(cosmic::app::Action::NavBar(entity)))
+            .drag_id(self.nav_drag_id)
+            .on_dnd_enter(|entity, _| cosmic::Action::App(Message::DndEnterNav(entity)))
+            .on_dnd_leave(|_| cosmic::Action::App(Message::DndExitNav))
+            .on_dnd_drop(|entity, data, action| {
+                cosmic::Action::App(Message::DndDropNav(entity, data, action))
+            })
+            .on_context(|entity| cosmic::Action::App(Message::NavBarContext(entity)))
+            .on_close(|entity| cosmic::Action::App(Message::NavBarClose(entity)))
+            .on_middle_press(|entity| {
+                cosmic::Action::App(Message::NavMenuAction(NavMenuAction::OpenInNewTab(entity)))
+            })
+            .context_menu(self.nav_context_menu())
+            .close_icon(icon::from_name("media-eject-symbolic").size(16).icon())
+            .button_height(BUTTON_HEIGHT)
+            .button_padding([space_s, space_xxs, space_s, space_xxs])
+            .button_spacing(space_xxs)
+            .spacing(space_xxs)
+            .style(theme::SegmentedButton::NavBar);
 
         #[cfg(feature = "wayland")]
         {
-            nav = nav
+            segmented = segmented
                 .window_id_maybe(self.core().main_window_id())
                 .on_surface_action(|m| cosmic::Action::Cosmic(cosmic::app::Action::Surface(m)))
         }
 
-        let mut nav = nav.into_container();
+        let mut usage_overlay = widget::column::with_capacity(nav_model.len() * 3);
+        for (i, entity) in nav_model.iter().enumerate() {
+            if i > 0 {
+                usage_overlay = usage_overlay
+                    .push(widget::space::vertical().height(Length::Fixed(f32::from(space_xxs))));
+                if nav_model.divider_above(entity).unwrap_or(false) {
+                    usage_overlay = usage_overlay.push(
+                        widget::space::vertical().height(Length::Fixed(1.0 + f32::from(space_xxs))),
+                    );
+                }
+            }
+
+            let usage_row: Element<'_, cosmic::Action<Message>> = if let Some(usage) =
+                nav_model.data::<DiskUsage>(entity)
+            {
+                let horizontal_inset = f32::from(space_s + 16 + space_xxs);
+                widget::column::with_children([
+                        widget::space::vertical().height(Length::Fill).into(),
+                        widget::row::with_children([
+                            widget::space::horizontal()
+                                .width(Length::Fixed(horizontal_inset))
+                                .into(),
+                            iced::widget::progress_bar(0.0..=1.0, usage.fraction())
+                                .girth(3)
+                                .length(Length::Fill)
+                                .class(match usage.level() {
+                                    DiskUsageLevel::Normal => theme::ProgressBar::Primary,
+                                    DiskUsageLevel::Warning => {
+                                        theme::ProgressBar::custom(|app_theme| {
+                                            let mut style = <cosmic::Theme as iced::widget::progress_bar::Catalog>::style(
+                                                app_theme,
+                                                &theme::ProgressBar::Primary,
+                                            );
+                                            style.bar = iced::Color::from(
+                                                app_theme.cosmic().warning_color(),
+                                            )
+                                            .into();
+                                            style
+                                        })
+                                    }
+                                    DiskUsageLevel::Critical => theme::ProgressBar::Danger,
+                                })
+                                .into(),
+                            widget::space::horizontal()
+                                .width(Length::Fixed(horizontal_inset))
+                                .into(),
+                        ])
+                        .into(),
+                        widget::space::vertical().height(Length::Fixed(4.0)).into(),
+                    ])
+                    .height(Length::Fixed(f32::from(BUTTON_HEIGHT)))
+                    .into()
+            } else {
+                widget::space::vertical()
+                    .height(Length::Fixed(f32::from(BUTTON_HEIGHT)))
+                    .into()
+            };
+            usage_overlay = usage_overlay.push(usage_row);
+        }
+
+        let layered_nav = iced::widget::Stack::with_children([
+            Element::from(segmented),
+            Element::from(usage_overlay),
+        ])
+        .width(Length::Fill);
+        let nav = widget::container(layered_nav).padding(space_xxs);
+        let nav = widget::scrollable(nav)
+            .class(cosmic::style::iced::Scrollable::Minimal)
+            .height(Length::Fill);
+        let mut nav = widget::container(nav)
+            .height(Length::Fill)
+            .class(theme::Container::custom(
+                cosmic::widget::nav_bar::nav_bar_style,
+            ));
 
         if !self.core.is_condensed() {
             nav = nav.max_width(280);
@@ -5309,16 +5394,10 @@ impl Application for App {
                 }
 
                 NavMenuAction::ChangeSidebarLabel(entity) => {
-                    if let Some(favorite) = self
-                        .nav_model
-                        .data::<FavoriteIndex>(entity)
-                        .and_then(|FavoriteIndex(favorite_i)| {
-                            self.config.favorites.get(*favorite_i)
-                        })
-                    {
-                        let label = favorite
-                            .display_name()
-                            .unwrap_or_else(|| fl!("filesystem"));
+                    if let Some(favorite) = self.nav_model.data::<FavoriteIndex>(entity).and_then(
+                        |FavoriteIndex(favorite_i)| self.config.favorites.get(*favorite_i),
+                    ) {
+                        let label = favorite.display_name().unwrap_or_else(|| fl!("filesystem"));
                         return Task::batch([
                             self.dialog_pages
                                 .push_back(DialogPage::ChangeSidebarLabel { entity, label }),

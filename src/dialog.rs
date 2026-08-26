@@ -924,7 +924,7 @@ impl App {
                 if let Some(icon) = item.icon(true) {
                     b = b.icon(widget::icon::icon(icon).size(16));
                 }
-                if item.is_mounted() {
+                if item.can_unmount() {
                     b = b.closable();
                 }
                 if i == 0 {

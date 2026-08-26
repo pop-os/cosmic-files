@@ -7156,8 +7156,7 @@ impl Tab {
                                         let path = path.clone();
 
                                         // Acquire semaphore permit
-                                        let _permit =
-                                            THUMB_SEMAPHORE.acquire().await.unwrap();
+                                        let _permit = THUMB_SEMAPHORE.acquire().await.unwrap();
 
                                         tokio::task::spawn_blocking(move || {
                                             let start = Instant::now();
