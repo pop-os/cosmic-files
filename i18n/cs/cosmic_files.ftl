@@ -428,3 +428,6 @@ context-action-confirm-warning =
     }.
 run = Spustit
 rename-confirm = Přejmenovat
+checksum = Kontrolní součet { $kind }
+calculate = Vypočítat
+error = Chyba

@@ -84,7 +84,7 @@ settings = الإعدادات
 ### Appearance
 
 appearance = المظهر
-theme = النسق
+theme = السمة
 match-desktop = طابق سطح المكتب
 dark = داكن
 light = فاتح
@@ -110,7 +110,7 @@ new-tab = لسان جديد
 new-window = نافذة جديدة
 rename = غيِّر الاسم...
 close-tab = أغلق اللسان
-quit = أنهِ
+quit = إنهِ
 
 ## Edit
 
@@ -147,7 +147,7 @@ icon-size-and-spacing = حجم الأيقونة والتباعد
 icon-size = حجم الأيقونة
 grid-spacing = تباعد شبكي
 trashed-on = مهمل
-details = التفاصيل
+details = تفاصيل
 pause = ألبث
 resume = استئناف
 create-archive = أنشئ أرشيف
@@ -383,3 +383,7 @@ context-action-confirm-warning =
        *[other] عنصر
     }.
 run = شغِّل
+checksum = تدقيق المجموع { $kind }
+calculate = احسب
+error = خطأ
+rename-confirm = أعد التسمية

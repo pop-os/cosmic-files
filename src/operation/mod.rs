@@ -967,11 +967,13 @@ impl Operation {
                 password,
             } => {
                 let controller_clone = controller.clone();
-                compio::runtime::spawn_blocking(
-                    move || -> Result<OperationSelection, OperationError> {
+                compio::runtime::spawn(async move {
+                    let extracted = compio::runtime::spawn_blocking(move || {
                         let controller = controller_clone;
                         let total_paths = paths.len();
                         let mut op_sel = OperationSelection::default();
+                        let mut written_files = Vec::new();
+                        let mut target_dirs = std::collections::HashSet::new();
                         for (i, path) in paths.iter().enumerate() {
                             futures::executor::block_on(async {
                                 controller
@@ -995,16 +997,32 @@ impl Operation {
                                 op_sel.ignored.push(path.clone());
                                 op_sel.selected.push(new_dir.clone());
 
-                                crate::archive::extract(path, &new_dir, &password, &controller)?;
+                                let (files, dirs) = crate::archive::extract(
+                                    path,
+                                    &new_dir,
+                                    &password,
+                                    &controller,
+                                )?;
+                                written_files.extend(files);
+                                target_dirs.extend(dirs);
                             }
                         }
 
-                        Ok(op_sel)
-                    },
-                )
+                        Ok::<_, OperationError>((op_sel, written_files, target_dirs))
+                    })
+                    .await
+                    .map_err(wrap_compio_spawn_error)??;
+
+                    let (op_sel, written_files, target_dirs) = extracted;
+                    if !written_files.is_empty() || !target_dirs.is_empty() {
+                        sync_to_disk(written_files, target_dirs).await;
+                    }
+
+                    Ok::<_, OperationError>(op_sel)
+                })
+                .await
+                .map_err(wrap_compio_spawn_error)?
             }
-            .await
-            .map_err(wrap_compio_spawn_error)?,
             Self::Move {
                 paths,
                 to,
@@ -1138,10 +1156,26 @@ impl Operation {
 
                     paths.push(item.original_path());
 
-                    compio::runtime::spawn_blocking(|| trash::os_limited::restore_all([item]))
-                        .await
-                        .map_err(wrap_compio_spawn_error)?
-                        .map_err(|e| OperationError::from_err(e, &controller))?;
+                    // Items with .trashinfo id use standard restore; sub-items use manual move
+                    if item
+                        .id
+                        .to_str()
+                        .map_or(false, |s| s.ends_with(".trashinfo"))
+                    {
+                        compio::runtime::spawn_blocking(|| trash::os_limited::restore_all([item]))
+                            .await
+                            .map_err(wrap_compio_spawn_error)?
+                            .map_err(|e| OperationError::from_err(e, &controller))?;
+                    } else {
+                        let from = PathBuf::from(&item.id);
+                        let to = item.original_path();
+                        if let Some(parent) = to.parent() {
+                            std::fs::create_dir_all(parent)
+                                .map_err(|e| OperationError::from_err(e, &controller))?;
+                        }
+                        std::fs::rename(&from, &to)
+                            .map_err(|e| OperationError::from_err(e, &controller))?;
+                    }
                 }
                 Ok(OperationSelection {
                     ignored: Vec::new(),

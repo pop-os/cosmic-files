@@ -12,7 +12,7 @@ undo = 復原
 today = 今天
 # List view
 name = 名稱
-modified = 修改日期
+modified = 修改時間
 size = 大小
 
 # Dialogs
@@ -161,8 +161,8 @@ moved =
         [one] 項目
        *[other] 項目
     } 從「{ $from }」至「{ $to }」
-renaming = 正在重新命名「{ $from }」至「{ $to }」
-renamed = 已經重新命名「{ $from }」至「{ $to }」
+renaming = 正在將「{ $from }」重新命名為「{ $to }」
+renamed = 已將「{ $from }」重新命名為「{ $to }」
 restoring =
     正在還原 { $items } 項目 { $items ->
         [one] 項目
@@ -182,7 +182,7 @@ default-app = { $name } （預設）
 
 ## Show details
 
-show-details = 顯示詳細資料
+show-details = 顯示詳細資訊
 
 ## Settings
 
@@ -196,13 +196,13 @@ match-desktop = 符合桌面
 dark = 深色
 light = 淺色
 # Context menu
-add-to-sidebar = 添加至側邊欄
+add-to-sidebar = 加入側邊欄
 compress = 壓縮…
 extract-here = 解壓縮
-new-file = 新建檔案...
-new-folder = 新建資料夾...
+new-file = 新增檔案...
+new-folder = 新增資料夾...
 open-in-terminal = 在終端機中開啟
-move-to-trash = 移動至垃圾桶
+move-to-trash = 丟入垃圾桶
 restore-from-trash = 從垃圾桶還原
 remove-from-sidebar = 從側邊欄移除
 sort-by-name = 依名稱排序
@@ -215,11 +215,11 @@ sort-by-size = 依大小排序
 ## File
 
 file = 檔案
-new-tab = 新建分頁
-new-window = 新建視窗
+new-tab = 新增分頁
+new-window = 新增視窗
 rename = 重新命名...
 close-tab = 關閉分頁
-quit = 退出
+quit = 結束
 
 ## Edit
 
@@ -258,18 +258,18 @@ deleted =
     }從 { trash }
 permanently-deleting =
     正在永久刪除 { $items } { $items ->
-        [one] 项目
-       *[other] 项目
+        [one] 項目
+       *[other] 項目
     }
 permanently-deleted =
     已經永久刪除 { $items } { $items ->
-        [one] 项目
-       *[other] 项目
+        [one] 項目
+       *[other] 項目
     }
 removing-from-recents =
     正在從 { recents } 中移除 { $items } { $items ->
-        [one] 项目
-       *[other] 项目
+        [one] 項目
+       *[other] 項目
     }
 deleting =
     正在刪除 { $items } { $items ->
@@ -278,21 +278,21 @@ deleting =
     }從 { trash }（{ $progress }）…
 removed-from-recents =
     已經從 { recents } 中移除 { $items } { $items ->
-        [one] 项目
-       *[other] 项目
+        [one] 項目
+       *[other] 項目
     }
-repository = 軟體庫源
+repository = 軟體庫
 desktop-view-options = 桌面檢視選項...
 show-on-desktop = 顯示在桌面
 desktop-folder-content = 桌面資料夾內容
 mounted-drives = 已經掛載的磁碟機
 trash-folder-icon = 垃圾桶圖示
-trashed-on = 遺棄時間
+trashed-on = 丟入時間
 icon-size-and-spacing = 圖示大小與間距
 icon-size = 圖示大小
 grid-spacing = 網格間距
-details = 詳情
-dismiss = 撤停訊息
+details = 詳細資訊
+dismiss = 關閉訊息
 delete = 刪除
 remove = 移除
 support = 支援
@@ -393,3 +393,6 @@ context-action-confirm-warning =
     } 上執行。
 run = 執行
 rename-confirm = 重新命名
+checksum = { $kind } 核對和
+calculate = 計算
+error = 錯誤

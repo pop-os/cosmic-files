@@ -28,6 +28,7 @@ use jiff_icu::ConvertFrom;
 use mime_guess::{Mime, mime};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 use std::cell::Cell;
 use std::cmp::{Ordering, Reverse};
@@ -179,7 +180,9 @@ fn button_appearance(
             appearance.icon_color = Some(Color::from(cosmic.on_bg_component_color()));
             appearance.text_color = Some(Color::from(cosmic.on_bg_component_color()));
             if cut {
-                appearance.text_color = Some(Color::from(cosmic.background.component.on_disabled));
+                appearance.text_color = Some(Color::from(
+                    cosmic.background(theme.transparent).component.on_disabled,
+                ));
             } else {
                 appearance.text_color = Some(Color::from(cosmic.on_bg_component_color()));
             }
@@ -190,12 +193,16 @@ fn button_appearance(
         appearance.background = Some(Color::from(cosmic.bg_color()).into());
         appearance.icon_color = Some(Color::from(cosmic.on_bg_color()));
         if cut {
-            appearance.text_color = Some(Color::from(cosmic.background.component.disabled));
+            appearance.text_color = Some(Color::from(
+                cosmic.background(theme.transparent).component.disabled,
+            ));
         } else {
             appearance.text_color = Some(Color::from(cosmic.on_bg_color()));
         }
     } else if cut {
-        appearance.text_color = Some(Color::from(cosmic.background.component.on_disabled));
+        appearance.text_color = Some(Color::from(
+            cosmic.background(theme.transparent).component.on_disabled,
+        ));
     }
     if focused && accent {
         appearance.outline_width = 1.0;
@@ -430,7 +437,9 @@ impl<'a> FormatTime<'a> {
 
 impl Display for FormatTime<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let zoned = jiff::Zoned::try_from(self.time).unwrap();
+        let Ok(zoned) = jiff::Zoned::try_from(self.time) else {
+            return Ok(());
+        };
         let now = jiff::Zoned::now();
         let icu_datetime = DateTime::convert_from(zoned.datetime());
         if zoned.date() == now.date() {
@@ -633,6 +642,41 @@ fn display_name_for_file(path: &Path, name: &str, get_from_gvfs: bool, is_deskto
     Item::display_name(name)
 }
 
+// Whether a dir lives on a remote filesystem, according to GIO.
+#[cfg(feature = "gvfs")]
+fn gvfs_dir_is_remote(dir: &Path) -> bool {
+    static REMOTE_CACHE: LazyLock<RwLock<FxHashMap<PathBuf, bool>>> =
+        LazyLock::new(|| RwLock::new(FxHashMap::default()));
+
+    if let Some(remote) = REMOTE_CACHE.read().unwrap().get(dir) {
+        return *remote;
+    }
+
+    let remote = match gio::prelude::FileExt::query_filesystem_info(
+        &gio::File::for_path(dir),
+        gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE,
+        gio::Cancellable::NONE,
+    ) {
+        Ok(info) => info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE),
+        Err(err) => {
+            log::warn!(
+                "failed to get GIO filesystem info for {}: {}",
+                dir.display(),
+                err
+            );
+
+            //Assume remote so that the "expensive tasks" are rather skipped then actually executed.
+            true
+        }
+    };
+
+    REMOTE_CACHE
+        .write()
+        .unwrap()
+        .insert(dir.to_path_buf(), remote);
+    remote
+}
+
 #[cfg(feature = "gvfs")]
 pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconSizes) -> Item {
     let file_name = file_info
@@ -640,7 +684,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
         .unwrap_or_default();
     let mtime = file_info.attribute_uint64(gio::FILE_ATTRIBUTE_TIME_MODIFIED);
     let mut is_desktop = false;
-    let remote = file_info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE);
+    let remote = path.parent().is_none_or(gvfs_dir_is_remote);
     let is_dir = matches!(file_info.file_type(), gio::FileType::Directory);
 
     let size_opt = (!is_dir).then_some(file_info.size() as u64);
@@ -713,6 +757,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
             mtime,
             size_opt,
             children_opt,
+            is_dir,
         },
         hidden,
         image_dimensions: (!remote && mime.type_() == mime::IMAGE)
@@ -736,6 +781,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
         overlaps_drag_rect: false,
         dir_size,
         cut: false,
+        checksums: ChecksumState::default(),
     }
 }
 
@@ -767,23 +813,7 @@ pub fn item_from_entry(
         #[cfg(feature = "gvfs")]
         FsKind::Gvfs => {
             is_gvfs = true;
-            let file = gio::File::for_path(&path);
-
-            match gio::prelude::FileExt::query_filesystem_info(
-                &file,
-                gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE,
-                gio::Cancellable::NONE,
-            ) {
-                Ok(info) => info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE),
-                Err(err) => {
-                    log::warn!(
-                        "failed to get GIO filesystem info for {}: {}",
-                        path.display(),
-                        err
-                    );
-                    true
-                }
-            }
+            path.parent().is_none_or(gvfs_dir_is_remote)
         }
         #[cfg(not(feature = "gvfs"))]
         FsKind::Gvfs => {
@@ -876,6 +906,7 @@ pub fn item_from_entry(
         overlaps_drag_rect: false,
         dir_size,
         cut: false,
+        checksums: ChecksumState::default(),
     }
 }
 
@@ -887,6 +918,8 @@ pub fn item_from_trash_entry(
     let original_path = entry.original_path();
     let name = entry.name.to_string_lossy().into_owned();
     let display_name = Item::display_name(&name);
+
+    let location = crate::trash::trash_item_path(&entry).map(Location::Path);
 
     let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) = match metadata.size
     {
@@ -915,7 +948,7 @@ pub fn item_from_trash_entry(
         is_mount_point: false,
         metadata: ItemMetadata::Trash { metadata, entry },
         hidden: false,
-        location_opt: None,
+        location_opt: location,
         image_dimensions: (mime.type_() == mime::IMAGE)
             .then(|| image::image_dimensions(&original_path).ok())
             .flatten(),
@@ -932,7 +965,46 @@ pub fn item_from_trash_entry(
         overlaps_drag_rect: false,
         dir_size: DirSize::NotDirectory,
         cut: false,
+        checksums: ChecksumState::default(),
     }
+}
+
+fn item_from_trash_child(
+    path: PathBuf,
+    name: String,
+    metadata: fs::Metadata,
+    sizes: IconSizes,
+) -> Option<Item> {
+    let Some(original_path) = crate::trash::original_path_for_trash_child(&path) else {
+        log::warn!(
+            "failed to resolve original path for trash item {}, skipping entry",
+            path.display()
+        );
+        return None;
+    };
+    let Some(original_parent) = original_path.parent() else {
+        log::warn!(
+            "trash item {} has no original parent, skipping entry",
+            path.display()
+        );
+        return None;
+    };
+    let entry = trash::TrashItem {
+        id: path.as_os_str().to_os_string(),
+        name: std::ffi::OsString::from(&name),
+        original_parent: original_parent.to_path_buf(),
+        time_deleted: 0,
+    };
+    let size = if metadata.is_dir() {
+        trash::TrashItemSize::Entries(0)
+    } else {
+        trash::TrashItemSize::Bytes(metadata.len())
+    };
+    Some(item_from_trash_entry(
+        entry,
+        trash::TrashItemMetadata { size },
+        sizes,
+    ))
 }
 
 fn get_filename_from_path(path: &Path) -> Result<String, String> {
@@ -973,7 +1045,6 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
             // gio crate expects a comma delimited string
             let attr_string = [
                 gio::FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME.as_str(),
-                gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE.as_str(),
                 gio::FILE_ATTRIBUTE_TIME_MODIFIED.as_str(),
                 gio::FILE_ATTRIBUTE_STANDARD_SIZE.as_str(),
                 gio::FILE_ATTRIBUTE_STANDARD_TYPE.as_str(),
@@ -1010,6 +1081,7 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
     if !remote_scannable {
         match fs::read_dir(tab_path) {
             Ok(entries) => {
+                let trash = crate::trash::is_trash_path(tab_path);
                 items = entries
                     .filter_map(|entry_res| {
                         let entry = entry_res
@@ -1050,7 +1122,11 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                             })
                             .ok()?;
 
-                        Some(item_from_entry(path, name, metadata, sizes))
+                        if trash {
+                            item_from_trash_child(path, name, metadata, sizes)
+                        } else {
+                            Some(item_from_entry(path, name, metadata, sizes))
+                        }
                     })
                     .collect();
             }
@@ -1355,6 +1431,7 @@ pub fn scan_desktop(
             overlaps_drag_rect: false,
             dir_size: DirSize::NotDirectory,
             cut: false,
+            checksums: ChecksumState::default(),
         });
     }
 
@@ -1738,6 +1815,8 @@ pub enum Message {
     GoPrevious,
     ItemDown,
     ItemLeft,
+    ItemPageDown,
+    ItemPageUp,
     ItemRight,
     ItemUp,
     Location(Location),
@@ -1774,6 +1853,11 @@ pub enum Message {
     HighlightDeactivate(usize),
     HighlightActivate(usize),
     DirectorySize(PathBuf, DirSize),
+    #[cfg(feature = "gvfs")]
+    DirectoryChildren(PathBuf, usize),
+    Checksums(PathBuf, ChecksumState),
+    CalculateChecksums(PathBuf),
+    CopyChecksum(String),
     ImageDecoded(PathBuf, u32, u32, Vec<u8>, Option<(u32, u32)>, u64), // path, width, height, pixels, display_size, generation
 }
 
@@ -1801,6 +1885,23 @@ pub enum DirSize {
     Error(String),
 }
 
+/// Checksums computed for a file. Only SHA256 is currently exposed; see
+/// [`calculate_checksums`] for how to add more.
+#[derive(Clone, Debug, Default)]
+pub struct FileChecksums {
+    pub sha256: String,
+}
+
+/// State of checksum computation for a file.
+#[derive(Clone, Debug, Default)]
+pub enum ChecksumState {
+    #[default]
+    NotCalculated,
+    Calculating,
+    Calculated(FileChecksums),
+    Error(String),
+}
+
 #[derive(Clone, Debug)]
 pub enum ItemMetadata {
     Path {
@@ -1822,6 +1923,7 @@ pub enum ItemMetadata {
         mtime: u64,
         size_opt: Option<u64>,
         children_opt: Option<usize>,
+        is_dir: bool,
     },
 }
 
@@ -1836,7 +1938,7 @@ impl ItemMetadata {
             Self::SimpleDir { .. } => true,
             Self::SimpleFile { .. } => false,
             #[cfg(feature = "gvfs")]
-            Self::GvfsPath { children_opt, .. } => children_opt.is_some(),
+            Self::GvfsPath { is_dir, .. } => *is_dir,
         }
     }
 
@@ -1845,7 +1947,7 @@ impl ItemMetadata {
             Self::Path { metadata, .. } => metadata.modified().ok(),
             #[cfg(feature = "gvfs")]
             Self::GvfsPath { mtime, .. } => {
-                Some(SystemTime::UNIX_EPOCH + Duration::from_secs(*mtime))
+                SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(*mtime))
             }
             _ => None,
         }
@@ -2252,6 +2354,7 @@ pub struct Item {
     pub cut: bool,
     pub overlaps_drag_rect: bool,
     pub dir_size: DirSize,
+    pub checksums: ChecksumState,
 }
 
 impl Item {
@@ -2266,6 +2369,7 @@ impl Item {
     ) -> widget::Text<'a, cosmic::Theme, cosmic::Renderer> {
         widget::text::body(name)
             .wrapping(text::Wrapping::WordOrGlyph)
+            .align_x(text::Alignment::Center)
             .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
                 3,
             )))
@@ -2321,10 +2425,8 @@ impl Item {
                 widget::image(handle.clone()).into()
             }
             ItemThumbnail::Svg(handle) => widget::svg(handle.clone()).into(),
-            ItemThumbnail::Text(content) => widget::text_editor(content)
-                .class(cosmic::theme::iced::TextEditor::Custom(Box::new(
-                    text_editor_class,
-                )))
+            ItemThumbnail::Text(content) => widget::text_editor::text_editor(content)
+                .style(text_editor_class)
                 .width(THUMBNAIL_SIZE as f32)
                 .height(Length::Fixed(THUMBNAIL_SIZE as f32))
                 .padding(spacing.space_xxs)
@@ -2375,7 +2477,7 @@ impl Item {
         );
 
         let mut details = widget::column::with_capacity(8).spacing(space_xxxs);
-        details = details.push(widget::text::heading(self.name.clone()));
+        details = details.push(widget::selectable_text::heading(self.name.clone()));
         details = details.push(widget::text::body(fl!(
             "type",
             mime = self.mime.to_string()
@@ -2432,21 +2534,21 @@ impl Item {
             let time_formatter = time_formatter(military_time);
 
             if let Ok(time) = metadata.created() {
-                details = details.push(widget::text::body(fl!(
+                details = details.push(widget::selectable_text::body(fl!(
                     "item-created",
                     created = format_time(time, &date_time_formatter, &time_formatter).to_string()
                 )));
             }
 
             if let Ok(time) = metadata.modified() {
-                details = details.push(widget::text::body(fl!(
+                details = details.push(widget::selectable_text::body(fl!(
                     "item-modified",
                     modified = format_time(time, &date_time_formatter, &time_formatter).to_string()
                 )));
             }
 
             if let Ok(time) = metadata.accessed() {
-                details = details.push(widget::text::body(fl!(
+                details = details.push(widget::selectable_text::body(fl!(
                     "item-accessed",
                     accessed = format_time(time, &date_time_formatter, &time_formatter).to_string()
                 )));
@@ -2527,6 +2629,55 @@ impl Item {
             details = details.push(widget::text::body(format!("{width}x{height}")));
         }
         column = column.push(details);
+
+        if let Some(metadata) = self.file_metadata()
+            && !metadata.is_dir()
+            && let Some(path) = self.path_opt()
+        {
+            let control: Element<'_, Message> = match &self.checksums {
+                ChecksumState::NotCalculated => widget::button::standard(fl!("calculate"))
+                    .on_press(Message::CalculateChecksums(path.clone()))
+                    .into(),
+                ChecksumState::Calculating => widget::row::with_capacity(2)
+                    .align_y(Alignment::Center)
+                    .spacing(space_xxxs)
+                    .push(widget::indeterminate_circular().size(16.0))
+                    .push(widget::text::body(fl!("calculating")))
+                    .into(),
+                ChecksumState::Calculated(checksums) => {
+                    let value = checksums.sha256.clone();
+                    // Middle-ellipsize the digest to fit, full value on hover.
+                    let value_text = widget::tooltip(
+                        widget::text::body(value.clone())
+                            .font(cosmic::font::mono())
+                            .width(Length::Fill)
+                            .wrapping(text::Wrapping::None)
+                            .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
+                                1,
+                            ))),
+                        widget::text::body(value.clone()),
+                        widget::tooltip::Position::Bottom,
+                    );
+                    let copy_button = widget::button::icon(
+                        widget::icon::from_name("edit-copy-symbolic").size(16),
+                    )
+                    .on_press(Message::CopyChecksum(value.clone()))
+                    .tooltip(fl!("copy"));
+                    widget::row::with_capacity(2)
+                        .align_y(Alignment::Center)
+                        .spacing(space_xxxs)
+                        .push(value_text)
+                        .push(copy_button)
+                        .into()
+                }
+                ChecksumState::Error(err) => {
+                    widget::text::body(format!("{}: {}", fl!("error"), err)).into()
+                }
+            };
+            settings.push(
+                widget::settings::item::builder(fl!("checksum", kind = "SHA256")).control(control),
+            );
+        }
 
         if let Some(path) = self.path_opt()
             && self.selected
@@ -2723,6 +2874,32 @@ async fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, 
         tokio::task::yield_now().await;
     }
     Ok(total)
+}
+
+/// Calculate file checksums in a single pass over the file. To add another
+/// digest, hash it alongside `sha256_hasher` in the loop below and add a field
+/// to [`FileChecksums`]; the file is only read once.
+async fn calculate_checksums(path: &Path) -> Result<FileChecksums, String> {
+    let path = path.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        let mut file = File::open(&path).map_err(|e| e.to_string())?;
+        let mut sha256_hasher = Sha256::new();
+
+        let mut buffer = [0u8; 8192];
+        loop {
+            let bytes_read = file.read(&mut buffer).map_err(|e| e.to_string())?;
+            if bytes_read == 0 {
+                break;
+            }
+            sha256_hasher.update(&buffer[..bytes_read]);
+        }
+
+        Ok(FileChecksums {
+            sha256: format!("{:x}", sha256_hasher.finalize()),
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn folder_name<P: AsRef<Path>>(path: P) -> (String, bool) {
@@ -3184,6 +3361,20 @@ impl Tab {
         } else {
             // Do not scroll
             None
+        }
+    }
+
+    fn rows_per_page(&self) -> usize {
+        let viewport_height = self.item_view_size_opt.get().map_or(0.0, |s| s.height);
+        let row_height = self
+            .select_focus
+            .and_then(|i| self.items_opt.as_ref()?.get(i))
+            .and_then(|item| item.rect_opt.get())
+            .map_or(0.0, |r| r.height);
+        if row_height > 0.0 && viewport_height > 0.0 {
+            (viewport_height / row_height).floor() as usize
+        } else {
+            1
         }
     }
 
@@ -3709,6 +3900,28 @@ impl Tab {
             }
             Message::EditLocationSubmit => {
                 if let Some(mut edit_location) = self.edit_location.take() {
+                    let typed_opt = match &edit_location.location {
+                        Location::Path(path) => path.to_str().map(str::to_string),
+                        Location::Network(uri, ..) => Some(uri.clone()),
+                        _ => None,
+                    };
+                    let mut typed_uri = false;
+                    if let Some(typed) = typed_opt {
+                        match typed.trim().parse::<url::Url>() {
+                            Ok(url) if url.scheme() != "file" && url.has_host() => {
+                                let uri = url.as_str().to_string();
+                                edit_location =
+                                    Location::Network(uri.clone(), uri, None).normalize().into();
+                                typed_uri = true;
+                            }
+                            Err(_) if matches!(edit_location.location, Location::Network(..)) => {
+                                edit_location =
+                                    Location::Path(PathBuf::from(typed)).normalize().into();
+                            }
+                            _ => {}
+                        }
+                    }
+
                     // Select first completion if current location does not exist
                     if edit_location.selected.is_none()
                         && edit_location
@@ -3724,6 +3937,9 @@ impl Tab {
                     }
 
                     cd = edit_location.resolve();
+                    if cd.is_none() && typed_uri {
+                        cd = Some(edit_location.location);
+                    }
                 }
             }
             Message::EditLocationTab => {
@@ -3882,6 +4098,93 @@ impl Tab {
                     if let Some(id) = self.select_focus_id() {
                         commands.push(Command::Iced(widget::button::focus(id).into()));
                     }
+                }
+            }
+            Message::ItemPageDown => {
+                self.dehighlight_all();
+                if let Some((row, col)) = self.select_focus_pos_opt().or(self.select_last_pos_opt())
+                {
+                    if self.select_focus.is_none() {
+                        self.select_position(row, col, mod_shift);
+                    }
+
+                    let rows_per_page = self.rows_per_page().max(1);
+                    let target_row = row.saturating_add(rows_per_page);
+
+                    if !self.select_position(target_row, col, mod_shift) {
+                        // Fall back to the last item at or before target_row
+                        let best = self.items_opt.as_ref().and_then(|items| {
+                            items
+                                .iter()
+                                .filter_map(|item| item.pos_opt.get())
+                                .filter(|(r, _)| *r <= target_row)
+                                .max()
+                        });
+                        if let Some((best_row, best_col)) = best {
+                            self.select_position(best_row, best_col, mod_shift);
+                        }
+                    }
+                } else {
+                    self.select_position(0, 0, mod_shift);
+                }
+                if let Some(offset) = self.select_focus_scroll() {
+                    commands.push(Command::Iced(
+                        scrollable::scroll_to(
+                            self.scrollable_id.clone(),
+                            AbsoluteOffset {
+                                x: Some(offset.x),
+                                y: Some(offset.y),
+                            },
+                        )
+                        .into(),
+                    ));
+                }
+                if let Some(id) = self.select_focus_id() {
+                    commands.push(Command::Iced(widget::button::focus(id).into()));
+                }
+            }
+            Message::ItemPageUp => {
+                self.dehighlight_all();
+                if let Some((row, col)) =
+                    self.select_focus_pos_opt().or(self.select_first_pos_opt())
+                {
+                    if self.select_focus.is_none() {
+                        self.select_position(row, col, mod_shift);
+                    }
+
+                    let rows_per_page = self.rows_per_page().max(1);
+                    let target_row = row.saturating_sub(rows_per_page);
+
+                    if !self.select_position(target_row, col, mod_shift) {
+                        // Fall back to the first item at or after target_row
+                        let best = self.items_opt.as_ref().and_then(|items| {
+                            items
+                                .iter()
+                                .filter_map(|item| item.pos_opt.get())
+                                .filter(|(r, _)| *r >= target_row)
+                                .min()
+                        });
+                        if let Some((best_row, best_col)) = best {
+                            self.select_position(best_row, best_col, mod_shift);
+                        }
+                    }
+                } else {
+                    self.select_position(0, 0, mod_shift);
+                }
+                if let Some(offset) = self.select_focus_scroll() {
+                    commands.push(Command::Iced(
+                        scrollable::scroll_to(
+                            self.scrollable_id.clone(),
+                            AbsoluteOffset {
+                                x: Some(offset.x),
+                                y: Some(offset.y),
+                            },
+                        )
+                        .into(),
+                    ));
+                }
+                if let Some(id) = self.select_focus_id() {
+                    commands.push(Command::Iced(widget::button::focus(id).into()));
                 }
             }
             Message::ItemLeft => {
@@ -4563,6 +4866,66 @@ impl Tab {
                     }
                 }
             }
+            #[cfg(feature = "gvfs")]
+            Message::DirectoryChildren(path, children) => {
+                if let Some(ref mut items) = self.items_opt {
+                    for item in items.iter_mut() {
+                        if item.path_opt() == Some(&path) {
+                            if let ItemMetadata::GvfsPath { children_opt, .. } = &mut item.metadata
+                            {
+                                *children_opt = Some(children);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            Message::Checksums(path, checksum_state) => {
+                let location = Location::Path(path);
+                if let Some(ref mut item) = self.parent_item_opt
+                    && item.location_opt.as_ref() == Some(&location)
+                {
+                    item.checksums = checksum_state.clone();
+                }
+                if let Some(ref mut items) = self.items_opt {
+                    for item in items.iter_mut() {
+                        if item.location_opt.as_ref() == Some(&location) {
+                            item.checksums = checksum_state;
+                            break;
+                        }
+                    }
+                }
+            }
+            Message::CalculateChecksums(path) => {
+                let location = Location::Path(path.clone());
+                if let Some(ref mut item) = self.parent_item_opt
+                    && item.location_opt.as_ref() == Some(&location)
+                {
+                    item.checksums = ChecksumState::Calculating;
+                }
+                if let Some(ref mut items) = self.items_opt {
+                    for item in items.iter_mut() {
+                        if item.location_opt.as_ref() == Some(&location) {
+                            item.checksums = ChecksumState::Calculating;
+                            break;
+                        }
+                    }
+                }
+                commands.push(Command::Iced(
+                    cosmic::Task::future(async move {
+                        match calculate_checksums(&path).await {
+                            Ok(checksums) => {
+                                Message::Checksums(path, ChecksumState::Calculated(checksums))
+                            }
+                            Err(err) => Message::Checksums(path, ChecksumState::Error(err)),
+                        }
+                    })
+                    .into(),
+                ));
+            }
+            Message::CopyChecksum(value) => {
+                commands.push(Command::Iced(cosmic::iced::clipboard::write(value).into()));
+            }
         }
 
         // Scroll to top if needed
@@ -4678,11 +5041,15 @@ impl Tab {
                         ItemMetadata::GvfsPath {
                             size_opt,
                             children_opt,
+                            is_dir,
                             ..
-                        } => match children_opt {
-                            Some(child_count) => (true, *child_count as u64),
-                            None => (false, size_opt.unwrap_or_default()),
-                        },
+                        } => {
+                            if *is_dir {
+                                (true, children_opt.unwrap_or_default() as u64)
+                            } else {
+                                (false, size_opt.unwrap_or_default())
+                            }
+                        }
                     };
                     let (a_is_entry, a_size) = get_size(a.1);
                     let (b_is_entry, b_size) = get_size(b.1);
@@ -4891,9 +5258,11 @@ impl Tab {
                 }
                 ItemThumbnail::Text(text) => {
                     element_opt = Some(
-                        widget::container(widget::text_editor(text).padding(space_xxs).class(
-                            cosmic::theme::iced::TextEditor::Custom(Box::new(text_editor_class)),
-                        ))
+                        widget::container(
+                            widget::text_editor::text_editor(text)
+                                .padding(space_xxs)
+                                .style(text_editor_class),
+                        )
                         .center(Length::Fill)
                         .into(),
                     );
@@ -5858,17 +6227,21 @@ impl Tab {
                         ItemMetadata::GvfsPath {
                             size_opt,
                             children_opt,
+                            is_dir,
                             ..
-                        } => match children_opt {
-                            Some(child_count) => {
-                                if *child_count == 1 {
-                                    format!("{child_count} item")
-                                } else {
-                                    format!("{child_count} items")
+                        } => {
+                            if *is_dir {
+                                // Children are not counted on remote filesystems
+                                match children_opt {
+                                    //TODO: translate
+                                    Some(1) => "1 item".to_string(),
+                                    Some(child_count) => format!("{child_count} items"),
+                                    None => String::new(),
                                 }
+                            } else {
+                                format_size(size_opt.unwrap_or_default())
                             }
-                            None => format_size(size_opt.unwrap_or_default()),
-                        },
+                        }
                     };
 
                     let row = if condensed {
@@ -6634,6 +7007,74 @@ impl Tab {
                 Rectangle::new(point, size)
             };
 
+            // Count the children of visible directories in the background. Doing it while
+            // scanning costs one directory listing per entry, which stalls remote filesystems.
+            #[cfg(feature = "gvfs")]
+            for item in items {
+                let ItemMetadata::GvfsPath {
+                    children_opt: None,
+                    is_dir: true,
+                    ..
+                } = &item.metadata
+                else {
+                    continue;
+                };
+
+                // Skip items that are not visible, or have no determined rect
+                match item.rect_opt.get() {
+                    Some(rect) if rect.intersects(&visible_rect) => {}
+                    _ => continue,
+                }
+
+                let Some(path) = item.path_opt().cloned() else {
+                    continue;
+                };
+
+                struct ChildrenWrapper(PathBuf);
+                impl Hash for ChildrenWrapper {
+                    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                        self.0.hash(state);
+                    }
+                }
+
+                subscriptions.push(Subscription::run_with(
+                    ChildrenWrapper(path),
+                    |ChildrenWrapper(path)| {
+                        let path = path.clone();
+                        stream::channel(
+                            1,
+                            move |mut output: futures::channel::mpsc::Sender<_>| async move {
+                                let message = {
+                                    let path = path.clone();
+                                    tokio::task::spawn_blocking(move || {
+                                        let children = match fs::read_dir(&path) {
+                                            Ok(entries) => entries.count(),
+                                            Err(err) => {
+                                                log::warn!(
+                                                    "failed to read directory {}: {}",
+                                                    path.display(),
+                                                    err
+                                                );
+                                                0
+                                            }
+                                        };
+                                        Message::DirectoryChildren(path, children)
+                                    })
+                                    .await
+                                    .unwrap()
+                                };
+
+                                if let Err(err) = output.send(message).await {
+                                    log::warn!("failed to send directory children: {err}");
+                                }
+
+                                std::future::pending().await
+                            },
+                        )
+                    },
+                ));
+            }
+
             for item in items {
                 if item.thumbnail_opt.is_some() {
                     // Skip items that already have a mime type and thumbnail
@@ -6729,7 +7170,8 @@ impl Tab {
                                         let path = path.clone();
 
                                         // Acquire semaphore permit
-                                        _ = THUMB_SEMAPHORE.acquire().await;
+                                        let _permit =
+                                            THUMB_SEMAPHORE.acquire().await.unwrap();
 
                                         tokio::task::spawn_blocking(move || {
                                             let start = Instant::now();

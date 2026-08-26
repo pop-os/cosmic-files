@@ -114,7 +114,7 @@ pub trait Mounter: Send + Sync {
     fn items(&self, sizes: IconSizes) -> Option<MounterItems>;
     //TODO: send result
     fn mount(&self, item: MounterItem) -> Task<()>;
-    fn network_drive(&self, uri: String) -> Task<()>;
+    fn network_drive(&self, uri: String) -> Task<bool>;
     fn network_scan(&self, uri: &str, sizes: IconSizes) -> Option<Result<Vec<tab::Item>, String>>;
     fn dir_info(&self, uri: &str) -> Option<(String, String, Option<PathBuf>)>;
     fn unmount(&self, item: MounterItem) -> Task<()>;

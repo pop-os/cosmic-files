@@ -453,7 +453,7 @@ impl Op {
             }
         }
 
-        let (from_file, metadata, to_file) = cosmic::iced::futures::join!(
+        let (from_file_open_result, metadata, to_file_open_result) = cosmic::iced::futures::join!(
             async {
                 compio::fs::OpenOptions::new()
                     .read(true)
@@ -469,12 +469,28 @@ impl Op {
                     .write(true)
                     .open(&self.to)
                     .await
-                    .with_context(|| format!("failed to open {} for writing", self.to.display()))
             }
         );
 
-        let from_file = from_file?;
-        let mut to_file = to_file?;
+        let from_file = from_file_open_result?;
+
+        let mut to_file = match to_file_open_result {
+            Ok(file) => file,
+            #[cfg(not(feature = "gvfs"))]
+            Err(why) => {
+                _ = from_file.close().await;
+                return Err(why).with_context(|| format!("failed to open {} for writing", self.to.display())).map_err(Into::into);
+            }
+            #[cfg(feature = "gvfs")]
+            Err(_why) => {
+                _ = from_file.close().await;
+                return self
+                    .gio_file_copy(ctx, progress)
+                    .await
+                    .map(|()| true)
+                    .map_err(Into::into);
+            }
+        };
         progress.total_bytes = metadata.as_ref().map(|m| m.len());
         (ctx.on_progress)(self, &progress);
 

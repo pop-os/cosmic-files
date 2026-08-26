@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::app::{self, Core, Task, context_drawer};
+use cosmic::core::Auto;
 use cosmic::cosmic_config::{self, ConfigSet};
 use cosmic::iced::clipboard::dnd::DndAction;
 use cosmic::iced::core::SmolStr;
@@ -27,7 +28,7 @@ use cosmic::iced::{
         IcedMargin, IcedOutput, SctkLayerSurfaceSettings,
     },
     platform_specific::shell::wayland::commands::layer_surface::{
-        Anchor, KeyboardInteractivity, Layer, destroy_layer_surface, get_layer_surface,
+        Anchor, KeyboardInteractivity, Layer, destroy_layer_surface,
     },
 };
 use cosmic::widget::about::About;
@@ -36,7 +37,7 @@ use cosmic::widget::menu::action::MenuAction;
 use cosmic::widget::menu::key_bind::KeyBind;
 use cosmic::widget::segmented_button::{self, Entity, ReorderEvent};
 use cosmic::widget::{self, icon, settings, space};
-use cosmic::{Application, ApplicationExt, Element, cosmic_theme, executor, style, surface, theme};
+use cosmic::{Application, ApplicationExt, Element, cosmic_theme, executor, surface, theme};
 use mime_guess::Mime;
 use notify_debouncer_full::notify::{self, RecommendedWatcher};
 use notify_debouncer_full::{DebouncedEvent, Debouncer, RecommendedCache, new_debouncer};
@@ -155,6 +156,8 @@ pub enum Action {
     HistoryPrevious,
     ItemDown,
     ItemLeft,
+    ItemPageDown,
+    ItemPageUp,
     ItemRight,
     ItemUp,
     LocationUp,
@@ -228,6 +231,8 @@ impl Action {
             Self::HistoryPrevious => Message::TabMessage(entity_opt, tab::Message::GoPrevious),
             Self::ItemDown => Message::TabMessage(entity_opt, tab::Message::ItemDown),
             Self::ItemLeft => Message::TabMessage(entity_opt, tab::Message::ItemLeft),
+            Self::ItemPageDown => Message::TabMessage(entity_opt, tab::Message::ItemPageDown),
+            Self::ItemPageUp => Message::TabMessage(entity_opt, tab::Message::ItemPageUp),
             Self::ItemRight => Message::TabMessage(entity_opt, tab::Message::ItemRight),
             Self::ItemUp => Message::TabMessage(entity_opt, tab::Message::ItemUp),
             Self::LocationUp => Message::TabMessage(entity_opt, tab::Message::LocationUp),
@@ -316,6 +321,7 @@ pub enum NavMenuAction {
     Preview(segmented_button::Entity),
     RunContextAction(segmented_button::Entity, usize),
     RemoveFromSidebar(segmented_button::Entity),
+    ChangeSidebarLabel(segmented_button::Entity),
 }
 
 impl MenuAction for NavMenuAction {
@@ -390,6 +396,7 @@ pub enum Message {
     OpenWithBrowse,
     OpenWithDialog(Option<Entity>),
     OpenWithSelection(usize),
+    OpenWithSearchClear,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     Overlap(window::Id, OverlapNotifyEvent),
     Paste(Option<Entity>),
@@ -561,12 +568,17 @@ pub enum DialogPage {
         mime: mime_guess::Mime,
         selected: usize,
         store_opt: Option<Arc<MimeApp>>,
+        search_app_name: String,
     },
     PermanentlyDelete {
         paths: Box<[PathBuf]>,
     },
     DeleteTrash {
         items: Vec<TrashItem>,
+    },
+    ChangeSidebarLabel {
+        entity: Entity,
+        label: String,
     },
     RenameItem {
         from: PathBuf,
@@ -1005,6 +1017,12 @@ impl App {
             .and_then(|first| first.as_ref().parent())
             .map(Path::to_path_buf)
         {
+            let mut tasks = Vec::new();
+            if let Some(old_dialog) = self.file_dialog_opt.take() {
+                let old_id = old_dialog.window_id();
+                self.windows.remove(&old_id);
+                tasks.push(window::close(old_id));
+            }
             let (mut dialog, dialog_task) = Dialog::new(
                 DialogSettings::new()
                     .kind(DialogKind::OpenFolder)
@@ -1021,7 +1039,9 @@ impl App {
                 ))),
             );
             self.file_dialog_opt = Some(dialog);
-            Task::batch([set_title_task, dialog_task])
+            tasks.push(set_title_task);
+            tasks.push(dialog_task);
+            Task::batch(tasks)
         } else {
             Task::none()
         }
@@ -1754,15 +1774,9 @@ impl App {
 
         for (favorite_i, favorite) in self.config.favorites.iter().enumerate() {
             if let Some(path) = favorite.path_opt() {
-                let name = if matches!(favorite, Favorite::Home) {
-                    fl!("home")
-                } else if let Favorite::Network { name, .. } = favorite {
-                    name.clone()
-                } else if let Some(file_name) = path.file_name().and_then(|x| x.to_str()) {
-                    file_name.to_string()
-                } else {
-                    fl!("filesystem")
-                };
+                let name = favorite
+                    .display_name()
+                    .unwrap_or_else(|| fl!("filesystem"));
                 nav_model = nav_model.insert(move |b| {
                     b.text(name.clone())
                         .icon(
@@ -2275,15 +2289,33 @@ impl App {
             .favorites
             .iter()
             .map(|favorite| {
-                if let Favorite::Path(path) = favorite {
-                    for (from, to) in path_changes.iter().map(|(f, t)| (f.as_ref(), t.as_ref())) {
-                        if path.starts_with(from)
-                            && let Ok(relative) = path.strip_prefix(from)
+                match favorite {
+                    Favorite::Path(path) => {
+                        for (from, to) in path_changes.iter().map(|(f, t)| (f.as_ref(), t.as_ref()))
                         {
-                            favorites_changed = true;
-                            return Favorite::from_path(to.join(relative));
+                            if path.starts_with(from)
+                                && let Ok(relative) = path.strip_prefix(from)
+                            {
+                                favorites_changed = true;
+                                return Favorite::from_path(to.join(relative));
+                            }
                         }
                     }
+                    Favorite::Named { path, name } => {
+                        for (from, to) in path_changes.iter().map(|(f, t)| (f.as_ref(), t.as_ref()))
+                        {
+                            if path.starts_with(from)
+                                && let Ok(relative) = path.strip_prefix(from)
+                            {
+                                favorites_changed = true;
+                                return Favorite::Named {
+                                    path: to.join(relative),
+                                    name: name.clone(),
+                                };
+                            }
+                        }
+                    }
+                    _ => {}
                 }
                 favorite.clone()
             })
@@ -2393,6 +2425,9 @@ impl Application for App {
                 ),
             ]);
 
+        if matches!(flags.mode, Mode::Desktop) {
+            core.set_auto_blur(Auto::Window | Auto::Popup);
+        }
         let mut app = Self {
             core,
             about,
@@ -2509,9 +2544,17 @@ impl Application for App {
         .on_middle_press(|entity| {
             cosmic::Action::App(Message::NavMenuAction(NavMenuAction::OpenInNewTab(entity)))
         })
-        .context_menu(self.nav_context_menu(self.nav_bar_context_id))
-        .close_icon(icon::from_name("media-eject-symbolic").size(16).icon())
-        .into_container();
+        .context_menu(self.nav_context_menu())
+        .close_icon(icon::from_name("media-eject-symbolic").size(16).icon());
+
+        #[cfg(feature = "wayland")]
+        {
+            nav = nav
+                .window_id_maybe(self.core().main_window_id())
+                .on_surface_action(|m| cosmic::Action::Cosmic(cosmic::app::Action::Surface(m)))
+        }
+
+        let mut nav = nav.into_container();
 
         if !self.core.is_condensed() {
             nav = nav.max_width(280);
@@ -2522,97 +2565,105 @@ impl Application for App {
         ))
     }
 
-    fn nav_context_menu(
-        &self,
-        entity: widget::nav_bar::Id,
-    ) -> Option<Vec<widget::menu::Tree<cosmic::Action<Self::Message>>>> {
-        let favorite_index_opt = self.nav_model.data::<FavoriteIndex>(entity);
-        let location_opt = self.nav_model.data::<Location>(entity);
+    fn nav_context_menu(&self) -> Option<Vec<widget::menu::Tree<cosmic::Action<Self::Message>>>> {
+        let items = self.nav_model.iter().map(|entity| {
+            let favorite_index_opt = self.nav_model.data::<FavoriteIndex>(entity);
+            let location_opt = self.nav_model.data::<Location>(entity);
 
-        let mut items = Vec::with_capacity(7);
+            let mut items: Vec<widget::menu::Item<NavMenuAction, String>> = Vec::with_capacity(7);
 
-        if location_opt
-            .and_then(Location::path_opt)
-            .is_some_and(|x| x.is_file())
-        {
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("open"),
-                None,
-                NavMenuAction::Open(entity),
-            ));
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("menu-open-with"),
-                None,
-                NavMenuAction::OpenWith(entity),
-            ));
-        } else {
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("open-in-new-tab"),
-                None,
-                NavMenuAction::OpenInNewTab(entity),
-            ));
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("open-in-new-window"),
-                None,
-                NavMenuAction::OpenInNewWindow(entity),
-            ));
-        }
-        if let Some(path) = location_opt.and_then(Location::path_opt) {
-            let selected_dir = usize::from(path.is_dir());
-            let action_items: Vec<_> = self
-                .config
-                .context_actions
-                .iter()
-                .enumerate()
-                .filter(|(_, action)| action.matches_selection(1, selected_dir))
-                .map(|(i, action)| {
-                    cosmic::widget::menu::Item::Button(
-                        action.name.clone(),
-                        None,
-                        NavMenuAction::RunContextAction(entity, i),
-                    )
-                })
-                .collect();
-
-            if !action_items.is_empty() {
-                items.push(cosmic::widget::menu::Item::Divider);
-                items.extend(action_items);
+            if location_opt
+                .and_then(Location::path_opt)
+                .is_some_and(|x| x.is_file())
+            {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("open"),
+                    None,
+                    NavMenuAction::Open(entity),
+                ));
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("menu-open-with"),
+                    None,
+                    NavMenuAction::OpenWith(entity),
+                ));
+            } else {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("open-in-new-tab"),
+                    None,
+                    NavMenuAction::OpenInNewTab(entity),
+                ));
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("open-in-new-window"),
+                    None,
+                    NavMenuAction::OpenInNewWindow(entity),
+                ));
             }
-        }
-        items.push(cosmic::widget::menu::Item::Divider);
-        if matches!(location_opt, Some(Location::Path(..))) {
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("show-details"),
-                None,
-                NavMenuAction::Preview(entity),
-            ));
-        }
-        items.push(cosmic::widget::menu::Item::Divider);
-        if favorite_index_opt.is_some() {
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("remove-from-sidebar"),
-                None,
-                NavMenuAction::RemoveFromSidebar(entity),
-            ));
-        }
+            if let Some(path) = location_opt.and_then(Location::path_opt) {
+                let selected_dir = usize::from(path.is_dir());
+                let action_items: Vec<_> = self
+                    .config
+                    .context_actions
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, action)| action.matches_selection(1, selected_dir))
+                    .map(|(i, action)| {
+                        cosmic::widget::menu::Item::Button(
+                            action.name.clone(),
+                            None,
+                            NavMenuAction::RunContextAction(entity, i),
+                        )
+                    })
+                    .collect();
 
-        if matches!(location_opt, Some(Location::Recents)) && tab::has_recents() {
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("clear-recents-history"),
-                None,
-                NavMenuAction::ClearRecents,
-            ));
-        }
+                if !action_items.is_empty() {
+                    items.push(cosmic::widget::menu::Item::Divider);
+                    items.extend(action_items);
+                }
+            }
+            items.push(cosmic::widget::menu::Item::Divider);
+            if matches!(location_opt, Some(Location::Path(..))) {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("show-details"),
+                    None,
+                    NavMenuAction::Preview(entity),
+                ));
+            }
+            items.push(cosmic::widget::menu::Item::Divider);
+            if favorite_index_opt.is_some() {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("change-sidebar-label"),
+                    None,
+                    NavMenuAction::ChangeSidebarLabel(entity),
+                ));
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("remove-from-sidebar"),
+                    None,
+                    NavMenuAction::RemoveFromSidebar(entity),
+                ));
+            }
 
-        if matches!(location_opt, Some(Location::Trash)) && !Trash::is_empty() {
-            items.push(cosmic::widget::menu::Item::Button(
-                fl!("empty-trash"),
-                None,
-                NavMenuAction::EmptyTrash,
-            ));
-        }
+            if matches!(location_opt, Some(Location::Recents)) && tab::has_recents() {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("clear-recents-history"),
+                    None,
+                    NavMenuAction::ClearRecents,
+                ));
+            }
 
-        Some(cosmic::widget::menu::items(&HashMap::new(), items))
+            if matches!(location_opt, Some(Location::Trash)) && !Trash::is_empty() {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("empty-trash"),
+                    None,
+                    NavMenuAction::EmptyTrash,
+                ));
+            }
+            items
+        });
+
+        Some(cosmic::widget::menu::nav_context(
+            &HashMap::new(),
+            items.collect(),
+        ))
     }
 
     fn nav_model(&self) -> Option<&segmented_button::SingleSelectModel> {
@@ -2651,10 +2702,14 @@ impl Application for App {
                         })
                         && let Some(mounter) = MOUNTERS.get(&key)
                     {
-                        return mounter.network_drive(uri.clone()).map(move |()| {
-                            cosmic::Action::App(Message::NetworkDriveOpenEntityAfterMount {
-                                entity,
-                            })
+                        return mounter.network_drive(uri.clone()).map(move |mounted| {
+                            if mounted {
+                                cosmic::Action::App(Message::NetworkDriveOpenEntityAfterMount {
+                                    entity,
+                                })
+                            } else {
+                                cosmic::action::none()
+                            }
                         });
                     }
 
@@ -2871,7 +2926,8 @@ impl Application for App {
                     } else {
                         Favorite::from_path(path)
                     };
-                    if !favorites.contains(&favorite) {
+                    let favorite_path = favorite.path_opt();
+                    if !favorites.iter().any(|f| f.path_opt() == favorite_path) {
                         favorites.push(favorite);
                     }
                 }
@@ -3178,9 +3234,17 @@ impl Application for App {
                             path,
                             mime,
                             selected,
+                            search_app_name,
                             ..
                         } => {
-                            let available_apps = self.mime_app_cache.get_apps_for_mime(&mime, true);
+                            let mut available_apps =
+                                self.mime_app_cache.get_apps_for_mime(&mime, true);
+                            available_apps.retain(|(app, _)| {
+                                app.name
+                                    .to_lowercase()
+                                    .trim()
+                                    .contains(search_app_name.to_lowercase().as_str().trim())
+                            });
 
                             if let Some((app, _)) = available_apps.get(selected) {
                                 if let Some(mut command) =
@@ -3220,6 +3284,18 @@ impl Application for App {
                         }
                         DialogPage::DeleteTrash { items } => {
                             tasks.push(self.operation(Operation::DeleteTrash { items }));
+                        }
+                        DialogPage::ChangeSidebarLabel { entity, label } => {
+                            if let Some(FavoriteIndex(favorite_i)) =
+                                self.nav_model.data::<FavoriteIndex>(entity)
+                            {
+                                let mut favorites = self.config.favorites.clone();
+                                if let Some(favorite) = favorites.get_mut(*favorite_i) {
+                                    *favorite = favorite.with_label(label.trim());
+                                    config_set!(favorites, favorites);
+                                    tasks.push(self.update_config());
+                                }
+                            }
                         }
                         DialogPage::RenameItem {
                             from, parent, name, ..
@@ -3559,7 +3635,7 @@ impl Application for App {
                         Some((*mounter_key, self.network_drive_input.clone()));
                     return mounter
                         .network_drive(self.network_drive_input.clone())
-                        .map(|()| cosmic::action::none());
+                        .map(|_| cosmic::action::none());
                 }
                 log::warn!(
                     "no mounter found for connecting to {:?}",
@@ -3807,26 +3883,38 @@ impl Application for App {
                         let Some(path) = item.path_opt() else {
                             continue;
                         };
-                        return self.push_dialog(
-                            DialogPage::OpenWith {
-                                path: path.clone(),
-                                mime: item.mime.clone(),
-                                selected: 0,
-                                store_opt: "x-scheme-handler/mime"
-                                    .parse::<mime_guess::Mime>()
-                                    .ok()
-                                    .and_then(|mime| {
-                                        self.mime_app_cache.get(&mime).first().cloned()
-                                    }),
-                            },
-                            Some(CONFIRM_OPEN_WITH_BUTTON_ID.clone()),
-                        );
+                        return Task::batch([
+                            self.push_dialog(
+                                DialogPage::OpenWith {
+                                    path: path.clone(),
+                                    mime: item.mime.clone(),
+                                    selected: 0,
+                                    store_opt: "x-scheme-handler/mime"
+                                        .parse::<mime_guess::Mime>()
+                                        .ok()
+                                        .and_then(|mime| {
+                                            self.mime_app_cache.get(&mime).first().cloned()
+                                        }),
+                                    search_app_name: String::new(),
+                                },
+                                Some(CONFIRM_OPEN_WITH_BUTTON_ID.clone()),
+                            ),
+                            widget::text_input::focus(self.dialog_text_input.clone()),
+                        ]);
                     }
                 }
             }
             Message::OpenWithSelection(index) => {
                 if let Some(DialogPage::OpenWith { selected, .. }) = self.dialog_pages.front_mut() {
                     *selected = index;
+                }
+            }
+            Message::OpenWithSearchClear => {
+                if let Some(DialogPage::OpenWith {
+                    search_app_name, ..
+                }) = self.dialog_pages.front_mut()
+                {
+                    *search_app_name = String::new();
                 }
             }
             Message::Paste(entity_opt) => {
@@ -4434,7 +4522,8 @@ impl Application for App {
                         tab::Command::AddToSidebar(path) => {
                             let mut favorites = self.config.favorites.clone();
                             let favorite = Favorite::from_path(path);
-                            if !favorites.contains(&favorite) {
+                            let favorite_path = favorite.path_opt();
+                            if !favorites.iter().any(|f| f.path_opt() == favorite_path) {
                                 favorites.push(favorite);
                             }
                             config_set!(favorites, favorites);
@@ -4469,9 +4558,10 @@ impl Application for App {
                                     use cctk::wayland_protocols::xdg::shell::client::xdg_positioner::{
                                         Anchor, Gravity,
                                     };
-                                    use cosmic::iced::runtime::platform_specific::wayland::popup::{
+                                    use cosmic::{iced::runtime::platform_specific::wayland::popup::{
                                         SctkPopupSettings, SctkPositioner,
-                                    };
+                                    }, widget::menu::StyleSheet as _};
+
                                     let window_id = WindowId::unique();
                                     self.windows.insert(
                                         window_id,
@@ -4481,9 +4571,24 @@ impl Application for App {
                                         )),
                                     );
                                     commands.push(self.update(Message::CheckClipboard));
+                                    let t = self.core.system_theme();
+                                    let styling = t.appearance(
+                                        &cosmic::theme::menu_bar::MenuBarStyle::Default,
+                                        false,
+                                    );
+                                    let rad = styling.menu_border_radius;
+
                                     commands.push(self.update(Message::Surface(
                                         cosmic::surface::action::app_popup(
-                                            move |app: &mut Self| -> SctkPopupSettings {
+                                        move |_| cosmic::surface::action::LiveSettings {
+                                                    corners: Some(iced::runtime::platform_specific::wayland::CornerRadius {
+                                                        top_left: rad[0] as u32,
+                                                        top_right: rad[1] as u32,
+                                                        bottom_left: rad[2] as u32,
+                                                        bottom_right: rad[3] as u32,
+                                                    }),
+                                                    ..Default::default()
+                                                },                                            move |app: &mut Self| -> SctkPopupSettings {
                                                 let anchor_rect = Rectangle {
                                                     x: point.x as i32,
                                                     y: point.y as i32,
@@ -5067,6 +5172,7 @@ impl Application for App {
                                             .and_then(|mime| {
                                                 self.mime_app_cache.get(&mime).first().cloned()
                                             }),
+                                        search_app_name: String::new(),
                                     },
                                     None,
                                 );
@@ -5201,6 +5307,26 @@ impl Application for App {
                         return self.update_config();
                     }
                 }
+
+                NavMenuAction::ChangeSidebarLabel(entity) => {
+                    if let Some(favorite) = self
+                        .nav_model
+                        .data::<FavoriteIndex>(entity)
+                        .and_then(|FavoriteIndex(favorite_i)| {
+                            self.config.favorites.get(*favorite_i)
+                        })
+                    {
+                        let label = favorite
+                            .display_name()
+                            .unwrap_or_else(|| fl!("filesystem"));
+                        return Task::batch([
+                            self.dialog_pages
+                                .push_back(DialogPage::ChangeSidebarLabel { entity, label }),
+                            widget::text_input::focus(self.dialog_text_input.clone()),
+                            widget::text_input::select_all(self.dialog_text_input.clone()),
+                        ]);
+                    }
+                }
             },
             Message::Recents => {
                 if self.config.show_recents {
@@ -5252,24 +5378,37 @@ impl Application for App {
                             .insert(surface_id, Window::new(WindowKind::Desktop(entity)));
                         return Task::batch([
                             command,
-                            get_layer_surface(SctkLayerSurfaceSettings {
-                                id: surface_id,
-                                layer: Layer::Bottom,
-                                keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                                input_zone: None,
-                                anchor: Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT,
-                                output: IcedOutput::Output(output),
-                                namespace: "cosmic-files-applet".into(),
-                                size: Some((None, None)),
-                                margin: IcedMargin {
-                                    top: 0,
-                                    bottom: 0,
-                                    left: 0,
-                                    right: 0,
-                                },
-                                exclusive_zone: 0,
-                                size_limits: Limits::NONE.min_width(1.0).min_height(1.0),
-                            }),
+                            cosmic::task::message(cosmic::action::cosmic(
+                                cosmic::app::Action::Surface(
+                                    cosmic::surface::action::app_layer_shell(
+                                        |_| Default::default(),
+                                        move |_: &mut App| SctkLayerSurfaceSettings {
+                                            id: surface_id,
+                                            layer: Layer::Bottom,
+                                            keyboard_interactivity: KeyboardInteractivity::OnDemand,
+                                            input_zone: None,
+                                            anchor: Anchor::TOP
+                                                | Anchor::BOTTOM
+                                                | Anchor::LEFT
+                                                | Anchor::RIGHT,
+                                            output: IcedOutput::Output(output.clone()),
+                                            namespace: "cosmic-files-applet".into(),
+                                            size: Some((None, None)),
+                                            margin: IcedMargin {
+                                                top: 0,
+                                                bottom: 0,
+                                                left: 0,
+                                                right: 0,
+                                            },
+                                            exclusive_zone: 0,
+                                            size_limits: Limits::NONE
+                                                .min_width(1.0)
+                                                .min_height(1.0),
+                                        },
+                                        None,
+                                    ),
+                                ),
+                            )),
                             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
                             overlap_notify(surface_id, true),
                         ]);
@@ -5910,6 +6049,7 @@ impl Application for App {
                 mime,
                 selected,
                 store_opt,
+                search_app_name,
                 ..
             } => {
                 let name = match path.file_name() {
@@ -5918,7 +6058,13 @@ impl Application for App {
                 };
 
                 let mut column = widget::list_column();
-                let available_apps = self.mime_app_cache.get_apps_for_mime(mime, true);
+                let mut available_apps = self.mime_app_cache.get_apps_for_mime(mime, true);
+                available_apps.retain(|(app, _)| {
+                    app.name
+                        .to_lowercase()
+                        .trim()
+                        .contains(search_app_name.to_lowercase().as_str().trim())
+                });
                 let item_height = 32.0;
                 let mut displayed_default = false;
                 let mut last_kind = MimeAppMatch::Exact;
@@ -5981,6 +6127,24 @@ impl Application for App {
                     )
                     .secondary_action(
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                    )
+                    .control(
+                        widget::text_input::search_input(
+                            fl!("search-application"),
+                            search_app_name,
+                        )
+                        .id(self.dialog_text_input.clone())
+                        .on_clear(Message::OpenWithSearchClear)
+                        .on_input(move |search_app_name| {
+                            Message::DialogUpdate(DialogPage::OpenWith {
+                                path: path.clone(),
+                                mime: mime.clone(),
+                                selected: *selected,
+                                store_opt: store_opt.clone(),
+                                search_app_name,
+                            })
+                        })
+                        .on_submit(|_| Message::DialogComplete),
                     )
                     .control(widget::scrollable(column).height({
                         let max_size = self
@@ -6055,6 +6219,40 @@ impl Application for App {
                         "permanently-delete-warning",
                         target = target
                     )))
+            }
+            DialogPage::ChangeSidebarLabel { entity, label } => {
+                let entity = *entity;
+                let complete_maybe = if label.trim().is_empty() {
+                    None
+                } else {
+                    Some(Message::DialogComplete)
+                };
+
+                widget::dialog()
+                    .title(fl!("change-sidebar-label"))
+                    .primary_action(
+                        widget::button::suggested(fl!("save"))
+                            .on_press_maybe(complete_maybe.clone()),
+                    )
+                    .secondary_action(
+                        widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
+                    )
+                    .control(
+                        widget::column::with_children([
+                            widget::text::body(fl!("sidebar-label")).into(),
+                            widget::text_input("", label.as_str())
+                                .id(self.dialog_text_input.clone())
+                                .on_input(move |label| {
+                                    Message::DialogUpdate(DialogPage::ChangeSidebarLabel {
+                                        entity,
+                                        label,
+                                    })
+                                })
+                                .on_submit_maybe(complete_maybe.map(|maybe| move |_| maybe.clone()))
+                                .into(),
+                        ])
+                        .spacing(space_xxs),
+                    )
             }
             DialogPage::RenameItem {
                 from,
@@ -6439,7 +6637,6 @@ impl Application for App {
                         })
                         .drag_id(self.tab_drag_id),
                 )
-                .class(style::Container::Background)
                 .width(Length::Fill)
                 .padding([0, space_s]),
             );

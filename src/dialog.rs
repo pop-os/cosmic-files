@@ -32,15 +32,13 @@ use std::{env, fmt, fs};
 use crate::app::{
     Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind, REPLACE_BUTTON_ID,
 };
-use crate::config::{
-    Config, DialogConfig, Favorite, TIME_CONFIG_ID, ThumbCfg, TimeConfig, TypeToSearch,
-};
+use crate::config::{Config, DialogConfig, TIME_CONFIG_ID, ThumbCfg, TimeConfig, TypeToSearch};
 use crate::key_bind::key_binds;
 use crate::localize::LANGUAGE_SORTER;
 use crate::mounter::{MOUNTERS, MounterItem, MounterItems, MounterKey, MounterMessage};
 use crate::tab::{self, ItemMetadata, Location, SearchLocation, Tab};
 use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
-use crate::{fl, home_dir, menu};
+use crate::{fl, home_dir, menu, mime_icon};
 
 #[derive(Clone, Debug)]
 pub struct DialogMessage(cosmic::Action<Message>);
@@ -889,13 +887,7 @@ impl App {
 
         for favorite in &self.flags.config.favorites {
             if let Some(path) = favorite.path_opt() {
-                let name = if matches!(favorite, Favorite::Home) {
-                    fl!("home")
-                } else if let Favorite::Network { name, .. } = favorite {
-                    name.clone()
-                } else if let Some(file_name) = path.file_name().and_then(|x| x.to_str()) {
-                    file_name.to_string()
-                } else {
+                let Some(name) = favorite.display_name() else {
                     continue;
                 };
                 nav_model = nav_model.insert(move |b| {
@@ -1790,11 +1782,28 @@ impl Application for App {
                                             SctkPopupSettings, SctkPositioner,
                                         };
                                         use cosmic::iced::Rectangle;
+                                        use cosmic::widget::menu::StyleSheet as _;
+
                                         let window_id = window::Id::unique();
                                         self.context_menu_window = Some(window_id);
                                         let autosize_id = widget::Id::unique();
+                                        let t = self.core.system_theme();
+                                        let styling = t.appearance(
+                                            &cosmic::theme::menu_bar::MenuBarStyle::Default,
+                                            false,
+                                        );
+                                        let rad = styling.menu_border_radius;
                                         commands.push(self.update(Message::Surface(
                                             cosmic::surface::action::app_popup(
+                                                move |_| cosmic::surface::action::LiveSettings {
+                                                    corners: Some(iced::runtime::platform_specific::wayland::CornerRadius {
+                                                        top_left: rad[0] as u32,
+                                                        top_right: rad[1] as u32,
+                                                        bottom_left: rad[2] as u32,
+                                                        bottom_right: rad[3] as u32,
+                                                    }),
+                                                    ..Default::default()
+                                                },
                                                 move |app: &mut Self| -> SctkPopupSettings {
                                                     let anchor_rect = Rectangle {
                                                         x: point.x as i32,
@@ -1919,11 +1928,13 @@ impl Application for App {
                         items.retain(|item| {
                             // Directories are always shown
                             item.metadata.is_dir()
+                                // Check for mime type match (first because it is faster)
                                     || mimes.iter().any(|filter_mime| {
                                         if filter_mime.subtype() == mime::STAR {
                                             filter_mime.type_() == item.mime.type_()
                                         } else {
                                             *filter_mime == item.mime
+                                                || mime_icon::is_mime_subclass_of(&item.mime, filter_mime)
                                         }
                                     })
                                 // Check for glob match (last because it is slower)
