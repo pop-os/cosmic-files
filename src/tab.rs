@@ -3847,7 +3847,6 @@ impl Tab {
                 }
             }
             Message::Drag(rect_opt) => {
-                self.watch_drag = false;
                 if let Some(rect) = rect_opt {
                     self.context_menu = None;
                     self.location_context_menu_index = None;
