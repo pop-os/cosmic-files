@@ -672,6 +672,14 @@ impl DialogPages {
         matches!(self.pages.front(), Some(DialogPage::NetworkQuestion { .. }))
     }
 
+    fn pop_front_for_escape(&mut self) -> Option<(DialogPage, Task<Message>)> {
+        if self.front_is_network_question() {
+            None
+        } else {
+            self.pop_front()
+        }
+    }
+
     fn pop_network_question(
         &mut self,
         question_tx: &mpsc::Sender<i32>,
@@ -2825,8 +2833,11 @@ impl Application for App {
         let entity = self.tab_model.active();
 
         // Close dialog if open
-        if let Some((_page, task)) = self.dialog_pages.pop_front() {
-            return task;
+        if self.dialog_pages.front().is_some() {
+            return self
+                .dialog_pages
+                .pop_front_for_escape()
+                .map_or(Task::none(), |(_page, task)| task);
         }
 
         // Close gallery mode if open
@@ -7365,6 +7376,45 @@ mod tests {
         ));
         assert!(pages.front().is_none());
         assert_eq!(pages.pages.len(), 0);
+    }
+
+    #[test]
+    fn network_question_escape_rejects_stale_input() {
+        let (q1_tx, _) = mpsc::channel(1);
+        let (q2_tx, _) = mpsc::channel(1);
+        let q1 = DialogPage::NetworkQuestion {
+            mounter_key: MounterKey("test"),
+            uri: String::from("sftp://q1"),
+            question: MounterQuestion {
+                message: String::from("Q1"),
+                choices: vec![String::from("choice")],
+            },
+            question_tx: q1_tx.clone(),
+        };
+        let q2 = DialogPage::NetworkQuestion {
+            mounter_key: MounterKey("test"),
+            uri: String::from("sftp://q2"),
+            question: MounterQuestion {
+                message: String::from("Q2"),
+                choices: vec![String::from("choice")],
+            },
+            question_tx: q2_tx.clone(),
+        };
+        let mut pages = DialogPages::new();
+        let _ = pages.push_back(q1);
+        let _ = pages.push_back(q2);
+
+        let (_popped, _task) = pages
+            .pop_network_question(&q1_tx)
+            .expect("matching first network question should pop");
+        let page_count = pages.pages.len();
+        assert!(pages.pop_front_for_escape().is_none());
+        assert_eq!(pages.pages.len(), page_count);
+        assert!(matches!(
+            pages.front(),
+            Some(DialogPage::NetworkQuestion { question_tx, .. })
+                if question_tx.same_channel(&q2_tx)
+        ));
     }
 }
 
