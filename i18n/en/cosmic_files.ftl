@@ -118,6 +118,9 @@ rename-file = Rename file
 rename-folder = Rename folder
 rename-confirm = Rename
 
+## Change Sidebar Label Dialog
+sidebar-label = Sidebar label
+
 ## Replace Dialog
 replace = Replace
 replace-title = "{$filename}" already exists in this location
@@ -293,6 +296,7 @@ unknown-folder = unknown folder
 ## Open with
 menu-open-with = Open with...
 default-app = {$name} (default)
+search-application = Search by app name
 
 ## Show details
 show-details = Show details
@@ -340,6 +344,7 @@ move-to = Move to...
 move-to-trash = Move to trash
 restore-from-trash = Restore from trash
 remove-from-sidebar = Remove from sidebar
+change-sidebar-label = Change sidebar label
 sort-by-name = Sort by name
 sort-by-modified = Sort by modified
 sort-by-size = Sort by size

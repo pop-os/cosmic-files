@@ -326,7 +326,7 @@ default-app = { $name } (alapértelmezett)
 
 show-details = Részletek megjelenítése
 type = Típus: { $mime }
-items = Elemek: { $items }
+items = Elemek száma: { $items }
 item-size = Méret: { $size }
 item-created = Létrehozva: { $created }
 item-modified = Módosítva: { $modified }
@@ -446,3 +446,6 @@ context-action-confirm-warning =
     } fog lefutni.
 run = Futtatás
 rename-confirm = Átnevezés
+checksum = { $kind } ellenőrzőösszeg
+calculate = Számítás
+error = Hiba

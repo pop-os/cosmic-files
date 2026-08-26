@@ -30,10 +30,10 @@ new-window = Çarçoveya nû
 remove = Rake
 zoom-out = Dûr bike
 compressing =
-    { $items } tê guvaştin { $items ->
+    { $items } { $items ->
         [one] hêman
        *[other] hêman
-    } ji "{ $from }" bo "{ $to }" ({ $progress })...
+    } tê guvaştin ji "{ $from }" bo "{ $to }" ({ $progress })...
 move-to-trash = Bilivîne bo jêbirdankê
 menu-about = Derbarê Pelên COSMIC...
 file-already-exists = Pelek bi heman navî jixwe heye
@@ -42,10 +42,10 @@ open-multiple-files = Gelek pelan veke
 default-size = Mezinahiya berdest
 name-hidden = Navên ku bi "." tê destpêkirin wê werin veşartin
 extracted =
-    { $items } hate derxistin { $items ->
+    { $items } { $items ->
         [one] hêman
        *[other] hêman
-    } ji "{ $from }" bo "{ $to }"
+    } hate derxistin ji "{ $from }" bo "{ $to }"
 create-new-folder = Peldanka nû biafrîne
 folder-already-exists = Peldankek bi heman navî jixwe heye
 create-archive = Erşîvê biafrîne
@@ -79,10 +79,10 @@ none = Ne yek
 no-results = Tu encam nehatin dîtin
 theme = Rûkar
 compressed =
-    { $items } hate guvaştin{ $items ->
+    { $items } { $items ->
         [one] hêman
        *[other] hêman
-    } ji "{ $from }" bo "{ $to }"
+    } hate guvaştin ji "{ $from }" bo "{ $to }"
 appearance = Xuyang
 rename-folder = Navê peldankê biguherîne
 new-file = Pela nû...
@@ -95,20 +95,20 @@ light = Ronî
 extract-to = Derxîne bo...
 add-network-drive = Ajokarê torê tevlî bike
 copying =
-    { $items } tê jêgirtin{ $items ->
+    { $items } { $items ->
         [one] hêman
        *[other] hêman
-    } ji "{ $from }" bo "{ $to }" ({ $progress })...
+    } tê jêgirtin ji "{ $from }" bo "{ $to }" ({ $progress })...
 create-new-file = Pelê nû biafrîne
 sort-by-trashed = Li gorî demê rêz bike
 support = Piştgirî
 try-again = Dîsa hewl bide
 eject = Biavêje
 copied =
-    { $items } hate jêgirtin { $items ->
+    { $items } { $items ->
         [one] hêman
        *[other] hêman
-    } ji "{ $from }" bo "{ $to }"
+    } hate jêgirtin ji "{ $from }" bo "{ $to }"
 open-in-new-window = Di çarçoveyeke nû de veke
 empty-folder = Peldanka vala
 empty-trash = Jêbirdankê vala bike
@@ -121,10 +121,10 @@ paste = Pêve bike
 empty-trash-title = Jêbirdankê vala bike?
 menu-settings = Sazkarî...
 moving =
-    { $items } tê livandin{ $items ->
+    { $items } { $items ->
         [one] hêman
        *[other] hêman
-    } ji "{ $from }" bo "{ $to }" ({ $progress })...
+    } tê livandin ji "{ $from }" bo "{ $to }" ({ $progress })...
 change-wallpaper = Wêneyê dîwêr biguhêrîne...
 network-drive-description =
     Di nav navnîşanên rajekarê de pêşgira protokolekê û navnîşanek heye.
@@ -158,8 +158,8 @@ progress-paused = { $percent }%, hate rawestandin
 desktop-view-options = Vebijêrkên dîtina sermaseyê...
 show-on-desktop = Li ser sermaseyê nîşan bide
 cancelled = Têkbirî
-new-folder = Peldankan nû...
-match-desktop = Li gorî sermaseyê
+new-folder = Peldanka nû...
+match-desktop = Bi sermaseyê re li hev bîne
 name-no-slashes = Nav nabe ku "/" tê de hebe
 operations-running-finished =
     { $running } { $running ->
@@ -175,10 +175,10 @@ extract-to-title = Derxîne bo peldankê
 icon-size = Mezinahiya îkonê
 open-with-title = Tu çawa dixwazî "{ $name }" vekî?
 extracting =
-    { $items } tê derxistin { $items ->
+    { $items } { $items ->
         [one] hêman
        *[other] hêman
-    } ji "{ $from }" bo"{ $to }" ({ $progress })...
+    } tê derxistin ji "{ $from }" bo"{ $to }" ({ $progress })...
 settings = Sazkarî
 complete = Qediya
 permanently-delete-question = Bi mayînde jê bibe?
@@ -193,10 +193,10 @@ sort-largest-to-smallest = Mezintir bo biçûktir
 restore-from-trash = Ji jêbirdankê vegerîne
 cut = Jê bike
 moved =
-    { $items } hate livandin { $items ->
+    { $items } { $items ->
         [one] hêman
        *[other] hêman
-    } ji "{ $from }" bo "{ $to }"
+    } hate livandin ji "{ $from }" bo "{ $to }"
 progress-cancelled = { $percent }%, hat têkbirin
 open-in-new-tab = Di rûgerê nû de veke
 file = Pel
@@ -220,7 +220,7 @@ trash = Jêbirdank
 undo = Vegerîne
 today = Îro
 name = Nav
-modified = Guhertî
+modified = Guhertin
 size = Mezinahî
 details = Hûrgilî
 pause = Rawestîne
@@ -229,7 +229,7 @@ copy-to-title = Rêgeha jêgirtinê hilbijêre
 copy-to-button-label = Jê bigire
 move-to-title = Rêgeha livandinê hilbijêre
 move-to-button-label = Bilivîne
-create = Biafrîne
+create = Afirandin
 save = Tomar bike
 context-action = Çalakiya naverokê
 context-action-confirm-title = "{ $name }" bixebtîne?
@@ -263,7 +263,7 @@ restoring =
     } ji { trash } ({ $progress })...
 icon-size-and-spacing = Mezinahiya îkonan û valahiya di navbera wan de
 type-to-search-enter-path = Riya rêgehê yan jî pelê têdixîne
-menu-open-with = Veke bi...
+menu-open-with = Veke bi riya...
 original-file = Pelê resen
 read-write-execute = Xwendin, nivîsandin û xebitandin
 calculating = Tê jimartin...
@@ -311,7 +311,7 @@ restored =
 domain = Navper
 sort = Rêz bike
 item-accessed = Gihîştin: { $accessed }
-open-with = Veke bi
+open-with = Veke bi riya
 keep-both = Herduyan bihêle
 permanently-deleted =
     { $items } bi mayînde hate jêbirin{ $items ->
@@ -328,3 +328,6 @@ write-only = Tenê nivîsandin
 trashed-on = Li Jêbirdankê hatiye avêtin
 mixed = Tevlihev
 type-to-search-select = Pel an peldanka yekem a lihevhatî hildibijêre
+calculate = Bijmêre
+error = Şaşetî
+checksum = Tevahiya { $kind } kontrol bike

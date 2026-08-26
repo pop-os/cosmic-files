@@ -25,7 +25,7 @@ modified = 修改时间
 trashed-on = 删除时间
 size = 大小
 # Progress footer
-details = 详细信息
+details = 详情
 dismiss = 清除消息
 operations-running =
     正在进行 { $running } { $running ->
@@ -169,8 +169,8 @@ read-write-execute = 读取、写入和执行
 
 favorite-path-error = 打开目录时出错
 favorite-path-error-description =
-    无法打开 "{ $path }" 。
-    "{ $path }" 可能不存在或您没有权限打开它。
+    无法打开“{ $path }” 。
+    “{ $path }”可能不存在或您没有权限打开它。
 
     您想要从侧边栏中移除它吗？
 remove = 移除
@@ -267,10 +267,10 @@ extracted =
         [one] 项目
        *[other] 项目
     }到“{ $to }”
-setting-executable-and-launching = 设置 "{ $name }" 为可执行文件并启动
-set-executable-and-launched = 已设 "{ $name }" 为可执行文件并且启动
-setting-permissions = 正在设置 "{ $name }" 的权限为 { $mode }
-set-permissions = 设置 "{ $name }" 的权限为 { $mode }
+setting-executable-and-launching = 设置 “{ $name }” 为可执行文件并启动
+set-executable-and-launched = 已设 “{ $name }” 为可执行文件并且启动
+setting-permissions = 正在设置 “{ $name }” 的权限为 { $mode }
+set-permissions = 设置 “{ $name }” 的权限为 { $mode }
 moving =
     正在从“{ $from }”移动 { $items } { $items ->
         [one] 项目
@@ -302,7 +302,7 @@ removed-from-recents =
        *[other] 项目
     }
 renaming = 正在将“{ $from }”重命名为“{ $to }”
-renamed = 已重命名"{ $from }"为"{ $to }"
+renamed = 已重命名 “{ $from }” 为 “{ $to }”
 restoring =
     正在从{ trash }中还原 { $items } { $items ->
         [one] 项目
@@ -446,3 +446,6 @@ context-action-confirm-warning =
     } 上运行。
 context-action = 环境行动
 rename-confirm = 重命名
+calculate = 计算
+error = 错误
+checksum = { $kind } 校验和
