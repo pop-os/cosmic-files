@@ -461,6 +461,8 @@ pub enum Message {
     ToggleContextPage(ContextPage),
     ToggleFoldersFirst,
     ToggleShowHidden,
+    IncrementInProgress,
+    DecrementInProgress,
     Undo(usize),
     UndoTrash(widget::ToastId, Arc<[PathBuf]>),
     UndoTrashStart(Vec<TrashItem>),
@@ -1282,8 +1284,12 @@ impl App {
         self.pending_operations
             .insert(id, (operation.clone(), controller.clone()));
 
+
+        let mut tasks = Vec::<Task<Message>>::new();
+        tasks.push(self.update(Message::IncrementInProgress));
+
         // Use a task to send operations to the compio runtime thread.
-        cosmic::Task::stream(cosmic::iced::stream::channel(4, move |msg_tx| async move {
+        tasks.push(cosmic::Task::stream(cosmic::iced::stream::channel(4, move |msg_tx| async move {
             let (tx, rx) = tokio::sync::oneshot::channel();
 
             let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
@@ -1305,7 +1311,8 @@ impl App {
                 let _ = msg_tx.lock().await.send(msg).await;
             }
         }))
-        .map(cosmic::Action::App)
+        .map(cosmic::Action::App));
+        Task::batch(tasks)
     }
 
     /// Will join operations together into a single task that will return a single
@@ -1412,6 +1419,9 @@ impl App {
         // Manually rescan any trash tabs after any operation is completed
         commands.push(self.rescan_trash());
 
+        // Hide the progress icon for all windows
+        commands.push(self.update(Message::DecrementInProgress));
+
         Task::batch(commands)
     }
 
@@ -1455,6 +1465,10 @@ impl App {
         {
             self.progress_operations.clear();
         }
+
+        // Hide the progress icon for all windows
+        tasks.push(self.update(Message::DecrementInProgress));
+
         // Manually rescan any trash tabs after any operation is completed
         tasks.push(self.rescan_trash());
         Task::batch(tasks)
@@ -4511,6 +4525,16 @@ impl Application for App {
                 config.show_hidden = !config.show_hidden;
                 return self.update(Message::TabConfig(config));
             }
+            Message::IncrementInProgress => {
+                let mut config = self.config.tab;
+                config.in_progress = config.in_progress.saturating_add(1);
+                return self.update(Message::TabConfig(config));
+            }
+            Message::DecrementInProgress => {
+                let mut config = self.config.tab;
+                config.in_progress = config.in_progress.saturating_sub(1);
+                return self.update(Message::TabConfig(config));
+            }
             Message::TabMessage(entity_opt, tab_message) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
 
@@ -4590,15 +4614,18 @@ impl Application for App {
 
                                     commands.push(self.update(Message::Surface(
                                         cosmic::surface::action::app_popup(
-                                        move |_| cosmic::surface::action::LiveSettings {
-                                                    corners: Some(iced::runtime::platform_specific::wayland::CornerRadius {
+                                            move |_| cosmic::surface::action::LiveSettings {
+                                                corners: Some(
+                                                    iced::runtime::platform_specific::wayland::CornerRadius {
                                                         top_left: rad[0] as u32,
                                                         top_right: rad[1] as u32,
                                                         bottom_left: rad[2] as u32,
                                                         bottom_right: rad[3] as u32,
-                                                    }),
-                                                    ..Default::default()
-                                                },                                            move |app: &mut Self| -> SctkPopupSettings {
+                                                    }
+                                                ),
+                                                ..Default::default()
+                                            },
+                                            move |app: &mut Self| -> SctkPopupSettings {
                                                 let anchor_rect = Rectangle {
                                                     x: point.x as i32,
                                                     y: point.y as i32,
@@ -6608,6 +6635,8 @@ impl Application for App {
 
         // Progress Icon for long-runing operations
         if !self.progress_operations.is_empty()
+            || !self.pending_operations.is_empty()
+            || self.config.tab.in_progress > 0
         {
             let mut title = String::new();
             let mut total_progress = 0.0;
@@ -6647,6 +6676,11 @@ impl Application for App {
                         percent = ((total_progress * 100.0) as i32)
                     );
                 }
+            } else if self.config.tab.in_progress > 0 {
+                title = fl!(
+                    "operations-running-background",
+                    running = self.config.tab.in_progress
+                )
             }
             elements.push(
                 widget::button::custom(
