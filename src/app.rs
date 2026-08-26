@@ -70,7 +70,7 @@ use crate::key_bind::key_binds;
 use crate::localize::LANGUAGE_SORTER;
 use crate::mime_app::{self, MimeApp, MimeAppCache, MimeAppMatch};
 use crate::mounter::{
-    MOUNTERS, MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage,
+    MOUNTERS, MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage, MounterQuestion,
 };
 use crate::operation::{
     Controller, Operation, OperationError, OperationErrorType, OperationSelection, ReplaceResult,
@@ -375,6 +375,9 @@ pub enum Message {
     NavBarContext(Entity),
     NavMenuAction(NavMenuAction),
     NetworkAuth(MounterKey, String, MounterAuth, mpsc::Sender<MounterAuth>),
+    NetworkQuestion(MounterKey, String, MounterQuestion, mpsc::Sender<i32>),
+    NetworkQuestionChoice(mpsc::Sender<i32>, i32),
+    NetworkQuestionCancel(mpsc::Sender<i32>),
     NetworkDriveInput(String),
     NetworkDriveOpenEntityAfterMount {
         entity: Entity,
@@ -549,6 +552,12 @@ pub enum DialogPage {
         auth: MounterAuth,
         auth_tx: mpsc::Sender<MounterAuth>,
     },
+    NetworkQuestion {
+        mounter_key: MounterKey,
+        uri: String,
+        question: MounterQuestion,
+        question_tx: mpsc::Sender<i32>,
+    },
     NetworkError {
         mounter_key: MounterKey,
         uri: String,
@@ -657,6 +666,24 @@ impl DialogPages {
             Task::none()
         };
         Some((page, task))
+    }
+
+    fn front_is_network_question(&self) -> bool {
+        matches!(self.pages.front(), Some(DialogPage::NetworkQuestion { .. }))
+    }
+
+    fn pop_network_question(
+        &mut self,
+        question_tx: &mpsc::Sender<i32>,
+    ) -> Option<(DialogPage, Task<Message>)> {
+        let matches = matches!(
+            self.pages.front(),
+            Some(DialogPage::NetworkQuestion {
+                question_tx: page_tx,
+                ..
+            }) if page_tx.same_channel(question_tx)
+        );
+        if matches { self.pop_front() } else { None }
     }
 
     pub fn update_front(&mut self, page: DialogPage) {
@@ -3144,11 +3171,19 @@ impl Application for App {
                 }
             }
             Message::DialogCancel => {
-                if let Some((_page, task)) = self.dialog_pages.pop_front() {
+                if self.dialog_pages.front_is_network_question() {
+                    log::warn!("tried to cancel a network question with a generic message");
+                    return Task::none();
+                }
+                if let Some((_dialog_page, task)) = self.dialog_pages.pop_front() {
                     return task;
                 }
             }
             Message::DialogComplete => {
+                if self.dialog_pages.front_is_network_question() {
+                    log::warn!("tried to complete a network question with a generic message");
+                    return Task::none();
+                }
                 if let Some((dialog_page, task)) = self.dialog_pages.pop_front() {
                     let mut tasks = vec![task];
                     match dialog_page {
@@ -3210,6 +3245,7 @@ impl Application for App {
                                 cosmic::action::none()
                             }));
                         }
+                        DialogPage::NetworkQuestion { .. } => unreachable!(),
                         DialogPage::NetworkError {
                             mounter_key: _,
                             uri,
@@ -3327,9 +3363,17 @@ impl Application for App {
                 return self.push_dialog(dialog_page, focused_id);
             }
             Message::DialogUpdate(dialog_page) => {
+                if self.dialog_pages.front_is_network_question() {
+                    log::warn!("tried to update a network question with a stale message");
+                    return Task::none();
+                }
                 self.dialog_pages.update_front(dialog_page);
             }
             Message::DialogUpdateComplete(dialog_page) => {
+                if self.dialog_pages.front_is_network_question() {
+                    log::warn!("tried to update a network question with a stale message");
+                    return Task::none();
+                }
                 return Task::batch([
                     self.update(Message::DialogUpdate(dialog_page)),
                     self.update(Message::DialogComplete),
@@ -3625,6 +3669,39 @@ impl Application for App {
                     Some(self.dialog_text_input.clone()),
                 );
             }
+            Message::NetworkQuestion(mounter_key, uri, question, question_tx) => {
+                return self.push_dialog(
+                    DialogPage::NetworkQuestion {
+                        mounter_key,
+                        uri,
+                        question,
+                        question_tx,
+                    },
+                    None,
+                );
+            }
+            Message::NetworkQuestionChoice(question_tx, choice) => {
+                if let Some((_dialog_page, task)) =
+                    self.dialog_pages.pop_network_question(&question_tx)
+                {
+                    return Task::batch([
+                        task,
+                        Task::future(async move {
+                            let _ = question_tx.send(choice).await;
+                            cosmic::action::none()
+                        }),
+                    ]);
+                }
+                log::warn!("tried to send a network question choice to the wrong dialog");
+            }
+            Message::NetworkQuestionCancel(question_tx) => {
+                if let Some((_dialog_page, task)) =
+                    self.dialog_pages.pop_network_question(&question_tx)
+                {
+                    return task;
+                }
+                log::warn!("tried to cancel the wrong network question");
+            }
             Message::NetworkDriveInput(input) => {
                 self.network_drive_input = input;
             }
@@ -3839,6 +3916,9 @@ impl Application for App {
                         .map(|parent| self.open_tab(Location::Path(parent), true, Some(vec![path])))
                 }));
             }
+            Message::OpenWithBrowse if self.dialog_pages.front_is_network_question() => {
+                log::warn!("tried to open with browse while a network question is active");
+            }
             Message::OpenWithBrowse => match self.dialog_pages.pop_front() {
                 Some((
                     DialogPage::OpenWith {
@@ -3870,7 +3950,7 @@ impl Application for App {
                     return Task::batch([task, self.dialog_pages.push_front(dialog_page)]);
                 }
                 None => {}
-            },
+            }
             Message::OpenWithDialog(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 if let Some(tab) = self.tab_model.data::<Tab>(entity)
@@ -4329,6 +4409,10 @@ impl Application for App {
                 }
             }
             Message::ReplaceResult(replace_result) => {
+                if self.dialog_pages.front_is_network_question() {
+                    log::warn!("tried to send replace result while a network question is active");
+                    return Task::none();
+                }
                 if let Some((dialog_page, task)) = self.dialog_pages.pop_front() {
                     match dialog_page {
                         DialogPage::Replace { tx, .. } => {
@@ -5942,6 +6026,32 @@ impl Application for App {
 
                 widget
             }
+            DialogPage::NetworkQuestion {
+                mounter_key: _,
+                uri: _,
+                question,
+                question_tx,
+            } => {
+                let mut parts = question.message.splitn(2, '\n');
+                let title = parts.next().unwrap_or_default();
+                let body = parts.next().unwrap_or_default();
+                let mut choices = widget::column::with_capacity(question.choices.len());
+                for (choice, index) in question.choices.iter().zip(0_i32..) {
+                    choices = choices.push(
+                        widget::button::standard(choice.clone())
+                            .on_press(Message::NetworkQuestionChoice(question_tx.clone(), index)),
+                    );
+                }
+
+                widget::dialog()
+                    .title(title)
+                    .body(body)
+                    .control(choices.spacing(space_s))
+                    .secondary_action(
+                        widget::button::standard(fl!("cancel"))
+                            .on_press(Message::NetworkQuestionCancel(question_tx.clone())),
+                    )
+            }
             DialogPage::NetworkError {
                 mounter_key: _,
                 uri: _,
@@ -7102,6 +7212,9 @@ impl Application for App {
                     MounterMessage::NetworkAuth(uri, auth, auth_tx) => {
                         Message::NetworkAuth(key, uri, auth, auth_tx)
                     }
+                    MounterMessage::NetworkQuestion(uri, question, question_tx) => {
+                        Message::NetworkQuestion(key, uri, question, question_tx)
+                    }
                     MounterMessage::NetworkResult(uri, res) => {
                         Message::NetworkResult(key, uri, res)
                     }
@@ -7202,6 +7315,56 @@ impl Application for App {
         }));
 
         Subscription::batch(subscriptions)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn network_question_sender_identity_rejects_stale_question() {
+        let (q1_tx, _) = mpsc::channel(1);
+        let (q2_tx, _) = mpsc::channel(1);
+        let q2 = DialogPage::NetworkQuestion {
+            mounter_key: MounterKey("test"),
+            uri: String::from("sftp://q2"),
+            question: MounterQuestion {
+                message: String::from("Q2"),
+                choices: vec![String::from("choice")],
+            },
+            question_tx: q2_tx.clone(),
+        };
+        let mut pages = DialogPages::new();
+        let _ = pages.push_front(q2);
+        let page_count = pages.pages.len();
+
+        assert!(pages.front_is_network_question());
+        assert!(pages.pop_network_question(&q1_tx).is_none());
+        assert!(pages.front_is_network_question());
+        assert_eq!(pages.pages.len(), page_count);
+        assert!(matches!(
+            pages.front(),
+            Some(DialogPage::NetworkQuestion { question_tx, .. })
+                if question_tx.same_channel(&q2_tx)
+        ));
+
+        let (popped, _task) = pages
+            .pop_network_question(&q2_tx.clone())
+            .expect("matching network question should pop");
+        assert!(matches!(
+            popped,
+            DialogPage::NetworkQuestion {
+                uri,
+                question,
+                question_tx,
+                ..
+            } if uri == "sftp://q2"
+                && question.message == "Q2"
+                && question_tx.same_channel(&q2_tx)
+        ));
+        assert!(pages.front().is_none());
+        assert_eq!(pages.pages.len(), 0);
     }
 }
 
