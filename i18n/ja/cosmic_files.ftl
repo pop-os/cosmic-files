@@ -163,6 +163,7 @@ unknown-folder = 不明なフォルダー
 
 menu-open-with = 別のアプリケーションで開く...
 default-app = { $name } (デフォルト)
+search-application = アプリ名で検索
 
 ## Properties
 

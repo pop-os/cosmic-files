@@ -255,6 +255,7 @@ restored =
     } fra { trash }
 unknown-folder = ukjent mappe
 menu-open-with = Åpne med…
+search-application = Søk etter appnavn
 default-app = { $name } (standard)
 show-details = Vis detaljer
 type = Type: { $mime }
