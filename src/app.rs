@@ -1413,9 +1413,10 @@ impl App {
                 }
 
                 self.complete_operations.insert(id, op);
+                operations_in_progress = operations_in_progress.saturating_sub(1);
             }
-            operations_in_progress = operations_in_progress.saturating_sub(1);
         }
+
         // Close progress notification if all relevant operations are finished
         if !self
             .pending_operations
@@ -1430,10 +1431,12 @@ impl App {
         commands.push(self.rescan_operation_selection(op_sel));
         // Manually rescan any trash tabs after any operation is completed
         commands.push(self.rescan_trash());
-        // Update the number of operation in progress
-        commands.push(
-            self.update(Message::SetOperationsInProgress(operations_in_progress)
-        ));
+        if operations_in_progress != self.state.operations_in_progress {
+            // Update the number of operation in progress
+            commands.push(
+                self.update(Message::SetOperationsInProgress(operations_in_progress)
+            ));
+        }
         Task::batch(commands)
     }
 
@@ -1481,9 +1484,12 @@ impl App {
         }
 
         // Update the progress icon for all windows
-        tasks.push(self.update_state());
+        tasks.push(self.update(
+            Message::SetOperationsInProgress(operations_in_progress)
+        ));
 
         // Manually rescan any trash tabs after any operation is completed
+        // TODO: Only rescan if operations affected Trash
         tasks.push(self.rescan_trash());
         Task::batch(tasks)
     }
@@ -1741,28 +1747,24 @@ impl App {
     }
 
     fn update_state(&mut self) -> Task<Message> {
-        // let (state_handler, state) = State::load();
-        // self.state_handler = state_handler;
-        // self.state = state;
-
-        // let tasks = self
-        //     .windows
-        //     .iter()
-        //     .filter(|(_, window)| matches!(window.kind, WindowKind::App(_)))
-        //     .map(|(id, _)| window::get(*id));
-
-        // let mut window_ids = Vec::new();
-        // for (window_id, window) in &self.windows {
-        //     if let WindowKind::App(e, _) = &window.kind
-        //     {
-
-        //         window_ids.push(*window_id);
-        //     }
-        // }
-        // for window_id in window_ids {
-        //     commands.push(self.update(Message::None));
-        // }
-
+        if let Some(state_handler) = self.state_handler.as_ref() {
+            if let Err(err) = state_handler
+                .set::<&FxOrderMap<String, (HeadingOptions, bool)>>(
+                    "sort_names",
+                    &self.state.sort_names,
+                )
+            {
+                log::warn!("Failed to save state sort_names: {err:?}");
+            }
+            if let Err(err) = state_handler
+                .set::<&usize>(
+                    "operations_in_progress",
+                    &self.state.operations_in_progress,
+                )
+            {
+                log::warn!("Failed to save state operations_in_progress: {err:?}");
+            }
+        }
         let needs_reload: Box<[_]> = self
             .tab_model
             .iter()
@@ -1777,7 +1779,6 @@ impl App {
             .map(|(entity, location)| self.update_tab(entity, location, None));
 
         Task::batch(commands)
-        // Task::none()
     }
 
     fn update_desktop(&mut self) -> Task<Message> {
@@ -4260,6 +4261,8 @@ impl Application for App {
                 if let Some((_, controller)) = self.pending_operations.get(&id) {
                     controller.cancel();
                     self.progress_operations.remove(&id);
+                    self.state.operations_in_progress = self.state.operations_in_progress
+                        .saturating_sub(1);
                 }
                 return self.update_state();
             }
@@ -4267,14 +4270,13 @@ impl Application for App {
                 for (id, (_, controller)) in &self.pending_operations {
                     controller.cancel();
                     self.progress_operations.remove(id);
+                    self.state.operations_in_progress = self.state.operations_in_progress
+                        .saturating_sub(1);
                 }
                 return self.update_state();
             }
             Message::PendingComplete(id, op_sel) => {
-                let mut tasks = Vec::new();
-                tasks.push(self.handle_completed_operations(vec![(id, op_sel)]));
-                tasks.push(self.update_state());
-                return Task::batch(tasks);
+                return self.handle_completed_operations(vec![(id, op_sel)]);
             }
             Message::PendingDismiss => {
                 self.progress_operations_dismiss = true;
@@ -4283,16 +4285,12 @@ impl Application for App {
                 self.progress_operations_dismiss = false;
             }
             Message::PendingError(id, err) => {
-                let mut tasks = Vec::new();
-                tasks.push(self.handle_operation_errors(vec![(id, err)]));
-                tasks.push(self.update_state());
-                return Task::batch(tasks);
+                return self.handle_operation_errors(vec![(id, err)]);
             }
             Message::PendingResults(completed, errors) => {
                 return Task::batch(vec![
                     self.handle_completed_operations(completed),
                     self.handle_operation_errors(errors),
-                    self.update_state(),
                 ]);
             }
             Message::PendingPause(id, pause) => {
@@ -4533,7 +4531,6 @@ impl Application for App {
                 }
             }
             Message::UpdateState => {
-                //return self.state_handler.load();
                 return self.update_state();
             }
             Message::SystemThemeModeChange => {
@@ -6765,7 +6762,7 @@ impl Application for App {
             }
             let finished = count - running;
             total_progress /= count as f32;
-            if running >= 1 && (running > 1 || finished > 0) {
+            if running >= 1 {
                 if finished > 0 {
                     title = fl!(
                         "operations-running-finished",
@@ -6773,14 +6770,14 @@ impl Application for App {
                         finished = finished,
                         percent = ((total_progress * 100.0) as i32)
                     );
-                } else {
+                } else if running > 1 || title.is_empty() {
                     title = fl!(
                         "operations-running",
                         running = running,
                         percent = ((total_progress * 100.0) as i32)
                     );
                 }
-            } else if self.state.operations_in_progress > 0 {
+            } else if title.is_empty() && self.state.operations_in_progress > 0 {
                 title = fl!(
                     "operations-running-background",
                     running = self.state.operations_in_progress
