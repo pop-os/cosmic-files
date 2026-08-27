@@ -57,7 +57,7 @@ pub fn key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
 
     // App-only keys
     if matches!(mode, tab::Mode::App) {
-        bind!([Ctrl], Key::Character("d".into()), AddToBookmarks);      // Taken over
+        bind!([Ctrl], Key::Character("d".into()), AddToStarred);      // Taken over
         bind!([Ctrl,Shift], Key::Character("d".into()), AddToSidebar);  // Moved
         bind!([Ctrl], Key::Named(Named::Enter), OpenInNewTab);
         bind!([Ctrl], Key::Character(",".into()), Settings);
