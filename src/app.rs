@@ -35,7 +35,7 @@ use cosmic::widget::about::About;
 use cosmic::widget::dnd_destination::DragId;
 use cosmic::widget::menu::action::MenuAction;
 use cosmic::widget::menu::key_bind::KeyBind;
-use cosmic::widget::segmented_button::{self, Entity, ReorderEvent};
+use cosmic::widget::segmented_button::{self, Entity, InsertPosition, ReorderEvent};
 use cosmic::widget::{self, icon, settings, space};
 use cosmic::{Application, ApplicationExt, Element, cosmic_theme, executor, surface, theme};
 use mime_guess::Mime;
@@ -424,6 +424,7 @@ pub enum Message {
     PermanentlyDelete(Option<Entity>),
     Preview(Option<Entity>),
     ReloadMimeAppCache,
+    ReorderNav(ReorderEvent),
     ReorderTab(ReorderEvent),
     RescanRecents,
     RescanTrash,
@@ -472,7 +473,7 @@ pub enum Message {
     ZoomOut(Option<Entity>),
     DndHoverLocTimeout(Location),
     DndHoverTabTimeout(Entity),
-    DndEnterNav(Entity),
+    DndEnterNav(Entity, Vec<String>),
     DndExitNav,
     DndEnterTab(Entity, Vec<String>),
     DndExitTab,
@@ -2530,22 +2531,38 @@ impl Application for App {
 
         let nav_model = self.nav_model()?;
 
-        let mut nav = cosmic::widget::nav_bar(nav_model, |entity| {
-            cosmic::Action::Cosmic(cosmic::app::Action::NavBar(entity))
-        })
-        .drag_id(self.nav_drag_id)
-        .on_dnd_enter(|entity, _| cosmic::Action::App(Message::DndEnterNav(entity)))
-        .on_dnd_leave(|_| cosmic::Action::App(Message::DndExitNav))
-        .on_dnd_drop(|entity, data, action| {
-            cosmic::Action::App(Message::DndDropNav(entity, data, action))
-        })
-        .on_context(|entity| cosmic::Action::App(Message::NavBarContext(entity)))
-        .on_close(|entity| cosmic::Action::App(Message::NavBarClose(entity)))
-        .on_middle_press(|entity| {
-            cosmic::Action::App(Message::NavMenuAction(NavMenuAction::OpenInNewTab(entity)))
-        })
-        .context_menu(self.nav_context_menu())
-        .close_icon(icon::from_name("media-eject-symbolic").size(16).icon());
+        let cosmic_theme::Spacing {
+            space_xxs, space_s, ..
+        } = theme::spacing();
+
+        // The segmented button is built directly instead of using the nav_bar widget
+        // because the latter does not expose the tab drag support needed to reorder
+        // favorites, so its styling is replicated here.
+        let mut nav = segmented_button::vertical(nav_model)
+            .on_activate(|entity| cosmic::Action::Cosmic(cosmic::app::Action::NavBar(entity)))
+            .drag_id(self.nav_drag_id)
+            .on_dnd_enter(|entity, mimes| {
+                cosmic::Action::App(Message::DndEnterNav(entity, mimes))
+            })
+            .on_dnd_leave(|_| cosmic::Action::App(Message::DndExitNav))
+            .on_dnd_drop(|entity, data, action| {
+                cosmic::Action::App(Message::DndDropNav(entity, data, action))
+            })
+            .enable_tab_drag(String::from("x-cosmic-files/nav-dnd"))
+            .tab_drag_threshold(25.)
+            .on_reorder(|event| cosmic::Action::App(Message::ReorderNav(event)))
+            .on_context(|entity| cosmic::Action::App(Message::NavBarContext(entity)))
+            .on_close(|entity| cosmic::Action::App(Message::NavBarClose(entity)))
+            .on_middle_press(|entity| {
+                cosmic::Action::App(Message::NavMenuAction(NavMenuAction::OpenInNewTab(entity)))
+            })
+            .context_menu(self.nav_context_menu())
+            .close_icon(icon::from_name("media-eject-symbolic").size(16).icon())
+            .button_height(32)
+            .button_padding([space_s, space_xxs, space_s, space_xxs])
+            .button_spacing(space_xxs)
+            .spacing(space_xxs)
+            .style(theme::SegmentedButton::NavBar);
 
         #[cfg(feature = "wayland")]
         {
@@ -2554,7 +2571,15 @@ impl Application for App {
                 .on_surface_action(|m| cosmic::Action::Cosmic(cosmic::app::Action::Surface(m)))
         }
 
-        let mut nav = nav.into_container();
+        let mut nav = widget::container(
+            widget::scrollable(widget::container(nav).padding(space_xxs))
+                .class(cosmic::style::iced::Scrollable::Minimal)
+                .height(Length::Fill),
+        )
+        .class(theme::Container::custom(
+            cosmic::widget::nav_bar::nav_bar_style,
+        ))
+        .height(Length::Fill);
 
         if !self.core.is_condensed() {
             nav = nav.max_width(280);
@@ -4994,8 +5019,10 @@ impl Application for App {
                 }
                 return self.update(Message::TabConfig(config));
             }
-            Message::DndEnterNav(entity) => {
-                if let Some(location) = self.nav_model.data::<Location>(entity) {
+            Message::DndEnterNav(entity, mimes) => {
+                if mimes.iter().all(|m| m.as_str() != "x-cosmic-files/nav-dnd")
+                    && let Some(location) = self.nav_model.data::<Location>(entity)
+                {
                     self.nav_dnd_hover = Some((location.clone(), Instant::now()));
                     let location = location.clone();
                     return Task::perform(tokio::time::sleep(HOVER_DURATION), move |()| {
@@ -5522,6 +5549,46 @@ impl Application for App {
             }
             Message::NetworkDriveOpenTabAfterMount { location } => {
                 return self.open_tab(location, false, None);
+            }
+            Message::ReorderNav(ReorderEvent {
+                dragged,
+                target,
+                position,
+            }) => {
+                if let Some(&FavoriteIndex(from)) = self.nav_model.data::<FavoriteIndex>(dragged) {
+                    // Find the new index in the favorites list
+                    let to_opt = if let Some(&FavoriteIndex(target_i)) =
+                        self.nav_model.data::<FavoriteIndex>(target)
+                    {
+                        Some(match position {
+                            InsertPosition::Before => target_i,
+                            InsertPosition::After => target_i + 1,
+                        })
+                    } else {
+                        // Allow dropping right past the edges of the favorites section
+                        match self.nav_model.data::<Location>(target) {
+                            Some(Location::Recents) if position == InsertPosition::After => Some(0),
+                            Some(Location::Trash) if position == InsertPosition::Before => {
+                                Some(self.config.favorites.len())
+                            }
+                            _ => None,
+                        }
+                    };
+                    // Moving an item to its own position or just after it does not change order
+                    if let Some(to) = to_opt
+                        && to != from
+                        && to != from + 1
+                    {
+                        let mut favorites = self.config.favorites.clone();
+                        if from < favorites.len() {
+                            let favorite = favorites.remove(from);
+                            let to = if to > from { to - 1 } else { to };
+                            favorites.insert(to.min(favorites.len()), favorite);
+                            config_set!(favorites, favorites);
+                            return self.update_config();
+                        }
+                    }
+                }
             }
             Message::ReorderTab(ReorderEvent {
                 dragged,
