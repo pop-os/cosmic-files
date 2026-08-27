@@ -3,7 +3,9 @@
 
 use cosmic::app::Settings;
 use cosmic::iced::Limits;
-use std::path::PathBuf;
+use std::ffi::{OsStr, OsString};
+use std::io;
+use std::path::{Path, PathBuf};
 use std::{env, fs, process};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -19,7 +21,7 @@ pub mod clipboard;
 pub mod config;
 mod context_action;
 pub mod dialog;
-mod exe_icon;
+mod exe_thumbnailer;
 mod key_bind;
 pub(crate) mod large_image;
 pub(crate) mod load_image;
@@ -41,6 +43,58 @@ pub(crate) type FxOrderMap<K, V> = ordermap::OrderMap<K, V, rustc_hash::FxBuildH
 
 pub(crate) fn err_str<T: ToString>(err: T) -> String {
     err.to_string()
+}
+
+fn thumbnail_request(
+    mut args: impl Iterator<Item = OsString>,
+) -> Option<Result<(), Box<dyn std::error::Error>>> {
+    let mode = args.next()?;
+    if mode != OsStr::new("--thumbnail-exe") {
+        return None;
+    }
+
+    Some((|| {
+        let usage = || {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "usage: cosmic-files --thumbnail-exe OUTPUT --size SIZE INPUT",
+            )
+        };
+        let output = args.next().ok_or_else(usage)?;
+        if args.next().as_deref() != Some(OsStr::new("--size")) {
+            return Err(usage().into());
+        }
+        let size = args
+            .next()
+            .and_then(|arg| arg.into_string().ok())
+            .and_then(|arg| arg.parse::<u32>().ok())
+            .filter(|size| *size > 0)
+            .ok_or_else(usage)?;
+        let input = args.next().ok_or_else(usage)?;
+        if args.next().is_some() {
+            return Err(usage().into());
+        }
+
+        exe_thumbnailer::thumbnail(Path::new(&input), Path::new(&output), size)
+    })())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::thumbnail_request;
+    use std::ffi::OsString;
+
+    #[test]
+    fn normal_arguments_are_not_thumbnail_requests() {
+        let args = [OsString::from("/tmp/file.exe")];
+        assert!(thumbnail_request(args.into_iter()).is_none());
+    }
+
+    #[test]
+    fn malformed_thumbnail_request_returns_an_error() {
+        let args = [OsString::from("--thumbnail-exe")];
+        assert!(thumbnail_request(args.into_iter()).unwrap().is_err());
+    }
 }
 
 pub fn desktop_dir() -> PathBuf {
@@ -129,6 +183,13 @@ pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
 /// Runs application with these settings
 #[rustfmt::skip]
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(result) = thumbnail_request(env::args_os().skip(1)) {
+        return result;
+    }
+    if let Ok(executable) = env::current_exe() {
+        thumbnailer::register_bundled_exe_thumbnailer(executable);
+    }
+
     let log_format = tracing_subscriber::fmt::format()
         .pretty()
         .with_line_number(true)
