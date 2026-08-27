@@ -12,6 +12,10 @@ cargo-target-dir := env('CARGO_TARGET_DIR', 'target')
 bin-src := cargo-target-dir / 'release' / name
 bin-dst := base-dir / 'bin' / name
 
+thumbnailer-bin-name := name + '-thumbnailer'
+thumbnailer-bin-src := cargo-target-dir / 'release' / thumbnailer-bin-name
+thumbnailer-bin-dst := base-dir / 'bin' / thumbnailer-bin-name
+
 applet-name := name + '-applet'
 applet-src := cargo-target-dir / 'release' / applet-name
 applet-dst := base-dir / 'bin' / applet-name
@@ -96,6 +100,7 @@ heaptrack *args:
 # Installs files
 install:
     install -Dm0755 {{bin-src}} {{bin-dst}}
+    install -Dm0755 {{thumbnailer-bin-src}} {{thumbnailer-bin-dst}}
     install -Dm0755 {{applet-src}} {{applet-dst}}
     install -Dm0644 {{desktop-src}} {{desktop-dst}}
     install -Dm0644 {{metainfo-src}} {{metainfo-dst}}
@@ -110,7 +115,7 @@ install-applet:
 
 # Uninstalls installed files
 uninstall:
-    rm -f {{bin-dst}} {{applet-dst}} {{thumbnailer-dst}}
+    rm -f {{bin-dst}} {{thumbnailer-bin-dst}} {{applet-dst}} {{thumbnailer-dst}}
 
 # Vendor dependencies locally
 vendor:

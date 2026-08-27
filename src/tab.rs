@@ -41,6 +41,8 @@ use std::io::{BufRead, BufReader, Read};
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 use std::path::{self, Path, PathBuf};
+#[cfg(debug_assertions)]
+use std::sync::Mutex;
 use std::sync::{Arc, LazyLock, RwLock, atomic};
 use std::time::{Duration, Instant, SystemTime};
 use tempfile::NamedTempFile;
@@ -1984,6 +1986,36 @@ impl Clone for ItemThumbnail {
     }
 }
 
+#[cfg(debug_assertions)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct DevExeThumbnailKey {
+    path: PathBuf,
+    modified: Option<SystemTime>,
+    file_size: u64,
+    thumbnail_size: u32,
+}
+
+#[cfg(debug_assertions)]
+#[derive(Clone, Debug)]
+enum DevExeThumbnail {
+    Image(widget::image::Handle),
+    Failed,
+}
+
+#[cfg(debug_assertions)]
+impl DevExeThumbnail {
+    fn to_item_thumbnail(&self) -> ItemThumbnail {
+        match self {
+            Self::Image(handle) => ItemThumbnail::Image(handle.clone(), None),
+            Self::Failed => ItemThumbnail::NotImage,
+        }
+    }
+}
+
+#[cfg(debug_assertions)]
+static DEV_EXE_THUMBNAILS: LazyLock<Mutex<FxHashMap<DevExeThumbnailKey, DevExeThumbnail>>> =
+    LazyLock::new(|| Mutex::new(FxHashMap::default()));
+
 impl ItemThumbnail {
     pub fn new(
         path: &Path,
@@ -1994,6 +2026,14 @@ impl ItemThumbnail {
         jobs: usize,
         max_size_mb: u64,
     ) -> Self {
+        #[cfg(debug_assertions)]
+        if matches!(
+            mime.essence_str(),
+            "application/vnd.microsoft.portable-executable" | "application/x-msdownload"
+        ) {
+            return Self::dev_exe_thumbnail(path, &metadata, thumbnail_size);
+        }
+
         let thumbnail_cacher =
             ThumbnailCacher::new(path, ThumbnailSize::from_pixel_size(thumbnail_size));
         match thumbnail_cacher.as_ref() {
@@ -2225,6 +2265,39 @@ impl ItemThumbnail {
         }
 
         Self::NotImage
+    }
+
+    #[cfg(debug_assertions)]
+    fn dev_exe_thumbnail(path: &Path, metadata: &ItemMetadata, thumbnail_size: u32) -> Self {
+        let key = DevExeThumbnailKey {
+            path: path.to_path_buf(),
+            modified: metadata.modified(),
+            file_size: metadata.file_size().unwrap_or_default(),
+            thumbnail_size,
+        };
+
+        if let Some(cached) = DEV_EXE_THUMBNAILS.lock().unwrap().get(&key).cloned() {
+            return cached.to_item_thumbnail();
+        }
+
+        let thumbnail = match crate::exe_thumbnailer::thumbnail_image(path, thumbnail_size) {
+            Ok(image) => DevExeThumbnail::Image(widget::image::Handle::from_rgba(
+                image.width(),
+                image.height(),
+                image.into_raw(),
+            )),
+            Err(err) => {
+                log::debug!("no embedded EXE icon for {}: {}", path.display(), err);
+                DevExeThumbnail::Failed
+            }
+        };
+
+        let mut cache = DEV_EXE_THUMBNAILS.lock().unwrap();
+        if cache.len() >= 512 {
+            cache.clear();
+        }
+        cache.insert(key, thumbnail.clone());
+        thumbnail.to_item_thumbnail()
     }
 
     fn generate_thumbnail_external(

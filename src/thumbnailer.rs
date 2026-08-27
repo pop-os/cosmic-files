@@ -7,23 +7,15 @@ use mime_guess::Mime;
 use rustc_hash::FxHashMap;
 #[cfg(feature = "desktop")]
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process;
-use std::sync::{LazyLock, Mutex, OnceLock};
+use std::sync::{LazyLock, Mutex};
+#[cfg(feature = "desktop")]
 use std::time::Instant;
-
-const EXE_THUMBNAILER_EXEC: &str = "cosmic-files --thumbnail-exe %o --size %s %i";
-const EXE_MIME_TYPES: [&str; 2] = [
-    "application/vnd.microsoft.portable-executable",
-    "application/x-msdownload",
-];
-
-static BUNDLED_EXE_THUMBNAILER: OnceLock<PathBuf> = OnceLock::new();
 
 #[derive(Clone, Debug)]
 pub struct Thumbnailer {
     pub exec: String,
-    executable: Option<PathBuf>,
 }
 
 impl Thumbnailer {
@@ -35,12 +27,7 @@ impl Thumbnailer {
     ) -> Option<process::Command> {
         let args_vec: Vec<String> = shlex::split(&self.exec)?;
         let mut args = args_vec.iter();
-        let parsed_executable = args.next()?;
-        let executable = self
-            .executable
-            .as_deref()
-            .unwrap_or_else(|| Path::new(parsed_executable));
-        let mut command = process::Command::new(executable);
+        let mut command = process::Command::new(args.next()?);
         for arg in args {
             if arg.starts_with('%') {
                 match arg.as_str() {
@@ -83,39 +70,15 @@ impl ThumbnailerCache {
         thumbnailer_cache
     }
 
+    #[cfg(not(feature = "desktop"))]
+    pub fn reload(&mut self) {}
+
+    #[cfg(feature = "desktop")]
     pub fn reload(&mut self) {
         let start = Instant::now();
 
         self.cache.clear();
-        self.load_bundled_exe_thumbnailer();
 
-        #[cfg(feature = "desktop")]
-        self.load_external_thumbnailers();
-
-        let elapsed = start.elapsed();
-        log::info!("loaded thumbnailer cache in {elapsed:?}");
-    }
-
-    fn load_bundled_exe_thumbnailer(&mut self) {
-        let Some(executable) = BUNDLED_EXE_THUMBNAILER.get() else {
-            return;
-        };
-        let thumbnailer = Thumbnailer {
-            exec: EXE_THUMBNAILER_EXEC.to_string(),
-            executable: Some(executable.clone()),
-        };
-
-        for mime_type in EXE_MIME_TYPES {
-            let mime = mime_type.parse::<Mime>().expect("valid static MIME type");
-            self.cache
-                .entry(mime)
-                .or_insert_with(|| Vec::with_capacity(1))
-                .push(thumbnailer.clone());
-        }
-    }
-
-    #[cfg(feature = "desktop")]
-    fn load_external_thumbnailers(&mut self) {
         let mut search_dirs = Vec::new();
         let xdg_dirs = xdg::BaseDirectories::new();
 
@@ -191,11 +154,13 @@ impl ThumbnailerCache {
                         .or_insert_with(|| Vec::with_capacity(1));
                     apps.push(Thumbnailer {
                         exec: exec.to_string(),
-                        executable: None,
                     });
                 }
             }
         }
+
+        let elapsed = start.elapsed();
+        log::info!("loaded thumbnailer cache in {elapsed:?}");
     }
 
     pub fn get(&self, key: &Mime) -> Vec<Thumbnailer> {
@@ -206,41 +171,29 @@ impl ThumbnailerCache {
 static THUMBNAILER_CACHE: LazyLock<Mutex<ThumbnailerCache>> =
     LazyLock::new(|| Mutex::new(ThumbnailerCache::new()));
 
-pub fn register_bundled_exe_thumbnailer(executable: PathBuf) {
-    let _ = BUNDLED_EXE_THUMBNAILER.set(executable);
-}
-
 pub fn thumbnailer(mime: &Mime) -> Vec<Thumbnailer> {
     let thumbnailer_cache = THUMBNAILER_CACHE.lock().unwrap();
     thumbnailer_cache.get(mime)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "desktop"))]
 mod tests {
-    use super::{EXE_THUMBNAILER_EXEC, Thumbnailer};
-    use std::path::{Path, PathBuf};
+    use super::Thumbnailer;
+    use std::path::Path;
 
     #[test]
-    fn command_uses_bundled_executable() {
-        let executable = PathBuf::from("/tmp/cosmic-files-under-test");
+    fn command_expands_thumbnailer_arguments() {
         let thumbnailer = Thumbnailer {
-            exec: EXE_THUMBNAILER_EXEC.to_string(),
-            executable: Some(executable.clone()),
+            exec: "cosmic-files-thumbnailer %o --size %s %i".to_string(),
         };
 
         let command = thumbnailer
             .command(Path::new("input.exe"), Path::new("output.png"), 128)
-            .unwrap();
-        assert_eq!(command.get_program(), executable);
+            .expect("valid thumbnailer command");
+        assert_eq!(command.get_program(), "cosmic-files-thumbnailer");
         assert_eq!(
             command.get_args().collect::<Vec<_>>(),
-            [
-                "--thumbnail-exe",
-                "output.png",
-                "--size",
-                "128",
-                "input.exe"
-            ]
+            ["output.png", "--size", "128", "input.exe"]
         );
     }
 }

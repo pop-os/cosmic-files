@@ -2,10 +2,45 @@
 
 use image::{DynamicImage, ImageFormat, RgbaImage};
 use std::error::Error;
+use std::ffi::{OsStr, OsString};
 use std::io;
 use std::path::Path;
 
+#[allow(dead_code)]
+pub fn thumbnail_from_args(mut args: impl Iterator<Item = OsString>) -> Result<(), Box<dyn Error>> {
+    let usage = || {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "usage: cosmic-files-thumbnailer OUTPUT --size SIZE INPUT",
+        )
+    };
+    let output = args.next().ok_or_else(usage)?;
+    if args.next().as_deref() != Some(OsStr::new("--size")) {
+        return Err(usage().into());
+    }
+    let size = args
+        .next()
+        .and_then(|arg| arg.into_string().ok())
+        .and_then(|arg| arg.parse::<u32>().ok())
+        .filter(|size| *size > 0)
+        .ok_or_else(usage)?;
+    let input = args.next().ok_or_else(usage)?;
+    if args.next().is_some() {
+        return Err(usage().into());
+    }
+
+    thumbnail(Path::new(&input), Path::new(&output), size)
+}
+
+#[allow(dead_code)]
 pub fn thumbnail(input: &Path, output: &Path, size: u32) -> Result<(), Box<dyn Error>> {
+    let icon = thumbnail_image(input, size)?;
+    DynamicImage::ImageRgba8(icon).save_with_format(output, ImageFormat::Png)?;
+
+    Ok(())
+}
+
+pub fn thumbnail_image(input: &Path, size: u32) -> Result<RgbaImage, Box<dyn Error>> {
     if size == 0 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -14,13 +49,14 @@ pub fn thumbnail(input: &Path, output: &Path, size: u32) -> Result<(), Box<dyn E
         .into());
     }
 
-    // pelite requires the complete PE image. This runs only in the external thumbnailer process.
-    let data = std::fs::read(input)?;
-    if data.len() < 64 || !data.starts_with(b"MZ") {
+    // Map the PE so only the headers and resource pages touched by pelite are read.
+    let data = pelite::FileMap::open(input)?;
+    let bytes = data.as_ref();
+    if bytes.len() < 64 || !bytes.starts_with(b"MZ") {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "input is not a PE file").into());
     }
 
-    let file = pelite::PeFile::from_bytes(&data).map_err(invalid_data)?;
+    let file = pelite::PeFile::from_bytes(bytes).map_err(invalid_data)?;
     let resources = file.resources().map_err(invalid_data)?;
     let (_name, group) = resources
         .icons()
@@ -31,26 +67,24 @@ pub fn thumbnail(input: &Path, output: &Path, size: u32) -> Result<(), Box<dyn E
     let mut ico = Vec::new();
     group.write(&mut ico).map_err(invalid_data)?;
 
-    let icon = largest_icon(&ico).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidData, "PE icon could not be decoded")
-    })?;
-    DynamicImage::ImageRgba8(icon)
-        .thumbnail(size, size)
-        .save_with_format(output, ImageFormat::Png)?;
-
-    Ok(())
+    Ok(
+        DynamicImage::ImageRgba8(largest_icon(&ico).map_err(invalid_data)?)
+            .thumbnail(size, size)
+            .into_rgba8(),
+    )
 }
 
 fn invalid_data(error: impl std::fmt::Display) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, error.to_string())
 }
 
-fn largest_icon(ico: &[u8]) -> Option<RgbaImage> {
+fn largest_icon(ico: &[u8]) -> Result<RgbaImage, String> {
     if ico.len() < 6 {
-        return None;
+        return Err("ICO header is truncated".to_string());
     }
     let count = usize::from(u16::from_le_bytes([ico[4], ico[5]]));
     let mut best: Option<(u64, RgbaImage)> = None;
+    let mut errors = Vec::new();
 
     for i in 0..count.min(32) {
         let entry = 6 + i * 16;
@@ -76,93 +110,66 @@ fn largest_icon(ico: &[u8]) -> Option<RgbaImage> {
             continue;
         };
 
-        let decoded = if data.starts_with(b"\x89PNG") {
-            decode(data)
-        } else {
-            dib_to_bmp(data).and_then(|bmp| decode(&bmp))
-        };
-        if let Some(image) = decoded {
-            let pixels = u64::from(image.width()) * u64::from(image.height());
-            if best
-                .as_ref()
-                .is_none_or(|(best_pixels, _)| pixels > *best_pixels)
-            {
-                best = Some((pixels, image));
+        match decode_icon(&ico[entry..entry + 16], data) {
+            Ok(image) => {
+                let pixels = u64::from(image.width()) * u64::from(image.height());
+                if best
+                    .as_ref()
+                    .is_none_or(|(best_pixels, _)| pixels > *best_pixels)
+                {
+                    best = Some((pixels, image));
+                }
             }
+            Err(err) => errors.push(format!("frame {i}: {err}")),
         }
     }
 
-    best.map(|(_, image)| image)
-}
-
-fn decode(data: &[u8]) -> Option<RgbaImage> {
-    image::ImageReader::new(io::Cursor::new(data))
-        .with_guessed_format()
-        .ok()?
-        .decode()
-        .ok()
-        .map(DynamicImage::into_rgba8)
-}
-
-fn dib_to_bmp(data: &[u8]) -> Option<Vec<u8>> {
-    if data.len() < 40 {
-        return None;
-    }
-    let header_size = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
-    if !(40..=124).contains(&header_size) || header_size > data.len() {
-        return None;
-    }
-
-    let width = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
-    // Icon DIBs store height as 2x (XOR image plus AND mask).
-    let height = u32::from_le_bytes([data[8], data[9], data[10], data[11]]) / 2;
-    let bits_per_pixel = u16::from_le_bytes([data[14], data[15]]);
-    let compression = u32::from_le_bytes([data[16], data[17], data[18], data[19]]);
-    let row_bits = width.checked_mul(u32::from(bits_per_pixel))?;
-    let row_bytes = row_bits.checked_add(31)?.checked_div(32)?.checked_mul(4)?;
-    let xor_size = usize::try_from(height)
-        .ok()?
-        .checked_mul(usize::try_from(row_bytes).ok()?)?;
-
-    let colors = if bits_per_pixel <= 8 {
-        let used = u32::from_le_bytes([data[32], data[33], data[34], data[35]]);
-        if used == 0 {
-            1u32 << bits_per_pixel
+    best.map(|(_, image)| image).ok_or_else(|| {
+        if errors.is_empty() {
+            "PE icon contains no complete frames".to_string()
         } else {
-            used
+            format!("PE icon could not be decoded ({})", errors.join("; "))
         }
-    } else if compression == 3 {
-        3
-    } else {
-        0
-    };
-    let color_table_size = usize::try_from(colors).ok()?.checked_mul(4)?;
-    let dib_size = header_size
-        .checked_add(color_table_size)?
-        .checked_add(xor_size)?;
-    if dib_size > data.len() {
-        return None;
+    })
+}
+
+fn decode_icon(entry: &[u8], data: &[u8]) -> Result<RgbaImage, String> {
+    if data.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return image::ImageReader::with_format(io::Cursor::new(data), ImageFormat::Png)
+            .decode()
+            .map(DynamicImage::into_rgba8)
+            .map_err(|err| err.to_string());
     }
 
-    let file_size = 14usize.checked_add(dib_size)?;
-    let pixel_offset = 14usize
-        .checked_add(header_size)?
-        .checked_add(color_table_size)?;
-    let mut bmp = Vec::with_capacity(file_size);
-    bmp.extend_from_slice(b"BM");
-    bmp.extend_from_slice(&u32::try_from(file_size).ok()?.to_le_bytes());
-    bmp.extend_from_slice(&0u32.to_le_bytes());
-    bmp.extend_from_slice(&u32::try_from(pixel_offset).ok()?.to_le_bytes());
-    bmp.extend_from_slice(&data[..dib_size]);
-    bmp[22..26].copy_from_slice(&height.to_le_bytes());
-    Some(bmp)
+    let capacity = 22usize
+        .checked_add(data.len())
+        .ok_or_else(|| "frame is too large".to_string())?;
+    let data_len = u32::try_from(data.len()).map_err(|_| "frame is too large".to_string())?;
+    let mut ico = Vec::with_capacity(capacity);
+    ico.extend_from_slice(&[0, 0, 1, 0, 1, 0]);
+    ico.extend_from_slice(entry);
+    ico[14..18].copy_from_slice(&data_len.to_le_bytes());
+    ico[18..22].copy_from_slice(&22u32.to_le_bytes());
+    ico.extend_from_slice(data);
+
+    image::ImageReader::with_format(io::Cursor::new(ico), ImageFormat::Ico)
+        .decode()
+        .map(DynamicImage::into_rgba8)
+        .map_err(|err| err.to_string())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::largest_icon;
-    use image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
+    use super::{largest_icon, thumbnail_from_args};
+    use image::{DynamicImage, ImageFormat, Rgb, RgbImage, Rgba, RgbaImage};
+    use std::ffi::OsString;
     use std::io::Cursor;
+
+    #[test]
+    fn malformed_thumbnail_request_returns_an_error() {
+        let args = [OsString::from("output.png")];
+        assert!(thumbnail_from_args(args.into_iter()).is_err());
+    }
 
     #[test]
     fn largest_icon_skips_invalid_entries() {
@@ -188,6 +195,56 @@ mod tests {
 
         let decoded = largest_icon(&ico).expect("valid icon after malformed entry");
         assert_eq!(decoded.dimensions(), (2, 2));
+        assert_eq!(decoded.get_pixel(0, 0), &Rgba([1, 2, 3, 255]));
+    }
+
+    #[test]
+    fn dib_and_mask_is_applied() {
+        let mut dib = vec![0; 40];
+        dib[0..4].copy_from_slice(&40u32.to_le_bytes());
+        dib[4..8].copy_from_slice(&2i32.to_le_bytes());
+        dib[8..12].copy_from_slice(&4i32.to_le_bytes());
+        dib[12..14].copy_from_slice(&1u16.to_le_bytes());
+        dib[14..16].copy_from_slice(&24u16.to_le_bytes());
+
+        // Two bottom-up BGR rows, padded to four-byte boundaries.
+        dib.extend_from_slice(&[0, 0, 255, 0, 0, 255, 0, 0]);
+        dib.extend_from_slice(&[0, 0, 255, 0, 0, 255, 0, 0]);
+        // The first mask row is the bottom image row; its first pixel is transparent.
+        dib.extend_from_slice(&[0b1000_0000, 0, 0, 0]);
+        dib.extend_from_slice(&[0, 0, 0, 0]);
+
+        let mut ico = vec![0, 0, 1, 0, 1, 0];
+        let mut entry = [0; 16];
+        entry[..8].copy_from_slice(&[2, 2, 0, 0, 1, 0, 24, 0]);
+        entry[8..12].copy_from_slice(&u32::try_from(dib.len()).unwrap().to_le_bytes());
+        entry[12..16].copy_from_slice(&22u32.to_le_bytes());
+        ico.extend_from_slice(&entry);
+        ico.extend_from_slice(&dib);
+
+        let decoded = largest_icon(&ico).expect("valid DIB icon");
+        assert_eq!(decoded.get_pixel(0, 0), &Rgba([255, 0, 0, 255]));
+        assert_eq!(decoded.get_pixel(0, 1), &Rgba([255, 0, 0, 0]));
+    }
+
+    #[test]
+    fn rgb_png_icon_is_decoded() {
+        let image = RgbImage::from_pixel(2, 2, Rgb([1, 2, 3]));
+        let mut png = Cursor::new(Vec::new());
+        DynamicImage::ImageRgb8(image)
+            .write_to(&mut png, ImageFormat::Png)
+            .unwrap();
+        let png = png.into_inner();
+
+        let mut ico = vec![0, 0, 1, 0, 1, 0];
+        let mut entry = [0; 16];
+        entry[..8].copy_from_slice(&[2, 2, 0, 0, 1, 0, 24, 0]);
+        entry[8..12].copy_from_slice(&u32::try_from(png.len()).unwrap().to_le_bytes());
+        entry[12..16].copy_from_slice(&22u32.to_le_bytes());
+        ico.extend_from_slice(&entry);
+        ico.extend_from_slice(&png);
+
+        let decoded = largest_icon(&ico).expect("valid RGB PNG icon");
         assert_eq!(decoded.get_pixel(0, 0), &Rgba([1, 2, 3, 255]));
     }
 }
