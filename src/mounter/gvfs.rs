@@ -194,7 +194,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
             }
         };
 
-        let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) = {
+        let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed, icon_handle_column) = {
             let file_icon = |size| {
                 info.icon()
                     .as_ref()
@@ -216,6 +216,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
                 file_icon(sizes.grid()),
                 file_icon(sizes.list()),
                 file_icon(sizes.list_condensed()),
+                file_icon(sizes.column()),
             )
         };
 
@@ -236,6 +237,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
             icon_handle_grid,
             icon_handle_list,
             icon_handle_list_condensed,
+            icon_handle_column,
             thumbnail_opt: Some(ItemThumbnail::NotImage),
             button_id: widget::Id::unique(),
             pos_opt: Cell::new(None),

@@ -190,6 +190,7 @@ pub enum Action {
     TabPrev,
     TabViewGrid,
     TabViewList,
+    TabViewColumn,
     ToggleFoldersFirst,
     ToggleShowHidden,
     ToggleSort(HeadingOptions),
@@ -269,6 +270,7 @@ impl Action {
             Self::TabPrev => Message::TabPrev,
             Self::TabViewGrid => Message::TabView(entity_opt, tab::View::Grid),
             Self::TabViewList => Message::TabView(entity_opt, tab::View::List),
+            Self::TabViewColumn => Message::TabView(entity_opt, tab::View::Column),
             Self::ToggleFoldersFirst => Message::ToggleFoldersFirst,
             Self::ToggleShowHidden => Message::ToggleShowHidden,
             Self::ToggleSort(sort) => {
