@@ -106,7 +106,7 @@ pub fn context_menu<'a>(
 
     // Allow paste when clipboard has data and we're in a location that supports it
     let can_paste = clipboard_paste_available && tab.location.supports_paste();
-    let can_select_all = tab.items_opt().is_some_and(|items| !items.is_empty());
+    let can_select_all = tab.can_select_all();
     let select_all_item = || {
         if can_select_all {
             menu_item(fl!("select-all"), Action::SelectAll).into()
@@ -631,9 +631,7 @@ pub fn menu_bar<'a>(
         )
     };
     let in_trash = tab_opt.is_some_and(|tab| tab.location.is_trash());
-    let can_select_all = tab_opt
-        .and_then(Tab::items_opt)
-        .is_some_and(|items| !items.is_empty());
+    let can_select_all = tab_opt.is_some_and(Tab::can_select_all);
 
     let mut selected_dir = 0;
     let mut selected = 0;
