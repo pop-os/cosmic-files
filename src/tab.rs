@@ -6500,9 +6500,9 @@ impl Tab {
                                 widget::text::caption(format!("{modified_text} - {size_text}"))
                                     .into(),
                             ])
+                            .width(Length::Fill)
                             .into()
                         );
-
                     } else {
                         children.push(
                             if is_search {
@@ -6534,27 +6534,27 @@ impl Tab {
                                     .into()
                             );
                         }
-                        if show_starred {
-                            children.push(
-                                widget::container(if item.starred {
-                                        widget::tooltip(
-                                            widget::button::icon(widget::icon::from_name("starred-symbolic").size(16))
-                                            .on_press(Message::RemoveFromStarred(item_path_vec)),
-                                            widget::text::body(fl!("remove-from-starred")),
-                                            widget::tooltip::Position::Top,
-                                        )
-                                    } else {
-                                        widget::tooltip(
-                                            widget::button::icon(widget::icon::from_name("non-starred-symbolic").size(16))
-                                            .on_press(Message::AddToStarred(item_path_vec)),
-                                            widget::text::body(fl!("add-to-starred")),
-                                            widget::tooltip::Position::Top,
-                                        )
-                                    })
-                                    .width(Length::Fixed(starred_width))
-                                    .into()
-                            )
-                        };
+                    };
+                    if show_starred {
+                        children.push(
+                            widget::container(if item.starred {
+                                    widget::tooltip(
+                                        widget::button::icon(widget::icon::from_name("starred-symbolic").size(16))
+                                        .on_press(Message::RemoveFromStarred(item_path_vec)),
+                                        widget::text::body(fl!("remove-from-starred")),
+                                        widget::tooltip::Position::Top,
+                                    )
+                                } else {
+                                    widget::tooltip(
+                                        widget::button::icon(widget::icon::from_name("non-starred-symbolic").size(16))
+                                        .on_press(Message::AddToStarred(item_path_vec)),
+                                        widget::text::body(fl!("add-to-starred")),
+                                        widget::tooltip::Position::Top,
+                                    )
+                                })
+                                .width(Length::Fixed(starred_width))
+                                .into()
+                        )
                     };
                     let row = widget::row::with_children(children)
                     .height(Length::Fixed(f32::from(row_height)))
