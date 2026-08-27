@@ -1,4 +1,4 @@
 [Thumbnailer Entry]
-TryExec=cosmic-files
-Exec=cosmic-files --thumbnail-exe %o --size %s %i
+TryExec=cosmic-files-thumbnailer
+Exec=cosmic-files-thumbnailer %o --size %s %i
 MimeType=application/vnd.microsoft.portable-executable;application/x-msdownload;
