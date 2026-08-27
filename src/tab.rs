@@ -3398,35 +3398,73 @@ impl Tab {
         let items = self.items_opt.as_ref()?;
         let item = items.get(self.select_focus?)?;
         let rect = item.rect_opt.get()?;
+ 
+        // Horizontal scrollbar
+        if self.config.view == View::Column {
 
-        //TODO: move to function
-        let visible_rect = {
-            let point = match self.scroll_opt {
-                Some(offset) => Point::new(0.0, offset.y),
-                None => Point::new(0.0, 0.0),
+            //TODO: move to function
+            let visible_rect = {
+                let point = match self.scroll_opt {
+                    Some(offset) => Point::new(offset.x, 0.0),
+                    None => Point::new(0.0, 0.0),
+                };
+                let size = self
+                    .item_view_size_opt
+                    .get()
+                    .unwrap_or_else(|| Size::new(0.0, 0.0));
+                Rectangle::new(point, size)
             };
-            let size = self
-                .item_view_size_opt
-                .get()
-                .unwrap_or_else(|| Size::new(0.0, 0.0));
-            Rectangle::new(point, size)
-        };
 
-        if rect.y < visible_rect.y {
-            // Scroll up to rect
-            self.scroll_opt = Some(AbsoluteOffset { x: 0.0, y: rect.y });
-            self.scroll_opt
-        } else if (rect.y + rect.height) > (visible_rect.y + visible_rect.height) {
-            // Scroll down to rect
-            self.scroll_opt = Some(AbsoluteOffset {
-                x: 0.0,
-                y: rect.y + rect.height - visible_rect.height,
-            });
-            self.scroll_opt
-        } else {
-            // Do not scroll
-            None
+            if rect.x < visible_rect.x {
+                // Scroll left to rect
+                self.scroll_opt = Some(AbsoluteOffset { x: rect.x, y: 0.0 });
+                self.scroll_opt
+            } else if (rect.x + rect.width) > (visible_rect.x + visible_rect.width) {
+                // Scroll right to rect
+                self.scroll_opt = Some(AbsoluteOffset {
+                    x: rect.x + rect.width - visible_rect.width,
+                    y: 0.0,
+                });
+                self.scroll_opt
+            } else {
+                // Do not scroll
+                None
+            }
         }
+
+        // Vertical scrollbar
+        else {
+
+            //TODO: move to function
+            let visible_rect = {
+                let point = match self.scroll_opt {
+                    Some(offset) => Point::new(0.0, offset.y),
+                    None => Point::new(0.0, 0.0),
+                };
+                let size = self
+                    .item_view_size_opt
+                    .get()
+                    .unwrap_or_else(|| Size::new(0.0, 0.0));
+                Rectangle::new(point, size)
+            };
+
+            if rect.y < visible_rect.y {
+                // Scroll up to rect
+                self.scroll_opt = Some(AbsoluteOffset { x: 0.0, y: rect.y });
+                self.scroll_opt
+            } else if (rect.y + rect.height) > (visible_rect.y + visible_rect.height) {
+                // Scroll down to rect
+                self.scroll_opt = Some(AbsoluteOffset {
+                    x: 0.0,
+                    y: rect.y + rect.height - visible_rect.height,
+                });
+                self.scroll_opt
+            } else {
+                // Do not scroll
+                None
+            }
+        }
+
     }
 
     fn rows_per_page(&self) -> usize {
@@ -5002,7 +5040,7 @@ impl Tab {
             }
         }
 
-        // Scroll to top if needed
+        // Scroll to top-left if needed
         if self.scroll_opt.is_none() {
             let offset = AbsoluteOffset { x: 0.0, y: 0.0 };
             self.scroll_opt = Some(offset);
