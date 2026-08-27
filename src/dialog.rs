@@ -36,7 +36,7 @@ use crate::config::{Config, DialogConfig, TIME_CONFIG_ID, ThumbCfg, TimeConfig, 
 use crate::key_bind::key_binds;
 use crate::localize::LANGUAGE_SORTER;
 use crate::mounter::{MOUNTERS, MounterItem, MounterItems, MounterKey, MounterMessage};
-use crate::tab::{self, ItemMetadata, Location, SearchLocation, Tab};
+use crate::tab::{self, ItemMetadata, Location, ScrollDirection, SearchLocation, Tab};
 use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
 use crate::{fl, home_dir, menu, mime_icon};
 
@@ -464,7 +464,7 @@ enum Message {
     Open,
     Preview,
     Save(bool),
-    ScrollTab(i16),
+    ScrollTab(i16, Option<ScrollDirection>),
     SearchActivate,
     SearchClear,
     SearchInput(String),
@@ -492,7 +492,7 @@ impl From<AppMessage> for Message {
             AppMessage::None => Self::None,
             AppMessage::Preview(_entity_opt) => Self::Preview,
             AppMessage::SearchActivate => Self::SearchActivate,
-            AppMessage::ScrollTab(scroll_speed) => Self::ScrollTab(scroll_speed),
+            AppMessage::ScrollTab(scroll_speed, scroll_dir) => Self::ScrollTab(scroll_speed, scroll_dir),
             AppMessage::TabMessage(_entity_opt, tab_message) => Self::TabMessage(tab_message),
             AppMessage::TabView(_entity_opt, view) => Self::TabView(view),
             AppMessage::ToggleFoldersFirst => Self::ToggleFoldersFirst,
@@ -1716,9 +1716,10 @@ impl Application for App {
                     return window::close(self.flags.window_id);
                 }
             }
-            Message::ScrollTab(scroll_speed) => {
+            Message::ScrollTab(scroll_speed, scroll_dir) => {
                 return self.update(Message::TabMessage(tab::Message::ScrollTab(
                     f32::from(scroll_speed) / 10.0,
+                    scroll_dir
                 )));
             }
             Message::SearchActivate => {
@@ -2196,7 +2197,7 @@ impl Application for App {
             subscriptions.push(
                 iced::time::every(time::Duration::from_millis(10))
                     .with(scroll_speed)
-                    .map(|(scroll_speed, _)| Message::ScrollTab(scroll_speed)),
+                    .map(|(scroll_speed, _)| Message::ScrollTab(scroll_speed, None)),
             );
         }
 

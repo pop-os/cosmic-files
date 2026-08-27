@@ -1870,7 +1870,7 @@ pub enum Message {
     MiddleClick(usize),
     Resize(Rectangle),
     Scroll(Viewport),
-    ScrollTab(f32),
+    ScrollTab(f32, Option<ScrollDirection>),
     ScrollToFocused,
     SearchContext(Location, SearchContextWrapper),
     SearchReady(bool),
@@ -3000,7 +3000,7 @@ pub fn parse_hidden_file(path: &PathBuf) -> Box<[String]> {
         .collect()
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum ScrollDirection {
     Vertical,
     Horizontal,
@@ -4600,13 +4600,21 @@ impl Tab {
                 self.scroll_opt = Some(viewport.absolute_offset());
                 self.watch_drag = true;
             }
-            Message::ScrollTab(scroll_speed) => {
+            Message::ScrollTab(scroll_speed, scroll_dir) => {
+                let mut scroll_x_speed = 0.0;
+                let mut scroll_y_speed = 0.0;
+                match scroll_dir {
+                    Some(ScrollDirection::Horizontal) => { scroll_x_speed = scroll_speed },
+                    Some(ScrollDirection::Vertical) => { scroll_y_speed = scroll_speed },
+                    Some(ScrollDirection::Both) => { scroll_y_speed = scroll_speed },
+                    None => { scroll_y_speed = scroll_speed },
+                }
                 commands.push(Command::Iced(
                     scrollable::scroll_by(
                         self.scrollable_id.clone(),
                         AbsoluteOffset {
-                            x: 0.0,
-                            y: scroll_speed,
+                            x: scroll_x_speed,
+                            y: scroll_y_speed,
                         },
                     )
                     .into(),
@@ -6719,7 +6727,7 @@ impl Tab {
             let mut count = 0;
             let mut col = 0;
             let mut row = 0;
-            let mut page_row = 0;
+            let mut page_col = 0;
             let mut hidden = 0;
             let mut grid_elements = Vec::new();
             for &(i, item) in &items {
@@ -6917,15 +6925,15 @@ impl Tab {
                 }
 
                 count += 1;
-                row += 1;
-                if row >= page_row + rows {
-                    row = 0;
-                    col += 1;
-                }
-                if col >= cols {
+                col += 1;
+                if col >= page_col + cols {
                     col = 0;
-                    page_row += rows;
-                    row = page_row;
+                    row += 1;
+                }
+                if row >= rows {
+                    row = 0;
+                    page_col += cols;
+                    col = page_col;
                 }
             }
             
@@ -6942,34 +6950,34 @@ impl Tab {
 
             column = column.push(grid);
 
-            //TODO: HACK If we don't reach the right of the view, go ahead and add a spacer to do that
+            //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
             {
-                let mut max_right = 0;
+                let mut max_bottom = 0;
                 for (_, item) in items {
                     if let Some(rect) = item.rect_opt.get() {
-                        let right = (rect.x + rect.width).ceil() as usize;
-                        if right > max_right {
-                            max_right = right;
+                        let bottom = (rect.y + rect.height).ceil() as usize;
+                        if bottom > max_bottom {
+                            max_bottom = bottom;
                         }
                     }
                 }
 
-                // Cache content width for scroll clamping on next frame
-                self.content_width_opt.set(Some(max_right as f32));
+                // Cache content height for scroll clamping on next frame
+                self.content_height_opt.set(Some(max_bottom as f32));
 
                 // TODO: Don't have 'magic' number (10) here
-                let left_deduct = 10 * (space_xxs as usize);
+                let top_deduct = 10 * (space_xxs as usize);
 
                 self.item_view_size_opt
                     .set(self.size_opt.get().map(|s| Size {
-                        width: s.width - left_deduct as f32,
-                        height: s.height,
+                        width: s.width,
+                        height: s.height - top_deduct as f32,
                     }));
 
-                let spacer_width = width.saturating_sub(max_right + left_deduct);
-                if spacer_width > 0 {
+                let spacer_height = height.saturating_sub(max_bottom + top_deduct);
+                if spacer_height > 0 {
                     column = column.push(widget::container(
-                        space::horizontal().width(Length::Fixed(spacer_width as f32)),
+                        space::vertical().height(Length::Fixed(spacer_height as f32)),
                     ));
                 }
             }

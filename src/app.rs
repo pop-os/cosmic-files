@@ -79,7 +79,7 @@ use crate::operation::{
 use crate::spawn_detached::spawn_detached;
 use crate::tab::{
     self, HOVER_DURATION, HeadingOptions, ItemMetadata, Location, SORT_OPTION_FALLBACK,
-    SearchLocation, Tab,
+    ScrollDirection, SearchLocation, Tab,
 };
 use crate::trash::{Trash, TrashExt};
 use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
@@ -434,7 +434,7 @@ pub enum Message {
     ReplaceResult(ReplaceResult),
     RestoreFromTrash(Option<Entity>),
     SaveSortNames,
-    ScrollTab(i16),
+    ScrollTab(i16, Option<ScrollDirection>),
     SearchActivate,
     SearchClear,
     SearchInput(String),
@@ -4363,11 +4363,11 @@ impl Application for App {
                     return self.operation(Operation::Restore { items: trash_items });
                 }
             }
-            Message::ScrollTab(scroll_speed) => {
+            Message::ScrollTab(scroll_speed, scroll_dir) => {
                 let entity = self.tab_model.active();
                 return self.update(Message::TabMessage(
                     Some(entity),
-                    tab::Message::ScrollTab(f32::from(scroll_speed) / 10.0),
+                    tab::Message::ScrollTab(f32::from(scroll_speed) / 10.0, scroll_dir),
                 ));
             }
             Message::SearchActivate => {
@@ -7084,11 +7084,25 @@ impl Application for App {
         ];
 
         if let Some(scroll_speed) = self.auto_scroll_speed {
-            subscriptions.push(
-                iced::time::every(time::Duration::from_millis(10))
-                    .with(scroll_speed)
-                    .map(|(scroll_speed, _)| Message::ScrollTab(scroll_speed)),
-            );
+            let mut scroll_horizontal = false;
+            if let Some(tab) = self.tab_model.data::<Tab>(self.tab_model.active()) {
+                if tab.config.view == tab::View::Column {
+                    scroll_horizontal = true;
+                }
+            }
+            if scroll_horizontal {
+                subscriptions.push(
+                    iced::time::every(time::Duration::from_millis(10))
+                        .with(scroll_speed)
+                        .map(|(scroll_speed, _)| Message::ScrollTab(scroll_speed, Some(ScrollDirection::Horizontal))),
+                );
+            } else {
+                subscriptions.push(
+                    iced::time::every(time::Duration::from_millis(10))
+                        .with(scroll_speed)
+                        .map(|(scroll_speed, _)| Message::ScrollTab(scroll_speed, Some(ScrollDirection::Vertical))),
+                );
+            }
         }
 
         subscriptions.extend(MOUNTERS.iter().map(|(key, mounter)| {
