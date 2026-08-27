@@ -399,7 +399,7 @@ pub enum Operation {
         paths: Box<[PathBuf]>,
     },
     RemoveFromBookmarks {
-        paths: Box<[PathBuf]>,
+        paths: Vec<PathBuf>,
     },
     Rename {
         from: PathBuf,

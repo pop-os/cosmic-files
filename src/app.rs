@@ -2995,7 +2995,14 @@ impl Application for App {
                 }
                 let mut tasks = Vec::new();
                 tasks.push(self.operation(Operation::AddToBookmarks { paths }));
-                tasks.push(self.update_config());
+                // tasks.push(iced::Task::future(tokio::time::sleep(
+                //     std::time::Duration::from_millis(300),
+                // ))
+                // .discard()
+                // .chain(
+                //     self.update_config()
+                    
+                // ));
                 return Task::batch(tasks);
             }
             Message::AppTheme(app_theme) => {
@@ -4328,11 +4335,11 @@ impl Application for App {
                 return self.operation(Operation::RemoveFromRecents { paths });
             }
             Message::RemoveFromBookmarks(entity_opt) => {
-                let paths: Box<[_]> = self.selected_paths(entity_opt).collect();
-                let mut tasks = Vec::new();
-                tasks.push(self.operation(Operation::RemoveFromBookmarks { paths }));
-                tasks.push(self.update_config());
-                return Task::batch(tasks);
+                let mut paths = Vec::new();
+                for path in self.selected_paths(entity_opt) {
+                    paths.push(path);
+                }
+                return self.operation(Operation::RemoveFromBookmarks { paths });
             }
             Message::ReloadMimeAppCache => {
                 self.mime_app_cache.reload();
@@ -4613,7 +4620,9 @@ impl Application for App {
                         }
                         tab::Command::AddToBookmarks(paths) => {
                             commands.push(self.operation(Operation::AddToBookmarks { paths }));
-                            commands.push(self.update_config());
+                        }
+                        tab::Command::RemoveFromBookmarks(paths) => {
+                            commands.push(self.operation(Operation::RemoveFromBookmarks { paths }));
                         }
                         tab::Command::AutoScroll(scroll_speed) => {
                             // converting an f32 to an i16 here by multiplying by 10 and casting to i16
