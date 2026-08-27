@@ -58,6 +58,7 @@ pub fn context_menu<'a>(
     key_binds: &HashMap<KeyBind, Action>,
     modifiers: &Modifiers,
     clipboard_paste_available: bool,
+    show_bookmarks: &bool,
     context_actions: &[ContextActionPreset],
 ) -> Element<'a, tab::Message> {
     let find_key = |action: &Action| -> String {
@@ -197,7 +198,9 @@ pub fn context_menu<'a>(
             | Location::Path(..)
             | Location::Search(SearchLocation::Path(..), ..)
             | Location::Search(SearchLocation::Recents, ..)
+            | Location::Search(SearchLocation::Bookmarks, ..)
             | Location::Recents
+            | Location::Bookmarks
             | Location::Network(_, _, Some(_)),
         ) => {
             if selected_trash_only {
@@ -290,16 +293,32 @@ pub fn context_menu<'a>(
                     children.push(divider::horizontal::light().into());
                     children.push(menu_item(fl!("delete-permanently"), Action::Delete).into());
                 } else {
+                    children.push(divider::horizontal::light().into());
+                    if *show_bookmarks {
+                        if matches!(tab.location, Location::Bookmarks) {
+                            children.push(menu_item(
+                                fl!("remove-from-bookmarks"),
+                                Action::RemoveFromBookmarks
+                            ).into());
+                        } else {
+                            children.push(menu_item(
+                                fl!("add-to-bookmarks"),
+                                Action::AddToBookmarks
+                            ).into());
+                        }
+                    }
                     if matches!(tab.mode, tab::Mode::App) {
-                        children.push(divider::horizontal::light().into());
-                        children
-                            .push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
+                        children.push(menu_item(
+                            fl!("add-to-sidebar"),
+                            Action::AddToSidebar).into()
+                        );
                     }
                     children.push(divider::horizontal::light().into());
                     if tab.location.is_recents() {
-                        children.push(
-                            menu_item(fl!("remove-from-recents"), Action::RemoveFromRecents).into(),
-                        );
+                        children.push(menu_item(
+                            fl!("remove-from-recents"),
+                            Action::RemoveFromRecents
+                        ).into());
                         children.push(divider::horizontal::light().into());
                     }
                     if selected_mount_point == 0 {
@@ -318,7 +337,7 @@ pub fn context_menu<'a>(
             } else {
                 //TODO: need better designs for menu with no selection
                 //TODO: have things like properties but they apply to the folder?
-                if tab.location != Location::Recents {
+                if tab.location != Location::Recents && tab.location != Location::Bookmarks {
                     children.push(menu_item(fl!("new-folder"), Action::NewFolder).into());
                     children.push(menu_item(fl!("new-file"), Action::NewFile).into());
                     children.push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
@@ -367,7 +386,9 @@ pub fn context_menu<'a>(
             | Location::Path(..)
             | Location::Search(SearchLocation::Path(..), ..)
             | Location::Search(SearchLocation::Recents, ..)
+            | Location::Search(SearchLocation::Bookmarks, ..)
             | Location::Recents
+            | Location::Bookmarks
             | Location::Network(_, _, Some(_)),
         ) => {
             if selected > 0 {
@@ -685,6 +706,11 @@ pub fn menu_bar<'a>(
                         menu::Item::Button(fl!("reload-folder"), None, Action::Reload),
                         menu::Item::Divider,
                         menu_button_optional(
+                            fl!("add-to-bookmarks"),
+                            Action::AddToBookmarks,
+                            selected > 0,
+                        ),
+                        menu_button_optional(
                             fl!("add-to-sidebar"),
                             Action::AddToSidebar,
                             selected > 0,
@@ -804,9 +830,9 @@ pub fn menu_bar<'a>(
         )
 }
 
-pub fn location_context_menu<'a>(ancestor_index: usize) -> Element<'a, tab::Message> {
+pub fn location_context_menu<'a>(ancestor_index: usize, tab_mode: tab::Mode) -> Element<'a, tab::Message> {
     //TODO: only add some of these when in App mode
-    let children = [
+    let mut children = vec![
         menu_button!(text::body(fl!("open-in-new-tab")))
             .on_press(tab::Message::LocationMenuAction(
                 LocationMenuAction::OpenInNewTab(ancestor_index),
@@ -823,13 +849,21 @@ pub fn location_context_menu<'a>(ancestor_index: usize) -> Element<'a, tab::Mess
                 LocationMenuAction::Preview(ancestor_index),
             ))
             .into(),
-        divider::horizontal::light().into(),
-        menu_button!(text::body(fl!("add-to-sidebar")))
+    ];
+
+    if matches!(tab_mode, tab::Mode::App) {
+        children.push(divider::horizontal::light().into());
+        children.push(menu_button!(text::body(fl!("add-to-bookmarks")))
+            .on_press(tab::Message::LocationMenuAction(
+                LocationMenuAction::AddToBookmarks(ancestor_index),
+            ))
+            .into());
+        children.push(menu_button!(text::body(fl!("add-to-sidebar")))
             .on_press(tab::Message::LocationMenuAction(
                 LocationMenuAction::AddToSidebar(ancestor_index),
             ))
-            .into(),
-    ];
+            .into());
+    }
 
     container(column::with_children(children))
         .padding(1)

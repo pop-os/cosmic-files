@@ -778,6 +778,8 @@ impl App {
                     Some(SearchLocation::Path(path.clone()))
                 } else if self.tab.location.is_recents() {
                     Some(SearchLocation::Recents)
+                } else if self.tab.location.is_bookmarked() {
+                    Some(SearchLocation::Bookmarks)
                 } else if self.tab.location.is_trash() {
                     Some(SearchLocation::Trash)
                 } else {
@@ -800,6 +802,7 @@ impl App {
                 Location::Search(search_location, ..) => match search_location {
                     SearchLocation::Path(path) => Some((Location::Path(path.clone()), false)),
                     SearchLocation::Recents => Some((Location::Recents, false)),
+                    SearchLocation::Bookmarks => Some((Location::Bookmarks, false)),
                     SearchLocation::Trash => Some((Location::Trash, false)),
                 },
                 _ => None,
@@ -874,6 +877,13 @@ impl App {
         Task::none()
     }
 
+    fn has_bookmarks(&mut self) -> bool {
+        match user_places_xbel::parse_file() {
+            Ok(bookmarks) => !bookmarks.bookmarks.is_empty(),
+            Err(_) => false,
+        }
+    }
+
     fn update_nav_model(&mut self) {
         let mut nav_model = segmented_button::ModelBuilder::default();
 
@@ -882,6 +892,18 @@ impl App {
                 b.text(fl!("recents"))
                     .icon(widget::icon::from_name("document-open-recent-symbolic"))
                     .data(Location::Recents)
+            });
+        }
+
+        if self.flags.config.show_bookmarks {
+            let mut icon = "non-starred-symbolic";
+            if self.has_bookmarks() {
+                icon = "starred-symbolic";
+            }
+            nav_model = nav_model.insert(|b| {
+                b.text(fl!("bookmarks"))
+                    .icon(widget::icon::from_name(icon))
+                    .data(Location::Bookmarks)
             });
         }
 
@@ -1836,7 +1858,8 @@ impl Application for App {
                                                             &app.tab,
                                                             &app.key_binds,
                                                             &app.modifiers,
-                                                            false, // Paste not used in dialogs
+                                                            false,  // Paste not used in dialogs
+                                                            &false, // Show Bookmarks
                                                             &app.flags.config.context_actions,
                                                         )
                                                         .map(Message::TabMessage)
@@ -2043,7 +2066,13 @@ impl Application for App {
 
         col = col.push(
             self.tab
-                .view(&self.key_binds, &self.modifiers, false, &[])
+                .view(
+                    &self.key_binds,
+                    &self.modifiers,
+                    false,  // Clipboard has content
+                    &false, // Show Bookmarks
+                    &[]
+                )
                 .map(Message::TabMessage),
         );
 

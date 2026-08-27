@@ -133,6 +133,7 @@ pub struct Flags {
 pub enum Action {
     About,
     AddToSidebar,
+    AddToBookmarks,
     Compress,
     Copy,
     CopyPath,
@@ -176,6 +177,7 @@ pub enum Action {
     Preview,
     Reload,
     RemoveFromRecents,
+    RemoveFromBookmarks,
     Rename,
     RestoreFromTrash,
     SearchActivate,
@@ -206,6 +208,7 @@ impl Action {
         match self {
             Self::About => Message::ToggleContextPage(ContextPage::About),
             Self::AddToSidebar => Message::AddToSidebar(entity_opt),
+            Self::AddToBookmarks => Message::AddToBookmarks(entity_opt),
             Self::Compress => Message::Compress(entity_opt),
             Self::Copy => Message::Copy(entity_opt),
             Self::CopyPath => Message::CopyPath(entity_opt),
@@ -253,6 +256,7 @@ impl Action {
             Self::Preview => Message::Preview(entity_opt),
             Self::Reload => Message::TabMessage(entity_opt, tab::Message::Reload),
             Self::RemoveFromRecents => Message::RemoveFromRecents(entity_opt),
+            Self::RemoveFromBookmarks => Message::RemoveFromBookmarks(entity_opt),
             Self::Rename => Message::Rename(entity_opt),
             Self::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
             Self::SearchActivate => Message::SearchActivate,
@@ -336,6 +340,7 @@ impl MenuAction for NavMenuAction {
 #[derive(Clone, Debug)]
 pub enum Message {
     AddToSidebar(Option<Entity>),
+    AddToBookmarks(Option<Entity>),
     AppTheme(AppTheme),
     CloseToast(widget::ToastId),
     Compress(Option<Entity>),
@@ -426,8 +431,10 @@ pub enum Message {
     ReloadMimeAppCache,
     ReorderTab(ReorderEvent),
     RescanRecents,
+    RescanBookmarks,
     RescanTrash,
     RemoveFromRecents(Option<Entity>),
+    RemoveFromBookmarks(Option<Entity>),
     Rename(Option<Entity>),
     ReplaceResult(ReplaceResult),
     RestoreFromTrash(Option<Entity>),
@@ -438,6 +445,7 @@ pub enum Message {
     SearchInput(String),
     SetShowDetails(bool),
     SetShowRecents(bool),
+    SetShowBookmarks(bool),
     SetTypeToSearch(TypeToSearch),
     SystemThemeModeChange,
     Size(window::Id, Size),
@@ -479,6 +487,7 @@ pub enum Message {
     DndDropTab(Entity, Option<ClipboardPaste>, DndAction),
     DndDropNav(Entity, Option<ClipboardPaste>, DndAction),
     Recents,
+    Bookmarks,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     OutputEvent(OutputEvent, WlOutput),
     Cosmic(app::Action),
@@ -1593,6 +1602,32 @@ impl App {
         Task::batch(commands)
     }
 
+    fn rescan_bookmarks(&mut self) -> Task<Message> {
+        let needs_reload: Box<[_]> = self
+            .tab_model
+            .iter()
+            .filter_map(|entity| {
+                let tab = self.tab_model.data::<Tab>(entity)?;
+                tab.location
+                    .is_bookmarked()
+                    .then_some((entity, tab.location.clone()))
+            })
+            .collect();
+
+        let commands = needs_reload
+            .into_iter()
+            .map(|(entity, location)| self.update_tab(entity, location, None));
+
+        Task::batch(commands)
+    }
+
+    fn has_bookmarks(&mut self) -> bool {
+        match user_places_xbel::parse_file() {
+            Ok(bookmarks) => !bookmarks.bookmarks.is_empty(),
+            Err(_) => false,
+        }
+    }
+
     fn search_get(&self) -> Option<&str> {
         let entity = self.tab_model.active();
         let tab = self.tab_model.data::<Tab>(entity)?;
@@ -1621,6 +1656,8 @@ impl App {
                         Some(SearchLocation::Path(path.clone()))
                     } else if tab.location.is_recents() {
                         Some(SearchLocation::Recents)
+                    } else if tab.location.is_bookmarked() {
+                        Some(SearchLocation::Bookmarks)
                     } else if tab.location.is_trash() {
                         Some(SearchLocation::Trash)
                     } else {
@@ -1643,6 +1680,7 @@ impl App {
                     Location::Search(search_location, ..) => match search_location {
                         SearchLocation::Path(path) => Some((Location::Path(path.clone()), false)),
                         SearchLocation::Recents => Some((Location::Recents, false)),
+                        SearchLocation::Bookmarks => Some((Location::Bookmarks, false)),
                         SearchLocation::Trash => Some((Location::Trash, false)),
                     },
                     _ => None,
@@ -1769,6 +1807,18 @@ impl App {
                 b.text(fl!("recents"))
                     .icon(icon::from_name("document-open-recent-symbolic"))
                     .data(Location::Recents)
+            });
+        }
+
+        if self.config.show_bookmarks {
+            let mut icon = "non-starred-symbolic";
+            if self.has_bookmarks() {
+                icon = "starred-symbolic";
+            }
+            nav_model = nav_model.insert(|b| {
+                b.text(fl!("bookmarks"))
+                    .icon(icon::from_name(icon))
+                    .data(Location::Bookmarks)
             });
         }
 
@@ -2275,6 +2325,10 @@ impl App {
                 .add({
                     settings::item::builder(fl!("show-recents"))
                         .toggler(self.config.show_recents, Message::SetShowRecents)
+                })
+                .add({
+                    settings::item::builder(fl!("show-bookmarks"))
+                        .toggler(self.config.show_bookmarks, Message::SetShowBookmarks)
                 })
                 .into(),
         ])
@@ -2933,6 +2987,16 @@ impl Application for App {
                 }
                 config_set!(favorites, favorites);
                 return self.update_config();
+            }
+            Message::AddToBookmarks(entity_opt) => {
+                let mut paths = Vec::new();
+                for path in self.selected_paths(entity_opt) {
+                    paths.push(path);
+                }
+                let mut tasks = Vec::new();
+                tasks.push(self.operation(Operation::AddToBookmarks { paths }));
+                tasks.push(self.update_config());
+                return Task::batch(tasks);
             }
             Message::AppTheme(app_theme) => {
                 config_set!(app_theme, app_theme);
@@ -4263,11 +4327,21 @@ impl Application for App {
                 let paths: Box<[_]> = self.selected_paths(entity_opt).collect();
                 return self.operation(Operation::RemoveFromRecents { paths });
             }
+            Message::RemoveFromBookmarks(entity_opt) => {
+                let paths: Box<[_]> = self.selected_paths(entity_opt).collect();
+                let mut tasks = Vec::new();
+                tasks.push(self.operation(Operation::RemoveFromBookmarks { paths }));
+                tasks.push(self.update_config());
+                return Task::batch(tasks);
+            }
             Message::ReloadMimeAppCache => {
                 self.mime_app_cache.reload();
             }
             Message::RescanRecents => {
                 return self.rescan_recents();
+            }
+            Message::RescanBookmarks => {
+                return self.rescan_bookmarks();
             }
             Message::RescanTrash => {
                 // Update trash icon if empty/full
@@ -4398,6 +4472,10 @@ impl Application for App {
             }
             Message::SetShowRecents(show_recents) => {
                 config_set!(show_recents, show_recents);
+                return self.update_config();
+            }
+            Message::SetShowBookmarks(show_bookmarks) => {
+                config_set!(show_bookmarks, show_bookmarks);
                 return self.update_config();
             }
             Message::SetTypeToSearch(type_to_search) => {
@@ -4533,6 +4611,10 @@ impl Application for App {
                             config_set!(favorites, favorites);
                             commands.push(self.update_config());
                         }
+                        tab::Command::AddToBookmarks(paths) => {
+                            commands.push(self.operation(Operation::AddToBookmarks { paths }));
+                            commands.push(self.update_config());
+                        }
                         tab::Command::AutoScroll(scroll_speed) => {
                             // converting an f32 to an i16 here by multiplying by 10 and casting to i16
                             // further resolution isn't necessary
@@ -4584,15 +4666,16 @@ impl Application for App {
 
                                     commands.push(self.update(Message::Surface(
                                         cosmic::surface::action::app_popup(
-                                        move |_| cosmic::surface::action::LiveSettings {
-                                                    corners: Some(iced::runtime::platform_specific::wayland::CornerRadius {
-                                                        top_left: rad[0] as u32,
-                                                        top_right: rad[1] as u32,
-                                                        bottom_left: rad[2] as u32,
-                                                        bottom_right: rad[3] as u32,
-                                                    }),
-                                                    ..Default::default()
-                                                },                                            move |app: &mut Self| -> SctkPopupSettings {
+                                            move |_| cosmic::surface::action::LiveSettings {
+                                                corners: Some(iced::runtime::platform_specific::wayland::CornerRadius {
+                                                    top_left: rad[0] as u32,
+                                                    top_right: rad[1] as u32,
+                                                    bottom_left: rad[2] as u32,
+                                                    bottom_right: rad[3] as u32,
+                                                }),
+                                                ..Default::default()
+                                            },
+                                            move |app: &mut Self| -> SctkPopupSettings {
                                                 let anchor_rect = Rectangle {
                                                     x: point.x as i32,
                                                     y: point.y as i32,
@@ -4955,6 +5038,9 @@ impl Application for App {
                         }
                         Some(Location::Recents | Location::Search(SearchLocation::Recents, ..)) => {
                             command.arg("--recents");
+                        }
+                        Some(Location::Bookmarks | Location::Search(SearchLocation::Bookmarks, ..)) => {
+                            command.arg("--bookmarks");
                         }
                         Some(Location::Trash | Location::Search(SearchLocation::Trash, ..)) => {
                             command.arg("--trash");
@@ -5335,6 +5421,11 @@ impl Application for App {
             Message::Recents => {
                 if self.config.show_recents {
                     return self.open_tab(Location::Recents, false, None);
+                }
+            }
+            Message::Bookmarks => {
+                if self.config.show_bookmarks {
+                    return self.open_tab(Location::Bookmarks, false, None);
                 }
             }
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
@@ -6653,6 +6744,7 @@ impl Application for App {
                     &self.key_binds,
                     &self.modifiers,
                     self.clipboard_has_content(),
+                    &self.config.show_bookmarks,
                     &self.config.context_actions,
                 )
                 .map(move |message| Message::TabMessage(Some(entity), message));
@@ -6682,6 +6774,7 @@ impl Application for App {
                                 &self.key_binds,
                                 &window.modifiers,
                                 self.clipboard_has_content(),
+                                &self.config.show_bookmarks,
                                 &self.config.context_actions,
                             )
                             .map(|x| Message::TabMessage(Some(*entity), x)),
@@ -6700,6 +6793,7 @@ impl Application for App {
                                 &self.key_binds,
                                 &window.modifiers,
                                 self.clipboard_has_content(),
+                                &self.config.show_bookmarks,
                                 &self.config.context_actions,
                             )
                             .map(move |message| Message::TabMessage(Some(*entity), message)),
@@ -6783,6 +6877,7 @@ impl Application for App {
             not(target_os = "android")
         ))]
         struct RecentsWatcherSubscription;
+        struct BookmarksWatcherSubscription;
 
         let mut subscriptions = vec![
             //TODO: filter more events by window id
@@ -7090,6 +7185,77 @@ impl Application for App {
                             }
                             Err(e) => {
                                 log::warn!("failed to create new watcher for recents file: {e:?}")
+                            }
+                        }
+
+                        std::future::pending().await
+                    },
+                )
+            }),
+            #[cfg(all(
+                not(feature = "desktop-applet"),
+                not(target_os = "ios"),
+                not(target_os = "android")
+            ))]
+            Subscription::run_with(TypeId::of::<BookmarksWatcherSubscription>(), |_| {
+                stream::channel(
+                    1,
+                    |mut output: futures::channel::mpsc::Sender<Message>| async move {
+                        let Some(bookmark) = user_places_xbel::dir() else {
+                            log::warn!(
+                                "failed to watch bookmarks changes: .user-places.xbel does not exist"
+                            );
+                            return std::future::pending().await;
+                        };
+
+                        let watcher_res = new_debouncer(
+                            time::Duration::from_millis(250),
+                            Some(time::Duration::from_millis(250)),
+                            move |event_res: notify_debouncer_full::DebounceEventResult| {
+                                match event_res {
+                                    Ok(events) => {
+                                        // Programs differ in how they modify the recents file so the
+                                        // rescan is triggered on any event but access.
+                                        if events.iter().any(|event| {
+                                            let kind = event.kind;
+                                            kind.is_create()
+                                                || kind.is_modify()
+                                                || kind.is_remove()
+                                                || kind.is_other()
+                                        }) && let Err(e) = futures::executor::block_on(async {
+                                            output.send(Message::RescanBookmarks).await
+                                        }) {
+                                            log::warn!(
+                                                "open bookmarks tabs need to be updated but sending message failed: {e:?}"
+                                            );
+                                        }
+                                    }
+                                    Err(e) => {
+                                        log::warn!(
+                                            "failed to watch bookmarks file for changes: {e:?}"
+                                        )
+                                    }
+                                }
+                            },
+                        );
+
+                        match watcher_res {
+                            Ok(mut watcher) => {
+                                if let Err(e) = watcher
+                                    .watch(&bookmark, notify::RecursiveMode::NonRecursive)
+                                {
+                                    log::warn!(
+                                        "failed to add bookmarks file `{}` to watcher: {}",
+                                        bookmark.display(),
+                                        e
+                                    );
+                                }
+
+                                // Don't drop the watcher.
+                                std::future::pending::<()>().await;
+                            }
+                            Err(e) => {
+                                log::warn!("failed to create new watcher for bookmarks file: {e:?}")
                             }
                         }
 
