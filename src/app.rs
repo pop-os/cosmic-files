@@ -6503,6 +6503,12 @@ impl Application for App {
 
     fn header_end(&self) -> Vec<Element<'_, Self::Message>> {
         let mut elements = Vec::new();
+        elements.push(
+            widget::button::icon(icon::from_name("list-add-symbolic"))
+                .on_press(Message::TabNew)
+                .padding(8)
+                .into(),
+        );
         elements
     }
 
