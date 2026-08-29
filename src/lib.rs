@@ -19,8 +19,6 @@ pub mod clipboard;
 pub mod config;
 mod context_action;
 pub mod dialog;
-#[cfg(debug_assertions)]
-mod exe_thumbnailer;
 mod key_bind;
 pub(crate) mod large_image;
 pub(crate) mod load_image;
