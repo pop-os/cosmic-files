@@ -152,104 +152,182 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
         .map_err(err_str)?
     {
         let info = info_res.map_err(err_str)?;
-        let name = info.name().to_string_lossy().into_owned();
-        let display_name = String::from(info.display_name());
-
-        let uri = String::from(file.child(info.name()).uri());
-
-        //TODO: what is the best way to resolve shortcuts?
-        let location = Location::Network(uri, display_name.clone(), file.child(&name).path());
-
-        let metadata = if force_dir {
-            ItemMetadata::SimpleDir { entries: 0 }
-        } else {
-            let mtime = info.attribute_uint64(gio::FILE_ATTRIBUTE_TIME_MODIFIED);
-            let is_dir = matches!(info.file_type(), gio::FileType::Directory);
-            let size_opt = (!is_dir).then_some(info.size() as u64);
-            let mut children_opt = None;
-
-            // Counting children costs a directory listing per entry, which is far too
-            // expensive on a remote filesystem
-            if is_dir && !remote {
-                if let Some(path) = file.child(&name).path() {
-                    //TODO: calculate children in the background (and make it cancellable?)
-                    match std::fs::read_dir(&path) {
-                        Ok(entries) => {
-                            children_opt = Some(entries.count());
-                        }
-                        Err(err) => {
-                            log::warn!("failed to read directory {}: {}", path.display(), err);
-                            children_opt = Some(0);
-                        }
-                    }
-                } else {
-                    children_opt = Some(0);
-                }
-            }
-            ItemMetadata::GvfsPath {
-                mtime,
-                size_opt,
-                children_opt,
-                is_dir,
-            }
-        };
-
-        let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) = {
-            let file_icon = |size| {
-                info.icon()
-                    .as_ref()
-                    .and_then(|icon| gio_icon_to_path(icon, size))
-                    .map(widget::icon::from_path)
-                    .unwrap_or(
-                        widget::icon::from_name(if metadata.is_dir() {
-                            "folder"
-                        } else {
-                            "text-x-generic"
-                        })
-                        .size(size)
-                        .handle(),
-                    )
-            };
-            (
-                //TODO: get mime from content_type?
-                "inode/directory".parse().unwrap(),
-                file_icon(sizes.grid()),
-                file_icon(sizes.list()),
-                file_icon(sizes.list_condensed()),
-            )
-        };
-
-        // Check if item is hidden
-        let hidden = name.starts_with('.')
-            || info.boolean(gio::FILE_ATTRIBUTE_STANDARD_IS_HIDDEN)
-            || hidden_files.contains(&name);
-
-        items.push(tab::Item {
-            name,
-            is_mount_point: false,
-            display_name,
-            metadata,
-            hidden,
-            location_opt: Some(location),
-            image_dimensions: None,
-            mime,
-            icon_handle_grid,
-            icon_handle_list,
-            icon_handle_list_condensed,
-            thumbnail_opt: Some(ItemThumbnail::NotImage),
-            button_id: widget::Id::unique(),
-            pos_opt: Cell::new(None),
-            rect_opt: Cell::new(None),
-            selected: false,
-            highlighted: false,
-            overlaps_drag_rect: false,
-            //TODO: scan directory size on gvfs mounts?
-            dir_size: DirSize::NotDirectory,
-            cut: false,
-            checksums: ChecksumState::default(),
-        });
+        items.push(item_from_info(
+            &file,
+            &info,
+            sizes,
+            force_dir,
+            !remote,
+            &hidden_files,
+        ));
     }
     Ok(items)
+}
+
+fn item_from_info(
+    dir: &gio::File,
+    info: &gio::FileInfo,
+    sizes: IconSizes,
+    force_dir: bool,
+    count_children: bool,
+    hidden_files: &[String],
+) -> tab::Item {
+    let name = info.name().to_string_lossy().into_owned();
+    let display_name = String::from(info.display_name());
+
+    let uri = String::from(dir.child(info.name()).uri());
+
+    //TODO: what is the best way to resolve shortcuts?
+    let location = Location::Network(uri, display_name.clone(), dir.child(&name).path());
+
+    let metadata = if force_dir {
+        ItemMetadata::SimpleDir { entries: 0 }
+    } else {
+        let mtime = info.attribute_uint64(gio::FILE_ATTRIBUTE_TIME_MODIFIED);
+        let is_dir = matches!(info.file_type(), gio::FileType::Directory);
+        let size_opt = (!is_dir).then_some(info.size() as u64);
+        let mut children_opt = None;
+
+        // Counting children costs a directory listing per entry, which is far too
+        // expensive on a remote filesystem
+        if is_dir && count_children {
+            if let Some(path) = dir.child(&name).path() {
+                //TODO: calculate children in the background (and make it cancellable?)
+                match std::fs::read_dir(&path) {
+                    Ok(entries) => {
+                        children_opt = Some(entries.count());
+                    }
+                    Err(err) => {
+                        log::warn!("failed to read directory {}: {}", path.display(), err);
+                        children_opt = Some(0);
+                    }
+                }
+            } else {
+                children_opt = Some(0);
+            }
+        }
+        ItemMetadata::GvfsPath {
+            mtime,
+            size_opt,
+            children_opt,
+            is_dir,
+        }
+    };
+
+    let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) = {
+        let file_icon = |size| {
+            info.icon()
+                .as_ref()
+                .and_then(|icon| gio_icon_to_path(icon, size))
+                .map(widget::icon::from_path)
+                .unwrap_or(
+                    widget::icon::from_name(if metadata.is_dir() {
+                        "folder"
+                    } else {
+                        "text-x-generic"
+                    })
+                    .size(size)
+                    .handle(),
+                )
+        };
+        (
+            //TODO: get mime from content_type?
+            "inode/directory".parse().unwrap(),
+            file_icon(sizes.grid()),
+            file_icon(sizes.list()),
+            file_icon(sizes.list_condensed()),
+        )
+    };
+
+    // Check if item is hidden
+    let hidden = name.starts_with('.')
+        || info.boolean(gio::FILE_ATTRIBUTE_STANDARD_IS_HIDDEN)
+        || hidden_files.contains(&name);
+
+    tab::Item {
+        name,
+        is_mount_point: false,
+        display_name,
+        metadata,
+        hidden,
+        location_opt: Some(location),
+        image_dimensions: None,
+        mime,
+        icon_handle_grid,
+        icon_handle_list,
+        icon_handle_list_condensed,
+        thumbnail_opt: Some(ItemThumbnail::NotImage),
+        button_id: widget::Id::unique(),
+        pos_opt: Cell::new(None),
+        rect_opt: Cell::new(None),
+        selected: false,
+        highlighted: false,
+        overlaps_drag_rect: false,
+        //TODO: scan directory size on gvfs mounts?
+        dir_size: DirSize::NotDirectory,
+        cut: false,
+        checksums: ChecksumState::default(),
+    }
+}
+
+fn network_search(
+    uri: &str,
+    regex: &regex::Regex,
+    show_hidden: bool,
+    sizes: IconSizes,
+    callback: &dyn Fn(tab::Item) -> bool,
+) -> Result<(), String> {
+    let (_, root) = resolve_uri(uri);
+
+    // Breadth-first traversal of the network location
+    let mut first = true;
+    let mut queue = std::collections::VecDeque::from([root]);
+    while let Some(dir) = queue.pop_front() {
+        let enumerator = match dir.enumerate_children(
+            SCAN_ATTRIBUTES,
+            // Do not follow symlinks to avoid traversal cycles
+            gio::FileQueryInfoFlags::NOFOLLOW_SYMLINKS,
+            gio::Cancellable::NONE,
+        ) {
+            Ok(ok) => ok,
+            // Fail the search if the location itself cannot be enumerated
+            Err(err) if first => return Err(err_str(err)),
+            Err(err) => {
+                log::warn!("failed to enumerate {}: {}", dir.uri(), err);
+                continue;
+            }
+        };
+        first = false;
+
+        for info_res in enumerator {
+            let info = match info_res {
+                Ok(ok) => ok,
+                Err(err) => {
+                    log::warn!("failed to read entry in {}: {}", dir.uri(), err);
+                    continue;
+                }
+            };
+
+            let name = info.name().to_string_lossy().into_owned();
+            let hidden =
+                name.starts_with('.') || info.boolean(gio::FILE_ATTRIBUTE_STANDARD_IS_HIDDEN);
+            if hidden && !show_hidden {
+                continue;
+            }
+
+            if regex.is_match(&info.display_name()) || regex.is_match(&name) {
+                let item = item_from_info(&dir, &info, sizes, false, false, &[]);
+                if !callback(item) {
+                    return Ok(());
+                }
+            }
+
+            if matches!(info.file_type(), gio::FileType::Directory) {
+                queue.push_back(dir.child(info.name()));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn dir_info(uri: &str) -> Result<(String, String, Option<PathBuf>), glib::Error> {
@@ -720,6 +798,19 @@ impl Mounter for Gvfs {
         items_rx.blocking_recv()
     }
 
+    fn network_search(
+        &self,
+        uri: &str,
+        regex: &regex::Regex,
+        show_hidden: bool,
+        sizes: IconSizes,
+        callback: &dyn Fn(tab::Item) -> bool,
+    ) -> Option<Result<(), String>> {
+        // Runs on the caller's thread so long searches do not block the
+        // mounter command loop; synchronous GIO file operations are thread safe
+        Some(network_search(uri, regex, show_hidden, sizes, callback))
+    }
+
     fn dir_info(&self, uri: &str) -> Option<(String, String, Option<PathBuf>)> {
         let (result_tx, mut result_rx) = mpsc::channel(1);
         self.command_tx
@@ -789,5 +880,148 @@ impl Mounter for Gvfs {
                 )
             },
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+    use std::fs;
+
+    use super::network_search;
+    use crate::config::IconSizes;
+    use crate::tab::Location;
+
+    fn search_names(uri: &str, regex: &regex::Regex, show_hidden: bool) -> Vec<String> {
+        let found = RefCell::new(Vec::new());
+        network_search(uri, regex, show_hidden, IconSizes::default(), &|item| {
+            found.borrow_mut().push(item.name.clone());
+            true
+        })
+        .unwrap();
+        let mut names = found.into_inner();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn network_search_finds_nested_matches() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        fs::create_dir_all(root.join("subdir/nested")).unwrap();
+        fs::write(root.join("match-top.txt"), b"").unwrap();
+        fs::write(root.join("subdir/match-mid.txt"), b"").unwrap();
+        fs::write(root.join("subdir/nested/match-deep.txt"), b"").unwrap();
+        fs::write(root.join("subdir/other.txt"), b"").unwrap();
+        fs::create_dir(root.join(".hidden-dir")).unwrap();
+        fs::write(root.join(".hidden-dir/match-hidden.txt"), b"").unwrap();
+
+        let uri = format!("file://{}", root.display());
+        let regex = regex::RegexBuilder::new(&regex::escape("Match"))
+            .case_insensitive(true)
+            .build()
+            .unwrap();
+
+        assert_eq!(
+            search_names(&uri, &regex, false),
+            vec!["match-deep.txt", "match-mid.txt", "match-top.txt"]
+        );
+
+        // With show_hidden, hidden directories are traversed as well
+        assert_eq!(
+            search_names(&uri, &regex, true),
+            vec![
+                "match-deep.txt",
+                "match-hidden.txt",
+                "match-mid.txt",
+                "match-top.txt"
+            ]
+        );
+
+        // Callback returning false stops the search early
+        let count = RefCell::new(0usize);
+        network_search(&uri, &regex, true, IconSizes::default(), &|_| {
+            *count.borrow_mut() += 1;
+            false
+        })
+        .unwrap();
+        assert_eq!(*count.borrow(), 1);
+    }
+
+    #[test]
+    fn network_search_fails_on_missing_root() {
+        let regex = regex::Regex::new("x").unwrap();
+        assert!(
+            network_search(
+                "file:///nonexistent-cosmic-files-test-dir",
+                &regex,
+                false,
+                IconSizes::default(),
+                &|_| true,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn network_search_items_are_network_locations() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        fs::create_dir(root.join("match-dir")).unwrap();
+        fs::write(root.join("match-dir/match-file.txt"), b"data").unwrap();
+
+        let uri = format!("file://{}", root.display());
+        let regex = regex::Regex::new("match").unwrap();
+
+        let found = RefCell::new(Vec::new());
+        network_search(&uri, &regex, false, IconSizes::default(), &|item| {
+            found.borrow_mut().push(item);
+            true
+        })
+        .unwrap();
+        let mut items = found.into_inner();
+        items.sort_by(|a, b| a.name.cmp(&b.name));
+        assert_eq!(items.len(), 2);
+
+        // Results must carry network locations, like items listed by
+        // network_scan, so that opening them stays in the network view
+        let dir_item = &items[0];
+        assert_eq!(dir_item.name, "match-dir");
+        assert!(dir_item.metadata.is_dir());
+        match &dir_item.location_opt {
+            Some(Location::Network(item_uri, display_name, path_opt)) => {
+                assert_eq!(item_uri, &format!("{uri}/match-dir"));
+                assert_eq!(display_name, "match-dir");
+                assert_eq!(path_opt.as_deref(), Some(root.join("match-dir").as_path()));
+            }
+            other => panic!("expected network location, got {other:?}"),
+        }
+
+        let file_item = &items[1];
+        assert_eq!(file_item.name, "match-file.txt");
+        assert!(!file_item.metadata.is_dir());
+        assert_eq!(file_item.metadata.file_size(), Some(4));
+        // Modified time drives search result ordering in the tab
+        assert!(file_item.metadata.modified().is_some());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn network_search_does_not_follow_symlink_cycles() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        fs::create_dir(root.join("subdir")).unwrap();
+        fs::write(root.join("subdir/match.txt"), b"").unwrap();
+        // Symlink cycle back to the root of the search
+        std::os::unix::fs::symlink(root, root.join("subdir/match-loop")).unwrap();
+
+        let uri = format!("file://{}", root.display());
+        let regex = regex::Regex::new("match").unwrap();
+
+        // The search must terminate and report each entry exactly once
+        assert_eq!(
+            search_names(&uri, &regex, false),
+            vec!["match-loop", "match.txt"]
+        );
     }
 }

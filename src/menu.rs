@@ -396,7 +396,7 @@ pub fn context_menu<'a>(
                 children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
             }
         }
-        (_, Location::Network(..)) => {
+        (_, Location::Network(..) | Location::Search(SearchLocation::Network(..), ..)) => {
             if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
                     children.push(menu_item(fl!("open"), Action::Open).into());

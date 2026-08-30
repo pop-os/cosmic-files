@@ -1617,14 +1617,33 @@ impl App {
         if let Some(tab) = self.tab_model.data_mut::<Tab>(tab) {
             let location_opt = match term_opt {
                 Some(term) => {
-                    let search_location = if let Some(path) = tab.location.path_opt() {
-                        Some(SearchLocation::Path(path.clone()))
-                    } else if tab.location.is_recents() {
-                        Some(SearchLocation::Recents)
-                    } else if tab.location.is_trash() {
-                        Some(SearchLocation::Trash)
-                    } else {
-                        None
+                    let search_location = match &tab.location {
+                        // Network locations are searched through GIO. The
+                        // network:/// browse tree is excluded, as its entries
+                        // are servers that may not be mounted
+                        Location::Network(uri, display_name, path)
+                            if !uri.starts_with("network://") =>
+                        {
+                            Some(SearchLocation::Network(
+                                uri.clone(),
+                                display_name.clone(),
+                                path.clone(),
+                            ))
+                        }
+                        Location::Search(search_location @ SearchLocation::Network(..), ..) => {
+                            Some(search_location.clone())
+                        }
+                        location => {
+                            if let Some(path) = location.path_opt() {
+                                Some(SearchLocation::Path(path.clone()))
+                            } else if location.is_recents() {
+                                Some(SearchLocation::Recents)
+                            } else if location.is_trash() {
+                                Some(SearchLocation::Trash)
+                            } else {
+                                None
+                            }
+                        }
                     };
 
                     search_location.map(|search_location| {
@@ -1642,6 +1661,10 @@ impl App {
                 None => match &tab.location {
                     Location::Search(search_location, ..) => match search_location {
                         SearchLocation::Path(path) => Some((Location::Path(path.clone()), false)),
+                        SearchLocation::Network(uri, display_name, path) => Some((
+                            Location::Network(uri.clone(), display_name.clone(), path.clone()),
+                            false,
+                        )),
                         SearchLocation::Recents => Some((Location::Recents, false)),
                         SearchLocation::Trash => Some((Location::Trash, false)),
                     },
@@ -4948,7 +4971,10 @@ impl Application for App {
                         ) => {
                             command.arg(path);
                         }
-                        Some(Location::Network(uri, ..)) => {
+                        Some(
+                            Location::Network(uri, ..)
+                            | Location::Search(SearchLocation::Network(uri, ..), ..),
+                        ) => {
                             command.arg(uri);
                         }
                         Some(Location::Recents | Location::Search(SearchLocation::Recents, ..)) => {
