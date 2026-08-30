@@ -7,7 +7,48 @@ use std::fs;
 use std::path::Path;
 use std::sync::{LazyLock, Mutex};
 
+use crate::fl;
+
 pub const FALLBACK_MIME_ICON: &str = "text-x-generic";
+
+static MIME_DESCRIPTION_CACHE: LazyLock<Mutex<FxHashMap<(Mime, bool), String>>> =
+    LazyLock::new(|| Mutex::new(FxHashMap::default()));
+
+/// Returns a localized, human-readable description for a MIME type.
+///
+/// This follows Nautilus' detailed type behavior for directories and unknown
+/// files. GIO provides the descriptions from the system shared MIME database.
+pub fn mime_type_description(mime: &Mime, is_executable: bool) -> String {
+    MIME_DESCRIPTION_CACHE
+        .lock()
+        .unwrap()
+        .entry((mime.clone(), is_executable))
+        .or_insert_with(|| mime_type_description_uncached(mime, is_executable))
+        .clone()
+}
+
+fn mime_type_description_uncached(mime: &Mime, _is_executable: bool) -> String {
+    if *mime == "inode/directory" {
+        return fl!("filetype-folder");
+    }
+
+    #[cfg(feature = "gvfs")]
+    {
+        let content_type = mime.essence_str();
+        if gio::content_type_is_unknown(content_type) {
+            return if _is_executable {
+                fl!("filetype-program")
+            } else {
+                fl!("filetype-binary")
+            };
+        }
+
+        gio::content_type_get_description(content_type).to_string()
+    }
+
+    #[cfg(not(feature = "gvfs"))]
+    mime.essence_str().to_string()
+}
 
 #[derive(Debug, Eq, Hash, PartialEq)]
 struct MimeIconKey {
