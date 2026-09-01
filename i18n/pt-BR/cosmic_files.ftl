@@ -111,7 +111,7 @@ rename-folder = Renomear pasta
 
 ## Change Sidebar Label Dialog
 
-sidebar-label = Rótulo da barra lateral
+sidebar-label = Legenda da barra lateral
 
 ## Replace Dialog
 
@@ -369,7 +369,7 @@ open-in-terminal = Abrir no terminal
 move-to-trash = Mover para a lixeira
 restore-from-trash = Restaurar da lixeira
 remove-from-sidebar = Remover da barra lateral
-change-sidebar-label = Alterar rótulo na barra lateral
+change-sidebar-label = Alterar legenda da barra lateral
 sort-by-name = Ordenar por nome
 sort-by-modified = Ordenar por data de modificação
 sort-by-size = Ordenar por tamanho
@@ -454,3 +454,4 @@ rename-confirm = Renomear
 checksum = Soma de verificação { $kind }
 calculate = Calcular
 error = Erro
+search-application = Pesquisar por nome de aplicativo

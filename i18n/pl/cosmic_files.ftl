@@ -450,3 +450,6 @@ rename-confirm = Zmień nazwę
 checksum = { $kind } suma kontrolna
 calculate = Oblicz
 error = Błąd
+sidebar-label = Etykieta panelu bocznego
+search-application = Wyszukaj po nazwie aplikacji
+change-sidebar-label = Zmień etykietę panelu bocznego
