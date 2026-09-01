@@ -16,6 +16,7 @@ use cosmic::iced::runtime::{clipboard, task};
 use cosmic::iced::widget::button::focus;
 use cosmic::iced::widget::scrollable;
 use cosmic::iced::widget::scrollable::AbsoluteOffset;
+use cosmic::iced::widget::stack;
 use cosmic::iced::window::{self, Event as WindowEvent, Id as WindowId};
 use cosmic::iced::{
     self, Alignment, Event, Length, Rectangle, Size, Subscription, event, mouse, stream,
@@ -777,6 +778,41 @@ pub struct App {
 }
 
 impl App {
+    fn selection_footer(&self) -> Option<Element<'_, Message>> {
+        if self.core.window.show_context
+            && matches!(
+                self.context_page,
+                ContextPage::Preview(_, PreviewKind::Selected)
+            )
+        {
+            return None;
+        }
+        let tab = self.tab_model.active_data::<Tab>()?;
+        if tab.location.is_trash() {
+            return None;
+        }
+        let stats = tab.selection_stats();
+        if stats.items == 0 {
+            return None;
+        }
+
+        let size = if stats.calculating {
+            fl!("calculating")
+        } else if let Some(error) = stats.error.as_deref() {
+            error.to_owned()
+        } else {
+            tab::format_size(stats.size)
+        };
+        let summary = format!("{} | {}", fl!("items", items = stats.items), size);
+        Some(
+            widget::container(widget::text::body(summary))
+            .width(Length::Fill)
+            .padding([theme::spacing().space_xs, theme::spacing().space_s])
+            .class(theme::Container::Background)
+            .into(),
+        )
+    }
+
     /// Returns true if the clipboard cache contains pasteable content
     fn clipboard_has_content(&self) -> bool {
         !matches!(self.clipboard_cache, ClipboardCache::Empty)
@@ -6644,14 +6680,30 @@ impl Application for App {
 
         let entity = self.tab_model.active();
         if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+            let footer = self.selection_footer();
             let tab_view = tab
                 .view(
                     &self.key_binds,
                     &self.modifiers,
+                    footer.as_ref().map_or(0, |_| 48),
                     self.clipboard_has_content(),
                     &self.config.context_actions,
                 )
                 .map(move |message| Message::TabMessage(Some(entity), message));
+            let tab_view = if let Some(footer) = footer {
+                stack([
+                    tab_view,
+                    widget::container(footer)
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .align_x(cosmic::iced::alignment::Horizontal::Center)
+                        .align_y(cosmic::iced::alignment::Vertical::Bottom)
+                        .into(),
+                ])
+                .into()
+            } else {
+                tab_view
+            };
             tab_column = tab_column.push(tab_view);
         } else {
             //TODO
@@ -6695,6 +6747,7 @@ impl Application for App {
                             .view(
                                 &self.key_binds,
                                 &window.modifiers,
+                                0,
                                 self.clipboard_has_content(),
                                 &self.config.context_actions,
                             )
@@ -7188,13 +7241,16 @@ impl Application for App {
             }
         }
 
+        let active_entity = self.tab_model.active();
         subscriptions.extend(self.tab_model.iter().filter_map(|entity| {
             let tab = self.tab_model.data::<Tab>(entity)?;
+            let selection_needs_sizes = entity == active_entity && tab.selection_stats().items > 0;
             Some(
                 tab.subscription(
-                    selected_previews
-                        .iter()
-                        .any(|preview| preview.as_ref() == Some(entity).as_ref()),
+                    selection_needs_sizes
+                        || selected_previews
+                            .iter()
+                            .any(|preview| preview.as_ref() == Some(entity).as_ref()),
                 )
                 .with(entity)
                 .map(|(entity, tab_msg)| Message::TabMessage(Some(entity), tab_msg)),

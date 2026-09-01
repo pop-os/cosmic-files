@@ -2043,7 +2043,7 @@ impl Application for App {
 
         col = col.push(
             self.tab
-                .view(&self.key_binds, &self.modifiers, false, &[])
+                .view(&self.key_binds, &self.modifiers, 0, false, &[])
                 .map(Message::TabMessage),
         );
 
