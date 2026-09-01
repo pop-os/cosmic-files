@@ -344,6 +344,8 @@ pub struct OperationSelection {
     pub ignored: Vec<PathBuf>,
     // Paths to select
     pub selected: Vec<PathBuf>,
+    // When true, do not record a new undo entry for this completed operation.
+    pub suppress_recording: bool,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -678,6 +680,7 @@ impl Operation {
                         let op_sel = OperationSelection {
                             ignored: paths.clone(),
                             selected: vec![to.clone()],
+                            ..Default::default()
                         };
 
                         let mut paths = paths;
@@ -1051,6 +1054,7 @@ impl Operation {
                     Result::<_, OperationError>::Ok(OperationSelection {
                         ignored: Vec::new(),
                         selected: vec![path],
+                        ..Default::default()
                     })
                 })
             }
@@ -1070,6 +1074,7 @@ impl Operation {
                     Result::<_, OperationError>::Ok(OperationSelection {
                         ignored: Vec::new(),
                         selected: vec![path],
+                        ..Default::default()
                     })
                 })
             }
@@ -1130,6 +1135,7 @@ impl Operation {
                     Result::<_, OperationError>::Ok(OperationSelection {
                         ignored: vec![from],
                         selected: vec![to],
+                        ..Default::default()
                     })
                 })
             }
@@ -1180,6 +1186,7 @@ impl Operation {
                 Ok(OperationSelection {
                     ignored: Vec::new(),
                     selected: paths,
+                    ..Default::default()
                 })
             }
             Self::SetExecutableAndLaunch { path } => {
@@ -1245,6 +1252,7 @@ impl Operation {
                 Ok(OperationSelection {
                     ignored: Vec::new(),
                     selected: vec![path],
+                    ..Default::default()
                 })
             }
         };

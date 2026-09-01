@@ -82,6 +82,7 @@ use crate::tab::{
     SearchLocation, Tab,
 };
 use crate::trash::{Trash, TrashExt};
+use crate::undo::{UndoEntry, UndoStack};
 use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
 use crate::{FxOrderMap, context_action, fl, home_dir, menu, mime_icon};
 
@@ -199,6 +200,8 @@ pub enum Action {
     ZoomIn,
     ZoomOut,
     Recents,
+    Undo,
+    Redo,
 }
 
 impl Action {
@@ -280,6 +283,8 @@ impl Action {
             Self::ZoomIn => Message::ZoomIn(entity_opt),
             Self::ZoomOut => Message::ZoomOut(entity_opt),
             Self::Recents => Message::Recents,
+            Self::Undo => Message::Undo,
+            Self::Redo => Message::Redo,
         }
     }
 }
@@ -460,7 +465,8 @@ pub enum Message {
     ToggleContextPage(ContextPage),
     ToggleFoldersFirst,
     ToggleShowHidden,
-    Undo(usize),
+    Undo,
+    Redo,
     UndoTrash(widget::ToastId, Arc<[PathBuf]>),
     UndoTrashStart(Vec<TrashItem>),
     WindowClose,
@@ -774,6 +780,15 @@ pub struct App {
     auto_scroll_speed: Option<i16>,
     file_dialog_opt: Option<Dialog<Message>>,
     clipboard_cache: ClipboardCache,
+    undo_stack: UndoStack,
+    redo_stack: UndoStack,
+    pending_undo: Option<UndoEntry>,
+    suppressed_ops: FxHashMap<u64, UndoEntry>,
+    #[allow(dead_code)]
+    // set by Todo 4 (permanent delete / empty-trash) while an inverse is in flight
+    pending_invalidation: Option<u64>,
+    #[allow(dead_code)] // assigned to UndoEntry::entry_id by Todo 3 (record_undo)
+    next_entry_id: u64,
 }
 
 impl App {
@@ -1291,6 +1306,48 @@ impl App {
                         Err(err) => Message::PendingError(id, err),
                     };
 
+                    _ = tx.send(msg);
+                }))
+                .await;
+
+            if let Ok(msg) = rx.await {
+                let _ = msg_tx.lock().await.send(msg).await;
+            }
+        }))
+        .map(cosmic::Action::App)
+    }
+
+    /// Like `operation`, but marks the returned `OperationSelection` with
+    /// `suppress_recording = true` so that `handle_completed_operations` knows
+    /// not to record a new undo entry for this operation (it's an undo/redo inverse).
+    fn operation_suppressed(&mut self, operation: Operation) -> Task<Message> {
+        let id = self.pending_operation_id;
+        let controller = Controller::default();
+        let compio_tx = self.compio_tx.clone();
+
+        self.pending_operation_id += 1;
+        if operation.show_progress_notification() {
+            self.progress_operations.insert(id);
+        }
+        self.pending_operations
+            .insert(id, (operation.clone(), controller.clone()));
+
+        // Use a task to send operations to the compio runtime thread.
+        cosmic::Task::stream(cosmic::iced::stream::channel(4, move |msg_tx| async move {
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
+            let msg_tx_clone = msg_tx.clone();
+
+            _ = compio_tx
+                .send(Box::pin(async move {
+                    let msg = match operation.perform(&msg_tx_clone, controller).await {
+                        Ok(mut result_paths) => {
+                            result_paths.suppress_recording = true;
+                            Message::PendingComplete(id, result_paths)
+                        }
+                        Err(err) => Message::PendingError(id, err),
+                    };
                     _ = tx.send(msg);
                 }))
                 .await;
@@ -2480,6 +2537,12 @@ impl Application for App {
             auto_scroll_speed: None,
             file_dialog_opt: None,
             clipboard_cache: ClipboardCache::Empty,
+            undo_stack: UndoStack::new(),
+            redo_stack: UndoStack::new(),
+            pending_undo: None,
+            suppressed_ops: FxHashMap::default(),
+            pending_invalidation: None,
+            next_entry_id: 0,
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             layer_sizes: FxHashMap::default(),
         };
@@ -4877,8 +4940,50 @@ impl Application for App {
                     )));
                 }
             }
-            Message::Undo(_id) => {
-                // TODO: undo
+            // Single-in-flight invariant: at most one undo/redo inverse runs at a time.
+            // Guards: pending_operations not empty, any dialog open, or pending_undo already held.
+            Message::Undo => {
+                if !self.pending_operations.is_empty()
+                    || !self.dialog_pages.pages.is_empty()
+                    || self.pending_undo.is_some()
+                {
+                    return Task::none();
+                } else if let Some(entry) = self.undo_stack.pop() {
+                    // Destructive undo (undo-copy / undo-create): the inverse moves files to the
+                    // Trash, which needs a confirmation. Hold the entry in `pending_undo`
+                    // (OUTSIDE both stacks, so it cannot be evicted) and let the single-in-flight
+                    // guard above block further undo/redo while it is held. Todo 7 pushes
+                    // `DialogPage::ConfirmUndo` here before dispatching the inverse.
+                    if entry.destructive {
+                        self.pending_undo = Some(entry);
+                        return Task::none();
+                    } else {
+                        self.pending_undo = Some(entry.clone());
+                        let inverse = entry.inverse.clone();
+                        let op_id = self.pending_operation_id;
+                        self.suppressed_ops.insert(op_id, entry);
+                        return self.operation_suppressed(inverse);
+                    }
+                } else {
+                    return Task::none();
+                }
+            }
+            Message::Redo => {
+                // Same single-in-flight guards as Undo
+                if !self.pending_operations.is_empty()
+                    || !self.dialog_pages.pages.is_empty()
+                    || self.pending_undo.is_some()
+                {
+                    return Task::none();
+                } else if let Some(entry) = self.redo_stack.pop() {
+                    self.pending_undo = Some(entry.clone());
+                    let forward = entry.forward.clone();
+                    let op_id = self.pending_operation_id;
+                    self.suppressed_ops.insert(op_id, entry);
+                    return self.operation_suppressed(forward);
+                } else {
+                    return Task::none();
+                }
             }
             Message::UndoTrash(id, recently_trashed) => {
                 self.toasts.remove(id);
