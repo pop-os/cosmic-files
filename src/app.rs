@@ -4285,6 +4285,23 @@ impl Application for App {
             }
             Message::Rename(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                // Rename a single item inline; fall back to dialogs for multiple selections
+                let single_opt = self
+                    .tab_model
+                    .data::<Tab>(entity)
+                    .and_then(|tab| tab.items_opt())
+                    .and_then(|items| {
+                        let mut selected =
+                            items.iter().enumerate().filter(|(_, item)| item.selected);
+                        let (i, item) = selected.next()?;
+                        (selected.next().is_none() && item.path_opt().is_some()).then_some(i)
+                    });
+                if let Some(i) = single_opt {
+                    return self.update(Message::TabMessage(
+                        Some(entity),
+                        tab::Message::EditNameEnable(i),
+                    ));
+                }
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity)
                     && let Some(items) = tab.items_opt()
                 {
@@ -4641,6 +4658,9 @@ impl Application for App {
                             }
                         }
                         tab::Command::Delete(paths) => commands.push(self.delete(paths)),
+                        tab::Command::Rename(from, to) => {
+                            commands.push(self.operation(Operation::Rename { from, to }))
+                        }
                         tab::Command::DropFiles(to, from) => {
                             commands.push(self.update(Message::PasteContents(to, from)));
                         }
