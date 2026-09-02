@@ -279,7 +279,26 @@ fn button_style(
     }
 }
 
+/// Reads a per-folder custom icon from a `.directory` file's `Icon=` key, if
+/// present. This is the freedesktop convention KDE/Dolphin uses, letting apps
+/// (sync clients, project tools) brand a folder. The value is either a themed
+/// icon name or an absolute path to an image, mirroring `desktop_icon_handle`.
+fn custom_folder_icon(path: &Path, icon_size: u16) -> Option<widget::icon::Handle> {
+    let contents = fs::read_to_string(path.join(".directory")).ok()?;
+    let icon = contents
+        .lines()
+        .find_map(|line| line.strip_prefix("Icon="))?
+        .trim();
+    if icon.is_empty() {
+        return None;
+    }
+    Some(desktop_icon_handle(icon, icon_size))
+}
+
 pub fn folder_icon(path: &PathBuf, icon_size: u16) -> widget::icon::Handle {
+    if let Some(handle) = custom_folder_icon(path, icon_size) {
+        return handle;
+    }
     widget::icon::from_name(SPECIAL_DIRS.get(path).map_or("folder", |x| *x))
         .prefer_svg(true)
         .size(icon_size)
@@ -287,12 +306,26 @@ pub fn folder_icon(path: &PathBuf, icon_size: u16) -> widget::icon::Handle {
 }
 
 pub fn folder_icon_symbolic(path: &PathBuf, icon_size: u16) -> widget::icon::Handle {
+    // A custom `.directory` icon (see `custom_folder_icon`) is a branded image,
+    // not part of the symbolic theme, so honor it directly — this is what makes
+    // a branded folder recognizable in the sidebar too, not just the main view.
+    if let Some(handle) = custom_folder_icon(path, icon_size) {
+        return handle;
+    }
     widget::icon::from_name(format!(
         "{}-symbolic",
         SPECIAL_DIRS.get(path).map_or("folder", |x| *x)
     ))
     .size(icon_size)
     .handle()
+}
+
+/// Sidebar/nav folder icon that keeps image aspect ratio (pad, don't squash).
+/// Matches the main view, which uses [`ContentFit::Contain`] for item icons.
+pub fn folder_nav_icon(path: &PathBuf, icon_size: u16) -> widget::icon::Icon {
+    widget::icon::icon(folder_icon_symbolic(path, icon_size))
+        .size(icon_size)
+        .content_fit(ContentFit::Contain)
 }
 
 //TODO: replace with Path::has_trailing_sep when stable
@@ -594,13 +627,99 @@ fn get_desktop_file_icon(path: &Path) -> Option<String> {
 fn desktop_icon_handle(icon: &str, size: u16) -> widget::icon::Handle {
     let icon_path = Path::new(icon);
     if icon_path.is_absolute() && icon_path.exists() {
-        widget::icon::from_path(icon_path.to_path_buf())
+        icon_handle_from_image_path(icon_path)
     } else {
-        widget::icon::from_name(icon)
-            .prefer_svg(true)
-            .size(size)
-            .handle()
+        themed_icon_handle(icon, size)
     }
+}
+
+/// Load a raster image path as an icon, padding non-square images to a square
+/// with transparent margins. Nav/segmented-button layouts allocate a square
+/// and historically fill it; without padding a wide logo (e.g. 1920×1201)
+/// gets squashed. SVG and already-square rasters keep the cheap path handle.
+fn icon_handle_from_image_path(path: &Path) -> widget::icon::Handle {
+    if path.extension().is_some_and(|ext| ext == "svg") {
+        return widget::icon::from_path(path.to_path_buf());
+    }
+    padded_square_raster_handle(path)
+        .unwrap_or_else(|| widget::icon::from_path(path.to_path_buf()))
+}
+
+fn padded_square_raster_handle(path: &Path) -> Option<widget::icon::Handle> {
+    let img = ImageReader::open(path)
+        .ok()?
+        .with_guessed_format()
+        .ok()?
+        .decode()
+        .ok()?
+        .into_rgba8();
+    let (w, h) = (img.width(), img.height());
+    if w == 0 || h == 0 || w == h {
+        return None;
+    }
+
+    // Cap work for huge brand assets used as tiny sidebar icons.
+    const MAX_SIDE: u32 = 256;
+    let img = if w.max(h) > MAX_SIDE {
+        let scale = MAX_SIDE as f32 / w.max(h) as f32;
+        let nw = ((w as f32) * scale).round().max(1.0) as u32;
+        let nh = ((h as f32) * scale).round().max(1.0) as u32;
+        image::imageops::resize(&img, nw, nh, image::imageops::FilterType::Triangle)
+    } else {
+        img
+    };
+    let (w, h) = (img.width(), img.height());
+    let side = w.max(h);
+    let mut square = image::RgbaImage::new(side, side);
+    let x = (side - w) / 2;
+    let y = (side - h) / 2;
+    image::imageops::overlay(&mut square, &img, i64::from(x), i64::from(y));
+    Some(widget::icon::from_raster_pixels(side, side, square.into_raw()))
+}
+
+fn icon_path_is_cosmic_family(path: &Path) -> bool {
+    path.components().any(|c| {
+        matches!(
+            c.as_os_str().to_str(),
+            Some("Cosmic" | "Pop" | "pop-os-branding")
+        )
+    })
+}
+
+/// Resolve a themed icon name with Cosmic fidelity.
+///
+/// Many Cosmic icons exist only as `*-symbolic`. Looking up the bare name can
+/// inherit a foreign full-color icon (e.g. Humanity) via the theme chain, which
+/// looks wrong next to Cosmic UI. Absolute paths are handled by callers and are
+/// unchanged here.
+fn themed_icon_handle(icon: &str, size: u16) -> widget::icon::Handle {
+    let resolve = |name: &str| {
+        let named = widget::icon::from_name(name).prefer_svg(true).size(size);
+        named.clone().path().map(|path| (path, named))
+    };
+
+    if !icon.ends_with("-symbolic") {
+        let symbolic = format!("{icon}-symbolic");
+        match (resolve(icon), resolve(symbolic.as_str())) {
+            (Some((base_path, base_named)), Some((sym_path, sym_named))) => {
+                if icon_path_is_cosmic_family(&base_path) {
+                    return base_named.handle();
+                }
+                if icon_path_is_cosmic_family(&sym_path) {
+                    return sym_named.handle();
+                }
+                return base_named.handle();
+            }
+            (None, Some((_, sym_named))) => return sym_named.handle(),
+            (Some((_, base_named)), None) => return base_named.handle(),
+            (None, None) => {}
+        }
+    }
+
+    widget::icon::from_name(icon)
+        .prefer_svg(true)
+        .size(size)
+        .handle()
 }
 
 #[cfg(feature = "desktop")]
