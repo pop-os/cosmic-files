@@ -3063,6 +3063,14 @@ impl Tab {
         }
     }
 
+    pub fn can_select_all(&self) -> bool {
+        self.items_opt.as_ref().is_some_and(|items| {
+            items
+                .iter()
+                .any(|item| self.config.show_hidden || !item.hidden)
+        })
+    }
+
     pub fn select_all(&mut self) {
         if let Some(ref mut items) = self.items_opt {
             for item in items.iter_mut() {
@@ -7632,6 +7640,38 @@ mod tests {
         trace!("Tab history: {:?}", tab.history);
 
         Ok((fs, tab, dirs))
+    }
+
+    #[test]
+    fn select_all_ignores_hidden_items_when_hidden_files_are_not_shown() -> io::Result<()> {
+        let fs = TempDir::new()?;
+        let path = fs.path();
+        fs::write(path.join(".hidden"), "hidden")?;
+
+        let mut tab = Tab::new(
+            Location::Path(path.to_owned()),
+            TabConfig::default(),
+            ThumbCfg::default(),
+            None,
+            widget::Id::unique(),
+            None,
+        );
+        let items = scan_path(&path.to_owned(), IconSizes::default());
+        assert_eq!(items.len(), 1);
+        assert!(items[0].hidden);
+        tab.set_items(items);
+
+        assert!(!tab.config.show_hidden);
+        assert!(!tab.can_select_all());
+        tab.select_all();
+        assert!(!tab.items_opt().unwrap()[0].selected);
+
+        tab.config.show_hidden = true;
+        assert!(tab.can_select_all());
+        tab.select_all();
+        assert!(tab.items_opt().unwrap()[0].selected);
+
+        Ok(())
     }
 
     #[test]

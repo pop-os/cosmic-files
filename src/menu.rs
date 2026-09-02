@@ -106,6 +106,14 @@ pub fn context_menu<'a>(
 
     // Allow paste when clipboard has data and we're in a location that supports it
     let can_paste = clipboard_paste_available && tab.location.supports_paste();
+    let can_select_all = tab.can_select_all();
+    let select_all_item = || {
+        if can_select_all {
+            menu_item(fl!("select-all"), Action::SelectAll).into()
+        } else {
+            menu_item_disabled(fl!("select-all"), Action::SelectAll).into()
+        }
+    };
 
     let (sort_name, sort_direction, _) = tab.sort_options();
     let sort_item = |label, variant| {
@@ -326,7 +334,7 @@ pub fn context_menu<'a>(
                 }
 
                 if tab.mode.multiple() {
-                    children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
+                    children.push(select_all_item());
                 }
                 if can_paste {
                     children.push(menu_item(fl!("paste"), Action::Paste).into());
@@ -386,7 +394,7 @@ pub fn context_menu<'a>(
                     children.push(menu_item(fl!("new-folder"), Action::NewFolder).into());
                 }
                 if tab.mode.multiple() {
-                    children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
+                    children.push(select_all_item());
                 }
                 if !children.is_empty() {
                     children.push(divider::horizontal::light().into());
@@ -403,7 +411,7 @@ pub fn context_menu<'a>(
                 }
             } else {
                 if tab.mode.multiple() {
-                    children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
+                    children.push(select_all_item());
                 }
                 if !children.is_empty() {
                     children.push(divider::horizontal::light().into());
@@ -415,7 +423,7 @@ pub fn context_menu<'a>(
         }
         (_, Location::Trash | Location::Search(SearchLocation::Trash, ..)) => {
             if tab.mode.multiple() {
-                children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
+                children.push(select_all_item());
             }
             if !children.is_empty() {
                 children.push(divider::horizontal::light().into());
@@ -623,6 +631,7 @@ pub fn menu_bar<'a>(
         )
     };
     let in_trash = tab_opt.is_some_and(|tab| tab.location.is_trash());
+    let can_select_all = tab_opt.is_some_and(Tab::can_select_all);
 
     let mut selected_dir = 0;
     let mut selected = 0;
@@ -709,7 +718,7 @@ pub fn menu_bar<'a>(
                         menu_button_optional(fl!("move-to"), Action::MoveTo, selected > 0),
                         menu_button_optional(fl!("copy-to"), Action::CopyTo, selected > 0),
                         menu_button_optional(fl!("paste"), Action::Paste, can_paste),
-                        menu::Item::Button(fl!("select-all"), None, Action::SelectAll),
+                        menu_button_optional(fl!("select-all"), Action::SelectAll, can_select_all),
                         menu::Item::Divider,
                         menu::Item::Button(fl!("history"), None, Action::EditHistory),
                     ],
