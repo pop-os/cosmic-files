@@ -1759,6 +1759,7 @@ pub enum Command {
     OpenInNewWindow(PathBuf),
     OpenTrash,
     Preview(PreviewKind),
+    Rename(PathBuf, PathBuf),
     RunContextAction(usize),
     SetOpenWith(Mime, String),
     SetPermissions(PathBuf, u32),
@@ -1788,6 +1789,10 @@ pub enum Message {
     EditLocationEnable,
     EditLocationSubmit,
     EditLocationTab,
+    EditNameEnable(usize),
+    EditNameInput(String),
+    EditNameSubmit,
+    EditNameCancel,
     OpenInNewTab(PathBuf),
     ClearRecents,
     EmptyTrash,
@@ -2816,6 +2821,8 @@ pub struct Tab {
     pub item_view_size_opt: Cell<Option<Size>>,
     pub edit_location: Option<EditLocation>,
     pub edit_location_id: widget::Id,
+    pub edit_name: Option<(usize, String)>,
+    pub edit_name_id: widget::Id,
     pub history_i: usize,
     pub history: Vec<Location>,
     pub config: TabConfig,
@@ -2963,6 +2970,8 @@ impl Tab {
             item_view_size_opt: Cell::new(None),
             edit_location: None,
             edit_location_id: widget::Id::unique(),
+            edit_name: None,
+            edit_name_id: widget::Id::unique(),
             history_i: 0,
             history,
             config,
@@ -3883,6 +3892,43 @@ impl Tab {
                     widget::text_input::focus(self.edit_location_id.clone()).into(),
                 ));
                 self.edit_location = Some(self.location.clone().into());
+            }
+            Message::EditNameEnable(i) => {
+                if let Some(item) = self.items_opt.as_ref().and_then(|items| items.get(i)) {
+                    let name = item.name.clone();
+                    commands.push(Command::Iced(
+                        widget::text_input::focus(self.edit_name_id.clone()).into(),
+                    ));
+                    commands.push(Command::Iced(
+                        widget::text_input::select_until_last(
+                            self.edit_name_id.clone(),
+                            &name,
+                            '.',
+                        )
+                        .into(),
+                    ));
+                    self.edit_name = Some((i, name));
+                }
+            }
+            Message::EditNameInput(input) => {
+                if let Some((_, name)) = self.edit_name.as_mut() {
+                    *name = input;
+                }
+            }
+            Message::EditNameCancel => {
+                self.edit_name = None;
+            }
+            Message::EditNameSubmit => {
+                if let Some((i, name)) = self.edit_name.take()
+                    && !name.is_empty()
+                    && !name.contains('/')
+                    && let Some(item) = self.items_opt.as_ref().and_then(|items| items.get(i))
+                    && name != item.name
+                    && let Some(from) = item.path_opt().cloned()
+                    && let Some(parent) = from.parent()
+                {
+                    commands.push(Command::Rename(from.clone(), parent.join(name)));
+                }
             }
             Message::EditLocationSubmit => {
                 if let Some(mut edit_location) = self.edit_location.take() {
@@ -5722,6 +5768,24 @@ impl Tab {
         .into()
     }
 
+    fn is_editing_name(&self, i: usize) -> bool {
+        self.edit_name.as_ref().is_some_and(|(idx, _)| *idx == i)
+    }
+
+    fn edit_name_input(&self) -> Element<'static, Message> {
+        let value = self
+            .edit_name
+            .as_ref()
+            .map_or(String::new(), |(_, name)| name.clone());
+        widget::text_input("", value)
+            .id(self.edit_name_id.clone())
+            .on_input(Message::EditNameInput)
+            .on_submit(|_| Message::EditNameSubmit)
+            .on_unfocus(Message::EditNameCancel)
+            .line_height(1.0)
+            .into()
+    }
+
     pub fn grid_view(
         &self,
     ) -> (
@@ -5855,8 +5919,13 @@ impl Tab {
                             false,
                         ))
                         .into(),
-                        widget::tooltip(
-                            widget::button::custom(Item::grid_display_name(&item.display_name))
+                        if self.is_editing_name(i) {
+                            self.edit_name_input()
+                        } else {
+                            widget::tooltip(
+                                widget::button::custom(Item::grid_display_name(
+                                    &item.display_name,
+                                ))
                                 .id(item.button_id.clone())
                                 .padding([0, space_xxxs])
                                 .class(button_style(
@@ -5867,10 +5936,11 @@ impl Tab {
                                     true,
                                     matches!(self.mode, Mode::Desktop),
                                 )),
-                            widget::text::body(&item.name),
-                            widget::tooltip::Position::Bottom,
-                        )
-                        .into(),
+                                widget::text::body(&item.name),
+                                widget::tooltip::Position::Bottom,
+                            )
+                            .into()
+                        },
                     ];
 
                     let mut column = widget::column::with_capacity(buttons.len())
@@ -6237,7 +6307,11 @@ impl Tab {
                                 .size(icon_size)
                                 .into(),
                             widget::column::with_children([
-                                Item::list_display_name(item.display_name.clone()).into(),
+                                if self.is_editing_name(i) {
+                                    self.edit_name_input()
+                                } else {
+                                    Item::list_display_name(item.display_name.clone()).into()
+                                },
                                 //TODO: translate?
                                 widget::text::caption(format!("{modified_text} - {size_text}"))
                                     .into(),
@@ -6254,7 +6328,11 @@ impl Tab {
                                 .size(icon_size)
                                 .into(),
                             widget::column::with_children([
-                                Item::list_display_name(item.display_name.clone()).into(),
+                                if self.is_editing_name(i) {
+                                    self.edit_name_input()
+                                } else {
+                                    Item::list_display_name(item.display_name.clone()).into()
+                                },
                                 widget::text::caption(match item.path_opt() {
                                     Some(path) => path.display().to_string(),
                                     None => String::new(),
@@ -6279,9 +6357,15 @@ impl Tab {
                                 .content_fit(ContentFit::Contain)
                                 .size(icon_size)
                                 .into(),
-                            Item::list_display_name(item.display_name.clone())
-                                .width(Length::Fill)
-                                .into(),
+                            if self.is_editing_name(i) {
+                                widget::container(self.edit_name_input())
+                                    .width(Length::Fill)
+                                    .into()
+                            } else {
+                                Item::list_display_name(item.display_name.clone())
+                                    .width(Length::Fill)
+                                    .into()
+                            },
                             widget::text::body(modified_text.clone())
                                 .width(Length::Fixed(modified_width))
                                 .into(),
