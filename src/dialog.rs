@@ -2109,7 +2109,7 @@ impl Application for App {
             }),
             Subscription::run_with(TypeId::of::<WatcherSubscription>(), |_| {
                 stream::channel(100, {
-                    |mut output: futures::channel::mpsc::Sender<_>| async move {
+                    async |mut output| {
                         let watcher_res = {
                             let mut output = output.clone();
                             new_debouncer(
@@ -2138,9 +2138,9 @@ impl Application for App {
                                         });
 
                                             if !events.is_empty() {
-                                                match futures::executor::block_on(async {
-                                                    output.send(Message::NotifyEvents(events)).await
-                                                }) {
+                                                match futures::executor::block_on(
+                                                    output.send(Message::NotifyEvents(events)),
+                                                ) {
                                                     Ok(()) => {}
                                                     Err(err) => {
                                                         log::warn!(
