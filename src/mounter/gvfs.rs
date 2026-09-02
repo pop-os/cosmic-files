@@ -563,6 +563,13 @@ impl Gvfs {
                                         Ok(()) => {
                                             _ = result_tx.send(Ok(()));
                                             Ok(true)},
+                                        Err(err) if matches!(
+                                            err.kind::<gio::IOErrorEnum>(),
+                                            Some(gio::IOErrorEnum::AlreadyMounted)
+                                        ) => {
+                                            _ = result_tx.send(Ok(()));
+                                            Ok(true)
+                                        }
                                         Err(err) => {
                                             _ = result_tx.send(Err(anyhow::anyhow!("{err:?}")));
                                             match err.kind::<gio::IOErrorEnum>() {
@@ -602,6 +609,7 @@ impl Gvfs {
                                             },
                                             Err(err) => match err.kind::<gio::IOErrorEnum>() {
                                                 Some(gio::IOErrorEnum::FailedHandled) => Ok(false),
+                                                Some(gio::IOErrorEnum::AlreadyMounted) => Ok(true),
                                                 _ => Err(format!("{err}"))
                                             }
                                         }));
