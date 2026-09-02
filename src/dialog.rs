@@ -765,15 +765,13 @@ impl App {
     }
 
     fn search_get(&self) -> Option<&str> {
-        match &self.tab.location {
-            Location::Search(_, term, ..) => Some(term),
-            _ => None,
-        }
+        self.tab.search_term.as_deref()
     }
 
     fn search_set(&mut self, term_opt: Option<String>) -> Task<Message> {
-        let location_opt = match term_opt {
-            Some(term) => {
+        let focus_field = term_opt.is_some();
+        let location_opt = match &term_opt {
+            Some(term) if !term.is_empty() => {
                 let search_location = if let Some(path) = self.tab.location.path_opt() {
                     Some(SearchLocation::Path(path.clone()))
                 } else if self.tab.location.is_recents() {
@@ -785,40 +783,43 @@ impl App {
                 };
 
                 search_location.map(|search_location| {
-                    (
-                        Location::Search(
-                            search_location,
-                            term,
-                            self.tab.config.show_hidden,
-                            Instant::now(),
-                        ),
-                        true,
+                    Location::Search(
+                        search_location,
+                        term.clone(),
+                        self.tab.config.show_hidden,
+                        Instant::now(),
                     )
                 })
             }
-            None => match &self.tab.location {
+            _ => match &self.tab.location {
                 Location::Search(search_location, ..) => match search_location {
-                    SearchLocation::Path(path) => Some((Location::Path(path.clone()), false)),
-                    SearchLocation::Recents => Some((Location::Recents, false)),
-                    SearchLocation::Trash => Some((Location::Trash, false)),
+                    SearchLocation::Path(path) => Some(Location::Path(path.clone())),
+                    SearchLocation::Recents => Some(Location::Recents),
+                    SearchLocation::Trash => Some(Location::Trash),
                 },
                 _ => None,
             },
         };
-        if let Some((location, focus_search)) = location_opt {
+        let mut location_changed = false;
+        if let Some(location) = location_opt {
             self.tab.change_location(&location, None);
+            location_changed = true;
+        }
+        self.tab.search_term = term_opt;
+        let focus_task = if focus_field {
+            widget::text_input::focus(self.search_id.clone())
+        } else {
+            Task::none()
+        };
+        if location_changed {
             return Task::batch([
                 self.update_title(),
                 self.update_watcher(),
                 self.rescan_tab(None),
-                if focus_search {
-                    widget::text_input::focus(self.search_id.clone())
-                } else {
-                    Task::none()
-                },
+                focus_task,
             ]);
         }
-        Task::none()
+        focus_task
     }
 
     fn update_config(&mut self) -> Task<Message> {
