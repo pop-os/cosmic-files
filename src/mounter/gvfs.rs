@@ -2,16 +2,18 @@ use cosmic::iced::futures::SinkExt;
 use cosmic::iced::{Subscription, stream};
 use cosmic::{Task, widget};
 use gio::glib;
+use gio::glib::translate::*;
 use gio::prelude::*;
 use std::any::TypeId;
 use std::cell::Cell;
+use std::ffi::c_char;
 use std::future::pending;
 use std::hash::Hash;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
-use super::{Mounter, MounterAuth, MounterItem, MounterItems, MounterMessage};
+use super::{Mounter, MounterAuth, MounterItem, MounterItems, MounterMessage, MounterQuestion};
 use crate::config::IconSizes;
 use crate::err_str;
 use crate::tab::{self, ChecksumState, DirSize, ItemMetadata, ItemThumbnail, Location};
@@ -263,11 +265,57 @@ fn dir_info(uri: &str) -> Result<(String, String, Option<PathBuf>), glib::Error>
     Ok((resolved_uri, info.display_name().into(), file.path()))
 }
 
+fn connect_ask_question<F>(mount_op: &gio::MountOperation, f: F)
+where
+    F: Fn(&gio::MountOperation, &str, Vec<String>) + 'static,
+{
+    unsafe extern "C" fn trampoline<F>(
+        this: *mut gio::ffi::GMountOperation,
+        message: *const c_char,
+        choices: *mut *const c_char,
+        f: glib::ffi::gpointer,
+    ) where
+        F: Fn(&gio::MountOperation, &str, Vec<String>) + 'static,
+    {
+        let f = unsafe { &*(f as *const F) };
+        let mount_op = unsafe { gio::MountOperation::from_glib_borrow(this) };
+        let mount_op = unsafe { mount_op.unsafe_cast_ref() };
+        let message = unsafe { glib::GString::from_glib_borrow(message) };
+        let mut choices_vec = Vec::new();
+        if !choices.is_null() {
+            let mut index = 0;
+            loop {
+                let choice = unsafe { *choices.add(index) };
+                if choice.is_null() {
+                    break;
+                }
+                choices_vec.push(unsafe { glib::GString::from_glib_borrow(choice) }.to_string());
+                index += 1;
+            }
+        }
+        f(mount_op, message.as_str(), choices_vec);
+    }
+
+    unsafe {
+        let f = Box::new(f);
+        glib::signal::connect_raw(
+            mount_op.as_ptr() as *mut _,
+            c"ask-question".as_ptr() as *const _,
+            Some(std::mem::transmute::<*const (), unsafe extern "C" fn()>(
+                trampoline::<F> as *const (),
+            )),
+            Box::into_raw(f),
+        );
+    }
+}
+
 fn mount_op(
     uri: String,
     event_tx: std::sync::Weak<crate::channel::Sender<Event>>,
 ) -> gio::MountOperation {
     let mount_op = gio::MountOperation::new();
+    let password_uri = uri.clone();
+    let password_event_tx = event_tx.clone();
     mount_op.connect_ask_password(
         move |mount_op, message, default_user, default_domain, flags| {
             let auth = MounterAuth {
@@ -289,8 +337,8 @@ fn mount_op(
                     .then_some(false),
             };
             let (auth_tx, mut auth_rx) = mpsc::channel(1);
-            if let Some(event_tx) = event_tx.upgrade() {
-                event_tx.send(Event::NetworkAuth(uri.clone(), auth, auth_tx));
+            if let Some(event_tx) = password_event_tx.upgrade() {
+                event_tx.send(Event::NetworkAuth(password_uri.clone(), auth, auth_tx));
             }
             //TODO: async recv?
             if let Some(auth) = auth_rx.blocking_recv() {
@@ -310,6 +358,26 @@ fn mount_op(
             }
         },
     );
+    connect_ask_question(&mount_op, move |mount_op, message, choices| {
+        let Some(event_tx) = event_tx.upgrade() else {
+            mount_op.reply(gio::MountOperationResult::Aborted);
+            return;
+        };
+
+        let question = MounterQuestion {
+            message: message.to_string(),
+            choices,
+        };
+        let (question_tx, mut question_rx) = mpsc::channel(1);
+        event_tx.send(Event::NetworkQuestion(uri.clone(), question, question_tx));
+        //TODO: async recv?
+        if let Some(choice) = question_rx.blocking_recv() {
+            mount_op.set_choice(choice);
+            mount_op.reply(gio::MountOperationResult::Handled);
+        } else {
+            mount_op.reply(gio::MountOperationResult::Aborted);
+        }
+    });
     mount_op
 }
 
@@ -338,6 +406,7 @@ enum Event {
     Items(MounterItems),
     MountResult(MounterItem, Result<bool, String>),
     NetworkAuth(String, MounterAuth, mpsc::Sender<MounterAuth>),
+    NetworkQuestion(String, MounterQuestion, mpsc::Sender<i32>),
     NetworkResult(String, Result<bool, String>),
 }
 
@@ -776,6 +845,14 @@ impl Mounter for Gvfs {
                                     .unwrap(),
                                 Event::NetworkAuth(uri, auth, auth_tx) => output
                                     .send(MounterMessage::NetworkAuth(uri, auth, auth_tx))
+                                    .await
+                                    .unwrap(),
+                                Event::NetworkQuestion(uri, question, question_tx) => output
+                                    .send(MounterMessage::NetworkQuestion(
+                                        uri,
+                                        question,
+                                        question_tx,
+                                    ))
                                     .await
                                     .unwrap(),
                                 Event::NetworkResult(uri, res) => output
