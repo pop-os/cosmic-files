@@ -3629,13 +3629,11 @@ impl Application for App {
                 self.network_drive_input = input;
             }
             Message::NetworkDriveSubmit => {
+                let uri = self.network_drive_input.trim().to_string();
                 //TODO: know which mounter to use for network drives
                 if let Some((mounter_key, mounter)) = MOUNTERS.iter().next() {
-                    self.network_drive_connecting =
-                        Some((*mounter_key, self.network_drive_input.clone()));
-                    return mounter
-                        .network_drive(self.network_drive_input.clone())
-                        .map(|_| cosmic::action::none());
+                    self.network_drive_connecting = Some((*mounter_key, uri.clone()));
+                    return mounter.network_drive(uri).map(|_| cosmic::action::none());
                 }
                 log::warn!(
                     "no mounter found for connecting to {:?}",
