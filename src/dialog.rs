@@ -774,14 +774,33 @@ impl App {
     fn search_set(&mut self, term_opt: Option<String>) -> Task<Message> {
         let location_opt = match term_opt {
             Some(term) => {
-                let search_location = if let Some(path) = self.tab.location.path_opt() {
-                    Some(SearchLocation::Path(path.clone()))
-                } else if self.tab.location.is_recents() {
-                    Some(SearchLocation::Recents)
-                } else if self.tab.location.is_trash() {
-                    Some(SearchLocation::Trash)
-                } else {
-                    None
+                let search_location = match &self.tab.location {
+                    // Network locations are searched through GIO. The
+                    // network:/// browse tree is excluded, as its entries
+                    // are servers that may not be mounted
+                    Location::Network(uri, display_name, path)
+                        if !uri.starts_with("network://") =>
+                    {
+                        Some(SearchLocation::Network(
+                            uri.clone(),
+                            display_name.clone(),
+                            path.clone(),
+                        ))
+                    }
+                    Location::Search(search_location @ SearchLocation::Network(..), ..) => {
+                        Some(search_location.clone())
+                    }
+                    location => {
+                        if let Some(path) = location.path_opt() {
+                            Some(SearchLocation::Path(path.clone()))
+                        } else if location.is_recents() {
+                            Some(SearchLocation::Recents)
+                        } else if location.is_trash() {
+                            Some(SearchLocation::Trash)
+                        } else {
+                            None
+                        }
+                    }
                 };
 
                 search_location.map(|search_location| {
@@ -799,6 +818,10 @@ impl App {
             None => match &self.tab.location {
                 Location::Search(search_location, ..) => match search_location {
                     SearchLocation::Path(path) => Some((Location::Path(path.clone()), false)),
+                    SearchLocation::Network(uri, display_name, path) => Some((
+                        Location::Network(uri.clone(), display_name.clone(), path.clone()),
+                        false,
+                    )),
                     SearchLocation::Recents => Some((Location::Recents, false)),
                     SearchLocation::Trash => Some((Location::Trash, false)),
                 },

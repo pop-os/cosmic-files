@@ -116,6 +116,18 @@ pub trait Mounter: Send + Sync {
     fn mount(&self, item: MounterItem) -> Task<()>;
     fn network_drive(&self, uri: String) -> Task<bool>;
     fn network_scan(&self, uri: &str, sizes: IconSizes) -> Option<Result<Vec<tab::Item>, String>>;
+    /// Recursively search a network location for entries matching `regex`,
+    /// calling `callback` for each match. The search stops early if
+    /// `callback` returns false. Returns None if the mounter does not
+    /// support searching the provided URI.
+    fn network_search(
+        &self,
+        uri: &str,
+        regex: &regex::Regex,
+        show_hidden: bool,
+        sizes: IconSizes,
+        callback: &dyn Fn(tab::Item) -> bool,
+    ) -> Option<Result<(), String>>;
     fn dir_info(&self, uri: &str) -> Option<(String, String, Option<PathBuf>)>;
     fn unmount(&self, item: MounterItem) -> Task<()>;
     fn subscription(&self) -> Subscription<MounterMessage>;

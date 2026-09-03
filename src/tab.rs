@@ -783,6 +783,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
 pub fn item_from_search_item(search_item: SearchItem, sizes: IconSizes) -> Item {
     match search_item {
         SearchItem::Path(path, name, metadata) => item_from_entry(path, name, metadata, sizes),
+        SearchItem::Network(item) => *item,
         SearchItem::Trash(entry, metadata) => item_from_trash_entry(entry, metadata, sizes),
     }
 }
@@ -1204,6 +1205,23 @@ pub fn scan_search<F: Fn(SearchItem) -> bool + Sync>(
                     })
                 });
         }
+        SearchLocation::Network(uri, ..) => {
+            for mounter in MOUNTERS.values() {
+                match mounter.network_search(
+                    uri,
+                    &regex,
+                    show_hidden,
+                    IconSizes::default(),
+                    &|item| callback(SearchItem::Network(Box::new(item))),
+                ) {
+                    Some(Ok(())) => return,
+                    Some(Err(err)) => {
+                        log::warn!("failed to search {uri:?}: {err}");
+                    }
+                    None => {}
+                }
+            }
+        }
         SearchLocation::Recents => {
             let recent_files = match recently_used_xbel::parse_file() {
                 Ok(recent_files) => recent_files,
@@ -1482,6 +1500,7 @@ impl EditLocation {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum SearchLocation {
     Path(PathBuf),
+    Network(String, String, Option<PathBuf>),
     Recents,
     Trash,
 }
@@ -1490,6 +1509,7 @@ impl std::fmt::Display for SearchLocation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Path(path) => write!(f, "{}", path.display()),
+            Self::Network(uri, ..) => write!(f, "{uri}"),
             Self::Recents => write!(f, "recents"),
             Self::Trash => write!(f, "trash"),
         }
@@ -1499,7 +1519,18 @@ impl std::fmt::Display for SearchLocation {
 #[derive(Clone, Debug)]
 pub enum SearchItem {
     Path(PathBuf, String, fs::Metadata),
+    Network(Box<Item>),
     Trash(TrashItem, TrashItemMetadata),
+}
+
+impl SearchItem {
+    fn modified_opt(&self) -> Option<SystemTime> {
+        match self {
+            Self::Path(_, _, metadata) => metadata.modified().ok(),
+            Self::Network(item) => item.metadata.modified(),
+            Self::Trash(..) => None,
+        }
+    }
 }
 
 impl From<Location> for EditLocation {
@@ -1665,6 +1696,7 @@ impl Location {
             Self::Search(location, term, ..) => {
                 let name = match location {
                     SearchLocation::Path(path) => folder_name(path).0,
+                    SearchLocation::Network(_, display_name, _) => display_name.clone(),
                     SearchLocation::Trash => fl!("trash"),
                     SearchLocation::Recents => fl!("recents"),
                 };
@@ -4565,18 +4597,20 @@ impl Tab {
                             let duration = Instant::now();
                             while let Ok(search_item) = context.results_rx.try_recv() {
                                 //TODO: combine this with column_sort logic, they must match!
-                                let index =
-                                    if let SearchItem::Path(_, _, ref metadata) = search_item {
-                                        let item_modified = metadata.modified().ok();
-                                        match items.binary_search_by(|other| {
-                                            item_modified.cmp(&other.metadata.modified())
-                                        }) {
-                                            Ok(index) => index,
-                                            Err(index) => index,
-                                        }
-                                    } else {
-                                        items.len()
-                                    };
+                                let index = if matches!(
+                                    search_item,
+                                    SearchItem::Path(..) | SearchItem::Network(..)
+                                ) {
+                                    let item_modified = search_item.modified_opt();
+                                    match items.binary_search_by(|other| {
+                                        item_modified.cmp(&other.metadata.modified())
+                                    }) {
+                                        Ok(index) => index,
+                                        Err(index) => index,
+                                    }
+                                } else {
+                                    items.len()
+                                };
 
                                 if index < MAX_SEARCH_RESULTS {
                                     //TODO: use correct IconSizes
@@ -5651,7 +5685,8 @@ impl Tab {
                         .into(),
                 );
             }
-            Location::Network(uri, display_name, path) => {
+            Location::Network(uri, display_name, path)
+            | Location::Search(SearchLocation::Network(uri, display_name, path), ..) => {
                 children.push(
                     widget::button::custom(widget::text::heading(display_name))
                         .padding(space_xxxs)
@@ -7348,10 +7383,12 @@ impl Tab {
                                             // Don't send if the result is too old
                                             if let Some(last_modified) =
                                                 *last_modified_opt.read().unwrap()
-                                                && let SearchItem::Path(_, _, ref metadata) =
-                                                    search_item
+                                                && matches!(
+                                                    search_item,
+                                                    SearchItem::Path(..) | SearchItem::Network(..)
+                                                )
                                             {
-                                                if let Ok(modified) = metadata.modified() {
+                                                if let Some(modified) = search_item.modified_opt() {
                                                     if modified < last_modified {
                                                         return true;
                                                     }
