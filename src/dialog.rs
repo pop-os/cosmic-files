@@ -541,7 +541,6 @@ struct App {
     title: String,
     accept_label: DialogLabel,
     choices: Vec<DialogChoice>,
-    context_menu_window: Option<window::Id>,
     context_page: ContextPage,
     dialog_pages: VecDeque<DialogPage>,
     dialog_text_input: widget::Id,
@@ -867,9 +866,6 @@ impl App {
 
     fn close_context_menus(&mut self) -> Task<Message> {
         self.tab.location_context_menu_index = None;
-        if self.tab.context_menu.is_some() {
-            return self.update(Message::TabMessage(tab::Message::ContextMenu(None, None)));
-        }
 
         Task::none()
     }
@@ -1048,7 +1044,6 @@ impl Application for App {
             title,
             accept_label: DialogLabel::from(accept_label),
             choices: Vec::new(),
-            context_menu_window: None,
             context_page: ContextPage::Preview(None, PreviewKind::Selected),
             dialog_pages: VecDeque::new(),
             dialog_text_input: widget::Id::new("Dialog Text Input"),
@@ -1322,10 +1317,6 @@ impl Application for App {
         if self.tab.location_context_menu_index.is_some() {
             self.tab.location_context_menu_index = None;
             return Task::none();
-        }
-
-        if self.tab.context_menu.is_some() {
-            return self.update(Message::TabMessage(tab::Message::ContextMenu(None, None)));
         }
 
         if self.tab.edit_location.is_some() {
@@ -1769,94 +1760,8 @@ impl Application for App {
                                 self.rescan_tab(selection_paths),
                             ]));
                         }
-                        tab::Command::ContextMenu(point_opt, parent_id) => {
-                            #[cfg(feature = "wayland")]
-                            match point_opt {
-                                Some(point) => {
-                                    if crate::is_wayland() {
-                                        // Open context menu
-                                        use cctk::wayland_protocols::xdg::shell::client::xdg_positioner::{
-                                            Anchor, Gravity,
-                                        };
-                                        use cosmic::iced::runtime::platform_specific::wayland::popup::{
-                                            SctkPopupSettings, SctkPositioner,
-                                        };
-                                        use cosmic::iced::Rectangle;
-                                        use cosmic::widget::menu::StyleSheet as _;
-
-                                        let window_id = window::Id::unique();
-                                        self.context_menu_window = Some(window_id);
-                                        let autosize_id = widget::Id::unique();
-                                        let t = self.core.system_theme();
-                                        let styling = t.appearance(
-                                            &cosmic::theme::menu_bar::MenuBarStyle::Default,
-                                            false,
-                                        );
-                                        let rad = styling.menu_border_radius;
-                                        commands.push(self.update(Message::Surface(
-                                            cosmic::surface::action::app_popup(
-                                                move |_| cosmic::surface::action::LiveSettings {
-                                                    corners: Some(iced::runtime::platform_specific::wayland::CornerRadius {
-                                                        top_left: rad[0] as u32,
-                                                        top_right: rad[1] as u32,
-                                                        bottom_left: rad[2] as u32,
-                                                        bottom_right: rad[3] as u32,
-                                                    }),
-                                                    ..Default::default()
-                                                },
-                                                move |app: &mut Self| -> SctkPopupSettings {
-                                                    let anchor_rect = Rectangle {
-                                                        x: point.x as i32,
-                                                        y: point.y as i32,
-                                                        width: 1,
-                                                        height: 1,
-                                                    };
-                                                    let positioner = SctkPositioner {
-                                                        size: None,
-                                                        anchor_rect,
-                                                        anchor: Anchor::None,
-                                                        gravity: Gravity::BottomRight,
-                                                        reactive: true,
-                                                        ..Default::default()
-                                                    };
-                                                    SctkPopupSettings {
-                                                        parent: parent_id
-                                                            .unwrap_or(app.flags.window_id),
-                                                        id: window_id,
-                                                        positioner,
-                                                        parent_size: None,
-                                                        grab: true,
-                                                        close_with_children: false,
-                                                        input_zone: None,
-                                                    }
-                                                },
-                                                Some(Box::new(move |app: &Self| {
-                                                    widget::autosize::autosize(
-                                                        menu::context_menu(
-                                                            &app.tab,
-                                                            &app.key_binds,
-                                                            &app.modifiers,
-                                                            false, // Paste not used in dialogs
-                                                            &app.flags.config.context_actions,
-                                                        )
-                                                        .map(Message::TabMessage)
-                                                        .map(cosmic::Action::App),
-                                                        autosize_id.clone(),
-                                                    )
-                                                    .into()
-                                                })),
-                                            ),
-                                        )));
-                                    }
-                                }
-                                None => {
-                                    if let Some(window_id) = self.context_menu_window.take() {
-                                        commands.push(self.update(Message::Surface(
-                                            cosmic::surface::action::destroy_popup(window_id),
-                                        )));
-                                    }
-                                }
-                            }
+                        tab::Command::Surface(action) => {
+                            commands.push(self.update(Message::Surface(action)));
                         }
                         tab::Command::Iced(iced_command) => {
                             commands.push(iced_command.0.map(|tab_message| {

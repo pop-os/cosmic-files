@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::app::Core;
-use cosmic::iced::advanced::widget::text::Style as TextStyle;
 use cosmic::iced::keyboard::Modifiers;
 use cosmic::iced::{Alignment, Background, Border, Length};
+use cosmic::widget::menu::action::MenuAction;
 use cosmic::widget::menu::key_bind::KeyBind;
 use cosmic::widget::menu::{self, ItemHeight, ItemWidth, MenuBar};
-use cosmic::widget::{
-    self, Row, button, column, container, divider, responsive_menu_bar, space, text,
-};
+use cosmic::widget::{self, Row, button, column, container, divider, responsive_menu_bar, text};
 use cosmic::{Element, theme};
 use i18n_embed::LanguageLoader;
 use mime_guess::Mime;
@@ -53,82 +51,46 @@ const fn menu_button_optional(
     }
 }
 
+/// A menu action dispatched to the tab the menu was opened on.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TabAction(pub Action);
+
+impl MenuAction for TabAction {
+    type Message = tab::Message;
+
+    fn message(&self) -> tab::Message {
+        tab::Message::ContextAction(self.0)
+    }
+}
+
 pub fn context_menu<'a>(
     tab: &Tab,
     key_binds: &HashMap<KeyBind, Action>,
     modifiers: &Modifiers,
     clipboard_paste_available: bool,
     context_actions: &[ContextActionPreset],
-) -> Element<'a, tab::Message> {
-    let find_key = |action: &Action| -> String {
-        for (key_bind, key_action) in key_binds {
-            if action == key_action {
-                return key_bind.to_string();
-            }
-        }
-        String::new()
-    };
-    fn key_style(theme: &cosmic::Theme) -> TextStyle {
-        let mut color = theme.cosmic().background(theme.transparent).component.on;
-        color.alpha *= 0.75;
-        TextStyle {
-            color: Some(color.into()),
-            ..Default::default()
-        }
-    }
-    fn disabled_style(theme: &cosmic::Theme) -> TextStyle {
-        let mut color = theme.cosmic().background(theme.transparent).component.on;
-        color.alpha *= 0.5;
-        TextStyle {
-            color: Some(color.into()),
-            ..Default::default()
-        }
-    }
-
-    let menu_item = |label, action| {
-        let key = find_key(&action);
-        menu_button!(
-            text::body(label),
-            space::horizontal(),
-            text::body(key).class(theme::Text::Custom(key_style))
-        )
-        .on_press(tab::Message::ContextAction(action))
-    };
-
-    let menu_item_disabled = |label, action: Action| {
-        let key = find_key(&action);
-        menu_button!(
-            text::body(label).class(theme::Text::Custom(disabled_style)),
-            space::horizontal(),
-            text::body(key).class(theme::Text::Custom(disabled_style))
-        )
-    };
+) -> Vec<menu::Tree<tab::Message>> {
+    let menu_item =
+        |label: String, action: Action| menu::Item::Button(label, None, TabAction(action));
+    let menu_item_disabled =
+        |label: String, action: Action| menu::Item::ButtonDisabled(label, None, TabAction(action));
 
     // Allow paste when clipboard has data and we're in a location that supports it
     let can_paste = clipboard_paste_available && tab.location.supports_paste();
 
     let (sort_name, sort_direction, _) = tab.sort_options();
-    let sort_item = |label, variant| {
-        let key = find_key(&Action::ToggleSort(variant));
-        let leading: Element<'a, tab::Message> = if sort_name == variant {
+    let sort_item = |label: String, variant| {
+        let entry = menu::Entry::new(label, TabAction(Action::ToggleSort(variant)));
+        menu::Item::Entry(if sort_name == variant {
             let icon_name = if sort_direction {
                 "view-sort-ascending-symbolic"
             } else {
                 "view-sort-descending-symbolic"
             };
-            widget::icon::from_name(icon_name).size(14).into()
+            entry.icon(widget::icon::from_name(icon_name).size(14).handle())
         } else {
-            space::horizontal().width(Length::Fixed(14.0)).into()
-        };
-        menu_button!(
-            leading,
-            space::horizontal().width(Length::Fixed(theme::spacing().space_xxs.into())),
-            text::body(label),
-            space::horizontal(),
-            text::body(key).class(theme::Text::Custom(key_style))
-        )
-        .on_press(tab::Message::ContextAction(Action::ToggleSort(variant)))
-        .into()
+            entry.reserve_icon()
+        })
     };
 
     let mut selected_dir = 0;
@@ -173,8 +135,8 @@ pub fn context_menu<'a>(
             .iter()
             .enumerate()
             .filter(|(_, action)| action.matches_selection(selected, selected_dir))
-            .map(|(i, action)| menu_item(action.name.clone(), Action::RunContextAction(i)).into())
-            .collect::<Vec<Element<'a, tab::Message>>>()
+            .map(|(i, action)| menu_item(action.name.clone(), Action::RunContextAction(i)))
+            .collect::<Vec<_>>()
     };
     // Parse the desktop entry if it is the only selection
     #[cfg(feature = "desktop")]
@@ -189,7 +151,7 @@ pub fn context_menu<'a>(
         }
     });
 
-    let mut children: Vec<Element<_>> = Vec::new();
+    let mut children: Vec<menu::Item<TabAction, String>> = Vec::new();
     match (&tab.mode, &tab.location) {
         (
             tab::Mode::App | tab::Mode::Desktop,
@@ -201,106 +163,113 @@ pub fn context_menu<'a>(
             | Location::Network(_, _, Some(_)),
         ) => {
             if selected_trash_only {
-                children.push(menu_item(fl!("open"), Action::Open).into());
+                children.push(menu_item(fl!("open"), Action::Open));
                 if !Trash::is_empty() {
-                    children.push(menu_item(fl!("empty-trash"), Action::EmptyTrash).into());
+                    children.push(menu_item(fl!("empty-trash"), Action::EmptyTrash));
                 }
             } else if let Some(entry) = selected_desktop_entry {
-                children.push(menu_item(fl!("open"), Action::Open).into());
+                children.push(menu_item(fl!("open"), Action::Open));
                 #[cfg(feature = "desktop")]
                 {
-                    children.extend(entry.desktop_actions.into_iter().enumerate().map(
-                        |(i, action)| menu_item(action.name, Action::ExecEntryAction(i)).into(),
-                    ));
+                    children.extend(
+                        entry
+                            .desktop_actions
+                            .into_iter()
+                            .enumerate()
+                            .map(|(i, action)| menu_item(action.name, Action::ExecEntryAction(i))),
+                    );
                 }
-                children.push(divider::horizontal::light().into());
-                children.push(menu_item(fl!("rename"), Action::Rename).into());
-                children.push(menu_item(fl!("cut"), Action::Cut).into());
+                children.push(menu::Item::Divider);
+                children.push(menu_item(fl!("rename"), Action::Rename));
+                children.push(menu_item(fl!("cut"), Action::Cut));
                 if modifiers.shift() && !modifiers.control() {
-                    children.push(menu_item(fl!("copy-path"), Action::CopyPath).into());
+                    children.push(menu_item(fl!("copy-path"), Action::CopyPath));
                 } else {
-                    children.push(menu_item(fl!("copy"), Action::Copy).into());
+                    children.push(menu_item(fl!("copy"), Action::Copy));
                 }
                 // Should this simply bypass trash and remove the shortcut?
-                children.push(menu_item(fl!("move-to-trash"), Action::Delete).into());
+                children.push(menu_item(fl!("move-to-trash"), Action::Delete));
                 let action_items = context_action_items(selected, selected_dir);
                 if !action_items.is_empty() {
-                    children.push(divider::horizontal::light().into());
+                    children.push(menu::Item::Divider);
                     children.extend(action_items);
                 }
             } else if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
-                    children.push(menu_item(fl!("open"), Action::Open).into());
+                    children.push(menu_item(fl!("open"), Action::Open));
                 }
                 if selected == 1 {
-                    children.push(menu_item(fl!("menu-open-with"), Action::OpenWith).into());
+                    children.push(menu_item(fl!("menu-open-with"), Action::OpenWith));
                     if selected_dir == 1 {
-                        children
-                            .push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
+                        children.push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal));
                     }
                 }
                 if tab.location.is_recents() || matches!(tab.location, Location::Search(..)) {
-                    children.push(
-                        menu_item(fl!("open-item-location"), Action::OpenItemLocation).into(),
-                    );
+                    children.push(menu_item(
+                        fl!("open-item-location"),
+                        Action::OpenItemLocation,
+                    ));
                 }
                 // All selected items are directories
                 if selected == selected_dir && matches!(tab.mode, tab::Mode::App) {
-                    children.push(menu_item(fl!("open-in-new-tab"), Action::OpenInNewTab).into());
-                    children
-                        .push(menu_item(fl!("open-in-new-window"), Action::OpenInNewWindow).into());
+                    children.push(menu_item(fl!("open-in-new-tab"), Action::OpenInNewTab));
+                    children.push(menu_item(
+                        fl!("open-in-new-window"),
+                        Action::OpenInNewWindow,
+                    ));
                 }
                 let action_items = context_action_items(selected, selected_dir);
                 if !action_items.is_empty() {
-                    children.push(divider::horizontal::light().into());
+                    children.push(menu::Item::Divider);
                     children.extend(action_items);
                 }
-                children.push(divider::horizontal::light().into());
+                children.push(menu::Item::Divider);
                 if selected_mount_point == 0 {
-                    children.push(menu_item(fl!("rename"), Action::Rename).into());
-                    children.push(menu_item(fl!("cut"), Action::Cut).into());
+                    children.push(menu_item(fl!("rename"), Action::Rename));
+                    children.push(menu_item(fl!("cut"), Action::Cut));
                 }
                 if modifiers.shift() && !modifiers.control() {
-                    children.push(menu_item(fl!("copy-path"), Action::CopyPath).into());
+                    children.push(menu_item(fl!("copy-path"), Action::CopyPath));
                 } else {
-                    children.push(menu_item(fl!("copy"), Action::Copy).into());
+                    children.push(menu_item(fl!("copy"), Action::Copy));
                 }
                 if selected_mount_point == 0 {
-                    children.push(menu_item(fl!("move-to"), Action::MoveTo).into());
+                    children.push(menu_item(fl!("move-to"), Action::MoveTo));
                 }
-                children.push(menu_item(fl!("copy-to"), Action::CopyTo).into());
+                children.push(menu_item(fl!("copy-to"), Action::CopyTo));
 
-                children.push(divider::horizontal::light().into());
+                children.push(menu::Item::Divider);
                 let supported_archive_types = crate::archive::SUPPORTED_ARCHIVE_TYPES;
                 selected_types.retain(|t| supported_archive_types.iter().copied().all(|m| *t != m));
                 if selected_types.is_empty() {
-                    children.push(menu_item(fl!("extract-here"), Action::ExtractHere).into());
-                    children.push(menu_item(fl!("extract-to"), Action::ExtractTo).into());
+                    children.push(menu_item(fl!("extract-here"), Action::ExtractHere));
+                    children.push(menu_item(fl!("extract-to"), Action::ExtractTo));
                 }
-                children.push(menu_item(fl!("compress"), Action::Compress).into());
-                children.push(divider::horizontal::light().into());
+                children.push(menu_item(fl!("compress"), Action::Compress));
+                children.push(menu::Item::Divider);
 
                 //TODO: Print?
-                children.push(menu_item(fl!("show-details"), Action::Preview).into());
+                children.push(menu_item(fl!("show-details"), Action::Preview));
                 if any_trash_item {
-                    children.push(divider::horizontal::light().into());
-                    children.push(
-                        menu_item(fl!("restore-from-trash"), Action::RestoreFromTrash).into(),
-                    );
-                    children.push(divider::horizontal::light().into());
-                    children.push(menu_item(fl!("delete-permanently"), Action::Delete).into());
+                    children.push(menu::Item::Divider);
+                    children.push(menu_item(
+                        fl!("restore-from-trash"),
+                        Action::RestoreFromTrash,
+                    ));
+                    children.push(menu::Item::Divider);
+                    children.push(menu_item(fl!("delete-permanently"), Action::Delete));
                 } else {
                     if matches!(tab.mode, tab::Mode::App) {
-                        children.push(divider::horizontal::light().into());
-                        children
-                            .push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar).into());
+                        children.push(menu::Item::Divider);
+                        children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar));
                     }
-                    children.push(divider::horizontal::light().into());
+                    children.push(menu::Item::Divider);
                     if tab.location.is_recents() {
-                        children.push(
-                            menu_item(fl!("remove-from-recents"), Action::RemoveFromRecents).into(),
-                        );
-                        children.push(divider::horizontal::light().into());
+                        children.push(menu_item(
+                            fl!("remove-from-recents"),
+                            Action::RemoveFromRecents,
+                        ));
+                        children.push(menu::Item::Divider);
                     }
                     if selected_mount_point == 0 {
                         if modifiers.shift() && !modifiers.control() {
@@ -309,55 +278,59 @@ pub fn context_menu<'a>(
                                     .into(),
                             );
                         } else {
-                            children.push(menu_item(fl!("move-to-trash"), Action::Delete).into());
+                            children.push(menu_item(fl!("move-to-trash"), Action::Delete));
                         }
                     } else if selected == 1 {
-                        children.push(menu_item(fl!("eject"), Action::Eject).into());
+                        children.push(menu_item(fl!("eject"), Action::Eject));
                     }
                 }
             } else {
                 //TODO: need better designs for menu with no selection
                 //TODO: have things like properties but they apply to the folder?
                 if tab.location != Location::Recents {
-                    children.push(menu_item(fl!("new-folder"), Action::NewFolder).into());
-                    children.push(menu_item(fl!("new-file"), Action::NewFile).into());
-                    children.push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
-                    children.push(divider::horizontal::light().into());
+                    children.push(menu_item(fl!("new-folder"), Action::NewFolder));
+                    children.push(menu_item(fl!("new-file"), Action::NewFile));
+                    children.push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal));
+                    children.push(menu::Item::Divider);
                 }
 
                 if tab.mode.multiple() {
-                    children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
+                    children.push(menu_item(fl!("select-all"), Action::SelectAll));
                 }
                 if can_paste {
-                    children.push(menu_item(fl!("paste"), Action::Paste).into());
+                    children.push(menu_item(fl!("paste"), Action::Paste));
                 } else {
-                    children.push(menu_item_disabled(fl!("paste"), Action::Paste).into());
+                    children.push(menu_item_disabled(fl!("paste"), Action::Paste));
                 }
 
                 //TODO: only show if cosmic-settings is found?
                 if matches!(tab.mode, tab::Mode::Desktop) {
-                    children.push(divider::horizontal::light().into());
-                    children.push(
-                        menu_item(fl!("change-wallpaper"), Action::CosmicSettingsWallpaper).into(),
-                    );
-                    children.push(
-                        menu_item(fl!("desktop-appearance"), Action::CosmicSettingsDesktop).into(),
-                    );
-                    children.push(
-                        menu_item(fl!("display-settings"), Action::CosmicSettingsDisplays).into(),
-                    );
+                    children.push(menu::Item::Divider);
+                    children.push(menu_item(
+                        fl!("change-wallpaper"),
+                        Action::CosmicSettingsWallpaper,
+                    ));
+                    children.push(menu_item(
+                        fl!("desktop-appearance"),
+                        Action::CosmicSettingsDesktop,
+                    ));
+                    children.push(menu_item(
+                        fl!("display-settings"),
+                        Action::CosmicSettingsDisplays,
+                    ));
                 }
 
-                children.push(divider::horizontal::light().into());
+                children.push(menu::Item::Divider);
                 // TODO: Nested menu
                 children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
                 children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
                 children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
                 if matches!(tab.location, Location::Desktop(..)) {
-                    children.push(divider::horizontal::light().into());
-                    children.push(
-                        menu_item(fl!("desktop-view-options"), Action::DesktopViewOptions).into(),
-                    );
+                    children.push(menu::Item::Divider);
+                    children.push(menu_item(
+                        fl!("desktop-view-options"),
+                        Action::DesktopViewOptions,
+                    ));
                 }
             }
         }
@@ -372,24 +345,25 @@ pub fn context_menu<'a>(
         ) => {
             if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
-                    children.push(menu_item(fl!("open"), Action::Open).into());
+                    children.push(menu_item(fl!("open"), Action::Open));
                 }
                 if matches!(tab.location, Location::Search(..)) || tab.location.is_recents() {
-                    children.push(
-                        menu_item(fl!("open-item-location"), Action::OpenItemLocation).into(),
-                    );
+                    children.push(menu_item(
+                        fl!("open-item-location"),
+                        Action::OpenItemLocation,
+                    ));
                 }
-                children.push(divider::horizontal::light().into());
-                children.push(menu_item(fl!("show-details"), Action::Preview).into());
+                children.push(menu::Item::Divider);
+                children.push(menu_item(fl!("show-details"), Action::Preview));
             } else {
                 if dialog_kind.save() {
-                    children.push(menu_item(fl!("new-folder"), Action::NewFolder).into());
+                    children.push(menu_item(fl!("new-folder"), Action::NewFolder));
                 }
                 if tab.mode.multiple() {
-                    children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
+                    children.push(menu_item(fl!("select-all"), Action::SelectAll));
                 }
                 if !children.is_empty() {
-                    children.push(divider::horizontal::light().into());
+                    children.push(menu::Item::Divider);
                 }
                 children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
                 children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
@@ -399,14 +373,14 @@ pub fn context_menu<'a>(
         (_, Location::Network(..)) => {
             if selected > 0 {
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
-                    children.push(menu_item(fl!("open"), Action::Open).into());
+                    children.push(menu_item(fl!("open"), Action::Open));
                 }
             } else {
                 if tab.mode.multiple() {
-                    children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
+                    children.push(menu_item(fl!("select-all"), Action::SelectAll));
                 }
                 if !children.is_empty() {
-                    children.push(divider::horizontal::light().into());
+                    children.push(menu::Item::Divider);
                 }
                 children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
                 children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
@@ -415,18 +389,20 @@ pub fn context_menu<'a>(
         }
         (_, Location::Trash | Location::Search(SearchLocation::Trash, ..)) => {
             if tab.mode.multiple() {
-                children.push(menu_item(fl!("select-all"), Action::SelectAll).into());
+                children.push(menu_item(fl!("select-all"), Action::SelectAll));
             }
             if !children.is_empty() {
-                children.push(divider::horizontal::light().into());
+                children.push(menu::Item::Divider);
             }
             if selected > 0 {
-                children.push(menu_item(fl!("show-details"), Action::Preview).into());
-                children.push(divider::horizontal::light().into());
-                children
-                    .push(menu_item(fl!("restore-from-trash"), Action::RestoreFromTrash).into());
-                children.push(divider::horizontal::light().into());
-                children.push(menu_item(fl!("delete-permanently"), Action::Delete).into());
+                children.push(menu_item(fl!("show-details"), Action::Preview));
+                children.push(menu::Item::Divider);
+                children.push(menu_item(
+                    fl!("restore-from-trash"),
+                    Action::RestoreFromTrash,
+                ));
+                children.push(menu::Item::Divider);
+                children.push(menu_item(fl!("delete-permanently"), Action::Delete));
             } else {
                 // TODO: Nested menu
                 children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
@@ -436,26 +412,11 @@ pub fn context_menu<'a>(
         }
     }
 
-    container(cosmic::widget::menu::menu_column::MenuColumn::with_children(children))
-        .padding(1)
-        //TODO: move style to libcosmic
-        .style(|theme| {
-            let cosmic = theme.cosmic();
-            let component = &cosmic.background(theme.transparent);
-            container::Style {
-                icon_color: Some(component.on.into()),
-                text_color: Some(component.on.into()),
-                background: Some(Background::Color(component.base.into())),
-                border: Border {
-                    radius: cosmic.radius_s().map(|x| x + 1.0).into(),
-                    width: 1.0,
-                    color: component.divider.into(),
-                },
-                ..Default::default()
-            }
-        })
-        .width(Length::Fixed(360.0))
-        .into()
+    let key_binds: HashMap<KeyBind, TabAction> = key_binds
+        .iter()
+        .map(|(key_bind, action)| (key_bind.clone(), TabAction(*action)))
+        .collect();
+    menu::items(&key_binds, children)
 }
 
 pub fn dialog_menu(
