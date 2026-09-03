@@ -279,12 +279,22 @@ fn network_search(
 ) -> Result<(), String> {
     let (_, root) = resolve_uri(uri);
 
+    // Shares in a server listing are mountable entries whose canonical
+    // location is only available in the target-uri attribute
+    let attributes = format!("{SCAN_ATTRIBUTES},{TARGET_URI_ATTRIBUTE}");
+
     // Breadth-first traversal of the network location
     let mut first = true;
+    let mut visited = std::collections::HashSet::new();
     let mut queue = std::collections::VecDeque::from([root]);
     while let Some(dir) = queue.pop_front() {
+        // Guard against traversal cycles introduced by target-uri redirects
+        if !visited.insert(String::from(dir.uri())) {
+            continue;
+        }
+
         let enumerator = match dir.enumerate_children(
-            SCAN_ATTRIBUTES,
+            &attributes,
             // Do not follow symlinks to avoid traversal cycles
             gio::FileQueryInfoFlags::NOFOLLOW_SYMLINKS,
             gio::Cancellable::NONE,
@@ -322,8 +332,18 @@ fn network_search(
                 }
             }
 
-            if matches!(info.file_type(), gio::FileType::Directory) {
-                queue.push_back(dir.child(info.name()));
+            match info.file_type() {
+                gio::FileType::Directory => queue.push_back(dir.child(info.name())),
+                // Shares below a server (e.g. smb://server/) are mountable
+                // entries; descend into them via their resolved location.
+                // Enumerating an unmounted share fails with NotMounted and
+                // is skipped above, so this never triggers mount prompts
+                gio::FileType::Mountable => {
+                    if let Some(target_uri) = info.attribute_as_string(TARGET_URI_ATTRIBUTE) {
+                        queue.push_back(gio::File::for_uri(&target_uri));
+                    }
+                }
+                _ => {}
             }
         }
     }
