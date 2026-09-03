@@ -12,6 +12,10 @@ cargo-target-dir := env('CARGO_TARGET_DIR', 'target')
 bin-src := cargo-target-dir / 'release' / name
 bin-dst := base-dir / 'bin' / name
 
+thumbnailer-bin-name := name + '-thumbnailer'
+thumbnailer-bin-src := cargo-target-dir / 'release' / thumbnailer-bin-name
+thumbnailer-bin-dst := base-dir / 'bin' / thumbnailer-bin-name
+
 applet-name := name + '-applet'
 applet-src := cargo-target-dir / 'release' / applet-name
 applet-dst := base-dir / 'bin' / applet-name
@@ -23,6 +27,10 @@ desktop-dst := clean(rootdir / prefix) / 'share' / 'applications' / desktop
 metainfo := APPID + '.metainfo.xml'
 metainfo-src := 'target/xdgen' / metainfo
 metainfo-dst := clean(rootdir / prefix) / 'share' / 'metainfo' / metainfo
+
+thumbnailer := APPID + '.thumbnailer'
+thumbnailer-src := 'res' / thumbnailer
+thumbnailer-dst := clean(rootdir / prefix) / 'share' / 'thumbnailers' / thumbnailer
 
 icons-src := 'res' / 'icons' / 'hicolor'
 icons-dst := clean(rootdir / prefix) / 'share' / 'icons' / 'hicolor'
@@ -92,9 +100,11 @@ heaptrack *args:
 # Installs files
 install:
     install -Dm0755 {{bin-src}} {{bin-dst}}
+    install -Dm0755 {{thumbnailer-bin-src}} {{thumbnailer-bin-dst}}
     install -Dm0755 {{applet-src}} {{applet-dst}}
     install -Dm0644 {{desktop-src}} {{desktop-dst}}
     install -Dm0644 {{metainfo-src}} {{metainfo-dst}}
+    install -Dm0644 {{thumbnailer-src}} {{thumbnailer-dst}}
     for size in `ls {{icons-src}}`; do \
         install -Dm0644 "{{icons-src}}/$size/apps/{{APPID}}.svg" "{{icons-dst}}/$size/apps/{{APPID}}.svg"; \
     done
@@ -105,7 +115,7 @@ install-applet:
 
 # Uninstalls installed files
 uninstall:
-    rm -f {{bin-dst}} {{applet-dst}}
+    rm -f {{bin-dst}} {{thumbnailer-bin-dst}} {{applet-dst}} {{thumbnailer-dst}}
 
 # Vendor dependencies locally
 vendor:

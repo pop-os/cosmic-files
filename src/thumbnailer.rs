@@ -5,10 +5,13 @@
 use cosmic::desktop::fde::GenericEntry;
 use mime_guess::Mime;
 use rustc_hash::FxHashMap;
+#[cfg(feature = "desktop")]
+use std::fs;
 use std::path::Path;
+use std::process;
 use std::sync::{LazyLock, Mutex};
+#[cfg(feature = "desktop")]
 use std::time::Instant;
-use std::{fs, process};
 
 #[derive(Clone, Debug)]
 pub struct Thumbnailer {
@@ -171,4 +174,26 @@ static THUMBNAILER_CACHE: LazyLock<Mutex<ThumbnailerCache>> =
 pub fn thumbnailer(mime: &Mime) -> Vec<Thumbnailer> {
     let thumbnailer_cache = THUMBNAILER_CACHE.lock().unwrap();
     thumbnailer_cache.get(mime)
+}
+
+#[cfg(all(test, feature = "desktop"))]
+mod tests {
+    use super::Thumbnailer;
+    use std::path::Path;
+
+    #[test]
+    fn command_expands_thumbnailer_arguments() {
+        let thumbnailer = Thumbnailer {
+            exec: "cosmic-files-thumbnailer %o --size %s %i".to_string(),
+        };
+
+        let command = thumbnailer
+            .command(Path::new("input.exe"), Path::new("output.png"), 128)
+            .expect("valid thumbnailer command");
+        assert_eq!(command.get_program(), "cosmic-files-thumbnailer");
+        assert_eq!(
+            command.get_args().collect::<Vec<_>>(),
+            ["output.png", "--size", "128", "input.exe"]
+        );
+    }
 }
