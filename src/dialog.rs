@@ -864,12 +864,6 @@ impl App {
         }
     }
 
-    fn close_context_menus(&mut self) -> Task<Message> {
-        self.tab.location_context_menu_index = None;
-
-        Task::none()
-    }
-
     fn update_nav_model(&mut self) {
         let mut nav_model = segmented_button::ModelBuilder::default();
 
@@ -1314,11 +1308,6 @@ impl Application for App {
             return Task::none();
         }
 
-        if self.tab.location_context_menu_index.is_some() {
-            self.tab.location_context_menu_index = None;
-            return Task::none();
-        }
-
         if self.tab.edit_location.is_some() {
             // Close location editing if enabled
             self.tab.edit_location = None;
@@ -1553,7 +1542,7 @@ impl Application for App {
             Message::Mouse(window_id, _button) => {
                 // Close context menu when clicking outside.
                 if self.core.main_window_id() == Some(window_id) {
-                    return self.close_context_menus();
+                    return Task::none();
                 }
             }
             Message::NewFolder => {
@@ -1713,7 +1702,7 @@ impl Application for App {
                 )));
             }
             Message::SearchActivate => {
-                let mut tasks = vec![self.close_context_menus()];
+                let mut tasks = vec![];
 
                 if self.search_get().is_none() {
                     tasks.push(self.search_set(Some(String::new())));
@@ -1724,7 +1713,7 @@ impl Application for App {
                 return Task::batch(tasks);
             }
             Message::SearchClear => {
-                return Task::batch([self.close_context_menus(), self.search_set(None)]);
+                return self.search_set(None);
             }
             Message::SearchInput(input) => {
                 return self.search_set(Some(input));

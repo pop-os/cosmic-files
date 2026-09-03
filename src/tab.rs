@@ -1779,8 +1779,7 @@ pub enum Message {
     ContextAction(Action),
     RightClickBackground,
     Surface(cosmic::surface::Action),
-    LocationContextMenuPoint(Option<Point>),
-    LocationContextMenuIndex(Option<Point>, Option<usize>),
+    LocationContextMenuIndex(Option<usize>),
     LocationMenuAction(LocationMenuAction),
     Drag(Option<Rectangle>),
     DragEnd,
@@ -2806,7 +2805,7 @@ pub struct Tab {
     pub location: Location,
     pub location_ancestors: Vec<(Location, String)>,
     pub location_title: String,
-    pub location_context_menu_point: Option<Point>,
+    /// Breadcrumb whose context menu is open, drawn as active while it shows
     pub location_context_menu_index: Option<usize>,
     pub mode: Mode,
     pub scroll_opt: Option<AbsoluteOffset>,
@@ -2952,7 +2951,6 @@ impl Tab {
             location,
             location_ancestors,
             location_title,
-            location_context_menu_point: None,
             location_context_menu_index: None,
             mode: Mode::App,
             scroll_opt: None,
@@ -3572,7 +3570,6 @@ impl Tab {
                 }
 
                 if click_i_opt != self.clicked.take() {
-                    self.location_context_menu_index = None;
                     if let Some(ref mut items) = self.items_opt {
                         for (i, item) in items.iter_mut().enumerate() {
                             if mod_ctrl {
@@ -3615,7 +3612,6 @@ impl Tab {
             Message::Click(click_i_opt) => {
                 self.selected_clicked = false;
                 self.edit_location = None;
-                self.location_context_menu_index = None;
                 if click_i_opt.is_none() {
                     self.clicked = click_i_opt;
                 }
@@ -3764,7 +3760,6 @@ impl Tab {
             }
             Message::RightClickBackground => {
                 self.edit_location = None;
-                self.location_context_menu_index = None;
 
                 //TODO: hack for clearing selecting when right clicking empty space
                 if self.last_right_click.take().is_none()
@@ -3778,15 +3773,10 @@ impl Tab {
             Message::Surface(action) => {
                 commands.push(Command::Surface(action));
             }
-            Message::LocationContextMenuPoint(point_opt) => {
-                self.location_context_menu_point = point_opt;
-            }
-            Message::LocationContextMenuIndex(p, index_opt) => {
-                self.location_context_menu_point = p;
-                self.location_context_menu_index = index_opt;
+            Message::LocationContextMenuIndex(index) => {
+                self.location_context_menu_index = index;
             }
             Message::LocationMenuAction(action) => {
-                self.location_context_menu_index = None;
                 let path_for_index = |ancestor_index| {
                     self.location
                         .path_opt()
@@ -3838,7 +3828,6 @@ impl Tab {
             Message::Drag(rect_opt) => {
                 self.watch_drag = false;
                 if let Some(rect) = rect_opt {
-                    self.location_context_menu_index = None;
                     if self.mode.multiple() {
                         self.select_rect(rect, mod_ctrl, mod_shift);
                     }
@@ -5570,31 +5559,20 @@ impl Tab {
                     }
 
                     let location = self.location.with_path(ancestor.to_path_buf());
-                    let mut mouse_area = crate::mouse_area::MouseArea::new(
+                    let mouse_area = crate::mouse_area::MouseArea::new(
                         widget::button::custom(row)
                             .padding(space_xxxs)
-                            .class(theme::Button::Link)
+                            .class(if self.location_context_menu_index == Some(index) {
+                                theme::Button::LinkActive
+                            } else {
+                                theme::Button::Link
+                            })
                             .on_press(if ancestor == path {
                                 Message::EditLocation(Some(self.location.clone().into()))
                             } else {
                                 Message::Location(location.clone())
                             }),
                     );
-
-                    if self.location_context_menu_index.is_some() {
-                        mouse_area = mouse_area
-                            .on_right_press(move |point_opt| {
-                                Message::LocationContextMenuIndex(point_opt, None)
-                            })
-                            .wayland_on_right_press_window_position();
-                    } else {
-                        mouse_area = mouse_area
-                            .on_right_press_no_capture()
-                            .on_right_press(move |point_opt| {
-                                Message::LocationContextMenuIndex(point_opt, Some(index))
-                            })
-                            .wayland_on_right_press_window_position();
-                    }
 
                     let mouse_area = if let Location::Path(_) = &self.location {
                         mouse_area
@@ -5603,7 +5581,16 @@ impl Tab {
                         mouse_area
                     };
 
-                    children.push(self.dnd_dest(&location, mouse_area));
+                    // Each breadcrumb carries the menu for its own ancestor index
+                    let mut context_menu =
+                        widget::context_menu(mouse_area, Some(menu::location_context_menu(index)))
+                            .on_open(Message::LocationContextMenuIndex(Some(index)))
+                            .on_close(Message::LocationContextMenuIndex(None))
+                            .on_surface_action(Message::Surface);
+                    if let Some(window_id) = self.window_id {
+                        context_menu = context_menu.window_id(window_id);
+                    }
+                    children.push(self.dnd_dest(&location, context_menu));
 
                     if found_home || overflow {
                         break;
@@ -5654,20 +5641,7 @@ impl Tab {
             column = column.push(heading_rule);
         }
 
-        let mouse_area = crate::mouse_area::MouseArea::new(column)
-            .on_right_press(Message::LocationContextMenuPoint);
-
-        let mut popover = widget::popover(mouse_area);
-        if let (Some(point), Some(index)) = (
-            self.location_context_menu_point,
-            self.location_context_menu_index,
-        ) {
-            popover = popover
-                .popup(menu::location_context_menu(index))
-                .position(widget::popover::Position::Point(point));
-        }
-
-        popover.into()
+        column.into()
     }
 
     pub fn empty_view(&self, has_hidden: bool) -> Element<'_, Message> {

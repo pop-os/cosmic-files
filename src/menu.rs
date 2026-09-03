@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
+use cosmic::{Element, theme};
 use cosmic::app::Core;
 use cosmic::iced::keyboard::Modifiers;
-use cosmic::iced::{Alignment, Background, Border, Length};
 use cosmic::widget::menu::action::MenuAction;
 use cosmic::widget::menu::key_bind::KeyBind;
 use cosmic::widget::menu::{self, ItemHeight, ItemWidth, MenuBar};
-use cosmic::widget::{self, Row, button, column, container, divider, responsive_menu_bar, text};
-use cosmic::{Element, theme};
+use cosmic::widget::{self, responsive_menu_bar};
 use i18n_embed::LanguageLoader;
 use mime_guess::Mime;
 use std::collections::HashMap;
@@ -23,21 +22,6 @@ use crate::trash::{Trash, TrashExt};
 
 static MENU_ID: LazyLock<cosmic::widget::Id> =
     LazyLock::new(|| cosmic::widget::Id::new("responsive-menu"));
-
-macro_rules! menu_button {
-    ($($x:expr),+ $(,)?) => (
-        button::custom(
-            Row::with_children(
-                [$(Element::from($x)),+]
-            )
-            .height(Length::Fixed(24.0))
-            .align_y(Alignment::Center)
-        )
-        .padding([theme::spacing().space_xxs, 16])
-        .width(Length::Fill)
-        .class(theme::Button::MenuItem)
-    );
-}
 
 const fn menu_button_optional(
     label: String,
@@ -765,50 +749,33 @@ pub fn menu_bar<'a>(
         )
 }
 
-pub fn location_context_menu<'a>(ancestor_index: usize) -> Element<'a, tab::Message> {
+pub fn location_context_menu(ancestor_index: usize) -> Vec<menu::Tree<tab::Message>> {
     //TODO: only add some of these when in App mode
-    let children = [
-        menu_button!(text::body(fl!("open-in-new-tab")))
-            .on_press(tab::Message::LocationMenuAction(
+    menu::items(
+        &HashMap::new(),
+        vec![
+            menu::Item::Button(
+                fl!("open-in-new-tab"),
+                None,
                 LocationMenuAction::OpenInNewTab(ancestor_index),
-            ))
-            .into(),
-        menu_button!(text::body(fl!("open-in-new-window")))
-            .on_press(tab::Message::LocationMenuAction(
+            ),
+            menu::Item::Button(
+                fl!("open-in-new-window"),
+                None,
                 LocationMenuAction::OpenInNewWindow(ancestor_index),
-            ))
-            .into(),
-        divider::horizontal::light().into(),
-        menu_button!(text::body(fl!("show-details")))
-            .on_press(tab::Message::LocationMenuAction(
+            ),
+            menu::Item::Divider,
+            menu::Item::Button(
+                fl!("show-details"),
+                None,
                 LocationMenuAction::Preview(ancestor_index),
-            ))
-            .into(),
-        divider::horizontal::light().into(),
-        menu_button!(text::body(fl!("add-to-sidebar")))
-            .on_press(tab::Message::LocationMenuAction(
+            ),
+            menu::Item::Divider,
+            menu::Item::Button(
+                fl!("add-to-sidebar"),
+                None,
                 LocationMenuAction::AddToSidebar(ancestor_index),
-            ))
-            .into(),
-    ];
-
-    container(column::with_children(children))
-        .padding(1)
-        .style(|theme| {
-            let cosmic = theme.cosmic();
-            let component = &cosmic.background(theme.transparent).component;
-            container::Style {
-                icon_color: Some(component.on.into()),
-                text_color: Some(component.on.into()),
-                background: Some(Background::Color(component.base.into())),
-                border: Border {
-                    radius: cosmic.radius_s().map(|x| x + 1.0).into(),
-                    width: 1.0,
-                    color: component.divider.into(),
-                },
-                ..Default::default()
-            }
-        })
-        .width(Length::Fixed(360.0))
-        .into()
+            ),
+        ],
+    )
 }

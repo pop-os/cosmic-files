@@ -1737,15 +1737,6 @@ impl App {
         }
     }
 
-    fn close_context_menus(&mut self) -> Task<Message> {
-        let active = self.tab_model.active();
-        if let Some(tab) = self.tab_model.data_mut::<Tab>(active) {
-            tab.location_context_menu_index = None;
-        }
-
-        Task::none()
-    }
-
     fn update_nav_model(&mut self) {
         let mut nav_model = segmented_button::ModelBuilder::default();
 
@@ -2802,11 +2793,6 @@ impl Application for App {
             return cosmic::task::message(cosmic::action::app(Message::SetShowDetails(false)));
         }
         if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
-            if tab.location_context_menu_index.is_some() {
-                tab.location_context_menu_index = None;
-                return Task::none();
-            }
-
             if tab.edit_location.is_some() {
                 tab.edit_location = None;
                 return Task::none();
@@ -3558,7 +3544,7 @@ impl Application for App {
             Message::Mouse(window_id, _button) => {
                 // Close context menu when clicking outside.
                 if self.core.main_window_id() == Some(window_id) {
-                    return self.close_context_menus();
+                    return Task::none();
                 }
             }
             Message::MoveTo(entity_opt) => {
@@ -4348,7 +4334,7 @@ impl Application for App {
                 ));
             }
             Message::SearchActivate => {
-                let mut tasks = vec![self.close_context_menus()];
+                let mut tasks = vec![];
 
                 if self.search_get().is_none() {
                     tasks.push(self.search_set_active(Some(String::new())));
@@ -4359,7 +4345,7 @@ impl Application for App {
                 return Task::batch(tasks);
             }
             Message::SearchClear => {
-                return Task::batch([self.close_context_menus(), self.search_set_active(None)]);
+                return self.search_set_active(None);
             }
             Message::SearchInput(input) => {
                 return self.search_set_active(Some(input));
@@ -4380,7 +4366,7 @@ impl Application for App {
                 return self.update_config();
             }
             Message::TabActivate(entity) => {
-                let mut tasks = vec![self.close_context_menus()];
+                let mut tasks = vec![];
 
                 // Activate new tab
                 self.tab_model.activate(entity);
@@ -4584,7 +4570,6 @@ impl Application for App {
                         }
                         tab::Command::OpenFile(paths) => commands.push(self.open_file(&paths)),
                         tab::Command::OpenInNewTab(path) => {
-                            commands.push(self.close_context_menus());
                             commands.push(self.open_tab(Location::Path(path), false, None));
                         }
                         tab::Command::OpenInNewWindow(path) => match env::current_exe() {
@@ -5021,8 +5006,6 @@ impl Application for App {
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(tab_entity) {
                     // Close location editing if enabled
                     tab.edit_location = None;
-                    // Close other context menus.
-                    tab.location_context_menu_index = None;
                 }
             }
             Message::NavMenuAction(action) => match action {
@@ -5120,7 +5103,7 @@ impl Application for App {
                         _ => Task::none(),
                     };
 
-                    return Task::batch([self.close_context_menus(), open_task]);
+                    return open_task;
                 }
 
                 // Open the selected path in a new cosmic-files window.
