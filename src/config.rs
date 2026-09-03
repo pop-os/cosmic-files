@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::FxOrderMap;
 use crate::app::App;
-use crate::tab::{HeadingOptions, Location, View};
+use crate::tab::{DEFAULT_SORT_OPTION_FALLBACK, HeadingOptions, Location, View};
 
 pub use crate::context_action::{ContextActionPreset, ContextActionSelection};
 
@@ -150,6 +150,7 @@ pub enum TypeToSearch {
 #[serde(default)]
 pub struct State {
     pub sort_names: FxOrderMap<String, (HeadingOptions, bool)>,
+    pub dialog_sort_name: (HeadingOptions, bool),
 }
 
 impl Default for State {
@@ -158,9 +159,10 @@ impl Default for State {
             sort_names: FxOrderMap::from_iter(dirs::download_dir().into_iter().map(|dir| {
                 (
                     Location::Path(dir).normalize().to_string(),
-                    (HeadingOptions::Modified, false),
+                    DEFAULT_SORT_OPTION_FALLBACK,
                 )
             })),
+            dialog_sort_name: DEFAULT_SORT_OPTION_FALLBACK,
         }
     }
 }

@@ -87,12 +87,15 @@ const TEXT_PREVIEW_MAX_FILE_BYTES: u64 = 8 * 1000 * 1000; // 8 MiB
 pub static THUMB_SEMAPHORE: LazyLock<tokio::sync::Semaphore> =
     LazyLock::new(|| tokio::sync::Semaphore::const_new(num_cpus::get().min(4)));
 
+pub(crate) const DEFAULT_SORT_OPTION_FALLBACK: (HeadingOptions, bool) =
+    (HeadingOptions::Modified, false);
+
 pub(crate) static SORT_OPTION_FALLBACK: LazyLock<FxHashMap<String, (HeadingOptions, bool)>> =
     LazyLock::new(|| {
         FxHashMap::from_iter(dirs::download_dir().into_iter().map(|dir| {
             (
                 Location::Path(dir).normalize().to_string(),
-                (HeadingOptions::Modified, false),
+                DEFAULT_SORT_OPTION_FALLBACK,
             )
         }))
     });

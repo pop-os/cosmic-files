@@ -3,6 +3,7 @@
 
 use cosmic::app::cosmic::Cosmic;
 use cosmic::app::{Core, Task, context_drawer};
+use cosmic::cosmic_config::ConfigSet;
 use cosmic::iced::core::SmolStr;
 use cosmic::iced::core::widget::operation;
 use cosmic::iced::futures::{self, SinkExt};
@@ -32,11 +33,13 @@ use std::{env, fmt, fs};
 use crate::app::{
     Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind, REPLACE_BUTTON_ID,
 };
-use crate::config::{Config, DialogConfig, TIME_CONFIG_ID, ThumbCfg, TimeConfig, TypeToSearch};
+use crate::config::{
+    Config, DialogConfig, State, TIME_CONFIG_ID, ThumbCfg, TimeConfig, TypeToSearch,
+};
 use crate::key_bind::key_binds;
 use crate::localize::LANGUAGE_SORTER;
 use crate::mounter::{MOUNTERS, MounterItem, MounterItems, MounterKey, MounterMessage};
-use crate::tab::{self, ItemMetadata, Location, SearchLocation, Tab};
+use crate::tab::{self, HeadingOptions, ItemMetadata, Location, SearchLocation, Tab};
 use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
 use crate::{fl, home_dir, menu, mime_icon};
 
@@ -251,6 +254,7 @@ impl<M: Send + 'static> Dialog<M> {
         crate::localize::localize();
 
         let (config_handler, config) = Config::load();
+        let (state_handler, state) = State::load();
 
         let mut settings = window::Settings {
             decorations: false,
@@ -285,6 +289,8 @@ impl<M: Send + 'static> Dialog<M> {
             window_id,
             config_handler,
             config,
+            state_handler,
+            state,
         };
 
         let (cosmic, cosmic_command) = Cosmic::<App>::init((core, flags));
@@ -439,6 +445,8 @@ struct Flags {
     #[allow(dead_code)]
     config_handler: Option<cosmic_config::Config>,
     config: Config,
+    state_handler: Option<cosmic_config::Config>,
+    state: State,
 }
 
 /// Messages that are used specifically by our [`App`].
@@ -1037,8 +1045,7 @@ impl Application for App {
             None,
         );
         tab.mode = tab::Mode::Dialog(flags.kind.clone());
-        tab.sort_name = tab::HeadingOptions::Modified;
-        tab.sort_direction = false;
+        (tab.sort_name, tab.sort_direction) = flags.state.dialog_sort_name;
 
         let key_binds = key_binds(&tab.mode);
 
@@ -1889,6 +1896,17 @@ impl Application for App {
                                 self.auto_scroll_speed = Some((scroll_speed_float * 10.0) as i16);
                             } else {
                                 self.auto_scroll_speed = None;
+                            }
+                        }
+                        tab::Command::SetSort(_, heading_options, direction) => {
+                            self.flags.state.dialog_sort_name = (heading_options, direction);
+                            if let Some(state_handler) = self.flags.state_handler.as_ref()
+                                && let Err(err) = state_handler.set::<&(HeadingOptions, bool)>(
+                                    "dialog_sort_name",
+                                    &self.flags.state.dialog_sort_name,
+                                )
+                            {
+                                log::warn!("Failed to save dialog sort name: {err:?}");
                             }
                         }
                         unsupported => {
