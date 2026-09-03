@@ -204,6 +204,7 @@ unknown-folder = ಅಜ್ಞಾತ ಫೋಲ್ಡರ್
 
 menu-open-with = ಇದರೊಂದಿಗೆ ತೆರೆಯಿರಿ
 default-app = { $name } (ಸ್ಥೂಲ)
+search-application = ಅಪ್ಲಿಕೇಶನ್ ಹೆಸರಿನಿಂದ ಹುಡುಕಿ
 
 ## Show details
 

@@ -8,7 +8,7 @@ use cosmic::iced::core::mouse::ScrollDelta;
 use cosmic::iced::core::widget::tree;
 use cosmic::iced::futures::{self, SinkExt};
 use cosmic::iced::keyboard::Modifiers;
-use cosmic::iced::widget::scrollable::{self, AbsoluteOffset, Viewport};
+use cosmic::iced::widget::scrollable::{self, AbsoluteOffset, Direction, Scrollbar, Viewport};
 use cosmic::iced::widget::{rule, stack};
 use cosmic::iced::{
     Alignment, Border, Color, ContentFit, Length, Point, Rectangle, Size, Subscription, Vector,
@@ -157,64 +157,107 @@ fn button_appearance(
     cut: bool,
     focused: bool,
     accent: bool,
-    condensed_radius: bool,
+    hidden: bool,
     desktop: bool,
 ) -> widget::button::Style {
     let cosmic = theme.cosmic();
     let mut appearance = widget::button::Style::new();
-    if selected {
+    let mut background = Color::TRANSPARENT;
+    let mut icon_color = Color::from(cosmic.on_bg_component_color());
+    let mut text_color = Color::from(cosmic.on_bg_component_color());
+
+    // Button is highlighted (hover, etc)
+    if highlighted {
+        background = Color::from(cosmic.bg_component_color());
         if accent {
-            appearance.background = Some(Color::from(cosmic.accent_color()).into());
-            appearance.icon_color = Some(Color::from(cosmic.on_accent_color()));
-            if cut {
-                appearance.text_color = Some(Color::from(cosmic.accent.on_disabled));
-            } else {
-                appearance.text_color = Some(Color::from(cosmic.on_accent_color()));
-            }
-        } else {
-            appearance.background = Some(Color::from(cosmic.bg_component_color()).into());
+            background = Color::from(cosmic.accent_color());
+            icon_color = Color::from(cosmic.on_accent_color());
+            text_color = Color::from(cosmic.on_accent_color());
         }
-    } else if highlighted {
-        if accent {
-            appearance.background = Some(Color::from(cosmic.bg_component_color()).into());
-            appearance.icon_color = Some(Color::from(cosmic.on_bg_component_color()));
-            appearance.text_color = Some(Color::from(cosmic.on_bg_component_color()));
-            if cut {
-                appearance.text_color = Some(Color::from(
-                    cosmic.background(theme.transparent).component.on_disabled,
-                ));
-            } else {
-                appearance.text_color = Some(Color::from(cosmic.on_bg_component_color()));
-            }
-        } else {
-            appearance.background = Some(Color::from(cosmic.bg_component_color()).into());
-        }
-    } else if desktop {
-        appearance.background = Some(Color::from(cosmic.bg_color()).into());
-        appearance.icon_color = Some(Color::from(cosmic.on_bg_color()));
-        if cut {
-            appearance.text_color = Some(Color::from(
-                cosmic.background(theme.transparent).component.disabled,
-            ));
-        } else {
-            appearance.text_color = Some(Color::from(cosmic.on_bg_color()));
-        }
-    } else if cut {
-        appearance.text_color = Some(Color::from(
-            cosmic.background(theme.transparent).component.on_disabled,
-        ));
+        background = background.scale_alpha(0.85);
     }
+
+    // Button is selected
+    else if selected {
+        background = Color::from(cosmic.bg_component_color());
+        if accent {
+            background = Color::from(cosmic.accent_color());
+            icon_color = Color::from(cosmic.on_accent_color());
+            text_color = Color::from(cosmic.on_accent_color());
+        }
+        background = background.scale_alpha(0.75);
+    }
+
+    // Button is an item on the desktop
+    else if desktop {
+        background = Color::from(cosmic.bg_color());
+        icon_color = Color::from(cosmic.on_bg_color());
+        text_color = Color::from(cosmic.on_bg_color());
+    }
+    
+    // Visually indicate cut items
+    if cut {
+        let disabled_color = Color::from(
+            cosmic.background(theme.transparent).component.on_disabled,
+        );
+        if !accent {
+            background = Color::from(
+                cosmic.background(theme.transparent).component.disabled,
+            ).scale_alpha(0.1);
+            icon_color = disabled_color;
+            text_color = disabled_color;
+        }
+        icon_color = icon_color.scale_alpha(0.8);
+        text_color = text_color.scale_alpha(0.8);
+        appearance.outline_width = 1.0;
+        appearance.outline_color = disabled_color.scale_alpha(0.25);
+    }
+
+    // Visually indicate hidden items
+    if hidden {
+        icon_color = icon_color.scale_alpha(0.8);
+        text_color = text_color.scale_alpha(0.8);
+    }
+
+    // Ensure legibility of text on the backgrounds
+    let bg_check = if background == Color::TRANSPARENT {
+            Color::from(cosmic.bg_color())
+        } else {
+            background
+    };
+    if !text_color.is_readable_on(background) {
+        if Color::from(cosmic.on_bg_color()).is_readable_on(bg_check) {
+            icon_color = Color::from(cosmic.on_bg_color());
+            text_color = Color::from(cosmic.on_bg_color());
+        }
+        else if Color::from(cosmic.on_bg_component_color()).is_readable_on(bg_check) {
+            icon_color = Color::from(cosmic.on_bg_component_color());
+            text_color = Color::from(cosmic.on_bg_component_color());
+        }
+        else if Color::WHITE.is_readable_on(bg_check) {
+            icon_color = Color::WHITE;
+            text_color = Color::WHITE;
+        } else {
+            icon_color = Color::BLACK;
+            text_color = Color::BLACK;
+        }
+    }
+
+    appearance.background = Some(background.into());
+    appearance.icon_color = Some(icon_color);
+    appearance.text_color = Some(text_color);
+
     if focused && accent {
         appearance.outline_width = 1.0;
         appearance.outline_color = Color::from(cosmic.accent_color());
         appearance.border_width = 2.0;
         appearance.border_color = Color::TRANSPARENT;
+    } else if focused {
+        appearance.border_width = 2.0;
+        appearance.border_color = Color::from(cosmic.accent_color());
     }
-    if condensed_radius {
-        appearance.border_radius = cosmic.radius_xs().into();
-    } else {
-        appearance.border_radius = cosmic.radius_s().into();
-    }
+
+    appearance.border_radius = cosmic.radius_m().into();
     appearance
 }
 
@@ -223,7 +266,7 @@ fn button_style(
     highlighted: bool,
     cut: bool,
     accent: bool,
-    condensed_radius: bool,
+    hidden: bool,
     desktop: bool,
 ) -> theme::Button {
     //TODO: move to libcosmic?
@@ -236,7 +279,7 @@ fn button_style(
                 cut,
                 focused,
                 accent,
-                condensed_radius,
+                hidden,
                 desktop,
             )
         }),
@@ -248,7 +291,7 @@ fn button_style(
                 cut,
                 false,
                 accent,
-                condensed_radius,
+                hidden,
                 desktop,
             )
         }),
@@ -260,7 +303,7 @@ fn button_style(
                 cut,
                 focused,
                 accent,
-                condensed_radius,
+                hidden,
                 desktop,
             )
         }),
@@ -272,7 +315,7 @@ fn button_style(
                 cut,
                 focused,
                 accent,
-                condensed_radius,
+                hidden,
                 desktop,
             )
         }),
@@ -689,13 +732,14 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
 
     let size_opt = (!is_dir).then_some(file_info.size() as u64);
 
-    let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) = if is_dir {
+    let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed, icon_handle_column) = if is_dir {
         (
             //TODO: make this a static
             "inode/directory".parse().unwrap(),
             folder_icon(&path, sizes.grid()),
             folder_icon(&path, sizes.list()),
             folder_icon(&path, sizes.list_condensed()),
+            folder_icon(&path, sizes.column()),
         )
     } else {
         // ALWAYS assume we're remote for mime guessing here, since gvfs reading can be expensive
@@ -715,13 +759,15 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
                 desktop_icon_handle(&icon_name, sizes.grid()),
                 desktop_icon_handle(&icon_name, sizes.list()),
                 desktop_icon_handle(&icon_name, sizes.list_condensed()),
+                desktop_icon_handle(&icon_name, sizes.column()),
             )
         } else {
             (
                 mime.clone(),
                 mime_icon(mime.clone(), sizes.grid()),
                 mime_icon(mime.clone(), sizes.list()),
-                mime_icon(mime, sizes.list_condensed()),
+                mime_icon(mime.clone(), sizes.list_condensed()),
+                mime_icon(mime, sizes.column()),
             )
         }
     };
@@ -763,6 +809,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
         icon_handle_grid,
         icon_handle_list,
         icon_handle_list_condensed,
+        icon_handle_column,
         thumbnail_opt: if remote {
             Some(ItemThumbnail::NotImage)
         } else {
@@ -816,7 +863,7 @@ pub fn item_from_entry(
         }
     };
 
-    let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) =
+    let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed, icon_handle_column) =
         if metadata.is_dir() {
             (
                 //TODO: make this a static
@@ -824,6 +871,7 @@ pub fn item_from_entry(
                 folder_icon(&path, sizes.grid()),
                 folder_icon(&path, sizes.list()),
                 folder_icon(&path, sizes.list_condensed()),
+                folder_icon(&path, sizes.column()),
             )
         } else {
             let mime = mime_for_path(&path, Some(&metadata), remote);
@@ -840,13 +888,15 @@ pub fn item_from_entry(
                     desktop_icon_handle(&icon_name, sizes.grid()),
                     desktop_icon_handle(&icon_name, sizes.list()),
                     desktop_icon_handle(&icon_name, sizes.list_condensed()),
+                    desktop_icon_handle(&icon_name, sizes.column()),
                 )
             } else {
                 (
                     mime.clone(),
                     mime_icon(mime.clone(), sizes.grid()),
                     mime_icon(mime.clone(), sizes.list()),
-                    mime_icon(mime, sizes.list_condensed()),
+                    mime_icon(mime.clone(), sizes.list_condensed()),
+                    mime_icon(mime, sizes.column()),
                 )
             }
         };
@@ -883,6 +933,7 @@ pub fn item_from_entry(
         icon_handle_grid,
         icon_handle_list,
         icon_handle_list_condensed,
+        icon_handle_column,
         thumbnail_opt: remote.then_some(ItemThumbnail::NotImage),
         button_id: widget::Id::unique(),
         pos_opt: Cell::new(None),
@@ -907,7 +958,7 @@ pub fn item_from_trash_entry(
 
     let location = crate::trash::trash_item_path(&entry).map(Location::Path);
 
-    let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) = match metadata.size
+    let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed, icon_handle_column) = match metadata.size
     {
         trash::TrashItemSize::Entries(_) => (
             //TODO: make this a static
@@ -915,6 +966,7 @@ pub fn item_from_trash_entry(
             folder_icon(&original_path, sizes.grid()),
             folder_icon(&original_path, sizes.list()),
             folder_icon(&original_path, sizes.list_condensed()),
+            folder_icon(&original_path, sizes.column()),
         ),
         trash::TrashItemSize::Bytes(_) => {
             // This passes remote = true so it does not read from the original path
@@ -923,7 +975,8 @@ pub fn item_from_trash_entry(
                 mime.clone(),
                 mime_icon(mime.clone(), sizes.grid()),
                 mime_icon(mime.clone(), sizes.list()),
-                mime_icon(mime, sizes.list_condensed()),
+                mime_icon(mime.clone(), sizes.list_condensed()),
+                mime_icon(mime, sizes.column()),
             )
         }
     };
@@ -942,6 +995,7 @@ pub fn item_from_trash_entry(
         icon_handle_grid,
         icon_handle_list,
         icon_handle_list_condensed,
+        icon_handle_column,
         thumbnail_opt: Some(ItemThumbnail::NotImage),
         button_id: widget::Id::unique(),
         pos_opt: Cell::new(None),
@@ -1371,7 +1425,8 @@ pub fn scan_desktop(
                 if let Some(icon) = mounter_item.icon(false) {
                     item.icon_handle_grid.clone_from(&icon);
                     item.icon_handle_list.clone_from(&icon);
-                    item.icon_handle_list_condensed = icon;
+                    item.icon_handle_list_condensed.clone_from(&icon);
+                    item.icon_handle_column = icon;
                 }
 
                 Some(item)
@@ -1387,12 +1442,13 @@ pub fn scan_desktop(
             entries: Trash::entries() as u64,
         };
 
-        let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) = {
+        let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed, icon_handle_column) = {
             (
                 "inode/directory".parse().unwrap(),
                 Trash::icon(sizes.grid()),
                 Trash::icon(sizes.list()),
                 Trash::icon(sizes.list_condensed()),
+                Trash::icon(sizes.column()),
             )
         };
 
@@ -1408,6 +1464,7 @@ pub fn scan_desktop(
             icon_handle_grid,
             icon_handle_list,
             icon_handle_list_condensed,
+            icon_handle_column,
             thumbnail_opt: Some(ItemThumbnail::NotImage),
             button_id: widget::Id::unique(),
             pos_opt: Cell::new(None),
@@ -1813,7 +1870,7 @@ pub enum Message {
     MiddleClick(usize),
     Resize(Rectangle),
     Scroll(Viewport),
-    ScrollTab(f32),
+    ScrollTab(f32, Option<ScrollDirection>),
     ScrollToFocused,
     SearchContext(Location, SearchContextWrapper),
     SearchReady(bool),
@@ -2331,6 +2388,7 @@ pub struct Item {
     pub icon_handle_grid: widget::icon::Handle,
     pub icon_handle_list: widget::icon::Handle,
     pub icon_handle_list_condensed: widget::icon::Handle,
+    pub icon_handle_column: widget::icon::Handle,
     pub thumbnail_opt: Option<ItemThumbnail>,
     pub button_id: widget::Id,
     pub pos_opt: Cell<Option<(usize, usize)>>,
@@ -2363,6 +2421,17 @@ impl Item {
 
     /// Text widget for a filename in list view: word-or-glyph wrapping, middle-ellipsized to 1 line.
     fn list_display_name<'a>(
+        name: impl Into<Cow<'a, str>> + 'a,
+    ) -> widget::Text<'a, cosmic::Theme, cosmic::Renderer> {
+        widget::text::body(name)
+            .wrapping(text::Wrapping::WordOrGlyph)
+            .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
+                1,
+            )))
+    }
+
+    /// Text widget for a filename in Column view: word-or-glyph wrapping, middle-ellipsized to 1 line.
+    fn column_display_name<'a>(
         name: impl Into<Cow<'a, str>> + 'a,
     ) -> widget::Text<'a, cosmic::Theme, cosmic::Renderer> {
         widget::text::body(name)
@@ -2730,6 +2799,7 @@ impl Item {
 pub enum View {
     Grid,
     List,
+    Column,
 }
 #[derive(Clone, Copy, Debug, Hash, PartialEq, PartialOrd, Ord, Eq, Deserialize, Serialize)]
 pub enum HeadingOptions {
@@ -2812,6 +2882,7 @@ pub struct Tab {
     pub scroll_opt: Option<AbsoluteOffset>,
     pub size_opt: Cell<Option<Size>>,
     pub content_height_opt: Cell<Option<f32>>,
+    pub content_width_opt: Cell<Option<f32>>,
     pub viewport_opt: Option<Rectangle>,
     pub item_view_size_opt: Cell<Option<Size>>,
     pub edit_location: Option<EditLocation>,
@@ -2929,6 +3000,13 @@ pub fn parse_hidden_file(path: &PathBuf) -> Box<[String]> {
         .collect()
 }
 
+#[derive(Debug, Clone)]
+pub enum ScrollDirection {
+    Vertical,
+    Horizontal,
+    Both,
+}
+
 impl Tab {
     pub fn new(
         location: Location,
@@ -2959,6 +3037,7 @@ impl Tab {
             scroll_opt: None,
             size_opt: Cell::new(None),
             content_height_opt: Cell::new(None),
+            content_width_opt: Cell::new(None),
             viewport_opt: None,
             item_view_size_opt: Cell::new(None),
             edit_location: None,
@@ -3319,35 +3398,73 @@ impl Tab {
         let items = self.items_opt.as_ref()?;
         let item = items.get(self.select_focus?)?;
         let rect = item.rect_opt.get()?;
+ 
+        // Horizontal scrollbar
+        if self.config.view == View::Column {
 
-        //TODO: move to function
-        let visible_rect = {
-            let point = match self.scroll_opt {
-                Some(offset) => Point::new(0.0, offset.y),
-                None => Point::new(0.0, 0.0),
+            //TODO: move to function
+            let visible_rect = {
+                let point = match self.scroll_opt {
+                    Some(offset) => Point::new(offset.x, 0.0),
+                    None => Point::new(0.0, 0.0),
+                };
+                let size = self
+                    .item_view_size_opt
+                    .get()
+                    .unwrap_or_else(|| Size::new(0.0, 0.0));
+                Rectangle::new(point, size)
             };
-            let size = self
-                .item_view_size_opt
-                .get()
-                .unwrap_or_else(|| Size::new(0.0, 0.0));
-            Rectangle::new(point, size)
-        };
 
-        if rect.y < visible_rect.y {
-            // Scroll up to rect
-            self.scroll_opt = Some(AbsoluteOffset { x: 0.0, y: rect.y });
-            self.scroll_opt
-        } else if (rect.y + rect.height) > (visible_rect.y + visible_rect.height) {
-            // Scroll down to rect
-            self.scroll_opt = Some(AbsoluteOffset {
-                x: 0.0,
-                y: rect.y + rect.height - visible_rect.height,
-            });
-            self.scroll_opt
-        } else {
-            // Do not scroll
-            None
+            if rect.x < visible_rect.x {
+                // Scroll left to rect
+                self.scroll_opt = Some(AbsoluteOffset { x: rect.x, y: 0.0 });
+                self.scroll_opt
+            } else if (rect.x + rect.width) > (visible_rect.x + visible_rect.width) {
+                // Scroll right to rect
+                self.scroll_opt = Some(AbsoluteOffset {
+                    x: rect.x + rect.width - visible_rect.width,
+                    y: 0.0,
+                });
+                self.scroll_opt
+            } else {
+                // Do not scroll
+                None
+            }
         }
+
+        // Vertical scrollbar
+        else {
+
+            //TODO: move to function
+            let visible_rect = {
+                let point = match self.scroll_opt {
+                    Some(offset) => Point::new(0.0, offset.y),
+                    None => Point::new(0.0, 0.0),
+                };
+                let size = self
+                    .item_view_size_opt
+                    .get()
+                    .unwrap_or_else(|| Size::new(0.0, 0.0));
+                Rectangle::new(point, size)
+            };
+
+            if rect.y < visible_rect.y {
+                // Scroll up to rect
+                self.scroll_opt = Some(AbsoluteOffset { x: 0.0, y: rect.y });
+                self.scroll_opt
+            } else if (rect.y + rect.height) > (visible_rect.y + visible_rect.height) {
+                // Scroll down to rect
+                self.scroll_opt = Some(AbsoluteOffset {
+                    x: 0.0,
+                    y: rect.y + rect.height - visible_rect.height,
+                });
+                self.scroll_opt
+            } else {
+                // Do not scroll
+                None
+            }
+        }
+
     }
 
     fn rows_per_page(&self) -> usize {
@@ -4521,13 +4638,21 @@ impl Tab {
                 self.scroll_opt = Some(viewport.absolute_offset());
                 self.watch_drag = true;
             }
-            Message::ScrollTab(scroll_speed) => {
+            Message::ScrollTab(scroll_speed, scroll_dir) => {
+                let mut scroll_x_speed = 0.0;
+                let mut scroll_y_speed = 0.0;
+                match scroll_dir {
+                    Some(ScrollDirection::Horizontal) => { scroll_x_speed = scroll_speed },
+                    Some(ScrollDirection::Vertical) => { scroll_y_speed = scroll_speed },
+                    Some(ScrollDirection::Both) => { scroll_y_speed = scroll_speed },
+                    None => { scroll_y_speed = scroll_speed },
+                }
                 commands.push(Command::Iced(
                     scrollable::scroll_by(
                         self.scrollable_id.clone(),
                         AbsoluteOffset {
-                            x: 0.0,
-                            y: scroll_speed,
+                            x: scroll_x_speed,
+                            y: scroll_y_speed,
                         },
                     )
                     .into(),
@@ -4728,7 +4853,8 @@ impl Tab {
                             if let Some(handle) = handle_opt {
                                 item.icon_handle_grid.clone_from(&handle);
                                 item.icon_handle_list.clone_from(&handle);
-                                item.icon_handle_list_condensed = handle;
+                                item.icon_handle_list_condensed.clone_from(&handle);
+                                item.icon_handle_column = handle;
                             }
                             item.thumbnail_opt = Some(thumbnail);
                             break;
@@ -4914,7 +5040,7 @@ impl Tab {
             }
         }
 
-        // Scroll to top if needed
+        // Scroll to top-left if needed
         if self.scroll_opt.is_none() {
             let offset = AbsoluteOffset { x: 0.0, y: 0.0 };
             self.scroll_opt = Some(offset);
@@ -5310,10 +5436,9 @@ impl Tab {
             .height(Length::Fill)
             .style(|theme| {
                 let cosmic = theme.cosmic();
-                let mut bg = cosmic.bg_color();
-                bg.alpha = 0.75;
+                let bg = cosmic.bg_color();
                 widget::container::Style {
-                    background: Some(Color::from(bg).into()),
+                    background: Some(Color::from(bg).scale_alpha(0.85).into()),
                     ..Default::default()
                 }
             })
@@ -5722,359 +5847,13 @@ impl Tab {
         .into()
     }
 
-    pub fn grid_view(
-        &self,
-    ) -> (
-        Option<Element<'static, Message>>,
-        Element<'_, Message>,
-        bool,
-    ) {
-        let cosmic_theme::Spacing {
-            space_xxs,
-            space_xxxs,
-            ..
-        } = theme::spacing();
-
-        let TabConfig {
-            show_hidden,
-            mut icon_sizes,
-            ..
-        } = self.config;
-
-        let mut grid_spacing = space_xxs;
-        if let Location::Desktop(_path, _output, desktop_config) = &self.location {
-            icon_sizes.grid = desktop_config.icon_size;
-            grid_spacing = desktop_config.grid_spacing_for(space_xxs);
-        }
-
-        let text_height = 3 * 20; // 3 lines of text
-        let item_width = (3 * space_xxs + icon_sizes.grid() + 3 * space_xxs) as usize;
-        let item_height =
-            (space_xxxs + icon_sizes.grid() + space_xxxs + text_height + space_xxxs) as usize;
-
-        let (width, height) = match self.size_opt.get() {
-            Some(size) => (
-                (size.width.floor() as usize)
-                    .saturating_sub(2 * (space_xxs as usize))
-                    .max(item_width),
-                (size.height.floor() as usize).max(item_height),
-            ),
-            None => (item_width, item_height),
-        };
-
-        let (cols, column_spacing) = {
-            let width_m1 = width.saturating_sub(item_width);
-            let cols_m1 = width_m1 / (item_width + grid_spacing as usize);
-            let cols = cols_m1 + 1;
-            let spacing = width_m1
-                .checked_div(cols_m1)
-                .unwrap_or(0)
-                .saturating_sub(item_width);
-            (cols, spacing as u16)
-        };
-
-        let rows = {
-            let height_m1 = height.saturating_sub(item_height);
-            let rows_m1 = height_m1 / (item_height + grid_spacing as usize);
-            rows_m1 + 1
-        };
-
-        //TODO: move to function
-        let visible_rect = {
-            // Use cached content height to clamp scroll offset after resize
-            let max_scroll_y = self
-                .content_height_opt
-                .get()
-                .map(|ch| (ch - height as f32).max(0.0))
-                .unwrap_or(f32::MAX);
-            let scroll_y = self
-                .scroll_opt
-                .map(|o| o.y.min(max_scroll_y).max(0.0))
-                .unwrap_or(0.0);
-            let point = Point::new(0.0, scroll_y);
-            let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
-            Rectangle::new(point, size)
-        };
-
-        let mut grid = widget::grid()
-            .column_spacing(column_spacing)
-            .row_spacing(grid_spacing)
-            .padding(space_xxs.into());
-        let mut dnd_items: Vec<(usize, (usize, usize), &Item)> = Vec::new();
-        let mut drag_w_i = usize::MAX;
-        let mut drag_n_i = usize::MAX;
-        let mut drag_e_i = 0;
-        let mut drag_s_i = 0;
-
-        let mut column = widget::column::with_capacity(2);
-        if let Some(items) = self.column_sort() {
-            let mut count = 0;
-            let mut col = 0;
-            let mut row = 0;
-            let mut page_row = 0;
-            let mut hidden = 0;
-            let mut grid_elements = Vec::new();
-            for &(i, item) in &items {
-                if !show_hidden && item.hidden {
-                    item.pos_opt.set(None);
-                    item.rect_opt.set(None);
-                    hidden += 1;
-                    continue;
-                }
-                item.pos_opt.set(Some((row, col)));
-                let item_rect = Rectangle::new(
-                    Point::new(
-                        (col * (item_width + column_spacing as usize) + space_xxs as usize) as f32,
-                        (row * (item_height + grid_spacing as usize) + space_xxs as usize) as f32,
-                    ),
-                    Size::new(item_width as f32, item_height as f32),
-                );
-                item.rect_opt.set(Some(item_rect));
-
-                //TODO: error if the row or col is already set?
-                while grid_elements.len() <= row {
-                    grid_elements.push(Vec::new());
-                }
-
-                // Only build elements if visible (for performance)
-                if item_rect.intersects(&visible_rect) {
-                    //TODO: one focus group per grid item (needs custom widget)
-                    let buttons: Vec<Element<Message>> = vec![
-                        widget::button::custom(
-                            widget::icon::icon(item.icon_handle_grid.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_sizes.grid()),
-                        )
-                        .padding(space_xxxs)
-                        .class(button_style(
-                            item.selected,
-                            item.highlighted,
-                            item.cut,
-                            false,
-                            false,
-                            false,
-                        ))
-                        .into(),
-                        widget::tooltip(
-                            widget::button::custom(Item::grid_display_name(&item.display_name))
-                                .id(item.button_id.clone())
-                                .padding([0, space_xxxs])
-                                .class(button_style(
-                                    item.selected,
-                                    item.highlighted,
-                                    item.cut,
-                                    true,
-                                    true,
-                                    matches!(self.mode, Mode::Desktop),
-                                )),
-                            widget::text::body(&item.name),
-                            widget::tooltip::Position::Bottom,
-                        )
-                        .into(),
-                    ];
-
-                    let mut column = widget::column::with_capacity(buttons.len())
-                        .align_x(Alignment::Center)
-                        .height(Length::Fixed(item_height as f32))
-                        .width(Length::Fixed(item_width as f32));
-                    for button in buttons {
-                        if self.context_menu.is_some() {
-                            column = column.push(button);
-                        } else {
-                            column = column.push(
-                                mouse_area::MouseArea::new(button)
-                                    .on_right_press_no_capture()
-                                    .wayland_on_right_press_window_position()
-                                    .on_right_press(move |point_opt| {
-                                        Message::RightClick(point_opt, Some(i))
-                                    }),
-                            );
-                        }
-                    }
-
-                    let column: Element<Message> =
-                        if item.metadata.is_dir() && item.location_opt.is_some() {
-                            self.dnd_dest(&item.location_opt.clone().unwrap(), column)
-                        } else {
-                            column.into()
-                        };
-
-                    if item.selected {
-                        dnd_items.push((i, (row, col), item));
-                        drag_w_i = drag_w_i.min(col);
-                        drag_n_i = drag_n_i.min(row);
-                        drag_e_i = drag_e_i.max(col);
-                        drag_s_i = drag_s_i.max(row);
-                    }
-                    let mouse_area = crate::mouse_area::MouseArea::new(column)
-                        .on_press(move |_| Message::Click(Some(i)))
-                        .on_double_click(move |_| Message::DoubleClick(Some(i)))
-                        .on_release(move |_| Message::ClickRelease(Some(i)))
-                        .on_middle_press(move |_| Message::MiddleClick(i))
-                        .on_enter(move || Message::HighlightActivate(i))
-                        .on_exit(move || Message::HighlightDeactivate(i));
-                    grid_elements[row].push(Element::from(mouse_area));
-                } else {
-                    // Add a spacer if the row is empty, so scroll works
-                    if grid_elements[row].is_empty() {
-                        grid_elements[row].push(Element::from(
-                            widget::column::with_capacity(0)
-                                .width(Length::Fill)
-                                .height(Length::Fixed(item_height as f32)),
-                        ));
-                    }
-                }
-
-                count += 1;
-                if matches!(self.mode, Mode::Desktop) {
-                    row += 1;
-                    if row >= page_row + rows {
-                        row = 0;
-                        col += 1;
-                    }
-                    if col >= cols {
-                        col = 0;
-                        page_row += rows;
-                        row = page_row;
-                    }
-                } else {
-                    col += 1;
-                    if col >= cols {
-                        col = 0;
-                        row += 1;
-                    }
-                }
-            }
-
-            for row_elements in grid_elements {
-                for element in row_elements {
-                    grid = grid.push(element);
-                }
-                grid = grid.insert_row();
-            }
-
-            if count == 0 {
-                return (None, self.empty_view(hidden > 0), false);
-            }
-
-            column = column.push(grid);
-
-            //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
-            {
-                let mut max_bottom = 0;
-                for (_, item) in items {
-                    if let Some(rect) = item.rect_opt.get() {
-                        let bottom = (rect.y + rect.height).ceil() as usize;
-                        if bottom > max_bottom {
-                            max_bottom = bottom;
-                        }
-                    }
-                }
-
-                // Cache content height for scroll clamping on next frame
-                self.content_height_opt.set(Some(max_bottom as f32));
-
-                let top_deduct = 7 * (space_xxs as usize);
-
-                self.item_view_size_opt
-                    .set(self.size_opt.get().map(|s| Size {
-                        width: s.width,
-                        height: s.height - top_deduct as f32,
-                    }));
-
-                let spacer_height = height.saturating_sub(max_bottom + top_deduct);
-                if spacer_height > 0 {
-                    column = column.push(widget::container(
-                        space::vertical().height(Length::Fixed(spacer_height as f32)),
-                    ));
-                }
-            }
-        }
-
-        let drag_list = (!dnd_items.is_empty()).then(|| {
-            let mut dnd_grid = widget::grid()
-                .column_spacing(column_spacing)
-                .row_spacing(grid_spacing)
-                .padding(space_xxs.into());
-
-            let mut dnd_item_i = 0;
-            for r in drag_n_i..=drag_s_i {
-                dnd_grid = dnd_grid.insert_row();
-                for c in drag_w_i..=drag_e_i {
-                    let Some((i, (row, col), item)) = dnd_items.get(dnd_item_i) else {
-                        break;
-                    };
-                    if *row == r && *col == c {
-                        let buttons = vec![
-                            widget::button::custom(
-                                widget::icon::icon(item.icon_handle_grid.clone())
-                                    .content_fit(ContentFit::Contain)
-                                    .size(icon_sizes.grid()),
-                            )
-                            .on_press(Message::Click(Some(*i)))
-                            .padding(space_xxxs)
-                            .class(button_style(
-                                item.selected,
-                                item.highlighted,
-                                item.cut,
-                                false,
-                                false,
-                                false,
-                            )),
-                            widget::button::custom(Item::grid_display_name(
-                                item.display_name.clone(),
-                            ))
-                            .id(item.button_id.clone())
-                            .on_press(Message::Click(Some(*i)))
-                            .padding([0, space_xxxs])
-                            .class(button_style(
-                                item.selected,
-                                item.highlighted,
-                                item.cut,
-                                true,
-                                true,
-                                false,
-                            )),
-                        ];
-
-                        let column =
-                            widget::column::with_children(buttons.into_iter().map(Element::from))
-                                .align_x(Alignment::Center)
-                                .height(Length::Fixed(item_height as f32))
-                                .width(Length::Fixed(item_width as f32));
-
-                        dnd_grid = dnd_grid.push(column);
-                        dnd_item_i += 1;
-                    } else {
-                        dnd_grid = dnd_grid.push(
-                            widget::container(space::vertical().height(item_width as f32))
-                                .height(Length::Fixed(item_height as f32)),
-                        );
-                    }
-                }
-            }
-            Element::from(dnd_grid)
-        });
-
-        let mut mouse_area = mouse_area::MouseArea::new(column.width(Length::Fill))
-            .on_press(|_| Message::Click(None))
-            .on_auto_scroll(Message::AutoScroll)
-            .on_drag_end(|_| Message::DragEnd)
-            .show_drag_rect(self.mode.multiple())
-            .on_release(|_| Message::ClickRelease(None));
-        if self.watch_drag {
-            mouse_area = mouse_area.on_drag(Message::Drag);
-        }
-
-        (drag_list, mouse_area.into(), true)
-    }
-
+    // Ctrl + 1
     pub fn list_view(
         &self,
     ) -> (
         Option<Element<'static, Message>>,
         Element<'_, Message>,
-        bool,
+        Option<ScrollDirection>,
     ) {
         let cosmic_theme::Spacing {
             space_s, space_xxs, ..
@@ -6232,9 +6011,12 @@ impl Tab {
 
                     let row = if condensed {
                         widget::row::with_children([
-                            widget::icon::icon(item.icon_handle_list_condensed.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_size)
+                            widget::container(
+                                widget::icon::icon(item.icon_handle_list_condensed.clone())
+                                    .content_fit(ContentFit::Contain)
+                                    .size(icon_size)
+                                )
+                                .padding([0, 0, 0, space_xxs])
                                 .into(),
                             widget::column::with_children([
                                 Item::list_display_name(item.display_name.clone()).into(),
@@ -6249,9 +6031,12 @@ impl Tab {
                         .spacing(space_xxs)
                     } else if is_search {
                         widget::row::with_children([
-                            widget::icon::icon(item.icon_handle_list_condensed.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_size)
+                            widget::container(
+                                widget::icon::icon(item.icon_handle_list_condensed.clone())
+                                    .content_fit(ContentFit::Contain)
+                                    .size(icon_size)
+                                )
+                                .padding([0, 0, 0, space_xxs])
                                 .into(),
                             widget::column::with_children([
                                 Item::list_display_name(item.display_name.clone()).into(),
@@ -6275,9 +6060,12 @@ impl Tab {
                         .spacing(space_xxs)
                     } else {
                         widget::row::with_children([
-                            widget::icon::icon(item.icon_handle_list.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_size)
+                            widget::container(
+                                widget::icon::icon(item.icon_handle_list.clone())
+                                    .content_fit(ContentFit::Contain)
+                                    .size(icon_size)
+                                )
+                                .padding([0, 0, 0, space_xxs])
                                 .into(),
                             Item::list_display_name(item.display_name.clone())
                                 .width(Length::Fill)
@@ -6305,7 +6093,7 @@ impl Tab {
                                     item.highlighted,
                                     item.cut,
                                     true,
-                                    true,
+                                    item.hidden,
                                     false,
                                 )),
                         )
@@ -6430,7 +6218,7 @@ impl Tab {
             }
 
             if count == 0 {
-                return (None, self.empty_view(hidden > 0), false);
+                return (None, self.empty_view(hidden > 0), None);
             }
 
             // Cache content height for scroll clamping on next frame
@@ -6465,7 +6253,813 @@ impl Tab {
             mouse_area = mouse_area.on_drag(Message::Drag);
         }
 
-        (drag_col, mouse_area.into(), true)
+        (drag_col, mouse_area.into(), Some(ScrollDirection::Vertical))
+    }
+
+    // Ctrl + 2
+    pub fn grid_view(
+        &self,
+    ) -> (
+        Option<Element<'static, Message>>,
+        Element<'_, Message>,
+        Option<ScrollDirection>,
+    ) {
+        let cosmic_theme::Spacing {
+            space_xxs,
+            space_xxxs,
+            ..
+        } = theme::spacing();
+
+        let TabConfig {
+            show_hidden,
+            mut icon_sizes,
+            ..
+        } = self.config;
+
+        let mut grid_spacing = space_xxs;
+        if let Location::Desktop(_path, _output, desktop_config) = &self.location {
+            icon_sizes.grid = desktop_config.icon_size;
+            grid_spacing = desktop_config.grid_spacing_for(space_xxs);
+        }
+
+        let text_height = 3 * 20; // 3 lines of text
+        let item_width = (3 * space_xxs + icon_sizes.grid() + 3 * space_xxs).max(80) as usize;
+        let item_height =
+            (space_xxxs + icon_sizes.grid() + space_xxxs + text_height + space_xxxs) as usize;
+
+        let (width, height) = match self.size_opt.get() {
+            Some(size) => (
+                (size.width.floor() as usize)
+                    .saturating_sub(2 * (space_xxs as usize))
+                    .max(item_width),
+                (size.height.floor() as usize).max(item_height),
+            ),
+            None => (item_width, item_height),
+        };
+
+        let (cols, column_spacing) = {
+            let width_m1 = width.saturating_sub(item_width + space_xxs as usize);
+            let cols_m1 = width_m1 / (item_width + grid_spacing as usize);
+            let cols = cols_m1 + 1;
+            let spacing = width_m1
+                .checked_div(cols_m1)
+                .unwrap_or(0)
+                .saturating_sub(item_width);
+            (cols, spacing as u16)
+        };
+
+        let rows = {
+            let height_m1 = height.saturating_sub(item_height);
+            let rows_m1 = height_m1 / (item_height + grid_spacing as usize);
+            rows_m1 + 1
+        };
+
+        //TODO: move to function
+        let visible_rect = {
+            // Use cached content height to clamp scroll offset after resize
+            let max_scroll_y = self
+                .content_height_opt
+                .get()
+                .map(|ch| (ch - height as f32).max(0.0))
+                .unwrap_or(f32::MAX);
+            let scroll_y = self
+                .scroll_opt
+                .map(|o| o.y.min(max_scroll_y).max(0.0))
+                .unwrap_or(0.0);
+            let point = Point::new(0.0, scroll_y);
+            let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
+            Rectangle::new(point, size)
+        };
+
+        let mut grid = widget::grid()
+            .column_spacing(column_spacing)
+            .row_spacing(grid_spacing)
+            .padding(space_xxs.into());
+        let mut dnd_items: Vec<(usize, (usize, usize), &Item)> = Vec::new();
+        let mut drag_w_i = usize::MAX;
+        let mut drag_n_i = usize::MAX;
+        let mut drag_e_i = 0;
+        let mut drag_s_i = 0;
+
+        let mut column = widget::column::with_capacity(2);
+        if let Some(items) = self.column_sort() {
+            let mut count = 0;
+            let mut col = 0;
+            let mut row = 0;
+            let mut page_row = 0;
+            let mut hidden = 0;
+            let mut grid_elements = Vec::new();
+            for &(i, item) in &items {
+                if !show_hidden && item.hidden {
+                    item.pos_opt.set(None);
+                    item.rect_opt.set(None);
+                    hidden += 1;
+                    continue;
+                }
+                item.pos_opt.set(Some((row, col)));
+                let item_rect = Rectangle::new(
+                    Point::new(
+                        (col * (item_width + column_spacing as usize) + space_xxs as usize) as f32,
+                        (row * (item_height + grid_spacing as usize) + space_xxs as usize) as f32,
+                    ),
+                    Size::new(item_width as f32, item_height as f32),
+                );
+                item.rect_opt.set(Some(item_rect));
+
+                //TODO: error if the row or col is already set?
+                while grid_elements.len() <= row {
+                    grid_elements.push(Vec::new());
+                }
+
+                // Only build elements if visible (for performance)
+                if item_rect.intersects(&visible_rect) {
+                    let contents = widget::column::with_children([
+                        Element::from(widget::container(
+                            widget::icon::icon(item.icon_handle_grid.clone())
+                                .content_fit(ContentFit::Contain)
+                                .size(icon_sizes.grid())
+                        )),
+                        Element::from(widget::container(
+                            widget::tooltip(
+                                Item::grid_display_name(&item.display_name),
+                                widget::text::body(&item.name),
+                                widget::tooltip::Position::Bottom,
+                            )
+                        ).style(|t| {
+                            // TODO: Merge with button_style()
+                            let mut a = widget::container::Style::default();
+                            let c = t.cosmic();
+                            let mut background = Color::TRANSPARENT;
+                            let mut icon_color = Color::from(c.on_bg_component_color());
+                            let mut text_color = Color::from(c.on_bg_component_color());
+
+                            // Button is highlighted (hover, etc)
+                            if item.highlighted {
+                                background = Color::from(c.accent_color());
+                                icon_color = Color::from(c.on_accent_color());
+                                text_color = Color::from(c.on_accent_color());
+                                background = background.scale_alpha(0.75);
+                            }
+
+                            // Button is selected
+                            else if item.selected {
+                                background = Color::from(c.accent_color());
+                                icon_color = Color::from(c.on_accent_color());
+                                text_color = Color::from(c.on_accent_color());
+                                background = background.scale_alpha(0.66);
+                            }
+
+                            // Button is an item on the desktop
+                            else if matches!(self.mode, Mode::Desktop) {
+                                background = Color::from(c.bg_color());
+                                icon_color = Color::from(c.on_bg_color());
+                                text_color = Color::from(c.on_bg_color());
+                            }
+
+                            // Visually indicate cut items
+                            if item.cut {
+                                let disabled_color = Color::from(
+                                    c.background(t.transparent).component.on_disabled,
+                                );
+                                if !item.highlighted && !item.selected {
+                                    background = Color::from(
+                                        c.background(t.transparent).component.disabled,
+                                    ).scale_alpha(0.1);
+                                    icon_color = disabled_color;
+                                    text_color = disabled_color;
+                                }
+                                icon_color = icon_color.scale_alpha(0.8);
+                                text_color = text_color.scale_alpha(0.8);
+                            }
+
+                            // Visually indicate hidden items
+                            if item.hidden {
+                                icon_color = icon_color.scale_alpha(0.8);
+                                text_color = text_color.scale_alpha(0.8);
+                            }
+
+                            // Ensure legibility of text on the backgrounds
+                            let bg_check = if background == Color::TRANSPARENT {
+                                    Color::from(c.bg_color())
+                                } else {
+                                    background
+                            };
+                            if !text_color.is_readable_on(bg_check) {
+                                if Color::from(c.on_bg_color()).is_readable_on(bg_check) {
+                                    icon_color = Color::from(c.on_bg_color());
+                                    text_color = Color::from(c.on_bg_color());
+                                }
+                                else if Color::from(c.on_bg_component_color()).is_readable_on(bg_check) {
+                                    icon_color = Color::from(c.on_bg_component_color());
+                                    text_color = Color::from(c.on_bg_component_color());
+                                }
+                                else if Color::WHITE.is_readable_on(bg_check) {
+                                    icon_color = Color::WHITE;
+                                    text_color = Color::WHITE;
+                                } else {
+                                    icon_color = Color::BLACK;
+                                    text_color = Color::BLACK;
+                                }
+                            }
+                            a.icon_color = Some(icon_color);
+                            a.text_color = Some(text_color);
+                            a
+                        })),
+                    ])
+                    .height(Length::Fill)
+                    .width(width as f32)
+                    .align_x(Alignment::Center);
+
+                    let button = |contents| {
+                        let mouse_area = crate::mouse_area::MouseArea::new(
+                            widget::button::custom(contents)
+                                .width(Length::Fill)
+                                .id(item.button_id.clone())
+                                .class(button_style(
+                                    item.selected,
+                                    item.highlighted,
+                                    item.cut,
+                                    true,
+                                    item.hidden,
+                                    false,
+                                )),
+                        )
+                        .on_press(move |_| Message::Click(Some(i)))
+                        .on_double_click(move |_| Message::DoubleClick(Some(i)))
+                        .on_release(move |_| Message::ClickRelease(Some(i)))
+                        .on_middle_press(move |_| Message::MiddleClick(i))
+                        .on_enter(move || Message::HighlightActivate(i))
+                        .on_exit(move || Message::HighlightDeactivate(i));
+
+                        if self.context_menu.is_some() {
+                            mouse_area
+                        } else {
+                            mouse_area
+                                .on_right_press_no_capture()
+                                .wayland_on_right_press_window_position()
+                                .on_right_press(move |point_opt| {
+                                    Message::RightClick(point_opt, Some(i))
+                                })
+                        }
+                    };
+
+                    let column = widget::column::with_children([button(contents).into()])
+                        .align_x(Alignment::Center)
+                        .height(Length::Fixed(item_height as f32))
+                        .width(Length::Fixed(item_width as f32));
+                    let column: Element<Message> =
+                        if item.metadata.is_dir() && item.location_opt.is_some() {
+                            self.dnd_dest(&item.location_opt.clone().unwrap(), column)
+                        } else {
+                            column.into()
+                        };
+                    grid_elements[row].push(column);
+
+                    if item.selected {
+                        dnd_items.push((i, (row, col), item));
+                        drag_w_i = drag_w_i.min(col);
+                        drag_n_i = drag_n_i.min(row);
+                        drag_e_i = drag_e_i.max(col);
+                        drag_s_i = drag_s_i.max(row);
+                    }
+                } else {
+                    // Add a spacer if the row is empty, so scroll works
+                    if grid_elements[row].is_empty() {
+                        grid_elements[row].push(Element::from(
+                            widget::column::with_capacity(0)
+                                .width(Length::Fill)
+                                .height(Length::Fixed(item_height as f32)),
+                        ));
+                    }
+                }
+
+                count += 1;
+                if matches!(self.mode, Mode::Desktop) {
+                    row += 1;
+                    if row >= page_row + rows {
+                        row = 0;
+                        col += 1;
+                    }
+                    if col >= cols {
+                        col = 0;
+                        page_row += rows;
+                        row = page_row;
+                    }
+                } else {
+                    col += 1;
+                    if col >= cols {
+                        col = 0;
+                        row += 1;
+                    }
+                }
+            }
+
+            for row_elements in grid_elements {
+                for element in row_elements {
+                    grid = grid.push(element);
+                }
+                grid = grid.insert_row();
+            }
+
+            if count == 0 {
+                return (None, self.empty_view(hidden > 0), None);
+            }
+
+            column = column.push(grid);
+
+            //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
+            {
+                let mut max_bottom = 0;
+                for (_, item) in items {
+                    if let Some(rect) = item.rect_opt.get() {
+                        let bottom = (rect.y + rect.height).ceil() as usize;
+                        if bottom > max_bottom {
+                            max_bottom = bottom;
+                        }
+                    }
+                }
+
+                // Cache content height for scroll clamping on next frame
+                self.content_height_opt.set(Some(max_bottom as f32));
+
+                // TODO: Don't have 'magic' number (10) here
+                let top_deduct = 10 * (space_xxs as usize);
+
+                self.item_view_size_opt
+                    .set(self.size_opt.get().map(|s| Size {
+                        width: s.width,
+                        height: s.height - top_deduct as f32,
+                    }));
+
+                let spacer_height = height.saturating_sub(max_bottom + top_deduct);
+                if spacer_height > 0 {
+                    column = column.push(widget::container(
+                        space::vertical().height(Length::Fixed(spacer_height as f32)),
+                    ));
+                }
+            }
+        }
+
+        let drag_list = (!dnd_items.is_empty()).then(|| {
+            let mut dnd_grid = widget::grid()
+                .column_spacing(column_spacing)
+                .row_spacing(grid_spacing)
+                .padding(space_xxs.into());
+
+            let mut dnd_item_i = 0;
+            for r in drag_n_i..=drag_s_i {
+                dnd_grid = dnd_grid.insert_row();
+                for c in drag_w_i..=drag_e_i {
+                    let Some((i, (row, col), item)) = dnd_items.get(dnd_item_i) else {
+                        break;
+                    };
+                    if *row == r && *col == c {
+                        let button = Element::from(
+                            widget::container(
+                                widget::tooltip(
+                                    widget::button::custom(
+                                        widget::column::with_children([
+                                            widget::icon::icon(item.icon_handle_grid.clone())
+                                                .content_fit(ContentFit::Contain)
+                                                .size(icon_sizes.grid()).into(),
+                                            Item::grid_display_name(item.display_name.clone()).into(),
+                                        ])
+                                        .align_x(Alignment::Center)
+                                        .spacing(space_xxs)
+                                        .width(Length::Fill)
+                                    )
+                                    .id(item.button_id.clone())
+                                    .on_press(Message::Click(Some(*i)))
+                                    .width(Length::Fill)
+                                    .padding(space_xxxs)
+                                    .class(button_style(
+                                        item.selected,
+                                        item.highlighted,
+                                        item.cut,
+                                        true,
+                                        item.hidden,
+                                        matches!(self.mode, Mode::Desktop),
+                                    )),
+                                    widget::text::body(item.name.clone()),
+                                    widget::tooltip::Position::Bottom,
+                                ),
+                            )
+                            .width(Length::Fill)
+                            .height(Length::Fill)
+                        );
+
+                        let column =
+                            widget::column::with_children([button])
+                                .align_x(Alignment::Center)
+                                .height(Length::Fixed(item_height as f32))
+                                .width(Length::Fixed(item_width as f32));
+
+                        dnd_grid = dnd_grid.push(column);
+                        dnd_item_i += 1;
+                    } else {
+                        dnd_grid = dnd_grid.push(
+                            widget::container(space::vertical().height(item_width as f32))
+                                .height(Length::Fixed(item_height as f32)),
+                        );
+                    }
+                }
+            }
+            Element::from(dnd_grid)
+        });
+
+        let mut mouse_area = mouse_area::MouseArea::new(column.width(Length::Fill))
+            .on_press(|_| Message::Click(None))
+            .on_auto_scroll(Message::AutoScroll)
+            .on_drag_end(|_| Message::DragEnd)
+            .show_drag_rect(self.mode.multiple())
+            .on_release(|_| Message::ClickRelease(None));
+        if self.watch_drag {
+            mouse_area = mouse_area.on_drag(Message::Drag);
+        }
+
+        (drag_list, mouse_area.into(), Some(ScrollDirection::Vertical))
+    }
+
+    // Ctrl + 3
+    pub fn column_view(
+        &self,
+    ) -> (
+        Option<Element<'static, Message>>,
+        Element<'_, Message>,
+        Option<ScrollDirection>,
+    ) {
+        let cosmic_theme::Spacing {
+            space_xxs,
+            space_xxxs,
+            ..
+        } = theme::spacing();
+
+        let TabConfig {
+            show_hidden,
+            icon_sizes,
+            ..
+        } = self.config;
+        let grid_spacing = space_xxxs;
+        let icon_size = icon_sizes.column().max(24); // Prevent icons getting too small
+        let item_width = (140 + grid_spacing + icon_size + grid_spacing) as usize;
+        let item_height = (grid_spacing + icon_size + grid_spacing) as usize;
+
+        let (width, height) = match self.size_opt.get() {
+            Some(size) => (
+                (size.width.floor() as usize)
+                    .max(item_width),
+                (size.height.floor() as usize)
+                    .saturating_sub(2 * (grid_spacing as usize))
+                    .max(item_height),
+            ),
+            None => (item_width, item_height),
+        };
+
+        //TODO: move to function
+        let visible_rect = {
+            // Use cached content width to clamp scroll offset after resize
+            let max_scroll_x = self
+                .content_width_opt
+                .get()
+                .map(|cw| (cw - width as f32).max(0.0))
+                .unwrap_or(f32::MAX);
+            let scroll_x = self
+                .scroll_opt
+                .map(|o| o.x.min(max_scroll_x).max(0.0))
+                .unwrap_or(0.0);
+            let point = Point::new(scroll_x, 0.0);
+            let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
+            Rectangle::new(point, size)
+        };
+
+        let mut dnd_items: Vec<(usize, (usize, usize), &Item)> = Vec::new();
+        let mut drag_w_i = usize::MAX;
+        let mut drag_n_i = usize::MAX;
+        let mut drag_e_i = 0;
+        let mut drag_s_i = 0;
+
+        let mut column = widget::column::with_capacity(2);
+        if let Some(items) = self.column_sort() {
+            // Show empty view instead if no items at all
+            let items_len = items.len();
+            if items_len == 0 {
+                return (None, self.empty_view(false), None);
+            }
+
+            // TODO: Don't load into grid_elements, load into list then push into grid
+            //       The hidden items are problematic
+            // Pre-allocate the grid of items
+            let rows = {
+                let height_m1 = height.saturating_sub(item_height);
+                let rows_m1 = height_m1 / (item_height + grid_spacing as usize);
+                rows_m1.max(1)
+            };
+            
+            // TODO: Load grid content asynchronously, starting with the current view
+
+            let mut count = 0;
+            let mut hidden = 0;
+            let mut item_elements = Vec::<Element<Message>>::new();
+
+            for &(i, item) in &items {
+                // Ignore hidden items if not showing hidden
+                if !show_hidden && item.hidden {
+                    item.pos_opt.set(None);
+                    item.rect_opt.set(None);
+                    hidden += 1;
+                    continue;
+                }
+
+                let col = (count / rows) as usize;
+                let row = (count % rows) as usize;
+
+                // Skip writing contents for items outside the visible viewport
+                item.pos_opt.set(Some((row, col)));
+                let item_rect = Rectangle::new(
+                    Point::new(
+                        (col * (item_width + grid_spacing as usize) + grid_spacing as usize) as f32,
+                        (row * (item_height + grid_spacing as usize) + grid_spacing as usize) as f32,
+                    ),
+                    Size::new(item_width as f32, item_height as f32),
+                );
+                item.rect_opt.set(Some(item_rect));
+                if !item_rect.intersects(&visible_rect) {
+                    // Add an empty spacer so scroll works
+                    let empty_cell: Element<Message> = widget::column::with_children([])
+                        .align_x(Alignment::Center)
+                        .height(Length::Fixed(item_height as f32))
+                        .width(Length::Fixed(item_width as f32))
+                        .into();
+                    item_elements.push(empty_cell);
+                    count += 1;
+                    continue;
+                }
+
+                let contents = widget::row::with_children([
+                    widget::container(
+                        widget::icon::icon(item.icon_handle_column.clone())
+                            .content_fit(ContentFit::Contain)
+                            .size(icon_size)
+                    )
+                    .align_x(Alignment::Center)
+                    .align_y(Alignment::Center)
+                    .height(Length::Fixed(item_height as f32))
+                    .width(Length::Fixed(icon_size as f32))
+                    .padding(padding::right(space_xxxs))
+                    .into(),
+                    Element::from(widget::container(
+                        widget::tooltip(
+                            Item::column_display_name(&item.display_name),
+                            widget::text::body(&item.name),
+                            widget::tooltip::Position::Bottom,
+                        )
+                    )
+                    .align_y(Alignment::Center)
+                    .width(Length::Fill)
+                    .style(|t| {
+                        // TODO: Merge with button_style()
+                        let mut a = widget::container::Style::default();
+                        let c = t.cosmic();
+                        let mut background = Color::TRANSPARENT;
+                        let mut icon_color = Color::from(c.on_bg_component_color());
+                        let mut text_color = Color::from(c.on_bg_component_color());
+
+                        // Button is highlighted (hover, etc)
+                        if item.highlighted {
+                            background = Color::from(c.accent_color());
+                            icon_color = Color::from(c.on_accent_color());
+                            text_color = Color::from(c.on_accent_color());
+                            background = background.scale_alpha(0.75);
+                        }
+
+                        // Button is selected
+                        else if item.selected {
+                            background = Color::from(c.accent_color());
+                            icon_color = Color::from(c.on_accent_color());
+                            text_color = Color::from(c.on_accent_color());
+                            background = background.scale_alpha(0.66);
+                        }
+
+                        // Button is an item on the desktop
+                        else if matches!(self.mode, Mode::Desktop) {
+                            background = Color::from(c.bg_color());
+                            icon_color = Color::from(c.on_bg_color());
+                            text_color = Color::from(c.on_bg_color());
+                        }
+
+                        // Visually indicate cut items
+                        if item.cut {
+                            let disabled_color = Color::from(
+                                c.background(t.transparent).component.on_disabled,
+                            );
+                            if !item.highlighted && !item.selected {
+                                background = Color::from(
+                                    c.background(t.transparent).component.disabled,
+                                ).scale_alpha(0.1);
+                                icon_color = disabled_color;
+                                text_color = disabled_color;
+                            }
+                            icon_color = icon_color.scale_alpha(0.8);
+                            text_color = text_color.scale_alpha(0.8);
+                        }
+
+                        // Visually indicate hidden items
+                        if item.hidden {
+                            icon_color = icon_color.scale_alpha(0.8);
+                            text_color = text_color.scale_alpha(0.8);
+                        }
+
+                        // Ensure legibility of text on the backgrounds
+                        let bg_check = if background == Color::TRANSPARENT {
+                                Color::from(c.bg_color())
+                            } else {
+                                background
+                        };
+                        if !text_color.is_readable_on(bg_check) {
+                            if Color::from(c.on_bg_color()).is_readable_on(bg_check) {
+                                icon_color = Color::from(c.on_bg_color());
+                                text_color = Color::from(c.on_bg_color());
+                            }
+                            else if Color::from(c.on_bg_component_color()).is_readable_on(bg_check) {
+                                icon_color = Color::from(c.on_bg_component_color());
+                                text_color = Color::from(c.on_bg_component_color());
+                            }
+                            else if Color::WHITE.is_readable_on(bg_check) {
+                                icon_color = Color::WHITE;
+                                text_color = Color::WHITE;
+                            } else {
+                                icon_color = Color::BLACK;
+                                text_color = Color::BLACK;
+                            }
+                        }
+                        a.icon_color = Some(icon_color);
+                        a.text_color = Some(text_color);
+                        a
+                    })),
+                ])
+                .height(Length::Fill)
+                .width(width as f32)
+                .align_y(Alignment::Center);
+
+                let button = |contents| {
+                    let mouse_area = crate::mouse_area::MouseArea::new(
+                        widget::button::custom(contents)
+                            .width(Length::Fill)
+                            .id(item.button_id.clone())
+                            .class(button_style(
+                                item.selected,
+                                item.highlighted,
+                                item.cut,
+                                true,
+                                item.hidden,
+                                false,
+                            )),
+                    )
+                    .on_press(move |_| Message::Click(Some(i)))
+                    .on_double_click(move |_| Message::DoubleClick(Some(i)))
+                    .on_release(move |_| Message::ClickRelease(Some(i)))
+                    .on_middle_press(move |_| Message::MiddleClick(i))
+                    .on_enter(move || Message::HighlightActivate(i))
+                    .on_exit(move || Message::HighlightDeactivate(i));
+
+                    if self.context_menu.is_some() {
+                        mouse_area
+                    } else {
+                        mouse_area
+                            .on_right_press_no_capture()
+                            .wayland_on_right_press_window_position()
+                            .on_right_press(move |point_opt| {
+                                Message::RightClick(point_opt, Some(i))
+                            })
+                    }
+                };
+
+                let cell = widget::column::with_children([button(contents).into()])
+                    .align_x(Alignment::Center)
+                    .height(Length::Fixed(item_height as f32))
+                    .width(Length::Fixed(item_width as f32));
+                let cell: Element<Message> =
+                    if item.metadata.is_dir() && item.location_opt.is_some() {
+                        self.dnd_dest(&item.location_opt.clone().unwrap(), cell)
+                    } else {
+                        cell.into()
+                    };
+                item_elements.push(cell);
+                
+                if item.selected {
+                    dnd_items.push((i, (row, col), item));
+                    drag_w_i = drag_w_i.min(col);
+                    drag_n_i = drag_n_i.min(row);
+                    drag_e_i = drag_e_i.max(col);
+                    drag_s_i = drag_s_i.max(row);
+                }
+
+                count += 1;
+
+            }
+
+            // Show empty view if no visible items at all
+            if count == 0 {
+                return (None, self.empty_view(hidden > 0), None);
+            }
+
+            column = column.push(
+                widget::column::with_children(item_elements)
+                    .wrap()
+                    .horizontal_spacing(space_xxxs)
+            );
+        }
+
+        let drag_list = (!dnd_items.is_empty()).then(|| {
+            let mut dnd_grid = widget::grid()
+                .column_spacing(grid_spacing)
+                .row_spacing(grid_spacing)
+                .padding(space_xxs.into());
+
+            let mut dnd_item_i = 0;
+            for r in drag_n_i..=drag_s_i {
+                dnd_grid = dnd_grid.insert_row();
+                for c in drag_w_i..=drag_e_i {
+                    let Some((i, (row, col), item)) = dnd_items.get(dnd_item_i) else {
+                        break;
+                    };
+                    if *row == r && *col == c {
+                        let button = Element::from(
+                            widget::container(
+                                widget::tooltip(
+                                    widget::button::custom(
+                                        widget::row::with_children([
+                                            widget::container(
+                                                widget::icon::icon(item.icon_handle_column.clone())
+                                                    .content_fit(ContentFit::Contain)
+                                                    .size(icon_size)
+                                                )
+                                                .width(icon_size)
+                                                .padding(padding::right(space_xxxs))
+                                                .into(),
+                                            Item::column_display_name(item.display_name.clone())
+                                                .width(Length::Fill)
+                                                .height(Length::Fixed(item_height as f32))
+                                                .into(),
+                                        ])
+                                        .align_y(Alignment::Center)
+                                        .spacing(space_xxs)
+                                        .width(Length::Fixed(item_width as f32))
+                                    )
+                                    .id(item.button_id.clone())
+                                    .on_press(Message::Click(Some(*i)))
+                                    .width(Length::Fill)
+                                    .padding(space_xxxs)
+                                    .class(button_style(
+                                        item.selected,
+                                        item.highlighted,
+                                        item.cut,
+                                        true,
+                                        item.hidden,
+                                        matches!(self.mode, Mode::Desktop),
+                                    )),
+                                    widget::text::body(item.name.clone()),
+                                    widget::tooltip::Position::Bottom,
+                                ),
+                            )
+                            .width(Length::Fill)
+                            .height(Length::Fill)
+                        );
+
+                        let column =
+                            widget::column::with_children([button])
+                                .align_x(Alignment::Center)
+                                .height(Length::Fixed(item_height as f32))
+                                .width(Length::Fixed(item_width as f32));
+
+                        dnd_grid = dnd_grid.push(column);
+                        dnd_item_i += 1;
+                    } else {
+                        dnd_grid = dnd_grid.push(
+                            widget::container(space::vertical().height(item_width as f32))
+                                .height(Length::Fixed(item_height as f32)),
+                        );
+                    }
+                }
+            }
+            Element::from(dnd_grid)
+        });
+
+        let mut mouse_area = mouse_area::MouseArea::new(
+            column
+                .height(Length::Fill)
+                .width(Length::Fill)
+        )
+            .on_press(|_| Message::Click(None))
+            .on_auto_scroll(Message::AutoScroll)
+            .on_drag_end(|_| Message::DragEnd)
+            .show_drag_rect(self.mode.multiple())
+            .on_release(|_| Message::ClickRelease(None));
+        if self.watch_drag {
+            mouse_area = mouse_area.on_drag(Message::Drag);
+        }
+
+        (drag_list, mouse_area.into(), Some(ScrollDirection::Horizontal))
     }
 
     pub fn view_responsive<'a>(
@@ -6491,9 +7085,10 @@ impl Tab {
         } else {
             Some(self.location_view())
         };
-        let (drag_list, mut item_view, can_scroll) = match self.config.view {
+        let (drag_list, mut item_view, scroll_dir) = match self.config.view {
             View::Grid => self.grid_view(),
             View::List => self.list_view(),
+            View::Column => self.column_view(),
         };
         item_view = widget::container(item_view).width(Length::Fill).into();
         let files = self
@@ -6535,6 +7130,10 @@ impl Tab {
                                     -4. * f32::from(space_xxxs),
                                 ),
                                 View::List => Vector::ZERO,
+                                View::Column => Vector::new(
+                                    f32::from(space_xxs).mul_add(-3.0, -f32::from(space_xxxs)),
+                                    -4. * f32::from(space_xxxs),
+                                ),
                             },
                         )
                     })
@@ -6578,7 +7177,7 @@ impl Tab {
         if let Some(location_view) = location_view_opt {
             tab_column = tab_column.push(location_view);
         }
-        if can_scroll {
+        if Some(scroll_dir.clone()).is_some() {
             tab_column = tab_column.push(
                 // FIXME: new responsive widget will remove the state from the scrollable
                 // id_container with custom id forces the state to be extracted in a diff
@@ -6586,6 +7185,15 @@ impl Tab {
                 widget::id_container(
                     widget::scrollable(popover)
                         .id(self.scrollable_id.clone())
+                        .direction(match scroll_dir {
+                            Some(ScrollDirection::Horizontal) => Direction::Horizontal(Scrollbar::new()),
+                            Some(ScrollDirection::Vertical) => Direction::Vertical(Scrollbar::new()),
+                            Some(ScrollDirection::Both) => Direction::Both {
+                                vertical: Scrollbar::new(),
+                                horizontal: Scrollbar::new(),
+                            },
+                            None => Direction::Vertical(Scrollbar::new()) // default
+                        })
                         .on_scroll(Message::Scroll)
                         .width(Length::Fill)
                         .height(Length::Fill),
@@ -6690,6 +7298,7 @@ impl Tab {
 
         dnd_dest.into()
     }
+
     pub fn multi_preview_view<'a>(
         &'a self,
         mime_app_cache_opt: Option<&'a mime_app::MimeAppCache>,
@@ -6951,6 +7560,7 @@ impl Tab {
 
         column.into()
     }
+
     pub fn view<'a>(
         &'a self,
         key_binds: &'a HashMap<KeyBind, Action>,

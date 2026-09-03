@@ -280,6 +280,7 @@ unknown-folder = dosar necunoscut
 
 menu-open-with = Deschide cu...
 default-app = { $name } (implicit)
+search-application = Caută după numele aplicației
 
 ## Show details
 

@@ -304,7 +304,8 @@ unknown-folder = Dossier inconnu
 ## Open with
 
 menu-open-with = Ouvrir avec...
-default-app = { $name } (par défaut)
+default-app = { $name } (défaut)
+search-application = Rechercher par nom d’application
 
 ## Show details
 

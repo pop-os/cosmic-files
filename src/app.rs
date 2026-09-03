@@ -79,7 +79,7 @@ use crate::operation::{
 use crate::spawn_detached::spawn_detached;
 use crate::tab::{
     self, HOVER_DURATION, HeadingOptions, ItemMetadata, Location, SORT_OPTION_FALLBACK,
-    SearchLocation, Tab,
+    ScrollDirection, SearchLocation, Tab,
 };
 use crate::trash::{Trash, TrashExt};
 use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
@@ -190,6 +190,7 @@ pub enum Action {
     TabPrev,
     TabViewGrid,
     TabViewList,
+    TabViewColumn,
     ToggleFoldersFirst,
     ToggleShowHidden,
     ToggleSort(HeadingOptions),
@@ -269,6 +270,7 @@ impl Action {
             Self::TabPrev => Message::TabPrev,
             Self::TabViewGrid => Message::TabView(entity_opt, tab::View::Grid),
             Self::TabViewList => Message::TabView(entity_opt, tab::View::List),
+            Self::TabViewColumn => Message::TabView(entity_opt, tab::View::Column),
             Self::ToggleFoldersFirst => Message::ToggleFoldersFirst,
             Self::ToggleShowHidden => Message::ToggleShowHidden,
             Self::ToggleSort(sort) => {
@@ -432,7 +434,7 @@ pub enum Message {
     ReplaceResult(ReplaceResult),
     RestoreFromTrash(Option<Entity>),
     SaveSortNames,
-    ScrollTab(i16),
+    ScrollTab(i16, Option<ScrollDirection>),
     SearchActivate,
     SearchClear,
     SearchInput(String),
@@ -3883,24 +3885,21 @@ impl Application for App {
                         let Some(path) = item.path_opt() else {
                             continue;
                         };
-                        return Task::batch([
-                            self.push_dialog(
-                                DialogPage::OpenWith {
-                                    path: path.clone(),
-                                    mime: item.mime.clone(),
-                                    selected: 0,
-                                    store_opt: "x-scheme-handler/mime"
-                                        .parse::<mime_guess::Mime>()
-                                        .ok()
-                                        .and_then(|mime| {
-                                            self.mime_app_cache.get(&mime).first().cloned()
-                                        }),
-                                    search_app_name: String::new(),
-                                },
-                                Some(CONFIRM_OPEN_WITH_BUTTON_ID.clone()),
-                            ),
-                            widget::text_input::focus(self.dialog_text_input.clone()),
-                        ]);
+                        return self.push_dialog(
+                            DialogPage::OpenWith {
+                                path: path.clone(),
+                                mime: item.mime.clone(),
+                                selected: 0,
+                                store_opt: "x-scheme-handler/mime"
+                                    .parse::<mime_guess::Mime>()
+                                    .ok()
+                                    .and_then(|mime| {
+                                        self.mime_app_cache.get(&mime).first().cloned()
+                                    }),
+                                search_app_name: String::new(),
+                            },
+                            Some(CONFIRM_OPEN_WITH_BUTTON_ID.clone()),
+                        );
                     }
                 }
             }
@@ -4364,11 +4363,11 @@ impl Application for App {
                     return self.operation(Operation::Restore { items: trash_items });
                 }
             }
-            Message::ScrollTab(scroll_speed) => {
+            Message::ScrollTab(scroll_speed, scroll_dir) => {
                 let entity = self.tab_model.active();
                 return self.update(Message::TabMessage(
                     Some(entity),
-                    tab::Message::ScrollTab(f32::from(scroll_speed) / 10.0),
+                    tab::Message::ScrollTab(f32::from(scroll_speed) / 10.0, scroll_dir),
                 ));
             }
             Message::SearchActivate => {
@@ -6131,22 +6130,22 @@ impl Application for App {
                         widget::button::standard(fl!("cancel")).on_press(Message::DialogCancel),
                     )
                     .control(
-                        widget::text_input::search_input(
-                            fl!("search-application"),
-                            search_app_name,
-                        )
-                        .id(self.dialog_text_input.clone())
-                        .on_clear(Message::OpenWithSearchClear)
-                        .on_input(move |search_app_name| {
-                            Message::DialogUpdate(DialogPage::OpenWith {
-                                path: path.clone(),
-                                mime: mime.clone(),
-                                selected: *selected,
-                                store_opt: store_opt.clone(),
-                                search_app_name,
-                            })
-                        })
-                        .on_submit(|_| Message::DialogComplete),
+                        widget::column::with_children([
+                            widget::text::body(fl!("search-application")).into(),
+                            widget::text_input("", search_app_name)
+                                .id(self.dialog_text_input.clone())
+                                .on_input(move |search_app_name| {
+                                    Message::DialogUpdate(DialogPage::OpenWith {
+                                        path: path.clone(),
+                                        mime: mime.clone(),
+                                        selected: *selected,
+                                        store_opt: store_opt.clone(),
+                                        search_app_name,
+                                    })
+                                })
+                                .into(),
+                        ])
+                        .spacing(space_xxs),
                     )
                     .control(widget::scrollable(column).height({
                         let max_size = self
@@ -7087,11 +7086,25 @@ impl Application for App {
         ];
 
         if let Some(scroll_speed) = self.auto_scroll_speed {
-            subscriptions.push(
-                iced::time::every(time::Duration::from_millis(10))
-                    .with(scroll_speed)
-                    .map(|(scroll_speed, _)| Message::ScrollTab(scroll_speed)),
-            );
+            let mut scroll_horizontal = false;
+            if let Some(tab) = self.tab_model.data::<Tab>(self.tab_model.active()) {
+                if tab.config.view == tab::View::Column {
+                    scroll_horizontal = true;
+                }
+            }
+            if scroll_horizontal {
+                subscriptions.push(
+                    iced::time::every(time::Duration::from_millis(10))
+                        .with(scroll_speed)
+                        .map(|(scroll_speed, _)| Message::ScrollTab(scroll_speed, Some(ScrollDirection::Horizontal))),
+                );
+            } else {
+                subscriptions.push(
+                    iced::time::every(time::Duration::from_millis(10))
+                        .with(scroll_speed)
+                        .map(|(scroll_speed, _)| Message::ScrollTab(scroll_speed, Some(ScrollDirection::Vertical))),
+                );
+            }
         }
 
         subscriptions.extend(MOUNTERS.iter().map(|(key, mounter)| {

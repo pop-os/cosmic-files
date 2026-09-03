@@ -73,6 +73,7 @@ copy_noun = Kopie
 
 menu-open-with = Otevřít pomocí...
 default-app = { $name } (výchozí)
+search-application = Hledat podle názvu aplikace
 
 ## Properties
 

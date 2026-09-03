@@ -49,5 +49,6 @@ const fn select_resized_icon(view: View, icon_sizes: &mut IconSizes) -> &mut Non
     match view {
         View::Grid => &mut icon_sizes.grid,
         View::List => &mut icon_sizes.list,
+        View::Column => &mut icon_sizes.column,
     }
 }

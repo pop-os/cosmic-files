@@ -247,6 +247,7 @@ unknown-folder = پوشه ناشناس
 
 menu-open-with = باز کردن با...
 default-app = { $name } (پیش‌فرض)
+search-application = جستجو بر اساس نام برنامه
 
 ## Show details
 
