@@ -446,6 +446,9 @@ context-action-confirm-warning =
     } fog lefutni.
 run = Futtatás
 rename-confirm = Átnevezés
-checksum = { $kind } ellenőrzőösszeg
+checksum = { $kind }-ellenőrzőösszeg
 calculate = Számítás
 error = Hiba
+sidebar-label = Oldalsávcímke
+search-application = Keresés alkalmazásnév alapján
+change-sidebar-label = Oldalsávcímke módosítása
