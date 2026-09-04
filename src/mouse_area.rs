@@ -22,6 +22,7 @@ pub struct MouseArea<'a, Message> {
     content: Element<'a, Message>,
     on_auto_scroll: Option<Box<dyn OnAutoScroll<'a, Message>>>,
     on_drag: Option<Box<dyn OnDrag<'a, Message>>>,
+    on_drag_delta: Option<Box<dyn OnDragDelta<'a, Message>>>,
     on_double_click: Option<Box<dyn OnMouseButton<'a, Message>>>,
     on_press: Option<Box<dyn OnMouseButton<'a, Message>>>,
     on_drag_end: Option<Box<dyn OnMouseButton<'a, Message>>>,
@@ -41,6 +42,7 @@ pub struct MouseArea<'a, Message> {
     on_enter: Option<Box<dyn OnEnterExit<'a, Message>>>,
     on_exit: Option<Box<dyn OnEnterExit<'a, Message>>>,
     show_drag_rect: bool,
+    drag_unclipped: bool,
 }
 
 impl<'a, Message> MouseArea<'a, Message> {
@@ -55,6 +57,13 @@ impl<'a, Message> MouseArea<'a, Message> {
     #[must_use]
     pub fn on_drag(mut self, message: impl OnDrag<'a, Message>) -> Self {
         self.on_drag = Some(Box::new(message));
+        self
+    }
+
+    /// The message to emit with the signed displacement from the drag origin.
+    #[must_use]
+    pub fn on_drag_delta(mut self, message: impl OnDragDelta<'a, Message>) -> Self {
+        self.on_drag_delta = Some(Box::new(message));
         self
     }
 
@@ -200,6 +209,12 @@ impl<'a, Message> MouseArea<'a, Message> {
         self
     }
 
+    #[must_use]
+    pub const fn drag_unclipped(mut self) -> Self {
+        self.drag_unclipped = true;
+        self
+    }
+
     /// Sets the widget's unique identifier.
     #[must_use]
     pub fn with_id(mut self, id: Id) -> Self {
@@ -216,6 +231,9 @@ impl<'a, Message, F> OnMouseButton<'a, Message> for F where F: Fn(Option<Point>)
 
 pub trait OnDrag<'a, Message>: Fn(Option<Rectangle>) -> Message + 'a {}
 impl<'a, Message, F> OnDrag<'a, Message> for F where F: Fn(Option<Rectangle>) -> Message + 'a {}
+
+pub trait OnDragDelta<'a, Message>: Fn(Vector) -> Message + 'a {}
+impl<'a, Message, F> OnDragDelta<'a, Message> for F where F: Fn(Vector) -> Message + 'a {}
 
 pub trait OnResize<'a, Message>: Fn(Rectangle) -> Message + 'a {}
 impl<'a, Message, F> OnResize<'a, Message> for F where F: Fn(Rectangle) -> Message + 'a {}
@@ -241,6 +259,13 @@ struct State {
 }
 
 impl State {
+    fn drag_delta(&self, cursor: mouse::Cursor) -> Option<Vector> {
+        let drag_source = self.drag_initiated?;
+        let position = cursor.position().or(self.last_virtual_position)?;
+
+        (position.distance(drag_source) > 1.0).then(|| position - drag_source)
+    }
+
     fn drag_rect(&self, cursor: mouse::Cursor) -> Option<Rectangle> {
         if let Some(drag_source) = self.drag_initiated
             && let Some(position) = cursor.position().or(self.last_virtual_position)
@@ -293,6 +318,7 @@ impl<'a, Message> MouseArea<'a, Message> {
             content: content.into(),
             on_auto_scroll: None,
             on_drag: None,
+            on_drag_delta: None,
             on_drag_end: None,
             on_double_click: None,
             on_press: None,
@@ -312,6 +338,7 @@ impl<'a, Message> MouseArea<'a, Message> {
             on_exit: None,
             on_scroll: None,
             show_drag_rect: false,
+            drag_unclipped: false,
         }
     }
 }
@@ -408,6 +435,9 @@ where
         viewport: &Rectangle,
         renderer: &Renderer,
     ) -> mouse::Interaction {
+        if self.drag_unclipped && cursor.is_over(layout.bounds()) {
+            return mouse::Interaction::ResizingHorizontally;
+        }
         self.content.as_widget().mouse_interaction(
             &tree.children[0],
             layout,
@@ -627,7 +657,7 @@ fn update<Message: Clone>(
                 }
             }
         }
-        if widget.on_drag.is_some() {
+        if widget.on_drag.is_some() || widget.on_drag_delta.is_some() {
             state.drag_initiated = cursor.position();
         }
 
@@ -798,12 +828,42 @@ fn update<Message: Clone>(
     }
 
     if let Some((message, drag_rect)) = widget.on_drag.as_ref().zip(state.drag_rect(cursor)) {
-        shell.publish(message(drag_rect.intersection(&layout_bounds).map(
-            |mut rect| {
+        let publish_rect = if widget.drag_unclipped {
+            Some(drag_rect)
+        } else {
+            drag_rect.intersection(&layout_bounds).map(|mut rect| {
                 rect.x -= layout_bounds.x;
                 rect.y -= layout_bounds.y;
                 rect
-            },
-        )));
+            })
+        };
+        shell.publish(message(publish_rect));
+    }
+
+    if let Some((message, drag_delta)) = widget.on_drag_delta.as_ref().zip(state.drag_delta(cursor))
+    {
+        shell.publish(message(drag_delta));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn drag_delta_preserves_direction_when_reversing() {
+        let state = State {
+            drag_initiated: Some(Point::new(200.0, 10.0)),
+            ..State::default()
+        };
+
+        let left = state.drag_delta(mouse::Cursor::Available(Point::new(150.0, 10.0)));
+        let back_toward_origin =
+            state.drag_delta(mouse::Cursor::Available(Point::new(180.0, 10.0)));
+        let right = state.drag_delta(mouse::Cursor::Available(Point::new(240.0, 10.0)));
+
+        assert_eq!(left, Some(Vector::new(-50.0, 0.0)));
+        assert_eq!(back_toward_origin, Some(Vector::new(-20.0, 0.0)));
+        assert_eq!(right, Some(Vector::new(40.0, 0.0)));
     }
 }
