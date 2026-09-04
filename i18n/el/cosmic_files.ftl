@@ -331,3 +331,6 @@ rename-confirm = Μετονομασία
 checksum = Άθροισμα ελέγχου { $kind }
 calculate = Υπολογισμός
 error = Σφάλμα
+sidebar-label = Ετικέτα πλαϊνής στήλης
+search-application = Αναζήτηση με όνομα εφαρμογής
+change-sidebar-label = Αλλαγή ετικέτας πλαϊνής στήλης

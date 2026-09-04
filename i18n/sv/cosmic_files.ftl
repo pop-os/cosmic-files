@@ -422,3 +422,6 @@ rename-confirm = Byt namn
 checksum = { $kind }-kontrollsumma
 calculate = Beräkna
 error = Fel
+sidebar-label = Sidofältsetikett
+search-application = Sök på programnamn
+change-sidebar-label = Ändra sidofältsetikett

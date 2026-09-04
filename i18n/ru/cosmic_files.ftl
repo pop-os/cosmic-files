@@ -174,6 +174,7 @@ unknown-folder = неизвестная папка
 
 menu-open-with = Открыть с помощью…
 default-app = { $name } (по умолчанию)
+search-application = Поиск по названию приложения
 
 ## Show details
 
@@ -272,7 +273,7 @@ extract-to-title = Распаковать в папку
 mount-error = Не удалось получить доступ к диску
 create = Создать
 open-with-title = Как хотите открыть «{ $name }»?
-browse-store = Искать в { $store }
+browse-store = Перейти в { $store }
 other-apps = Другие приложения
 related-apps = Связанные приложения
 selected-items = { $items } выделенных элем.
@@ -382,14 +383,16 @@ clear-recents-history = Очистить историю недавних
 copy-path = Копировать путь
 mixed = Смешанные
 context-action = Контекстная команда
-context-action-confirm-title = Выполнить «{ $name }»?
+context-action-confirm-title = Запустить «{ $name }»?
 context-action-confirm-warning =
     Команда затронет { $items } { $items ->
         [one] элемент
        *[other] элем.
     }.
-run = Выполнить
+run = Запустить
 rename-confirm = Переименовать
 checksum = Хеш-сумма { $kind }
 calculate = Вычислить
 error = Ошибка
+sidebar-label = Подпись в боковой панели
+change-sidebar-label = Изменить подпись
