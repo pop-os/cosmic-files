@@ -42,7 +42,7 @@ name-no-slashes = 名稱不能包含斜線
 ## Open/Save Dialog
 
 cancel = 取消
-create = 建立
+create = 創作
 open = 開啟
 open-file = 開啟檔案
 open-folder = 開啟資料夾
