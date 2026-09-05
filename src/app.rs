@@ -364,6 +364,7 @@ pub enum Message {
     Focused(window::Id),
     Key(window::Id, Modifiers, Key, Physical, Option<SmolStr>),
     LaunchUrl(String),
+    UpdateState,
     MaybeExit,
     ModifiersChanged(window::Id, Modifiers),
     MounterItems(MounterKey, MounterItems),
@@ -422,6 +423,7 @@ pub enum Message {
     PendingPause(u64, bool),
     PendingPauseAll(bool),
     PermanentlyDelete(Option<Entity>),
+    PendingRestore,
     Preview(Option<Entity>),
     ReloadMimeAppCache,
     ReorderTab(ReorderEvent),
@@ -432,6 +434,7 @@ pub enum Message {
     ReplaceResult(ReplaceResult),
     RestoreFromTrash(Option<Entity>),
     SaveSortNames,
+    SetOperationsInProgress(usize),
     ScrollTab(i16),
     SearchActivate,
     SearchClear,
@@ -460,6 +463,7 @@ pub enum Message {
     ToggleContextPage(ContextPage),
     ToggleFoldersFirst,
     ToggleShowHidden,
+    State(State),
     Undo(usize),
     UndoTrash(widget::ToastId, Arc<[PathBuf]>),
     UndoTrashStart(Vec<TrashItem>),
@@ -750,6 +754,7 @@ pub struct App {
     progress_operations: BTreeSet<u64>,
     complete_operations: BTreeMap<u64, Operation>,
     failed_operations: BTreeMap<u64, (Operation, Controller, String)>,
+    progress_operations_dismiss: bool,
     scrollable_id: widget::Id,
     search_id: widget::Id,
     size: Option<Size>,
@@ -1269,6 +1274,10 @@ impl App {
         let controller = Controller::default();
         let compio_tx = self.compio_tx.clone();
 
+        // Reset dismissal for each new operation queue
+        if self.pending_operation_id == 0 {
+            self.progress_operations_dismiss = false;
+        }
         self.pending_operation_id += 1;
         if operation.show_progress_notification() {
             self.progress_operations.insert(id);
@@ -1276,8 +1285,21 @@ impl App {
         self.pending_operations
             .insert(id, (operation.clone(), controller.clone()));
 
+
+        let mut tasks = Vec::<Task<Message>>::new();
+
+        // Update the number of operations in progress across all windows
+        let mut operations_in_progress = self.state.operations_in_progress.saturating_add(1);
+        if self.state.operations_in_progress < self.pending_operations.len() {
+            operations_in_progress = self.pending_operations.len();
+        }
+        tasks.push(self.update(
+            Message::SetOperationsInProgress(operations_in_progress)
+        ));
+        tasks.push(self.update_state());
+
         // Use a task to send operations to the compio runtime thread.
-        cosmic::Task::stream(cosmic::iced::stream::channel(4, move |msg_tx| async move {
+        tasks.push(cosmic::Task::stream(cosmic::iced::stream::channel(4, move |msg_tx| async move {
             let (tx, rx) = tokio::sync::oneshot::channel();
 
             let msg_tx = Arc::new(tokio::sync::Mutex::new(msg_tx));
@@ -1299,7 +1321,8 @@ impl App {
                 let _ = msg_tx.lock().await.send(msg).await;
             }
         }))
-        .map(cosmic::Action::App)
+        .map(cosmic::Action::App));
+        Task::batch(tasks)
     }
 
     /// Will join operations together into a single task that will return a single
@@ -1337,8 +1360,12 @@ impl App {
         &mut self,
         completed: Vec<(u64, OperationSelection)>,
     ) -> Task<Message> {
-        let mut commands = Vec::with_capacity(4 * completed.len());
+        let mut tasks = Vec::with_capacity(4 * completed.len());
         let mut op_sel = OperationSelection::default();
+        let mut operations_in_progress = self.state.operations_in_progress;
+        let mut rescan_recents = false;
+        let mut rescan_trash = false;
+        let mut update_config = false;
         for (id, op_sel_pending) in completed {
             op_sel.ignored.extend(op_sel_pending.ignored);
             op_sel.selected.extend(op_sel_pending.selected);
@@ -1347,7 +1374,7 @@ impl App {
                 if let Some(description) = op.toast() {
                     if let Operation::Delete { ref paths } = op {
                         let paths: Arc<[PathBuf]> = Arc::from(paths.as_slice());
-                        commands.push(
+                        tasks.push(
                             self.toasts
                                 .push(
                                     widget::toaster::Toast::new(description)
@@ -1358,7 +1385,7 @@ impl App {
                                 .map(cosmic::Action::App),
                         );
                     } else {
-                        commands.push(
+                        tasks.push(
                             self.toasts
                                 .push(widget::toaster::Toast::new(description))
                                 .map(cosmic::Action::App),
@@ -1366,10 +1393,22 @@ impl App {
                     }
                 }
 
+                // Rescan Trash only if operation relates to Trash
+                if !rescan_trash {   
+                    rescan_trash = match op {
+                        Operation::Delete { .. } => true,
+                        Operation::DeleteTrash { .. } => true,
+                        Operation::EmptyTrash { .. } => true,
+                        Operation::PermanentlyDelete { .. } => true,
+                        Operation::Restore { .. } => true,
+                        _ => false,
+                    };
+                }
+
                 // If a favorite for a path has been renamed or moved, update it.
                 if let Operation::Rename { ref from, ref to } = op {
                     if self.update_favorites([(from, to)].as_slice()) {
-                        commands.push(self.update_config());
+                        update_config = true;
                     }
                 } else if let Operation::Move {
                     ref paths, ref to, ..
@@ -1380,17 +1419,19 @@ impl App {
                         .filter_map(|from| from.file_name().map(|name| (from, to.join(name))))
                         .collect();
                     if self.update_favorites(&path_changes) {
-                        commands.push(self.update_config());
+                        update_config = true;
                     }
                 }
 
-                if matches!(op, Operation::RemoveFromRecents { .. }) {
-                    commands.push(self.rescan_recents());
+                if !rescan_recents && matches!(op, Operation::RemoveFromRecents { .. }) {
+                    rescan_recents = true;
                 }
 
                 self.complete_operations.insert(id, op);
+                operations_in_progress = operations_in_progress.saturating_sub(1);
             }
         }
+
         // Close progress notification if all relevant operations are finished
         if !self
             .pending_operations
@@ -1399,19 +1440,37 @@ impl App {
         {
             self.progress_operations.clear();
         }
-        // Potentially show a notification
-        commands.push(self.update_notification());
-        // Rescan and select based on operation
-        commands.push(self.rescan_operation_selection(op_sel));
-        // Manually rescan any trash tabs after any operation is completed
-        commands.push(self.rescan_trash());
 
-        Task::batch(commands)
+        if update_config {
+            tasks.push(self.update_config());
+        }
+        // Potentially show a notification
+        tasks.push(self.update_notification());
+        // Rescan and select based on operation
+        tasks.push(self.rescan_operation_selection(op_sel));
+        if operations_in_progress != self.state.operations_in_progress {
+            // Update the number of operation in progress
+            tasks.push(
+                self.update(Message::SetOperationsInProgress(operations_in_progress)
+            ));
+        }
+        // Rescan any Recents tabs
+        if rescan_recents {
+            tasks.push(self.rescan_recents());
+        }
+        // Rescan any Trash tabs
+        if rescan_trash {
+            tasks.push(self.rescan_trash());
+        }
+        Task::batch(tasks)
     }
 
     fn handle_operation_errors(&mut self, errors: Vec<(u64, OperationError)>) -> Task<Message> {
         let mut tasks = Vec::new();
         let mut failed = Vec::new();
+        let mut rescan_recents = false;
+        let mut rescan_trash = false;
+        let mut operations_in_progress = self.state.operations_in_progress;
         for (id, err) in errors.into_iter() {
             if let Some((op, controller)) = self.pending_operations.remove(&id) {
                 // Only show dialog if not cancelled
@@ -1427,10 +1486,27 @@ impl App {
                     }
                 }
 
+                // Rescan Trash only if operation relates to Trash
+                if !rescan_trash {   
+                    rescan_trash = match op {
+                        Operation::Delete { .. } => true,
+                        Operation::DeleteTrash { .. } => true,
+                        Operation::EmptyTrash { .. } => true,
+                        Operation::PermanentlyDelete { .. } => true,
+                        Operation::Restore { .. } => true,
+                        _ => false,
+                    };
+                }
+
+                if !rescan_recents && matches!(op, Operation::RemoveFromRecents { .. }) {
+                    rescan_recents = true;
+                }
+
                 // Remove from progress
                 self.progress_operations.remove(&id);
                 self.failed_operations
                     .insert(id, (op, controller, err.to_string()));
+                operations_in_progress = operations_in_progress.saturating_sub(1);
             }
         }
         if !failed.is_empty() {
@@ -1449,8 +1525,23 @@ impl App {
         {
             self.progress_operations.clear();
         }
-        // Manually rescan any trash tabs after any operation is completed
-        tasks.push(self.rescan_trash());
+
+        // Potentially show a notification
+        tasks.push(self.update_notification());
+        if operations_in_progress != self.state.operations_in_progress {
+            // Update the number of operation in progress
+            tasks.push(
+                self.update(Message::SetOperationsInProgress(operations_in_progress)
+            ));
+        }
+        // Rescan any Recents tabs
+        if rescan_recents {
+            tasks.push(self.rescan_recents());
+        }
+        // Rescan any Trash tabs
+        if rescan_trash {
+            tasks.push(self.rescan_trash());
+        }
         Task::batch(tasks)
     }
 
@@ -1692,6 +1783,7 @@ impl App {
     }
 
     fn update_config(&mut self) -> Task<Message> {
+        // Update sidebar to reflect changes in config
         self.update_nav_model();
         // Tabs are collected first to placate the borrowck
         let tabs: Box<[_]> = self.tab_model.iter().collect();
@@ -1703,6 +1795,42 @@ impl App {
                     tab::Message::Config(self.config.tab),
                 ))
             }));
+        Task::batch(commands)
+    }
+
+    fn update_state(&mut self) -> Task<Message> {
+        // TODO: Dynamically write the State instead of specific items
+        if let Some(state_handler) = self.state_handler.as_ref() {
+            if let Err(err) = state_handler
+                .set::<&FxOrderMap<String, (HeadingOptions, bool)>>(
+                    "sort_names",
+                    &self.state.sort_names,
+                )
+            {
+                log::warn!("Failed to save state sort_names: {err:?}");
+            }
+            if let Err(err) = state_handler
+                .set::<&usize>(
+                    "operations_in_progress",
+                    &self.state.operations_in_progress,
+                )
+            {
+                log::warn!("Failed to save state operations_in_progress: {err:?}");
+            }
+        }
+        let needs_reload: Box<[_]> = self
+            .tab_model
+            .iter()
+            .filter_map(|entity| {
+                let tab = self.tab_model.data::<Tab>(entity)?;
+                Some((entity, tab.location.clone()))
+            })
+            .collect();
+
+        let commands = needs_reload
+            .into_iter()
+            .map(|(entity, location)| self.update_tab(entity, location, None));
+
         Task::batch(commands)
     }
 
@@ -2461,6 +2589,7 @@ impl Application for App {
             progress_operations: BTreeSet::new(),
             complete_operations: BTreeMap::new(),
             failed_operations: BTreeMap::new(),
+            progress_operations_dismiss: false,
             scrollable_id: widget::Id::new("File Scrollable"),
             search_id: widget::Id::new("File Search"),
             size: None,
@@ -2777,6 +2906,20 @@ impl Application for App {
     }
 
     fn on_app_exit(&mut self) -> Option<Message> {
+        // HACK: Reset the operations in progress for next time
+        if self.core.main_window_id().is_none() {
+            self.state.operations_in_progress = 0;
+            if let Some(state_handler) = self.state_handler.as_ref()
+                && let Err(err) = state_handler
+                    .set::<&usize>(
+                        "operations_in_progress",
+                        &self.state.operations_in_progress,
+                    )
+            {
+                log::warn!("Failed to save operations in progress: {err:?}");
+            }
+        }
+
         Some(Message::WindowClose)
     }
 
@@ -3461,6 +3604,18 @@ impl Application for App {
             }
             Message::MaybeExit => {
                 if self.core.main_window_id().is_none() && self.pending_operations.is_empty() {
+                    // HACK: Reset the operations in progress for next time
+                    self.state.operations_in_progress = 0;
+                    if let Some(state_handler) = self.state_handler.as_ref()
+                        && let Err(err) = state_handler
+                            .set::<&usize>(
+                                "operations_in_progress",
+                                &self.state.operations_in_progress,
+                            )
+                    {
+                        log::warn!("Failed to save operations in progress: {err:?}");
+                    }
+
                     // Exit if window is closed and there are no pending operations
                     process::exit(0);
                 }
@@ -4159,19 +4314,28 @@ impl Application for App {
                 if let Some((_, controller)) = self.pending_operations.get(&id) {
                     controller.cancel();
                     self.progress_operations.remove(&id);
+                    self.state.operations_in_progress = self.state.operations_in_progress
+                        .saturating_sub(1);
                 }
+                return self.update_state();
             }
             Message::PendingCancelAll => {
                 for (id, (_, controller)) in &self.pending_operations {
                     controller.cancel();
                     self.progress_operations.remove(id);
+                    self.state.operations_in_progress = self.state.operations_in_progress
+                        .saturating_sub(1);
                 }
+                return self.update_state();
             }
             Message::PendingComplete(id, op_sel) => {
                 return self.handle_completed_operations(vec![(id, op_sel)]);
             }
             Message::PendingDismiss => {
-                self.progress_operations.clear();
+                self.progress_operations_dismiss = true;
+            }
+            Message::PendingRestore => {
+                self.progress_operations_dismiss = false;
             }
             Message::PendingError(id, err) => {
                 return self.handle_operation_errors(vec![(id, err)]);
@@ -4400,6 +4564,28 @@ impl Application for App {
                 config_set!(type_to_search, type_to_search);
                 return self.update_config();
             }
+            Message::SetOperationsInProgress(count) => {
+                self.state.operations_in_progress = count;
+                if let Some(state_handler) = self.state_handler.as_ref()
+                    && let Err(err) = state_handler
+                        .set::<&usize>(
+                            "operations_in_progress",
+                            &self.state.operations_in_progress,
+                        )
+                {
+                    log::warn!("Failed to save operations in progress: {err:?}");
+                }
+                return self.update_state();
+            }
+            Message::State(state) => {
+                if state != self.state {
+                    self.state = state;
+                    return self.update_state();
+                }
+            }
+            Message::UpdateState => {
+                return self.update_state();
+            }
             Message::SystemThemeModeChange => {
                 return self.update_config();
             }
@@ -4582,15 +4768,18 @@ impl Application for App {
 
                                     commands.push(self.update(Message::Surface(
                                         cosmic::surface::action::app_popup(
-                                        move |_| cosmic::surface::action::LiveSettings {
-                                                    corners: Some(iced::runtime::platform_specific::wayland::CornerRadius {
+                                            move |_| cosmic::surface::action::LiveSettings {
+                                                corners: Some(
+                                                    iced::runtime::platform_specific::wayland::CornerRadius {
                                                         top_left: rad[0] as u32,
                                                         top_right: rad[1] as u32,
                                                         bottom_left: rad[2] as u32,
                                                         bottom_right: rad[3] as u32,
-                                                    }),
-                                                    ..Default::default()
-                                                },                                            move |app: &mut Self| -> SctkPopupSettings {
+                                                    }
+                                                ),
+                                                ..Default::default()
+                                            },
+                                            move |app: &mut Self| -> SctkPopupSettings {
                                                 let anchor_rect = Rectangle {
                                                     x: point.x as i32,
                                                     y: point.y as i32,
@@ -4776,6 +4965,7 @@ impl Application for App {
                                 true
                             };
 
+                            // Why the delay here?
                             if !self.must_save_sort_names & changed {
                                 self.must_save_sort_names = true;
                                 return cosmic::Task::future(async move {
@@ -4783,6 +4973,7 @@ impl Application for App {
                                     cosmic::action::app(Message::SaveSortNames)
                                 });
                             }
+
                         }
                     }
                 }
@@ -6439,7 +6630,9 @@ impl Application for App {
     }
 
     fn footer(&self) -> Option<Element<'_, Message>> {
-        if self.progress_operations.is_empty() {
+        if self.progress_operations.is_empty() 
+            || self.progress_operations_dismiss
+        {
             return None;
         }
 
@@ -6564,8 +6757,9 @@ impl Application for App {
     }
 
     fn header_end(&self) -> Vec<Element<'_, Self::Message>> {
-        let mut elements = Vec::with_capacity(2);
-
+        let mut elements = Vec::<Element<'_, Self::Message>>::new();
+        
+        // Search icon / input
         if let Some(term) = self.search_get() {
             if self.core.is_condensed() {
                 elements.push(
@@ -6592,6 +6786,72 @@ impl Application for App {
                     .on_press(Message::SearchActivate)
                     .padding(8)
                     .into(),
+            );
+        }
+
+        // Progress Icon for long-runing operations
+        if !self.progress_operations.is_empty()
+            || !self.pending_operations.is_empty()
+            || self.state.operations_in_progress > 0
+        {
+            let mut title = String::new();
+            let mut total_progress = 0.0;
+            let mut count = 0;
+            for (op, controller) in self.pending_operations.values() {
+                if op.show_progress_notification() {
+                    let progress = controller.progress();
+                    if title.is_empty() {
+                        title = op.pending_text(progress, controller.state());
+                    }
+                    total_progress += progress;
+                    count += 1;
+                }
+            }
+            let running = count;
+            // Adjust the progress bar so it does not jump around when operations finish
+            for id in &self.progress_operations {
+                if self.complete_operations.contains_key(id) {
+                    total_progress += 1.0;
+                    count += 1;
+                }
+            }
+            let finished = count - running;
+            total_progress /= count as f32;
+            if running >= 1 {
+                if finished > 0 {
+                    title = fl!(
+                        "operations-running-finished",
+                        running = running,
+                        finished = finished,
+                        percent = ((total_progress * 100.0) as i32)
+                    );
+                } else if running > 1 || title.is_empty() {
+                    title = fl!(
+                        "operations-running",
+                        running = running,
+                        percent = ((total_progress * 100.0) as i32)
+                    );
+                }
+            } else if title.is_empty() && self.state.operations_in_progress > 0 {
+                title = fl!(
+                    "operations-running-background",
+                    running = self.state.operations_in_progress
+                )
+            }
+            elements.push(
+                widget::button::custom(
+                    widget::container(
+                        widget::tooltip(
+                            widget::indeterminate_circular().size(20.0),
+                            widget::text::body(title),
+                            widget::tooltip::Position::Bottom,
+                        )
+                    )
+                )
+                .class(theme::Button::Icon)
+                .on_press(Message::PendingRestore)
+                .padding(4)
+                .into()
             );
         }
 
@@ -6837,6 +7097,16 @@ impl Application for App {
                     );
                 }
                 Message::Config(update.config)
+            }),
+            State::subscription().map(|update| {
+                if !update.errors.is_empty() {
+                    log::info!(
+                        "errors loading state {:?}: {:?}",
+                        update.keys,
+                        update.errors
+                    );
+                }
+                Message::State(update.config)
             }),
             cosmic_config::config_subscription::<_, TimeConfig>(
                 TypeId::of::<TimeSubscription>(),
