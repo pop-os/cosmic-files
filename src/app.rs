@@ -8,8 +8,9 @@ use cosmic::iced::clipboard::dnd::DndAction;
 use cosmic::iced::core::SmolStr;
 use cosmic::iced::core::widget::operation::focusable::unfocus;
 use cosmic::iced::futures::{self, SinkExt};
-use cosmic::iced::keyboard::key::Physical;
+use cosmic::iced::keyboard::key::{Named, Physical};
 use cosmic::iced::keyboard::{Event as KeyEvent, Key, Modifiers};
+use cosmic::iced::widget::operation;
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use cosmic::iced::platform_specific::shell::wayland::commands::overlap_notify::overlap_notify;
 use cosmic::iced::runtime::{clipboard, task};
@@ -601,6 +602,15 @@ pub enum DialogPage {
         path: PathBuf,
         entity: Entity,
     },
+}
+
+/// Returns true for dialogs whose two actions should support switching
+/// focus between them with arrow keys (in addition to Tab/Shift+Tab).
+fn dialog_supports_arrow_focus(dialog_page: &DialogPage) -> bool {
+    matches!(
+        dialog_page,
+        DialogPage::PermanentlyDelete { .. } | DialogPage::DeleteTrash { .. }
+    )
 }
 
 pub struct DialogPages {
@@ -3389,6 +3399,22 @@ impl Application for App {
                 #[cfg(not(all(feature = "wayland", feature = "desktop-applet")))]
                 let in_surface_ids = false;
                 if self.core.main_window_id() == Some(window_id) || in_surface_ids {
+                    if self
+                        .dialog_pages
+                        .front()
+                        .is_some_and(dialog_supports_arrow_focus)
+                    {
+                        match key {
+                            Key::Named(Named::ArrowRight) | Key::Named(Named::ArrowDown) => {
+                                return operation::focus_next();
+                            }
+                            Key::Named(Named::ArrowLeft) | Key::Named(Named::ArrowUp) => {
+                                return operation::focus_previous();
+                            }
+                            _ => {}
+                        }
+                    }
+
                     let entity = self.tab_model.active();
                     for (key_bind, action) in &self.key_binds {
                         if key_bind.matches(modifiers, &key, Some(&physical_key)) {
