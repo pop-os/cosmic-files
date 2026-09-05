@@ -16,7 +16,7 @@ use cosmic::iced::{
 };
 use cosmic::widget::menu::action::MenuAction;
 use cosmic::widget::menu::key_bind::KeyBind;
-use cosmic::widget::{self, DndDestination, DndSource, Id, RcElementWrapper, Widget, space};
+use cosmic::widget::{self, DndDestination, DndSource, Id, RcElementWrapper, Widget, space, icon};
 use cosmic::{Apply, Element, cosmic_theme, font, theme};
 use i18n_embed::LanguageLoader;
 use icu::datetime::input::DateTime;
@@ -81,6 +81,9 @@ const THUMBNAIL_SIZE: u32 = (ICON_SIZE_GRID as u32) * (ICON_SCALE_MAX as u32);
 const TEXT_PREVIEW_MAX_BYTES: usize = 256 * 1024; // 256 KiB
 /// Maximum file size (bytes) to attempt text preview; files larger than this are skipped entirely.
 const TEXT_PREVIEW_MAX_FILE_BYTES: u64 = 8 * 1000 * 1000; // 8 MiB
+// TODO: after creating "emblem-symbolic-link" icon in cosmic-icons need change this
+const SYMLINK_ICON_NAME: &str = "mail-forward-symbolic";
+
 
 // Thumbnail generation semaphore - limits parallel thumbnail workers
 // Uses 4 workers for balanced throughput and memory usage
@@ -743,6 +746,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
 
     let display_name = display_name_for_file(&path, &file_info.display_name(), false, is_desktop);
     let hidden = file_name.starts_with('.');
+    let symlink = file_info.symlink_target();
 
     Item {
         name: file_name.into(),
@@ -777,6 +781,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
         dir_size,
         cut: false,
         checksums: ChecksumState::default(),
+        is_symlink: symlink.is_some(),
     }
 }
 
@@ -785,6 +790,13 @@ pub fn item_from_search_item(search_item: SearchItem, sizes: IconSizes) -> Item 
         SearchItem::Path(path, name, metadata) => item_from_entry(path, name, metadata, sizes),
         SearchItem::Trash(entry, metadata) => item_from_trash_entry(entry, metadata, sizes),
     }
+}
+
+pub fn check_symlink(path: &PathBuf) -> bool {
+    fs::symlink_metadata(path)
+    .ok()
+    .filter(|meta| meta.is_symlink())          
+    .is_some()
 }
 
 pub fn item_from_entry(
@@ -867,6 +879,8 @@ pub fn item_from_entry(
     }
 
     let display_name = display_name_for_file(&path, &name, is_gvfs, is_desktop);
+    let is_symlink = check_symlink(&path); 
+    let location_opt = Some(Location::Path(path));
 
     Item {
         name,
@@ -877,7 +891,7 @@ pub fn item_from_entry(
             children_opt,
         },
         hidden,
-        location_opt: Some(Location::Path(path)),
+        location_opt: location_opt,
         image_dimensions: None,
         mime,
         icon_handle_grid,
@@ -893,6 +907,7 @@ pub fn item_from_entry(
         dir_size,
         cut: false,
         checksums: ChecksumState::default(),
+        is_symlink: is_symlink,
     }
 }
 
@@ -905,7 +920,9 @@ pub fn item_from_trash_entry(
     let name = entry.name.to_string_lossy().into_owned();
     let display_name = Item::display_name(&name);
 
-    let location = crate::trash::trash_item_path(&entry).map(Location::Path);
+    let trash_path = crate::trash::trash_item_path(&entry);
+    let is_symlink = trash_path.as_ref().map_or(false, |p| check_symlink(p));
+    let location = trash_path.map(Location::Path);
 
     let (mime, icon_handle_grid, icon_handle_list, icon_handle_list_condensed) = match metadata.size
     {
@@ -952,6 +969,7 @@ pub fn item_from_trash_entry(
         dir_size: DirSize::NotDirectory,
         cut: false,
         checksums: ChecksumState::default(),
+        is_symlink: is_symlink,
     }
 }
 
@@ -1418,6 +1436,7 @@ pub fn scan_desktop(
             dir_size: DirSize::NotDirectory,
             cut: false,
             checksums: ChecksumState::default(),
+            is_symlink: false,
         });
     }
 
@@ -2341,6 +2360,7 @@ pub struct Item {
     pub overlaps_drag_rect: bool,
     pub dir_size: DirSize,
     pub checksums: ChecksumState,
+    pub is_symlink: bool,
 }
 
 impl Item {
@@ -2797,6 +2817,139 @@ impl fmt::Debug for SearchContextWrapper {
         f.debug_struct("SearchContextWrapper").finish()
     }
 }
+
+pub struct ListViewRowBuilder {
+    icon_size: u16,
+    row_height: u16,
+    modified_width: f32,
+    size_width: f32,
+    space_xxs: u16,
+}
+
+// TODO: Here are all the possible parameters for different list view modes. This is not ideal; it will require some refactoring in the future.
+impl ListViewRowBuilder {
+    pub fn new(
+        icon_size: u16,
+        row_height: u16,
+        modified_width: f32,
+        size_width: f32,
+        space_xxs: u16,
+    ) -> Self {
+        Self {
+            icon_size,
+            row_height,
+            modified_width,
+            size_width,
+            space_xxs,
+        }
+    }
+
+    fn condensed<'b>(
+        &self,
+        display_name: String,
+        icon_handle_list_condensed: widget::icon::Handle,
+        modified_text: String,
+        size_text: String,
+        is_symlink: bool,
+    ) -> widget::Row<'b, Message, cosmic::prelude::Theme> {
+        let row_height = self.row_height;
+        let space_xxs = self.space_xxs;
+        let icon_size = self.icon_size;
+        let link_icon = icon::from_name(SYMLINK_ICON_NAME).size(icon_size).handle();
+        let link_icon_size = icon_size/2;
+
+        let item_name_widget = if is_symlink {
+            widget::row::with_children([
+                    widget::icon::icon(link_icon)
+                        .content_fit(ContentFit::Contain)
+                        .width(Length::Fixed(link_icon_size as f32))
+                        .height(Length::Fixed(link_icon_size as f32))
+                        .size(icon_size)
+                        .into(),
+                    Item::list_display_name(display_name).into(),
+                ])
+        } else {
+            widget::row::with_children([
+                    Item::list_display_name(display_name).into(),
+                ])
+        };
+
+        widget::row::with_children([
+            widget::icon::icon(icon_handle_list_condensed)
+                .content_fit(ContentFit::Contain)
+                .size(icon_size)
+                .into(),
+            widget::column::with_children([
+                item_name_widget
+                .align_y(Alignment::Center)
+                .into(),
+                widget::text::caption(format!("{modified_text} - {size_text}")).into(),
+            ])
+            .into(),
+        ])
+        .height(Length::Fixed(f32::from(row_height)))
+        .align_y(Alignment::Center)
+        .spacing(space_xxs)
+        .into()
+    }
+
+    pub fn wide<'b>(
+        &self,
+        display_name: String,
+        icon_handle_list: widget::icon::Handle,
+        modified_text: String,
+        size_text: String,
+        is_symlink: bool,
+    ) -> widget::Row<'b, Message, cosmic::prelude::Theme> {
+        let icon_size = self.icon_size;
+        let modified_width = self.modified_width;
+        let size_width = self.size_width;
+        let row_height = self.row_height;
+        let space_xxs = self.space_xxs;
+        let link_icon = icon::from_name(SYMLINK_ICON_NAME).size(icon_size).handle();
+        let item_name_widget = if is_symlink {
+            widget::row::with_children([
+                    widget::icon::icon(link_icon)
+                        .content_fit(ContentFit::Contain)
+                        .width(Length::Fixed(icon_size as f32))
+                        .height(Length::Fixed(icon_size as f32))
+                        .size(icon_size)
+                    .into(),
+                    Item::list_display_name(display_name)
+                        .width(Length::Fill)
+                        .into(),
+                ])
+        } else {
+            widget::row::with_children([
+                    Item::list_display_name(display_name)
+                        .width(Length::Fill)
+                        .into(),
+                ])
+        };
+
+        widget::row::with_children([
+            widget::icon::icon(icon_handle_list.clone())
+                .content_fit(ContentFit::Contain)
+                .size(icon_size)
+                .into(),
+                item_name_widget
+                .spacing(self.space_xxs)
+                .align_y(Alignment::Center) 
+                .width(Length::Fill)
+                .into(),
+            widget::text::body(modified_text.clone())
+                .width(Length::Fixed(modified_width))
+                .into(),
+            widget::text::body(size_text.clone())
+                .width(Length::Fixed(size_width))
+                .into(),
+        ])
+        .height(Length::Fixed(f32::from(row_height)))
+        .align_y(Alignment::Center)
+        .spacing(space_xxs)
+    }
+}
+
 
 // TODO when creating items, pass <Arc<SelectedItems>> to each item
 // as a drag data, so that when dnd is initiated, they are all included
@@ -6126,6 +6279,11 @@ impl Tab {
         if let Some(items) = self.column_sort() {
             let mut count = 0;
             let mut hidden = 0;
+            let row_builder = ListViewRowBuilder::new(icon_size.clone(), 
+                row_height.clone(), 
+                modified_width.clone(), 
+                size_width.clone(), 
+                space_xxs.clone());
             for (i, item) in items {
                 if item.hidden && !show_hidden {
                     item.pos_opt.set(None);
@@ -6231,22 +6389,8 @@ impl Tab {
                     };
 
                     let row = if condensed {
-                        widget::row::with_children([
-                            widget::icon::icon(item.icon_handle_list_condensed.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_size)
-                                .into(),
-                            widget::column::with_children([
-                                Item::list_display_name(item.display_name.clone()).into(),
-                                //TODO: translate?
-                                widget::text::caption(format!("{modified_text} - {size_text}"))
-                                    .into(),
-                            ])
-                            .into(),
-                        ])
-                        .height(Length::Fixed(f32::from(row_height)))
-                        .align_y(Alignment::Center)
-                        .spacing(space_xxs)
+                        row_builder.condensed(item.display_name.clone(), item.icon_handle_list_condensed.clone(), 
+                            modified_text.clone(), size_text.clone(), item.is_symlink)
                     } else if is_search {
                         widget::row::with_children([
                             widget::icon::icon(item.icon_handle_list_condensed.clone())
@@ -6274,24 +6418,11 @@ impl Tab {
                         .align_y(Alignment::Center)
                         .spacing(space_xxs)
                     } else {
-                        widget::row::with_children([
-                            widget::icon::icon(item.icon_handle_list.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_size)
-                                .into(),
-                            Item::list_display_name(item.display_name.clone())
-                                .width(Length::Fill)
-                                .into(),
-                            widget::text::body(modified_text.clone())
-                                .width(Length::Fixed(modified_width))
-                                .into(),
-                            widget::text::body(size_text.clone())
-                                .width(Length::Fixed(size_width))
-                                .into(),
-                        ])
-                        .height(Length::Fixed(f32::from(row_height)))
-                        .align_y(Alignment::Center)
-                        .spacing(space_xxs)
+                        row_builder.wide(item.display_name.clone(),
+                        item.icon_handle_list.clone(),
+                            modified_text.clone(),
+                            size_text.clone(),
+                        item.is_symlink)
                     };
 
                     let button = |row| {
