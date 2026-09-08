@@ -193,7 +193,7 @@ pub fn context_menu<'a>(
     match (&tab.mode, &tab.location) {
         (
             tab::Mode::App | tab::Mode::Desktop,
-            Location::Desktop(..)
+            Location::Desktop { .. }
             | Location::Path(..)
             | Location::Search(SearchLocation::Path(..), ..)
             | Location::Search(SearchLocation::Recents, ..)
@@ -350,10 +350,13 @@ pub fn context_menu<'a>(
 
                 children.push(divider::horizontal::light().into());
                 // TODO: Nested menu
+                if let Location::Desktop { .. } = &tab.location {
+                    children.push(sort_item(fl!("sort-manually"), HeadingOptions::Manual));
+                }
                 children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
                 children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
                 children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
-                if matches!(tab.location, Location::Desktop(..)) {
+                if matches!(tab.location, Location::Desktop { .. }) {
                     children.push(divider::horizontal::light().into());
                     children.push(
                         menu_item(fl!("desktop-view-options"), Action::DesktopViewOptions).into(),
@@ -363,7 +366,7 @@ pub fn context_menu<'a>(
         }
         (
             tab::Mode::Dialog(dialog_kind),
-            Location::Desktop(..)
+            Location::Desktop { .. }
             | Location::Path(..)
             | Location::Search(SearchLocation::Path(..), ..)
             | Location::Search(SearchLocation::Recents, ..)

@@ -349,6 +349,7 @@ sort-by-name = Sort by name
 sort-by-modified = Sort by modified
 sort-by-size = Sort by size
 sort-by-trashed = Sort by delete time
+sort-manually = Sort manually
 remove-from-recents = Remove from recents
 
 ## Desktop
