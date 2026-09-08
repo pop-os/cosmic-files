@@ -1,5 +1,5 @@
 use crate::mime_icon::mime_for_path;
-use crate::operation::{Controller, OpReader, OperationError, OperationErrorType, sync_to_disk};
+use crate::operation::{Controller, OpReader, OperationError, OperationErrorType};
 use cosmic::iced::futures;
 use jiff::Zoned;
 use jiff::civil::DateTime;
@@ -45,7 +45,7 @@ pub fn extract(
     new_dir: &Path,
     password: &Option<String>,
     controller: &Controller,
-) -> Result<(), OperationError> {
+) -> Result<(Vec<PathBuf>, HashSet<PathBuf>), OperationError> {
     let mime = mime_for_path(path, None, false);
     let password = password.as_deref();
     match mime.essence_str() {
@@ -55,13 +55,15 @@ pub fn extract(
                 .map(flate2::read::GzDecoder::new)
                 .map(tar::Archive::new)
                 .and_then(|mut archive| archive.unpack(new_dir))
-                .map_err(|e| OperationError::from_err(e, controller))?;
+                .map_err(|e| OperationError::from_err(e, controller))
+                .map(|_| Default::default())
         }
         "application/x-tar" => OpReader::new(path, controller.clone())
             .map(io::BufReader::new)
             .map(tar::Archive::new)
             .and_then(|mut archive| archive.unpack(new_dir))
-            .map_err(|e| OperationError::from_err(e, controller))?,
+            .map_err(|e| OperationError::from_err(e, controller))
+            .map(|_| Default::default()),
         "application/zip" => fs::File::open(path)
             .map(io::BufReader::new)
             .map(zip::ZipArchive::new)
@@ -75,7 +77,7 @@ pub fn extract(
                     OperationError::from_kind(OperationErrorType::PasswordRequired, controller)
                 }
                 _ => OperationError::from_err(e, controller),
-            })?,
+            }),
         #[cfg(feature = "bzip2")]
         "application/x-bzip"
         | "application/x-bzip-compressed-tar"
@@ -85,7 +87,8 @@ pub fn extract(
             .map(bzip2::read::BzDecoder::new)
             .map(tar::Archive::new)
             .and_then(|mut archive| archive.unpack(new_dir))
-            .map_err(|e| OperationError::from_err(e, controller))?,
+            .map_err(|e| OperationError::from_err(e, controller))
+            .map(|_| Default::default()),
         #[cfg(feature = "lzma-rust2")]
         "application/x-xz" | "application/x-xz-compressed-tar" => {
             OpReader::new(path, controller.clone())
@@ -93,14 +96,14 @@ pub fn extract(
                 .map(|reader| lzma_rust2::XzReader::new(reader, true))
                 .map(tar::Archive::new)
                 .and_then(|mut archive| archive.unpack(new_dir))
-                .map_err(|e| OperationError::from_err(e, controller))?;
+                .map_err(|e| OperationError::from_err(e, controller))
+                .map(|_| Default::default())
         }
         _ => Err(OperationError::from_err(
             format!("unsupported mime type {mime:?}"),
             controller,
-        ))?,
+        )),
     }
-    Ok(())
 }
 
 // From https://docs.rs/zip/latest/zip/read/struct.ZipArchive.html#method.extract, with cancellation and progress added
@@ -109,7 +112,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
     directory: P,
     password: Option<&str>,
     controller: Controller,
-) -> zip::result::ZipResult<()> {
+) -> zip::result::ZipResult<(Vec<PathBuf>, HashSet<PathBuf>)> {
     use std::ffi::OsString;
     use std::fs;
     use zip::result::ZipError;
@@ -282,10 +285,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
         }
     }
 
-    // Flush files to disk
-    futures::executor::block_on(async { sync_to_disk(written_files, target_dirs).await });
-
-    Ok(())
+    Ok((written_files, target_dirs))
 }
 
 fn zip_date_time_to_system_time(date_time: zip::DateTime) -> Option<SystemTime> {

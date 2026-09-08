@@ -174,6 +174,7 @@ unknown-folder = неизвестная папка
 
 menu-open-with = Открыть с помощью…
 default-app = { $name } (по умолчанию)
+search-application = Поиск по названию приложения
 
 ## Show details
 
@@ -188,7 +189,7 @@ settings = Параметры
 
 ### Appearance
 
-appearance = Оформление
+appearance = Внешний вид
 theme = Тема
 match-desktop = Как в системе
 dark = Тёмная
@@ -218,7 +219,7 @@ new-tab = Новая вкладка
 new-window = Новое окно
 rename = Переименовать…
 close-tab = Закрыть вкладку
-quit = Выйти
+quit = Завершить
 
 ## Edit
 
@@ -271,8 +272,8 @@ extract-to = Распаковать в…
 extract-to-title = Распаковать в папку
 mount-error = Не удалось получить доступ к диску
 create = Создать
-open-with-title = Как вы хотите открыть «{ $name }»?
-browse-store = Искать в { $store }
+open-with-title = Как хотите открыть «{ $name }»?
+browse-store = Перейти в { $store }
 other-apps = Другие приложения
 related-apps = Связанные приложения
 selected-items = { $items } выделенных элем.
@@ -320,7 +321,7 @@ type-to-search-enter-path = Ввод пути к каталогу или фай�
 delete-permanently = Удалить навсегда
 eject = Извлечь
 remove-from-recents = Убрать из недавних
-change-wallpaper = Изменить обои…
+change-wallpaper = Изменить фон...
 desktop-appearance = Параметры оформления…
 display-settings = Параметры экрана…
 reload-folder = Обновить папку
@@ -382,11 +383,16 @@ clear-recents-history = Очистить историю недавних
 copy-path = Копировать путь
 mixed = Смешанные
 context-action = Контекстная команда
-context-action-confirm-title = Выполнить «{ $name }»?
+context-action-confirm-title = Запустить «{ $name }»?
 context-action-confirm-warning =
     Команда затронет { $items } { $items ->
         [one] элемент
        *[other] элем.
     }.
-run = Выполнить
+run = Запустить
 rename-confirm = Переименовать
+checksum = Хеш-сумма { $kind }
+calculate = Вычислить
+error = Ошибка
+sidebar-label = Подпись в боковой панели
+change-sidebar-label = Изменить подпись

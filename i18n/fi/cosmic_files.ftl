@@ -225,7 +225,7 @@ settings = Asetukset
 
 appearance = Ulkoasu
 theme = Teema
-match-desktop = Sovita työpöytään
+match-desktop = Sama kuin työpöytä
 dark = Tumma
 light = Vaalea
 
@@ -415,3 +415,6 @@ context-action-confirm-warning =
     }.
 run = Suorita
 rename-confirm = Nimeä uudelleen
+checksum = { $kind }-tarkistussumma
+calculate = Laske
+error = Virhe

@@ -5,7 +5,7 @@ no-results = कोई परिणाम नहीं
 filesystem = फाइल सिस्टम
 home = होम
 networks = नेटवर्क्स
-notification-in-progress = फाइल संचालन प्रगति पर है।
+notification-in-progress = फ़ाइल संचालन प्रगति पर हैं
 trash = कचरा
 recents = हाल के
 undo = पूर्ववत करें
@@ -33,8 +33,8 @@ create-archive = संग्रह बनाएँ
 
 ## Empty Trash Dialog
 
-empty-trash = कचरा खाली करें
-empty-trash-warning = क्या आप वाकई कचरे में सभी आइटमों को स्थायी रूप से हटाना चाहते हैं?
+empty-trash = रद्दी साफ़ करें
+empty-trash-warning = रद्दी फ़ोल्डर में मौजूद आइटम स्थायी रूप से हटा दिए जाएंगे
 
 ## New File/Folder Dialog
 
@@ -42,11 +42,11 @@ create-new-file = नई फाइल बनाएँ
 create-new-folder = नया फ़ोल्डर बनाएँ
 file-name = फाइल का नाम
 folder-name = फ़ोल्डर का नाम
-file-already-exists = इसी नाम की फाइल पहले से मौजूद है।
-folder-already-exists = इसी नाम का फ़ोल्डर पहले से मौजूद है।
-name-hidden = "." से शुरू होने वाले नाम छिपे रहेंगे।
-name-invalid = नाम "{ $filename }" मान्य नहीं है।
-name-no-slashes = नाम में स्लैश का उपयोग नहीं किया जा सकता है।
+file-already-exists = उस नाम की फ़ाइल पहले से मौजूद है
+folder-already-exists = उस नाम का फ़ोल्डर पहले से मौजूद है
+name-hidden = "." से शुरू होने वाले नाम छिपे होंगे
+name-invalid = नाम "{ $filename }" नहीं हो सकता
+name-no-slashes = नाम में स्लैश नहीं हो सकते
 
 ## Open/Save Dialog
 
@@ -75,8 +75,8 @@ rename-folder = फ़ोल्डर का नाम बदलें
 
 ## Replace Dialog
 
-replace = प्रतिस्थापित करें
-replace-title = { $filename } पहले से इस स्थान पर मौजूद है।
+replace = बदलें
+replace-title = { $filename } पहले से इस स्थान पर मौजूद है
 replace-warning = क्या आप इसे प्रतिस्थापित करना चाहते हैं? यदि प्रतिस्थापित किया गया, तो मौजूदा फ़ाइल को ओवरराइट किया जाएगा।
 replace-warning-operation = क्या आप इसे बदलना चाहते हैं? प्रतिस्थापित करने पर मौजूदा फ़ाइल ओवरराइट हो जाएगी।
 original-file = मूल फ़ाइल
@@ -211,13 +211,13 @@ show-details = विवरण दिखाएँ
 
 ## Settings
 
-settings = सेटिंग
+settings = सेटिंग्स
 
 ### Appearance
 
-appearance = रूप
-theme = थीम
-match-desktop = सिस्टम सेटिंग्स से मेल खाएँ
+appearance = रुप-रंग
+theme = प्रसंग
+match-desktop = डेस्कटॉप से मेल खाएँ
 dark = डार्क
 light = लाइट
 # Context menu
@@ -251,27 +251,27 @@ new-tab = नया टैब
 new-window = नई विंडो
 rename = नाम बदलें...
 close-tab = टैब बंद करें
-quit = बंद करें
+quit = बाहर जाएँ
 
 ## Edit
 
-edit = संपादित करें
-cut = कट करें
-copy = नकल करें
+edit = संपादन
+cut = काटें
+copy = कॉपी करें
 paste = चिपकाएँ
 select-all = सभी चुनें
 
 ## View
 
-zoom-in = ज़ूम इन करें
-default-size = डिफ़ॉल्ट आकार
-zoom-out = ज़ूम आउट करें
+zoom-in = बड़ा करें
+default-size = मूल आकार
+zoom-out = छोटा करें
 view = दृश्य
 grid-view = ग्रिड दृश्य
 list-view = सूची दृश्य
 show-hidden-files = छिपी हुई फाइलें दिखाएँ
 list-directories-first = सबसे पहले डाइरेक्ट्री दिखाएँ
-menu-settings = सेटिंग्स...
+menu-settings = सेटिंग्स..।
 menu-about = कॉस्मिक फाइल्स के बारे में...
 
 ## Sort
@@ -284,4 +284,98 @@ sort-oldest-first = पुराने से नए
 sort-smallest-to-largest = छोटे से बड़े
 sort-largest-to-smallest = बड़े से छोटे
 repository = रिपॉजिटरी
-support = सहायता
+support = समर्थन
+read-execute = पढ़ें और निष्पादित करें
+deleted =
+    { trash } से { $items } { $items ->
+        [one] आइटम मिटाया गया
+       *[other] आइटम मिटाए गए
+    }
+dismiss = संदेश खारिज करें
+favorite-path-error = निर्देशिका खोलने में त्रुटि
+progress = { $percent }%
+related-apps = संबंधित ऐप्स
+removing-from-recents =
+    { recents } से { $items } { $items ->
+        [one] आइटम हटाया जा रहा है
+       *[other] आइटम हटाए जा रहे हैं
+    }
+remove = हटाएँ
+read-write-execute = पढ़ें, लिखें और निष्पादित करें
+other-apps = अन्य ऐप्स
+pause = विराम
+keep = रखें
+permanently-deleting =
+    { $items } { $items ->
+        [one] आइटम स्थायी रूप से मिटाया जा रहा है
+       *[other] आइटम स्थायी रूप से मिटाए जा रहे हैं
+    }
+read-write = पढ़ें और लिखें
+none = कोई नहीं
+resume = फिर से शुरू करें
+grid-spacing = ग्रिड स्पेसिंग
+extract-to = इस रूप में निकालें..।
+delete = हटाएं
+read-only = केवल पढ़ने के लिए
+deleting =
+    { trash } से { $items } { $items ->
+        [one] आइटम मिटाया जा रहा है
+       *[other] आइटम मिटाए जा रहे हैं
+    } ({ $progress })..।
+execute-only = केवल निष्पादित करें
+details = विवरण
+mount-error = ड्राइव तक पहुँचने में असमर्थ
+removed-from-recents =
+    { recents } से { $items } { $items ->
+        [one] आइटम हटाया गया
+       *[other] आइटम हटाए गए
+    }
+progress-paused = { $percent }%, रुका हुआ
+cancelled = रद्द किया गया
+operations-running-finished =
+    { $running } { $running ->
+        [one] ऑपरेशन
+       *[other] ऑपरेशन
+    } चल रहा है ({ $percent }%), { $finished } समाप्त..।
+progress-failed = { $percent }%, विफल
+extract-to-title = फ़ोल्डर में निकालें
+open-with = इससे खोलें
+permanently-deleted =
+    { $items } { $items ->
+        [one] आइटम स्थायी रूप से मिटाया गया
+       *[other] आइटम स्थायी रूप से मिटाए गए
+    }
+write-execute = लिखें और निष्पादित करें
+extract-password-required = पासवर्ड आवश्यक है
+progress-cancelled = { $percent }%, रद्द किया गया
+write-only = केवल लिखने के लिए
+permanently-delete-warning = { $target } को स्थाई रूप से हटा दिया जाएगा। इस कार्रवाई को पूर्ववत नहीं किया जा सकता है।
+favorite-path-error-description =
+    "{ $path }" को खोला नहीं जा सकता
+    "{ $path }" मौजूद नहीं हो सकता है या आपके पास इसे खोलने की अनुमति नहीं हो सकती है
+
+    क्या आप इसे साइडबार से हटाना चाहते हैं?
+empty-trash-title = रद्दी साफ़ करें?
+permanently-delete-question = स्थाई रूप से हटाएं?
+operations-running =
+    { $running } { $running ->
+        [one] ऑपरेशन
+       *[other] ऑपरेशन
+    } चल रहा है ({ $percent }%)..।
+copy-to-title = कॉपी गंतव्य चुनें
+copy-to-button-label = कॉपी
+move-to-title = मूव गंतव्य चुनें
+move-to-button-label = मूव
+context-action = संदर्भ क्रिया
+context-action-confirm-title = "{ $name }" चलाएँ?
+context-action-confirm-warning =
+    यह { $items } { $items ->
+        [one] आइटम
+       *[other] आइटम
+    } पर चलेगा।
+run = चलाएँ
+rename-confirm = नाम बदलें
+mixed = मिश्रित
+pasted-image = चिपकाई गई छवि
+pasted-text = चिपकाया गया पाठ
+pasted-video = चिपकाया गया वीडियो

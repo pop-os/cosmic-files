@@ -1,12 +1,12 @@
 cosmic-files = Ficheiros COSMIC
 comment = Gerenciador de arquivos do COSMIC
-keywords = Pastas;Gerenciador;Arquivos;Gestor;Explorer;
+keywords = Pasta;Gestor;
 empty-folder = Pasta vazia
 empty-folder-hidden = Pasta vazia (tem ficheiros ocultos)
 no-results = Nenhum resultado encontrado
 filesystem = Sistema de ficheiros
 home = Pasta Pessoal
-notification-in-progress = Operações em curso.
+notification-in-progress = Operações em curso
 trash = Lixo
 undo = Anular
 # List view
@@ -204,7 +204,7 @@ desktop-view-options = Opções de visualização da área de trabalho...
 show-on-desktop = Mostrar na área de trabalho
 desktop-folder-content = Conteúdo da pasta da área de trabalho
 mounted-drives = Dispositivos montados
-trash-folder-icon = Ícone do lixo
+trash-folder-icon = Ícone da pasta lixo
 icon-size-and-spacing = Tamanho e espaçamento do ícone
 icon-size = Tamanho do ícone
 grid-spacing = Espaçamento entre ícones

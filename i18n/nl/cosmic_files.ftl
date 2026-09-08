@@ -425,7 +425,7 @@ removed-from-recents =
     } uit { recents } verwijderd
 remove-from-recents = Uit recente verwijderen
 type-to-search-select = Dit selecteert het eerst overeenkomende bestand of map
-comment = Bestandsbeheerder voor COSMIC desktop
+comment = Bestandsbeheerder voor COSMIC
 copy-to-title = Kopieerbestemming aanwijzen
 copy-to-button-label = Kopiëren
 move-to-button-label = Verplaatsen

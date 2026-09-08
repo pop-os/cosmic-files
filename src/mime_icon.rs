@@ -15,28 +15,21 @@ struct MimeIconKey {
     size: u16,
 }
 
-struct MimeIconCache {
+#[derive(Default)]
+pub struct MimeIconCache {
     cache: FxHashMap<MimeIconKey, Option<icon::Handle>>,
     #[cfg(unix)]
-    shared_mime_info: xdg_mime::SharedMimeInfo,
+    pub shared_mime_info: xdg_mime::SharedMimeInfo,
 }
 
 impl MimeIconCache {
-    pub fn new() -> Self {
-        Self {
-            cache: FxHashMap::default(),
-            #[cfg(unix)]
-            shared_mime_info: xdg_mime::SharedMimeInfo::new(),
-        }
-    }
-
     #[cfg(not(unix))]
     pub fn get(&mut self, _key: MimeIconKey) -> Option<icon::Handle> {
         None
     }
 
     #[cfg(unix)]
-    pub fn get(&mut self, key: MimeIconKey) -> Option<icon::Handle> {
+    fn get(&mut self, key: MimeIconKey) -> Option<icon::Handle> {
         self.cache
             .entry(key)
             .or_insert_with_key(|key| {
@@ -56,8 +49,9 @@ impl MimeIconCache {
             .clone()
     }
 }
-static MIME_ICON_CACHE: LazyLock<Mutex<MimeIconCache>> =
-    LazyLock::new(|| Mutex::new(MimeIconCache::new()));
+
+pub static MIME_ICON_CACHE: LazyLock<Mutex<MimeIconCache>> =
+    LazyLock::new(|| Mutex::new(MimeIconCache::default()));
 
 #[cfg(not(unix))]
 pub fn mime_for_path(
@@ -78,6 +72,7 @@ pub fn mime_for_path(
     let mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
     // Try the shared mime info cache first
     let mut gb = mime_icon_cache.shared_mime_info.guess_mime_type();
+    gb.zero_size(false);
     if remote {
         if let Some(file_name) = path.file_name().and_then(std::ffi::OsStr::to_str) {
             gb.file_name(file_name);
@@ -128,4 +123,12 @@ pub fn parent_mime_types(_mime: &Mime) -> Option<Vec<Mime>> {
 pub fn parent_mime_types(mime: &Mime) -> Option<Vec<Mime>> {
     let mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
     mime_icon_cache.shared_mime_info.get_parents_aliased(mime)
+}
+
+pub fn is_mime_subclass_of(mime_type: &Mime, base: &Mime) -> bool {
+    let mime_icon_cache = MIME_ICON_CACHE.lock().unwrap();
+
+    mime_icon_cache
+        .shared_mime_info
+        .mime_type_subclass(mime_type, base)
 }
