@@ -468,7 +468,7 @@ enum Message {
     SearchActivate,
     SearchClear,
     SearchInput(String),
-    Surface(cosmic::surface::Action),
+    Surface(cosmic::surface::Action<Message>),
     #[allow(clippy::enum_variant_names)]
     TabMessage(tab::Message),
     TabRescan(
@@ -501,7 +501,7 @@ impl From<AppMessage> for Message {
             AppMessage::ZoomIn(_entity_opt) => Self::ZoomIn,
             AppMessage::ZoomOut(_entity_opt) => Self::ZoomOut,
             AppMessage::NewItem(_entity_opt, true) => Self::NewFolder,
-            AppMessage::Surface(action) => Self::Surface(action),
+            AppMessage::Surface(action) => Self::Surface(action.map(Self::from)),
             unsupported => {
                 log::warn!("{unsupported:?} not supported in dialog mode");
                 Self::None
@@ -1750,6 +1750,7 @@ impl Application for App {
                             ]));
                         }
                         tab::Command::Surface(action) => {
+                            let action = action.map(Message::TabMessage);
                             commands.push(self.update(Message::Surface(action)));
                         }
                         tab::Command::Iced(iced_command) => {
@@ -1905,9 +1906,7 @@ impl Application for App {
                 });
             }
             Message::Surface(action) => {
-                return cosmic::task::message(cosmic::Action::Cosmic(
-                    cosmic::app::Action::Surface(action),
-                ));
+                return cosmic::task::message(cosmic::Action::Surface(action));
             }
         }
 

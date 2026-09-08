@@ -1742,7 +1742,7 @@ impl fmt::Debug for TaskWrapper {
 #[derive(Debug)]
 pub enum Command {
     Action(Action),
-    Surface(cosmic::surface::Action),
+    Surface(cosmic::surface::Action<Message>),
     AddNetworkDrive,
     AddToSidebar(PathBuf),
     AutoScroll(Option<f32>),
@@ -1778,7 +1778,7 @@ pub enum Message {
     Config(TabConfig),
     ContextAction(Action),
     RightClickBackground,
-    Surface(cosmic::surface::Action),
+    Surface(cosmic::surface::Action<Message>),
     LocationContextMenuIndex(Option<usize>),
     LocationMenuAction(LocationMenuAction),
     Drag(Option<Rectangle>),

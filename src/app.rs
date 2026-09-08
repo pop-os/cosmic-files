@@ -481,7 +481,7 @@ pub enum Message {
     OutputEvent(OutputEvent, WlOutput),
     Cosmic(app::Action),
     None,
-    Surface(surface::Action),
+    Surface(surface::Action<Message>),
     CutPaths(Vec<PathBuf>),
 }
 
@@ -2525,7 +2525,7 @@ impl Application for App {
         {
             nav = nav
                 .window_id_maybe(self.core().main_window_id())
-                .on_surface_action(|m| cosmic::Action::Cosmic(cosmic::app::Action::Surface(m)))
+                .on_surface_action(|action| cosmic::Action::Surface(action.flatten()))
         }
 
         let mut nav = nav.into_container();
@@ -4520,6 +4520,9 @@ impl Application for App {
                             ]));
                         }
                         tab::Command::Surface(action) => {
+                            // re-type the tab's surface action the way its messages are re-typed
+                            let action = action
+                                .map(move |message| Message::TabMessage(Some(entity), message));
                             commands.push(self.update(Message::Surface(action)));
                         }
                         tab::Command::Delete(paths) => commands.push(self.delete(paths)),
@@ -5249,35 +5252,31 @@ impl Application for App {
                             .insert(surface_id, Window::new(WindowKind::Desktop(entity)));
                         return Task::batch([
                             command,
-                            cosmic::task::message(cosmic::action::cosmic(
-                                cosmic::app::Action::Surface(
-                                    cosmic::surface::action::app_layer_shell(
-                                        |_| Default::default(),
-                                        move |_: &mut App| SctkLayerSurfaceSettings {
-                                            id: surface_id,
-                                            layer: Layer::Bottom,
-                                            keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                                            input_zone: None,
-                                            anchor: Anchor::TOP
-                                                | Anchor::BOTTOM
-                                                | Anchor::LEFT
-                                                | Anchor::RIGHT,
-                                            output: IcedOutput::Output(output.clone()),
-                                            namespace: "cosmic-files-applet".into(),
-                                            size: Some((None, None)),
-                                            margin: IcedMargin {
-                                                top: 0,
-                                                bottom: 0,
-                                                left: 0,
-                                                right: 0,
-                                            },
-                                            exclusive_zone: 0,
-                                            size_limits: Limits::NONE
-                                                .min_width(1.0)
-                                                .min_height(1.0),
+                            cosmic::task::message(cosmic::Action::Surface(
+                                cosmic::surface::action::app_layer_shell(
+                                    |_| Default::default(),
+                                    move |_: &mut App| SctkLayerSurfaceSettings {
+                                        id: surface_id,
+                                        layer: Layer::Bottom,
+                                        keyboard_interactivity: KeyboardInteractivity::OnDemand,
+                                        input_zone: None,
+                                        anchor: Anchor::TOP
+                                            | Anchor::BOTTOM
+                                            | Anchor::LEFT
+                                            | Anchor::RIGHT,
+                                        output: IcedOutput::Output(output.clone()),
+                                        namespace: "cosmic-files-applet".into(),
+                                        size: Some((None, None)),
+                                        margin: IcedMargin {
+                                            top: 0,
+                                            bottom: 0,
+                                            left: 0,
+                                            right: 0,
                                         },
-                                        None,
-                                    ),
+                                        exclusive_zone: 0,
+                                        size_limits: Limits::NONE.min_width(1.0).min_height(1.0),
+                                    },
+                                    None,
                                 ),
                             )),
                             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
@@ -5372,9 +5371,7 @@ impl Application for App {
                 });
             }
             Message::Surface(action) => {
-                return cosmic::task::message(cosmic::Action::Cosmic(
-                    cosmic::app::Action::Surface(action),
-                ));
+                return cosmic::task::message(cosmic::Action::Surface(action));
             }
             Message::SaveSortNames => {
                 self.must_save_sort_names = false;
@@ -6600,6 +6597,7 @@ impl Application for App {
                 return self.view_main().map(|message| match message {
                     cosmic::Action::App(app) => app,
                     cosmic::Action::Cosmic(cosmic) => Message::Cosmic(cosmic),
+                    cosmic::Action::Surface(action) => Message::Surface(action),
                     cosmic::Action::None => Message::None,
                 });
             }
