@@ -4,6 +4,7 @@
 use cosmic::app::{self, Core, Task, context_drawer};
 use cosmic::core::Auto;
 use cosmic::cosmic_config::{self, ConfigSet};
+use cosmic::direction::Direction;
 use cosmic::iced::clipboard::dnd::DndAction;
 use cosmic::iced::core::SmolStr;
 use cosmic::iced::core::widget::operation::focusable::unfocus;
@@ -7054,6 +7055,23 @@ impl Application for App {
         }));
 
         Subscription::batch(subscriptions)
+    }
+
+    fn directional_navigation(
+        &mut self,
+        _dir: Direction,
+        window_id: window::Id,
+    ) -> Option<Task<Self::Message>> {
+        if window_id == window::Id::RESERVED {
+            // opt out of automatic handling of arrow keys
+            Some(Task::none())
+        } else {
+            #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
+            if self.surface_ids.values().any(|l| *l == window_id) {
+                return Some(Task::none());
+            }
+            None
+        }
     }
 }
 
