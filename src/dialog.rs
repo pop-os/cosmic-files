@@ -892,16 +892,16 @@ impl App {
                 };
                 nav_model = nav_model.insert(move |b| {
                     b.text(name.clone())
-                        .icon(
-                            widget::icon::icon(if path.is_dir() {
-                                tab::folder_icon_symbolic(&path, 16)
-                            } else {
+                        .icon(if path.is_dir() {
+                            tab::folder_nav_icon(&path, 16)
+                        } else {
+                            widget::icon::icon(
                                 widget::icon::from_name("text-x-generic-symbolic")
                                     .size(16)
-                                    .handle()
-                            })
-                            .size(16),
-                        )
+                                    .handle(),
+                            )
+                            .size(16)
+                        })
                         .data(Location::Path(path.clone()))
                 });
             }
