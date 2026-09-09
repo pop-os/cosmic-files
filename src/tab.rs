@@ -4956,8 +4956,12 @@ impl Tab {
                 if location != self.location || selected_paths.is_some() {
                     if location.path_opt().is_none_or(|path| path.is_dir()) {
                         if selected_paths.is_none() {
-                            selected_paths =
-                                self.location.path_opt().map(|path| vec![path.clone()]);
+                            selected_paths = self.location.path_opt().and_then(|old| {
+                                let new = location.path_opt()?;
+                                old.ancestors()
+                                    .find(|ancestor| ancestor.parent() == Some(new.as_path()))
+                                    .map(|ancestor| vec![ancestor.to_path_buf()])
+                            });
                         }
                         self.change_location(&location, history_i_opt);
                         commands.push(Command::ChangeLocation(
