@@ -28,6 +28,10 @@ name = Name
 modified = Modified
 trashed-on = Trashed
 size = Size
+filetype = Type
+filetype-folder = Folder
+filetype-program = Program
+filetype-binary = Binary
 
 # Progress footer
 details = Details
