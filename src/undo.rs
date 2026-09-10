@@ -356,6 +356,35 @@ impl UndoHistory {
         Some(self.record_undo_for_retry(entry, target))
     }
 
+    /// Returns the id of the single in-flight inverse/redo (the sole key of
+    /// `suppressed_ops`) when one is actually dispatched, `None` otherwise.
+    ///
+    /// The single-in-flight invariant guarantees `suppressed_ops` has at most
+    /// one entry, so "the sole key" is unambiguous. Used by
+    /// `App::invalidate_undo_history` (Todo 4) to decide whether a permanent
+    /// delete / empty-trash clear must be DEFERRED until that inverse completes.
+    pub fn inverse_in_flight(&self) -> Option<u64> {
+        self.suppressed_ops.keys().next().copied()
+    }
+
+    /// Clears EVERYTHING: both stacks, the held entry, the suppression map, the
+    /// deferred-invalidation flag, and the direction slot. Returns the combined
+    /// toast ids to dismiss.
+    ///
+    /// This is the immediate-clear path of a permanent delete / empty-trash
+    /// invalidation (Todo 4) when NO inverse is in flight (idle, or a Todo-7
+    /// `DialogPage::ConfirmUndo` holds the entry in `pending_undo`). It is also
+    /// what the deferred hook performs once the in-flight inverse completes.
+    pub fn clear_all(&mut self) -> Dismiss {
+        let mut dismiss = self.undo_stack.clear();
+        dismiss.extend(self.redo_stack.clear());
+        self.pending_undo = None;
+        self.suppressed_ops.clear();
+        self.pending_invalidation = None;
+        self.pending_undo_direction = None;
+        dismiss
+    }
+
     /// The deferred-invalidation hook, called with the id of a completing
     /// operation. When it equals the id of the in-flight inverse that a
     /// permanent delete / empty-trash deferred (Todo 4), clears BOTH stacks,
@@ -366,13 +395,7 @@ impl UndoHistory {
     /// introduce.
     pub fn deferred_invalidation(&mut self, id: u64) -> Option<Dismiss> {
         if self.pending_invalidation == Some(id) {
-            let mut dismiss = self.undo_stack.clear();
-            dismiss.extend(self.redo_stack.clear());
-            self.pending_undo = None;
-            self.suppressed_ops.clear();
-            self.pending_invalidation = None;
-            self.pending_undo_direction = None;
-            Some(dismiss)
+            Some(self.clear_all())
         } else {
             None
         }
@@ -797,5 +820,133 @@ mod tests {
             .iter_mut()
             .find(|entry| entry.entry_id == entry_id);
         assert!(gone.is_none(), "evicted entry id must no longer be found");
+    }
+
+    // Todo 4 invalidation semantics.
+    // Todo 4 invalidation semantics.
+    //
+    // (a) After an undo succeeds (entry routed to redo), a new Create clears redo.
+    #[test]
+    fn undo_invalidation_new_op_clears_redo() {
+        let mut history = UndoHistory::new();
+        let entry = make_entry(0, "original delete");
+        history.undo_stack.push(entry.clone());
+        let entry = history.undo_stack.pop().unwrap();
+        let inverse_id = 100;
+        history.suppressed_ops.insert(inverse_id, entry);
+        history.pending_undo_direction = Some(true);
+        // Undo succeeds: the entry lands on the redo stack.
+        let _ = history.route_suppressed_success(inverse_id);
+        assert_eq!(history.redo_stack.len(), 1);
+
+        // A new Create records and clears redo.
+        let create = build_undo_entry(
+            &Operation::NewFile {
+                path: PathBuf::from("/tmp/new"),
+            },
+            &OperationSelection::default(),
+        )
+        .unwrap();
+        let _ = history.record_undo(create);
+        assert!(history.redo_stack.is_empty(), "new op clears redo");
+    }
+
+    // (b) Permanent delete with NO undo activity: both stacks empty, nothing held,
+    // (b) Permanent delete with NO undo activity: both stacks empty, nothing held,
+    // nothing suppressed, nothing deferred.
+    #[test]
+    fn undo_invalidation_permanent_delete_idle_clears_all() {
+        let mut history = UndoHistory::new();
+        history.undo_stack.push(make_entry(0, "a"));
+        history.redo_stack.push(make_entry(1, "b"));
+        history.pending_undo = Some(make_entry(2, "held"));
+
+        let dismiss = history.clear_all();
+        assert!(dismiss.is_empty());
+        assert!(history.undo_stack.is_empty());
+        assert!(history.redo_stack.is_empty());
+        assert!(history.pending_undo.is_none());
+        assert!(history.suppressed_ops.is_empty());
+        assert!(history.pending_invalidation.is_none());
+        assert!(history.pending_undo_direction.is_none());
+    }
+
+    // (c) Permanent delete while an inverse is in flight: pending_invalidation is
+    // (c) Permanent delete while an inverse is in flight: pending_invalidation is
+    // Some(inverse_id) until that inverse completes, then all stacks empty and
+    // nothing recorded. The permanent-delete op itself (its OWN id) does NOT
+    // clear by itself.
+    #[test]
+    fn undo_invalidation_while_inverse_in_flight() {
+        let mut history = UndoHistory::new();
+        history.undo_stack.push(make_entry(0, "a"));
+        history.redo_stack.push(make_entry(1, "b"));
+        let held = make_entry(2, "held");
+        history.pending_undo = Some(held.clone());
+        let inverse_id = 300;
+        history.suppressed_ops.insert(inverse_id, held);
+        history.pending_undo_direction = Some(true);
+
+        // App::invalidate_undo_history state (1): an inverse IS in flight.
+        assert_eq!(history.inverse_in_flight(), Some(inverse_id));
+        history.pending_invalidation = Some(inverse_id);
+
+        // NOT cleared yet (deferred): stacks still hold their entries.
+        assert_eq!(history.undo_stack.len(), 1);
+        assert_eq!(history.redo_stack.len(), 1);
+        assert_eq!(history.pending_invalidation, Some(inverse_id));
+
+        // A different operation (e.g. the permanent delete itself) completing
+        // does NOT trigger the clear and is not swallowed.
+        assert!(history.deferred_invalidation(inverse_id + 1).is_none());
+        assert_eq!(history.pending_invalidation, Some(inverse_id));
+
+        // The in-flight inverse completes: everything cleared, nothing recorded.
+        let dismiss = history.deferred_invalidation(inverse_id);
+        assert!(dismiss.is_some());
+        assert!(history.undo_stack.is_empty());
+        assert!(history.redo_stack.is_empty());
+        assert!(history.pending_undo.is_none());
+        assert!(history.suppressed_ops.is_empty());
+        assert!(history.pending_invalidation.is_none());
+        assert!(history.pending_undo_direction.is_none());
+    }
+
+    // (d) Permanent delete while a destructive entry is HELD in pending_undo
+    // (empty suppressed_ops - the Todo-7 ConfirmUndo dialog-open case): the clear
+    // is immediate; the held entry is dropped.
+    #[test]
+    fn undo_invalidation_dialog_held_clears_immediately() {
+        let mut history = UndoHistory::new();
+        history.undo_stack.push(make_entry(0, "a"));
+        history.redo_stack.push(make_entry(1, "b"));
+        history.pending_undo = Some(make_entry(2, "held destructive"));
+
+        // No inverse in flight: immediate clear.
+        assert!(history.inverse_in_flight().is_none());
+        let dismiss = history.clear_all();
+        assert!(history.undo_stack.is_empty());
+        assert!(history.redo_stack.is_empty());
+        assert!(history.pending_undo.is_none(), "held entry dropped");
+        assert!(history.suppressed_ops.is_empty());
+        assert!(history.pending_invalidation.is_none());
+        assert!(dismiss.is_empty());
+    }
+
+    // (e) After EmptyTrash completes, both stacks are empty.
+    #[test]
+    fn undo_invalidation_empty_trash_completes_clears_all() {
+        let mut history = UndoHistory::new();
+        history.undo_stack.push(make_entry(0, "delete"));
+        history.redo_stack.push(make_entry(1, "redo"));
+
+        // EmptyTrash is not itself undoable.
+        assert!(build_undo_entry(&Operation::EmptyTrash, &OperationSelection::default()).is_none());
+        // Completion: immediate clear (no inverse in flight).
+        let dismiss = history.clear_all();
+        assert!(dismiss.is_empty());
+        assert!(history.undo_stack.is_empty());
+        assert!(history.redo_stack.is_empty());
+        assert!(history.pending_undo.is_none());
     }
 }

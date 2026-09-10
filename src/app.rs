@@ -1324,7 +1324,37 @@ impl App {
         }
         Task::batch(tasks)
     }
-
+    /// A permanent delete or empty-trash invalidates the whole undo history
+    /// (both stacks, the held entry, and all tracked toasts).
+    ///
+    /// Three states:
+    /// 1. An inverse is ACTUALLY in flight (`suppressed_ops` non-empty - it was
+    ///    dispatched, so it has a pending-operation id there) -> DEFER: set
+    ///    `pending_invalidation` to that inverse's id. The in-flight inverse's
+    ///    completion performs the clear via the `deferred_invalidation` hook
+    ///    (Todo 3), so no held entry is orphaned and no completing inverse is
+    ///    misrouted. The permanent-delete/empty-trash op ITSELF completes with
+    ///    its OWN id, which does NOT match `pending_invalidation`, so it never
+    ///    clears by itself.
+    /// 2. A destructive-undo ConfirmUndo dialog is open (`pending_undo` is held
+    ///    but `suppressed_ops` is empty - no inverse dispatched yet) -> clear
+    ///    immediately and DROP the held `pending_undo`. There is no in-flight
+    ///    inverse to wait for. Todo 7 will pop `DialogPage::ConfirmUndo` here;
+    ///    until then any dialog page present is left untouched (defensive).
+    /// 3. Both empty (no undo activity) -> clear immediately as in (2).
+    fn invalidate_undo_history(&mut self) {
+        if let Some(inverse_id) = self.undo.inverse_in_flight() {
+            // Defer: the in-flight inverse's completion performs the clear.
+            self.undo.pending_invalidation = Some(inverse_id);
+        } else {
+            // No inverse in flight (idle, or a ConfirmUndo dialog holds
+            // `pending_undo`): clear immediately.
+            let dismiss = self.undo.clear_all();
+            for toast_id in dismiss {
+                self.toasts.remove(toast_id);
+            }
+        }
+    }
     fn operation(&mut self, operation: Operation) -> Task<Message> {
         let id = self.pending_operation_id;
         let controller = Controller::default();
@@ -1463,6 +1493,15 @@ impl App {
                 op_sel.selected.extend(op_sel_pending.selected);
                 continue;
             };
+
+            // A completed EmptyTrash invalidates the whole undo history (every
+            // trashed item is now permanently gone), with the same three-state
+            // deferral as permanent delete: if an inverse is in flight, defer to
+            // its completion; otherwise clear immediately. This must run BEFORE
+            // the suppression/record routing below consumes the op.
+            if matches!(op, Operation::EmptyTrash) {
+                self.invalidate_undo_history();
+            }
 
             // Build the undo entry BEFORE consuming `op_sel_pending`'s fields below.
             let entry_opt = build_undo_entry(&op, &op_sel_pending);
@@ -3494,6 +3533,11 @@ impl Application for App {
                             }
                         }
                         DialogPage::PermanentlyDelete { paths } => {
+                            // A permanent delete (Shift+Delete or remote) invalidates
+                            // the whole undo history BEFORE dispatching the operation:
+                            // deferred when an inverse is in flight (its completion, via
+                            // the Todo-3 hook, performs the clear).
+                            self.invalidate_undo_history();
                             tasks.push(self.operation(Operation::PermanentlyDelete { paths }));
                         }
                         DialogPage::DeleteTrash { items } => {
