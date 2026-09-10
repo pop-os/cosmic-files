@@ -346,6 +346,9 @@ pub struct OperationSelection {
     pub selected: Vec<PathBuf>,
     // When true, do not record a new undo entry for this completed operation.
     pub suppress_recording: bool,
+    // The trash items captured by Operation::Delete so undo-delete can restore
+    // them. ONLY Operation::Delete sets this (None otherwise).
+    pub undo_items: Option<Vec<trash::TrashItem>>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -851,6 +854,17 @@ impl Operation {
             }
             Self::Delete { paths } => {
                 let total = paths.len();
+                #[cfg(any(
+                    target_os = "windows",
+                    all(
+                        unix,
+                        not(target_os = "macos"),
+                        not(target_os = "ios"),
+                        not(target_os = "android")
+                    )
+                ))]
+                let mut trashed_paths: Vec<PathBuf> = Vec::with_capacity(total);
+
                 for (i, path) in paths.into_iter().enumerate() {
                     futures::executor::block_on(async {
                         controller
@@ -861,12 +875,70 @@ impl Operation {
 
                     controller.set_progress((i as f32) / (total as f32));
 
-                    let _items_opt = compio::runtime::spawn_blocking(|| trash::delete(path))
+                    // Move the path into the trash. NOTE: `trash::delete` returns
+                    // `Result<(), Error>` (no items), so the trash items are captured
+                    // below by listing the trash and matching the original paths.
+                    let path_clone = path.clone();
+                    let _ = compio::runtime::spawn_blocking(move || trash::delete(path_clone))
                         .await
                         .map_err(wrap_compio_spawn_error)?;
-                    //TODO: items_opt allows for easy restore
+                    #[cfg(any(
+                        target_os = "windows",
+                        all(
+                            unix,
+                            not(target_os = "macos"),
+                            not(target_os = "ios"),
+                            not(target_os = "android")
+                        )
+                    ))]
+                    trashed_paths.push(path);
                 }
-                Ok(OperationSelection::default())
+
+                // Capture the just-trashed items so undo-delete can restore them.
+                // Restore-from-trash is unsupported on macOS, so only capture on
+                // platforms where `Operation::Restore` works.
+                #[cfg(any(
+                    target_os = "windows",
+                    all(
+                        unix,
+                        not(target_os = "macos"),
+                        not(target_os = "ios"),
+                        not(target_os = "android")
+                    )
+                ))]
+                let undo_items = {
+                    if trashed_paths.is_empty() {
+                        None
+                    } else {
+                        let items = compio::runtime::spawn_blocking(move || {
+                            trash::os_limited::list().map(|all| {
+                                all.into_iter()
+                                    .filter(|item| trashed_paths.contains(&item.original_path()))
+                                    .collect::<Vec<_>>()
+                            })
+                        })
+                        .await
+                        .map_err(wrap_compio_spawn_error)?
+                        .map_err(|e| OperationError::from_err(e, &controller))?;
+                        if items.is_empty() { None } else { Some(items) }
+                    }
+                };
+
+                #[cfg(not(any(
+                    target_os = "windows",
+                    all(
+                        unix,
+                        not(target_os = "macos"),
+                        not(target_os = "ios"),
+                        not(target_os = "android")
+                    )
+                )))]
+                let undo_items = None;
+
+                Ok(OperationSelection {
+                    undo_items,
+                    ..Default::default()
+                })
             }
             Self::DeleteTrash { items } => {
                 #[cfg(any(

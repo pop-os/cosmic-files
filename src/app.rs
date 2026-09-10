@@ -82,7 +82,7 @@ use crate::tab::{
     SearchLocation, Tab,
 };
 use crate::trash::{Trash, TrashExt};
-use crate::undo::{UndoEntry, UndoStack};
+use crate::undo::{UndoHistory, build_undo_entry};
 use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
 use crate::{FxOrderMap, context_action, fl, home_dir, menu, mime_icon};
 
@@ -467,6 +467,8 @@ pub enum Message {
     ToggleShowHidden,
     Undo,
     Redo,
+    AssignToastId(u64, widget::ToastId),
+    RefreshAffectedTabs,
     UndoTrash(widget::ToastId, Arc<[PathBuf]>),
     UndoTrashStart(Vec<TrashItem>),
     WindowClose,
@@ -722,6 +724,55 @@ impl Window {
     }
 }
 
+/// Pushes `path`'s parent directory into `dirs` if not already present.
+fn push_parent(dirs: &mut Vec<PathBuf>, path: &Path) {
+    if let Some(parent) = path.parent() {
+        let parent = parent.to_path_buf();
+        if !dirs.contains(&parent) {
+            dirs.push(parent);
+        }
+    }
+}
+
+/// Pushes each path's parent directory into `dirs`.
+fn push_parents(dirs: &mut Vec<PathBuf>, paths: &[PathBuf]) {
+    for path in paths {
+        push_parent(dirs, path);
+    }
+}
+
+/// Directories affected by a completed operation, used to refresh other tabs
+/// viewing them after a successful undo/redo inverse.
+fn affected_dirs(op: &Operation, op_sel: &OperationSelection) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    match op {
+        Operation::Copy { paths, to } | Operation::Move { paths, to, .. } => {
+            push_parents(&mut dirs, paths);
+            if !dirs.contains(to) {
+                dirs.push(to.clone());
+            }
+        }
+        Operation::Delete { paths } => push_parents(&mut dirs, paths),
+        Operation::Rename { from, to } => {
+            push_parent(&mut dirs, from);
+            push_parent(&mut dirs, to);
+        }
+        Operation::Restore { items } => {
+            for item in items {
+                push_parent(&mut dirs, &item.original_path());
+            }
+        }
+        Operation::NewFile { path } | Operation::NewFolder { path } => {
+            push_parent(&mut dirs, path);
+        }
+        Operation::PermanentlyDelete { paths } => push_parents(&mut dirs, paths),
+        _ => {}
+    }
+    push_parents(&mut dirs, &op_sel.selected);
+    push_parents(&mut dirs, &op_sel.ignored);
+    dirs
+}
+
 // The [`App`] stores application-specific state.
 pub struct App {
     core: Core,
@@ -780,15 +831,10 @@ pub struct App {
     auto_scroll_speed: Option<i16>,
     file_dialog_opt: Option<Dialog<Message>>,
     clipboard_cache: ClipboardCache,
-    undo_stack: UndoStack,
-    redo_stack: UndoStack,
-    pending_undo: Option<UndoEntry>,
-    suppressed_ops: FxHashMap<u64, UndoEntry>,
-    #[allow(dead_code)]
-    // set by Todo 4 (permanent delete / empty-trash) while an inverse is in flight
-    pending_invalidation: Option<u64>,
-    #[allow(dead_code)] // assigned to UndoEntry::entry_id by Todo 3 (record_undo)
-    next_entry_id: u64,
+    undo: UndoHistory,
+    // Directories affected by the last successful suppressed (undo/redo) inverse;
+    // consumed by Message::RefreshAffectedTabs to reload tabs viewing them.
+    pending_affected_dirs: Vec<PathBuf>,
 }
 
 impl App {
@@ -1397,23 +1443,110 @@ impl App {
         let mut commands = Vec::with_capacity(4 * completed.len());
         let mut op_sel = OperationSelection::default();
         for (id, op_sel_pending) in completed {
+            // Deferred-invalidation hook (Todo 4 sets `pending_invalidation` to the
+            // in-flight inverse's id when a permanent delete / empty-trash must clear
+            // the history). If THIS completing operation is that inverse, clear both
+            // stacks + held entry + suppression map, dismiss tracked toasts, and record
+            // nothing. A normal user operation completing while the flag is set does NOT
+            // match `Some(id)` and is routed (and recorded) normally below — the race
+            // fix a plain bool would not provide.
+            if let Some(dismiss) = self.undo.deferred_invalidation(id) {
+                for toast_id in dismiss {
+                    self.toasts.remove(toast_id);
+                }
+                return Task::none();
+            }
+
+            let Some((op, _)) = self.pending_operations.remove(&id) else {
+                // Still accumulate the selection even when the op is no longer pending.
+                op_sel.ignored.extend(op_sel_pending.ignored);
+                op_sel.selected.extend(op_sel_pending.selected);
+                continue;
+            };
+
+            // Build the undo entry BEFORE consuming `op_sel_pending`'s fields below.
+            let entry_opt = build_undo_entry(&op, &op_sel_pending);
+            let dirs = affected_dirs(&op, &op_sel_pending);
+            let suppress_recording = op_sel_pending.suppress_recording;
+
+            // A suppressed inverse/redo that SUCCEEDED: push the entry RETURNED by
+            // `suppressed_ops.remove(&id)` to the OPPOSITE stack (undo success -> redo,
+            // redo success -> undo) WITHOUT recording a new entry, and refresh tabs
+            // viewing the affected directories.
+            if let Some(dismiss) = self.undo.route_suppressed_success(id) {
+                for toast_id in dismiss {
+                    self.toasts.remove(toast_id);
+                }
+                self.pending_affected_dirs = dirs;
+                commands.push(cosmic::task::message(Message::RefreshAffectedTabs));
+            }
+
             op_sel.ignored.extend(op_sel_pending.ignored);
             op_sel.selected.extend(op_sel_pending.selected);
-            if let Some((op, _)) = self.pending_operations.remove(&id) {
+
+            // If a favorite for a path has been renamed or moved, update it (this runs
+            // for real file operations, including a successful undo/redo inverse).
+            if let Operation::Rename { ref from, ref to } = op {
+                if self.update_favorites([(from, to)].as_slice()) {
+                    commands.push(self.update_config());
+                }
+            } else if let Operation::Move {
+                ref paths, ref to, ..
+            } = op
+            {
+                let path_changes: Box<[_]> = paths
+                    .iter()
+                    .filter_map(|from| from.file_name().map(|name| (from, to.join(name))))
+                    .collect();
+                if self.update_favorites(&path_changes) {
+                    commands.push(self.update_config());
+                }
+            }
+
+            if matches!(op, Operation::RemoveFromRecents { .. }) {
+                commands.push(self.rescan_recents());
+            }
+
+            // Record a new undo entry and show toasts only for non-suppressed ops
+            // (a suppressed inverse must never produce an Undo-action toast).
+            if !suppress_recording {
+                let mut entry_id_opt = None;
+                if let Some(entry) = entry_opt {
+                    let (entry_id, dismiss) = self.undo.record_undo(entry);
+                    for toast_id in dismiss {
+                        self.toasts.remove(toast_id);
+                    }
+                    entry_id_opt = Some(entry_id);
+                }
+
                 // Show toast for some operations
                 if let Some(description) = op.toast() {
                     if let Operation::Delete { ref paths } = op {
                         let paths: Arc<[PathBuf]> = Arc::from(paths.as_slice());
-                        commands.push(
-                            self.toasts
-                                .push(
-                                    widget::toaster::Toast::new(description)
-                                        .action(fl!("undo"), move |tid| {
-                                            Message::UndoTrash(tid, paths.clone())
-                                        }),
-                                )
+                        let toast = widget::toaster::Toast::new(description)
+                            .action(fl!("undo"), move |tid| {
+                                Message::UndoTrash(tid, paths.clone())
+                            });
+                        // Capture the toast id ASYNCHRONOUSLY and write it back onto the
+                        // recorded entry so evict/clear can dismiss it later. NOTE:
+                        // `Toasts::push` returns a `Task<Message>` (the app message
+                        // `on_close(id)` = `Message::CloseToast(id)` when the toast
+                        // auto-dismisses) — not a `Task<ToastId>` as assumed by the
+                        // plan. The toaster task is therefore intercepted to forward
+                        // the id to `Message::AssignToastId` (which also removes the
+                        // toast, equivalent to CloseToast).
+                        let task = match entry_id_opt {
+                            Some(entry_id) => self
+                                .toasts
+                                .push(toast)
+                                .map(move |msg| match msg {
+                                    Message::CloseToast(id) => Message::AssignToastId(entry_id, id),
+                                    other => other,
+                                })
                                 .map(cosmic::Action::App),
-                        );
+                            None => self.toasts.push(toast).map(cosmic::Action::App),
+                        };
+                        commands.push(task);
                     } else {
                         commands.push(
                             self.toasts
@@ -1422,31 +1555,9 @@ impl App {
                         );
                     }
                 }
-
-                // If a favorite for a path has been renamed or moved, update it.
-                if let Operation::Rename { ref from, ref to } = op {
-                    if self.update_favorites([(from, to)].as_slice()) {
-                        commands.push(self.update_config());
-                    }
-                } else if let Operation::Move {
-                    ref paths, ref to, ..
-                } = op
-                {
-                    let path_changes: Box<[_]> = paths
-                        .iter()
-                        .filter_map(|from| from.file_name().map(|name| (from, to.join(name))))
-                        .collect();
-                    if self.update_favorites(&path_changes) {
-                        commands.push(self.update_config());
-                    }
-                }
-
-                if matches!(op, Operation::RemoveFromRecents { .. }) {
-                    commands.push(self.rescan_recents());
-                }
-
-                self.complete_operations.insert(id, op);
             }
+
+            self.complete_operations.insert(id, op);
         }
         // Close progress notification if all relevant operations are finished
         if !self
@@ -1470,6 +1581,25 @@ impl App {
         let mut tasks = Vec::new();
         let mut failed = Vec::new();
         for (id, err) in errors.into_iter() {
+            // Deferred-invalidation hook (same id-keyed rule as completed ops): the
+            // in-flight inverse that a permanent-delete/empty-trash deferred failed ->
+            // clear everything and record nothing.
+            if let Some(dismiss) = self.undo.deferred_invalidation(id) {
+                for toast_id in dismiss {
+                    self.toasts.remove(toast_id);
+                }
+                return Task::none();
+            }
+
+            // A suppressed inverse/redo FAILED: return the held entry to its original
+            // stack so the user can retry (record_undo_for_retry does not clear the
+            // other stack). The existing error path below still surfaces the error.
+            if let Some(dismiss) = self.undo.route_suppressed_failure(id) {
+                for toast_id in dismiss {
+                    self.toasts.remove(toast_id);
+                }
+            }
+
             if let Some((op, controller)) = self.pending_operations.remove(&id) {
                 // Only show dialog if not cancelled
                 if !controller.is_cancelled() {
@@ -1509,6 +1639,31 @@ impl App {
         // Manually rescan any trash tabs after any operation is completed
         tasks.push(self.rescan_trash());
         Task::batch(tasks)
+    }
+
+    /// Reloads every tab whose location is equal to or under any of `dirs`
+    /// (cross-tab refresh after a successful undo/redo inverse).
+    fn refresh_affected_tabs(&mut self, dirs: &[PathBuf]) -> Task<Message> {
+        if dirs.is_empty() {
+            return Task::none();
+        }
+        let affected: Box<[_]> = self
+            .tab_model
+            .iter()
+            .filter_map(|entity| {
+                let tab = self.tab_model.data::<Tab>(entity)?;
+                let tab_path = tab.location.path_opt()?;
+                let is_affected = dirs
+                    .iter()
+                    .any(|dir| tab_path == dir || tab_path.starts_with(dir));
+                is_affected.then_some(entity)
+            })
+            .collect();
+        Task::batch(
+            affected
+                .into_iter()
+                .map(|entity| self.update(Message::TabMessage(Some(entity), tab::Message::Reload))),
+        )
     }
 
     fn remove_window(&mut self, id: &window::Id) {
@@ -2537,12 +2692,8 @@ impl Application for App {
             auto_scroll_speed: None,
             file_dialog_opt: None,
             clipboard_cache: ClipboardCache::Empty,
-            undo_stack: UndoStack::new(),
-            redo_stack: UndoStack::new(),
-            pending_undo: None,
-            suppressed_ops: FxHashMap::default(),
-            pending_invalidation: None,
-            next_entry_id: 0,
+            undo: UndoHistory::new(),
+            pending_affected_dirs: Vec::new(),
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             layer_sizes: FxHashMap::default(),
         };
@@ -4945,23 +5096,26 @@ impl Application for App {
             Message::Undo => {
                 if !self.pending_operations.is_empty()
                     || !self.dialog_pages.pages.is_empty()
-                    || self.pending_undo.is_some()
+                    || self.undo.pending_undo.is_some()
                 {
                     return Task::none();
-                } else if let Some(entry) = self.undo_stack.pop() {
+                } else if let Some(entry) = self.undo.undo_stack.pop() {
                     // Destructive undo (undo-copy / undo-create): the inverse moves files to the
                     // Trash, which needs a confirmation. Hold the entry in `pending_undo`
                     // (OUTSIDE both stacks, so it cannot be evicted) and let the single-in-flight
                     // guard above block further undo/redo while it is held. Todo 7 pushes
                     // `DialogPage::ConfirmUndo` here before dispatching the inverse.
                     if entry.destructive {
-                        self.pending_undo = Some(entry);
+                        self.undo.pending_undo = Some(entry);
                         return Task::none();
                     } else {
-                        self.pending_undo = Some(entry.clone());
+                        self.undo.pending_undo = Some(entry.clone());
                         let inverse = entry.inverse.clone();
+                        // Key the suppression map by the EXACT dispatched operation's id:
+                        // capture `pending_operation_id` BEFORE `operation_suppressed` increments it.
                         let op_id = self.pending_operation_id;
-                        self.suppressed_ops.insert(op_id, entry);
+                        self.undo.pending_undo_direction = Some(true);
+                        self.undo.suppressed_ops.insert(op_id, entry);
                         return self.operation_suppressed(inverse);
                     }
                 } else {
@@ -4972,18 +5126,39 @@ impl Application for App {
                 // Same single-in-flight guards as Undo
                 if !self.pending_operations.is_empty()
                     || !self.dialog_pages.pages.is_empty()
-                    || self.pending_undo.is_some()
+                    || self.undo.pending_undo.is_some()
                 {
                     return Task::none();
-                } else if let Some(entry) = self.redo_stack.pop() {
-                    self.pending_undo = Some(entry.clone());
+                } else if let Some(entry) = self.undo.redo_stack.pop() {
+                    self.undo.pending_undo = Some(entry.clone());
                     let forward = entry.forward.clone();
                     let op_id = self.pending_operation_id;
-                    self.suppressed_ops.insert(op_id, entry);
+                    self.undo.pending_undo_direction = Some(false);
+                    self.undo.suppressed_ops.insert(op_id, entry);
                     return self.operation_suppressed(forward);
                 } else {
                     return Task::none();
                 }
+            }
+            Message::AssignToastId(entry_id, toast_id) => {
+                // Write the asynchronously-obtained toast id back onto the recorded entry.
+                // If the entry was already evicted, ignore the stale id.
+                if let Some(entry) = self
+                    .undo
+                    .undo_stack
+                    .iter_mut()
+                    .find(|entry| entry.entry_id == entry_id)
+                {
+                    entry.toast_id = Some(toast_id);
+                }
+                // This message is produced by intercepting the toaster's own `on_close`
+                // task (`Message::CloseToast`) for the delete toast; dismiss the toast
+                // here (equivalent to Message::CloseToast).
+                self.toasts.remove(toast_id);
+            }
+            Message::RefreshAffectedTabs => {
+                let dirs = std::mem::take(&mut self.pending_affected_dirs);
+                return self.refresh_affected_tabs(&dirs);
             }
             Message::UndoTrash(id, recently_trashed) => {
                 self.toasts.remove(id);
