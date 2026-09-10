@@ -717,9 +717,50 @@ pub fn menu_bar<'a>(
                 (
                     (fl!("view")),
                     vec![
-                        menu::Item::Button(fl!("zoom-in"), None, Action::ZoomIn),
-                        menu::Item::Button(fl!("default-size"), None, Action::ZoomDefault),
-                        menu::Item::Button(fl!("zoom-out"), None, Action::ZoomOut),
+                        menu::Item::Folder(
+                            fl!("zoom"),
+                            vec![
+                                menu::Item::Button(fl!("zoom-in"), None, Action::ZoomIn),
+                                menu::Item::Button(fl!("default-size"), None, Action::ZoomDefault),
+                                menu::Item::Button(fl!("zoom-out"), None, Action::ZoomOut),
+                            ]
+                        ),
+                        menu::Item::Folder(
+                            fl!("sort"),
+                            vec![
+                                sort_item(fl!("sort-a-z"), tab::HeadingOptions::Name, true),
+                                sort_item(fl!("sort-z-a"), tab::HeadingOptions::Name, false),
+                                sort_item(
+                                    fl!("sort-newest-first"),
+                                    if in_trash {
+                                        tab::HeadingOptions::TrashedOn
+                                    } else {
+                                        tab::HeadingOptions::Modified
+                                    },
+                                    false,
+                                ),
+                                sort_item(
+                                    fl!("sort-oldest-first"),
+                                    if in_trash {
+                                        tab::HeadingOptions::TrashedOn
+                                    } else {
+                                        tab::HeadingOptions::Modified
+                                    },
+                                    true,
+                                ),
+                                sort_item(
+                                    fl!("sort-smallest-to-largest"),
+                                    tab::HeadingOptions::Size,
+                                    true,
+                                ),
+                                sort_item(
+                                    fl!("sort-largest-to-smallest"),
+                                    tab::HeadingOptions::Size,
+                                    false,
+                                ),
+                                //TODO: sort by type
+                            ],
+                        ),
                         menu::Item::Divider,
                         menu::Item::CheckBox(
                             fl!("grid-view"),
@@ -763,43 +804,7 @@ pub fn menu_bar<'a>(
                         menu::Item::Divider,
                         menu::Item::Button(fl!("menu-about"), None, Action::About),
                     ],
-                ),
-                (
-                    (fl!("sort")),
-                    vec![
-                        sort_item(fl!("sort-a-z"), tab::HeadingOptions::Name, true),
-                        sort_item(fl!("sort-z-a"), tab::HeadingOptions::Name, false),
-                        sort_item(
-                            fl!("sort-newest-first"),
-                            if in_trash {
-                                tab::HeadingOptions::TrashedOn
-                            } else {
-                                tab::HeadingOptions::Modified
-                            },
-                            false,
-                        ),
-                        sort_item(
-                            fl!("sort-oldest-first"),
-                            if in_trash {
-                                tab::HeadingOptions::TrashedOn
-                            } else {
-                                tab::HeadingOptions::Modified
-                            },
-                            true,
-                        ),
-                        sort_item(
-                            fl!("sort-smallest-to-largest"),
-                            tab::HeadingOptions::Size,
-                            true,
-                        ),
-                        sort_item(
-                            fl!("sort-largest-to-smallest"),
-                            tab::HeadingOptions::Size,
-                            false,
-                        ),
-                        //TODO: sort by type
-                    ],
-                ),
+                ),  
             ],
         )
 }
