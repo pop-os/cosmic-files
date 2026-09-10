@@ -58,7 +58,7 @@ pub fn context_menu<'a>(
     key_binds: &HashMap<KeyBind, Action>,
     modifiers: &Modifiers,
     clipboard_paste_available: bool,
-    show_bookmarks: &bool,
+    show_starred: &bool,
     context_actions: &[ContextActionPreset],
 ) -> Element<'a, tab::Message> {
     let find_key = |action: &Action| -> String {
@@ -139,7 +139,7 @@ pub fn context_menu<'a>(
     let mut selected_types: Vec<Mime> = vec![];
     let mut selected_mount_point = 0;
     let mut any_trash_item = false;
-    let mut bookmarked = 0;
+    let mut starred = 0;
     if let Some(items) = tab.items_opt() {
         for item in items {
             if item.selected {
@@ -148,8 +148,8 @@ pub fn context_menu<'a>(
                     selected_mount_point += i32::from(item.is_mount_point);
                     selected_dir += 1;
                 }
-                if item.bookmarked {
-                    bookmarked += 1
+                if item.starred {
+                    starred += 1
                 }
                 match &item.location_opt {
                     Some(Location::Trash) | Some(Location::Search(SearchLocation::Trash, ..)) => {
@@ -202,9 +202,9 @@ pub fn context_menu<'a>(
             | Location::Path(..)
             | Location::Search(SearchLocation::Path(..), ..)
             | Location::Search(SearchLocation::Recents, ..)
-            | Location::Search(SearchLocation::Bookmarks, ..)
+            | Location::Search(SearchLocation::Starred, ..)
             | Location::Recents
-            | Location::Bookmarks
+            | Location::Starred
             | Location::Network(_, _, Some(_)),
         ) => {
             if selected_trash_only {
@@ -298,17 +298,17 @@ pub fn context_menu<'a>(
                     children.push(menu_item(fl!("delete-permanently"), Action::Delete).into());
                 } else {
                     children.push(divider::horizontal::light().into());
-                    if *show_bookmarks {
-                        if bookmarked > 0 || matches!(tab.location, Location::Bookmarks) {
+                    if *show_starred {
+                        if starred > 0 || matches!(tab.location, Location::Starred) {
                             children.push(menu_item(
-                                fl!("remove-from-bookmarks"),
-                                Action::RemoveFromBookmarks
+                                fl!("remove-from-starred"),
+                                Action::RemoveFromStarred
                             ).into());
                         }
-                        if bookmarked < selected && !matches!(tab.location, Location::Bookmarks) {
+                        if starred < selected && !matches!(tab.location, Location::Starred) {
                             children.push(menu_item(
-                                fl!("add-to-bookmarks"),
-                                Action::AddToBookmarks
+                                fl!("add-to-starred"),
+                                Action::AddToStarred
                             ).into());
                         }
                     }
@@ -342,7 +342,7 @@ pub fn context_menu<'a>(
             } else {
                 //TODO: need better designs for menu with no selection
                 //TODO: have things like properties but they apply to the folder?
-                if tab.location != Location::Recents && tab.location != Location::Bookmarks {
+                if tab.location != Location::Recents && tab.location != Location::Starred {
                     children.push(menu_item(fl!("new-folder"), Action::NewFolder).into());
                     children.push(menu_item(fl!("new-file"), Action::NewFile).into());
                     children.push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal).into());
@@ -391,9 +391,9 @@ pub fn context_menu<'a>(
             | Location::Path(..)
             | Location::Search(SearchLocation::Path(..), ..)
             | Location::Search(SearchLocation::Recents, ..)
-            | Location::Search(SearchLocation::Bookmarks, ..)
+            | Location::Search(SearchLocation::Starred, ..)
             | Location::Recents
-            | Location::Bookmarks
+            | Location::Starred
             | Location::Network(_, _, Some(_)),
         ) => {
             if selected > 0 {
@@ -711,8 +711,8 @@ pub fn menu_bar<'a>(
                         menu::Item::Button(fl!("reload-folder"), None, Action::Reload),
                         menu::Item::Divider,
                         menu_button_optional(
-                            fl!("add-to-bookmarks"),
-                            Action::AddToBookmarks,
+                            fl!("add-to-starred"),
+                            Action::AddToStarred,
                             selected > 0,
                         ),
                         menu_button_optional(
@@ -858,9 +858,9 @@ pub fn location_context_menu<'a>(ancestor_index: usize, tab_mode: tab::Mode) -> 
 
     if matches!(tab_mode, tab::Mode::App) {
         children.push(divider::horizontal::light().into());
-        children.push(menu_button!(text::body(fl!("add-to-bookmarks")))
+        children.push(menu_button!(text::body(fl!("add-to-starred")))
             .on_press(tab::Message::LocationMenuAction(
-                LocationMenuAction::AddToBookmarks(ancestor_index),
+                LocationMenuAction::AddToStarred(ancestor_index),
             ))
             .into());
         children.push(menu_button!(text::body(fl!("add-to-sidebar")))

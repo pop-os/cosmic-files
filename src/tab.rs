@@ -773,7 +773,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
         rect_opt: Cell::new(None),
         selected: false,
         highlighted: false,
-        bookmarked: false,
+        starred: false,
         overlaps_drag_rect: false,
         dir_size,
         cut: false,
@@ -869,7 +869,7 @@ pub fn item_from_entry(
 
     let display_name = display_name_for_file(&path, &name, is_gvfs, is_desktop);
 
-    let bookmarked = is_bookmarked(path.clone());
+    let starred = is_starred(path.clone());
 
     Item {
         name,
@@ -892,7 +892,7 @@ pub fn item_from_entry(
         rect_opt: Cell::new(None),
         selected: false,
         highlighted: false,
-        bookmarked: bookmarked,
+        starred: starred,
         overlaps_drag_rect: false,
         dir_size,
         cut: false,
@@ -952,7 +952,7 @@ pub fn item_from_trash_entry(
         rect_opt: Cell::new(None),
         selected: false,
         highlighted: false,
-        bookmarked: false,
+        starred: false,
         overlaps_drag_rect: false,
         dir_size: DirSize::NotDirectory,
         cut: false,
@@ -1250,7 +1250,7 @@ pub fn scan_search<F: Fn(SearchItem) -> bool + Sync>(
                 }
             }
         }
-        SearchLocation::Bookmarks => {
+        SearchLocation::Starred => {
             let user_places = match user_places_xbel::read_user_places() {
                 Ok(user_places) => user_places,
                 Err(err) => {
@@ -1360,7 +1360,7 @@ pub fn scan_recents(sizes: IconSizes) -> Vec<Item> {
     recents.into_iter().take(50).map(|(item, _)| item).collect()
 }
 
-pub fn user_bookmarks() -> Vec<user_places_xbel::Bookmark> {
+pub fn user_starred() -> Vec<user_places_xbel::Bookmark> {
     let user_places = match user_places_xbel::read_user_places() {
         Ok(user_places) => user_places.bookmarks,
         Err(err) => {
@@ -1371,16 +1371,16 @@ pub fn user_bookmarks() -> Vec<user_places_xbel::Bookmark> {
     return user_places;
 }
 
-pub fn is_bookmarked(path: PathBuf) -> bool {
-    let bookmarked_paths: Vec<PathBuf> = user_bookmarks().into_iter().filter_map(|bookmark| {
+pub fn is_starred(path: PathBuf) -> bool {
+    let starred_paths: Vec<PathBuf> = user_starred().into_iter().filter_map(|bookmark| {
         Some(uri_to_path(bookmark.href)?)
     })
     .collect();
-    return bookmarked_paths.contains(&path);
+    return starred_paths.contains(&path);
 }
 
-pub fn scan_bookmarks(sizes: IconSizes) -> Vec<Item> {
-    let mut bookmarks: Vec<_> = user_bookmarks().into_iter().filter_map(|bookmark| {
+pub fn scan_starred(sizes: IconSizes) -> Vec<Item> {
+    let mut starred: Vec<_> = user_starred().into_iter().filter_map(|bookmark| {
             let path = uri_to_path(bookmark.href)?;
             let last_edit = bookmark.modified.parse::<jiff::Timestamp>().ok()?;
             let last_visit = bookmark.visited.parse::<jiff::Timestamp>().ok()?;
@@ -1401,13 +1401,13 @@ pub fn scan_bookmarks(sizes: IconSizes) -> Vec<Item> {
                 let item = item_from_entry(path, name, metadata, sizes);
                 Some((item, last_edit.min(last_visit)))
             } else {
-                log::warn!("bookmarks file path does not exist: {}", path.display());
+                log::warn!("starred file path does not exist: {}", path.display());
                 None
             }
         })
         .collect();
-    bookmarks.sort_by_key(|bookmark| Reverse(bookmark.1));
-    bookmarks.into_iter().take(50).map(|(item, _)| item).collect()
+    starred.sort_by_key(|bookmark| Reverse(bookmark.1));
+    starred.into_iter().take(50).map(|(item, _)| item).collect()
 }
 
 pub fn scan_network(uri: &str, sizes: IconSizes) -> Vec<Item> {
@@ -1509,7 +1509,7 @@ pub fn scan_desktop(
             rect_opt: Cell::new(None),
             selected: false,
             highlighted: false,
-            bookmarked: false,
+            starred: false,
             overlaps_drag_rect: false,
             dir_size: DirSize::NotDirectory,
             cut: false,
@@ -1579,7 +1579,7 @@ impl EditLocation {
 pub enum SearchLocation {
     Path(PathBuf),
     Recents,
-    Bookmarks,
+    Starred,
     Trash,
 }
 
@@ -1588,7 +1588,7 @@ impl std::fmt::Display for SearchLocation {
         match self {
             Self::Path(path) => write!(f, "{}", path.display()),
             Self::Recents => write!(f, "recents"),
-            Self::Bookmarks => write!(f, "bookmarks"),
+            Self::Starred => write!(f, "starred"),
             Self::Trash => write!(f, "trash"),
         }
     }
@@ -1617,7 +1617,7 @@ pub enum Location {
     Path(PathBuf),
     Recents,
     Search(SearchLocation, String, bool, Instant),
-    Bookmarks,
+    Starred,
     Trash,
 }
 
@@ -1633,7 +1633,7 @@ impl std::fmt::Display for Location {
             Self::Search(location, term, ..) => {
                 write!(f, "search {} for {}", location, term)
             },
-            Self::Bookmarks => write!(f, "bookmarks"),
+            Self::Starred => write!(f, "starred"),
             Self::Trash => write!(f, "trash"),
         }
     }
@@ -1735,7 +1735,7 @@ impl Location {
                 Vec::new()
             }
             Self::Recents => scan_recents(sizes),
-            Self::Bookmarks => scan_bookmarks(sizes),
+            Self::Starred => scan_starred(sizes),
             Self::Trash => Trash::scan(sizes),
             Self::Network(uri, _, _) => scan_network(uri, sizes),
         };
@@ -1767,7 +1767,7 @@ impl Location {
                 let name = match location {
                     SearchLocation::Path(path) => folder_name(path).0,
                     SearchLocation::Recents => fl!("recents"),
-                    SearchLocation::Bookmarks => fl!("bookmarks"),
+                    SearchLocation::Starred => fl!("starred"),
                     SearchLocation::Trash => fl!("trash"),
                 };
 
@@ -1777,8 +1777,8 @@ impl Location {
             Self::Recents => {
                 fl!("recents")
             }
-            Self::Bookmarks => {
-                fl!("bookmarks")
+            Self::Starred => {
+                fl!("starred")
             }
             Self::Trash => {
                 fl!("trash")
@@ -1810,10 +1810,10 @@ impl Location {
         )
     }
 
-    pub fn is_bookmarks(&self) -> bool {
+    pub fn is_starred(&self) -> bool {
         matches!(
             self,
-            Location::Bookmarks | Location::Search(SearchLocation::Bookmarks, ..)
+            Location::Starred | Location::Search(SearchLocation::Starred, ..)
         )
     }
 
@@ -1824,7 +1824,7 @@ impl Location {
         )
     }
 
-    /// Returns true if this location supports paste operations (not Trash, Recents or Bookmarks)
+    /// Returns true if this location supports paste operations (not Trash, Recents or Starred)
     pub fn supports_paste(&self) -> bool {
         matches!(
             self,
@@ -1855,7 +1855,7 @@ pub enum Command {
     Action(Action),
     AddNetworkDrive,
     AddToSidebar(PathBuf),
-    AddToBookmarks(Vec<PathBuf>),
+    AddToStarred(Vec<PathBuf>),
     AutoScroll(Option<f32>),
     ChangeLocation(String, Location, Option<Vec<PathBuf>>),
     ContextMenu(Option<Point>, Option<window::Id>),
@@ -1871,7 +1871,7 @@ pub enum Command {
     OpenInNewWindow(PathBuf),
     OpenTrash,
     Preview(PreviewKind),
-    RemoveFromBookmarks(Vec<PathBuf>),
+    RemoveFromStarred(Vec<PathBuf>),
     RunContextAction(usize),
     SetOpenWith(Mime, String),
     SetPermissions(PathBuf, u32),
@@ -1885,7 +1885,7 @@ pub enum Command {
 pub enum Message {
     AddNetworkDrive,
     AutoScroll(Option<f32>),
-    AddToBookmarks(Vec<PathBuf>),
+    AddToStarred(Vec<PathBuf>),
     Click(Option<usize>),
     DoubleClick(Option<usize>),
     ClickRelease(Option<usize>),
@@ -1935,7 +1935,7 @@ pub enum Message {
     SelectFirst,
     SelectLast,
     SetOpenWith(Mime, String),
-    RemoveFromBookmarks(Vec<PathBuf>),
+    RemoveFromStarred(Vec<PathBuf>),
     RunContextAction(usize),
     SetPermissions(PathBuf, u32),
     ShiftPermissions(Option<(PathBuf, u32)>, u32, u32),
@@ -1968,7 +1968,7 @@ pub enum LocationMenuAction {
     OpenInNewWindow(usize),
     Preview(usize),
     AddToSidebar(usize),
-    AddToBookmarks(usize),
+    AddToStarred(usize),
 }
 
 impl MenuAction for LocationMenuAction {
@@ -2453,7 +2453,7 @@ pub struct Item {
     pub rect_opt: Cell<Option<Rectangle>>,
     pub selected: bool,
     pub highlighted: bool,
-    pub bookmarked: bool,
+    pub starred: bool,
     pub cut: bool,
     pub overlaps_drag_rect: bool,
     pub dir_size: DirSize,
@@ -2853,7 +2853,7 @@ pub enum HeadingOptions {
     Name = 0,
     Modified,
     Size,
-    Bookmarked,
+    Starred,
     TrashedOn,
 }
 
@@ -2863,7 +2863,7 @@ impl fmt::Display for HeadingOptions {
             Self::Name => write!(f, "{}", fl!("name")),
             Self::Modified => write!(f, "{}", fl!("modified")),
             Self::Size => write!(f, "{}", fl!("size")),
-            Self::Bookmarked => write!(f, "{}", fl!("bookmarked")),
+            Self::Starred => write!(f, "{}", fl!("starred")),
             Self::TrashedOn => write!(f, "{}", fl!("trashed-on")),
         }
     }
@@ -2875,7 +2875,7 @@ impl HeadingOptions {
             Self::Name.to_string(),
             Self::Modified.to_string(),
             Self::Size.to_string(),
-            Self::Bookmarked.to_string(),
+            Self::Starred.to_string(),
             Self::TrashedOn.to_string(),
         ]
     }
@@ -3964,11 +3964,11 @@ impl Tab {
                             );
                         }
                     }
-                    LocationMenuAction::AddToBookmarks(ancestor_index) => {
+                    LocationMenuAction::AddToStarred(ancestor_index) => {
                         if let Some(path) = path_for_index(ancestor_index) {
                           let mut paths = Vec::new();
                             paths.push(path);
-                            commands.push(Command::AddToBookmarks(paths));
+                            commands.push(Command::AddToStarred(paths));
                         } else {
                             log::warn!(
                                 "no ancestor {ancestor_index} for location {:?}",
@@ -5046,11 +5046,11 @@ impl Tab {
             Message::CopyChecksum(value) => {
                 commands.push(Command::Iced(cosmic::iced::clipboard::write(value).into()));
             }
-            Message::AddToBookmarks(paths) => {
-                commands.push(Command::AddToBookmarks(paths));
+            Message::AddToStarred(paths) => {
+                commands.push(Command::AddToStarred(paths));
             }
-            Message::RemoveFromBookmarks(paths) => {
-                commands.push(Command::RemoveFromBookmarks(paths));
+            Message::RemoveFromStarred(paths) => {
+                commands.push(Command::RemoveFromStarred(paths));
             }
 
         }
@@ -5221,18 +5221,18 @@ impl Tab {
                     }
                 });
             }
-            HeadingOptions::Bookmarked => {
+            HeadingOptions::Starred => {
                 items.sort_by(|a, b| {
-                    let a_bookmarked = a.1.bookmarked;
-                    let b_bookmarked = b.1.bookmarked;
+                    let a_starred = a.1.starred;
+                    let b_starred = b.1.starred;
                     if folders_first {
                         match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
                             (true, false) => Ordering::Less,
                             (false, true) => Ordering::Greater,
-                            _ => check_reverse(a_bookmarked.cmp(&b_bookmarked), sort_direction),
+                            _ => check_reverse(a_starred.cmp(&b_starred), sort_direction),
                         }
                     } else {
-                        check_reverse(a_bookmarked.cmp(&b_bookmarked), sort_direction)
+                        check_reverse(a_starred.cmp(&b_starred), sort_direction)
                     }
                 });
             }
@@ -5548,19 +5548,19 @@ impl Tab {
         w += f32::from(space_s);
 
         let is_trash = self.location.is_trash();
-        let mut show_bookmarks = self.config.show_bookmarks;
+        let mut show_starred = self.config.show_starred;
         if is_trash {
-            show_bookmarks = false;
-        } else if self.location.is_bookmarks() {
-            show_bookmarks = true;
+            show_starred = false;
+        } else if self.location.is_starred() {
+            show_starred = true;
         }
         //TODO: allow resizing?
         let sort_offset = space_xxs as f32;
-        let name_width = 300.0;
-        let modified_width = 200.0 + sort_offset;
-        let size_width = 100.0 + sort_offset;
-        let bookmarked_width = if show_bookmarks { 32.0 + sort_offset } else { 0.0 };
-        let condensed = size.width < (name_width + modified_width + size_width + bookmarked_width);
+        let name_width = 260.0;
+        let modified_width = 160.0 + sort_offset;
+        let size_width = 80.0 + sort_offset;
+        let starred_width = if show_starred { 32.0 + sort_offset } else { 0.0 };
+        let condensed = size.width < (name_width + modified_width + size_width + starred_width);
 
         let (sort_name, sort_direction, _) = self.sort_options();
         let heading_item = |name, width, msg, icon_name| {
@@ -5622,13 +5622,37 @@ impl Tab {
             HeadingOptions::Size,
             "",
         ),);
-        if show_bookmarks {
+        if show_starred {
             heading_cols.push(heading_item(
-                fl!("bookmarked"),
-                Length::Fixed(bookmarked_width.into()),
-                HeadingOptions::Bookmarked,
+                fl!("starred"),
+                Length::Fixed(starred_width.into()),
+                HeadingOptions::Starred,
                 "starred-symbolic",
             ),);
+            // heading_cols.push(heading_item(
+            //     fl!("starred"),
+            //     Length::Fixed(starred_width.into()),
+            //     HeadingOptions::Starred,
+            //     "non-starred-symbolic",
+            // ),);
+            // heading_cols.push(heading_item(
+            //     fl!("starred"),
+            //     Length::Fixed(starred_width.into()),
+            //     HeadingOptions::Starred,
+            //     "",
+            // ),);
+            // heading_cols.push(heading_item(
+            //     fl!("star"),
+            //     Length::Fixed(starred_width.into()),
+            //     HeadingOptions::Starred,
+            //     "",
+            // ),);
+            // heading_cols.push(heading_item(
+            //     " ".to_string(),
+            //     Length::Fixed(starred_width.into()),
+            //     HeadingOptions::Starred,
+            //     "",
+            // ),);
         }
 
         let heading_row = widget::row::with_children(heading_cols)
@@ -5839,11 +5863,11 @@ impl Tab {
                         .into(),
                 );
             }
-            Location::Bookmarks | Location::Search(SearchLocation::Bookmarks, ..) => {
+            Location::Starred | Location::Search(SearchLocation::Starred, ..) => {
                 children.push(
-                    widget::button::custom(widget::text::heading(fl!("bookmarks")))
+                    widget::button::custom(widget::text::heading(fl!("starred")))
                         .padding(space_xxxs)
-                        .on_press(Message::Location(Location::Bookmarks))
+                        .on_press(Message::Location(Location::Starred))
                         .class(theme::Button::Text)
                         .into(),
                 );
@@ -6292,21 +6316,21 @@ impl Tab {
             ..
         } = self.config;
 
-        let mut show_bookmarks = self.config.show_bookmarks;
+        let mut show_starred = self.config.show_starred;
         let is_trash = self.location.is_trash();
         if is_trash {
-            show_bookmarks = false;
-        } else if self.location.is_bookmarks() {
-            show_bookmarks = true;
+            show_starred = false;
+        } else if self.location.is_starred() {
+            show_starred = true;
         }
 
         let size = self.size_opt.get().unwrap_or_else(|| Size::new(0.0, 0.0));
         //TODO: allow resizing?
-        let name_width = 300.0;
-        let modified_width = 200.0;
-        let size_width = 100.0;
-        let bookmarked_width = if show_bookmarks { 32.0 + (space_xxs as f32 * 2.0) } else { 0.0 };
-        let condensed = size.width < (name_width + modified_width + size_width + bookmarked_width);
+        let name_width = 260.0;
+        let modified_width = 160.0;
+        let size_width = 80.0;
+        let starred_width = if show_starred { 32.0 + (space_xxs as f32 * 2.0) } else { 0.0 };
+        let condensed = size.width < (name_width + modified_width + size_width + starred_width + space_xxs as f32);
         let is_search = matches!(self.location, Location::Search(..));
         let icon_size = if condensed || is_search {
             icon_sizes.list_condensed()
@@ -6363,7 +6387,7 @@ impl Tab {
                 item.rect_opt.set(Some(item_rect));
 
                 let mut item_path_vec = Vec::new();
-                if show_bookmarks {
+                if show_starred {
                     if let Some(path) = item.path_opt() {
                         item_path_vec.push(path.to_path_buf());
                     }
@@ -6513,24 +6537,24 @@ impl Tab {
                                     .into()
                             );
                         }
-                        if show_bookmarks {
+                        if show_starred {
                             children.push(
-                                widget::container(if item.bookmarked {
+                                widget::container(if item.starred {
                                         widget::tooltip(
                                             widget::button::icon(widget::icon::from_name("starred-symbolic").size(16))
-                                            .on_press(Message::RemoveFromBookmarks(item_path_vec)),
-                                            widget::text::body(fl!("remove-from-bookmarks")),
+                                            .on_press(Message::RemoveFromStarred(item_path_vec)),
+                                            widget::text::body(fl!("remove-from-starred")),
                                             widget::tooltip::Position::Top,
                                         )
                                     } else {
                                         widget::tooltip(
                                             widget::button::icon(widget::icon::from_name("non-starred-symbolic").size(16))
-                                            .on_press(Message::AddToBookmarks(item_path_vec)),
-                                            widget::text::body(fl!("add-to-bookmarks")),
+                                            .on_press(Message::AddToStarred(item_path_vec)),
+                                            widget::text::body(fl!("add-to-starred")),
                                             widget::tooltip::Position::Top,
                                         )
                                     })
-                                    .width(Length::Fixed(bookmarked_width))
+                                    .width(Length::Fixed(starred_width))
                                     .into()
                             )
                         };
@@ -6599,7 +6623,7 @@ impl Tab {
                                     //TODO: translate?
                                     widget::text::body(format!("{modified_text} - {size_text}"))
                                         .into(),
-                                    if item.bookmarked {
+                                    if item.starred {
                                         widget::icon::from_name("starred-symbolic")
                                             .size(16)
                                             .icon()
@@ -6638,7 +6662,7 @@ impl Tab {
                                 widget::text::body(size_text.clone())
                                     .width(Length::Fixed(size_width))
                                     .into(),
-                                if item.bookmarked {
+                                if item.starred {
                                     widget::icon::from_name("starred-symbolic")
                                         .size(16)
                                         .icon()
@@ -6668,7 +6692,7 @@ impl Tab {
                                 widget::text::body(size_text)
                                     .width(Length::Fixed(size_width))
                                     .into(),
-                                if item.bookmarked {
+                                if item.starred {
                                     widget::icon::from_name("starred-symbolic")
                                         .size(16)
                                         .icon()
@@ -6753,7 +6777,7 @@ impl Tab {
         modifiers: &'a Modifiers,
         size: Size,
         clipboard_paste_available: bool,
-        show_bookmarks: &'a bool,
+        show_starred: &'a bool,
         context_actions: &'a [ContextActionPreset],
     ) -> Element<'a, Message> {
         // Update cached size
@@ -6847,7 +6871,7 @@ impl Tab {
                 key_binds,
                 modifiers,
                 clipboard_paste_available,
-                show_bookmarks,
+                show_starred,
                 context_actions,
             );
             popover = popover
@@ -7237,7 +7261,7 @@ impl Tab {
         key_binds: &'a HashMap<KeyBind, Action>,
         modifiers: &'a Modifiers,
         clipboard_paste_available: bool,
-        show_bookmarks: &'a bool,
+        show_starred: &'a bool,
         context_actions: &'a [ContextActionPreset],
     ) -> Element<'a, Message> {
         widget::responsive(move |size| {
@@ -7247,7 +7271,7 @@ impl Tab {
                     modifiers,
                     size,
                     clipboard_paste_available,
-                    show_bookmarks,
+                    show_starred,
                     context_actions,
                 ),
                 Id::new(format!(
