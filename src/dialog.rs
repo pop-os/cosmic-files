@@ -877,13 +877,6 @@ impl App {
         Task::none()
     }
 
-    fn has_bookmarks(&mut self) -> bool {
-        match user_places_xbel::parse_file() {
-            Ok(bookmarks) => !bookmarks.bookmarks.is_empty(),
-            Err(_) => false,
-        }
-    }
-
     fn update_nav_model(&mut self) {
         let mut nav_model = segmented_button::ModelBuilder::default();
 
@@ -896,13 +889,9 @@ impl App {
         }
 
         if self.flags.config.show_bookmarks {
-            let mut icon = "non-starred-symbolic";
-            if self.has_bookmarks() {
-                icon = "starred-symbolic";
-            }
             nav_model = nav_model.insert(|b| {
                 b.text(fl!("bookmarks"))
-                    .icon(widget::icon::from_name(icon))
+                    .icon(widget::icon::from_name("starred-symbolic"))
                     .data(Location::Bookmarks)
             });
         }
