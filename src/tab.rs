@@ -2466,13 +2466,12 @@ impl Item {
     /// Text widget for a filename in grid/icon view: word-or-glyph wrapping, middle-ellipsized to 3 lines.
     fn grid_display_name<'a>(
         name: impl Into<Cow<'a, str>> + 'a,
+        lines: usize
     ) -> widget::Text<'a, cosmic::Theme, cosmic::Renderer> {
         widget::text::body(name)
             .wrapping(text::Wrapping::WordOrGlyph)
             .align_x(text::Alignment::Center)
-            .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
-                3,
-            )))
+            .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(lines)))
     }
 
     /// Text widget for a filename in list view: word-or-glyph wrapping, middle-ellipsized to 1 line.
@@ -5968,6 +5967,14 @@ impl Tab {
             ..
         } = self.config;
 
+        let mut show_starred = self.config.show_starred;
+        let is_trash = self.location.is_trash();
+        if is_trash {
+            show_starred = false;
+        } else if self.location.is_starred() {
+            show_starred = true;
+        }
+
         let mut grid_spacing = space_xxs;
         if let Location::Desktop(_path, _output, desktop_config) = &self.location {
             icon_sizes.grid = desktop_config.icon_size;
@@ -6058,6 +6065,13 @@ impl Tab {
                 );
                 item.rect_opt.set(Some(item_rect));
 
+                let mut item_path_vec = Vec::new();
+                if show_starred {
+                    if let Some(path) = item.path_opt() {
+                        item_path_vec.push(path.to_path_buf());
+                    }
+                }
+
                 //TODO: error if the row or col is already set?
                 while grid_elements.len() <= row {
                     grid_elements.push(Vec::new());
@@ -6066,7 +6080,7 @@ impl Tab {
                 // Only build elements if visible (for performance)
                 if item_rect.intersects(&visible_rect) {
                     //TODO: one focus group per grid item (needs custom widget)
-                    let buttons: Vec<Element<Message>> = vec![
+                    let mut buttons: Vec<Element<Message>> = vec![
                         widget::button::custom(
                             widget::icon::icon(item.icon_handle_grid.clone())
                                 .content_fit(ContentFit::Contain)
@@ -6083,7 +6097,7 @@ impl Tab {
                         ))
                         .into(),
                         widget::tooltip(
-                            widget::button::custom(Item::grid_display_name(&item.display_name))
+                            widget::button::custom(Item::grid_display_name(&item.display_name, if show_starred { 2 } else { 3 }))
                                 .id(item.button_id.clone())
                                 .padding([0, space_xxxs])
                                 .class(button_style(
@@ -6099,6 +6113,29 @@ impl Tab {
                         )
                         .into(),
                     ];
+                    if show_starred {
+                        buttons.push(
+                            if item.starred {
+                                widget::tooltip(
+                                    widget::button::icon(widget::icon::from_name("starred-symbolic").size(16))
+                                        .on_press(Message::RemoveFromStarred(item_path_vec))
+                                        .padding(2),
+                                    widget::text::body(fl!("remove-from-starred")),
+                                    widget::tooltip::Position::Top,
+                                )
+                                .into()
+                            } else {
+                                widget::tooltip(
+                                    widget::button::icon(widget::icon::from_name("non-starred-symbolic").size(16))
+                                        .on_press(Message::AddToStarred(item_path_vec))
+                                        .padding(2),
+                                    widget::text::body(fl!("add-to-starred")),
+                                    widget::tooltip::Position::Top,
+                                )
+                                .into()
+                            }
+                        )
+                    }
 
                     let mut column = widget::column::with_capacity(buttons.len())
                         .align_x(Alignment::Center)
@@ -6250,6 +6287,7 @@ impl Tab {
                             )),
                             widget::button::custom(Item::grid_display_name(
                                 item.display_name.clone(),
+                                3
                             ))
                             .id(item.button_id.clone())
                             .on_press(Message::Click(Some(*i)))
