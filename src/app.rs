@@ -1360,9 +1360,12 @@ impl App {
         &mut self,
         completed: Vec<(u64, OperationSelection)>,
     ) -> Task<Message> {
-        let mut commands = Vec::with_capacity(4 * completed.len());
+        let mut tasks = Vec::with_capacity(4 * completed.len());
         let mut op_sel = OperationSelection::default();
         let mut operations_in_progress = self.state.operations_in_progress;
+        let mut rescan_recents = false;
+        let mut rescan_trash = false;
+        let mut update_config = false;
         for (id, op_sel_pending) in completed {
             op_sel.ignored.extend(op_sel_pending.ignored);
             op_sel.selected.extend(op_sel_pending.selected);
@@ -1371,7 +1374,7 @@ impl App {
                 if let Some(description) = op.toast() {
                     if let Operation::Delete { ref paths } = op {
                         let paths: Arc<[PathBuf]> = Arc::from(paths.as_slice());
-                        commands.push(
+                        tasks.push(
                             self.toasts
                                 .push(
                                     widget::toaster::Toast::new(description)
@@ -1382,7 +1385,7 @@ impl App {
                                 .map(cosmic::Action::App),
                         );
                     } else {
-                        commands.push(
+                        tasks.push(
                             self.toasts
                                 .push(widget::toaster::Toast::new(description))
                                 .map(cosmic::Action::App),
@@ -1390,10 +1393,22 @@ impl App {
                     }
                 }
 
+                // Rescan Trash only if operation relates to Trash
+                if !rescan_trash {   
+                    rescan_trash = match op {
+                        Operation::Delete { .. } => true,
+                        Operation::DeleteTrash { .. } => true,
+                        Operation::EmptyTrash { .. } => true,
+                        Operation::PermanentlyDelete { .. } => true,
+                        Operation::Restore { .. } => true,
+                        _ => false,
+                    };
+                }
+
                 // If a favorite for a path has been renamed or moved, update it.
                 if let Operation::Rename { ref from, ref to } = op {
                     if self.update_favorites([(from, to)].as_slice()) {
-                        commands.push(self.update_config());
+                        update_config = true;
                     }
                 } else if let Operation::Move {
                     ref paths, ref to, ..
@@ -1404,12 +1419,12 @@ impl App {
                         .filter_map(|from| from.file_name().map(|name| (from, to.join(name))))
                         .collect();
                     if self.update_favorites(&path_changes) {
-                        commands.push(self.update_config());
+                        update_config = true;
                     }
                 }
 
-                if matches!(op, Operation::RemoveFromRecents { .. }) {
-                    commands.push(self.rescan_recents());
+                if !rescan_recents && matches!(op, Operation::RemoveFromRecents { .. }) {
+                    rescan_recents = true;
                 }
 
                 self.complete_operations.insert(id, op);
@@ -1425,24 +1440,36 @@ impl App {
         {
             self.progress_operations.clear();
         }
+
+        if update_config {
+            tasks.push(self.update_config());
+        }
         // Potentially show a notification
-        commands.push(self.update_notification());
+        tasks.push(self.update_notification());
         // Rescan and select based on operation
-        commands.push(self.rescan_operation_selection(op_sel));
-        // Manually rescan any trash tabs after any operation is completed
-        commands.push(self.rescan_trash());
+        tasks.push(self.rescan_operation_selection(op_sel));
         if operations_in_progress != self.state.operations_in_progress {
             // Update the number of operation in progress
-            commands.push(
+            tasks.push(
                 self.update(Message::SetOperationsInProgress(operations_in_progress)
             ));
         }
-        Task::batch(commands)
+        // Rescan any Recents tabs
+        if rescan_recents {
+            tasks.push(self.rescan_recents());
+        }
+        // Rescan any Trash tabs
+        if rescan_trash {
+            tasks.push(self.rescan_trash());
+        }
+        Task::batch(tasks)
     }
 
     fn handle_operation_errors(&mut self, errors: Vec<(u64, OperationError)>) -> Task<Message> {
         let mut tasks = Vec::new();
         let mut failed = Vec::new();
+        let mut rescan_recents = false;
+        let mut rescan_trash = false;
         let mut operations_in_progress = self.state.operations_in_progress;
         for (id, err) in errors.into_iter() {
             if let Some((op, controller)) = self.pending_operations.remove(&id) {
@@ -1457,6 +1484,22 @@ impl App {
                             }));
                         }
                     }
+                }
+
+                // Rescan Trash only if operation relates to Trash
+                if !rescan_trash {   
+                    rescan_trash = match op {
+                        Operation::Delete { .. } => true,
+                        Operation::DeleteTrash { .. } => true,
+                        Operation::EmptyTrash { .. } => true,
+                        Operation::PermanentlyDelete { .. } => true,
+                        Operation::Restore { .. } => true,
+                        _ => false,
+                    };
+                }
+
+                if !rescan_recents && matches!(op, Operation::RemoveFromRecents { .. }) {
+                    rescan_recents = true;
                 }
 
                 // Remove from progress
@@ -1483,14 +1526,22 @@ impl App {
             self.progress_operations.clear();
         }
 
-        // Update the progress icon for all windows
-        tasks.push(self.update(
-            Message::SetOperationsInProgress(operations_in_progress)
-        ));
-
-        // Manually rescan any trash tabs after any operation is completed
-        // TODO: Only rescan if operations affected Trash
-        tasks.push(self.rescan_trash());
+        // Potentially show a notification
+        tasks.push(self.update_notification());
+        if operations_in_progress != self.state.operations_in_progress {
+            // Update the number of operation in progress
+            tasks.push(
+                self.update(Message::SetOperationsInProgress(operations_in_progress)
+            ));
+        }
+        // Rescan any Recents tabs
+        if rescan_recents {
+            tasks.push(self.rescan_recents());
+        }
+        // Rescan any Trash tabs
+        if rescan_trash {
+            tasks.push(self.rescan_trash());
+        }
         Task::batch(tasks)
     }
 
@@ -1732,6 +1783,7 @@ impl App {
     }
 
     fn update_config(&mut self) -> Task<Message> {
+        // Update sidebar to reflect changes in config
         self.update_nav_model();
         // Tabs are collected first to placate the borrowck
         let tabs: Box<[_]> = self.tab_model.iter().collect();
@@ -1747,6 +1799,7 @@ impl App {
     }
 
     fn update_state(&mut self) -> Task<Message> {
+        // TODO: Dynamically write the State instead of specific items
         if let Some(state_handler) = self.state_handler.as_ref() {
             if let Err(err) = state_handler
                 .set::<&FxOrderMap<String, (HeadingOptions, bool)>>(
