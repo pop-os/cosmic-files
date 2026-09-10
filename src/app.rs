@@ -133,6 +133,7 @@ pub struct Flags {
 pub enum Action {
     About,
     AddToSidebar,
+    AddToStarred,
     Compress,
     Copy,
     CopyPath,
@@ -176,6 +177,7 @@ pub enum Action {
     Preview,
     Reload,
     RemoveFromRecents,
+    RemoveFromStarred,
     Rename,
     RestoreFromTrash,
     SearchActivate,
@@ -206,6 +208,7 @@ impl Action {
         match self {
             Self::About => Message::ToggleContextPage(ContextPage::About),
             Self::AddToSidebar => Message::AddToSidebar(entity_opt),
+            Self::AddToStarred => Message::AddToStarred(entity_opt),
             Self::Compress => Message::Compress(entity_opt),
             Self::Copy => Message::Copy(entity_opt),
             Self::CopyPath => Message::CopyPath(entity_opt),
@@ -253,6 +256,7 @@ impl Action {
             Self::Preview => Message::Preview(entity_opt),
             Self::Reload => Message::TabMessage(entity_opt, tab::Message::Reload),
             Self::RemoveFromRecents => Message::RemoveFromRecents(entity_opt),
+            Self::RemoveFromStarred => Message::RemoveFromStarred(entity_opt),
             Self::Rename => Message::Rename(entity_opt),
             Self::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
             Self::SearchActivate => Message::SearchActivate,
@@ -336,6 +340,7 @@ impl MenuAction for NavMenuAction {
 #[derive(Clone, Debug)]
 pub enum Message {
     AddToSidebar(Option<Entity>),
+    AddToStarred(Option<Entity>),
     AppTheme(AppTheme),
     CloseToast(widget::ToastId),
     Compress(Option<Entity>),
@@ -426,8 +431,10 @@ pub enum Message {
     ReloadMimeAppCache,
     ReorderTab(ReorderEvent),
     RescanRecents,
+    RescanStarred,
     RescanTrash,
     RemoveFromRecents(Option<Entity>),
+    RemoveFromStarred(Option<Entity>),
     Rename(Option<Entity>),
     ReplaceResult(ReplaceResult),
     RestoreFromTrash(Option<Entity>),
@@ -438,6 +445,7 @@ pub enum Message {
     SearchInput(String),
     SetShowDetails(bool),
     SetShowRecents(bool),
+    SetShowStarred(bool),
     SetTypeToSearch(TypeToSearch),
     SystemThemeModeChange,
     Size(window::Id, Size),
@@ -479,6 +487,7 @@ pub enum Message {
     DndDropTab(Entity, Option<ClipboardPaste>, DndAction),
     DndDropNav(Entity, Option<ClipboardPaste>, DndAction),
     Recents,
+    Starred,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     OutputEvent(OutputEvent, WlOutput),
     Cosmic(app::Action),
@@ -1261,6 +1270,7 @@ impl App {
         if !trash_paths.is_empty() {
             tasks.push(self.operation(Operation::Delete { paths: trash_paths }));
         }
+        tasks.push(self.rescan_recents());
         Task::batch(tasks)
     }
 
@@ -1383,11 +1393,6 @@ impl App {
                         commands.push(self.update_config());
                     }
                 }
-
-                if matches!(op, Operation::RemoveFromRecents { .. }) {
-                    commands.push(self.rescan_recents());
-                }
-
                 self.complete_operations.insert(id, op);
             }
         }
@@ -1405,6 +1410,8 @@ impl App {
         commands.push(self.rescan_operation_selection(op_sel));
         // Manually rescan any trash tabs after any operation is completed
         commands.push(self.rescan_trash());
+        // Manually rescan any Recents tabs after any operation is completed
+        commands.push(self.rescan_recents());
 
         Task::batch(commands)
     }
@@ -1451,6 +1458,8 @@ impl App {
         }
         // Manually rescan any trash tabs after any operation is completed
         tasks.push(self.rescan_trash());
+        // Manually rescan any Recents tabs after any operation is completed
+        tasks.push(self.rescan_recents());
         Task::batch(tasks)
     }
 
@@ -1593,6 +1602,25 @@ impl App {
         Task::batch(commands)
     }
 
+    fn rescan_starred(&mut self) -> Task<Message> {
+        let needs_reload: Box<[_]> = self
+            .tab_model
+            .iter()
+            .filter_map(|entity| {
+                let tab = self.tab_model.data::<Tab>(entity)?;
+                tab.location
+                    .is_starred()
+                    .then_some((entity, tab.location.clone()))
+            })
+            .collect();
+
+        let commands = needs_reload
+            .into_iter()
+            .map(|(entity, location)| self.update_tab(entity, location, None));
+
+        Task::batch(commands)
+    }
+
     fn search_get(&self) -> Option<&str> {
         let entity = self.tab_model.active();
         let tab = self.tab_model.data::<Tab>(entity)?;
@@ -1621,6 +1649,8 @@ impl App {
                         Some(SearchLocation::Path(path.clone()))
                     } else if tab.location.is_recents() {
                         Some(SearchLocation::Recents)
+                    } else if tab.location.is_starred() {
+                        Some(SearchLocation::Starred)
                     } else if tab.location.is_trash() {
                         Some(SearchLocation::Trash)
                     } else {
@@ -1643,6 +1673,7 @@ impl App {
                     Location::Search(search_location, ..) => match search_location {
                         SearchLocation::Path(path) => Some((Location::Path(path.clone()), false)),
                         SearchLocation::Recents => Some((Location::Recents, false)),
+                        SearchLocation::Starred => Some((Location::Starred, false)),
                         SearchLocation::Trash => Some((Location::Trash, false)),
                     },
                     _ => None,
@@ -1769,6 +1800,14 @@ impl App {
                 b.text(fl!("recents"))
                     .icon(icon::from_name("document-open-recent-symbolic"))
                     .data(Location::Recents)
+            });
+        }
+
+        if self.config.show_starred {
+            nav_model = nav_model.insert(|b| {
+                b.text(fl!("starred"))
+                    .icon(icon::from_name("starred-symbolic"))
+                    .data(Location::Starred)
             });
         }
 
@@ -2275,6 +2314,10 @@ impl App {
                 .add({
                     settings::item::builder(fl!("show-recents"))
                         .toggler(self.config.show_recents, Message::SetShowRecents)
+                })
+                .add({
+                    settings::item::builder(fl!("show-starred"))
+                        .toggler(self.config.show_starred, Message::SetShowStarred)
                 })
                 .into(),
         ])
@@ -2933,6 +2976,19 @@ impl Application for App {
                 }
                 config_set!(favorites, favorites);
                 return self.update_config();
+            }
+            Message::AddToStarred(entity_opt) => {
+                let mut paths = Vec::new();
+                for path in self.selected_paths(entity_opt) {
+                    paths.push(path);
+                }
+                let mut tasks = Vec::new();
+                tasks.push(self.operation(Operation::AddToStarred { paths }));
+                let entity = self.tab_model.active();
+                if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+                    tasks.push(self.update_tab(entity, tab.location.clone(), None))
+                };
+                return Task::batch(tasks)
             }
             Message::AppTheme(app_theme) => {
                 config_set!(app_theme, app_theme);
@@ -4263,11 +4319,27 @@ impl Application for App {
                 let paths: Box<[_]> = self.selected_paths(entity_opt).collect();
                 return self.operation(Operation::RemoveFromRecents { paths });
             }
+            Message::RemoveFromStarred(entity_opt) => {
+                let mut paths = Vec::new();
+                for path in self.selected_paths(entity_opt) {
+                    paths.push(path);
+                }
+                let mut tasks = Vec::new();
+                tasks.push(self.operation(Operation::RemoveFromStarred { paths }));
+                let entity = self.tab_model.active();
+                if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+                    tasks.push(self.update_tab(entity, tab.location.clone(), None))
+                };
+                return Task::batch(tasks)
+            }
             Message::ReloadMimeAppCache => {
                 self.mime_app_cache.reload();
             }
             Message::RescanRecents => {
                 return self.rescan_recents();
+            }
+            Message::RescanStarred => {
+                return self.rescan_starred();
             }
             Message::RescanTrash => {
                 // Update trash icon if empty/full
@@ -4323,6 +4395,7 @@ impl Application for App {
                                 &last_name,
                                 '.',
                             ),
+                            self.rescan_recents(),
                         ]);
                         return Task::batch(tasks);
                     }
@@ -4347,6 +4420,7 @@ impl Application for App {
             Message::RestoreFromTrash(entity_opt) => {
                 let mut trash_items = Vec::new();
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                let mut tasks = Vec::new();
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity)
                     && let Some(items) = tab.items_opt()
                 {
@@ -4361,8 +4435,10 @@ impl Application for App {
                     }
                 }
                 if !trash_items.is_empty() {
-                    return self.operation(Operation::Restore { items: trash_items });
+                    tasks.push(self.operation(Operation::Restore { items: trash_items }));
                 }
+                tasks.push(self.rescan_recents());
+                return Task::batch(tasks);
             }
             Message::ScrollTab(scroll_speed) => {
                 let entity = self.tab_model.active();
@@ -4394,6 +4470,13 @@ impl Application for App {
             }
             Message::SetShowRecents(show_recents) => {
                 config_set!(show_recents, show_recents);
+                return self.update_config();
+            }
+            Message::SetShowStarred(show_starred) => {
+                config_set!(show_starred, show_starred);
+                let mut config = self.config.tab.clone();
+                config.show_starred = show_starred;
+                config_set!(tab, config);
                 return self.update_config();
             }
             Message::SetTypeToSearch(type_to_search) => {
@@ -4531,6 +4614,14 @@ impl Application for App {
                             config_set!(favorites, favorites);
                             commands.push(self.update_config());
                         }
+                        tab::Command::AddToStarred(paths) => {
+                            commands.push(self.operation(Operation::AddToStarred { paths }));
+                            commands.push(self.rescan_starred());
+                        }
+                        tab::Command::RemoveFromStarred(paths) => {
+                            commands.push(self.operation(Operation::RemoveFromStarred { paths }));
+                            commands.push(self.rescan_starred());
+                        }
                         tab::Command::AutoScroll(scroll_speed) => {
                             // converting an f32 to an i16 here by multiplying by 10 and casting to i16
                             // further resolution isn't necessary
@@ -4582,15 +4673,16 @@ impl Application for App {
 
                                     commands.push(self.update(Message::Surface(
                                         cosmic::surface::action::app_popup(
-                                        move |_| cosmic::surface::action::LiveSettings {
-                                                    corners: Some(iced::runtime::platform_specific::wayland::CornerRadius {
-                                                        top_left: rad[0] as u32,
-                                                        top_right: rad[1] as u32,
-                                                        bottom_left: rad[2] as u32,
-                                                        bottom_right: rad[3] as u32,
-                                                    }),
-                                                    ..Default::default()
-                                                },                                            move |app: &mut Self| -> SctkPopupSettings {
+                                            move |_| cosmic::surface::action::LiveSettings {
+                                                corners: Some(iced::runtime::platform_specific::wayland::CornerRadius {
+                                                    top_left: rad[0] as u32,
+                                                    top_right: rad[1] as u32,
+                                                    bottom_left: rad[2] as u32,
+                                                    bottom_right: rad[3] as u32,
+                                                }),
+                                                ..Default::default()
+                                            },
+                                            move |app: &mut Self| -> SctkPopupSettings {
                                                 let anchor_rect = Rectangle {
                                                     x: point.x as i32,
                                                     y: point.y as i32,
@@ -4954,6 +5046,9 @@ impl Application for App {
                         Some(Location::Recents | Location::Search(SearchLocation::Recents, ..)) => {
                             command.arg("--recents");
                         }
+                        Some(Location::Starred | Location::Search(SearchLocation::Starred, ..)) => {
+                            command.arg("--starred");
+                        }
                         Some(Location::Trash | Location::Search(SearchLocation::Trash, ..)) => {
                             command.arg("--trash");
                         }
@@ -5253,6 +5348,9 @@ impl Application for App {
                                     Location::Recents => {
                                         command.arg("--recents");
                                     }
+                                    Location::Starred => {
+                                        command.arg("--starred");
+                                    }
                                     _ => {
                                         log::error!(
                                             "unsupported location for open in new window: {location:?}"
@@ -5333,6 +5431,11 @@ impl Application for App {
             Message::Recents => {
                 if self.config.show_recents {
                     return self.open_tab(Location::Recents, false, None);
+                }
+            }
+            Message::Starred => {
+                if self.config.show_starred {
+                    return self.open_tab(Location::Starred, false, None);
                 }
             }
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
@@ -6651,6 +6754,7 @@ impl Application for App {
                     &self.key_binds,
                     &self.modifiers,
                     self.clipboard_has_content(),
+                    &self.config.show_starred,
                     &self.config.context_actions,
                 )
                 .map(move |message| Message::TabMessage(Some(entity), message));
@@ -6680,6 +6784,7 @@ impl Application for App {
                                 &self.key_binds,
                                 &window.modifiers,
                                 self.clipboard_has_content(),
+                                &self.config.show_starred,
                                 &self.config.context_actions,
                             )
                             .map(|x| Message::TabMessage(Some(*entity), x)),
@@ -6698,6 +6803,7 @@ impl Application for App {
                                 &self.key_binds,
                                 &window.modifiers,
                                 self.clipboard_has_content(),
+                                &self.config.show_starred,
                                 &self.config.context_actions,
                             )
                             .map(move |message| Message::TabMessage(Some(*entity), message)),
@@ -6781,6 +6887,7 @@ impl Application for App {
             not(target_os = "android")
         ))]
         struct RecentsWatcherSubscription;
+        struct StarredWatcherSubscription;
 
         let mut subscriptions = vec![
             //TODO: filter more events by window id
@@ -6971,6 +7078,17 @@ impl Application for App {
                                                 "trash needs to be rescanned but sending message failed: {e:?}"
                                             );
                                         }
+
+                                        // Rescan on any event. Keeps the Recents tab synchronised
+                                        if should_rescan
+                                            && let Err(e) = futures::executor::block_on(async {
+                                                output.send(Message::RescanRecents).await
+                                            })
+                                        {
+                                            log::warn!(
+                                                "recents needs to be rescanned but sending message failed: {e:?}"
+                                            );
+                                        }
                                     }
                                     Err(e) => {
                                         log::warn!("failed to watch trash bin for changes: {e:?}");
@@ -7077,6 +7195,77 @@ impl Application for App {
                             }
                             Err(e) => {
                                 log::warn!("failed to create new watcher for recents file: {e:?}")
+                            }
+                        }
+
+                        std::future::pending().await
+                    },
+                )
+            }),
+            #[cfg(all(
+                not(feature = "desktop-applet"),
+                not(target_os = "ios"),
+                not(target_os = "android")
+            ))]
+            Subscription::run_with(TypeId::of::<StarredWatcherSubscription>(), |_| {
+                stream::channel(
+                    1,
+                    |mut output: futures::channel::mpsc::Sender<Message>| async move {
+                        let Some(starred_file) = user_places_xbel::dir() else {
+                            log::warn!(
+                                "failed to watch starred changes: .user-places.xbel does not exist"
+                            );
+                            return std::future::pending().await;
+                        };
+
+                        let watcher_res = new_debouncer(
+                            time::Duration::from_millis(250),
+                            Some(time::Duration::from_millis(250)),
+                            move |event_res: notify_debouncer_full::DebounceEventResult| {
+                                match event_res {
+                                    Ok(events) => {
+                                        // Programs differ in how they modify the starred file so the
+                                        // rescan is triggered on any event but access.
+                                        if events.iter().any(|event| {
+                                            let kind = event.kind;
+                                            kind.is_create()
+                                                || kind.is_modify()
+                                                || kind.is_remove()
+                                                || kind.is_other()
+                                        }) && let Err(e) = futures::executor::block_on(async {
+                                            output.send(Message::RescanStarred).await
+                                        }) {
+                                            log::warn!(
+                                                "open starred tabs need to be updated but sending message failed: {e:?}"
+                                            );
+                                        }
+                                    }
+                                    Err(e) => {
+                                        log::warn!(
+                                            "failed to watch starred file for changes: {e:?}"
+                                        )
+                                    }
+                                }
+                            },
+                        );
+
+                        match watcher_res {
+                            Ok(mut watcher) => {
+                                if let Err(e) = watcher
+                                    .watch(&starred_file, notify::RecursiveMode::NonRecursive)
+                                {
+                                    log::warn!(
+                                        "failed to add starred file `{}` to watcher: {}",
+                                        starred_file.display(),
+                                        e
+                                    );
+                                }
+
+                                // Don't drop the watcher.
+                                std::future::pending::<()>().await;
+                            }
+                            Err(e) => {
+                                log::warn!("failed to create new watcher for starred file: {e:?}")
                             }
                         }
 

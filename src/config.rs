@@ -204,8 +204,10 @@ pub struct Config {
     pub context_actions: Vec<ContextActionPreset>,
     pub thumb_cfg: ThumbCfg,
     pub favorites: Vec<Favorite>,
+    pub starred: Vec<Favorite>,
     pub show_details: bool,
     pub show_recents: bool,
+    pub show_starred: bool,
     pub tab: TabConfig,
     pub type_to_search: TypeToSearch,
 }
@@ -248,6 +250,7 @@ impl Config {
             show_hidden: self.dialog.show_hidden,
             single_click: false,
             view: self.dialog.view,
+            show_starred: self.show_starred
         }
     }
 }
@@ -268,8 +271,10 @@ impl Default for Config {
                 Favorite::Pictures,
                 Favorite::Videos,
             ],
+            starred: vec![],
             show_details: false,
             show_recents: true,
+            show_starred: true,
             tab: TabConfig::default(),
             type_to_search: TypeToSearch::Recursive,
         }
@@ -370,6 +375,8 @@ pub struct TabConfig {
     pub single_click: bool,
     /// Selected view, grid or list
     pub view: View,
+    /// Show starred icons
+    pub show_starred: bool,
 }
 
 impl Default for TabConfig {
@@ -381,6 +388,7 @@ impl Default for TabConfig {
             show_hidden: false,
             single_click: false,
             view: View::List,
+            show_starred: false
         }
     }
 }
