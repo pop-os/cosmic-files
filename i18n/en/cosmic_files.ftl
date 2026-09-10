@@ -10,6 +10,7 @@ networks = Networks
 notification-in-progress = File operations are in progress
 trash = Trash
 recents = Recents
+bookmarks = Bookmarks
 undo = Undo
 today = Today
 
@@ -281,6 +282,22 @@ removed-from-recents = Removed {$items} {$items ->
         [one] item
         *[other] items
     } from {recents}
+adding-to-bookmarks = Adding {$items} {$items ->
+        [one] item
+        *[other] items
+    } to {bookmarks}
+added-to-bookmarks = Added {$items} {$items ->
+        [one] item
+        *[other] items
+    } to {bookmarks}
+removing-from-bookmarks = Removing {$items} {$items ->
+        [one] item
+        *[other] items
+    } from {bookmarks}
+removed-from-bookmarks = Removed {$items} {$items ->
+        [one] item
+        *[other] items
+    } from {bookmarks}
 renaming = Renaming "{$from}" to "{$to}"
 renamed = Renamed "{$from}" to "{$to}"
 restoring = Restoring {$items} {$items ->
@@ -315,6 +332,7 @@ error = Error
 settings = Settings
 single-click = Single click to open
 show-recents = Recents folder in the sidebar
+show-bookmarks = Bookmarks folder in the sidebar
 
 ### Appearance
 appearance = Appearance
@@ -331,6 +349,8 @@ type-to-search-select = Selects the first matching file or folder
 
 # Context menu
 add-to-sidebar = Add to sidebar
+add-to-bookmarks = Add to Bookmarks
+remove-from-bookmarks = Remove from Bookmarks
 clear-recents-history = Clear Recents history
 compress = Compress...
 copy-to = Copy to...
