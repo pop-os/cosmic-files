@@ -22,6 +22,7 @@ use crate::tab::{
     self, HeadingOptions, ItemMetadata, Location, LocationMenuAction, SearchLocation, Tab,
 };
 use crate::trash::{Trash, TrashExt};
+use crate::undo::{UndoEntry, UndoStack};
 
 static MENU_ID: LazyLock<cosmic::widget::Id> =
     LazyLock::new(|| cosmic::widget::Id::new("responsive-menu"));
@@ -603,6 +604,38 @@ pub fn dialog_menu(
     .into()
 }
 
+/// The label for the Edit-menu Undo item: the top `undo_stack` entry's
+/// description (e.g. "Undo Delete"), or the plain `fl!("undo")` fallback when
+/// the stack is empty. The description strings are placeholders until Todo 8
+/// swaps them for the `undo-*` i18n keys.
+pub(crate) fn undo_label(undo_stack: &UndoStack) -> String {
+    undo_stack
+        .peek()
+        .map(|entry| entry.description.clone())
+        .unwrap_or_else(|| fl!("undo"))
+}
+
+/// The label for the Edit-menu Redo item: the top `redo_stack` entry's
+/// description (an entry's `description` describes its forward operation,
+/// which is exactly what a redo re-applies, so it is correct for both items),
+/// or the literal "Redo" fallback when the stack is empty. The `redo` i18n
+/// key does not exist yet — Todo 8 adds it and replaces this fallback.
+pub(crate) fn redo_label(redo_stack: &UndoStack) -> String {
+    redo_stack
+        .peek()
+        .map(|entry| entry.description.clone())
+        .unwrap_or_else(|| "Redo".to_string())
+}
+
+/// Whether an Edit-menu Undo/Redo item is enabled: the corresponding stack
+/// must be non-empty AND no undo/redo may be in flight. `pending_undo` is
+/// `Some` while an inverse/redo runs AND while a destructive entry awaits the
+/// Todo-7 confirmation dialog, so this blocks the item during both.
+pub(crate) fn undo_redo_enabled(stack: &UndoStack, pending_undo: &Option<UndoEntry>) -> bool {
+    !stack.is_empty() && pending_undo.is_none()
+}
+
+#[allow(clippy::too_many_arguments)] // six pre-existing args + Todo-5 undo/redo state
 pub fn menu_bar<'a>(
     core: &Core,
     tab_opt: Option<&Tab>,
@@ -610,6 +643,10 @@ pub fn menu_bar<'a>(
     modifiers: &Modifiers,
     key_binds: &HashMap<KeyBind, Action>,
     clipboard_paste_available: bool,
+    undo_label: String,
+    can_undo: bool,
+    redo_label: String,
+    can_redo: bool,
 ) -> Element<'a, Message> {
     let sort_options = tab_opt.map(Tab::sort_options);
     let sort_item = |label, sort, dir| {
@@ -704,6 +741,8 @@ pub fn menu_bar<'a>(
                 (
                     (fl!("edit")),
                     vec![
+                        menu_button_optional(undo_label, Action::Undo, can_undo),
+                        menu_button_optional(redo_label, Action::Redo, can_redo),
                         menu_button_optional(fl!("cut"), Action::Cut, selected > 0),
                         menu_button_optional(fl!("copy"), Action::Copy, selected > 0),
                         menu_button_optional(fl!("move-to"), Action::MoveTo, selected > 0),
@@ -850,4 +889,126 @@ pub fn location_context_menu<'a>(ancestor_index: usize) -> Element<'a, tab::Mess
         })
         .width(Length::Fixed(360.0))
         .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use cosmic::iced::keyboard::Modifiers;
+
+    use super::*;
+    use crate::config::{TabConfig, ThumbCfg};
+    use crate::key_bind::key_binds;
+    use crate::undo::{UndoEntry, UndoHistory};
+
+    fn undo_entry(description: &str) -> UndoEntry {
+        UndoEntry {
+            entry_id: 0,
+            forward: crate::operation::Operation::NewFile {
+                path: PathBuf::from("/tmp/test"),
+            },
+            inverse: crate::operation::Operation::Delete {
+                paths: vec![PathBuf::from("/tmp/test")],
+            },
+            description: description.to_string(),
+            destructive: false,
+            toast_id: None,
+        }
+    }
+
+    // Todo 5 acceptance: the Edit menu's Undo/Redo items carry dynamic labels
+    // from the top stack entries and are enabled exactly when the stack is
+    // non-empty AND no undo/redo is in flight (`pending_undo` is None).
+    #[test]
+    fn edit_menu_undo_redo() {
+        let mut history = UndoHistory::new();
+        history.undo_stack.push(undo_entry("Undo Delete"));
+
+        // Undo: dynamic label from the top entry, enabled (stack non-empty,
+        // nothing in flight). Redo stack is empty: fallback label, disabled.
+        assert_eq!(undo_label(&history.undo_stack), "Undo Delete");
+        assert!(undo_redo_enabled(
+            &history.undo_stack,
+            &history.pending_undo
+        ));
+        assert_eq!(redo_label(&history.redo_stack), "Redo");
+        assert!(!undo_redo_enabled(
+            &history.redo_stack,
+            &history.pending_undo
+        ));
+
+        // The exact `menu::Item`s the Edit menu embeds for this state.
+        match menu_button_optional(
+            undo_label(&history.undo_stack),
+            Action::Undo,
+            undo_redo_enabled(&history.undo_stack, &history.pending_undo),
+        ) {
+            menu::Item::Button(label, None, Action::Undo) => {
+                assert_eq!(label, "Undo Delete");
+            }
+            _ => panic!("expected an enabled Undo item labelled \"Undo Delete\""),
+        }
+        match menu_button_optional(
+            redo_label(&history.redo_stack),
+            Action::Redo,
+            undo_redo_enabled(&history.redo_stack, &history.pending_undo),
+        ) {
+            menu::Item::ButtonDisabled(label, None, Action::Redo) => {
+                assert_eq!(label, "Redo");
+            }
+            _ => panic!("expected a disabled Redo item"),
+        }
+
+        // An in-flight undo/redo (`pending_undo` set) disables BOTH items even
+        // though the undo stack is non-empty.
+        history.pending_undo = Some(undo_entry("Undo Delete"));
+        assert!(!undo_redo_enabled(
+            &history.undo_stack,
+            &history.pending_undo
+        ));
+        assert!(!undo_redo_enabled(
+            &history.redo_stack,
+            &history.pending_undo
+        ));
+
+        // Redo: a non-empty redo stack yields a dynamic label and is enabled.
+        let mut history = UndoHistory::new();
+        history.redo_stack.push(undo_entry("Undo Move"));
+        assert_eq!(redo_label(&history.redo_stack), "Undo Move");
+        assert!(undo_redo_enabled(
+            &history.redo_stack,
+            &history.pending_undo
+        ));
+
+        // Empty undo stack: plain `fl!("undo")` fallback, disabled.
+        let empty = UndoHistory::new();
+        assert_eq!(undo_label(&empty.undo_stack), "Undo");
+        assert!(!undo_redo_enabled(&empty.undo_stack, &empty.pending_undo));
+
+        // Full `menu_bar` construction with the threaded undo state and minimal
+        // fixtures (a real Tab, Core::default(), the app key_binds, empty
+        // modifiers) — proves the render path accepts the new parameters.
+        let fs = tempfile::tempdir().expect("create temp dir for tab fixture");
+        let tab = Tab::new(
+            Location::Path(fs.path().into()),
+            TabConfig::default(),
+            ThumbCfg::default(),
+            None,
+            widget::Id::unique(),
+            None,
+        );
+        let _ = menu_bar(
+            &Core::default(),
+            Some(&tab),
+            &Config::default(),
+            &Modifiers::empty(),
+            &key_binds(&tab.mode),
+            true,
+            undo_label(&history.undo_stack),
+            undo_redo_enabled(&history.undo_stack, &history.pending_undo),
+            redo_label(&history.redo_stack),
+            undo_redo_enabled(&history.redo_stack, &history.pending_undo),
+        );
+    }
 }

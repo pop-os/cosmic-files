@@ -6875,6 +6875,14 @@ impl Application for App {
     }
 
     fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
+        // Dynamic Undo/Redo labels and enabled state for the Edit menu (Todo
+        // 5), derived from the current undo history: labels come from the top
+        // stack entries' descriptions, and the items are enabled exactly when
+        // the stack is non-empty AND no undo/redo is in flight.
+        let undo_label = menu::undo_label(&self.undo.undo_stack);
+        let redo_label = menu::redo_label(&self.undo.redo_stack);
+        let can_undo = menu::undo_redo_enabled(&self.undo.undo_stack, &self.undo.pending_undo);
+        let can_redo = menu::undo_redo_enabled(&self.undo.redo_stack, &self.undo.pending_undo);
         vec![menu::menu_bar(
             &self.core,
             self.tab_model.active_data::<Tab>(),
@@ -6882,6 +6890,10 @@ impl Application for App {
             &self.modifiers,
             &self.key_binds,
             self.clipboard_has_content(),
+            undo_label,
+            can_undo,
+            redo_label,
+            can_redo,
         )]
     }
 
