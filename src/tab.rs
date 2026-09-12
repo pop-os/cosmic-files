@@ -1712,6 +1712,19 @@ impl Location {
         )
     }
 
+    /// What a search started here would search, if this location can be searched at all.
+    pub fn search_location_opt(&self) -> Option<SearchLocation> {
+        if let Some(path) = self.path_opt() {
+            Some(SearchLocation::Path(path.clone()))
+        } else if self.is_recents() {
+            Some(SearchLocation::Recents)
+        } else if self.is_trash() {
+            Some(SearchLocation::Trash)
+        } else {
+            None
+        }
+    }
+
     /// Returns true if this location supports paste operations (not Trash)
     pub fn supports_paste(&self) -> bool {
         matches!(

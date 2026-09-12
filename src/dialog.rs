@@ -769,19 +769,13 @@ impl App {
 
     fn search_set(&mut self, term_opt: Option<String>) -> Task<Message> {
         let focus_field = term_opt.is_some();
+        let search_location_opt = self.tab.location.search_location_opt();
+        if term_opt.is_some() && search_location_opt.is_none() {
+            return Task::none();
+        }
         let location_opt = match &term_opt {
             Some(term) if !term.is_empty() => {
-                let search_location = if let Some(path) = self.tab.location.path_opt() {
-                    Some(SearchLocation::Path(path.clone()))
-                } else if self.tab.location.is_recents() {
-                    Some(SearchLocation::Recents)
-                } else if self.tab.location.is_trash() {
-                    Some(SearchLocation::Trash)
-                } else {
-                    None
-                };
-
-                search_location.map(|search_location| {
+                search_location_opt.map(|search_location| {
                     Location::Search(
                         search_location,
                         term.clone(),

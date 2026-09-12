@@ -1604,19 +1604,13 @@ impl App {
         let focus_field = term_opt.is_some();
         let mut title_location_opt = None;
         if let Some(tab) = self.tab_model.data_mut::<Tab>(tab) {
+            let search_location_opt = tab.location.search_location_opt();
+            if term_opt.is_some() && search_location_opt.is_none() {
+                return Task::none();
+            }
             let location_opt = match &term_opt {
                 Some(term) if !term.is_empty() => {
-                    let search_location = if let Some(path) = tab.location.path_opt() {
-                        Some(SearchLocation::Path(path.clone()))
-                    } else if tab.location.is_recents() {
-                        Some(SearchLocation::Recents)
-                    } else if tab.location.is_trash() {
-                        Some(SearchLocation::Trash)
-                    } else {
-                        None
-                    };
-
-                    search_location.map(|search_location| {
+                    search_location_opt.map(|search_location| {
                         Location::Search(
                             search_location,
                             term.clone(),
