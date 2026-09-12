@@ -469,6 +469,9 @@ pub enum Message {
     Redo,
     AssignToastId(u64, widget::ToastId),
     RefreshAffectedTabs,
+    TextInputFocused(widget::Id),
+    TextInputBlurred,
+
     UndoTrash(widget::ToastId, Arc<[PathBuf]>),
     UndoTrashStart(Vec<TrashItem>),
     WindowClose,
@@ -835,6 +838,23 @@ pub struct App {
     // Directories affected by the last successful suppressed (undo/redo) inverse;
     // consumed by Message::RefreshAffectedTabs to reload tabs viewing them.
     pending_affected_dirs: Vec<PathBuf>,
+    // The widget id of the text input currently focused, if any (Todo 6). When
+    // it is set, Ctrl+Z / Ctrl+Y must undo TEXT in that input, never a file
+    // operation (the Nemo #1854/#3209 class of bug), so the Undo/Redo keybinds
+    // are skipped. Set by Message::TextInputFocused / cleared by TextInputBlurred.
+    focused_text_input: Option<widget::Id>,
+}
+
+/// The text-field guard (Todo 6): while any tracked text input has focus,
+/// Ctrl+Z / Ctrl+Y must undo TEXT in that input, never a file operation (the
+/// Nemo #1854/#3209 class of bug). `focused_text_input` is `Some` whenever a
+/// tracked input is focused; the guard then suppresses ONLY the Undo/Redo
+/// keybind dispatch — every other keybind still works.
+pub(crate) fn undo_redo_blocked_by_focus(
+    focused_text_input: &Option<widget::Id>,
+    action: &Action,
+) -> bool {
+    focused_text_input.is_some() && matches!(action, Action::Undo | Action::Redo)
 }
 
 impl App {
@@ -2025,9 +2045,7 @@ impl App {
 
         for (favorite_i, favorite) in self.config.favorites.iter().enumerate() {
             if let Some(path) = favorite.path_opt() {
-                let name = favorite
-                    .display_name()
-                    .unwrap_or_else(|| fl!("filesystem"));
+                let name = favorite.display_name().unwrap_or_else(|| fl!("filesystem"));
                 nav_model = nav_model.insert(move |b| {
                     b.text(name.clone())
                         .icon(
@@ -2733,6 +2751,7 @@ impl Application for App {
             clipboard_cache: ClipboardCache::Empty,
             undo: UndoHistory::new(),
             pending_affected_dirs: Vec::new(),
+            focused_text_input: None,
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             layer_sizes: FxHashMap::default(),
         };
@@ -3650,6 +3669,12 @@ impl Application for App {
                     let entity = self.tab_model.active();
                     for (key_bind, action) in &self.key_binds {
                         if key_bind.matches(modifiers, &key, Some(&physical_key)) {
+                            // Text-field guard (Todo 6): while a text input has
+                            // focus, Ctrl+Z / Ctrl+Y must undo TEXT in that input,
+                            // never a file operation. Only Undo/Redo are skipped.
+                            if undo_redo_blocked_by_focus(&self.focused_text_input, action) {
+                                continue;
+                            }
                             return self.update(action.message(Some(entity)));
                         }
                     }
@@ -4630,6 +4655,10 @@ impl Application for App {
                 ));
             }
             Message::SearchActivate => {
+                // Both branches below focus the search box (programmatic focus
+                // does not fire the widget's `on_focus`), so record it for the
+                // text-field guard (Todo 6).
+                self.focused_text_input = Some(self.search_id.clone());
                 let mut tasks = vec![self.close_context_menus()];
 
                 if self.search_get().is_none() {
@@ -4641,6 +4670,7 @@ impl Application for App {
                 return Task::batch(tasks);
             }
             Message::SearchClear => {
+                self.focused_text_input = None;
                 return Task::batch([self.close_context_menus(), self.search_set_active(None)]);
             }
             Message::SearchInput(input) => {
@@ -4761,6 +4791,25 @@ impl Application for App {
             }
             Message::TabMessage(entity_opt, tab_message) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+
+                // Text-field guard (Todo 6): the edit-location bar is focused
+                // programmatically by the tab (which cannot reach App state), so
+                // track its lifecycle here — open messages focus the input, close
+                // messages blur it. This keeps Ctrl+Z in the bar undoing TEXT
+                // instead of a file operation.
+                match &tab_message {
+                    tab::Message::EditLocationEnable | tab::Message::EditLocation(Some(_)) => {
+                        if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+                            self.focused_text_input = Some(tab.edit_location_id.clone());
+                        }
+                    }
+                    tab::Message::EditLocation(None)
+                    | tab::Message::EditLocationComplete(_)
+                    | tab::Message::EditLocationSubmit => {
+                        self.focused_text_input = None;
+                    }
+                    _ => {}
+                }
 
                 let tab_commands = match self.tab_model.data_mut::<Tab>(entity) {
                     Some(tab) => tab.update(tab_message, self.modifiers),
@@ -5204,6 +5253,14 @@ impl Application for App {
                 let dirs = std::mem::take(&mut self.pending_affected_dirs);
                 return self.refresh_affected_tabs(&dirs);
             }
+            Message::TextInputFocused(id) => {
+                // A tracked text input gained focus (click or programmatic):
+                // record it so the Undo/Redo keybinds are skipped (Todo 6).
+                self.focused_text_input = Some(id);
+            }
+            Message::TextInputBlurred => {
+                self.focused_text_input = None;
+            }
             Message::UndoTrash(id, recently_trashed) => {
                 self.toasts.remove(id);
 
@@ -5633,16 +5690,10 @@ impl Application for App {
                 }
 
                 NavMenuAction::ChangeSidebarLabel(entity) => {
-                    if let Some(favorite) = self
-                        .nav_model
-                        .data::<FavoriteIndex>(entity)
-                        .and_then(|FavoriteIndex(favorite_i)| {
-                            self.config.favorites.get(*favorite_i)
-                        })
-                    {
-                        let label = favorite
-                            .display_name()
-                            .unwrap_or_else(|| fl!("filesystem"));
+                    if let Some(favorite) = self.nav_model.data::<FavoriteIndex>(entity).and_then(
+                        |FavoriteIndex(favorite_i)| self.config.favorites.get(*favorite_i),
+                    ) {
+                        let label = favorite.display_name().unwrap_or_else(|| fl!("filesystem"));
                         return Task::batch([
                             self.dialog_pages
                                 .push_back(DialogPage::ChangeSidebarLabel { entity, label }),
@@ -5877,7 +5928,11 @@ impl Application for App {
             .title(fl!("edit-history")),
             ContextPage::NetworkDrive => {
                 let mut text_input =
-                    widget::text_input(fl!("enter-server-address"), &self.network_drive_input);
+                    widget::text_input(fl!("enter-server-address"), &self.network_drive_input)
+                        .on_focus(Message::TextInputFocused(widget::Id::new(
+                            "network-drive-address",
+                        )))
+                        .on_unfocus(Message::TextInputBlurred);
                 let button = if self.network_drive_connecting.is_some() {
                     widget::button::standard(fl!("connecting"))
                 } else {
@@ -6001,6 +6056,10 @@ impl Application for App {
                             widget::row::with_children([
                                 widget::text_input("", name.as_str())
                                     .id(self.dialog_text_input.clone())
+                                    .on_focus(Message::TextInputFocused(
+                                        self.dialog_text_input.clone(),
+                                    ))
+                                    .on_unfocus(Message::TextInputBlurred)
                                     .on_input(move |name| {
                                         Message::DialogUpdate(DialogPage::Compress {
                                             paths: paths.clone(),
@@ -6042,6 +6101,8 @@ impl Application for App {
                         widget::text::body(fl!("password")).into(),
                         widget::text_input("", password_unwrapped)
                             .password()
+                            .on_focus(Message::TextInputFocused(self.dialog_text_input.clone()))
+                            .on_unfocus(Message::TextInputBlurred)
                             .on_input(move |password_unwrapped| {
                                 Message::DialogUpdate(DialogPage::Compress {
                                     paths: paths.clone(),
@@ -6112,7 +6173,9 @@ impl Application for App {
                             Message::DialogUpdate(DialogPage::ExtractPassword { id: *id, password })
                         })
                         .on_submit(|_| Message::DialogComplete)
-                        .id(self.dialog_text_input.clone()),
+                        .id(self.dialog_text_input.clone())
+                        .on_focus(Message::TextInputFocused(self.dialog_text_input.clone()))
+                        .on_unfocus(Message::TextInputBlurred),
                 )
                 .primary_action(
                     widget::button::suggested(fl!("extract-here"))
@@ -6150,6 +6213,8 @@ impl Application for App {
                 if let Some(username) = &auth.username_opt {
                     //TODO: what should submit do?
                     let mut input = widget::text_input(fl!("username"), username)
+                        .on_focus(Message::TextInputFocused(self.dialog_text_input.clone()))
+                        .on_unfocus(Message::TextInputBlurred)
                         .on_input(move |value| {
                             Message::DialogUpdate(DialogPage::NetworkAuth {
                                 mounter_key: *mounter_key,
@@ -6172,6 +6237,8 @@ impl Application for App {
                 if let Some(domain) = &auth.domain_opt {
                     //TODO: what should submit do?
                     let mut input = widget::text_input(fl!("domain"), domain)
+                        .on_focus(Message::TextInputFocused(self.dialog_text_input.clone()))
+                        .on_unfocus(Message::TextInputBlurred)
                         .on_input(move |value| {
                             Message::DialogUpdate(DialogPage::NetworkAuth {
                                 mounter_key: *mounter_key,
@@ -6195,6 +6262,8 @@ impl Application for App {
                     //TODO: what should submit do?
                     //TODO: button for showing password
                     let mut input = widget::secure_input(fl!("password"), password, None, true)
+                        .on_focus(Message::TextInputFocused(self.dialog_text_input.clone()))
+                        .on_unfocus(Message::TextInputBlurred)
                         .on_input(move |value| {
                             Message::DialogUpdate(DialogPage::NetworkAuth {
                                 mounter_key: *mounter_key,
@@ -6335,6 +6404,8 @@ impl Application for App {
                             .into(),
                             widget::text_input("", name.as_str())
                                 .id(self.dialog_text_input.clone())
+                                .on_focus(Message::TextInputFocused(self.dialog_text_input.clone()))
+                                .on_unfocus(Message::TextInputBlurred)
                                 .on_input(move |name| {
                                     Message::DialogUpdate(DialogPage::NewItem {
                                         parent: parent.clone(),
@@ -6458,6 +6529,8 @@ impl Application for App {
                             search_app_name,
                         )
                         .id(self.dialog_text_input.clone())
+                        .on_focus(Message::TextInputFocused(self.dialog_text_input.clone()))
+                        .on_unfocus(Message::TextInputBlurred)
                         .on_clear(Message::OpenWithSearchClear)
                         .on_input(move |search_app_name| {
                             Message::DialogUpdate(DialogPage::OpenWith {
@@ -6566,6 +6639,8 @@ impl Application for App {
                             widget::text::body(fl!("sidebar-label")).into(),
                             widget::text_input("", label.as_str())
                                 .id(self.dialog_text_input.clone())
+                                .on_focus(Message::TextInputFocused(self.dialog_text_input.clone()))
+                                .on_unfocus(Message::TextInputBlurred)
                                 .on_input(move |label| {
                                     Message::DialogUpdate(DialogPage::ChangeSidebarLabel {
                                         entity,
@@ -6639,6 +6714,8 @@ impl Application for App {
                             .into(),
                             widget::text_input("", name.as_str())
                                 .id(self.dialog_text_input.clone())
+                                .on_focus(Message::TextInputFocused(self.dialog_text_input.clone()))
+                                .on_unfocus(Message::TextInputBlurred)
                                 .double_click_select_delimiter('.')
                                 .on_input(move |name| {
                                     Message::DialogUpdate(DialogPage::RenameItem {
@@ -6915,6 +6992,8 @@ impl Application for App {
                     widget::text_input::search_input("", term)
                         .width(Length::Fixed(240.0))
                         .id(self.search_id.clone())
+                        .on_focus(Message::TextInputFocused(self.search_id.clone()))
+                        .on_unfocus(Message::TextInputBlurred)
                         .on_clear(Message::SearchClear)
                         .on_input(Message::SearchInput)
                         .into(),
@@ -6948,6 +7027,8 @@ impl Application for App {
                     widget::text_input::search_input("", term)
                         .width(Length::Fill)
                         .id(self.search_id.clone())
+                        .on_focus(Message::TextInputFocused(self.search_id.clone()))
+                        .on_unfocus(Message::TextInputBlurred)
                         .on_clear(Message::SearchClear)
                         .on_input(Message::SearchInput),
                 )
@@ -6978,6 +7059,11 @@ impl Application for App {
             );
         }
 
+        // Dynamic Undo label + enabled state for the context menu's Undo item
+        // (Todo 6), derived from the current undo history exactly like the
+        // Edit menu (Todo 5).
+        let undo_label = menu::undo_label(&self.undo.undo_stack);
+        let can_undo = menu::undo_redo_enabled(&self.undo.undo_stack, &self.undo.pending_undo);
         let entity = self.tab_model.active();
         if let Some(tab) = self.tab_model.data::<Tab>(entity) {
             let tab_view = tab
@@ -6986,6 +7072,8 @@ impl Application for App {
                     &self.modifiers,
                     self.clipboard_has_content(),
                     &self.config.context_actions,
+                    undo_label,
+                    can_undo,
                 )
                 .map(move |message| Message::TabMessage(Some(entity), message));
             tab_column = tab_column.push(tab_view);
@@ -7015,6 +7103,11 @@ impl Application for App {
                                 &window.modifiers,
                                 self.clipboard_has_content(),
                                 &self.config.context_actions,
+                                menu::undo_label(&self.undo.undo_stack),
+                                menu::undo_redo_enabled(
+                                    &self.undo.undo_stack,
+                                    &self.undo.pending_undo,
+                                ),
                             )
                             .map(|x| Message::TabMessage(Some(*entity), x)),
                             id.clone(),
@@ -7033,6 +7126,11 @@ impl Application for App {
                                 &window.modifiers,
                                 self.clipboard_has_content(),
                                 &self.config.context_actions,
+                                menu::undo_label(&self.undo.undo_stack),
+                                menu::undo_redo_enabled(
+                                    &self.undo.undo_stack,
+                                    &self.undo.pending_undo,
+                                ),
                             )
                             .map(move |message| Message::TabMessage(Some(*entity), message)),
                         None => widget::space::vertical().into(),
@@ -7810,5 +7908,38 @@ pub(crate) mod test_utils {
             path.display(),
             tab_path.display()
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Todo 6 acceptance: while a text input has focus, Ctrl+Z / Ctrl+Y must
+    // undo TEXT in that input, never a file operation (the Nemo #1854/#3209
+    // class of bug). The guard is extracted into `undo_redo_blocked_by_focus`,
+    // which `Message::Key` consults before dispatching any keybind.
+    #[test]
+    fn text_field_undo_guard() {
+        let focused = Some(widget::Id::unique());
+        let unfocused = None;
+
+        // With a focused text input, Undo AND Redo are suppressed...
+        assert!(undo_redo_blocked_by_focus(&focused, &Action::Undo));
+        assert!(undo_redo_blocked_by_focus(&focused, &Action::Redo));
+
+        // ...but every OTHER keybind is NOT blocked.
+        assert!(!undo_redo_blocked_by_focus(&focused, &Action::Copy));
+        assert!(!undo_redo_blocked_by_focus(&focused, &Action::Cut));
+        assert!(!undo_redo_blocked_by_focus(&focused, &Action::Paste));
+        assert!(!undo_redo_blocked_by_focus(&focused, &Action::Delete));
+        assert!(!undo_redo_blocked_by_focus(&focused, &Action::Rename));
+        assert!(!undo_redo_blocked_by_focus(&focused, &Action::MoveTo));
+        assert!(!undo_redo_blocked_by_focus(&focused, &Action::NewFolder));
+        assert!(!undo_redo_blocked_by_focus(&focused, &Action::TabNew));
+
+        // Without a focused text input the guard never blocks anything.
+        assert!(!undo_redo_blocked_by_focus(&unfocused, &Action::Undo));
+        assert!(!undo_redo_blocked_by_focus(&unfocused, &Action::Redo));
     }
 }

@@ -60,6 +60,8 @@ pub fn context_menu<'a>(
     modifiers: &Modifiers,
     clipboard_paste_available: bool,
     context_actions: &[ContextActionPreset],
+    undo_label: String,
+    can_undo: bool,
 ) -> Element<'a, tab::Message> {
     let find_key = |action: &Action| -> String {
         for (key_bind, key_action) in key_binds {
@@ -103,6 +105,14 @@ pub fn context_menu<'a>(
             space::horizontal(),
             text::body(key).class(theme::Text::Custom(disabled_style))
         )
+    };
+
+    let undo_item = |label: String| {
+        if can_undo {
+            menu_item(label, Action::Undo).into()
+        } else {
+            menu_item_disabled(label, Action::Undo).into()
+        }
     };
 
     // Allow paste when clipboard has data and we're in a location that supports it
@@ -316,6 +326,8 @@ pub fn context_menu<'a>(
                         children.push(menu_item(fl!("eject"), Action::Eject).into());
                     }
                 }
+                children.push(divider::horizontal::light().into());
+                children.push(undo_item(undo_label.clone()));
             } else {
                 //TODO: need better designs for menu with no selection
                 //TODO: have things like properties but they apply to the folder?
@@ -334,6 +346,7 @@ pub fn context_menu<'a>(
                 } else {
                     children.push(menu_item_disabled(fl!("paste"), Action::Paste).into());
                 }
+                children.push(undo_item(undo_label.clone()));
 
                 //TODO: only show if cosmic-settings is found?
                 if matches!(tab.mode, tab::Mode::Desktop) {
@@ -1009,6 +1022,80 @@ mod tests {
             undo_redo_enabled(&history.undo_stack, &history.pending_undo),
             redo_label(&history.redo_stack),
             undo_redo_enabled(&history.redo_stack, &history.pending_undo),
+        );
+    }
+
+    // Todo 6 acceptance: the context menu emits an Undo item (dynamic label
+    // from the Todo-5 helpers, enabled when the undo stack is non-empty and
+    // nothing is in flight) in BOTH the selection and no-selection arms. The
+    // element tree is not walkable (MenuColumn children are private), so the
+    // test asserts the label/enabled derivation the app callers feed in and
+    // proves `context_menu` renders both arms with the threaded state.
+    #[test]
+    fn context_menu_undo() {
+        let mut history = UndoHistory::new();
+        history.undo_stack.push(undo_entry("Undo Delete"));
+        assert_eq!(undo_label(&history.undo_stack), "Undo Delete");
+        assert!(undo_redo_enabled(
+            &history.undo_stack,
+            &history.pending_undo
+        ));
+        let (label, can_undo) = (
+            undo_label(&history.undo_stack),
+            undo_redo_enabled(&history.undo_stack, &history.pending_undo),
+        );
+
+        // No-selection arm: a fresh Tab with no items (undo sits near Paste).
+        let fs = tempfile::tempdir().expect("create temp dir for tab fixture");
+        let tab = Tab::new(
+            Location::Path(fs.path().into()),
+            TabConfig::default(),
+            ThumbCfg::default(),
+            None,
+            widget::Id::unique(),
+            None,
+        );
+        let _ = context_menu(
+            &tab,
+            &key_binds(&tab.mode),
+            &Modifiers::empty(),
+            true,
+            &[],
+            label.clone(),
+            can_undo,
+        );
+
+        // Selection arm: a tab with selected items (undo sits near Move-to-Trash).
+        let (_tmp, mut tab) =
+            crate::app::test_utils::tab_click_new(2, 0, 2, 0, 5).expect("create fixture tab");
+        if let Some(items) = tab.items_opt_mut() {
+            for item in items.iter_mut() {
+                item.selected = true;
+            }
+        }
+        let _ = context_menu(
+            &tab,
+            &key_binds(&tab.mode),
+            &Modifiers::empty(),
+            true,
+            &[],
+            label.clone(),
+            can_undo,
+        );
+
+        // In-flight undo (`pending_undo` set) disables the item even though
+        // the undo stack is non-empty.
+        history.pending_undo = Some(undo_entry("Undo Delete"));
+        let can_undo = undo_redo_enabled(&history.undo_stack, &history.pending_undo);
+        assert!(!can_undo);
+        let _ = context_menu(
+            &tab,
+            &key_binds(&tab.mode),
+            &Modifiers::empty(),
+            true,
+            &[],
+            undo_label(&history.undo_stack),
+            can_undo,
         );
     }
 }

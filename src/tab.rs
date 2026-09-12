@@ -6468,6 +6468,7 @@ impl Tab {
         (drag_col, mouse_area.into(), true)
     }
 
+    #[allow(clippy::too_many_arguments)] // Todo 6 added undo_label + can_undo
     pub fn view_responsive<'a>(
         &'a self,
         key_binds: &'a HashMap<KeyBind, Action>,
@@ -6475,6 +6476,8 @@ impl Tab {
         size: Size,
         clipboard_paste_available: bool,
         context_actions: &'a [ContextActionPreset],
+        undo_label: String,
+        can_undo: bool,
     ) -> Element<'a, Message> {
         // Update cached size
         self.size_opt.set(Some(size));
@@ -6568,6 +6571,8 @@ impl Tab {
                 modifiers,
                 clipboard_paste_available,
                 context_actions,
+                undo_label,
+                can_undo,
             );
             popover = popover
                 .popup(context_menu)
@@ -6957,6 +6962,8 @@ impl Tab {
         modifiers: &'a Modifiers,
         clipboard_paste_available: bool,
         context_actions: &'a [ContextActionPreset],
+        undo_label: String,
+        can_undo: bool,
     ) -> Element<'a, Message> {
         widget::responsive(move |size| {
             widget::id_container(
@@ -6966,6 +6973,8 @@ impl Tab {
                     size,
                     clipboard_paste_available,
                     context_actions,
+                    undo_label.clone(),
+                    can_undo,
                 ),
                 Id::new(format!(
                     "tab-{}-{}",
@@ -7156,8 +7165,7 @@ impl Tab {
                                         let path = path.clone();
 
                                         // Acquire semaphore permit
-                                        let _permit =
-                                            THUMB_SEMAPHORE.acquire().await.unwrap();
+                                        let _permit = THUMB_SEMAPHORE.acquire().await.unwrap();
 
                                         tokio::task::spawn_blocking(move || {
                                             let start = Instant::now();
