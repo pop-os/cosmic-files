@@ -400,6 +400,27 @@ impl UndoHistory {
             None
         }
     }
+
+    /// Whether an Undo/Redo invocation must be a no-op (the single-in-flight
+    /// invariant from Todo 1).
+    ///
+    /// The three conditions are INDEPENDENT, so the guard is an OR (never AND):
+    /// (1) file operations are pending (`!pending_operations.is_empty()`),
+    /// (2) a dialog page is open (in practice a `DialogPage::ConfirmUndo`
+    ///     awaiting a destructive-undo confirmation), or
+    /// (3) an entry is already held in `pending_undo` (an inverse is in flight
+    ///     or a destructive-undo dialog holds the popped entry).
+    ///
+    /// Todo 9 exposes this as a testable seam so the guard logic the
+    /// `Message::Undo` / `Message::Redo` handlers run can be unit-tested
+    /// without constructing a full `App`.
+    pub fn is_undo_redo_blocked(
+        &self,
+        has_pending_operations: bool,
+        has_open_dialog: bool,
+    ) -> bool {
+        has_pending_operations || has_open_dialog || self.pending_undo.is_some()
+    }
 }
 
 #[cfg(test)]
@@ -626,6 +647,21 @@ mod tests {
             other => panic!("expected Move inverse, got {other:?}"),
         }
 
+        // Todo 9 (b): the FORWARD Move preserves the same cross_device_copy
+        // flag (a cross-device move must undo with the same copy semantics).
+        match &entry.forward {
+            Operation::Move {
+                paths,
+                to,
+                cross_device_copy,
+            } => {
+                assert_eq!(paths, &vec![PathBuf::from("/src/file.txt")]);
+                assert_eq!(to, &PathBuf::from("/dst"));
+                assert!(*cross_device_copy, "forward keeps cross_device_copy");
+            }
+            other => panic!("expected Move forward, got {other:?}"),
+        }
+
         // Copy inverse Delete paths equal op_sel.selected.
         let op = Operation::Copy {
             paths: vec![PathBuf::from("/src/file.txt")],
@@ -743,6 +779,65 @@ mod tests {
         assert_eq!(history.redo_stack.peek().unwrap().entry_id, 1);
         assert!(history.pending_undo.is_none());
         assert!(history.suppressed_ops.is_empty());
+    }
+
+    // Todo 9 acceptance: a suppressed inverse that FAILS (e.g. a restore that
+    // hits a permission error, or a cross-device move whose source device was
+    // unmounted) restores the held entry to `undo_stack` via
+    // `record_undo_for_retry(entry, StackTarget::Undo)` and does NOT touch
+    // `redo_stack` — the entry stays undoable so the user can retry.
+    #[test]
+    fn undo_failure_keeps_entry() {
+        let mut history = UndoHistory::new();
+        // A pre-existing redo entry must survive a failed undo untouched.
+        history.redo_stack.push(make_entry(7, "redo survivor"));
+        let entry = make_entry(42, "failed inverse");
+        history.undo_stack.push(entry.clone());
+        let entry = history.undo_stack.pop().unwrap();
+        history.pending_undo = Some(entry.clone());
+        let inverse_id = 100;
+        history.suppressed_ops.insert(inverse_id, entry.clone());
+        history.pending_undo_direction = Some(true); // an undo is in flight
+
+        let dismiss = history.route_suppressed_failure(inverse_id);
+        assert!(dismiss.is_some());
+
+        // The FULL entry (not just an id) is back on the undo stack, topmost.
+        assert_eq!(history.undo_stack.len(), 1);
+        assert_eq!(history.undo_stack.peek().unwrap().entry_id, 42);
+        assert_eq!(
+            history.undo_stack.peek().unwrap().inverse,
+            entry.inverse,
+            "the SAME inverse is retained for retry"
+        );
+        // redo_stack untouched; nothing held; suppression cleared.
+        assert_eq!(history.redo_stack.len(), 1, "redo_stack untouched");
+        assert_eq!(history.redo_stack.peek().unwrap().entry_id, 7);
+        assert!(history.pending_undo.is_none());
+        assert!(history.suppressed_ops.is_empty());
+    }
+
+    // Todo 9 acceptance: Undo/Redo are no-ops while the single-in-flight guards
+    // hold — non-empty `pending_operations`, an open dialog (a ConfirmUndo
+    // page), or a held `pending_undo`. Tested via the guard helper the
+    // `Message::Undo` / `Message::Redo` handlers use.
+    #[test]
+    fn undo_in_flight_noop() {
+        let mut history = UndoHistory::new();
+
+        // Non-empty pending_operations blocks.
+        assert!(history.is_undo_redo_blocked(true, false));
+        // An open dialog page blocks.
+        assert!(history.is_undo_redo_blocked(false, true));
+        // A held pending_undo blocks (an inverse is in flight).
+        history.pending_undo = Some(make_entry(0, "in flight"));
+        assert!(history.is_undo_redo_blocked(false, false));
+        // Combinations of the independent conditions also block (OR, not AND).
+        assert!(history.is_undo_redo_blocked(true, true));
+
+        // Idle: undo is allowed.
+        history.pending_undo = None;
+        assert!(!history.is_undo_redo_blocked(false, false));
     }
 
     // Deferred invalidation: `pending_invalidation = Some(inverse_id)` set while

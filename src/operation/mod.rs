@@ -1201,6 +1201,19 @@ impl Operation {
                         .check()
                         .await
                         .map_err(|s| OperationError::from_state(s, &controller))?;
+
+                    // Collision safety: if the target already exists (a forward rename
+                    // onto an existing path, or an undo-rename restoring a name that was
+                    // taken again), pick a unique name so the rename NEVER overwrites an
+                    // existing file. `copy_unique_path` bases the generated name on the
+                    // desired `to` (e.g. "b (Copy 1).txt") in the same parent directory.
+                    let to = if to.exists() {
+                        let parent = to.parent().unwrap_or_else(|| Path::new("."));
+                        copy_unique_path(&to, parent)
+                    } else {
+                        to
+                    };
+
                     compio::fs::rename(&from, &to)
                         .await
                         .map_err(|e| OperationError::from_err(e, &controller))?;
@@ -1577,6 +1590,92 @@ mod tests {
 
         assert!(file_path.exists(), "Original file should still exist");
         assert!(expected.exists(), "File should have been copied");
+
+        Ok(())
+    }
+
+    /// Simple wrapper around `[Operation::Rename]` — performs the rename and
+    /// drains any messages it sends through `msg_tx` (same shape as
+    /// `operation_copy`; a rename sends nothing today, but the drain keeps the
+    /// channel from blocking if that ever changes).
+    pub async fn operation_rename(
+        from: PathBuf,
+        to: PathBuf,
+    ) -> Result<OperationSelection, OperationError> {
+        let (tx, mut rx) = mpsc::channel(1);
+
+        let handle_rename = async move {
+            Operation::Rename { from, to }
+                .perform(&sync::Mutex::new(tx).into(), Controller::default())
+                .await
+        };
+
+        // Drain messages so the mpsc channel (capacity 1) never blocks the
+        // operation; the sender is dropped when `perform` returns, which closes
+        // the channel and ends this loop.
+        let handle_messages = async move {
+            while let Some(msg) = rx.next().await {
+                if let Message::DialogPush(DialogPage::Replace { tx, .. }, _id_to_focus) = msg {
+                    tx.send(ReplaceResult::Cancel)
+                        .await
+                        .expect("Sending a response to a replace request should succeed");
+                }
+            }
+        };
+
+        future::join(handle_messages, handle_rename).await.1
+    }
+
+    // Todo 9 acceptance: a rename whose target ALREADY EXISTS yields a unique
+    // name and NEVER overwrites the existing target. This is the execution-time
+    // collision guard that also makes undo-rename safe: the inverse is
+    // structurally the same `Operation::Rename.perform()` arm.
+    #[test(compio::test)]
+    async fn undo_rename_collision() -> io::Result<()> {
+        let fs = empty_fs()?;
+        let path = fs.path();
+
+        // Forward-style rename: a.txt -> b.txt while b.txt exists and holds
+        // data that must survive.
+        let from = path.join("a.txt");
+        File::create(&from)?;
+        let to = path.join("b.txt");
+        File::create(&to)?;
+        fs::write(&to, "pre-existing")?;
+
+        let op_sel = operation_rename(from.clone(), to.clone())
+            .await
+            .expect("Rename should succeed");
+        assert!(!from.exists(), "source should have been renamed away");
+        assert!(to.exists(), "colliding target must never be overwritten");
+        assert_eq!(fs::read_to_string(&to)?, "pre-existing");
+        let unique = path.join(format!("b ({} 1).txt", fl!("copy_noun")));
+        assert_eq!(
+            op_sel.selected[0], unique,
+            "rename should pick a unique name instead of overwriting"
+        );
+        assert!(
+            unique.exists(),
+            "file should have been renamed to the unique name"
+        );
+
+        // Inverse-style rename (undo-rename): c.txt -> a.txt while a.txt exists
+        // again (it was re-created after the original rename). Same collision
+        // safety, derived from the desired target name.
+        let from = path.join("c.txt");
+        File::create(&from)?;
+        let to = path.join("a.txt");
+        File::create(&to)?;
+        fs::write(&to, "re-created")?;
+
+        let op_sel = operation_rename(from.clone(), to.clone())
+            .await
+            .expect("Rename should succeed");
+        assert!(!from.exists(), "source should have been renamed away");
+        assert_eq!(fs::read_to_string(&to)?, "re-created");
+        let unique = path.join(format!("a ({} 1).txt", fl!("copy_noun")));
+        assert_eq!(op_sel.selected[0], unique);
+        assert!(unique.exists());
 
         Ok(())
     }

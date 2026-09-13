@@ -5233,10 +5233,10 @@ impl Application for App {
             // Single-in-flight invariant: at most one undo/redo inverse runs at a time.
             // Guards: pending_operations not empty, any dialog open, or pending_undo already held.
             Message::Undo => {
-                if !self.pending_operations.is_empty()
-                    || !self.dialog_pages.pages.is_empty()
-                    || self.undo.pending_undo.is_some()
-                {
+                if self.undo.is_undo_redo_blocked(
+                    !self.pending_operations.is_empty(),
+                    !self.dialog_pages.pages.is_empty(),
+                ) {
                     return Task::none();
                 } else if let Some(entry) = self.undo.undo_stack.pop() {
                     // Destructive undo (undo-copy / undo-create): the inverse moves files
@@ -5276,10 +5276,10 @@ impl Application for App {
             }
             Message::Redo => {
                 // Same single-in-flight guards as Undo
-                if !self.pending_operations.is_empty()
-                    || !self.dialog_pages.pages.is_empty()
-                    || self.undo.pending_undo.is_some()
-                {
+                if self.undo.is_undo_redo_blocked(
+                    !self.pending_operations.is_empty(),
+                    !self.dialog_pages.pages.is_empty(),
+                ) {
                     return Task::none();
                 } else if let Some(entry) = self.undo.redo_stack.pop() {
                     self.undo.pending_undo = Some(entry.clone());
