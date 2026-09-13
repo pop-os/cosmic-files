@@ -476,8 +476,6 @@ pub enum Message {
     TextInputFocused(widget::Id),
     TextInputBlurred,
 
-    UndoTrash(widget::ToastId, Arc<[PathBuf]>),
-    UndoTrashStart(Vec<TrashItem>),
     WindowClose,
     WindowCloseRequested(window::Id),
     WindowMaximize(window::Id, bool),
@@ -787,6 +785,21 @@ fn affected_dirs(op: &Operation, op_sel: &OperationSelection) -> Vec<PathBuf> {
     push_parents(&mut dirs, &op_sel.selected);
     push_parents(&mut dirs, &op_sel.ignored);
     dirs
+}
+
+/// Whether a completed operation should emit a completion toast. Suppressed
+/// (inverse/redo) operations NEVER emit one: an undo-of-copy's inverse is
+/// itself a `Delete` whose normal completion would advertise an Undo action
+/// for an entry that is no longer on the undo stack.
+fn completion_toast(op: &Operation, suppress_recording: bool) -> Option<String> {
+    if suppress_recording { None } else { op.toast() }
+}
+
+/// The Undo action for the delete toast: drives the undo stack directly
+/// (`Message::Undo`), replacing the removed toast rescan-and-restore path.
+/// The `ToastId` the toaster passes to the action is unused.
+fn delete_undo_toast_action() -> impl Fn(widget::ToastId) -> Message {
+    |_tid| Message::Undo
 }
 
 // The [`App`] stores application-specific state.
@@ -1594,53 +1607,52 @@ impl App {
                 commands.push(self.rescan_recents());
             }
 
-            // Record a new undo entry and show toasts only for non-suppressed ops
-            // (a suppressed inverse must never produce an Undo-action toast).
-            if !suppress_recording {
-                let mut entry_id_opt = None;
-                if let Some(entry) = entry_opt {
-                    let (entry_id, dismiss) = self.undo.record_undo(entry);
-                    for toast_id in dismiss {
-                        self.toasts.remove(toast_id);
-                    }
-                    entry_id_opt = Some(entry_id);
+            // Record a new undo entry only for non-suppressed ops (a suppressed
+            // inverse must never produce a new undo entry of its own).
+            let mut entry_id_opt = None;
+            if !suppress_recording && let Some(entry) = entry_opt {
+                let (entry_id, dismiss) = self.undo.record_undo(entry);
+                for toast_id in dismiss {
+                    self.toasts.remove(toast_id);
                 }
+                entry_id_opt = Some(entry_id);
+            }
 
-                // Show toast for some operations
-                if let Some(description) = op.toast() {
-                    if let Operation::Delete { ref paths } = op {
-                        let paths: Arc<[PathBuf]> = Arc::from(paths.as_slice());
-                        let toast = widget::toaster::Toast::new(description)
-                            .action(fl!("undo"), move |tid| {
-                                Message::UndoTrash(tid, paths.clone())
-                            });
-                        // Capture the toast id ASYNCHRONOUSLY and write it back onto the
-                        // recorded entry so evict/clear can dismiss it later. NOTE:
-                        // `Toasts::push` returns a `Task<Message>` (the app message
-                        // `on_close(id)` = `Message::CloseToast(id)` when the toast
-                        // auto-dismisses) — not a `Task<ToastId>` as assumed by the
-                        // plan. The toaster task is therefore intercepted to forward
-                        // the id to `Message::AssignToastId` (which also removes the
-                        // toast, equivalent to CloseToast).
-                        let task = match entry_id_opt {
-                            Some(entry_id) => self
-                                .toasts
-                                .push(toast)
-                                .map(move |msg| match msg {
-                                    Message::CloseToast(id) => Message::AssignToastId(entry_id, id),
-                                    other => other,
-                                })
-                                .map(cosmic::Action::App),
-                            None => self.toasts.push(toast).map(cosmic::Action::App),
-                        };
-                        commands.push(task);
-                    } else {
-                        commands.push(
-                            self.toasts
-                                .push(widget::toaster::Toast::new(description))
-                                .map(cosmic::Action::App),
-                        );
-                    }
+            // Show a completion toast for some operations. Suppressed
+            // (inverse/redo) operations never emit one — an undo-of-copy's
+            // inverse is itself a `Delete` whose normal completion would
+            // advertise an Undo action for an entry that is no longer on the
+            // undo stack (`completion_toast` returns None for those).
+            if let Some(description) = completion_toast(&op, suppress_recording) {
+                if let Operation::Delete { .. } = op {
+                    let toast = widget::toaster::Toast::new(description)
+                        .action(fl!("undo"), delete_undo_toast_action());
+                    // Capture the toast id ASYNCHRONOUSLY and write it back onto the
+                    // recorded entry so evict/clear can dismiss it later. NOTE:
+                    // `Toasts::push` returns a `Task<Message>` (the app message
+                    // `on_close(id)` = `Message::CloseToast(id)` when the toast
+                    // auto-dismisses) — not a `Task<ToastId>` as assumed by the
+                    // plan. The toaster task is therefore intercepted to forward
+                    // the id to `Message::AssignToastId` (which also removes the
+                    // toast, equivalent to CloseToast).
+                    let task = match entry_id_opt {
+                        Some(entry_id) => self
+                            .toasts
+                            .push(toast)
+                            .map(move |msg| match msg {
+                                Message::CloseToast(id) => Message::AssignToastId(entry_id, id),
+                                other => other,
+                            })
+                            .map(cosmic::Action::App),
+                        None => self.toasts.push(toast).map(cosmic::Action::App),
+                    };
+                    commands.push(task);
+                } else {
+                    commands.push(
+                        self.toasts
+                            .push(widget::toaster::Toast::new(description))
+                            .map(cosmic::Action::App),
+                    );
                 }
             }
 
@@ -5339,39 +5351,6 @@ impl Application for App {
             Message::TextInputBlurred => {
                 self.focused_text_input = None;
             }
-            Message::UndoTrash(id, recently_trashed) => {
-                self.toasts.remove(id);
-
-                let mut paths = Vec::with_capacity(recently_trashed.len());
-                let icon_sizes = self.config.tab.icon_sizes;
-
-                return cosmic::task::future(async move {
-                    match tokio::task::spawn_blocking(move || Location::Trash.scan(icon_sizes))
-                        .await
-                    {
-                        Ok((_parent_item_opt, items)) => {
-                            for path in &*recently_trashed {
-                                for item in &items {
-                                    if let ItemMetadata::Trash { ref entry, .. } = item.metadata {
-                                        let original_path = entry.original_path();
-                                        if &original_path == path {
-                                            paths.push(entry.clone());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            log::warn!("failed to rescan: {err}");
-                        }
-                    }
-
-                    Message::UndoTrashStart(paths)
-                });
-            }
-            Message::UndoTrashStart(items) => {
-                return self.operation(Operation::Restore { items });
-            }
             Message::WindowClose => {
                 if let Some(window_id) = self.core.main_window_id() {
                     self.core.set_main_window_id(None);
@@ -6915,18 +6894,15 @@ impl Application for App {
                 description,
                 item_count,
             } => {
-                // Todo 8 replaces these literal labels with the i18n keys
-                // `confirm-undo-copy` / `confirm-undo-create` / `confirm-undo-trash` /
-                // `confirm-undo-cancel`.
                 let item_word = if *item_count == 1 { "item" } else { "items" };
                 widget::dialog()
                     .title(description.clone())
                     .primary_action(
-                        widget::button::destructive("Move to Trash")
+                        widget::button::destructive(fl!("confirm-undo-trash"))
                             .on_press(Message::ConfirmDestructiveUndo(true)),
                     )
                     .secondary_action(
-                        widget::button::standard("Cancel")
+                        widget::button::standard(fl!("confirm-undo-cancel"))
                             .on_press(Message::ConfirmDestructiveUndo(false)),
                     )
                     .control(widget::text(format!(
@@ -8042,6 +8018,47 @@ mod tests {
         // Without a focused text input the guard never blocks anything.
         assert!(!undo_redo_blocked_by_focus(&unfocused, &Action::Undo));
         assert!(!undo_redo_blocked_by_focus(&unfocused, &Action::Redo));
+    }
+
+    // Todo 8 acceptance: the delete toast's Undo action drives the undo stack
+    // directly (`Message::Undo`), not the removed toast rescan-and-restore
+    // path. `delete_undo_toast_action` is the exact closure handed to the
+    // toast's `.action()` in `handle_completed_operations`.
+    #[test]
+    fn undo_toast_rewire() {
+        let action = delete_undo_toast_action();
+        let tid = widget::ToastId::from(slotmap::KeyData::from_ffi(1));
+        assert!(matches!(action(tid), Message::Undo));
+    }
+
+    // Todo 8 acceptance: a suppressed (inverse/redo) operation's completion
+    // must never produce an Undo-action toast. An undo-of-copy's inverse is
+    // itself a `Delete` — the one operation that normally toasts with an Undo
+    // action — so this is exactly the case the guard must catch.
+    #[test]
+    fn undo_suppressed_no_toast() {
+        // A Delete normally produces a completion toast...
+        let delete = Operation::Delete {
+            paths: vec![PathBuf::from("/home/user/foo.txt")],
+        };
+        assert!(delete.toast().is_some(), "Delete normally toasts");
+
+        // ...but the same Delete completing as a suppressed inverse never does.
+        assert!(
+            completion_toast(&delete, true).is_none(),
+            "suppressed inverse must not produce an Undo-action toast"
+        );
+        assert!(
+            completion_toast(&delete, false).is_some(),
+            "a normal (non-suppressed) Delete still toasts"
+        );
+
+        // Other undoable operations never toast when suppressed either.
+        let rename = Operation::Rename {
+            from: PathBuf::from("/a/x.txt"),
+            to: PathBuf::from("/a/y.txt"),
+        };
+        assert!(completion_toast(&rename, true).is_none());
     }
 
     // ---- Todo 7: destructive-undo confirmation dialog ----

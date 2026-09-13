@@ -405,6 +405,7 @@ impl UndoHistory {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fl;
     use crate::operation::Operation;
     use std::path::PathBuf;
     use trash::TrashItem;
@@ -948,5 +949,47 @@ mod tests {
         assert!(history.undo_stack.is_empty());
         assert!(history.redo_stack.is_empty());
         assert!(history.pending_undo.is_none());
+    }
+
+    // Todo 8 acceptance: every new undo/redo i18n key resolves to its expected
+    // English string in the compiled fluent bundle. A missing key falls back to
+    // the key name itself (non-empty), so exact-text equality is the proof.
+    #[test]
+    fn undo_i18n_keys() {
+        assert_eq!(fl!("redo"), "Redo");
+        assert_eq!(fl!("undo-delete"), "Undo Delete");
+        assert_eq!(fl!("undo-rename"), "Undo Rename");
+        assert_eq!(fl!("undo-move"), "Undo Move");
+        assert_eq!(fl!("undo-copy"), "Undo Copy");
+        assert_eq!(fl!("undo-create"), "Undo Create");
+        assert_eq!(fl!("redo-delete"), "Redo Delete");
+        assert_eq!(fl!("redo-rename"), "Redo Rename");
+        assert_eq!(fl!("redo-move"), "Redo Move");
+        assert_eq!(fl!("redo-copy"), "Redo Copy");
+        assert_eq!(fl!("redo-create"), "Redo Create");
+        assert_eq!(fl!("confirm-undo-trash"), "Move to Trash");
+        assert_eq!(fl!("confirm-undo-cancel"), "Cancel");
+        // The count-based confirmation strings resolve with a plural placeholder.
+        // Fluent wraps interpolated values in bidi isolation markers
+        // (U+2068 / U+2069), so strip them before comparing exact text.
+        let stripped = |s: String| s.replace(['\u{2068}', '\u{2069}'], "");
+        assert_eq!(
+            stripped(fl!("confirm-undo-copy", count = 1)),
+            "Move 1 item to the Trash?"
+        );
+        assert_eq!(
+            stripped(fl!("confirm-undo-copy", count = 3)),
+            "Move 3 items to the Trash?"
+        );
+        assert_eq!(
+            stripped(fl!("confirm-undo-create", count = 1)),
+            // This key (per its fluent definition) shows the plural form of
+            // "item" without echoing the count itself.
+            "Delete the created item?"
+        );
+        assert_eq!(
+            stripped(fl!("confirm-undo-create", count = 3)),
+            "Delete the created items?"
+        );
     }
 }
