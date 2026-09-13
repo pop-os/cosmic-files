@@ -82,7 +82,7 @@ use crate::tab::{
     SearchLocation, Tab,
 };
 use crate::trash::{Trash, TrashExt};
-use crate::undo::{UndoHistory, build_undo_entry};
+use crate::undo::{StackTarget, UndoHistory, build_undo_entry};
 use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
 use crate::{FxOrderMap, context_action, fl, home_dir, menu, mime_icon};
 
@@ -467,6 +467,10 @@ pub enum Message {
     ToggleShowHidden,
     Undo,
     Redo,
+    /// Response to the `DialogPage::ConfirmUndo` dialog: `true` proceeds with
+    /// the destructive undo (the inverse moves files to the Trash), `false`
+    /// cancels and returns the held entry to the undo stack.
+    ConfirmDestructiveUndo(bool),
     AssignToastId(u64, widget::ToastId),
     RefreshAffectedTabs,
     TextInputFocused(widget::Id),
@@ -586,6 +590,15 @@ pub enum DialogPage {
     },
     DeleteTrash {
         items: Vec<TrashItem>,
+    },
+    /// Confirms that an undo-of-copy / undo-of-create should proceed: its
+    /// inverse moves files to the Trash (data-preserving, never permanent
+    /// delete), which requires the user's go-ahead. `description` is the undo
+    /// entry's label (e.g. "Undo Copy"), `item_count` the number of files that
+    /// will be moved to the Trash.
+    ConfirmUndo {
+        description: String,
+        item_count: usize,
     },
     ChangeSidebarLabel {
         entity: Entity,
@@ -1358,20 +1371,35 @@ impl App {
     ///    clears by itself.
     /// 2. A destructive-undo ConfirmUndo dialog is open (`pending_undo` is held
     ///    but `suppressed_ops` is empty - no inverse dispatched yet) -> clear
-    ///    immediately and DROP the held `pending_undo`. There is no in-flight
-    ///    inverse to wait for. Todo 7 will pop `DialogPage::ConfirmUndo` here;
-    ///    until then any dialog page present is left untouched (defensive).
+    ///    immediately and DROP the held `pending_undo`, and pop the now-stale
+    ///    ConfirmUndo dialog. There is no in-flight inverse to wait for. (The
+    ///    `Message::ConfirmDestructiveUndo` guards also handle an orphaned dialog,
+    ///    so the pop here is belt-and-suspenders.)
     /// 3. Both empty (no undo activity) -> clear immediately as in (2).
-    fn invalidate_undo_history(&mut self) {
+    fn invalidate_undo_history(&mut self) -> Task<Message> {
         if let Some(inverse_id) = self.undo.inverse_in_flight() {
             // Defer: the in-flight inverse's completion performs the clear.
             self.undo.pending_invalidation = Some(inverse_id);
+            Task::none()
         } else {
             // No inverse in flight (idle, or a ConfirmUndo dialog holds
             // `pending_undo`): clear immediately.
             let dismiss = self.undo.clear_all();
             for toast_id in dismiss {
                 self.toasts.remove(toast_id);
+            }
+            // The held entry is gone, so an open ConfirmUndo dialog is stale: pop
+            // it (returning the task that closes the dialog window if it was last).
+            if matches!(
+                self.dialog_pages.front(),
+                Some(DialogPage::ConfirmUndo { .. })
+            ) {
+                self.dialog_pages
+                    .pop_front()
+                    .map(|(_page, task)| task)
+                    .unwrap_or_else(Task::none)
+            } else {
+                Task::none()
             }
         }
     }
@@ -1520,7 +1548,7 @@ impl App {
             // its completion; otherwise clear immediately. This must run BEFORE
             // the suppression/record routing below consumes the op.
             if matches!(op, Operation::EmptyTrash) {
-                self.invalidate_undo_history();
+                commands.push(self.invalidate_undo_history());
             }
 
             // Build the undo entry BEFORE consuming `op_sel_pending`'s fields below.
@@ -3556,7 +3584,7 @@ impl Application for App {
                             // the whole undo history BEFORE dispatching the operation:
                             // deferred when an inverse is in flight (its completion, via
                             // the Todo-3 hook, performs the clear).
-                            self.invalidate_undo_history();
+                            tasks.push(self.invalidate_undo_history());
                             tasks.push(self.operation(Operation::PermanentlyDelete { paths }));
                         }
                         DialogPage::DeleteTrash { items } => {
@@ -3585,6 +3613,12 @@ impl Application for App {
                         }
                         DialogPage::SetExecutableAndLaunch { path } => {
                             tasks.push(self.operation(Operation::SetExecutableAndLaunch { path }));
+                        }
+                        DialogPage::ConfirmUndo { .. } => {
+                            // The ConfirmUndo dialog's buttons dispatch
+                            // `Message::ConfirmDestructiveUndo` directly; it is never
+                            // completed via `Message::DialogComplete`.
+                            log::warn!("confirm-undo dialog should not be completed");
                         }
                         DialogPage::FavoritePathError { entity, .. } => {
                             if let Some(FavoriteIndex(favorite_i)) =
@@ -5193,14 +5227,27 @@ impl Application for App {
                 {
                     return Task::none();
                 } else if let Some(entry) = self.undo.undo_stack.pop() {
-                    // Destructive undo (undo-copy / undo-create): the inverse moves files to the
-                    // Trash, which needs a confirmation. Hold the entry in `pending_undo`
-                    // (OUTSIDE both stacks, so it cannot be evicted) and let the single-in-flight
-                    // guard above block further undo/redo while it is held. Todo 7 pushes
-                    // `DialogPage::ConfirmUndo` here before dispatching the inverse.
+                    // Destructive undo (undo-copy / undo-create): the inverse moves files
+                    // to the Trash, so ask for confirmation BEFORE dispatching it. The entry
+                    // is held in `pending_undo` (OUTSIDE both stacks, so it cannot be evicted
+                    // by new ops); the single-in-flight guard above blocks further undo/redo
+                    // while it is held. The dialog's buttons dispatch
+                    // `Message::ConfirmDestructiveUndo`, which either dispatches the inverse
+                    // (true) or returns the entry to the undo stack (false).
                     if entry.destructive {
-                        self.undo.pending_undo = Some(entry);
-                        return Task::none();
+                        self.undo.pending_undo = Some(entry.clone());
+                        // Count the files that the inverse (a Delete) will move to the Trash:
+                        // for undo-copy that is the copied items, for undo-create a single path.
+                        let item_count = match &entry.inverse {
+                            Operation::Delete { paths } => paths.len(),
+                            // Fallback: an inverse that is not a Delete moves a single path.
+                            _ => 1,
+                        };
+                        let page = DialogPage::ConfirmUndo {
+                            description: entry.description.clone(),
+                            item_count,
+                        };
+                        return self.dialog_pages.push_back(page);
                     } else {
                         self.undo.pending_undo = Some(entry.clone());
                         let inverse = entry.inverse.clone();
@@ -5232,6 +5279,37 @@ impl Application for App {
                 } else {
                     return Task::none();
                 }
+            }
+            Message::ConfirmDestructiveUndo(confirm) => {
+                // Guard: if the held entry was already dropped (a permanent-delete /
+                // empty-trash invalidation cleared it, Todo 4 case 2), just pop the dialog
+                // and no-op — no panic, no dispatch.
+                let Some(entry) = self.undo.pending_undo.take() else {
+                    let _ = self.dialog_pages.pop_front();
+                    return Task::none();
+                };
+                let mut tasks = Vec::new();
+                if let Some((_page, task)) = self.dialog_pages.pop_front() {
+                    tasks.push(task);
+                }
+                if confirm {
+                    // Proceed: dispatch the inverse (moves files to the Trash) marked
+                    // suppressed, keyed by the EXACT dispatched operation's id. Its
+                    // completion routes the entry to `redo_stack` (Todo 3).
+                    let inverse = entry.inverse.clone();
+                    let op_id = self.pending_operation_id;
+                    self.undo.pending_undo_direction = Some(true);
+                    self.undo.suppressed_ops.insert(op_id, entry);
+                    tasks.push(self.operation_suppressed(inverse));
+                } else {
+                    // Cancel: return the held entry to the undo stack (cap-20 eviction)
+                    // WITHOUT clearing the redo stack, so the undo can be triggered again.
+                    let dismiss = self.undo.record_undo_for_retry(entry, StackTarget::Undo);
+                    for toast_id in dismiss {
+                        self.toasts.remove(toast_id);
+                    }
+                }
+                return Task::batch(tasks);
             }
             Message::AssignToastId(entry_id, toast_id) => {
                 // Write the asynchronously-obtained toast id back onto the recorded entry.
@@ -6833,6 +6911,28 @@ impl Application for App {
                 .secondary_action(
                     widget::button::standard(fl!("keep")).on_press(Message::DialogCancel),
                 ),
+            DialogPage::ConfirmUndo {
+                description,
+                item_count,
+            } => {
+                // Todo 8 replaces these literal labels with the i18n keys
+                // `confirm-undo-copy` / `confirm-undo-create` / `confirm-undo-trash` /
+                // `confirm-undo-cancel`.
+                let item_word = if *item_count == 1 { "item" } else { "items" };
+                widget::dialog()
+                    .title(description.clone())
+                    .primary_action(
+                        widget::button::destructive("Move to Trash")
+                            .on_press(Message::ConfirmDestructiveUndo(true)),
+                    )
+                    .secondary_action(
+                        widget::button::standard("Cancel")
+                            .on_press(Message::ConfirmDestructiveUndo(false)),
+                    )
+                    .control(widget::text(format!(
+                        "Move {item_count} {item_word} to the Trash?"
+                    )))
+            }
         };
         Some(dialog.into())
     }
@@ -7914,6 +8014,7 @@ pub(crate) mod test_utils {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::undo::UndoEntry;
 
     // Todo 6 acceptance: while a text input has focus, Ctrl+Z / Ctrl+Y must
     // undo TEXT in that input, never a file operation (the Nemo #1854/#3209
@@ -7941,5 +8042,314 @@ mod tests {
         // Without a focused text input the guard never blocks anything.
         assert!(!undo_redo_blocked_by_focus(&unfocused, &Action::Undo));
         assert!(!undo_redo_blocked_by_focus(&unfocused, &Action::Redo));
+    }
+
+    // ---- Todo 7: destructive-undo confirmation dialog ----
+
+    /// A minimal `App` fixture for driving the `Message::Undo` /
+    /// `Message::ConfirmDestructiveUndo` handlers in isolation. None of the
+    /// heavyweight runtime parts (windows, tabs, watchers) are started; the
+    /// handler paths under test only touch the undo history, the dialog page
+    /// stack, the operation tables, and the toaster.
+    fn test_app() -> App {
+        let (compio_tx, _compio_rx) = mpsc::channel(1);
+        App {
+            core: Core::default(),
+            about: About::default(),
+            nav_bar_context_id: segmented_button::Entity::null(),
+            nav_model: segmented_button::ModelBuilder::default().build(),
+            tab_model: segmented_button::ModelBuilder::default().build(),
+            config_handler: None,
+            state_handler: None,
+            config: Config::default(),
+            state: State::default(),
+            mode: Mode::App,
+            app_themes: Vec::new(),
+            compio_tx,
+            context_page: ContextPage::Preview(None, PreviewKind::Selected),
+            dialog_pages: DialogPages::new(),
+            dialog_text_input: widget::Id::new("Dialog Text Input"),
+            key_binds: key_binds(&tab::Mode::App),
+            margin: FxHashMap::default(),
+            mime_app_cache: MimeAppCache::new(),
+            modifiers: Modifiers::empty(),
+            mounter_items: FxHashMap::default(),
+            must_save_sort_names: false,
+            network_drive_connecting: None,
+            network_drive_input: String::new(),
+            #[cfg(feature = "notify")]
+            notification_opt: None,
+            #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
+            overlap: FxHashMap::default(),
+            pending_operation_id: 0,
+            pending_operations: BTreeMap::new(),
+            progress_operations: BTreeSet::new(),
+            complete_operations: BTreeMap::new(),
+            failed_operations: BTreeMap::new(),
+            scrollable_id: widget::Id::new("File Scrollable"),
+            search_id: widget::Id::new("File Search"),
+            size: None,
+            #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
+            surface_ids: FxHashMap::default(),
+            #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
+            surface_names: FxHashMap::default(),
+            toasts: widget::toaster::Toasts::new(Message::CloseToast),
+            watcher_opt: None,
+            windows: FxHashMap::default(),
+            nav_dnd_hover: None,
+            tab_dnd_hover: None,
+            type_select_prefix: String::new(),
+            type_select_last_key: None,
+            nav_drag_id: DragId::new(),
+            tab_drag_id: DragId::new(),
+            auto_scroll_speed: None,
+            file_dialog_opt: None,
+            clipboard_cache: ClipboardCache::Empty,
+            undo: UndoHistory::new(),
+            pending_affected_dirs: Vec::new(),
+            focused_text_input: None,
+            #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
+            layer_sizes: FxHashMap::default(),
+        }
+    }
+
+    /// A destructive undo entry (undo-copy): forward Copy, inverse Delete.
+    fn destructive_entry() -> UndoEntry {
+        UndoEntry {
+            entry_id: 7,
+            forward: Operation::Copy {
+                paths: vec![PathBuf::from("/src/a")],
+                to: PathBuf::from("/dst"),
+            },
+            inverse: Operation::Delete {
+                paths: vec![PathBuf::from("/dst/a"), PathBuf::from("/dst/b")],
+            },
+            description: "Undo Copy".to_string(),
+            destructive: true,
+            toast_id: None,
+        }
+    }
+
+    /// A non-destructive undo entry (undo-delete): forward Delete, inverse Restore.
+    fn non_destructive_entry() -> UndoEntry {
+        UndoEntry {
+            entry_id: 8,
+            forward: Operation::Delete {
+                paths: vec![PathBuf::from("/src/a")],
+            },
+            inverse: Operation::Restore {
+                items: vec![TrashItem {
+                    id: "/dst/a.trashinfo".into(),
+                    name: "a".into(),
+                    original_parent: PathBuf::from("/src"),
+                    time_deleted: 0,
+                }],
+            },
+            description: "Undo Delete".to_string(),
+            destructive: false,
+            toast_id: None,
+        }
+    }
+
+    fn destructive_count(app: &App) -> usize {
+        match app.dialog_pages.front() {
+            Some(DialogPage::ConfirmUndo { item_count, .. }) => *item_count,
+            _ => 0,
+        }
+    }
+
+    // Message::Undo on a destructive entry holds it in pending_undo (REMOVED
+    // from undo_stack), pushes DialogPage::ConfirmUndo, and does NOT dispatch
+    // anything (no suppressed_ops entry).
+    #[test]
+    fn destructive_undo_confirm_holds_destructive_entry() {
+        let mut app = test_app();
+        app.undo.undo_stack.push(destructive_entry());
+        app.undo.redo_stack.push(non_destructive_entry());
+
+        let _task = app.update(Message::Undo);
+
+        assert!(
+            app.undo.pending_undo.is_some(),
+            "entry held outside the stacks"
+        );
+        assert!(
+            app.undo.undo_stack.is_empty(),
+            "entry removed from undo_stack"
+        );
+        assert_eq!(app.undo.redo_stack.len(), 1, "redo_stack untouched");
+        assert!(
+            app.undo.suppressed_ops.is_empty(),
+            "no inverse dispatched yet"
+        );
+        assert!(matches!(
+            app.dialog_pages.front(),
+            Some(DialogPage::ConfirmUndo {
+                description,
+                item_count: 2,
+            }) if description == "Undo Copy"
+        ));
+        assert_eq!(
+            destructive_count(&app),
+            2,
+            "item_count from inverse Delete paths"
+        );
+    }
+
+    // ConfirmDestructiveUndo(false) returns the held entry to undo_stack via
+    // record_undo_for_retry(entry, StackTarget::Undo): cap-20 eviction respected,
+    // redo_stack untouched, dialog popped, pending_undo cleared.
+    #[test]
+    fn destructive_undo_confirm_cancel_returns_entry() {
+        let mut app = test_app();
+        // Fill the stack to the cap so the retry path must evict the oldest.
+        for i in 0..20 {
+            let mut entry = non_destructive_entry();
+            entry.entry_id = i as u64;
+            app.undo.undo_stack.push(entry);
+        }
+        let held = destructive_entry();
+        app.undo.pending_undo = Some(held);
+        let _ = app.dialog_pages.push_back(DialogPage::ConfirmUndo {
+            description: "Undo Copy".to_string(),
+            item_count: 2,
+        });
+
+        let _task = app.update(Message::ConfirmDestructiveUndo(false));
+
+        assert!(app.undo.pending_undo.is_none(), "held entry released");
+        assert!(app.dialog_pages.pages.is_empty(), "dialog popped");
+        assert_eq!(
+            app.undo.undo_stack.len(),
+            20,
+            "cap respected, oldest evicted"
+        );
+        assert_eq!(
+            app.undo.undo_stack.peek().map(|e| e.destructive),
+            Some(true),
+            "held entry is now the stack top",
+        );
+        assert_eq!(app.undo.redo_stack.len(), 0, "redo_stack unchanged");
+        assert!(app.undo.suppressed_ops.is_empty());
+    }
+
+    // ConfirmDestructiveUndo(true) pops the dialog and dispatches the inverse as
+    // a suppressed task keyed by the dispatched operation's id.
+    #[test]
+    fn destructive_undo_confirm_confirm_dispatches() {
+        let mut app = test_app();
+        app.undo.pending_undo = Some(destructive_entry());
+        let _ = app.dialog_pages.push_back(DialogPage::ConfirmUndo {
+            description: "Undo Copy".to_string(),
+            item_count: 2,
+        });
+        let op_id = app.pending_operation_id;
+
+        let _task = app.update(Message::ConfirmDestructiveUndo(true));
+
+        assert!(app.undo.pending_undo.is_none(), "entry taken at confirm");
+        assert!(app.dialog_pages.pages.is_empty(), "dialog popped");
+        assert_eq!(
+            app.undo.suppressed_ops.len(),
+            1,
+            "inverse registered as suppressed",
+        );
+        assert_eq!(
+            app.undo.suppressed_ops.get(&op_id).map(|e| e.entry_id),
+            Some(7),
+            "suppression keyed by the exact dispatched operation id",
+        );
+        assert_eq!(
+            app.undo.pending_undo_direction,
+            Some(true),
+            "direction = undo",
+        );
+        assert_eq!(
+            app.pending_operations.len(),
+            1,
+            "the inverse is now an in-flight operation",
+        );
+    }
+
+    // When the held entry was already dropped (permanent-delete / empty-trash
+    // invalidation, Todo 4 case 2), ConfirmDestructiveUndo pops the dialog and
+    // no-ops — no panic, no dispatch — for BOTH true and false.
+    #[test]
+    fn destructive_undo_confirm_stale_dialog_noops() {
+        for confirm in [true, false] {
+            let mut app = test_app();
+            let _ = app.dialog_pages.push_back(DialogPage::ConfirmUndo {
+                description: "Undo Copy".to_string(),
+                item_count: 2,
+            });
+
+            let _task = app.update(Message::ConfirmDestructiveUndo(confirm));
+
+            assert!(app.dialog_pages.pages.is_empty(), "stale dialog popped");
+            assert!(app.undo.suppressed_ops.is_empty(), "nothing dispatched");
+            assert!(app.pending_operations.is_empty(), "no operation started");
+            assert!(app.undo.pending_undo.is_none());
+        }
+    }
+
+    // Undo/Redo are no-ops while ANY of the three single-in-flight guards
+    // holds: a ConfirmUndo dialog open, in-flight operations, or a held
+    // pending_undo. Test each independently.
+    #[test]
+    fn destructive_undo_confirm_guards_block_undo_redo() {
+        // Guard 1: a ConfirmUndo dialog is open (non-destructive stack entry).
+        let mut app = test_app();
+        app.undo.undo_stack.push(non_destructive_entry());
+        let _ = app.dialog_pages.push_back(DialogPage::ConfirmUndo {
+            description: "Undo Copy".to_string(),
+            item_count: 2,
+        });
+        let _task = app.update(Message::Undo);
+        assert_eq!(
+            app.undo.undo_stack.len(),
+            1,
+            "Undo blocked while ConfirmUndo is open",
+        );
+        assert!(app.undo.pending_undo.is_none());
+        let _task = app.update(Message::Redo);
+        assert!(
+            app.undo.redo_stack.is_empty(),
+            "Redo blocked while ConfirmUndo is open"
+        );
+
+        // Guard 2: an operation is in flight.
+        let mut app = test_app();
+        app.undo.undo_stack.push(non_destructive_entry());
+        let (_tx, _rx) = mpsc::channel::<()>(1);
+        app.pending_operations.insert(
+            0,
+            (
+                Operation::Copy {
+                    paths: vec![PathBuf::from("/a")],
+                    to: PathBuf::from("/b"),
+                },
+                Controller::default(),
+            ),
+        );
+        let _task = app.update(Message::Undo);
+        assert_eq!(
+            app.undo.undo_stack.len(),
+            1,
+            "Undo blocked while operations are pending",
+        );
+        assert!(app.undo.pending_undo.is_none());
+        let _task = app.update(Message::Redo);
+        assert!(
+            app.undo.redo_stack.is_empty(),
+            "Redo blocked while operations are pending"
+        );
+
+        // Guard 3: a held pending_undo.
+        let mut app = test_app();
+        app.undo.pending_undo = Some(destructive_entry());
+        let _task = app.update(Message::Undo);
+        assert!(app.undo.pending_undo.is_some(), "held entry not replaced");
+        let _task = app.update(Message::Redo);
+        assert!(app.undo.pending_undo.is_some(), "held entry still held");
     }
 }
