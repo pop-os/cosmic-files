@@ -563,6 +563,16 @@ fn update<Message: Clone>(
         state.last_position = position_in;
     }
 
+    if state.drag_initiated.is_some()
+        && matches!(
+            event,
+            Event::Mouse(mouse::Event::CursorMoved { .. })
+                | Event::Touch(touch::Event::FingerMoved { .. })
+        )
+    {
+        shell.request_redraw();
+    }
+
     if let Event::Mouse(mouse::Event::CursorMoved { position }) = event {
         let virtual_position = Point::new(
             viewport.x - layout_bounds.x + position.x,
@@ -639,6 +649,7 @@ fn update<Message: Clone>(
     {
         state.drag_initiated = None;
         state.prev_click = None;
+        shell.request_redraw();
         if let Some(message) = widget.on_drag_end.as_ref() {
             shell.publish(message(cursor.position_in(layout_bounds)));
         }
@@ -658,7 +669,9 @@ fn update<Message: Clone>(
             state.prev_click = None;
             return;
         }
-        state.drag_initiated = None;
+        if state.drag_initiated.take().is_some() {
+            shell.request_redraw();
+        }
         if let Some(message) = widget.on_release.as_ref() {
             shell.publish(message(cursor.position_in(layout_bounds)));
 

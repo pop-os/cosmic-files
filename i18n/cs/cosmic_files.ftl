@@ -431,3 +431,6 @@ rename-confirm = Přejmenovat
 checksum = Kontrolní součet { $kind }
 calculate = Vypočítat
 error = Chyba
+search-application = Hledat podle názvu aplikace
+sidebar-label = Popisek v postranním panelu
+change-sidebar-label = Změnit popisek v postranním panelu

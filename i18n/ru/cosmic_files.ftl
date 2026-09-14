@@ -383,14 +383,16 @@ clear-recents-history = Очистить историю недавних
 copy-path = Копировать путь
 mixed = Смешанные
 context-action = Контекстная команда
-context-action-confirm-title = Выполнить «{ $name }»?
+context-action-confirm-title = Запустить «{ $name }»?
 context-action-confirm-warning =
     Команда затронет { $items } { $items ->
         [one] элемент
        *[other] элем.
     }.
-run = Выполнить
+run = Запустить
 rename-confirm = Переименовать
 checksum = Хеш-сумма { $kind }
 calculate = Вычислить
 error = Ошибка
+sidebar-label = Подпись в боковой панели
+change-sidebar-label = Изменить подпись
