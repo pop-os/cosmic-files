@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
-use super::{Mounter, MounterAuth, MounterItem, MounterItems, MounterMessage};
+use super::{DiskUsage, Mounter, MounterAuth, MounterItem, MounterItems, MounterMessage};
 use crate::config::IconSizes;
 use crate::err_str;
 use crate::tab::{self, ChecksumState, DirSize, ItemMetadata, ItemThumbnail, Location};
@@ -57,6 +57,37 @@ fn gio_icon_to_path(icon: &gio::Icon, size: u16) -> Option<PathBuf> {
     None
 }
 
+fn filesystem_details(file: &gio::File) -> (bool, Option<DiskUsage>) {
+    let filesystem_info = file
+        .query_filesystem_info(
+            "filesystem::remote,filesystem::size,filesystem::free",
+            gio::Cancellable::NONE,
+        )
+        .ok();
+    let is_remote = filesystem_info
+        .as_ref()
+        .map(|info| info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE))
+        .unwrap_or(true); // Default to remote if query fails
+    let disk_usage_opt = if is_remote {
+        None
+    } else {
+        filesystem_info.as_ref().and_then(|info| {
+            let total = info.attribute_uint64(gio::FILE_ATTRIBUTE_FILESYSTEM_SIZE);
+            (total > 0).then(|| DiskUsage {
+                free: info.attribute_uint64(gio::FILE_ATTRIBUTE_FILESYSTEM_FREE),
+                total,
+            })
+        })
+    };
+
+    (is_remote, disk_usage_opt)
+}
+
+#[cfg(unix)]
+fn should_add_system_mount(system_path: &std::path::Path, mounted_paths: &[PathBuf]) -> bool {
+    !mounted_paths.iter().any(|path| path == system_path)
+}
+
 fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
     let mut items: MounterItems = (monitor.mounts().into_iter())
         .enumerate()
@@ -64,14 +95,7 @@ fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
         .filter(|(_, mount)| !mount.is_shadowed())
         .map(|(i, mount)| {
             let root = MountExt::root(&mount);
-            let is_remote = root
-                .query_filesystem_info(
-                    gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE,
-                    gio::Cancellable::NONE,
-                )
-                .ok()
-                .map(|info| info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE))
-                .unwrap_or(true); // Default to remote if query fails
+            let (is_remote, disk_usage_opt) = filesystem_details(&root);
 
             MounterItem::Gvfs(Item {
                 uri: mount.root().uri().into(),
@@ -83,9 +107,40 @@ fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
                 icon_opt: gio_icon_to_path(&MountExt::icon(&mount), sizes.grid()),
                 icon_symbolic_opt: gio_icon_to_path(&MountExt::symbolic_icon(&mount), 16),
                 path_opt: root.path(),
+                disk_usage_opt,
             })
         })
         .collect();
+
+    // GVolumeMonitor intentionally omits system-internal mounts such as `/`. Add the root
+    // filesystem explicitly so its capacity is represented in the sidebar, but keep it
+    // non-unmountable.
+    #[cfg(unix)]
+    {
+        let system_path = PathBuf::from("/");
+        let mounted_paths: Vec<_> = items.iter().filter_map(MounterItem::path).collect();
+        if should_add_system_mount(&system_path, &mounted_paths)
+            && let (Some(mount), _) = gio::UnixMountEntry::for_mount_path(&system_path)
+        {
+            let root = gio::File::for_path(&system_path);
+            let (is_remote, disk_usage_opt) = filesystem_details(&root);
+            if !is_remote && disk_usage_opt.is_some() {
+                items.push(MounterItem::Gvfs(Item {
+                    uri: root.uri().into(),
+                    kind: ItemKind::SystemMount,
+                    index: 0,
+                    name: mount.guess_name().into(),
+                    is_mounted: true,
+                    is_remote: false,
+                    icon_opt: gio_icon_to_path(&mount.guess_icon(), sizes.grid()),
+                    icon_symbolic_opt: gio_icon_to_path(&mount.guess_symbolic_icon(), 16),
+                    path_opt: Some(system_path),
+                    disk_usage_opt,
+                }));
+            }
+        }
+    }
+
     items.extend(
         (monitor.volumes().into_iter())
             .enumerate()
@@ -106,6 +161,7 @@ fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
                     icon_opt: gio_icon_to_path(&VolumeExt::icon(&volume), sizes.grid()),
                     icon_symbolic_opt: gio_icon_to_path(&VolumeExt::symbolic_icon(&volume), 16),
                     path_opt: None,
+                    disk_usage_opt: None,
                 })
             }),
     );
@@ -344,7 +400,14 @@ enum Event {
 #[derive(Clone, Debug)]
 enum ItemKind {
     Mount,
+    SystemMount,
     Volume,
+}
+
+impl ItemKind {
+    const fn can_unmount(&self) -> bool {
+        matches!(self, Self::Mount)
+    }
 }
 
 //TODO: better method of matching items
@@ -359,6 +422,7 @@ pub struct Item {
     icon_opt: Option<PathBuf>,
     icon_symbolic_opt: Option<PathBuf>,
     path_opt: Option<PathBuf>,
+    disk_usage_opt: Option<DiskUsage>,
 }
 
 impl Item {
@@ -389,6 +453,14 @@ impl Item {
 
     pub fn path(&self) -> Option<PathBuf> {
         self.path_opt.clone()
+    }
+
+    pub const fn disk_usage(&self) -> Option<DiskUsage> {
+        self.disk_usage_opt
+    }
+
+    pub const fn can_unmount(&self) -> bool {
+        self.kind.can_unmount()
     }
 }
 

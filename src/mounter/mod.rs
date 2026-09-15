@@ -9,6 +9,46 @@ use tokio::sync::mpsc;
 use crate::config::IconSizes;
 use crate::tab;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DiskUsage {
+    pub free: u64,
+    pub total: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DiskUsageLevel {
+    Normal,
+    Warning,
+    Critical,
+}
+
+impl DiskUsage {
+    #[allow(clippy::cast_precision_loss)]
+    pub fn fraction(self) -> f32 {
+        if self.total == 0 || self.free > self.total {
+            return 0.0;
+        }
+
+        (self.total - self.free) as f32 / self.total as f32
+    }
+
+    pub fn level(self) -> DiskUsageLevel {
+        if self.total == 0 || self.free > self.total {
+            return DiskUsageLevel::Normal;
+        }
+
+        let used = u128::from(self.total - self.free);
+        let total = u128::from(self.total);
+        if used * 100 >= total * 90 {
+            DiskUsageLevel::Critical
+        } else if used * 100 >= total * 80 {
+            DiskUsageLevel::Warning
+        } else {
+            DiskUsageLevel::Normal
+        }
+    }
+}
+
 #[cfg(feature = "gvfs")]
 mod gvfs;
 
@@ -95,6 +135,22 @@ impl MounterItem {
         match self {
             #[cfg(feature = "gvfs")]
             Self::Gvfs(item) => item.is_remote(),
+            Self::None => unreachable!(),
+        }
+    }
+
+    pub fn disk_usage(&self) -> Option<DiskUsage> {
+        match self {
+            #[cfg(feature = "gvfs")]
+            Self::Gvfs(item) => item.disk_usage(),
+            Self::None => unreachable!(),
+        }
+    }
+
+    pub fn can_unmount(&self) -> bool {
+        match self {
+            #[cfg(feature = "gvfs")]
+            Self::Gvfs(item) => item.can_unmount(),
             Self::None => unreachable!(),
         }
     }
