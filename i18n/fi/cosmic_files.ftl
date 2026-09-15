@@ -418,3 +418,6 @@ rename-confirm = Nimeä uudelleen
 checksum = { $kind }-tarkistussumma
 calculate = Laske
 error = Virhe
+search-application = Hae sovelluksen nimellä
+sidebar-label = Sivupalkin nimike
+change-sidebar-label = Muuta sivupalkin nimikettä

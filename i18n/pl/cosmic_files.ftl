@@ -1,5 +1,5 @@
 cosmic-files = Pliki COSMIC
-comment = Menedżer plików pulpitu COSMIC
+comment = Menedżer plików dla środowiska COSMIC
 keywords = Katalogi;Pliki;Menedżer;
 empty-folder = Pusty katalog
 empty-folder-hidden = Pusty katalog (z ukrytymi plikami)
