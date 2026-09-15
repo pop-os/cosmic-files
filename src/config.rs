@@ -150,6 +150,7 @@ pub enum TypeToSearch {
 #[serde(default)]
 pub struct State {
     pub sort_names: FxOrderMap<String, (HeadingOptions, bool)>,
+    pub dialog_sort_name: (HeadingOptions, bool),
 }
 
 impl Default for State {
@@ -161,6 +162,7 @@ impl Default for State {
                     (HeadingOptions::Modified, false),
                 )
             })),
+            dialog_sort_name: (HeadingOptions::Modified, false),
         }
     }
 }
