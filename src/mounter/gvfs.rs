@@ -760,9 +760,7 @@ impl Mounter for Gvfs {
                 let event_rx = event_rx.clone();
                 stream::channel(
                     1,
-                    move |mut output: cosmic::iced::futures::channel::mpsc::Sender<
-                        MounterMessage,
-                    >| async move {
+                    async move |mut output| {
                         command_tx.send(Cmd::Rescan).unwrap();
                         while let Some(event) = event_rx.recv().await {
                             match event {
