@@ -78,6 +78,9 @@ pub fn key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
         bind!([Shift], Key::Named(Named::Enter), OpenInNewWindow);
         bind!([Ctrl], Key::Character("v".into()), Paste);
         bind!([], Key::Named(Named::F2), Rename);
+        bind!([Ctrl], Key::Character("z".into()), Undo);
+        bind!([Ctrl], Key::Character("y".into()), Redo);
+        bind!([Ctrl, Shift], Key::Character("z".into()), Redo);
     }
 
     // App and dialog only keys
@@ -88,7 +91,50 @@ pub fn key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
         bind!([], Key::Named(Named::Backspace), HistoryPrevious);
         bind!([Alt], Key::Named(Named::ArrowUp), LocationUp);
         bind!([Ctrl], Key::Character("f".into()), SearchActivate);
+        bind!([Ctrl], Key::Character("z".into()), Undo);
+        bind!([Ctrl], Key::Character("y".into()), Redo);
+        bind!([Ctrl, Shift], Key::Character("z".into()), Redo);
     }
 
     key_binds
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::dialog::DialogKind;
+
+    #[test]
+    fn key_binds_undo_redo() {
+        for mode in [
+            tab::Mode::App,
+            tab::Mode::Desktop,
+            tab::Mode::Dialog(DialogKind::OpenFile),
+        ] {
+            let key_binds = key_binds(&mode);
+
+            assert_eq!(
+                key_binds.get(&KeyBind {
+                    modifiers: vec![Modifier::Ctrl],
+                    key: Key::Character("z".into()),
+                }),
+                Some(&Action::Undo),
+            );
+            assert_eq!(
+                key_binds.get(&KeyBind {
+                    modifiers: vec![Modifier::Ctrl],
+                    key: Key::Character("y".into()),
+                }),
+                Some(&Action::Redo),
+            );
+            assert_eq!(
+                key_binds.get(&KeyBind {
+                    modifiers: vec![Modifier::Ctrl, Modifier::Shift],
+                    key: Key::Character("z".into()),
+                }),
+                Some(&Action::Redo),
+            );
+        }
+    }
 }

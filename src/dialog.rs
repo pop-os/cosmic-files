@@ -484,6 +484,8 @@ enum Message {
     ZoomDefault,
     ZoomIn,
     ZoomOut,
+    TextInputFocused(widget::Id),
+    TextInputBlurred,
 }
 
 impl From<AppMessage> for Message {
@@ -561,6 +563,10 @@ struct App {
     auto_scroll_speed: Option<i16>,
     type_select_prefix: String,
     type_select_last_key: Option<Instant>,
+    // The widget id of the text input currently focused, if any (Todo 6). When
+    // set, the Undo/Redo keybinds are skipped so Ctrl+Z / Ctrl+Y undo TEXT in
+    // the input, never a file operation. Same guard as the main app.
+    focused_text_input: Option<widget::Id>,
 }
 
 impl App {
@@ -580,6 +586,8 @@ impl App {
             col = col.push(
                 widget::text_input("", filename)
                     .id(self.filename_id.clone())
+                    .on_focus(Message::TextInputFocused(self.filename_id.clone()))
+                    .on_unfocus(Message::TextInputBlurred)
                     .double_click_select_delimiter('.')
                     .on_input(Message::Filename)
                     .on_submit(|_| Message::Save(false)),
@@ -806,6 +814,11 @@ impl App {
         };
         if let Some((location, focus_search)) = location_opt {
             self.tab.change_location(&location, None);
+            if focus_search {
+                // The search box is focused programmatically below (no widget
+                // `on_focus` fires), so record it for the text-field guard.
+                self.focused_text_input = Some(self.search_id.clone());
+            }
             return Task::batch([
                 self.update_title(),
                 self.update_watcher(),
@@ -1055,6 +1068,7 @@ impl Application for App {
             auto_scroll_speed: None,
             type_select_prefix: String::new(),
             type_select_last_key: None,
+            focused_text_input: None,
         };
 
         let commands = Task::batch([
@@ -1164,6 +1178,8 @@ impl Application for App {
                             widget::text::body(fl!("folder-name")).into(),
                             widget::text_input("", name.as_str())
                                 .id(self.dialog_text_input.clone())
+                                .on_focus(Message::TextInputFocused(self.dialog_text_input.clone()))
+                                .on_unfocus(Message::TextInputBlurred)
                                 .on_input(move |name| {
                                     Message::DialogUpdate(DialogPage::NewFolder {
                                         parent: parent.clone(),
@@ -1215,6 +1231,8 @@ impl Application for App {
                     widget::text_input::search_input("", term)
                         .width(Length::Fixed(240.0))
                         .id(self.search_id.clone())
+                        .on_focus(Message::TextInputFocused(self.search_id.clone()))
+                        .on_unfocus(Message::TextInputBlurred)
                         .on_clear(Message::SearchClear)
                         .on_input(Message::SearchInput)
                         .into(),
@@ -1425,6 +1443,12 @@ impl Application for App {
             Message::Key(modifiers, key, physical_key, text) => {
                 for (key_bind, action) in &self.key_binds {
                     if key_bind.matches(modifiers, &key, Some(&physical_key)) {
+                        // Text-field guard (Todo 6): while a text input has focus,
+                        // Ctrl+Z / Ctrl+Y must undo TEXT, never a file operation.
+                        if crate::app::undo_redo_blocked_by_focus(&self.focused_text_input, action)
+                        {
+                            continue;
+                        }
                         return self.update(Message::from(action.message()));
                     }
                 }
@@ -1551,6 +1575,8 @@ impl Application for App {
                         parent: path.clone(),
                         name: String::new(),
                     });
+                    // The dialog input is focused programmatically below.
+                    self.focused_text_input = Some(self.dialog_text_input.clone());
                     return widget::text_input::focus(self.dialog_text_input.clone());
                 }
             }
@@ -1702,8 +1728,10 @@ impl Application for App {
                 )));
             }
             Message::SearchActivate => {
+                // Both branches focus the search box programmatically (no widget
+                // `on_focus` fires), so record it for the text-field guard.
+                self.focused_text_input = Some(self.search_id.clone());
                 let mut tasks = vec![];
-
                 if self.search_get().is_none() {
                     tasks.push(self.search_set(Some(String::new())));
                 } else {
@@ -1713,10 +1741,17 @@ impl Application for App {
                 return Task::batch(tasks);
             }
             Message::SearchClear => {
+                self.focused_text_input = None;
                 return self.search_set(None);
             }
             Message::SearchInput(input) => {
                 return self.search_set(Some(input));
+            }
+            Message::TextInputFocused(id) => {
+                self.focused_text_input = Some(id);
+            }
+            Message::TextInputBlurred => {
+                self.focused_text_input = None;
             }
             Message::TabMessage(tab_message) => {
                 let click_i_opt = match tab_message {
@@ -1856,9 +1891,11 @@ impl Application for App {
 
                     // Reset focus on location change
                     if self.search_get().is_some() {
+                        self.focused_text_input = Some(self.search_id.clone());
                         return widget::text_input::focus(self.search_id.clone());
                     }
                     if let DialogKind::SaveFile { filename } = &self.flags.kind {
+                        self.focused_text_input = Some(self.filename_id.clone());
                         return Task::batch([
                             widget::text_input::focus(self.filename_id.clone()),
                             widget::text_input::select_until_last(
@@ -1868,6 +1905,7 @@ impl Application for App {
                             ),
                         ]);
                     }
+                    self.focused_text_input = Some(self.filename_id.clone());
                     return widget::text_input::focus(self.filename_id.clone());
                 }
             }
@@ -1927,6 +1965,8 @@ impl Application for App {
                     widget::text_input::search_input("", term)
                         .width(Length::Fill)
                         .id(self.search_id.clone())
+                        .on_focus(Message::TextInputFocused(self.search_id.clone()))
+                        .on_unfocus(Message::TextInputBlurred)
                         .on_clear(Message::SearchClear)
                         .on_input(Message::SearchInput),
                 )
@@ -1936,7 +1976,14 @@ impl Application for App {
 
         col = col.push(
             self.tab
-                .view(&self.key_binds, &self.modifiers, false, &[])
+                .view(
+                    &self.key_binds,
+                    &self.modifiers,
+                    false,
+                    &[],
+                    fl!("undo"), // no undo history in dialogs
+                    false,
+                )
                 .map(Message::TabMessage),
         );
 
