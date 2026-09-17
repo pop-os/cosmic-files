@@ -22,6 +22,12 @@ pub struct MounterAuth {
     pub anonymous_opt: Option<bool>,
 }
 
+#[derive(Clone, Debug)]
+pub struct MounterQuestion {
+    pub message: String,
+    pub choices: Vec<String>,
+}
+
 // Custom debug for MounterAuth to hide password
 impl fmt::Debug for MounterAuth {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -107,6 +113,7 @@ pub enum MounterMessage {
     Items(MounterItems),
     MountResult(MounterItem, Result<bool, String>),
     NetworkAuth(String, MounterAuth, mpsc::Sender<MounterAuth>),
+    NetworkQuestion(String, MounterQuestion, mpsc::Sender<i32>),
     NetworkResult(String, Result<bool, String>),
 }
 
