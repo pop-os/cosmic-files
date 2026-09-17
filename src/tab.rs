@@ -2834,7 +2834,6 @@ pub struct Tab {
     search_context: Option<SearchContext>,
     date_time_formatter: DateTimeFormatter<fieldsets::YMDT>,
     time_formatter: DateTimeFormatter<fieldsets::T>,
-    watch_drag: bool,
     window_id: Option<window::Id>,
     large_image_manager: LargeImageManager,
 }
@@ -2979,7 +2978,6 @@ impl Tab {
             search_context: None,
             date_time_formatter: date_time_formatter(config.military_time),
             time_formatter: time_formatter(config.military_time),
-            watch_drag: true,
             window_id,
             large_image_manager: LargeImageManager::new(),
         }
@@ -3586,7 +3584,6 @@ impl Tab {
             }
             Message::DragEnd => {
                 self.clicked = None;
-                self.watch_drag = true;
             }
             Message::DoubleClick(click_i_opt) => {
                 if let Some(clicked_item) = self
@@ -3826,7 +3823,6 @@ impl Tab {
                 }
             }
             Message::Drag(rect_opt) => {
-                self.watch_drag = false;
                 if let Some(rect) = rect_opt {
                     if self.mode.multiple() {
                         self.select_rect(rect, mod_ctrl, mod_shift);
@@ -4464,13 +4460,11 @@ impl Tab {
                 }
             }
             Message::HighlightDeactivate(i) => {
-                self.watch_drag = true;
                 if let Some(item) = self.items_opt.as_mut().and_then(|f| f.get_mut(i)) {
                     item.highlighted = false;
                 }
             }
             Message::HighlightActivate(i) => {
-                self.watch_drag = true;
                 if let Some(item) = self.items_opt.as_mut().and_then(|f| f.get_mut(i)) {
                     item.highlighted = true;
                 }
@@ -4496,7 +4490,6 @@ impl Tab {
             }
             Message::Scroll(viewport) => {
                 self.scroll_opt = Some(viewport.absolute_offset());
-                self.watch_drag = true;
             }
             Message::ScrollTab(scroll_speed) => {
                 commands.push(Command::Iced(
@@ -6003,15 +5996,13 @@ impl Tab {
             Element::from(dnd_grid)
         });
 
-        let mut mouse_area = mouse_area::MouseArea::new(column.width(Length::Fill))
+        let mouse_area = mouse_area::MouseArea::new(column.width(Length::Fill))
             .on_press(|_| Message::Click(None))
             .on_auto_scroll(Message::AutoScroll)
+            .on_drag(move |rect_opt| self.on_drag(rect_opt))
             .on_drag_end(|_| Message::DragEnd)
             .show_drag_rect(self.mode.multiple())
             .on_release(|_| Message::ClickRelease(None));
-        if self.watch_drag {
-            mouse_area = mouse_area.on_drag(Message::Drag);
-        }
 
         (drag_list, mouse_area.into(), true)
     }
@@ -6395,16 +6386,14 @@ impl Tab {
         let drag_col = (!drag_items.is_empty())
             .then(|| Element::from(widget::column::with_children(drag_items)));
 
-        let mut mouse_area = mouse_area::MouseArea::new(column.padding([0, space_s]))
+        let mouse_area = mouse_area::MouseArea::new(column.padding([0, space_s]))
             .with_id(Id::new("list-view"))
             .on_press(|_| Message::Click(None))
             .on_auto_scroll(Message::AutoScroll)
+            .on_drag(move |rect_opt| self.on_drag(rect_opt))
             .on_drag_end(|_| Message::DragEnd)
             .show_drag_rect(self.mode.multiple())
             .on_release(|_| Message::ClickRelease(None));
-        if self.watch_drag {
-            mouse_area = mouse_area.on_drag(Message::Drag);
-        }
 
         (drag_col, mouse_area.into(), true)
     }
@@ -7396,6 +7385,19 @@ impl Tab {
 
     const fn format_time(&self, time: SystemTime) -> FormatTime<'_> {
         format_time(time, &self.date_time_formatter, &self.time_formatter)
+    }
+
+    fn on_drag<'a>(&self, rect_opt: Option<Rectangle>) -> Option<Message> {
+        let rect = rect_opt?;
+        // We only want to publish a drag message if the overlapped items of the drag rect change,
+        // otherwise a view rebuild is triggered on every drag event.
+        let changed = self.items_opt.as_ref().is_some_and(|items| {
+            items.iter().any(|item| {
+                let overlaps = item.rect_opt.get().is_some_and(|r| r.intersects(&rect));
+                overlaps != item.overlaps_drag_rect
+            })
+        });
+        changed.then_some(Message::Drag(Some(rect)))
     }
 }
 
