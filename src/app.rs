@@ -7,7 +7,7 @@ use cosmic::cosmic_config::{self, ConfigSet};
 use cosmic::direction::Direction;
 use cosmic::iced::clipboard::dnd::DndAction;
 use cosmic::iced::core::SmolStr;
-use cosmic::iced::core::widget::operation::focusable::unfocus;
+use cosmic::iced::core::widget::operation::focusable::{find_focused, unfocus};
 use cosmic::iced::futures::{self, SinkExt};
 use cosmic::iced::keyboard::key::Physical;
 use cosmic::iced::keyboard::{Event as KeyEvent, Key, Modifiers};
@@ -435,6 +435,7 @@ pub enum Message {
     SearchActivate,
     SearchClear,
     SearchInput(String),
+    Select(usize, widget::Id),
     SetShowDetails(bool),
     SetShowRecents(bool),
     SetTypeToSearch(TypeToSearch),
@@ -2317,6 +2318,55 @@ impl App {
         }
 
         false
+    }
+
+    fn dir_nav(
+        &mut self,
+        dir: Direction,
+        window_id: WindowId,
+    ) -> Option<cosmic::prelude::Task<cosmic::Action<Message>>> {
+        let entity = self.tab_model.active();
+        let tab = self.tab_model.data::<Tab>(entity)?;
+
+        if tab.gallery
+            || tab
+                .items_opt
+                .as_ref()
+                .is_some_and(|items| items.iter().any(|item| item.selected))
+        {
+            return Some(Task::none());
+        }
+
+        let items: Vec<_> = tab
+            .items_opt
+            .as_ref()
+            .map(|items| {
+                items
+                    .iter()
+                    .enumerate()
+                    .map(|(i, item)| (i, item.button_id.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        Some(
+            iced::runtime::widget::selector::find_all(iced::runtime::widget::selector::focus())
+                .map(move |foc| {
+                    let (dir_foc_id, task) = cosmic::app::cosmic::dir_focus(window_id, dir, foc);
+                    if let Some(dir_foc_id) = dir_foc_id {
+                        if let Some(item) = items.iter().find(|item| item.1 == dir_foc_id) {
+                            cosmic::task::message(cosmic::Action::App(Message::Select(
+                                item.0,
+                                item.1.clone(),
+                            )))
+                        } else {
+                            task.discard()
+                        }
+                    } else {
+                        task.discard()
+                    }
+                })
+                .then(|f| f),
+        )
     }
 }
 
@@ -4471,8 +4521,28 @@ impl Application for App {
                 // The context menu opens on right-button release, so refresh paste availability now
                 let right_click = matches!(tab_message, tab::Message::RightClick(..));
 
+                let is_dir_nav = matches!(
+                    tab_message,
+                    tab::Message::ItemRight
+                        | tab::Message::ItemLeft
+                        | tab::Message::ItemUp
+                        | tab::Message::ItemDown
+                );
+
                 let tab_commands = match self.tab_model.data_mut::<Tab>(entity) {
-                    Some(tab) => tab.update(tab_message, self.modifiers),
+                    Some(tab) => {
+                        if !is_dir_nav
+                            || tab.gallery
+                            || tab
+                                .items_opt
+                                .as_ref()
+                                .is_some_and(|items| items.iter().any(|item| item.selected))
+                        {
+                            tab.update(tab_message, self.modifiers)
+                        } else {
+                            Vec::new()
+                        }
+                    }
                     _ => Vec::new(),
                 };
 
@@ -5398,6 +5468,18 @@ impl Application for App {
                 position,
             }) => {
                 _ = self.tab_model.reorder(dragged, target, position);
+            }
+            Message::Select(i, id) => {
+                let entity = self.tab_model.active();
+                let Some(tab) = self.tab_model.data_mut::<Tab>(entity) else {
+                    return Task::none();
+                };
+                if let Some(item) = tab
+                    .items_opt_mut()
+                    .and_then(|items| items.get_mut(i).filter(|item| item.button_id == id))
+                {
+                    item.selected = true;
+                }
             }
         }
 
@@ -7059,16 +7141,15 @@ impl Application for App {
 
     fn directional_navigation(
         &mut self,
-        _dir: Direction,
+        dir: Direction,
         window_id: window::Id,
     ) -> Option<Task<Self::Message>> {
         if window_id == window::Id::RESERVED {
-            // opt out of automatic handling of arrow keys
-            Some(Task::none())
+            self.dir_nav(dir, window_id)
         } else {
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             if self.surface_ids.values().any(|l| *l == window_id) {
-                return Some(Task::none());
+                return self.dir_nav(dir, window_id);
             }
             None
         }
