@@ -1157,11 +1157,7 @@ impl Operation {
                     paths.push(item.original_path());
 
                     // Items with .trashinfo id use standard restore; sub-items use manual move
-                    if item
-                        .id
-                        .to_str()
-                        .map_or(false, |s| s.ends_with(".trashinfo"))
-                    {
+                    if item.id.to_str().is_some_and(|s| s.ends_with(".trashinfo")) {
                         compio::runtime::spawn_blocking(|| trash::os_limited::restore_all([item]))
                             .await
                             .map_err(wrap_compio_spawn_error)?
