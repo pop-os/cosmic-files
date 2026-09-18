@@ -6201,11 +6201,18 @@ impl Tab {
                                 .size(icon_size)
                                 .into(),
                             widget::column::with_children([
-                                Item::list_display_name(item.display_name.clone()).into(),
+                                Item::list_display_name(item.display_name.clone())
+                                .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
+                                    1,
+                                )))
+                                .into(),
                                 widget::text::caption(match item.path_opt() {
                                     Some(path) => path.display().to_string(),
                                     None => String::new(),
                                 })
+                                .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
+                                    1,
+                                )))
                                 .into(),
                             ])
                             .width(Length::Fill)
@@ -6307,11 +6314,18 @@ impl Tab {
                                     .size(icon_size)
                                     .into(),
                                 widget::column::with_children([
-                                    Item::list_display_name(item.display_name.clone()).into(),
+                                    Item::list_display_name(item.display_name.clone())
+                                    .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
+                                        1,
+                                    )))
+                                    .into(),
                                     widget::text::caption(match item.path_opt() {
                                         Some(path) => path.display().to_string(),
                                         None => String::new(),
                                     })
+                                    .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
+                                        1,
+                                    )))
                                     .into(),
                                 ])
                                 .width(Length::Fill)
