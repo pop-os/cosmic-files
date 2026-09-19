@@ -385,6 +385,9 @@ list-view = List view
 show-hidden-files = Show hidden files
 list-directories-first = List directories first
 gallery-preview = Gallery preview
+loading-preview = Loading preview...
+failed-to-generate-preview = Failed to generate preview
+missing-pdf-thumbnailer = No PDF thumbnailer found. Install Evince to enable PDF previews.
 menu-settings = Settings...
 menu-about = About COSMIC Files...
 
