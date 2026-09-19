@@ -52,6 +52,7 @@ pub fn context_menu<'a>(
     key_binds: &HashMap<KeyBind, Action>,
     modifiers: &Modifiers,
     clipboard_paste_available: bool,
+    show_bookmarks: &bool,
     context_actions: &[ContextActionPreset],
 ) -> Vec<menu::Tree<tab::Message>> {
     let menu_item =
@@ -143,7 +144,9 @@ pub fn context_menu<'a>(
             | Location::Path(..)
             | Location::Search(SearchLocation::Path(..), ..)
             | Location::Search(SearchLocation::Recents, ..)
+            | Location::Search(SearchLocation::Bookmarks, ..)
             | Location::Recents
+            | Location::Bookmarks
             | Location::Network(_, _, Some(_)),
         ) => {
             if selected_trash_only {
@@ -243,8 +246,21 @@ pub fn context_menu<'a>(
                     children.push(menu::Item::Divider);
                     children.push(menu_item(fl!("delete-permanently"), Action::Delete));
                 } else {
+                    children.push(menu::Item::Divider);
+                    if *show_bookmarks {
+                        if matches!(tab.location, Location::Bookmarks) {
+                            children.push(menu_item(
+                                fl!("remove-from-bookmarks"),
+                                Action::RemoveFromBookmarks
+                            ));
+                        } else {
+                            children.push(menu_item(
+                                fl!("add-to-bookmarks"),
+                                Action::AddToBookmarks
+                            ));
+                        }
+                    }
                     if matches!(tab.mode, tab::Mode::App) {
-                        children.push(menu::Item::Divider);
                         children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar));
                     }
                     children.push(menu::Item::Divider);
@@ -271,7 +287,7 @@ pub fn context_menu<'a>(
             } else {
                 //TODO: need better designs for menu with no selection
                 //TODO: have things like properties but they apply to the folder?
-                if tab.location != Location::Recents {
+                if tab.location != Location::Recents && tab.location != Location::Bookmarks {
                     children.push(menu_item(fl!("new-folder"), Action::NewFolder));
                     children.push(menu_item(fl!("new-file"), Action::NewFile));
                     children.push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal));
@@ -324,7 +340,9 @@ pub fn context_menu<'a>(
             | Location::Path(..)
             | Location::Search(SearchLocation::Path(..), ..)
             | Location::Search(SearchLocation::Recents, ..)
+            | Location::Search(SearchLocation::Bookmarks, ..)
             | Location::Recents
+            | Location::Bookmarks
             | Location::Network(_, _, Some(_)),
         ) => {
             if selected > 0 {
@@ -630,6 +648,11 @@ pub fn menu_bar<'a>(
                         menu::Item::Button(fl!("reload-folder"), None, Action::Reload),
                         menu::Item::Divider,
                         menu_button_optional(
+                            fl!("add-to-bookmarks"),
+                            Action::AddToBookmarks,
+                            selected > 0,
+                        ),
+                        menu_button_optional(
                             fl!("add-to-sidebar"),
                             Action::AddToSidebar,
                             selected > 0,
@@ -749,7 +772,7 @@ pub fn menu_bar<'a>(
         )
 }
 
-pub fn location_context_menu(ancestor_index: usize) -> Vec<menu::Tree<tab::Message>> {
+pub fn location_context_menu(ancestor_index: usize, tab_mode: tab::Mode) -> Vec<menu::Tree<tab::Message>> {
     //TODO: only add some of these when in App mode
     menu::items(
         &HashMap::new(),
@@ -772,6 +795,12 @@ pub fn location_context_menu(ancestor_index: usize) -> Vec<menu::Tree<tab::Messa
             ),
             menu::Item::Divider,
             menu::Item::Button(
+                fl!("add-to-bookmarks"),
+                None,
+                LocationMenuAction::AddToBookmarks(ancestor_index),
+            ),
+            menu::Item::Divider,
+            menu::Item::Button(
                 fl!("add-to-sidebar"),
                 None,
                 LocationMenuAction::AddToSidebar(ancestor_index),
@@ -779,3 +808,4 @@ pub fn location_context_menu(ancestor_index: usize) -> Vec<menu::Tree<tab::Messa
         ],
     )
 }
+

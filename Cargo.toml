@@ -54,6 +54,7 @@ i18n-embed-fl = "0.10"
 rust-embed = "8"
 slotmap = "1.1.1"
 recently-used-xbel = "1.2.0"
+user-places-xbel = { git = "https://github.com/MikhailValerie/user-places-xbel/" }
 zip = "8"
 md-5 = "0.10.6"
 sha2 = "0.10"
