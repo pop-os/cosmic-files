@@ -777,8 +777,8 @@ impl App {
                     Some(SearchLocation::Path(path.clone()))
                 } else if self.tab.location.is_recents() {
                     Some(SearchLocation::Recents)
-                } else if self.tab.location.is_bookmarks() {
-                    Some(SearchLocation::Bookmarks)
+                } else if self.tab.location.is_starred() {
+                    Some(SearchLocation::Starred)
                 } else if self.tab.location.is_trash() {
                     Some(SearchLocation::Trash)
                 } else {
@@ -801,7 +801,7 @@ impl App {
                 Location::Search(search_location, ..) => match search_location {
                     SearchLocation::Path(path) => Some((Location::Path(path.clone()), false)),
                     SearchLocation::Recents => Some((Location::Recents, false)),
-                    SearchLocation::Bookmarks => Some((Location::Bookmarks, false)),
+                    SearchLocation::Starred => Some((Location::Starred, false)),
                     SearchLocation::Trash => Some((Location::Trash, false)),
                 },
                 _ => None,
@@ -885,11 +885,11 @@ impl App {
             });
         }
 
-        if self.flags.config.show_bookmarks {
+        if self.flags.config.show_starred {
             nav_model = nav_model.insert(|b| {
-                b.text(fl!("bookmarks"))
+                b.text(fl!("starred"))
                     .icon(widget::icon::from_name("starred-symbolic"))
-                    .data(Location::Bookmarks)
+                    .data(Location::Starred)
             });
         }
 
@@ -1958,7 +1958,7 @@ impl Application for App {
                     &self.key_binds,
                     &self.modifiers,
                     false,  // Clipboard has content
-                    &false, // Show Bookmarks
+                    &false, // Show Starred
                     &[]
                 )
                 .map(Message::TabMessage),

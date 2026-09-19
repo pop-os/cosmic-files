@@ -165,11 +165,11 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 log::warn!("recents feature is disabled in config");
                 continue;
             }
-        } else if &arg == "--bookmarks" {
-            if config.show_bookmarks {
-                Location::Bookmarks
+        } else if &arg == "--starred" {
+            if config.show_starred {
+                Location::Starred
             } else {
-                log::warn!("bookmarks feature is disabled in config");
+                log::warn!("starred feature is disabled in config");
                 continue;
             }
         } else if &arg == "--network" {
