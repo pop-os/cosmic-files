@@ -6539,6 +6539,12 @@ impl Tab {
                 {
                     tab_column = tab_column.push(
                         widget::layer_container(widget::row::with_children([
+                            widget::container(
+                                widget::text::body(fl!("items-count", items = items.len()))
+                                .width(Length::Fixed(100.0)),
+                            )
+                            .padding([space_xxs, 0])
+                            .into(),
                             widget::space::horizontal().into(),
                             widget::button::standard(fl!("empty-trash"))
                                 .on_press(Message::EmptyTrash)
@@ -6557,6 +6563,12 @@ impl Tab {
                 {
                     tab_column = tab_column.push(
                         widget::layer_container(widget::row::with_children([
+                            widget::container(
+                                widget::text::body(fl!("items-count", items = items.len()))
+                                .width(Length::Fixed(100.0))
+                            )
+                            .padding([space_xxs, 0])
+                            .into(),
                             widget::space::horizontal().into(),
                             widget::button::standard(fl!("clear-recents-history"))
                                 .on_press(Message::ClearRecents)
