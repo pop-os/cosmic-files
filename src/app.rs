@@ -1600,7 +1600,7 @@ impl App {
             .filter_map(|entity| {
                 let tab = self.tab_model.data::<Tab>(entity)?;
                 tab.location
-                    .is_bookmarked()
+                    .is_bookmarks()
                     .then_some((entity, tab.location.clone()))
             })
             .collect();
@@ -1610,13 +1610,6 @@ impl App {
             .map(|(entity, location)| self.update_tab(entity, location, None));
 
         Task::batch(commands)
-    }
-
-    fn has_bookmarks(&mut self) -> bool {
-        match user_places_xbel::parse_file() {
-            Ok(bookmarks) => !bookmarks.bookmarks.is_empty(),
-            Err(_) => false,
-        }
     }
 
     fn search_get(&self) -> Option<&str> {
@@ -1647,7 +1640,7 @@ impl App {
                         Some(SearchLocation::Path(path.clone()))
                     } else if tab.location.is_recents() {
                         Some(SearchLocation::Recents)
-                    } else if tab.location.is_bookmarked() {
+                    } else if tab.location.is_bookmarks() {
                         Some(SearchLocation::Bookmarks)
                     } else if tab.location.is_trash() {
                         Some(SearchLocation::Trash)
@@ -1787,13 +1780,9 @@ impl App {
         }
 
         if self.config.show_bookmarks {
-            let mut icon = "non-starred-symbolic";
-            if self.has_bookmarks() {
-                icon = "starred-symbolic";
-            }
             nav_model = nav_model.insert(|b| {
                 b.text(fl!("bookmarks"))
-                    .icon(icon::from_name(icon))
+                    .icon(icon::from_name("starred-symbolic"))
                     .data(Location::Bookmarks)
             });
         }
@@ -2957,15 +2946,11 @@ impl Application for App {
                 }
                 let mut tasks = Vec::new();
                 tasks.push(self.operation(Operation::AddToBookmarks { paths }));
-                // tasks.push(iced::Task::future(tokio::time::sleep(
-                //     std::time::Duration::from_millis(300),
-                // ))
-                // .discard()
-                // .chain(
-                //     self.update_config()
-                    
-                // ));
-                return Task::batch(tasks);
+                let entity = self.tab_model.active();
+                if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+                    tasks.push(self.update_tab(entity, tab.location.clone(), None))
+                };
+                return Task::batch(tasks)
             }
             Message::AppTheme(app_theme) => {
                 config_set!(app_theme, app_theme);
@@ -4301,7 +4286,13 @@ impl Application for App {
                 for path in self.selected_paths(entity_opt) {
                     paths.push(path);
                 }
-                return self.operation(Operation::RemoveFromBookmarks { paths });
+                let mut tasks = Vec::new();
+                tasks.push(self.operation(Operation::RemoveFromBookmarks { paths }));
+                let entity = self.tab_model.active();
+                if let Some(tab) = self.tab_model.data::<Tab>(entity) {
+                    tasks.push(self.update_tab(entity, tab.location.clone(), None))
+                };
+                return Task::batch(tasks)
             }
             Message::ReloadMimeAppCache => {
                 self.mime_app_cache.reload();
@@ -4445,6 +4436,9 @@ impl Application for App {
             }
             Message::SetShowBookmarks(show_bookmarks) => {
                 config_set!(show_bookmarks, show_bookmarks);
+                let mut config = self.config.tab.clone();
+                config.show_bookmarks = show_bookmarks;
+                config_set!(tab, config);
                 return self.update_config();
             }
             Message::SetTypeToSearch(type_to_search) => {
@@ -4589,9 +4583,11 @@ impl Application for App {
                         }
                         tab::Command::AddToBookmarks(paths) => {
                             commands.push(self.operation(Operation::AddToBookmarks { paths }));
+                            commands.push(self.rescan_bookmarks());
                         }
                         tab::Command::RemoveFromBookmarks(paths) => {
                             commands.push(self.operation(Operation::RemoveFromBookmarks { paths }));
+                            commands.push(self.rescan_bookmarks());
                         }
                         tab::Command::AutoScroll(scroll_speed) => {
                             // converting an f32 to an i16 here by multiplying by 10 and casting to i16
@@ -5228,6 +5224,9 @@ impl Application for App {
                                     }
                                     Location::Recents => {
                                         command.arg("--recents");
+                                    }
+                                    Location::Bookmarks => {
+                                        command.arg("--bookmarks");
                                     }
                                     _ => {
                                         log::error!(
@@ -7060,7 +7059,7 @@ impl Application for App {
                 stream::channel(
                     1,
                     |mut output: futures::channel::mpsc::Sender<Message>| async move {
-                        let Some(bookmark) = user_places_xbel::dir() else {
+                        let Some(bookmarks_file) = user_places_xbel::dir() else {
                             log::warn!(
                                 "failed to watch bookmarks changes: .user-places.xbel does not exist"
                             );
@@ -7073,7 +7072,7 @@ impl Application for App {
                             move |event_res: notify_debouncer_full::DebounceEventResult| {
                                 match event_res {
                                     Ok(events) => {
-                                        // Programs differ in how they modify the recents file so the
+                                        // Programs differ in how they modify the bookmarks file so the
                                         // rescan is triggered on any event but access.
                                         if events.iter().any(|event| {
                                             let kind = event.kind;
@@ -7101,11 +7100,11 @@ impl Application for App {
                         match watcher_res {
                             Ok(mut watcher) => {
                                 if let Err(e) = watcher
-                                    .watch(&bookmark, notify::RecursiveMode::NonRecursive)
+                                    .watch(&bookmarks_file, notify::RecursiveMode::NonRecursive)
                                 {
                                     log::warn!(
                                         "failed to add bookmarks file `{}` to watcher: {}",
-                                        bookmark.display(),
+                                        bookmarks_file.display(),
                                         e
                                     );
                                 }

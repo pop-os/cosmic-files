@@ -250,6 +250,7 @@ impl Config {
             show_hidden: self.dialog.show_hidden,
             single_click: false,
             view: self.dialog.view,
+            show_bookmarks: self.show_bookmarks
         }
     }
 }
@@ -374,6 +375,8 @@ pub struct TabConfig {
     pub single_click: bool,
     /// Selected view, grid or list
     pub view: View,
+    /// Show bookmarks icons
+    pub show_bookmarks: bool,
 }
 
 impl Default for TabConfig {
@@ -385,6 +388,7 @@ impl Default for TabConfig {
             show_hidden: false,
             single_click: false,
             view: View::List,
+            show_bookmarks: false
         }
     }
 }
