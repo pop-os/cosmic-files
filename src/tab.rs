@@ -773,6 +773,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
         rect_opt: Cell::new(None),
         selected: false,
         highlighted: false,
+        bookmarked: false,
         overlaps_drag_rect: false,
         dir_size,
         cut: false,
@@ -889,6 +890,7 @@ pub fn item_from_entry(
         rect_opt: Cell::new(None),
         selected: false,
         highlighted: false,
+        bookmarked: false,
         overlaps_drag_rect: false,
         dir_size,
         cut: false,
@@ -948,6 +950,7 @@ pub fn item_from_trash_entry(
         rect_opt: Cell::new(None),
         selected: false,
         highlighted: false,
+        bookmarked: false,
         overlaps_drag_rect: false,
         dir_size: DirSize::NotDirectory,
         cut: false,
@@ -1495,6 +1498,7 @@ pub fn scan_desktop(
             rect_opt: Cell::new(None),
             selected: false,
             highlighted: false,
+            bookmarked: false,
             overlaps_drag_rect: false,
             dir_size: DirSize::NotDirectory,
             cut: false,
@@ -2058,6 +2062,11 @@ impl ItemMetadata {
             _ => None,
         }
     }
+
+    pub fn is_bookmarked(&self) -> bool {
+        // TODO: Cache bookmarked to query for list
+        return false;
+    }
 }
 
 #[derive(Debug)]
@@ -2435,6 +2444,7 @@ pub struct Item {
     pub rect_opt: Cell<Option<Rectangle>>,
     pub selected: bool,
     pub highlighted: bool,
+    pub bookmarked: bool,
     pub cut: bool,
     pub overlaps_drag_rect: bool,
     pub dir_size: DirSize,
@@ -2834,6 +2844,7 @@ pub enum HeadingOptions {
     Name = 0,
     Modified,
     Size,
+    Bookmarked,
     TrashedOn,
 }
 
@@ -2843,6 +2854,7 @@ impl fmt::Display for HeadingOptions {
             Self::Name => write!(f, "{}", fl!("name")),
             Self::Modified => write!(f, "{}", fl!("modified")),
             Self::Size => write!(f, "{}", fl!("size")),
+            Self::Bookmarked => write!(f, "{}", fl!("bookmarked")),
             Self::TrashedOn => write!(f, "{}", fl!("trashed-on")),
         }
     }
@@ -2854,6 +2866,7 @@ impl HeadingOptions {
             Self::Name.to_string(),
             Self::Modified.to_string(),
             Self::Size.to_string(),
+            Self::Bookmarked.to_string(),
             Self::TrashedOn.to_string(),
         ]
     }
@@ -5157,6 +5170,21 @@ impl Tab {
                     }
                 });
             }
+            HeadingOptions::Bookmarked => {
+                items.sort_by(|a, b| {
+                    let a_bookmarked = a.1.metadata.is_bookmarked();
+                    let b_bookmarked = b.1.metadata.is_bookmarked();
+                    if folders_first {
+                        match (a.1.metadata.is_dir(), b.1.metadata.is_dir()) {
+                            (true, false) => Ordering::Less,
+                            (false, true) => Ordering::Greater,
+                            _ => check_reverse(a_bookmarked.cmp(&b_bookmarked), sort_direction),
+                        }
+                    } else {
+                        check_reverse(a_bookmarked.cmp(&b_bookmarked), sort_direction)
+                    }
+                });
+            }
             HeadingOptions::TrashedOn => {
                 let time_deleted = |x: &Item| match &x.metadata {
                     ItemMetadata::Trash { entry, .. } => Some(entry.time_deleted),
@@ -5438,6 +5466,7 @@ impl Tab {
         } = theme::spacing();
 
         let size = self.size_opt.get().unwrap_or(Size::new(0.0, 0.0));
+        let icon_size = 16;
 
         let mut row = widget::row::with_capacity(5)
             .align_y(Alignment::Center)
@@ -5445,7 +5474,7 @@ impl Tab {
         let mut w = 0.0;
 
         let mut prev_button =
-            widget::button::custom(widget::icon::from_name("go-previous-symbolic").size(16))
+            widget::button::custom(widget::icon::from_name("go-previous-symbolic").size(icon_size))
                 .padding(space_xxs)
                 .class(theme::Button::Icon);
         if self.history_i > 0 && !self.history.is_empty() {
@@ -5455,7 +5484,7 @@ impl Tab {
         w += f32::from(space_xxs).mul_add(2.0, 16.0);
 
         let mut next_button =
-            widget::button::custom(widget::icon::from_name("go-next-symbolic").size(16))
+            widget::button::custom(widget::icon::from_name("go-next-symbolic").size(icon_size))
                 .padding(space_xxs)
                 .class(theme::Button::Icon);
         if self.history_i + 1 < self.history.len() {
@@ -5471,7 +5500,8 @@ impl Tab {
         let name_width = 300.0;
         let modified_width = 200.0;
         let size_width = 100.0;
-        let condensed = size.width < (name_width + modified_width + size_width);
+        let bookmarked_width = (icon_size + 2 * space_xxs) as f32;
+        let condensed = size.width < (name_width + modified_width + size_width + bookmarked_width);
 
         let (sort_name, sort_direction, _) = self.sort_options();
         let heading_item = |name, width, msg| {
@@ -5511,6 +5541,7 @@ impl Tab {
                 )
             },
             heading_item(fl!("size"), Length::Fixed(size_width), HeadingOptions::Size),
+            heading_item(fl!("bookmarked"), Length::Fixed(bookmarked_width.into()), HeadingOptions::Bookmarked),
         ])
         .align_y(Alignment::Center)
         .height(Length::Fixed((space_m + 4).into()))
@@ -6157,7 +6188,8 @@ impl Tab {
         let name_width = 300.0;
         let modified_width = 200.0;
         let size_width = 100.0;
-        let condensed = size.width < (name_width + modified_width + size_width);
+        let bookmarked_width = (16 + 2 * space_xxs) as f32;
+        let condensed = size.width < (name_width + modified_width + size_width + bookmarked_width);
         let is_search = matches!(self.location, Location::Search(..));
         let icon_size = if condensed || is_search {
             icon_sizes.list_condensed()
@@ -6215,6 +6247,10 @@ impl Tab {
 
                 // Only build elements if visible (for performance)
                 let button_row = if item_rect.intersects(&visible_rect) {
+                    let mut bookmarked_icon = "non-starred-symbolic";
+                    if item.bookmarked {
+                        bookmarked_icon = "starred-symbolic";
+                    }
                     let modified_text = match &item.metadata {
                         ItemMetadata::Path { metadata, .. } => match metadata.modified() {
                             Ok(time) => self.format_time(time).to_string(),
@@ -6332,8 +6368,9 @@ impl Tab {
                             widget::text::body(modified_text.clone())
                                 .width(Length::Fixed(modified_width))
                                 .into(),
-                            widget::text::body(size_text.clone())
-                                .width(Length::Fixed(size_width))
+                            widget::icon::from_name(bookmarked_icon)
+                                .size(16)
+                                .icon()
                                 .into(),
                         ])
                         .height(Length::Fixed(f32::from(row_height)))
@@ -6353,6 +6390,10 @@ impl Tab {
                                 .into(),
                             widget::text::body(size_text.clone())
                                 .width(Length::Fixed(size_width))
+                                .into(),
+                            widget::icon::from_name(bookmarked_icon)
+                                .size(16)
+                                .icon()
                                 .into(),
                         ])
                         .height(Length::Fixed(f32::from(row_height)))
@@ -6413,6 +6454,10 @@ impl Tab {
                                     //TODO: translate?
                                     widget::text::body(format!("{modified_text} - {size_text}"))
                                         .into(),
+                                    widget::icon::from_name(bookmarked_icon)
+                                        .size(16)
+                                        .icon()
+                                        .into(),
                                 ])
                                 .into(),
                             ])
@@ -6441,6 +6486,10 @@ impl Tab {
                                 widget::text::body(size_text.clone())
                                     .width(Length::Fixed(size_width))
                                     .into(),
+                                widget::icon::from_name(bookmarked_icon)
+                                    .size(16)
+                                    .icon()
+                                    .into(),
                             ])
                             .align_y(Alignment::Center)
                             .spacing(space_xxs)
@@ -6459,6 +6508,10 @@ impl Tab {
                                     .into(),
                                 widget::text::body(size_text)
                                     .width(Length::Fixed(size_width))
+                                    .into(),
+                                widget::icon::from_name(bookmarked_icon)
+                                    .size(16)
+                                    .icon()
                                     .into(),
                             ])
                             .align_y(Alignment::Center)
