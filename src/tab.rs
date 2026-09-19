@@ -5646,32 +5646,44 @@ impl Tab {
 
     pub fn empty_view(&self, has_hidden: bool) -> Element<'_, Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = theme::spacing();
-
-        mouse_area::MouseArea::new(widget::column::with_children([widget::container(
-            match self.mode {
-                Mode::App | Mode::Dialog(_) => widget::column::with_children([
-                    widget::icon::from_name("folder-symbolic")
-                        .size(64)
-                        .icon()
-                        .into(),
-                    widget::text::body(if has_hidden {
-                        fl!("empty-folder-hidden")
-                    } else if matches!(self.location, Location::Search(..)) {
-                        fl!("no-results")
-                    } else {
-                        fl!("empty-folder")
-                    })
-                    .into(),
-                ]),
-                Mode::Desktop => widget::column::with_capacity(0),
-            }
-            .align_x(Alignment::Center)
-            .spacing(space_xxs),
+        let mut mouse_area = mouse_area::MouseArea::new(
+            widget::column::with_children([
+                widget::container(
+                    match self.mode {
+                        Mode::App | Mode::Dialog(_) => widget::column::with_children([
+                            widget::icon::from_name("folder-symbolic")
+                                .size(64)
+                                .icon()
+                                .into(),
+                            widget::text::body(if has_hidden {
+                                fl!("empty-folder-hidden")
+                            } else if matches!(self.location, Location::Search(..)) {
+                                fl!("no-results")
+                            } else {
+                                fl!("empty-folder")
+                            })
+                            .into(),
+                        ]),
+                        Mode::Desktop => widget::column::with_capacity(0),
+                    }
+                    .align_x(Alignment::Center)
+                    .spacing(space_xxs),
+                )
+                .center(Length::Fill)
+                .into()
+            ])
         )
-        .center(Length::Fill)
-        .into()]))
-        .on_press(|_| Message::Click(None))
-        .into()
+        .on_press(|_| Message::Click(None));
+        if matches!(self.mode, Mode::Desktop) {
+            mouse_area = mouse_area
+                .on_drag_end(|_| Message::DragEnd)
+                .show_drag_rect(self.mode.multiple())
+                .on_release(|_| Message::ClickRelease(None));
+        }
+        if self.watch_drag {
+            mouse_area = mouse_area.on_drag(Message::Drag);
+        }
+        mouse_area.into()
     }
 
     pub fn grid_view(
@@ -5693,16 +5705,24 @@ impl Tab {
             ..
         } = self.config;
 
+        // Overwrite
         let mut grid_spacing = space_xxs;
         if let Location::Desktop(_path, _output, desktop_config) = &self.location {
             icon_sizes.grid = desktop_config.icon_size;
             grid_spacing = desktop_config.grid_spacing_for(space_xxs);
         }
 
+        // Calculate Icon sizes
         let text_height = 3 * 20; // 3 lines of text
         let item_width = (3 * space_xxs + icon_sizes.grid() + 3 * space_xxs) as usize;
-        let item_height =
-            (space_xxxs + icon_sizes.grid() + space_xxxs + text_height + space_xxxs) as usize;
+        let item_height = (
+            space_xxxs          // Padding (top)
+            + icon_sizes.grid() // Icon
+            + space_xxxs        // Row spacing
+            + text_height       // Text elements
+            + space_xxxs        // Padding (bottom)
+        ) as usize;
+
 
         let (width, height) = match self.size_opt.get() {
             Some(size) => (
