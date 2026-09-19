@@ -886,13 +886,9 @@ impl App {
         }
 
         if self.flags.config.show_bookmarks {
-            let mut icon = "non-starred-symbolic";
-            if self.has_bookmarks() {
-                icon = "starred-symbolic";
-            }
             nav_model = nav_model.insert(|b| {
                 b.text(fl!("bookmarks"))
-                    .icon(widget::icon::from_name(icon))
+                    .icon(widget::icon::from_name("starred-symbolic"))
                     .data(Location::Bookmarks)
             });
         }

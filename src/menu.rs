@@ -85,6 +85,7 @@ pub fn context_menu<'a>(
     let mut selected_types: Vec<Mime> = vec![];
     let mut selected_mount_point = 0;
     let mut any_trash_item = false;
+    let mut bookmarked = 0;
     if let Some(items) = tab.items_opt() {
         for item in items {
             if item.selected {
@@ -92,6 +93,9 @@ pub fn context_menu<'a>(
                 if item.metadata.is_dir() {
                     selected_mount_point += i32::from(item.is_mount_point);
                     selected_dir += 1;
+                }
+                if item.bookmarked {
+                    bookmarked += 1
                 }
                 match &item.location_opt {
                     Some(Location::Trash) | Some(Location::Search(SearchLocation::Trash, ..)) => {
@@ -248,19 +252,20 @@ pub fn context_menu<'a>(
                 } else {
                     children.push(menu::Item::Divider);
                     if *show_bookmarks {
-                        if matches!(tab.location, Location::Bookmarks) {
+                        if bookmarked > 0 || matches!(tab.location, Location::Bookmarks) {
                             children.push(menu_item(
                                 fl!("remove-from-bookmarks"),
                                 Action::RemoveFromBookmarks
                             ));
-                        } else {
+                        }
+                        if bookmarked < selected && !matches!(tab.location, Location::Bookmarks) {
                             children.push(menu_item(
                                 fl!("add-to-bookmarks"),
                                 Action::AddToBookmarks
                             ));
                         }
                     }
-                    if matches!(tab.mode, tab::Mode::App) {
+                    if matches!(tab.mode, tab::Mode::App) && selected == selected_dir {
                         children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar));
                     }
                     children.push(menu::Item::Divider);
