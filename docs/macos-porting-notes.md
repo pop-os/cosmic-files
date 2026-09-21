@@ -275,6 +275,48 @@ All three bite a file manager harder than a terminal:
 - **PATH** — a bundle gets the bare launchd `PATH`; `/opt/homebrew/bin` is absent. Any
   external tool must be resolved by absolute path.
 
+### 5.5 Bundling in this repo
+
+`scripts/macos-bundle.sh` builds `target/macos/COSMIC Files.app` — the space is
+deliberate, it is the name the Dock and the menu bar show. The script is the single
+command the bundle is produced by; it takes the release binary from
+`$CARGO_TARGET_DIR/release/cosmic-files` and builds it with the macOS feature set if it
+is not there.
+
+The `Info.plist` comes from the template `res/macos/Info.plist.in`, which carries
+everything from 5.2 that is settled today and marks where the privacy usage strings and
+`CFBundleDocumentTypes` go. Only `@SHORT_VERSION@` is substituted, from the Cargo.toml
+version. `LSMinimumSystemVersion` is 11.0, matching the `LC_BUILD_VERSION` `minos` of the
+aarch64 binary.
+
+`CFBundleIdentifier` is `com.system76.CosmicFiles` — the same string the config directory
+already uses, and **the key every TCC privacy grant attaches to**. Changing it resets
+every permission the user has granted, so it is fixed in the template and asserted by the
+tests. Under an ad-hoc signature the grants still do not survive a rebuild (4.1); the
+identifier is what makes them survivable at all once there is a Developer ID.
+
+The icon is generated, not committed. `sips` rasterises the hicolor SVGs in
+`res/icons/hicolor` straight into an iconset — it reads SVG, so the 1024px retina
+representation comes out of the vector art rather than an upscale — and `iconutil`
+converts that to `Contents/Resources/cosmic-files.icns`. Each size uses the SVG drawn for
+it where one exists, so the small representations keep their hinting.
+
+Signing is ad-hoc and inside-out, with no `--options runtime`: `xattr -crs`, then
+`codesign --force -s -` on `Contents/MacOS/cosmic-files`, then the same on the bundle,
+verified with `codesign --verify --deep --strict`. The script refuses to sign anything
+that is not thin arm64 (4.4).
+
+`scripts/test-macos-bundle.sh` runs the bundler and asserts all of the above: the
+`Contents` layout, every plist key by `plutil -extract` (including that `LSRequiresCarbon`
+and `CSResourcesFileMapped` stay absent), a 1024px icns, an ad-hoc signature without the
+hardened runtime that carries the bundle identifier, and `lipo -info` reporting a non-fat
+arm64 binary.
+
+**Launched from Finder the app has no `XDG_DATA_DIRS`** (5.4), so the shared MIME database
+under `/opt/homebrew/share` is not found and per-file-type icons fall back to generic
+ones. `XDG_DATA_HOME` is unset too, but its spec default is `~/.local/share`, so the
+Cosmic icon theme installed there is still found.
+
 ---
 
 ## 6. FFI, threading, and lifecycle
