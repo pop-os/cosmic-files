@@ -376,6 +376,8 @@ pub enum Message {
     ModifiersChanged(window::Id, Modifiers),
     #[cfg(target_os = "macos")]
     Pinch(crate::gesture::Phase, f64),
+    #[cfg(target_os = "macos")]
+    Scroll(crate::gesture::Scroll),
     MounterItems(MounterKey, MounterItems),
     MountResult(MounterKey, MounterItem, Result<bool, String>),
     Mouse(window::Id, mouse::Button),
@@ -749,6 +751,8 @@ pub struct App {
     mounter_items: FxHashMap<MounterKey, MounterItems>,
     #[cfg(target_os = "macos")]
     pinch: crate::gesture::Pinch,
+    #[cfg(target_os = "macos")]
+    swipe: crate::gesture::Swipe,
     must_save_sort_names: bool,
     network_drive_connecting: Option<(MounterKey, String)>,
     network_drive_input: String,
@@ -2423,6 +2427,8 @@ impl Application for App {
             about,
             #[cfg(target_os = "macos")]
             pinch: crate::gesture::Pinch::default(),
+            #[cfg(target_os = "macos")]
+            swipe: crate::gesture::Swipe::default(),
             nav_bar_context_id: segmented_button::Entity::null(),
             nav_model: segmented_button::ModelBuilder::default().build(),
             tab_model: segmented_button::ModelBuilder::default().build(),
@@ -3463,6 +3469,17 @@ impl Application for App {
                     .map(|_| self.update(message.clone()))
                     .collect::<Vec<_>>();
                 return Task::batch(tasks);
+            }
+            #[cfg(target_os = "macos")]
+            Message::Scroll(scroll) => {
+                // A two-finger swipe walks the active tab's history, as it does in Finder.
+                if let Some(direction) = self.swipe.feed(scroll) {
+                    let tab_message = match direction {
+                        crate::gesture::Direction::Back => tab::Message::GoPrevious,
+                        crate::gesture::Direction::Forward => tab::Message::GoNext,
+                    };
+                    return self.update(Message::TabMessage(None, tab_message));
+                }
             }
             Message::ModifiersChanged(window_id, modifiers) => {
                 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
@@ -7089,10 +7106,16 @@ impl Application for App {
         }));
 
         #[cfg(target_os = "macos")]
-        subscriptions.push(
-            crate::gesture_macos::subscription()
-                .map(|(phase, magnification)| Message::Pinch(phase, magnification)),
-        );
+        subscriptions.push(crate::gesture_macos::subscription().map(|event| {
+            match event {
+                crate::gesture_macos::GestureEvent::Pinch(phase, magnification) => {
+                    Message::Pinch(phase, magnification)
+                }
+                crate::gesture_macos::GestureEvent::Scroll(scroll) => Message::Scroll(scroll),
+                // A two-finger double tap is the platform's zoom-to-default.
+                crate::gesture_macos::GestureEvent::SmartMagnify => Message::ZoomDefault(None),
+            }
+        }));
 
         Subscription::batch(subscriptions)
     }
