@@ -85,21 +85,22 @@ Cut                       CosmicSettingsDesktop     CosmicSettingsDisplays
 CosmicSettingsWallpaper   DesktopViewOptions        Delete
 EditHistory               EditLocation              Eject
 EmptyTrash                ExtractHere               ExtractTo
-Gallery                   HistoryNext               HistoryPrevious
-ItemDown                  ItemLeft                  ItemPageDown
-ItemPageUp                ItemRight                 ItemUp
-LocationUp                MoveTo                    NewFile
-NewFolder                 Open                      OpenInNewTab
-OpenInNewWindow           OpenItemLocation          OpenTerminal
-OpenWith                  Paste                     PermanentlyDelete
-Preview                   Reload                    RemoveFromRecents
-Rename                    RestoreFromTrash          SearchActivate
-SelectFirst               SelectLast                SelectAll
-Settings                  TabClose                  TabNew
-TabNext                   TabPrev                   TabViewGrid
-TabViewList               ToggleFoldersFirst        ToggleShowHidden
-WindowClose               WindowNew                 ZoomDefault
-ZoomIn                    ZoomOut                   Recents
+Gallery                   Hide                      HistoryNext
+HistoryPrevious           ItemDown                  ItemLeft
+ItemPageDown              ItemPageUp                ItemRight
+ItemUp                    LocationUp                MoveTo
+NewFile                   NewFolder                 Open
+OpenInNewTab              OpenInNewWindow           OpenItemLocation
+OpenTerminal              OpenWith                  Paste
+PermanentlyDelete         Preview                   Quit
+Reload                    RemoveFromRecents         Rename
+RestoreFromTrash          SearchActivate            SelectFirst
+SelectLast                SelectAll                 Settings
+TabClose                  TabNew                    TabNext
+TabPrev                   TabViewGrid               TabViewList
+ToggleFoldersFirst        ToggleShowHidden          WindowClose
+WindowNew                 ZoomDefault               ZoomIn
+ZoomOut                   Recents
 ```
 
 Four actions take arguments, written in parentheses:
@@ -140,7 +141,9 @@ Selection and navigation keys are the same on every platform: the arrow keys, `S
 | `WindowNew` | `⌘N` | `Ctrl+N` |
 | `TabNew` | `⌘T` | `Ctrl+T` |
 | `TabClose` | `⌘W` | `Ctrl+W` |
-| `WindowClose` | `⌘Q`, `⇧⌘W` | `Ctrl+Q` |
+| `WindowClose` | `⇧⌘W` | `Ctrl+Q` |
+| `Quit` | `⌘Q` | — |
+| `Hide` | `⌘H` | — |
 | `Settings` | `⌘,` | `Ctrl+,` |
 | `ToggleShowHidden` | `⇧⌘.` | `Ctrl+H` |
 | `Delete` (move to trash) | `⌘⌫`, `⌘⌦` | `Delete` |
@@ -162,6 +165,10 @@ Selection and navigation keys are the same on every platform: the arrow keys, `S
 The rest keep their usual keys, because Finder has no equivalent: `Ctrl+Enter` opens in a new tab,
 `Shift+Enter` in a new window, `Ctrl+Tab` and `Ctrl+Shift+Tab` switch tabs, `Ctrl+Space` previews
 and `Space` opens the gallery. `Cmd+Space` is deliberately left alone: it belongs to Spotlight.
+
+`Quit` and `WindowClose` are two different things on macOS, as they are in every Mac app:
+`WindowClose` closes the window and leaves the application in the Dock, where clicking the icon
+brings a window back, and only `⌘Q` ends it. `Hide` exists on macOS alone.
 
 Two differences are worth spelling out. Enter renames rather than opens, as it does in Finder, and
 `⌘↓` opens; in open and save dialogs, where there is nothing to rename, Enter still opens. And

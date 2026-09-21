@@ -1,9 +1,9 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Startup fixes that only AppKit can make.
+//! The parts of the application only AppKit can provide.
 //!
-//! Two of them, both applied once at launch:
+//! Two fixes are applied once at launch:
 //!
 //! * [`disable_autofill_heuristics`] registers a user default before the event loop starts, so
 //!   AppKit never attaches its autofill heuristics to the rename, search and path-bar text
@@ -12,21 +12,34 @@
 //!   libcosmic's palettes are authored in sRGB, so greys and the accent colour come out
 //!   oversaturated until the window is told which space its colours are in.
 //!
+//! The rest is the application lifecycle a Mac app is expected to have.
+//! [`hide_application`] is what Cmd+H does everywhere else, and [`watch_activation`] notices
+//! the application being brought to the front — a click on the Dock icon, most of all — so that
+//! a window can be put back after the last one was closed.
+//!
 //! Reaching the `NSWindow` means going out through `raw_window_handle` to the `NSView` iced
 //! draws into, which is what [`with_ns_window`] wraps: it hands a live `NSWindow` to a closure
 //! on the main thread, or yields nothing if there is no window to hand over. AppKit calls back
 //! into us synchronously, so nothing in here may touch application state.
 
+use std::ptr::NonNull;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use cosmic::iced::Task;
+use block2::RcBlock;
+use cosmic::iced::futures::{self, StreamExt, channel::mpsc};
 use cosmic::iced::runtime::window::raw_window_handle::RawWindowHandle;
 use cosmic::iced::runtime::window::run_with_handle;
 use cosmic::iced::window::Id as WindowId;
-use objc2::MainThreadMarker;
+use cosmic::iced::{Subscription, Task};
 use objc2::runtime::AnyObject;
-use objc2_app_kit::{NSColorSpace, NSView, NSWindow};
-use objc2_foundation::{NSDictionary, NSUserDefaults, ns_string};
+use objc2::{MainThreadMarker, sel};
+use objc2_app_kit::{
+    NSApplication, NSApplicationDidBecomeActiveNotification, NSColorSpace, NSMenu, NSView, NSWindow,
+};
+use objc2_foundation::{
+    NSDictionary, NSNotification, NSNotificationCenter, NSUserDefaults, ns_string,
+};
 
 /// Turn off AppKit's autofill heuristics. Call once, before the event loop starts; a default
 /// registered afterwards would not be read by the text fields that are already alive.
@@ -43,6 +56,131 @@ pub fn disable_autofill_heuristics() {
         "registered NSAutoFillHeuristicControllerEnabled = NO (now {})",
         defaults.boolForKey(key)
     );
+}
+
+/// Hide the application, the way Cmd+H hides any other Mac app. Clicking the Dock icon, or
+/// Cmd+Tabbing back, brings it out again; AppKit restores the windows it hid.
+pub fn hide_application() {
+    let Some(mtm) = MainThreadMarker::new() else {
+        log::warn!("not hiding the application: not on the main thread");
+        return;
+    };
+    // `nil` is the sender a programmatic hide passes, as opposed to the menu item that would
+    // otherwise be validated against it.
+    NSApplication::sharedApplication(mtm).hide(None);
+    log::info!("hid the application");
+}
+
+/// The application was brought to the front: the Dock icon was clicked, it was Cmd+Tabbed to,
+/// or it was unhidden.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Activated;
+
+/// The receiving end of the activation observer's channel, parked here until the subscription
+/// starts.
+static ACTIVATIONS: Mutex<Option<mpsc::UnboundedReceiver<Activated>>> = Mutex::new(None);
+
+/// Start watching for the application being activated. Call once, on the main thread, before
+/// the first [`activation_subscription`] runs; the observer lives for the rest of the process.
+///
+/// This observes a notification rather than implementing `applicationShouldHandleReopen:`,
+/// because winit owns the application delegate and replacing it would take the rest of the
+/// delegate's work with it. The cost is that an activation is only reported when the
+/// application was not already frontmost.
+pub fn watch_activation() {
+    let Some(_mtm) = MainThreadMarker::new() else {
+        log::warn!("activation observer not installed: not on the main thread");
+        return;
+    };
+
+    let (tx, rx) = mpsc::unbounded();
+    *ACTIVATIONS.lock().unwrap() = Some(rx);
+
+    let handler = RcBlock::new(move |_notification: NonNull<NSNotification>| {
+        // AppKit posts this synchronously, while the application may already be borrowed, so
+        // handing the news to the subscription is all this may do.
+        let _ = tx.unbounded_send(Activated);
+    });
+
+    let center = NSNotificationCenter::defaultCenter();
+    // SAFETY: the name is AppKit's own notification constant, the block only sends on a
+    // channel, and a `None` queue asks for delivery on the posting thread, which is the main
+    // thread for this notification.
+    let token = unsafe {
+        center.addObserverForName_object_queue_usingBlock(
+            Some(NSApplicationDidBecomeActiveNotification),
+            None,
+            None,
+            &handler,
+        )
+    };
+    // The observer is wanted for the life of the process, and dropping the token would remove
+    // it, so the token is leaked rather than tracked.
+    std::mem::forget(token);
+    log::info!("watching for application activation");
+}
+
+/// Deliver the observer's activations as messages. Yields nothing if [`watch_activation`] did
+/// not run.
+pub fn activation_subscription() -> Subscription<Activated> {
+    Subscription::run(|| {
+        // The receiver is taken once; a restarted subscription gets an empty stream.
+        let rx = ACTIVATIONS.lock().unwrap().take();
+        futures::stream::iter(rx).flatten()
+    })
+}
+
+/// Set once the Quit item has been unbound, so the repeat calls cost nothing.
+static QUIT_KEY_RELEASED: AtomicBool = AtomicBool::new(false);
+
+/// Take Cmd+Q off the Quit item in the application menu that winit installs.
+///
+/// That item sends `terminate:`, which ends the process where it stands; a copy or move still
+/// running would be lost with it. AppKit matches a menu item's key equivalent before the key
+/// reaches the window, so while the shortcut sits on that item the binding table never sees
+/// Cmd+Q. Unbound, the key arrives as any other does and quits through
+/// [`crate::app::Action::Quit`], which waits for the pending operations first.
+///
+/// Call once a window exists: winit builds the menu while the event loop is starting, which is
+/// after anything `main` can do.
+pub fn release_quit_key_equivalent() {
+    if QUIT_KEY_RELEASED.load(Ordering::Relaxed) {
+        return;
+    }
+    let Some(mtm) = MainThreadMarker::new() else {
+        log::warn!("not unbinding Cmd+Q: not on the main thread");
+        return;
+    };
+    let Some(menu) = NSApplication::sharedApplication(mtm).mainMenu() else {
+        log::info!("no application menu, so nothing holds Cmd+Q");
+        QUIT_KEY_RELEASED.store(true, Ordering::Relaxed);
+        return;
+    };
+    let unbound = unbind_terminate(&menu);
+    log::info!("unbound Cmd+Q from {unbound} Quit menu item(s)");
+    QUIT_KEY_RELEASED.store(true, Ordering::Relaxed);
+}
+
+/// Clear the key equivalent of every `terminate:` item in `menu` and its submenus, and report
+/// how many there were.
+fn unbind_terminate(menu: &NSMenu) -> usize {
+    let mut unbound = 0;
+    for item in &menu.itemArray() {
+        if let Some(submenu) = item.submenu() {
+            unbound += unbind_terminate(&submenu);
+        }
+        log::debug!(
+            "menu item {:?} action {:?} key {:?}",
+            item.title(),
+            item.action(),
+            item.keyEquivalent()
+        );
+        if item.action() == Some(sel!(terminate:)) && !item.keyEquivalent().is_empty() {
+            item.setKeyEquivalent(ns_string!(""));
+            unbound += 1;
+        }
+    }
+    unbound
 }
 
 /// Set once the window's colour space has been pinned, so the repeat calls that come with

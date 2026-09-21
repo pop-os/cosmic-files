@@ -148,25 +148,33 @@ procfs = "0.18"
 block2 = "0.6"
 objc2 = "0.6"
 # Trackpad gestures come from an NSEvent monitor (see src/gesture_macos.rs); the window colour
-# space is set through NSView/NSWindow (see src/appkit_macos.rs).
+# space is set through NSView/NSWindow, and the application lifecycle goes through
+# NSApplication and NSNotificationCenter (see src/appkit_macos.rs).
 objc2-app-kit = { version = "0.3", default-features = false, features = [
     "std",
     "bitflags",
     "block2",
     "objc2-core-foundation",
+    "NSApplication",
     "NSColorSpace",
     "NSEvent",
+    "NSMenu",
+    "NSMenuItem",
+    "NSResponder",
     "NSView",
     "NSWindow",
 ] }
 objc2-foundation = { version = "0.3", default-features = false, features = [
     "std",
+    "block2",
     "NSDictionary",
     "NSError",
     "NSGeometry",
     # The system language a Finder launch does not pass in (src/launch_macos.rs).
     "NSLocale",
+    "NSNotification",
     "NSObject",
+    "NSOperation",
     "NSString",
     "NSURL",
     "NSUserDefaults",
