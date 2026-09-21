@@ -66,7 +66,27 @@
 	<key>NSNetworkVolumesUsageDescription</key>
 	<string>COSMIC Files needs access to network volumes to browse file shares you have mounted.</string>
 
-	<!-- CFBundleDocumentTypes and LSHandlerRank, which claim folders for
-	     "Open With", belong here. Tracked separately. -->
+	<!-- Folder handling: what puts the app in Finder's "Open With" menu for a
+	     folder. public.folder is what Finder reports for an ordinary folder and
+	     public.directory also covers packages and other directory-shaped items.
+	     LSHandlerRank is Alternate rather than Owner so Finder stays the
+	     default handler and this app is offered beside it; see porting notes
+	     5.2. A folder is opened for browsing, never edited, hence Viewer. -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Folder</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.folder</string>
+				<string>public.directory</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

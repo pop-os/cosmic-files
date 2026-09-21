@@ -266,6 +266,21 @@ assert_plist_nonempty NSRemovableVolumesUsageDescription \
 assert_plist_nonempty NSNetworkVolumesUsageDescription \
     "NSNetworkVolumesUsageDescription gives a reason"
 
+echo "# folder handling"
+# How a file manager claims a place in Finder's "Open With" for folders. Both
+# UTIs are needed: public.folder is what Finder reports for an ordinary folder,
+# public.directory also covers packages and other directory-shaped items.
+assert_plist_value CFBundleDocumentTypes.0.LSItemContentTypes.0 public.folder \
+    "the first document type claims public.folder"
+assert_plist_value CFBundleDocumentTypes.0.LSItemContentTypes.1 public.directory \
+    "the first document type claims public.directory"
+# Alternate, not Owner: Finder stays the default handler for folders and the app
+# is offered alongside it. See porting notes 5.2.
+assert_plist_value CFBundleDocumentTypes.0.LSHandlerRank Alternate \
+    "the document type ranks itself Alternate"
+assert_plist_value CFBundleDocumentTypes.0.CFBundleTypeRole Viewer \
+    "the document type takes the Viewer role"
+
 echo
 printf '%d passed, %d failed\n' "$passed" "$failed"
 [ "$failed" -eq 0 ]
