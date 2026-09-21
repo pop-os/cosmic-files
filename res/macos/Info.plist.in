@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Info.plist template for "COSMIC Files.app". scripts/macos-bundle.sh substitutes
+  @SHORT_VERSION@ with the version from Cargo.toml and writes the result to
+  Contents/Info.plist.
+
+  Every key here is load-bearing; see docs/macos-porting-notes.md section 5.2.
+  LSRequiresCarbon and CSResourcesFileMapped are deliberately absent.
+-->
+<plist version="1.0">
+<dict>
+	<!-- Identity. CFBundleIdentifier is the key TCC privacy grants attach to
+	     (porting notes 4.1): changing it resets every grant the user has given. -->
+	<key>CFBundleIdentifier</key>
+	<string>com.system76.CosmicFiles</string>
+	<key>CFBundleName</key>
+	<string>COSMIC Files</string>
+	<key>CFBundleDisplayName</key>
+	<string>COSMIC Files</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@SHORT_VERSION@</string>
+	<key>CFBundleVersion</key>
+	<string>@SHORT_VERSION@</string>
+
+	<!-- Payload. CFBundleExecutable must match the file in Contents/MacOS;
+	     CFBundleIconFile names Contents/Resources/cosmic-files.icns. -->
+	<key>CFBundleExecutable</key>
+	<string>cosmic-files</string>
+	<key>CFBundleIconFile</key>
+	<string>cosmic-files</string>
+
+	<!-- Appearance. Without NSHighResolutionCapable the bundle runs 1x
+	     magnified and everything looks blurry; this is bundle-only behaviour,
+	     so it cannot be reproduced with `cargo run`. NSRequiresAquaSystemAppearance
+	     NO opts in to the system dark mode. -->
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSRequiresAquaSystemAppearance</key>
+	<false/>
+
+	<!-- Platform floor, matching the LC_BUILD_VERSION minos of the aarch64
+	     binary. Apple Silicon starts at macOS 11. -->
+	<key>LSMinimumSystemVersion</key>
+	<string>11.0</string>
+
+	<!-- Privacy usage descriptions (NSDesktopFolderUsageDescription and
+	     friends) belong here. Without them a TCC-gated read is silently denied
+	     with no prompt and no System Settings entry. Tracked separately. -->
+
+	<!-- CFBundleDocumentTypes and LSHandlerRank, which claim folders for
+	     "Open With", belong here. Tracked separately. -->
+</dict>
+</plist>
