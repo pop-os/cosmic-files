@@ -8,6 +8,7 @@ permission-denied = Permission denied
 permission-denied-description = This item cannot be opened. Grant access in System Settings, under Privacy & Security.
 trash-needs-full-disk-access = Listing the Trash needs Full Disk Access
 open-privacy-settings = Open Privacy & Security settings
+reveal-in-finder = Reveal in Finder
 filesystem = Filesystem
 home = Home
 networks = Networks

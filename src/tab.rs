@@ -2004,6 +2004,34 @@ fn open_privacy_settings() {
     log::warn!("no privacy settings pane to open on this platform");
 }
 
+/// The program and arguments that select `path` in a Finder window. `-R` reveals the item
+/// rather than opening it.
+#[cfg(target_os = "macos")]
+pub fn reveal_in_finder_command(path: &Path) -> (&'static str, [std::ffi::OsString; 2]) {
+    (
+        MACOS_OPEN,
+        [
+            std::ffi::OsString::from("-R"),
+            path.as_os_str().to_os_string(),
+        ],
+    )
+}
+
+/// Show `path` selected in a Finder window.
+pub fn reveal_in_finder(path: &Path) {
+    #[cfg(target_os = "macos")]
+    {
+        let (program, args) = reveal_in_finder_command(path);
+        let mut command = std::process::Command::new(program);
+        command.args(args);
+        if let Err(err) = crate::spawn_detached::spawn_detached(&mut command) {
+            log::warn!("failed to reveal {} in Finder: {}", path.display(), err);
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    log::warn!("there is no Finder to reveal {} in", path.display());
+}
+
 /// Which explanation a listing with nothing in it shows.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EmptyReason {
@@ -8155,6 +8183,8 @@ mod tests {
     use tempfile::TempDir;
     use test_log::test;
 
+    #[cfg(target_os = "macos")]
+    use super::reveal_in_finder_command;
     use super::{
         EmptyReason, Instant, Item, ItemAccess, ItemMetadata, ItemThumbnail, Location, Message,
         PIXELS_PER_ZOOM_STEP, Path, Rectangle, SearchLocation, Tab, access_from_error,
@@ -8557,6 +8587,26 @@ mod tests {
             assert!(!is_always_hidden(name), "{name} should follow the setting");
         }
         assert_eq!(is_always_hidden(".DS_Store"), cfg!(target_os = "macos"));
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn revealing_an_item_asks_finder_to_select_it() -> io::Result<()> {
+        let (program, args) =
+            reveal_in_finder_command(Path::new("/Users/someone/Documents/My Report.pdf"));
+        // -R is what selects the item in a window rather than opening it.
+        assert_eq!(program, "/usr/bin/open");
+        assert_eq!(
+            args,
+            [
+                std::ffi::OsString::from("-R"),
+                std::ffi::OsString::from("/Users/someone/Documents/My Report.pdf"),
+            ]
+        );
+        // A bundle launched from Finder inherits a bare PATH, so nothing may be looked up
+        // by name; see porting notes 5.4.
+        assert!(Path::new(program).is_absolute());
         Ok(())
     }
 

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use cosmic::{Element, theme};
 use cosmic::app::Core;
 use cosmic::iced::keyboard::Modifiers;
 use cosmic::widget::menu::action::MenuAction;
 use cosmic::widget::menu::key_bind::KeyBind;
 use cosmic::widget::menu::{self, ItemHeight, ItemWidth, MenuBar};
 use cosmic::widget::{self, responsive_menu_bar};
+use cosmic::{Element, theme};
 use i18n_embed::LanguageLoader;
 use mime_guess::Mime;
 use std::collections::HashMap;
@@ -203,6 +203,10 @@ pub fn context_menu<'a>(
                         Action::OpenInNewWindow,
                     ));
                 }
+                // Finder is the peer file manager on macOS; there is nothing to hand an
+                // item over to anywhere else.
+                #[cfg(target_os = "macos")]
+                children.push(menu_item(fl!("reveal-in-finder"), Action::RevealInFinder));
                 let action_items = context_action_items(selected, selected_dir);
                 if !action_items.is_empty() {
                     children.push(menu::Item::Divider);

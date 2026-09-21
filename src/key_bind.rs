@@ -688,6 +688,7 @@ unit_actions![
     RemoveFromRecents,
     Rename,
     RestoreFromTrash,
+    RevealInFinder,
     SearchActivate,
     SelectFirst,
     SelectLast,
@@ -1100,8 +1101,8 @@ mod tests {
             assert_eq!(&action.config_name(), name);
             assert_eq!(Action::from_config_name(name), Some(*action));
         }
-        // 63 payload-free variants plus the four parameterized ones below.
-        assert_eq!(UNIT_ACTIONS.len(), 63);
+        // 64 payload-free variants plus the four parameterized ones below.
+        assert_eq!(UNIT_ACTIONS.len(), 64);
     }
 
     #[test]
