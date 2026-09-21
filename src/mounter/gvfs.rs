@@ -237,6 +237,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
             icon_handle_list,
             icon_handle_list_condensed,
             thumbnail_opt: Some(ItemThumbnail::NotImage),
+            thumbnail_scale_opt: None,
             button_id: widget::Id::unique(),
             pos_opt: Cell::new(None),
             rect_opt: Cell::new(None),

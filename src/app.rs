@@ -453,6 +453,8 @@ pub enum Message {
     SetTypeToSearch(TypeToSearch),
     SystemThemeModeChange,
     Size(window::Id, Size),
+    /// A window reported how many physical pixels it draws per logical pixel.
+    Rescaled(window::Id, f32),
     TabActivate(Entity),
     TabNext,
     TabPrev,
@@ -766,6 +768,9 @@ pub struct App {
     complete_operations: BTreeMap<u64, Operation>,
     failed_operations: BTreeMap<u64, (Operation, Controller, String)>,
     scrollable_id: widget::Id,
+    /// Physical pixels per logical pixel, per window. A window missing from the map has not
+    /// reported its scale factor yet and is treated as 1.0.
+    scale_factors: FxHashMap<window::Id, f32>,
     search_id: widget::Id,
     size: Option<Size>,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
@@ -1180,6 +1185,19 @@ impl App {
         self.margin = overlaps;
     }
 
+    /// The window a tab draws into. Tabs without one of their own are in the main window.
+    fn tab_window_id(&self, tab: &Tab) -> Option<window::Id> {
+        tab.window_id().or_else(|| self.core.main_window_id())
+    }
+
+    /// Physical pixels per logical pixel for a window, before it has reported its own.
+    fn tab_scale_factor(&self, window_id: Option<window::Id>) -> f32 {
+        window_id
+            .or_else(|| self.core.main_window_id())
+            .and_then(|id| self.scale_factors.get(&id).copied())
+            .unwrap_or(1.0)
+    }
+
     fn open_tab_entity(
         &mut self,
         location: Location,
@@ -1196,6 +1214,7 @@ impl App {
             scrollable_id,
             window_id,
         );
+        tab.set_scale_factor(self.tab_scale_factor(window_id));
         tab.mode = match self.mode {
             Mode::App => tab::Mode::App,
             Mode::Desktop => {
@@ -2460,6 +2479,7 @@ impl Application for App {
             complete_operations: BTreeMap::new(),
             failed_operations: BTreeMap::new(),
             scrollable_id: widget::Id::new("File Scrollable"),
+            scale_factors: FxHashMap::default(),
             search_id: widget::Id::new("File Search"),
             size: None,
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
@@ -5385,6 +5405,27 @@ impl Application for App {
                     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
                     self.layer_sizes.insert(window_id, size);
                 }
+                // A window only reports a scale factor when it changes, so ask for the first
+                // one. This message also arrives when the window opens.
+                if !self.scale_factors.contains_key(&window_id) {
+                    return window::scale_factor(window_id).map(move |scale| {
+                        cosmic::action::app(Message::Rescaled(window_id, scale))
+                    });
+                }
+            }
+            Message::Rescaled(window_id, scale_factor) => {
+                log::debug!("window {window_id:?} scale factor is {scale_factor}");
+                self.scale_factors.insert(window_id, scale_factor);
+                let entities: Vec<Entity> = self.tab_model.iter().collect();
+                for entity in entities {
+                    let in_window = self
+                        .tab_model
+                        .data::<Tab>(entity)
+                        .is_some_and(|tab| self.tab_window_id(tab) == Some(window_id));
+                    if in_window && let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
+                        tab.set_scale_factor(scale_factor);
+                    }
+                }
             }
             Message::Eject => {
                 #[cfg(feature = "gvfs")]
@@ -6715,6 +6756,9 @@ impl Application for App {
                     Some(Message::Size(window_id, size))
                 }
                 Event::Window(WindowEvent::Resized(s)) => Some(Message::Size(window_id, s)),
+                Event::Window(WindowEvent::Rescaled(scale_factor)) => {
+                    Some(Message::Rescaled(window_id, scale_factor))
+                }
                 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
                 Event::PlatformSpecific(event::PlatformSpecific::Wayland(wayland_event)) => {
                     match wayland_event {

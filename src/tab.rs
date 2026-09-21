@@ -63,7 +63,9 @@ use crate::localize::{LANGUAGE_SORTER, LOCALE};
 use crate::mime_icon::{mime_for_path, mime_icon};
 use crate::mounter::MOUNTERS;
 use crate::operation::{Controller, OperationError};
-use crate::thumbnail_cacher::{CachedThumbnail, ThumbnailCacher, ThumbnailSize};
+use crate::thumbnail_cacher::{
+    CachedThumbnail, ThumbnailCacher, ThumbnailSize, thumbnail_pixel_size,
+};
 use crate::thumbnailer::thumbnailer;
 use crate::trash::{Trash, TrashExt};
 use crate::{FxOrderMap, fl, menu, mime_app, mouse_area};
@@ -768,6 +770,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
         } else {
             None
         },
+        thumbnail_scale_opt: None,
         button_id: widget::Id::unique(),
         pos_opt: Cell::new(None),
         rect_opt: Cell::new(None),
@@ -884,6 +887,7 @@ pub fn item_from_entry(
         icon_handle_list,
         icon_handle_list_condensed,
         thumbnail_opt: remote.then_some(ItemThumbnail::NotImage),
+        thumbnail_scale_opt: None,
         button_id: widget::Id::unique(),
         pos_opt: Cell::new(None),
         rect_opt: Cell::new(None),
@@ -943,6 +947,7 @@ pub fn item_from_trash_entry(
         icon_handle_list,
         icon_handle_list_condensed,
         thumbnail_opt: Some(ItemThumbnail::NotImage),
+        thumbnail_scale_opt: None,
         button_id: widget::Id::unique(),
         pos_opt: Cell::new(None),
         rect_opt: Cell::new(None),
@@ -1409,6 +1414,7 @@ pub fn scan_desktop(
             icon_handle_list,
             icon_handle_list_condensed,
             thumbnail_opt: Some(ItemThumbnail::NotImage),
+            thumbnail_scale_opt: None,
             button_id: widget::Id::unique(),
             pos_opt: Cell::new(None),
             rect_opt: Cell::new(None),
@@ -1826,7 +1832,8 @@ pub enum Message {
     ShiftPermissions(Option<(PathBuf, u32)>, u32, u32),
     SetSort(HeadingOptions, bool),
     TabComplete(PathBuf, Vec<(String, PathBuf)>),
-    Thumbnail(PathBuf, ItemThumbnail),
+    /// A rendered thumbnail, and the scale factor it was rendered for.
+    Thumbnail(PathBuf, ItemThumbnail, f32),
     ToggleSort(HeadingOptions),
     Drop(Option<(Location, ClipboardPaste)>),
     DndHover(Location),
@@ -2441,6 +2448,9 @@ pub struct Item {
     pub icon_handle_list: widget::icon::Handle,
     pub icon_handle_list_condensed: widget::icon::Handle,
     pub thumbnail_opt: Option<ItemThumbnail>,
+    /// The scale factor the thumbnail in `thumbnail_opt` was rasterised for, if it was
+    /// rasterised at all. `None` for anything that does not depend on the display.
+    pub thumbnail_scale_opt: Option<f32>,
     pub button_id: widget::Id,
     pub pos_opt: Cell<Option<(usize, usize)>>,
     pub rect_opt: Cell<Option<Rectangle>>,
@@ -2483,6 +2493,29 @@ impl Item {
 
     pub fn path_opt(&self) -> Option<&PathBuf> {
         self.location_opt.as_ref()?.path_opt()
+    }
+
+    /// Whether a thumbnail should be rendered for this item now.
+    ///
+    /// Only items inside `visible_rect` are worth rendering, and an item that already has one
+    /// wants another only when it was rasterised for a different scale factor. Moving a window
+    /// to a display with another scale therefore re-renders what the user can see rather than
+    /// the whole listing; the rest follow as they are scrolled into view.
+    fn wants_thumbnail(&self, scale_factor: f32, visible_rect: &Rectangle) -> bool {
+        // An item with no rect has not been laid out, which includes hidden items.
+        let Some(rect) = self.rect_opt.get() else {
+            return false;
+        };
+        if !rect.intersects(visible_rect) {
+            return false;
+        }
+
+        self.thumbnail_scale_opt.map_or_else(
+            // Nothing rasterised: render one unless the item already settled on something that
+            // does not depend on the display, such as a directory or a vector.
+            || self.thumbnail_opt.is_none(),
+            |scale| scale != scale_factor,
+        )
     }
 
     pub fn can_gallery(&self) -> bool {
@@ -2967,7 +3000,10 @@ pub struct Tab {
     /// The path a Quick Look preview is currently being rendered for, to avoid queueing it twice.
     #[cfg(all(target_os = "macos", feature = "quicklook"))]
     quicklook_pending: Option<PathBuf>,
-    /// Ctrl+scroll travel banked toward the next zoom step, in pixels.
+    /// Physical pixels per logical pixel for the window this tab is in. `1.0` until the
+    /// window reports its own; see `App::tab_scale_factor`.
+    scale_factor: f32,
+    /// Ctrl+scroll travel banked toward the next zoom step, in logical pixels.
     zoom_scroll_accum: f32,
     /// When the last Ctrl+scroll event arrived, used to discard momentum tails.
     zoom_scroll_last: Option<Instant>,
@@ -3187,8 +3223,30 @@ impl Tab {
             quicklook_preview: None,
             #[cfg(all(target_os = "macos", feature = "quicklook"))]
             quicklook_pending: None,
+            scale_factor: 1.0,
             zoom_scroll_accum: 0.0,
             zoom_scroll_last: None,
+        }
+    }
+
+    /// The window this tab draws into, if it has one of its own.
+    pub const fn window_id(&self) -> Option<window::Id> {
+        self.window_id
+    }
+
+    /// Physical pixels per logical pixel for the window this tab is in.
+    pub const fn scale_factor(&self) -> f32 {
+        self.scale_factor
+    }
+
+    /// Record the window's scale factor.
+    ///
+    /// A value that is not positive and finite is ignored: macOS reports zero before the
+    /// window is on a screen (docs/macos-porting-notes.md section 3.2), and a zero here would
+    /// make every scaled measurement infinite.
+    pub fn set_scale_factor(&mut self, scale_factor: f32) {
+        if scale_factor.is_finite() && scale_factor > 0.0 {
+            self.scale_factor = scale_factor;
         }
     }
 
@@ -4949,7 +5007,7 @@ impl Tab {
                     ));
                 }
             }
-            Message::Thumbnail(path, thumbnail) => {
+            Message::Thumbnail(path, thumbnail, scale_factor) => {
                 if let Some(ref mut items) = self.items_opt {
                     let location = Location::Path(path);
                     for item in items.iter_mut() {
@@ -4977,6 +5035,14 @@ impl Tab {
                                 item.icon_handle_list.clone_from(&handle);
                                 item.icon_handle_list_condensed = handle;
                             }
+                            // Only a rasterised preview goes soft on another display; a
+                            // vector or a plain icon is good at any scale.
+                            item.thumbnail_scale_opt = match &thumbnail {
+                                ItemThumbnail::Image(..) => Some(scale_factor),
+                                #[cfg(all(target_os = "macos", feature = "quicklook"))]
+                                ItemThumbnail::QuickLook(_) => Some(scale_factor),
+                                _ => None,
+                            };
                             item.thumbnail_opt = Some(thumbnail);
                             break;
                         }
@@ -5104,7 +5170,8 @@ impl Tab {
                 }
                 self.zoom_scroll_last = Some(now);
 
-                let steps = zoom_steps_for_scroll(delta, &mut self.zoom_scroll_accum);
+                let steps =
+                    zoom_steps_for_scroll(delta, &mut self.zoom_scroll_accum, self.scale_factor);
                 let action = if steps > 0 {
                     Action::ZoomIn
                 } else {
@@ -7320,23 +7387,10 @@ impl Tab {
                 ));
             }
 
+            let scale_factor = self.scale_factor;
             for item in items {
-                if item.thumbnail_opt.is_some() {
-                    // Skip items that already have a mime type and thumbnail
+                if !item.wants_thumbnail(scale_factor, &visible_rect) {
                     continue;
-                }
-
-                match item.rect_opt.get() {
-                    Some(rect) => {
-                        if !rect.intersects(&visible_rect) {
-                            // Skip items that are not visible
-                            continue;
-                        }
-                    }
-                    None => {
-                        // Skip items with no determined rect (this should include hidden items)
-                        continue;
-                    }
                 }
 
                 let Some(path) = item.path_opt().cloned() else {
@@ -7378,11 +7432,15 @@ impl Tab {
                         effective_max_mb: u64,
                         effective_jobs: usize,
                         max_size: u64,
+                        scale_factor: f32,
                     }
 
                     impl Hash for Wrapper {
                         fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
                             self.path.hash(state);
+                            // A render already in flight is for the display the window was on
+                            // when it started, so a rescale has to start a new one.
+                            self.scale_factor.to_bits().hash(state);
                         }
                     }
 
@@ -7394,6 +7452,7 @@ impl Tab {
                             effective_max_mb,
                             effective_jobs,
                             max_size,
+                            scale_factor,
                         },
                         |wrapper| {
                             let Wrapper {
@@ -7403,6 +7462,7 @@ impl Tab {
                                 effective_max_mb,
                                 effective_jobs,
                                 max_size,
+                                scale_factor,
                             } = wrapper.clone();
                             stream::channel(
                                 1,
@@ -7423,17 +7483,18 @@ impl Tab {
                                                 &path,
                                                 metadata,
                                                 mime,
-                                                THUMBNAIL_SIZE,
+                                                thumbnail_pixel_size(THUMBNAIL_SIZE, scale_factor),
                                                 effective_max_mb,
                                                 effective_jobs,
                                                 max_size,
                                             );
                                             log::debug!(
-                                                "thumbnailed {} in {:?}",
+                                                "thumbnailed {} at {}x in {:?}",
                                                 path.display(),
+                                                scale_factor,
                                                 start.elapsed()
                                             );
-                                            Message::Thumbnail(path, thumbnail)
+                                            Message::Thumbnail(path, thumbnail, scale_factor)
                                         })
                                         .await
                                         .unwrap()
@@ -7721,12 +7782,28 @@ impl Tab {
     }
 }
 
-/// Pixels of Ctrl+scroll travel that make up one zoom step on a precise touchpad.
+/// Logical pixels of Ctrl+scroll travel that make up one zoom step on a precise touchpad.
 const PIXELS_PER_ZOOM_STEP: f32 = 50.0;
 
 /// Idle gap after which banked Ctrl+scroll travel is discarded, so that a touchpad's
 /// momentum tail does not coast into further zoom steps.
 const ZOOM_SCROLL_IDLE: Duration = Duration::from_millis(150);
+
+/// Convert scroll travel reported in physical pixels into logical pixels.
+///
+/// winit applies the window's scale factor before emitting a pixel delta and iced passes it
+/// through untouched, so the same finger travel reads twice as far on a 2x panel as on a 1x
+/// display. Dividing it back out keeps any pixel threshold in logical units.
+///
+/// A scale factor that is not a positive, finite number is not usable: macOS reports zero
+/// before the window is on a screen. Leave the delta alone rather than produce infinity.
+fn logical_scroll_pixels(physical: f32, scale_factor: f32) -> f32 {
+    if scale_factor.is_finite() && scale_factor > 0.0 {
+        physical / scale_factor
+    } else {
+        physical
+    }
+}
 
 /// Convert a Ctrl+scroll delta into a number of zoom steps, banking the remainder.
 ///
@@ -7734,7 +7811,10 @@ const ZOOM_SCROLL_IDLE: Duration = Duration::from_millis(150);
 /// touchpad reports `Pixels` as a rapid stream of small deltas, so those accumulate
 /// until they add up to a step's worth of travel; treating each one as a step walks the
 /// whole zoom range in a fraction of a second.
-fn zoom_steps_for_scroll(delta: ScrollDelta, accum: &mut f32) -> i32 {
+///
+/// Pixel deltas are physical, so `scale_factor` converts them to logical pixels first and the
+/// same finger travel zooms by the same amount on every display.
+fn zoom_steps_for_scroll(delta: ScrollDelta, accum: &mut f32, scale_factor: f32) -> i32 {
     match delta {
         ScrollDelta::Lines { y, .. } => {
             *accum = 0.0;
@@ -7747,6 +7827,8 @@ fn zoom_steps_for_scroll(delta: ScrollDelta, accum: &mut f32) -> i32 {
             }
         }
         ScrollDelta::Pixels { y, .. } => {
+            let y = logical_scroll_pixels(y, scale_factor);
+
             // Reversing direction should zoom back immediately, not spend the bank first.
             if y != 0.0 && *accum != 0.0 && (*accum > 0.0) != (y > 0.0) {
                 *accum = 0.0;
@@ -7831,8 +7913,8 @@ mod tests {
     use test_log::test;
 
     use super::{
-        ItemMetadata, ItemThumbnail, Location, Message, PIXELS_PER_ZOOM_STEP, Tab,
-        respond_to_scroll_direction, scan_path, zoom_steps_for_scroll,
+        Item, ItemMetadata, ItemThumbnail, Location, Message, PIXELS_PER_ZOOM_STEP, Rectangle, Tab,
+        logical_scroll_pixels, respond_to_scroll_direction, scan_path, zoom_steps_for_scroll,
     };
     use crate::app::test_utils::{
         NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED, assert_eq_tab_path, empty_fs,
@@ -8096,15 +8178,100 @@ mod tests {
         Ok(())
     }
 
+    /// An item that already has a thumbnail rasterised for `scale_factor`, laid out at `rect`.
+    fn thumbnailed_item(rect: Rectangle, scale_factor: f32) -> Item {
+        let (_fs, tab) = tab_click_new(NUM_FILES, NUM_NESTED, NUM_DIRS, NUM_NESTED, NAME_LEN)
+            .expect("tab should be populated with Items");
+        let mut item = tab.items_opt().expect("items")[0].clone();
+        item.rect_opt.set(Some(rect));
+        item.thumbnail_opt = Some(ItemThumbnail::Image(
+            widget::image::Handle::from_rgba(1, 1, vec![0, 0, 0, 0]),
+            None,
+        ));
+        item.thumbnail_scale_opt = Some(scale_factor);
+        item
+    }
+
+    const VISIBLE: Rectangle = Rectangle {
+        x: 0.0,
+        y: 0.0,
+        width: 100.0,
+        height: 100.0,
+    };
+    const ON_SCREEN: Rectangle = Rectangle {
+        x: 10.0,
+        y: 10.0,
+        width: 10.0,
+        height: 10.0,
+    };
+    const OFF_SCREEN: Rectangle = Rectangle {
+        x: 10.0,
+        y: 5000.0,
+        width: 10.0,
+        height: 10.0,
+    };
+
+    #[test]
+    fn a_visible_thumbnail_is_rendered_again_for_a_new_scale_factor() -> io::Result<()> {
+        let item = thumbnailed_item(ON_SCREEN, 1.0);
+        assert!(item.wants_thumbnail(2.0, &VISIBLE));
+        Ok(())
+    }
+
+    #[test]
+    fn an_offscreen_thumbnail_is_left_alone_when_the_scale_factor_changes() -> io::Result<()> {
+        // The whole listing must not re-render when a window moves to another display.
+        let item = thumbnailed_item(OFF_SCREEN, 1.0);
+        assert!(!item.wants_thumbnail(2.0, &VISIBLE));
+        Ok(())
+    }
+
+    #[test]
+    fn a_thumbnail_rendered_for_this_scale_factor_is_kept() -> io::Result<()> {
+        let item = thumbnailed_item(ON_SCREEN, 2.0);
+        assert!(!item.wants_thumbnail(2.0, &VISIBLE));
+        Ok(())
+    }
+
+    #[test]
+    fn an_item_with_no_thumbnail_of_its_own_is_never_rendered_again() -> io::Result<()> {
+        // Directories and other things that cannot be thumbnailed settle on NotImage, which
+        // does not depend on the display and must not be asked for again on every rescale.
+        let mut item = thumbnailed_item(ON_SCREEN, 1.0);
+        item.thumbnail_opt = Some(ItemThumbnail::NotImage);
+        item.thumbnail_scale_opt = None;
+        assert!(!item.wants_thumbnail(2.0, &VISIBLE));
+        Ok(())
+    }
+
+    #[test]
+    fn physical_scroll_travel_is_reported_in_logical_pixels() -> io::Result<()> {
+        // 100 physical pixels of finger travel on a 2x panel is 50 logical pixels, the same
+        // distance the finger covers for 50 physical pixels on a 1x display.
+        assert_eq!(logical_scroll_pixels(100.0, 2.0), 50.0);
+        assert_eq!(logical_scroll_pixels(50.0, 1.0), 50.0);
+        assert_eq!(logical_scroll_pixels(60.0, 1.5), 40.0);
+        Ok(())
+    }
+
+    #[test]
+    fn nonsense_scale_factors_leave_scroll_travel_alone() -> io::Result<()> {
+        // macOS can report a scale factor of zero before the window is on a screen.
+        assert_eq!(logical_scroll_pixels(50.0, 0.0), 50.0);
+        assert_eq!(logical_scroll_pixels(50.0, -2.0), 50.0);
+        assert_eq!(logical_scroll_pixels(50.0, f32::NAN), 50.0);
+        Ok(())
+    }
+
     #[test]
     fn wheel_notch_is_one_zoom_step() -> io::Result<()> {
         let mut accum = 0.0;
         assert_eq!(
-            zoom_steps_for_scroll(ScrollDelta::Lines { x: 0.0, y: 1.0 }, &mut accum),
+            zoom_steps_for_scroll(ScrollDelta::Lines { x: 0.0, y: 1.0 }, &mut accum, 1.0),
             1
         );
         assert_eq!(
-            zoom_steps_for_scroll(ScrollDelta::Lines { x: 0.0, y: -1.0 }, &mut accum),
+            zoom_steps_for_scroll(ScrollDelta::Lines { x: 0.0, y: -1.0 }, &mut accum, 1.0),
             -1
         );
         Ok(())
@@ -8114,7 +8281,8 @@ mod tests {
     fn small_touchpad_deltas_do_not_zoom_on_their_own() -> io::Result<()> {
         let mut accum = 0.0;
         for _ in 0..10 {
-            let steps = zoom_steps_for_scroll(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, &mut accum);
+            let steps =
+                zoom_steps_for_scroll(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, &mut accum, 1.0);
             assert_eq!(steps, 0, "a 1px delta should not be a whole zoom step");
         }
         Ok(())
@@ -8126,7 +8294,7 @@ mod tests {
         let mut steps = 0;
         // Fifty 1px events is exactly one step's worth of travel.
         for _ in 0..50 {
-            steps += zoom_steps_for_scroll(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, &mut accum);
+            steps += zoom_steps_for_scroll(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, &mut accum, 1.0);
         }
         assert_eq!(steps, 1);
 
@@ -8138,9 +8306,47 @@ mod tests {
                     x: 0.0,
                     y: PIXELS_PER_ZOOM_STEP * 3.0
                 },
-                &mut accum
+                &mut accum,
+                1.0
             ),
             3
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn the_same_finger_travel_zooms_the_same_on_a_1x_and_a_2x_display() -> io::Result<()> {
+        // One step's worth of logical travel, delivered as fifty events, on a 1x display.
+        let mut accum = 0.0;
+        let mut steps_1x = 0;
+        for _ in 0..50 {
+            steps_1x +=
+                zoom_steps_for_scroll(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, &mut accum, 1.0);
+        }
+
+        // The same travel on a 2x panel arrives as twice as many physical pixels.
+        let mut accum = 0.0;
+        let mut steps_2x = 0;
+        for _ in 0..50 {
+            steps_2x +=
+                zoom_steps_for_scroll(ScrollDelta::Pixels { x: 0.0, y: 2.0 }, &mut accum, 2.0);
+        }
+
+        assert_eq!(steps_1x, 1);
+        assert_eq!(steps_2x, steps_1x);
+        Ok(())
+    }
+
+    #[test]
+    fn wheel_notches_ignore_the_scale_factor() -> io::Result<()> {
+        let mut accum = 0.0;
+        assert_eq!(
+            zoom_steps_for_scroll(ScrollDelta::Lines { x: 0.0, y: 1.0 }, &mut accum, 2.0),
+            1
+        );
+        assert_eq!(
+            zoom_steps_for_scroll(ScrollDelta::Lines { x: 0.0, y: -1.0 }, &mut accum, 2.0),
+            -1
         );
         Ok(())
     }
@@ -8154,10 +8360,11 @@ mod tests {
                 y: PIXELS_PER_ZOOM_STEP - 1.0,
             },
             &mut accum,
+            1.0,
         );
         assert!(accum > 0.0);
         // Reversing should not immediately fire a step from the opposite bank.
-        let steps = zoom_steps_for_scroll(ScrollDelta::Pixels { x: 0.0, y: -1.0 }, &mut accum);
+        let steps = zoom_steps_for_scroll(ScrollDelta::Pixels { x: 0.0, y: -1.0 }, &mut accum, 1.0);
         assert_eq!(steps, 0);
         assert!(accum < 0.0);
         Ok(())
