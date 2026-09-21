@@ -111,6 +111,10 @@ X11/Wayland convention; on macOS the native gesture is a two-finger pinch, and C
 additionally collides with the system Accessibility zoom. `magnification()` is a unitless
 per-event delta — accumulate and compare against ~0.05–0.1 per step.
 
+**Done here:** iced never converts winit's `PinchGesture`, so `src/gesture_macos.rs` installs an
+`NSEvent` local monitor for `NSEventMaskMagnify` and feeds the pure reducer in `src/gesture.rs`,
+which banks spread at 0.1 per zoom step and resets on `Began`, `Ended` and direction change.
+
 Note **[V]** `PanGesture` does **not** exist on macOS (iOS and Wayland only), and winit
 implements no `swipeWithEvent:` at all. Three- and four-finger swipes are reserved by the
 window server and never reach the app.

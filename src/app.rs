@@ -374,6 +374,8 @@ pub enum Message {
     LaunchUrl(String),
     MaybeExit,
     ModifiersChanged(window::Id, Modifiers),
+    #[cfg(target_os = "macos")]
+    Pinch(crate::gesture::Phase, f64),
     MounterItems(MounterKey, MounterItems),
     MountResult(MounterKey, MounterItem, Result<bool, String>),
     Mouse(window::Id, mouse::Button),
@@ -745,6 +747,8 @@ pub struct App {
     mime_app_cache: MimeAppCache,
     modifiers: Modifiers,
     mounter_items: FxHashMap<MounterKey, MounterItems>,
+    #[cfg(target_os = "macos")]
+    pinch: crate::gesture::Pinch,
     must_save_sort_names: bool,
     network_drive_connecting: Option<(MounterKey, String)>,
     network_drive_input: String,
@@ -2411,9 +2415,14 @@ impl Application for App {
         if matches!(flags.mode, Mode::Desktop) {
             core.set_auto_blur(Auto::Window | Auto::Popup);
         }
+        #[cfg(target_os = "macos")]
+        crate::gesture_macos::install();
+
         let mut app = Self {
             core,
             about,
+            #[cfg(target_os = "macos")]
+            pinch: crate::gesture::Pinch::default(),
             nav_bar_context_id: segmented_button::Entity::null(),
             nav_model: segmented_button::ModelBuilder::default().build(),
             tab_model: segmented_button::ModelBuilder::default().build(),
@@ -3442,6 +3451,19 @@ impl Application for App {
                     log::warn!("failed to open {url:?}: {err}");
                 }
             },
+            #[cfg(target_os = "macos")]
+            Message::Pinch(phase, magnification) => {
+                let steps = self.pinch.feed(phase, magnification);
+                let message = if steps > 0 {
+                    Message::ZoomIn(None)
+                } else {
+                    Message::ZoomOut(None)
+                };
+                let tasks = (0..steps.abs())
+                    .map(|_| self.update(message.clone()))
+                    .collect::<Vec<_>>();
+                return Task::batch(tasks);
+            }
             Message::ModifiersChanged(window_id, modifiers) => {
                 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
                 let in_surface_ids = self.surface_ids.values().any(|id| *id == window_id);
@@ -7061,6 +7083,12 @@ impl Application for App {
                 .map(|(entity, tab_msg)| Message::TabMessage(Some(entity), tab_msg)),
             )
         }));
+
+        #[cfg(target_os = "macos")]
+        subscriptions.push(
+            crate::gesture_macos::subscription()
+                .map(|(phase, magnification)| Message::Pinch(phase, magnification)),
+        );
 
         Subscription::batch(subscriptions)
     }
