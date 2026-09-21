@@ -5395,12 +5395,14 @@ impl Application for App {
                 _ => {}
             },
             Message::Size(window_id, size) => {
+                // Both follow-ups below need a live window, which this message guarantees;
+                // neither may return early or it would starve the other.
+                let mut tasks = Vec::new();
                 if self.core.main_window_id() == Some(window_id) {
                     self.size = Some(size);
-                    // The window exists by the time it reports a size; pinning it to sRGB is a
-                    // no-op after the first one.
+                    // Pinning the window to sRGB is a no-op after the first time.
                     #[cfg(target_os = "macos")]
-                    return crate::appkit_macos::pin_srgb_color_space(window_id);
+                    tasks.push(crate::appkit_macos::pin_srgb_color_space(window_id));
                 } else {
                     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
                     self.layer_sizes.insert(window_id, size);
@@ -5408,10 +5410,11 @@ impl Application for App {
                 // A window only reports a scale factor when it changes, so ask for the first
                 // one. This message also arrives when the window opens.
                 if !self.scale_factors.contains_key(&window_id) {
-                    return window::scale_factor(window_id).map(move |scale| {
+                    tasks.push(window::scale_factor(window_id).map(move |scale| {
                         cosmic::action::app(Message::Rescaled(window_id, scale))
-                    });
+                    }));
                 }
+                return Task::batch(tasks);
             }
             Message::Rescaled(window_id, scale_factor) => {
                 log::debug!("window {window_id:?} scale factor is {scale_factor}");
