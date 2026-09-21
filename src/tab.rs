@@ -1834,6 +1834,7 @@ pub enum Message {
     DndLeave(Location),
     WindowDrag,
     WindowToggleMaximize,
+    ScrollZoom(ScrollDelta),
     ZoomIn,
     ZoomOut,
     HighlightDeactivate(usize),
@@ -2837,6 +2838,10 @@ pub struct Tab {
     watch_drag: bool,
     window_id: Option<window::Id>,
     large_image_manager: LargeImageManager,
+    /// Ctrl+scroll travel banked toward the next zoom step, in pixels.
+    zoom_scroll_accum: f32,
+    /// When the last Ctrl+scroll event arrived, used to discard momentum tails.
+    zoom_scroll_last: Option<Instant>,
 }
 
 async fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, OperationError> {
@@ -2982,6 +2987,8 @@ impl Tab {
             watch_drag: true,
             window_id,
             large_image_manager: LargeImageManager::new(),
+            zoom_scroll_accum: 0.0,
+            zoom_scroll_last: None,
         }
     }
 
@@ -4806,6 +4813,29 @@ impl Tab {
             }
             Message::WindowToggleMaximize => {
                 commands.push(Command::WindowToggleMaximize);
+            }
+            Message::ScrollZoom(delta) => {
+                let now = Instant::now();
+                // A touchpad keeps sending momentum events after the user lets go. Drop
+                // whatever was banked if there was a lull, so the tail cannot coast into
+                // another step.
+                if self
+                    .zoom_scroll_last
+                    .is_some_and(|last| now.duration_since(last) > ZOOM_SCROLL_IDLE)
+                {
+                    self.zoom_scroll_accum = 0.0;
+                }
+                self.zoom_scroll_last = Some(now);
+
+                let steps = zoom_steps_for_scroll(delta, &mut self.zoom_scroll_accum);
+                let action = if steps > 0 {
+                    Action::ZoomIn
+                } else {
+                    Action::ZoomOut
+                };
+                for _ in 0..steps.abs() {
+                    commands.push(Command::Action(action));
+                }
             }
             Message::ZoomIn => {
                 commands.push(Command::Action(Action::ZoomIn));
@@ -7399,25 +7429,53 @@ impl Tab {
     }
 }
 
+/// Pixels of Ctrl+scroll travel that make up one zoom step on a precise touchpad.
+const PIXELS_PER_ZOOM_STEP: f32 = 50.0;
+
+/// Idle gap after which banked Ctrl+scroll travel is discarded, so that a touchpad's
+/// momentum tail does not coast into further zoom steps.
+const ZOOM_SCROLL_IDLE: Duration = Duration::from_millis(150);
+
+/// Convert a Ctrl+scroll delta into a number of zoom steps, banking the remainder.
+///
+/// A wheel reports `Lines` one notch at a time, so each event is exactly one step. A
+/// touchpad reports `Pixels` as a rapid stream of small deltas, so those accumulate
+/// until they add up to a step's worth of travel; treating each one as a step walks the
+/// whole zoom range in a fraction of a second.
+fn zoom_steps_for_scroll(delta: ScrollDelta, accum: &mut f32) -> i32 {
+    match delta {
+        ScrollDelta::Lines { y, .. } => {
+            *accum = 0.0;
+            if y > 0.0 {
+                1
+            } else if y < 0.0 {
+                -1
+            } else {
+                0
+            }
+        }
+        ScrollDelta::Pixels { y, .. } => {
+            // Reversing direction should zoom back immediately, not spend the bank first.
+            if y != 0.0 && *accum != 0.0 && (*accum > 0.0) != (y > 0.0) {
+                *accum = 0.0;
+            }
+            *accum += y;
+
+            let steps = (*accum / PIXELS_PER_ZOOM_STEP) as i32;
+            *accum -= steps as f32 * PIXELS_PER_ZOOM_STEP;
+            steps
+        }
+    }
+}
+
 pub fn respond_to_scroll_direction(delta: ScrollDelta, modifiers: &Modifiers) -> Option<Message> {
     if !modifiers.control() {
         return None;
     }
 
-    let delta_y = match delta {
-        ScrollDelta::Lines { y, .. } => y,
-        ScrollDelta::Pixels { y, .. } => y,
-    };
-
-    if delta_y > 0.0 {
-        return Some(Message::ZoomIn);
-    }
-
-    if delta_y < 0.0 {
-        return Some(Message::ZoomOut);
-    }
-
-    None
+    // Capture the event whenever Ctrl is held, even if this delta is too small to make a
+    // step yet, so the list does not scroll while zooming.
+    Some(Message::ScrollZoom(delta))
 }
 
 fn text_editor_class(
@@ -7481,7 +7539,8 @@ mod tests {
     use test_log::test;
 
     use super::{
-        ItemMetadata, ItemThumbnail, Location, Message, Tab, respond_to_scroll_direction, scan_path,
+        ItemMetadata, ItemThumbnail, Location, Message, PIXELS_PER_ZOOM_STEP, Tab,
+        respond_to_scroll_direction, scan_path, zoom_steps_for_scroll,
     };
     use crate::app::test_utils::{
         NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED, assert_eq_tab_path, empty_fs,
@@ -7738,11 +7797,77 @@ mod tests {
     }
 
     #[test]
-    fn tab_scroll_up_with_ctrl_modifier_zooms() -> io::Result<()> {
+    fn tab_scroll_with_ctrl_modifier_requests_zoom() -> io::Result<()> {
         let message_maybe =
             respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, &Modifiers::CTRL);
-        assert!(message_maybe.is_some());
-        assert!(matches!(message_maybe.unwrap(), Message::ZoomIn));
+        assert!(matches!(message_maybe, Some(Message::ScrollZoom(_))));
+        Ok(())
+    }
+
+    #[test]
+    fn wheel_notch_is_one_zoom_step() -> io::Result<()> {
+        let mut accum = 0.0;
+        assert_eq!(
+            zoom_steps_for_scroll(ScrollDelta::Lines { x: 0.0, y: 1.0 }, &mut accum),
+            1
+        );
+        assert_eq!(
+            zoom_steps_for_scroll(ScrollDelta::Lines { x: 0.0, y: -1.0 }, &mut accum),
+            -1
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn small_touchpad_deltas_do_not_zoom_on_their_own() -> io::Result<()> {
+        let mut accum = 0.0;
+        for _ in 0..10 {
+            let steps = zoom_steps_for_scroll(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, &mut accum);
+            assert_eq!(steps, 0, "a 1px delta should not be a whole zoom step");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn touchpad_deltas_zoom_once_per_step_of_travel() -> io::Result<()> {
+        let mut accum = 0.0;
+        let mut steps = 0;
+        // Fifty 1px events is exactly one step's worth of travel.
+        for _ in 0..50 {
+            steps += zoom_steps_for_scroll(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, &mut accum);
+        }
+        assert_eq!(steps, 1);
+
+        // A single large delta yields the equivalent number of steps at once.
+        let mut accum = 0.0;
+        assert_eq!(
+            zoom_steps_for_scroll(
+                ScrollDelta::Pixels {
+                    x: 0.0,
+                    y: PIXELS_PER_ZOOM_STEP * 3.0
+                },
+                &mut accum
+            ),
+            3
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn reversing_scroll_direction_discards_banked_travel() -> io::Result<()> {
+        let mut accum = 0.0;
+        zoom_steps_for_scroll(
+            ScrollDelta::Pixels {
+                x: 0.0,
+                y: PIXELS_PER_ZOOM_STEP - 1.0,
+            },
+            &mut accum,
+        );
+        assert!(accum > 0.0);
+        // Reversing should not immediately fire a step from the opposite bank.
+        let steps = zoom_steps_for_scroll(ScrollDelta::Pixels { x: 0.0, y: -1.0 }, &mut accum);
+        assert_eq!(steps, 0);
+        assert!(accum < 0.0);
         Ok(())
     }
 
@@ -7753,15 +7878,6 @@ mod tests {
             &Modifiers::empty(),
         );
         assert!(message_maybe.is_none());
-        Ok(())
-    }
-
-    #[test]
-    fn tab_scroll_down_with_ctrl_modifier_zooms() -> io::Result<()> {
-        let message_maybe =
-            respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: -1.0 }, &Modifiers::CTRL);
-        assert!(message_maybe.is_some());
-        assert!(matches!(message_maybe.unwrap(), Message::ZoomOut));
         Ok(())
     }
 
