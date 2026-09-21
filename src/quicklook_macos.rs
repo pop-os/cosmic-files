@@ -99,6 +99,9 @@ pub fn owns_preview(mime: &Mime) -> bool {
         "text" => false,
         // Images go to the `image` crate unless it cannot decode them (HEIC, camera RAW).
         "image" => !BUILTIN_IMAGE_SUBTYPES.contains(&mime.subtype().as_str()),
+        // Directories and other filesystem nodes have no preview. Asking anyway costs a
+        // round-trip to the Quick Look agent per entry, which is most of a directory listing.
+        "inode" => false,
         _ => true,
     }
 }
@@ -235,6 +238,7 @@ mod tests {
 
     #[test]
     fn owns_preview_leaves_text_and_decodable_images_alone() {
+        assert!(!owns_preview(&"inode/directory".parse::<Mime>().unwrap()));
         for decodable in [
             "text/plain",
             "text/markdown",
