@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::FxOrderMap;
 use crate::app::App;
+use crate::key_bind::Shortcuts;
 use crate::tab::{HeadingOptions, Location, View};
 
 pub use crate::context_action::{ContextActionPreset, ContextActionSelection};
@@ -204,6 +205,11 @@ pub struct Config {
     pub context_actions: Vec<ContextActionPreset>,
     pub thumb_cfg: ThumbCfg,
     pub favorites: Vec<Favorite>,
+    /// Key bindings that override the defaults from [`crate::key_bind::key_binds`].
+    ///
+    /// Optional: configurations written before this field existed simply have no overrides.
+    #[serde(default)]
+    pub keybinds: Shortcuts,
     pub show_details: bool,
     pub show_recents: bool,
     pub tab: TabConfig,
@@ -268,6 +274,7 @@ impl Default for Config {
                 Favorite::Pictures,
                 Favorite::Videos,
             ],
+            keybinds: Shortcuts::new(),
             show_details: false,
             show_recents: true,
             tab: TabConfig::default(),
