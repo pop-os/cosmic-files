@@ -48,11 +48,45 @@
 	<key>LSMinimumSystemVersion</key>
 	<string>11.0</string>
 
-	<!-- Privacy usage descriptions (NSDesktopFolderUsageDescription and
-	     friends) belong here. Without them a TCC-gated read is silently denied
-	     with no prompt and no System Settings entry. Tracked separately. -->
+	<!-- Privacy usage descriptions. Without them a TCC-gated read is silently
+	     denied with no prompt and no System Settings entry, so there is no way
+	     for the user to grant access afterwards either; see porting notes 4.2.
+	     Each string is what the prompt shows, so it says why a file manager is
+	     asking. There is no key for Full Disk Access, which is what ~/.Trash
+	     needs: the Trash view detects the denial and links to the Privacy pane
+	     instead. -->
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>COSMIC Files needs access to your Desktop folder to list, open and manage the files stored there.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>COSMIC Files needs access to your Documents folder to list, open and manage the files stored there.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>COSMIC Files needs access to your Downloads folder to list, open and manage the files stored there.</string>
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>COSMIC Files needs access to removable volumes to browse USB drives, memory cards and other external disks.</string>
+	<key>NSNetworkVolumesUsageDescription</key>
+	<string>COSMIC Files needs access to network volumes to browse file shares you have mounted.</string>
 
-	<!-- CFBundleDocumentTypes and LSHandlerRank, which claim folders for
-	     "Open With", belong here. Tracked separately. -->
+	<!-- Folder handling: what puts the app in Finder's "Open With" menu for a
+	     folder. public.folder is what Finder reports for an ordinary folder and
+	     public.directory also covers packages and other directory-shaped items.
+	     LSHandlerRank is Alternate rather than Owner so Finder stays the
+	     default handler and this app is offered beside it; see porting notes
+	     5.2. A folder is opened for browsing, never edited, hence Viewer. -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Folder</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.folder</string>
+				<string>public.directory</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

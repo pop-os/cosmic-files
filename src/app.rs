@@ -220,6 +220,7 @@ pub enum Action {
     RemoveFromRecents,
     Rename,
     RestoreFromTrash,
+    RevealInFinder,
     SearchActivate,
     SelectFirst,
     SelectLast,
@@ -299,6 +300,7 @@ impl Action {
             Self::RemoveFromRecents => Message::RemoveFromRecents(entity_opt),
             Self::Rename => Message::Rename(entity_opt),
             Self::RestoreFromTrash => Message::RestoreFromTrash(entity_opt),
+            Self::RevealInFinder => Message::RevealInFinder(entity_opt),
             Self::SearchActivate => Message::SearchActivate,
             Self::SelectAll => Message::TabMessage(entity_opt, tab::Message::SelectAll),
             Self::SelectFirst => Message::TabMessage(entity_opt, tab::Message::SelectFirst),
@@ -487,6 +489,8 @@ pub enum Message {
     Rename(Option<Entity>),
     ReplaceResult(ReplaceResult),
     RestoreFromTrash(Option<Entity>),
+    /// Show the selected items in a Finder window. macOS only.
+    RevealInFinder(Option<Entity>),
     SaveSortNames,
     ScrollTab(i16),
     SearchActivate,
@@ -4457,6 +4461,12 @@ impl Application for App {
                             return Task::batch([task, self.dialog_pages.push_front(other)]);
                         }
                     }
+                }
+            }
+            Message::RevealInFinder(entity_opt) => {
+                let paths: Box<[_]> = self.selected_paths(entity_opt).collect();
+                for path in paths {
+                    tab::reveal_in_finder(&path);
                 }
             }
             Message::RestoreFromTrash(entity_opt) => {

@@ -37,7 +37,7 @@ use std::error::Error;
 use std::fmt::{self, Display};
 use std::fs::{self, File, Metadata};
 use std::hash::Hash;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{self, BufRead, BufReader, Read};
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 use std::path::{self, Path, PathBuf};
@@ -471,6 +471,16 @@ fn hidden_attribute(_metadata: &Metadata) -> bool {
     false
 }
 
+/// Whether an entry of this name is one the platform never lists, whatever the show-hidden
+/// setting says.
+///
+/// On macOS that is `.DS_Store`: Finder's own per-folder state, not anything the user put
+/// there, and Finder itself does not show it even with hidden files turned on. Everywhere
+/// else nothing is in this category and `.DS_Store` is an ordinary dotfile.
+pub fn is_always_hidden(name: &str) -> bool {
+    cfg!(target_os = "macos") && name == ".DS_Store"
+}
+
 #[cfg(target_os = "windows")]
 fn hidden_attribute(metadata: &Metadata) -> bool {
     use std::os::windows::fs::MetadataExt;
@@ -900,6 +910,57 @@ pub fn item_from_entry(
     }
 }
 
+/// An entry the OS listed but refused to stat.
+///
+/// It is shown locked rather than dropped, because on macOS this is what a whole folder of
+/// files looks like after the user declines the privacy prompt: `read_dir` succeeds and
+/// every entry inside it is EPERM (porting notes 4.3). It settles on
+/// [`ItemThumbnail::NotImage`] with no scale, the same way a directory does, so the
+/// thumbnailer asks for it once, decides there is nothing to render, and never comes back;
+/// a retry loop over a denied tree is what pegged zed's CPU.
+pub fn item_from_denied_entry(path: PathBuf, name: String, is_dir: bool, sizes: IconSizes) -> Item {
+    let hidden = name.starts_with('.');
+    let display_name = Item::display_name(&name);
+    // Nothing may be read from the path, so the MIME type comes from the name alone.
+    let mime: Mime = if is_dir {
+        "inode/directory".parse().unwrap()
+    } else {
+        mime_for_path(&path, None, true)
+    };
+
+    Item {
+        name,
+        display_name,
+        is_mount_point: false,
+        metadata: ItemMetadata::Denied { is_dir },
+        hidden,
+        location_opt: Some(Location::Path(path)),
+        image_dimensions: None,
+        mime,
+        icon_handle_grid: denied_icon(sizes.grid()),
+        icon_handle_list: denied_icon(sizes.list()),
+        icon_handle_list_condensed: denied_icon(sizes.list_condensed()),
+        thumbnail_opt: Some(ItemThumbnail::NotImage),
+        thumbnail_scale_opt: None,
+        button_id: widget::Id::unique(),
+        pos_opt: Cell::new(None),
+        rect_opt: Cell::new(None),
+        selected: false,
+        highlighted: false,
+        overlaps_drag_rect: false,
+        dir_size: DirSize::NotDirectory,
+        cut: false,
+        checksums: ChecksumState::default(),
+    }
+}
+
+/// The lock shown in place of an icon the app is not allowed to look at.
+fn denied_icon(icon_size: u16) -> widget::icon::Handle {
+    widget::icon::from_name("changes-prevent-symbolic")
+        .size(icon_size)
+        .handle()
+}
+
 pub fn item_from_trash_entry(
     entry: TrashItem,
     metadata: TrashItemMetadata,
@@ -1103,15 +1164,29 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                             hidden_files = parse_hidden_file(&path);
                         }
 
-                        let metadata = fs::metadata(&path)
-                            .inspect_err(|err| {
+                        let metadata = match fs::metadata(&path) {
+                            Ok(metadata) => metadata,
+                            Err(err) => {
                                 log::warn!(
                                     "failed to read metadata for entry at {}: {}",
                                     path.display(),
                                     err
-                                )
-                            })
-                            .ok()?;
+                                );
+                                return match access_from_error(&err) {
+                                    // The entry is really there, we are just not allowed to
+                                    // look at it. Show it locked instead of hiding it.
+                                    ItemAccess::Denied => {
+                                        // `read_dir` already knows whether this is a
+                                        // directory, so asking costs no further syscall and
+                                        // cannot be refused.
+                                        let is_dir =
+                                            entry.file_type().is_ok_and(|kind| kind.is_dir());
+                                        Some(item_from_denied_entry(path, name, is_dir, sizes))
+                                    }
+                                    ItemAccess::Unavailable => None,
+                                };
+                            }
+                        };
 
                         if trash {
                             item_from_trash_child(path, name, metadata, sizes)
@@ -1814,6 +1889,9 @@ pub enum Message {
     Location(Location),
     LocationUp,
     Open(Option<PathBuf>),
+    /// Show the Privacy & Security pane of System Settings, the only place Full Disk
+    /// Access can be granted.
+    OpenPrivacySettings,
     Reload,
     RightClick(Option<Point>, Option<usize>),
     MiddleClick(usize),
@@ -1900,11 +1978,125 @@ pub enum ChecksumState {
     Error(String),
 }
 
+/// The macOS `open` tool, named in full: a bundle launched from Finder inherits a bare
+/// PATH, so nothing may be looked up by name (porting notes 5.4).
+#[cfg(target_os = "macos")]
+pub const MACOS_OPEN: &str = "/usr/bin/open";
+
+/// The deep link to the pane that grants Full Disk Access. There is no API to prompt for
+/// it, so pointing at System Settings is all an app can do; porting notes 4.2.
+#[cfg(target_os = "macos")]
+const PRIVACY_ALL_FILES_URL: &str =
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
+
+/// Open the Privacy & Security pane of System Settings.
+#[cfg(target_os = "macos")]
+fn open_privacy_settings() {
+    let mut command = std::process::Command::new(MACOS_OPEN);
+    command.arg(PRIVACY_ALL_FILES_URL);
+    if let Err(err) = crate::spawn_detached::spawn_detached(&mut command) {
+        log::warn!("failed to open the privacy settings pane: {err}");
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn open_privacy_settings() {
+    log::warn!("no privacy settings pane to open on this platform");
+}
+
+/// The program and arguments that select `path` in a Finder window. `-R` reveals the item
+/// rather than opening it.
+#[cfg(target_os = "macos")]
+pub fn reveal_in_finder_command(path: &Path) -> (&'static str, [std::ffi::OsString; 2]) {
+    (
+        MACOS_OPEN,
+        [
+            std::ffi::OsString::from("-R"),
+            path.as_os_str().to_os_string(),
+        ],
+    )
+}
+
+/// Show `path` selected in a Finder window.
+pub fn reveal_in_finder(path: &Path) {
+    #[cfg(target_os = "macos")]
+    {
+        let (program, args) = reveal_in_finder_command(path);
+        let mut command = std::process::Command::new(program);
+        command.args(args);
+        if let Err(err) = crate::spawn_detached::spawn_detached(&mut command) {
+            log::warn!("failed to reveal {} in Finder: {}", path.display(), err);
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    log::warn!("there is no Finder to reveal {} in", path.display());
+}
+
+/// Which explanation a listing with nothing in it shows.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EmptyReason {
+    /// Nothing is here.
+    Folder,
+    /// Nothing is here that is not hidden.
+    FolderWithHidden,
+    /// Nothing matched the search term.
+    NoSearchResults,
+    /// The Trash could not be listed at all: either this build has no API for it, or the
+    /// OS refused `~/.Trash`. Both need Full Disk Access, which cannot be prompted for.
+    TrashUnreadable,
+}
+
+/// Decide what an empty listing means.
+///
+/// `trash_listable` is whether the Trash can be read at all here. It is false on macOS,
+/// where the trash crate exposes no listing API and `~/.Trash` sits behind Full Disk
+/// Access, so an empty Trash view there is a denial rather than an empty bin.
+pub fn empty_reason(location: &Location, has_hidden: bool, trash_listable: bool) -> EmptyReason {
+    if matches!(location, Location::Trash) && !trash_listable {
+        EmptyReason::TrashUnreadable
+    } else if has_hidden {
+        EmptyReason::FolderWithHidden
+    } else if matches!(location, Location::Search(..)) {
+        EmptyReason::NoSearchResults
+    } else {
+        EmptyReason::Folder
+    }
+}
+
+/// What a listing should do with an entry it could see but not stat.
+///
+/// `read_dir` and the per-entry `metadata` call are two different permission checks. On
+/// macOS a TCC-protected folder lists happily and then refuses every `open` and `metadata`
+/// inside it with EPERM (porting notes 4.3), so an unreadable entry is not necessarily a
+/// stale listing: it may be one the user has simply not granted us.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ItemAccess {
+    /// The OS refused. The entry exists and belongs in the listing, shown locked.
+    Denied,
+    /// Unreadable for some other reason, such as the entry being removed between the
+    /// listing and the stat. Nothing to show.
+    Unavailable,
+}
+
+/// Classify the error from stat-ing an entry that `read_dir` already listed.
+pub fn access_from_error(err: &io::Error) -> ItemAccess {
+    if err.kind() == io::ErrorKind::PermissionDenied {
+        ItemAccess::Denied
+    } else {
+        ItemAccess::Unavailable
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum ItemMetadata {
     Path {
         metadata: Metadata,
         children_opt: Option<usize>,
+    },
+    /// An entry the OS refused to stat; see [`ItemAccess::Denied`]. It carries no metadata
+    /// by definition, so the size and modified columns stay blank.
+    Denied {
+        is_dir: bool,
     },
     Trash {
         metadata: trash::TrashItemMetadata,
@@ -1929,6 +2121,7 @@ impl ItemMetadata {
     pub fn is_dir(&self) -> bool {
         match self {
             Self::Path { metadata, .. } => metadata.is_dir(),
+            Self::Denied { is_dir } => *is_dir,
             Self::Trash { metadata, .. } => match metadata.size {
                 trash::TrashItemSize::Entries(_) => true,
                 trash::TrashItemSize::Bytes(_) => false,
@@ -2493,6 +2686,30 @@ impl Item {
 
     pub fn path_opt(&self) -> Option<&PathBuf> {
         self.location_opt.as_ref()?.path_opt()
+    }
+
+    /// Whether this item belongs in a listing that is or is not showing hidden files.
+    pub fn shown(&self, show_hidden: bool) -> bool {
+        !is_always_hidden(&self.name) && (show_hidden || !self.hidden)
+    }
+
+    /// Whether the OS refused this entry; see [`ItemMetadata::Denied`].
+    pub fn is_denied(&self) -> bool {
+        matches!(self.metadata, ItemMetadata::Denied { .. })
+    }
+
+    /// What hovering the name should say: the full name normally, and why the item is
+    /// locked when it is one the app was refused.
+    fn hover_text(&self) -> String {
+        if self.is_denied() {
+            format!(
+                "{}: {}",
+                fl!("permission-denied"),
+                fl!("permission-denied-description")
+            )
+        } else {
+            self.name.clone()
+        }
     }
 
     /// Whether a thumbnail should be rendered for this item now.
@@ -3076,9 +3293,35 @@ async fn render_quicklook_preview(path: PathBuf, mime: Mime) -> Option<(u32, u32
     .flatten()
 }
 
+/// Directories directly under the home directory that the app never walks by itself.
+///
+/// On macOS these are behind Full Disk Access or hold nothing worth walking, and touching
+/// them is how an app ends up provoking permission failures for a place the user never
+/// navigated to; see porting notes 4.3. Elsewhere the list is empty, so the predicate is
+/// always false and nothing changes.
+#[cfg(target_os = "macos")]
+const PROTECTED_TREES: &[&str] = &["Library", ".Trash", ".cache"];
+#[cfg(not(target_os = "macos"))]
+const PROTECTED_TREES: &[&str] = &[];
+
+/// Whether `path` is one of the home directory trees the app must not walk, or lies inside
+/// one. Comparison is by path component, so `~/Librarything` is not `~/Library`.
+pub fn is_protected_tree(path: &Path, home: &Path) -> bool {
+    PROTECTED_TREES
+        .iter()
+        .any(|tree| path.starts_with(home.join(tree)))
+}
+
 async fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, OperationError> {
     let mut total = 0;
-    for entry_res in WalkDir::new(path) {
+    // A protected tree contributes nothing rather than being descended into: the root
+    // itself is filtered out when it is one, and WalkDir does not walk past a filtered
+    // directory, so a walk of the home directory skips them too.
+    let home = crate::home_dir();
+    for entry_res in WalkDir::new(path)
+        .into_iter()
+        .filter_entry(|entry| !is_protected_tree(entry.path(), &home))
+    {
         controller
             .check()
             .await
@@ -3328,7 +3571,7 @@ impl Tab {
     pub fn select_all(&mut self) {
         if let Some(ref mut items) = self.items_opt {
             for item in items.iter_mut() {
-                if !self.config.show_hidden && item.hidden {
+                if !item.shown(self.config.show_hidden) {
                     item.selected = false;
                     continue;
                 }
@@ -3991,14 +4234,10 @@ impl Tab {
                                     .skip(min_real)
                                     .take(max_real - min_real + 1)
                                 {
-                                    if let Some(item) = items.get_mut(index) {
-                                        if item.hidden {
-                                            if self.config.show_hidden {
-                                                item.selected = true;
-                                            }
-                                        } else {
-                                            item.selected = true;
-                                        }
+                                    if let Some(item) = items.get_mut(index)
+                                        && item.shown(self.config.show_hidden)
+                                    {
+                                        item.selected = true;
                                     }
                                 }
                             }
@@ -4727,6 +4966,9 @@ impl Tab {
                     }
                 }
             }
+            Message::OpenPrivacySettings => {
+                open_privacy_settings();
+            }
             Message::Reload => {
                 //TODO: support keeping selected locations without paths
                 let selected_paths = self
@@ -5364,6 +5606,8 @@ impl Tab {
                         },
                         ItemMetadata::SimpleDir { entries } => (true, *entries),
                         ItemMetadata::SimpleFile { size } => (false, *size),
+                        // No size may be read, so denied entries sort as empty.
+                        ItemMetadata::Denied { is_dir } => (*is_dir, 0),
                         #[cfg(feature = "gvfs")]
                         ItemMetadata::GvfsPath {
                             size_opt,
@@ -6036,26 +6280,36 @@ impl Tab {
     pub fn empty_view(&self, has_hidden: bool) -> Element<'_, Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = theme::spacing();
 
-        mouse_area::MouseArea::new(widget::column::with_children([widget::container(
-            match self.mode {
-                Mode::App | Mode::Dialog(_) => widget::column::with_children([
+        let reason = empty_reason(&self.location, has_hidden, Trash::listable());
+        let body = match self.mode {
+            Mode::App | Mode::Dialog(_) => match reason {
+                EmptyReason::TrashUnreadable => widget::column::with_children([
+                    Trash::icon_symbolic(64).icon().size(64).into(),
+                    widget::text::body(fl!("trash-needs-full-disk-access")).into(),
+                    // There is no API to prompt for Full Disk Access, so the deep link
+                    // into the Privacy pane is all the app can offer; porting notes 4.2.
+                    widget::button::link(fl!("open-privacy-settings"))
+                        .on_press(Message::OpenPrivacySettings)
+                        .into(),
+                ]),
+                other => widget::column::with_children([
                     widget::icon::from_name("folder-symbolic")
                         .size(64)
                         .icon()
                         .into(),
-                    widget::text::body(if has_hidden {
-                        fl!("empty-folder-hidden")
-                    } else if matches!(self.location, Location::Search(..)) {
-                        fl!("no-results")
-                    } else {
-                        fl!("empty-folder")
+                    widget::text::body(match other {
+                        EmptyReason::FolderWithHidden => fl!("empty-folder-hidden"),
+                        EmptyReason::NoSearchResults => fl!("no-results"),
+                        _ => fl!("empty-folder"),
                     })
                     .into(),
                 ]),
-                Mode::Desktop => widget::column::with_capacity(0),
-            }
-            .align_x(Alignment::Center)
-            .spacing(space_xxs),
+            },
+            Mode::Desktop => widget::column::with_capacity(0),
+        };
+
+        mouse_area::MouseArea::new(widget::column::with_children([widget::container(
+            body.align_x(Alignment::Center).spacing(space_xxs),
         )
         .center(Length::Fill)
         .into()]))
@@ -6156,10 +6410,14 @@ impl Tab {
             let mut hidden = 0;
             let mut grid_elements = Vec::new();
             for &(i, item) in &items {
-                if !show_hidden && item.hidden {
+                if !item.shown(show_hidden) {
                     item.pos_opt.set(None);
                     item.rect_opt.set(None);
-                    hidden += 1;
+                    // Only count what turning hidden files on would reveal, so the empty
+                    // folder message does not invite a setting change that shows nothing.
+                    if item.shown(true) {
+                        hidden += 1;
+                    }
                     continue;
                 }
                 item.pos_opt.set(Some((row, col)));
@@ -6208,7 +6466,7 @@ impl Tab {
                                     true,
                                     matches!(self.mode, Mode::Desktop),
                                 )),
-                            widget::text::body(&item.name),
+                            widget::text::body(item.hover_text()),
                             widget::tooltip::Position::Bottom,
                         )
                         .into(),
@@ -6463,10 +6721,13 @@ impl Tab {
             let mut count = 0;
             let mut hidden = 0;
             for (i, item) in items {
-                if item.hidden && !show_hidden {
+                if !item.shown(show_hidden) {
                     item.pos_opt.set(None);
                     item.rect_opt.set(None);
-                    hidden += 1;
+                    // See the grid view: only what the setting could reveal is counted.
+                    if item.shown(true) {
+                        hidden += 1;
+                    }
                     continue;
                 }
 
@@ -6545,6 +6806,9 @@ impl Tab {
                             }
                         }
                         ItemMetadata::SimpleFile { size } => format_size(*size),
+                        // The size column says why the row is locked, since there is no
+                        // size to put there.
+                        ItemMetadata::Denied { .. } => fl!("permission-denied"),
                         #[cfg(feature = "gvfs")]
                         ItemMetadata::GvfsPath {
                             size_opt,
@@ -7388,6 +7652,7 @@ impl Tab {
             }
 
             let scale_factor = self.scale_factor;
+            let home = crate::home_dir();
             for item in items {
                 if !item.wants_thumbnail(scale_factor, &visible_rect) {
                     continue;
@@ -7396,6 +7661,12 @@ impl Tab {
                 let Some(path) = item.path_opt().cloned() else {
                     continue;
                 };
+
+                // Reading a file to thumbnail it is exactly the access these trees refuse;
+                // see porting notes 4.3.
+                if is_protected_tree(&path, &home) {
+                    continue;
+                }
 
                 let metadata = item.metadata.clone();
                 let can_thumbnail = match metadata {
@@ -7912,8 +8183,12 @@ mod tests {
     use tempfile::TempDir;
     use test_log::test;
 
+    #[cfg(target_os = "macos")]
+    use super::reveal_in_finder_command;
     use super::{
-        Item, ItemMetadata, ItemThumbnail, Location, Message, PIXELS_PER_ZOOM_STEP, Rectangle, Tab,
+        EmptyReason, Instant, Item, ItemAccess, ItemMetadata, ItemThumbnail, Location, Message,
+        PIXELS_PER_ZOOM_STEP, Path, Rectangle, SearchLocation, Tab, access_from_error,
+        empty_reason, is_always_hidden, is_protected_tree, item_from_denied_entry, item_from_path,
         logical_scroll_pixels, respond_to_scroll_direction, scan_path, zoom_steps_for_scroll,
     };
     use crate::app::test_utils::{
@@ -8240,6 +8515,199 @@ mod tests {
         let mut item = thumbnailed_item(ON_SCREEN, 1.0);
         item.thumbnail_opt = Some(ItemThumbnail::NotImage);
         item.thumbnail_scale_opt = None;
+        assert!(!item.wants_thumbnail(2.0, &VISIBLE));
+        Ok(())
+    }
+
+    #[test]
+    fn a_refused_entry_is_classified_as_denied() -> io::Result<()> {
+        // A TCC denial on macOS is EPERM, os error 1, which std maps to PermissionDenied.
+        // EACCES, the ordinary mode-bits refusal, maps to the same kind.
+        assert_eq!(
+            access_from_error(&io::Error::from_raw_os_error(libc::EPERM)),
+            ItemAccess::Denied
+        );
+        assert_eq!(
+            access_from_error(&io::Error::from(io::ErrorKind::PermissionDenied)),
+            ItemAccess::Denied
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn an_entry_that_went_away_is_not_a_denial() -> io::Result<()> {
+        // Anything other than a refusal is a listing that went stale, not something to
+        // render a lock on: the entry is dropped as it always was.
+        assert_eq!(
+            access_from_error(&io::Error::from(io::ErrorKind::NotFound)),
+            ItemAccess::Unavailable
+        );
+        assert_eq!(
+            access_from_error(&io::Error::from(io::ErrorKind::InvalidData)),
+            ItemAccess::Unavailable
+        );
+        Ok(())
+    }
+
+    /// A real item for a file of this name, built the way a listing builds one.
+    fn item_named(dir: &TempDir, name: &str) -> Item {
+        let path = dir.path().join(name);
+        fs::write(&path, b"").expect("failed to write the test file");
+        item_from_path(path, IconSizes::default()).expect("failed to build the item")
+    }
+
+    #[test]
+    fn a_dotfile_appears_once_hidden_files_are_shown() -> io::Result<()> {
+        let dir = TempDir::new()?;
+        let dotfile = item_named(&dir, ".bashrc");
+        assert!(!dotfile.shown(false));
+        assert!(dotfile.shown(true));
+
+        let ordinary = item_named(&dir, "notes.txt");
+        assert!(ordinary.shown(false));
+        assert!(ordinary.shown(true));
+        Ok(())
+    }
+
+    #[test]
+    fn finder_bookkeeping_stays_out_of_the_listing_on_macos() -> io::Result<()> {
+        // Finder does not show .DS_Store even with hidden files turned on, because it is
+        // Finder's own per-folder state rather than anything the user put there.
+        let dir = TempDir::new()?;
+        let ds_store = item_named(&dir, ".DS_Store");
+        assert!(!ds_store.shown(false));
+        assert_eq!(ds_store.shown(true), !cfg!(target_os = "macos"));
+        Ok(())
+    }
+
+    #[test]
+    fn nothing_but_ds_store_is_always_hidden() -> io::Result<()> {
+        // A name that merely looks like it must still follow the setting.
+        for name in [".bashrc", ".git", "DS_Store", ".DS_Store.bak", "notes.txt"] {
+            assert!(!is_always_hidden(name), "{name} should follow the setting");
+        }
+        assert_eq!(is_always_hidden(".DS_Store"), cfg!(target_os = "macos"));
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn revealing_an_item_asks_finder_to_select_it() -> io::Result<()> {
+        let (program, args) =
+            reveal_in_finder_command(Path::new("/Users/someone/Documents/My Report.pdf"));
+        // -R is what selects the item in a window rather than opening it.
+        assert_eq!(program, "/usr/bin/open");
+        assert_eq!(
+            args,
+            [
+                std::ffi::OsString::from("-R"),
+                std::ffi::OsString::from("/Users/someone/Documents/My Report.pdf"),
+            ]
+        );
+        // A bundle launched from Finder inherits a bare PATH, so nothing may be looked up
+        // by name; see porting notes 5.4.
+        assert!(Path::new(program).is_absolute());
+        Ok(())
+    }
+
+    #[test]
+    fn a_trash_that_cannot_be_listed_asks_for_full_disk_access() -> io::Result<()> {
+        // macOS has no API to list the Trash and keeps ~/.Trash behind Full Disk Access,
+        // which has no prompting API either, so the only thing left is to say so.
+        assert_eq!(
+            empty_reason(&Location::Trash, false, false),
+            EmptyReason::TrashUnreadable
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_trash_that_was_listed_and_is_empty_just_says_so() -> io::Result<()> {
+        assert_eq!(
+            empty_reason(&Location::Trash, false, true),
+            EmptyReason::Folder
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn an_unreadable_trash_does_not_change_what_other_locations_say() -> io::Result<()> {
+        let path = Location::Path(PathBuf::from("/Users/someone/Documents"));
+        let search = Location::Search(
+            SearchLocation::Path(PathBuf::from("/Users/someone")),
+            "needle".to_string(),
+            false,
+            Instant::now(),
+        );
+        assert_eq!(empty_reason(&path, false, false), EmptyReason::Folder);
+        assert_eq!(
+            empty_reason(&path, true, false),
+            EmptyReason::FolderWithHidden
+        );
+        assert_eq!(
+            empty_reason(&search, false, false),
+            EmptyReason::NoSearchResults
+        );
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_trees_macos_guards_are_never_walked() -> io::Result<()> {
+        // Walking these is how an app ends up asking for permissions the user never
+        // navigated to; see porting notes 4.3.
+        let home = PathBuf::from("/Users/someone");
+        for path in [
+            "/Users/someone/Library",
+            "/Users/someone/Library/Caches/com.apple.Safari",
+            "/Users/someone/.Trash",
+            "/Users/someone/.Trash/deleted.txt",
+            "/Users/someone/.cache",
+            "/Users/someone/.cache/thumbnails/large",
+        ] {
+            assert!(
+                is_protected_tree(Path::new(path), &home),
+                "{path} should be protected"
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn ordinary_folders_are_walked_as_before() -> io::Result<()> {
+        let home = PathBuf::from("/Users/someone");
+        for path in [
+            "/Users/someone",
+            "/Users/someone/Documents",
+            "/Users/someone/Pictures/Library",
+            // A name that merely starts with a protected one is not protected.
+            "/Users/someone/Librarything",
+            // Another account's home is not ours to guard.
+            "/Users/other/Library",
+            // The system-wide one is not the per-user tree TCC protects.
+            "/Library/Fonts",
+        ] {
+            assert!(
+                !is_protected_tree(Path::new(path), &home),
+                "{path} should not be protected"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn a_denied_item_is_never_asked_for_a_thumbnail() -> io::Result<()> {
+        // Retrying a thumbnail for an entry the OS refuses is what sent zed's CPU berserk
+        // when a user declined the prompt. The item settles the same way a directory does.
+        let item = item_from_denied_entry(
+            PathBuf::from("/Users/someone/Desktop/photo.png"),
+            "photo.png".to_string(),
+            false,
+            IconSizes::default(),
+        );
+        item.rect_opt.set(Some(ON_SCREEN));
+        assert!(!item.wants_thumbnail(1.0, &VISIBLE));
         assert!(!item.wants_thumbnail(2.0, &VISIBLE));
         Ok(())
     }
