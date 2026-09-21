@@ -33,7 +33,7 @@ use crate::app::{
     Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind, REPLACE_BUTTON_ID,
 };
 use crate::config::{Config, DialogConfig, TIME_CONFIG_ID, ThumbCfg, TimeConfig, TypeToSearch};
-use crate::key_bind::key_binds;
+use crate::key_bind::key_binds_with_overrides;
 use crate::localize::LANGUAGE_SORTER;
 use crate::mounter::{MOUNTERS, MounterItem, MounterItems, MounterKey, MounterMessage};
 use crate::tab::{self, ItemMetadata, Location, SearchLocation, Tab};
@@ -1030,7 +1030,7 @@ impl Application for App {
         tab.sort_name = tab::HeadingOptions::Modified;
         tab.sort_direction = false;
 
-        let key_binds = key_binds(&tab.mode);
+        let key_binds = key_binds_with_overrides(&tab.mode, &flags.config.keybinds);
 
         let mut app = Self {
             core,
