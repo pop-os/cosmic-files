@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
+use cosmic::{Element, theme};
 use cosmic::app::Core;
 use cosmic::iced::keyboard::Modifiers;
 use cosmic::widget::menu::action::MenuAction;
 use cosmic::widget::menu::key_bind::KeyBind;
 use cosmic::widget::menu::{self, ItemHeight, ItemWidth, MenuBar};
 use cosmic::widget::{self, responsive_menu_bar};
-use cosmic::{Element, theme};
 use i18n_embed::LanguageLoader;
 use mime_guess::Mime;
 use std::collections::HashMap;
