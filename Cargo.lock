@@ -1398,6 +1398,7 @@ version = "1.9.0"
 dependencies = [
  "anyhow",
  "atomic_float",
+ "block2 0.6.2",
  "bstr",
  "bzip2",
  "compio",
@@ -1429,6 +1430,10 @@ dependencies = [
  "notify-rust",
  "num_cpus",
  "num_enum",
+ "objc2 0.6.4",
+ "objc2-foundation 0.3.2",
+ "objc2-quick-look-thumbnailing",
+ "objc2-uniform-type-identifiers",
  "open",
  "ordermap",
  "paste",
@@ -5365,6 +5370,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "objc2-quick-look-thumbnailing"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac8e00da1ca87ffe3ea8d20981026f013df91072a140432f0f88da9a356d9b3c"
+dependencies = [
+ "bitflags 2.13.2",
+ "block2 0.6.2",
+ "objc2 0.6.4",
+ "objc2-core-foundation",
+ "objc2-foundation 0.3.2",
+ "objc2-uniform-type-identifiers",
+]
+
+[[package]]
 name = "objc2-ui-kit"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5373,6 +5392,16 @@ dependencies = [
  "bitflags 2.13.2",
  "objc2 0.6.4",
  "objc2-core-foundation",
+ "objc2-foundation 0.3.2",
+]
+
+[[package]]
+name = "objc2-uniform-type-identifiers"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7902ac02859fc1f7045f8b598c63f1ae0cc7efeaa06a9bc9f3d9a3c955974fa4"
+dependencies = [
+ "objc2 0.6.4",
  "objc2-foundation 0.3.2",
 ]
 

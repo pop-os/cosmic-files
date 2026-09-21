@@ -29,6 +29,8 @@ pub mod mime_icon;
 mod mounter;
 mod mouse_area;
 pub mod operation;
+#[cfg(all(target_os = "macos", feature = "quicklook"))]
+pub(crate) mod quicklook_macos;
 mod spawn_detached;
 pub mod tab;
 mod thumbnail_cacher;
