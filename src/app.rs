@@ -64,7 +64,7 @@ use crate::config::{
     TimeConfig, TypeToSearch,
 };
 use crate::dialog::{Dialog, DialogKind, DialogMessage, DialogResult, DialogSettings};
-use crate::key_bind::key_binds;
+use crate::key_bind::key_binds_with_overrides;
 use crate::localize::LANGUAGE_SORTER;
 use crate::mime_app::{self, MimeApp, MimeAppCache, MimeAppMatch};
 use crate::mounter::{
@@ -114,6 +114,16 @@ pub(crate) static REPLACE_BUTTON_ID: LazyLock<widget::Id> =
 pub enum Mode {
     App,
     Desktop,
+}
+
+impl Mode {
+    /// The [`tab::Mode`] whose key bindings this window uses.
+    const fn tab_mode(&self) -> tab::Mode {
+        match self {
+            Self::App => tab::Mode::App,
+            Self::Desktop => tab::Mode::Desktop,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1683,6 +1693,8 @@ impl App {
     }
 
     fn update_config(&mut self) -> Task<Message> {
+        // Re-apply the configured key binding overrides; the config watcher makes edits live.
+        self.key_binds = key_binds_with_overrides(&self.mode.tab_mode(), &self.config.keybinds);
         self.update_nav_model();
         // Tabs are collected first to placate the borrowck
         let tabs: Box<[_]> = self.tab_model.iter().collect();
@@ -2361,10 +2373,7 @@ impl Application for App {
 
         let app_themes = vec![fl!("match-desktop"), fl!("dark"), fl!("light")];
 
-        let key_binds = key_binds(&match flags.mode {
-            Mode::App => tab::Mode::App,
-            Mode::Desktop => tab::Mode::Desktop,
-        });
+        let key_binds = key_binds_with_overrides(&flags.mode.tab_mode(), &flags.config.keybinds);
 
         // Create a dedicated thread for the compio runtime to handle operations on.
         // Supports io_uring on Linux, IOPC on Windows, and polling everywhere else.
