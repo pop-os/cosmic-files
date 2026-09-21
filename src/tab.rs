@@ -471,6 +471,16 @@ fn hidden_attribute(_metadata: &Metadata) -> bool {
     false
 }
 
+/// Whether an entry of this name is one the platform never lists, whatever the show-hidden
+/// setting says.
+///
+/// On macOS that is `.DS_Store`: Finder's own per-folder state, not anything the user put
+/// there, and Finder itself does not show it even with hidden files turned on. Everywhere
+/// else nothing is in this category and `.DS_Store` is an ordinary dotfile.
+pub fn is_always_hidden(name: &str) -> bool {
+    cfg!(target_os = "macos") && name == ".DS_Store"
+}
+
 #[cfg(target_os = "windows")]
 fn hidden_attribute(metadata: &Metadata) -> bool {
     use std::os::windows::fs::MetadataExt;
@@ -2650,6 +2660,11 @@ impl Item {
         self.location_opt.as_ref()?.path_opt()
     }
 
+    /// Whether this item belongs in a listing that is or is not showing hidden files.
+    pub fn shown(&self, show_hidden: bool) -> bool {
+        !is_always_hidden(&self.name) && (show_hidden || !self.hidden)
+    }
+
     /// Whether the OS refused this entry; see [`ItemMetadata::Denied`].
     pub fn is_denied(&self) -> bool {
         matches!(self.metadata, ItemMetadata::Denied { .. })
@@ -3528,7 +3543,7 @@ impl Tab {
     pub fn select_all(&mut self) {
         if let Some(ref mut items) = self.items_opt {
             for item in items.iter_mut() {
-                if !self.config.show_hidden && item.hidden {
+                if !item.shown(self.config.show_hidden) {
                     item.selected = false;
                     continue;
                 }
@@ -4191,14 +4206,10 @@ impl Tab {
                                     .skip(min_real)
                                     .take(max_real - min_real + 1)
                                 {
-                                    if let Some(item) = items.get_mut(index) {
-                                        if item.hidden {
-                                            if self.config.show_hidden {
-                                                item.selected = true;
-                                            }
-                                        } else {
-                                            item.selected = true;
-                                        }
+                                    if let Some(item) = items.get_mut(index)
+                                        && item.shown(self.config.show_hidden)
+                                    {
+                                        item.selected = true;
                                     }
                                 }
                             }
@@ -6371,10 +6382,14 @@ impl Tab {
             let mut hidden = 0;
             let mut grid_elements = Vec::new();
             for &(i, item) in &items {
-                if !show_hidden && item.hidden {
+                if !item.shown(show_hidden) {
                     item.pos_opt.set(None);
                     item.rect_opt.set(None);
-                    hidden += 1;
+                    // Only count what turning hidden files on would reveal, so the empty
+                    // folder message does not invite a setting change that shows nothing.
+                    if !show_hidden {
+                        hidden += 1;
+                    }
                     continue;
                 }
                 item.pos_opt.set(Some((row, col)));
@@ -6678,10 +6693,13 @@ impl Tab {
             let mut count = 0;
             let mut hidden = 0;
             for (i, item) in items {
-                if item.hidden && !show_hidden {
+                if !item.shown(show_hidden) {
                     item.pos_opt.set(None);
                     item.rect_opt.set(None);
-                    hidden += 1;
+                    // See the grid view: only what the setting could reveal is counted.
+                    if !show_hidden {
+                        hidden += 1;
+                    }
                     continue;
                 }
 
@@ -8140,8 +8158,8 @@ mod tests {
     use super::{
         EmptyReason, Instant, Item, ItemAccess, ItemMetadata, ItemThumbnail, Location, Message,
         PIXELS_PER_ZOOM_STEP, Path, Rectangle, SearchLocation, Tab, access_from_error,
-        empty_reason, is_protected_tree, item_from_denied_entry, logical_scroll_pixels,
-        respond_to_scroll_direction, scan_path, zoom_steps_for_scroll,
+        empty_reason, is_always_hidden, is_protected_tree, item_from_denied_entry, item_from_path,
+        logical_scroll_pixels, respond_to_scroll_direction, scan_path, zoom_steps_for_scroll,
     };
     use crate::app::test_utils::{
         NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED, assert_eq_tab_path, empty_fs,
@@ -8498,6 +8516,47 @@ mod tests {
             access_from_error(&io::Error::from(io::ErrorKind::InvalidData)),
             ItemAccess::Unavailable
         );
+        Ok(())
+    }
+
+    /// A real item for a file of this name, built the way a listing builds one.
+    fn item_named(dir: &TempDir, name: &str) -> Item {
+        let path = dir.path().join(name);
+        fs::write(&path, b"").expect("failed to write the test file");
+        item_from_path(path, IconSizes::default()).expect("failed to build the item")
+    }
+
+    #[test]
+    fn a_dotfile_appears_once_hidden_files_are_shown() -> io::Result<()> {
+        let dir = TempDir::new()?;
+        let dotfile = item_named(&dir, ".bashrc");
+        assert!(!dotfile.shown(false));
+        assert!(dotfile.shown(true));
+
+        let ordinary = item_named(&dir, "notes.txt");
+        assert!(ordinary.shown(false));
+        assert!(ordinary.shown(true));
+        Ok(())
+    }
+
+    #[test]
+    fn finder_bookkeeping_stays_out_of_the_listing_on_macos() -> io::Result<()> {
+        // Finder does not show .DS_Store even with hidden files turned on, because it is
+        // Finder's own per-folder state rather than anything the user put there.
+        let dir = TempDir::new()?;
+        let ds_store = item_named(&dir, ".DS_Store");
+        assert!(!ds_store.shown(false));
+        assert_eq!(ds_store.shown(true), !cfg!(target_os = "macos"));
+        Ok(())
+    }
+
+    #[test]
+    fn nothing_but_ds_store_is_always_hidden() -> io::Result<()> {
+        // A name that merely looks like it must still follow the setting.
+        for name in [".bashrc", ".git", "DS_Store", ".DS_Store.bak", "notes.txt"] {
+            assert!(!is_always_hidden(name), "{name} should follow the setting");
+        }
+        assert_eq!(is_always_hidden(".DS_Store"), cfg!(target_os = "macos"));
         Ok(())
     }
 
