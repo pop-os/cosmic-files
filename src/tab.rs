@@ -37,7 +37,7 @@ use std::error::Error;
 use std::fmt::{self, Display};
 use std::fs::{self, File, Metadata};
 use std::hash::Hash;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{self, BufRead, BufReader, Read};
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 use std::path::{self, Path, PathBuf};
@@ -900,6 +900,57 @@ pub fn item_from_entry(
     }
 }
 
+/// An entry the OS listed but refused to stat.
+///
+/// It is shown locked rather than dropped, because on macOS this is what a whole folder of
+/// files looks like after the user declines the privacy prompt: `read_dir` succeeds and
+/// every entry inside it is EPERM (porting notes 4.3). It settles on
+/// [`ItemThumbnail::NotImage`] with no scale, the same way a directory does, so the
+/// thumbnailer asks for it once, decides there is nothing to render, and never comes back;
+/// a retry loop over a denied tree is what pegged zed's CPU.
+pub fn item_from_denied_entry(path: PathBuf, name: String, is_dir: bool, sizes: IconSizes) -> Item {
+    let hidden = name.starts_with('.');
+    let display_name = Item::display_name(&name);
+    // Nothing may be read from the path, so the MIME type comes from the name alone.
+    let mime: Mime = if is_dir {
+        "inode/directory".parse().unwrap()
+    } else {
+        mime_for_path(&path, None, true)
+    };
+
+    Item {
+        name,
+        display_name,
+        is_mount_point: false,
+        metadata: ItemMetadata::Denied { is_dir },
+        hidden,
+        location_opt: Some(Location::Path(path)),
+        image_dimensions: None,
+        mime,
+        icon_handle_grid: denied_icon(sizes.grid()),
+        icon_handle_list: denied_icon(sizes.list()),
+        icon_handle_list_condensed: denied_icon(sizes.list_condensed()),
+        thumbnail_opt: Some(ItemThumbnail::NotImage),
+        thumbnail_scale_opt: None,
+        button_id: widget::Id::unique(),
+        pos_opt: Cell::new(None),
+        rect_opt: Cell::new(None),
+        selected: false,
+        highlighted: false,
+        overlaps_drag_rect: false,
+        dir_size: DirSize::NotDirectory,
+        cut: false,
+        checksums: ChecksumState::default(),
+    }
+}
+
+/// The lock shown in place of an icon the app is not allowed to look at.
+fn denied_icon(icon_size: u16) -> widget::icon::Handle {
+    widget::icon::from_name("changes-prevent-symbolic")
+        .size(icon_size)
+        .handle()
+}
+
 pub fn item_from_trash_entry(
     entry: TrashItem,
     metadata: TrashItemMetadata,
@@ -1103,15 +1154,29 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
                             hidden_files = parse_hidden_file(&path);
                         }
 
-                        let metadata = fs::metadata(&path)
-                            .inspect_err(|err| {
+                        let metadata = match fs::metadata(&path) {
+                            Ok(metadata) => metadata,
+                            Err(err) => {
                                 log::warn!(
                                     "failed to read metadata for entry at {}: {}",
                                     path.display(),
                                     err
-                                )
-                            })
-                            .ok()?;
+                                );
+                                return match access_from_error(&err) {
+                                    // The entry is really there, we are just not allowed to
+                                    // look at it. Show it locked instead of hiding it.
+                                    ItemAccess::Denied => {
+                                        // `read_dir` already knows whether this is a
+                                        // directory, so asking costs no further syscall and
+                                        // cannot be refused.
+                                        let is_dir =
+                                            entry.file_type().is_ok_and(|kind| kind.is_dir());
+                                        Some(item_from_denied_entry(path, name, is_dir, sizes))
+                                    }
+                                    ItemAccess::Unavailable => None,
+                                };
+                            }
+                        };
 
                         if trash {
                             item_from_trash_child(path, name, metadata, sizes)
@@ -1900,11 +1965,40 @@ pub enum ChecksumState {
     Error(String),
 }
 
+/// What a listing should do with an entry it could see but not stat.
+///
+/// `read_dir` and the per-entry `metadata` call are two different permission checks. On
+/// macOS a TCC-protected folder lists happily and then refuses every `open` and `metadata`
+/// inside it with EPERM (porting notes 4.3), so an unreadable entry is not necessarily a
+/// stale listing: it may be one the user has simply not granted us.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ItemAccess {
+    /// The OS refused. The entry exists and belongs in the listing, shown locked.
+    Denied,
+    /// Unreadable for some other reason, such as the entry being removed between the
+    /// listing and the stat. Nothing to show.
+    Unavailable,
+}
+
+/// Classify the error from stat-ing an entry that `read_dir` already listed.
+pub fn access_from_error(err: &io::Error) -> ItemAccess {
+    if err.kind() == io::ErrorKind::PermissionDenied {
+        ItemAccess::Denied
+    } else {
+        ItemAccess::Unavailable
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum ItemMetadata {
     Path {
         metadata: Metadata,
         children_opt: Option<usize>,
+    },
+    /// An entry the OS refused to stat; see [`ItemAccess::Denied`]. It carries no metadata
+    /// by definition, so the size and modified columns stay blank.
+    Denied {
+        is_dir: bool,
     },
     Trash {
         metadata: trash::TrashItemMetadata,
@@ -1929,6 +2023,7 @@ impl ItemMetadata {
     pub fn is_dir(&self) -> bool {
         match self {
             Self::Path { metadata, .. } => metadata.is_dir(),
+            Self::Denied { is_dir } => *is_dir,
             Self::Trash { metadata, .. } => match metadata.size {
                 trash::TrashItemSize::Entries(_) => true,
                 trash::TrashItemSize::Bytes(_) => false,
@@ -2493,6 +2588,25 @@ impl Item {
 
     pub fn path_opt(&self) -> Option<&PathBuf> {
         self.location_opt.as_ref()?.path_opt()
+    }
+
+    /// Whether the OS refused this entry; see [`ItemMetadata::Denied`].
+    pub fn is_denied(&self) -> bool {
+        matches!(self.metadata, ItemMetadata::Denied { .. })
+    }
+
+    /// What hovering the name should say: the full name normally, and why the item is
+    /// locked when it is one the app was refused.
+    fn hover_text(&self) -> String {
+        if self.is_denied() {
+            format!(
+                "{}: {}",
+                fl!("permission-denied"),
+                fl!("permission-denied-description")
+            )
+        } else {
+            self.name.clone()
+        }
     }
 
     /// Whether a thumbnail should be rendered for this item now.
@@ -5364,6 +5478,8 @@ impl Tab {
                         },
                         ItemMetadata::SimpleDir { entries } => (true, *entries),
                         ItemMetadata::SimpleFile { size } => (false, *size),
+                        // No size may be read, so denied entries sort as empty.
+                        ItemMetadata::Denied { is_dir } => (*is_dir, 0),
                         #[cfg(feature = "gvfs")]
                         ItemMetadata::GvfsPath {
                             size_opt,
@@ -6208,7 +6324,7 @@ impl Tab {
                                     true,
                                     matches!(self.mode, Mode::Desktop),
                                 )),
-                            widget::text::body(&item.name),
+                            widget::text::body(item.hover_text()),
                             widget::tooltip::Position::Bottom,
                         )
                         .into(),
@@ -6545,6 +6661,9 @@ impl Tab {
                             }
                         }
                         ItemMetadata::SimpleFile { size } => format_size(*size),
+                        // The size column says why the row is locked, since there is no
+                        // size to put there.
+                        ItemMetadata::Denied { .. } => fl!("permission-denied"),
                         #[cfg(feature = "gvfs")]
                         ItemMetadata::GvfsPath {
                             size_opt,
@@ -7913,8 +8032,9 @@ mod tests {
     use test_log::test;
 
     use super::{
-        Item, ItemMetadata, ItemThumbnail, Location, Message, PIXELS_PER_ZOOM_STEP, Rectangle, Tab,
-        logical_scroll_pixels, respond_to_scroll_direction, scan_path, zoom_steps_for_scroll,
+        Item, ItemAccess, ItemMetadata, ItemThumbnail, Location, Message, PIXELS_PER_ZOOM_STEP,
+        Rectangle, Tab, access_from_error, item_from_denied_entry, logical_scroll_pixels,
+        respond_to_scroll_direction, scan_path, zoom_steps_for_scroll,
     };
     use crate::app::test_utils::{
         NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED, assert_eq_tab_path, empty_fs,
@@ -8240,6 +8360,52 @@ mod tests {
         let mut item = thumbnailed_item(ON_SCREEN, 1.0);
         item.thumbnail_opt = Some(ItemThumbnail::NotImage);
         item.thumbnail_scale_opt = None;
+        assert!(!item.wants_thumbnail(2.0, &VISIBLE));
+        Ok(())
+    }
+
+    #[test]
+    fn a_refused_entry_is_classified_as_denied() -> io::Result<()> {
+        // A TCC denial on macOS is EPERM, os error 1, which std maps to PermissionDenied.
+        // EACCES, the ordinary mode-bits refusal, maps to the same kind.
+        assert_eq!(
+            access_from_error(&io::Error::from_raw_os_error(libc::EPERM)),
+            ItemAccess::Denied
+        );
+        assert_eq!(
+            access_from_error(&io::Error::from(io::ErrorKind::PermissionDenied)),
+            ItemAccess::Denied
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn an_entry_that_went_away_is_not_a_denial() -> io::Result<()> {
+        // Anything other than a refusal is a listing that went stale, not something to
+        // render a lock on: the entry is dropped as it always was.
+        assert_eq!(
+            access_from_error(&io::Error::from(io::ErrorKind::NotFound)),
+            ItemAccess::Unavailable
+        );
+        assert_eq!(
+            access_from_error(&io::Error::from(io::ErrorKind::InvalidData)),
+            ItemAccess::Unavailable
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_denied_item_is_never_asked_for_a_thumbnail() -> io::Result<()> {
+        // Retrying a thumbnail for an entry the OS refuses is what sent zed's CPU berserk
+        // when a user declined the prompt. The item settles the same way a directory does.
+        let item = item_from_denied_entry(
+            PathBuf::from("/Users/someone/Desktop/photo.png"),
+            "photo.png".to_string(),
+            false,
+            IconSizes::default(),
+        );
+        item.rect_opt.set(Some(ON_SCREEN));
+        assert!(!item.wants_thumbnail(1.0, &VISIBLE));
         assert!(!item.wants_thumbnail(2.0, &VISIBLE));
         Ok(())
     }
