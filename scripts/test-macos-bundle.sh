@@ -186,6 +186,37 @@ else
     no "the bundled binary is thin arm64" "$arch_info"
 fi
 
+# ---------------------------------------------------------------------------
+# Privacy and Finder integration (issues #9 and #10).
+#
+# These assertions were added separately from the ones above; keep them in this
+# block so the two sets stay easy to tell apart.
+# ---------------------------------------------------------------------------
+
+assert_plist_nonempty() {
+    local key=$1 name=$2 actual
+    actual=$(plutil -extract "$key" raw -o - -- "$plist" 2>&1)
+    if [ -n "$actual" ] && ! printf '%s' "$actual" | grep -q 'error:'; then
+        ok "$name"
+    else
+        no "$name" "$key is missing or empty ('$actual')"
+    fi
+}
+
+echo "# privacy usage descriptions"
+# Without these a TCC-gated read is silently denied: no prompt, and no entry in
+# System Settings for the user to grant afterwards. See porting notes 4.2/5.2.
+assert_plist_nonempty NSDesktopFolderUsageDescription \
+    "NSDesktopFolderUsageDescription gives a reason"
+assert_plist_nonempty NSDocumentsFolderUsageDescription \
+    "NSDocumentsFolderUsageDescription gives a reason"
+assert_plist_nonempty NSDownloadsFolderUsageDescription \
+    "NSDownloadsFolderUsageDescription gives a reason"
+assert_plist_nonempty NSRemovableVolumesUsageDescription \
+    "NSRemovableVolumesUsageDescription gives a reason"
+assert_plist_nonempty NSNetworkVolumesUsageDescription \
+    "NSNetworkVolumesUsageDescription gives a reason"
+
 echo
 printf '%d passed, %d failed\n' "$passed" "$failed"
 [ "$failed" -eq 0 ]
