@@ -3190,9 +3190,35 @@ async fn render_quicklook_preview(path: PathBuf, mime: Mime) -> Option<(u32, u32
     .flatten()
 }
 
+/// Directories directly under the home directory that the app never walks by itself.
+///
+/// On macOS these are behind Full Disk Access or hold nothing worth walking, and touching
+/// them is how an app ends up provoking permission failures for a place the user never
+/// navigated to; see porting notes 4.3. Elsewhere the list is empty, so the predicate is
+/// always false and nothing changes.
+#[cfg(target_os = "macos")]
+const PROTECTED_TREES: &[&str] = &["Library", ".Trash", ".cache"];
+#[cfg(not(target_os = "macos"))]
+const PROTECTED_TREES: &[&str] = &[];
+
+/// Whether `path` is one of the home directory trees the app must not walk, or lies inside
+/// one. Comparison is by path component, so `~/Librarything` is not `~/Library`.
+pub fn is_protected_tree(path: &Path, home: &Path) -> bool {
+    PROTECTED_TREES
+        .iter()
+        .any(|tree| path.starts_with(home.join(tree)))
+}
+
 async fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, OperationError> {
     let mut total = 0;
-    for entry_res in WalkDir::new(path) {
+    // A protected tree contributes nothing rather than being descended into: the root
+    // itself is filtered out when it is one, and WalkDir does not walk past a filtered
+    // directory, so a walk of the home directory skips them too.
+    let home = crate::home_dir();
+    for entry_res in WalkDir::new(path)
+        .into_iter()
+        .filter_entry(|entry| !is_protected_tree(entry.path(), &home))
+    {
         controller
             .check()
             .await
@@ -7507,6 +7533,7 @@ impl Tab {
             }
 
             let scale_factor = self.scale_factor;
+            let home = crate::home_dir();
             for item in items {
                 if !item.wants_thumbnail(scale_factor, &visible_rect) {
                     continue;
@@ -7515,6 +7542,12 @@ impl Tab {
                 let Some(path) = item.path_opt().cloned() else {
                     continue;
                 };
+
+                // Reading a file to thumbnail it is exactly the access these trees refuse;
+                // see porting notes 4.3.
+                if is_protected_tree(&path, &home) {
+                    continue;
+                }
 
                 let metadata = item.metadata.clone();
                 let can_thumbnail = match metadata {
@@ -8033,8 +8066,8 @@ mod tests {
 
     use super::{
         Item, ItemAccess, ItemMetadata, ItemThumbnail, Location, Message, PIXELS_PER_ZOOM_STEP,
-        Rectangle, Tab, access_from_error, item_from_denied_entry, logical_scroll_pixels,
-        respond_to_scroll_direction, scan_path, zoom_steps_for_scroll,
+        Path, Rectangle, Tab, access_from_error, is_protected_tree, item_from_denied_entry,
+        logical_scroll_pixels, respond_to_scroll_direction, scan_path, zoom_steps_for_scroll,
     };
     use crate::app::test_utils::{
         NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED, assert_eq_tab_path, empty_fs,
@@ -8391,6 +8424,51 @@ mod tests {
             access_from_error(&io::Error::from(io::ErrorKind::InvalidData)),
             ItemAccess::Unavailable
         );
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_trees_macos_guards_are_never_walked() -> io::Result<()> {
+        // Walking these is how an app ends up asking for permissions the user never
+        // navigated to; see porting notes 4.3.
+        let home = PathBuf::from("/Users/someone");
+        for path in [
+            "/Users/someone/Library",
+            "/Users/someone/Library/Caches/com.apple.Safari",
+            "/Users/someone/.Trash",
+            "/Users/someone/.Trash/deleted.txt",
+            "/Users/someone/.cache",
+            "/Users/someone/.cache/thumbnails/large",
+        ] {
+            assert!(
+                is_protected_tree(Path::new(path), &home),
+                "{path} should be protected"
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn ordinary_folders_are_walked_as_before() -> io::Result<()> {
+        let home = PathBuf::from("/Users/someone");
+        for path in [
+            "/Users/someone",
+            "/Users/someone/Documents",
+            "/Users/someone/Pictures/Library",
+            // A name that merely starts with a protected one is not protected.
+            "/Users/someone/Librarything",
+            // Another account's home is not ours to guard.
+            "/Users/other/Library",
+            // The system-wide one is not the per-user tree TCC protects.
+            "/Library/Fonts",
+        ] {
+            assert!(
+                !is_protected_tree(Path::new(path), &home),
+                "{path} should not be protected"
+            );
+        }
         Ok(())
     }
 
