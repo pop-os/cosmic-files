@@ -1846,6 +1846,10 @@ pub enum Message {
     CalculateChecksums(PathBuf),
     CopyChecksum(String),
     ImageDecoded(PathBuf, u32, u32, Vec<u8>, Option<(u32, u32)>, u64), // path, width, height, pixels, display_size, generation
+    /// A full-screen Quick Look preview finished rendering: path, then the decoded RGBA image
+    /// as width, height and pixels, or `None` if Quick Look could not produce one.
+    #[cfg(all(target_os = "macos", feature = "quicklook"))]
+    QuickLookPreview(PathBuf, Option<(u32, u32, Vec<u8>)>),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -1969,6 +1973,11 @@ pub enum ItemThumbnail {
     Image(widget::image::Handle, Option<(u32, u32)>),
     Svg(widget::svg::Handle),
     Text(widget::text_editor::Content),
+    /// A preview rendered by macOS Quick Look. The source file is not itself a decodable image
+    /// (a PDF, an office document, a video, a HEIC or RAW photo), so this handle is the only
+    /// representation that can be drawn; the gallery must never fall back to the source path.
+    #[cfg(all(target_os = "macos", feature = "quicklook"))]
+    QuickLook(widget::image::Handle),
 }
 
 impl Clone for ItemThumbnail {
@@ -1977,6 +1986,8 @@ impl Clone for ItemThumbnail {
             Self::NotImage => Self::NotImage,
             Self::Image(handle, size_opt) => Self::Image(handle.clone(), *size_opt),
             Self::Svg(handle) => Self::Svg(handle.clone()),
+            #[cfg(all(target_os = "macos", feature = "quicklook"))]
+            Self::QuickLook(handle) => Self::QuickLook(handle.clone()),
             // Content cannot be cloned simply
             Self::Text(content) => {
                 Self::Text(widget::text_editor::Content::with_text(&content.text()))
@@ -2000,6 +2011,14 @@ impl ItemThumbnail {
         match thumbnail_cacher.as_ref() {
             Ok(cache) => match cache.get_cached_thumbnail() {
                 CachedThumbnail::Valid((thumbnail_path, size)) => {
+                    // A cached thumbnail for a file the built-in decoder cannot open came from
+                    // Quick Look, and stays a Quick Look preview: the source path is not an
+                    // image, so the gallery must not try to load it at full resolution.
+                    #[cfg(all(target_os = "macos", feature = "quicklook"))]
+                    if crate::quicklook_macos::owns_preview(&mime) {
+                        return Self::QuickLook(widget::image::Handle::from_path(thumbnail_path));
+                    }
+
                     // Check original image dimensions even when loading cached thumbnail
                     // This prevents trying to load huge images in preview mode
                     let original_dims = match image::image_dimensions(path) {
@@ -2148,6 +2167,21 @@ impl ItemThumbnail {
             .as_ref()
             .ok()
             .map(ThumbnailCacher::thumbnail_dir);
+
+        // macOS ships no freedesktop.org thumbnailers, so ask Quick Look first. It covers PDFs,
+        // office documents, video and the image formats the `image` crate cannot decode.
+        #[cfg(all(target_os = "macos", feature = "quicklook"))]
+        if let Some((item_thumbnail, temp_file)) =
+            Self::generate_thumbnail_quicklook(path, &mime, thumbnail_size, thumbnail_dir)
+        {
+            if let Ok(cache) = thumbnail_cacher
+                && let Err(err) = cache.update_with_temp_file(temp_file)
+            {
+                log::warn!("failed to update cache for {}: {}", path.display(), err);
+            }
+            return item_thumbnail;
+        }
+
         if let Some((item_thumbnail, temp_file)) =
             Self::generate_thumbnail_external(path, &mime, thumbnail_size, thumbnail_dir)
         {
@@ -2226,6 +2260,80 @@ impl ItemThumbnail {
         }
 
         Self::NotImage
+    }
+
+    /// Render a grid-sized thumbnail with macOS Quick Look.
+    ///
+    /// Mirrors [`Self::generate_thumbnail_external`]: the PNG lands in a temporary file next to
+    /// the thumbnail cache so the caller can move it into place without crossing a filesystem.
+    /// Quick Look overwrites the file the temp handle already created, and a failed request
+    /// leaves it empty, which is why the decode below is what decides success.
+    #[cfg(all(target_os = "macos", feature = "quicklook"))]
+    fn generate_thumbnail_quicklook(
+        path: &Path,
+        mime: &mime::Mime,
+        thumbnail_size: u32,
+        thumbnail_dir: Option<&Path>,
+    ) -> Option<(Self, NamedTempFile)> {
+        if !crate::quicklook_macos::owns_preview(mime) {
+            return None;
+        }
+
+        let file = match thumbnail_dir {
+            Some(dir) => tempfile::Builder::new()
+                .prefix("cosmic-files-")
+                .tempfile_in(dir),
+            None => tempfile::Builder::new().prefix("cosmic-files-").tempfile(),
+        };
+        let file = match file {
+            Ok(ok) => ok,
+            Err(err) => {
+                log::warn!(
+                    "failed to create temporary file for thumbnail of {}: {}",
+                    path.display(),
+                    err
+                );
+                return None;
+            }
+        };
+
+        if let Err(err) = crate::quicklook_macos::save_preview_png(
+            path,
+            file.path(),
+            mime,
+            f64::from(thumbnail_size),
+            1.0,
+        ) {
+            log::debug!("quick look declined {}: {}", path.display(), err);
+            return None;
+        }
+
+        match image::ImageReader::open(file.path())
+            .and_then(ImageReader::with_guessed_format)
+            .map_err(crate::err_str)
+            .and_then(|reader| {
+                reader
+                    .decode()
+                    .map(DynamicImage::into_rgba8)
+                    .map_err(crate::err_str)
+            }) {
+            Ok(image) => Some((
+                Self::QuickLook(widget::image::Handle::from_rgba(
+                    image.width(),
+                    image.height(),
+                    image.into_raw(),
+                )),
+                file,
+            )),
+            Err(err) => {
+                log::warn!(
+                    "failed to decode quick look thumbnail of {}: {}",
+                    path.display(),
+                    err
+                );
+                None
+            }
+        }
     }
 
     fn generate_thumbnail_external(
@@ -2378,7 +2486,19 @@ impl Item {
     }
 
     pub fn can_gallery(&self) -> bool {
-        self.mime.type_() == mime::IMAGE || self.mime.type_() == mime::TEXT
+        if self.mime.type_() == mime::IMAGE || self.mime.type_() == mime::TEXT {
+            return true;
+        }
+
+        // Quick Look opens the gallery for anything it actually managed to preview. Asking the
+        // thumbnail rather than the MIME type keeps the gallery from opening on a blank screen
+        // for the many types Quick Look has no generator for.
+        #[cfg(all(target_os = "macos", feature = "quicklook"))]
+        if matches!(self.thumbnail_opt, Some(ItemThumbnail::QuickLook(_))) {
+            return true;
+        }
+
+        false
     }
 
     pub fn file_metadata(&self) -> Option<Metadata> {
@@ -2411,6 +2531,8 @@ impl Item {
                 // Full resolution loading happens in gallery mode
                 widget::image(handle.clone()).into()
             }
+            #[cfg(all(target_os = "macos", feature = "quicklook"))]
+            ItemThumbnail::QuickLook(handle) => widget::image(handle.clone()).into(),
             ItemThumbnail::Svg(handle) => widget::svg(handle.clone()).into(),
             ItemThumbnail::Text(content) => widget::text_editor::text_editor(content)
                 .style(text_editor_class)
@@ -2838,10 +2960,84 @@ pub struct Tab {
     watch_drag: bool,
     window_id: Option<window::Id>,
     large_image_manager: LargeImageManager,
+    /// Full-screen Quick Look preview for the item the gallery is showing, if it has arrived.
+    /// Only one is kept: these are far larger than a grid thumbnail.
+    #[cfg(all(target_os = "macos", feature = "quicklook"))]
+    quicklook_preview: Option<(PathBuf, widget::image::Handle)>,
+    /// The path a Quick Look preview is currently being rendered for, to avoid queueing it twice.
+    #[cfg(all(target_os = "macos", feature = "quicklook"))]
+    quicklook_pending: Option<PathBuf>,
     /// Ctrl+scroll travel banked toward the next zoom step, in pixels.
     zoom_scroll_accum: f32,
     /// When the last Ctrl+scroll event arrived, used to discard momentum tails.
     zoom_scroll_last: Option<Instant>,
+}
+
+/// Render a gallery-sized Quick Look preview and decode it to RGBA, off the UI thread.
+///
+/// The PNG itself is temporary and is not worth caching: it is an order of magnitude larger than
+/// a grid thumbnail and is only ever wanted for the one item the gallery is showing.
+#[cfg(all(target_os = "macos", feature = "quicklook"))]
+async fn render_quicklook_preview(path: PathBuf, mime: Mime) -> Option<(u32, u32, Vec<u8>)> {
+    tokio::task::spawn_blocking(move || {
+        let start = Instant::now();
+        let file = match tempfile::Builder::new()
+            .prefix("cosmic-files-quicklook-")
+            .suffix(".png")
+            .tempfile()
+        {
+            Ok(file) => file,
+            Err(err) => {
+                log::warn!(
+                    "failed to create temporary file for preview of {}: {}",
+                    path.display(),
+                    err
+                );
+                return None;
+            }
+        };
+
+        if let Err(err) = crate::quicklook_macos::save_preview_png(
+            &path,
+            file.path(),
+            &mime,
+            crate::quicklook_macos::GALLERY_PREVIEW_SIZE,
+            crate::quicklook_macos::GALLERY_PREVIEW_SCALE,
+        ) {
+            log::warn!("quick look preview failed for {}: {}", path.display(), err);
+            return None;
+        }
+
+        match image::ImageReader::open(file.path())
+            .and_then(ImageReader::with_guessed_format)
+            .map_err(crate::err_str)
+            .and_then(|reader| {
+                reader
+                    .decode()
+                    .map(DynamicImage::into_rgba8)
+                    .map_err(crate::err_str)
+            }) {
+            Ok(image) => {
+                log::debug!(
+                    "quick look previewed {} in {:?}",
+                    path.display(),
+                    start.elapsed()
+                );
+                Some((image.width(), image.height(), image.into_raw()))
+            }
+            Err(err) => {
+                log::warn!(
+                    "failed to decode quick look preview of {}: {}",
+                    path.display(),
+                    err
+                );
+                None
+            }
+        }
+    })
+    .await
+    .ok()
+    .flatten()
 }
 
 async fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, OperationError> {
@@ -2987,6 +3183,10 @@ impl Tab {
             watch_drag: true,
             window_id,
             large_image_manager: LargeImageManager::new(),
+            #[cfg(all(target_os = "macos", feature = "quicklook"))]
+            quicklook_preview: None,
+            #[cfg(all(target_os = "macos", feature = "quicklook"))]
+            quicklook_pending: None,
             zoom_scroll_accum: 0.0,
             zoom_scroll_last: None,
         }
@@ -3424,6 +3624,45 @@ impl Tab {
         last
     }
 
+    /// Drop the full-screen Quick Look preview. It is much larger than a grid thumbnail and is
+    /// only useful while the gallery is open.
+    #[cfg(all(target_os = "macos", feature = "quicklook"))]
+    fn discard_quicklook_preview(&mut self) {
+        self.quicklook_preview = None;
+        // Any render still in flight is no longer wanted; clearing this makes its result land
+        // on the superseded branch instead of holding a full-screen image in a closed gallery.
+        self.quicklook_pending = None;
+    }
+
+    /// Queue a full-screen Quick Look rendering for the gallery's current item, unless one is
+    /// already in hand or on its way.
+    #[cfg(all(target_os = "macos", feature = "quicklook"))]
+    fn trigger_quicklook_preview(&mut self, request: Option<(PathBuf, Mime)>) -> Vec<Command> {
+        let Some((path, mime)) = request else {
+            return Vec::new();
+        };
+
+        let have_preview = self
+            .quicklook_preview
+            .as_ref()
+            .is_some_and(|(cached, _)| *cached == path);
+        if have_preview || self.quicklook_pending.as_deref() == Some(path.as_path()) {
+            return Vec::new();
+        }
+
+        // A preview of a different item is stale now, and is the largest thing the tab holds.
+        self.quicklook_preview = None;
+        self.quicklook_pending = Some(path.clone());
+
+        vec![Command::Iced(
+            cosmic::iced::Task::perform(
+                render_quicklook_preview(path.clone(), mime),
+                move |decoded| Message::QuickLookPreview(path.clone(), decoded),
+            )
+            .into(),
+        )]
+    }
+
     fn trigger_async_decode(&mut self) -> Vec<Command> {
         // Only trigger decode in gallery mode for the currently selected image
         if !self.gallery {
@@ -3441,6 +3680,19 @@ impl Tab {
         let Some(item) = items.get(index) else {
             return Vec::new();
         };
+
+        // A Quick Look item has no decodable source image, so the large-image path below cannot
+        // help it. Ask Quick Look for a gallery-sized rendering instead: the grid thumbnail it
+        // already has is icon sized and would look soft blown up to full screen.
+        #[cfg(all(target_os = "macos", feature = "quicklook"))]
+        if matches!(item.thumbnail_opt, Some(ItemThumbnail::QuickLook(_))) {
+            // Copy what the request needs so the borrow of `items` ends here.
+            let request = item
+                .path_opt()
+                .cloned()
+                .map(|path| (path, item.mime.clone()));
+            return self.trigger_quicklook_preview(request);
+        }
 
         let Some(ItemThumbnail::Image(_, original_dims)) = &item.thumbnail_opt else {
             return Vec::new();
@@ -3950,6 +4202,9 @@ impl Tab {
 
                 if gallery {
                     commands.extend(self.trigger_async_decode());
+                } else {
+                    #[cfg(all(target_os = "macos", feature = "quicklook"))]
+                    self.discard_quicklook_preview();
                 }
             }
             Message::GalleryPrevious | Message::GalleryNext => {
@@ -4005,6 +4260,9 @@ impl Tab {
 
                             if self.gallery {
                                 commands.extend(self.trigger_async_decode());
+                            } else {
+                                #[cfg(all(target_os = "macos", feature = "quicklook"))]
+                                self.discard_quicklook_preview();
                             }
                             break;
                         }
@@ -4702,6 +4960,11 @@ impl Tab {
                                     symbolic: false,
                                     data: widget::icon::Data::Image(handle.clone()),
                                 }),
+                                #[cfg(all(target_os = "macos", feature = "quicklook"))]
+                                ItemThumbnail::QuickLook(handle) => Some(widget::icon::Handle {
+                                    symbolic: false,
+                                    data: widget::icon::Data::Image(handle.clone()),
+                                }),
                                 ItemThumbnail::Svg(handle) => Some(widget::icon::Handle {
                                     symbolic: false,
                                     data: widget::icon::Data::Svg(handle.clone()),
@@ -4731,6 +4994,20 @@ impl Tab {
                     display_size,
                     generation,
                 );
+            }
+            #[cfg(all(target_os = "macos", feature = "quicklook"))]
+            Message::QuickLookPreview(path, decoded) => {
+                // Anything that is not the render still being waited on is one the gallery has
+                // already moved past, and would overwrite a newer preview.
+                if self.quicklook_pending.as_deref() == Some(path.as_path()) {
+                    self.quicklook_pending = None;
+                    if let Some((width, height, pixels)) = decoded {
+                        self.quicklook_preview = Some((
+                            path,
+                            widget::image::Handle::from_rgba(width, height, pixels),
+                        ));
+                    }
+                }
             }
             Message::ToggleSort(heading_option) => {
                 if !matches!(self.location, Location::Search(..)) {
@@ -5230,6 +5507,21 @@ impl Tab {
                         };
 
                     element_opt = Some(widget::container(content).center(Length::Fill).into());
+                }
+                #[cfg(all(target_os = "macos", feature = "quicklook"))]
+                ItemThumbnail::QuickLook(handle) => {
+                    // Prefer the gallery-sized rendering once it arrives; until then the grid
+                    // thumbnail stands in, so opening the gallery is never blank.
+                    let handle = item
+                        .path_opt()
+                        .and_then(|path| self.quicklook_preview.as_ref().filter(|(p, _)| p == path))
+                        .map_or_else(|| handle.clone(), |(_, preview)| preview.clone());
+
+                    element_opt = Some(
+                        widget::container(crate::load_image::loaded_image(handle))
+                            .center(Length::Fill)
+                            .into(),
+                    );
                 }
                 ItemThumbnail::Svg(handle) => {
                     element_opt = Some(
@@ -8039,6 +8331,72 @@ mod tests {
         assert!(
             matches!(thumb, ItemThumbnail::Text(_)),
             "small text file should produce Text thumbnail"
+        );
+        Ok(())
+    }
+
+    /// A hand-written, structurally minimal PDF. Enough for Quick Look to render a blank page,
+    /// and small enough not to need a binary fixture in the repository.
+    #[cfg(all(target_os = "macos", feature = "quicklook"))]
+    const MINIMAL_PDF: &[u8] = b"%PDF-1.4\n\
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n\
+2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n\
+3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\n\
+trailer<</Root 1 0 R/Size 4>>\n\
+%%EOF\n";
+
+    #[cfg(all(target_os = "macos", feature = "quicklook"))]
+    #[test]
+    fn item_thumbnail_pdf_uses_quicklook() -> io::Result<()> {
+        let dir = TempDir::new()?;
+        let path = dir.path().join("document.pdf");
+        fs::write(&path, MINIMAL_PDF)?;
+        let item_metadata = ItemMetadata::Path {
+            metadata: fs::metadata(&path)?,
+            children_opt: None,
+        };
+
+        let thumb = ItemThumbnail::new(
+            &path,
+            item_metadata,
+            "application/pdf".parse().expect("MIME type should parse"),
+            128,
+            100 * 1024 * 1024,
+            1,
+            8,
+        );
+
+        assert!(
+            matches!(thumb, ItemThumbnail::QuickLook(_)),
+            "a PDF should be previewed by Quick Look"
+        );
+        Ok(())
+    }
+
+    #[cfg(all(target_os = "macos", feature = "quicklook"))]
+    #[test]
+    fn item_thumbnail_unpreviewable_file_is_not_image() -> io::Result<()> {
+        let dir = TempDir::new()?;
+        let path = dir.path().join("opaque.bin");
+        fs::write(&path, [0x00u8, 0x01, 0x02, 0x03, 0x04])?;
+        let item_metadata = ItemMetadata::Path {
+            metadata: fs::metadata(&path)?,
+            children_opt: None,
+        };
+
+        let thumb = ItemThumbnail::new(
+            &path,
+            item_metadata,
+            mime::APPLICATION_OCTET_STREAM,
+            128,
+            100 * 1024 * 1024,
+            1,
+            8,
+        );
+
+        assert!(
+            matches!(thumb, ItemThumbnail::NotImage),
+            "a file Quick Look cannot preview should stay without a thumbnail"
         );
         Ok(())
     }

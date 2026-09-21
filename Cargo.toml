@@ -109,6 +109,7 @@ default = [
     "io-uring",
     "lzma-rust2",
     "notify",
+    "quicklook",
     "wayland",
     "wgpu",
 ]
@@ -119,6 +120,15 @@ gvfs = ["dep:gio", "dep:glib"]
 io-uring = ["compio/io-uring"]
 jemalloc = ["dep:tikv-jemallocator"]
 notify = ["dep:notify-rust"]
+# macOS Quick Look previews. No effect on other platforms: every dependency it enables is
+# declared only for macOS, so the feature resolves to nothing elsewhere.
+quicklook = [
+    "dep:block2",
+    "dep:objc2",
+    "dep:objc2-foundation",
+    "dep:objc2-quick-look-thumbnailing",
+    "dep:objc2-uniform-type-identifiers",
+]
 wayland = ["libcosmic/wayland", "dep:cctk", "dep:wayland-client"]
 wgpu = ["libcosmic/wgpu"]
 
@@ -135,6 +145,32 @@ uzers = "0.12.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = "0.18"
+
+# Quick Look thumbnailing, used in place of the freedesktop.org thumbnailers that macOS lacks.
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = { version = "0.6", optional = true }
+objc2 = { version = "0.6", optional = true }
+objc2-foundation = { version = "0.3", default-features = false, features = [
+    "std",
+    "NSError",
+    "NSGeometry",
+    "NSString",
+    "NSURL",
+], optional = true }
+objc2-quick-look-thumbnailing = { version = "0.3", default-features = false, features = [
+    "std",
+    "bitflags",
+    "block2",
+    "objc2-core-foundation",
+    "objc2-uniform-type-identifiers",
+    "QLThumbnailGenerationRequest",
+    "QLThumbnailGenerator",
+], optional = true }
+objc2-uniform-type-identifiers = { version = "0.3", default-features = false, features = [
+    "std",
+    "UTCoreTypes",
+    "UTType",
+], optional = true }
 
 [build-dependencies]
 xdgen = "0.1"
