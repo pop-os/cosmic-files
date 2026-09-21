@@ -155,7 +155,12 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     #[cfg(target_os = "macos")]
-    appkit_macos::disable_autofill_heuristics();
+    {
+        appkit_macos::disable_autofill_heuristics();
+        // Closing the last window leaves the application in the Dock; this is how it hears
+        // about the click that asks for a window back.
+        appkit_macos::watch_activation();
+    }
 
     localize::localize();
 
