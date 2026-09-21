@@ -312,10 +312,58 @@ and `CSResourcesFileMapped` stay absent), a 1024px icns, an ad-hoc signature wit
 hardened runtime that carries the bundle identifier, and `lipo -info` reporting a non-fat
 arm64 binary.
 
-**Launched from Finder the app has no `XDG_DATA_DIRS`** (5.4), so the shared MIME database
-under `/opt/homebrew/share` is not found and per-file-type icons fall back to generic
+#### Making the bundle self-contained
+
+Launched from Finder the app has no `XDG_DATA_DIRS` (5.4), so the shared MIME database
+under `/opt/homebrew/share` was not found and per-file-type icons fell back to generic
 ones. `XDG_DATA_HOME` is unset too, but its spec default is `~/.local/share`, so the
-Cosmic icon theme installed there is still found.
+Cosmic icon theme installed there was still found — on *this* machine. Neither can be
+relied on elsewhere, so both now travel inside the bundle.
+
+**The bundler copies them in.** `Contents/Resources/share/icons/Cosmic` from
+`~/.local/share/icons/Cosmic` (`COSMIC_ICON_THEME_DIR`, installed from
+`github.com/pop-os/cosmic-icons`) and `Contents/Resources/share/mime` from
+`/opt/homebrew/share/mime` (`SHARED_MIME_INFO_DIR`, `brew install shared-mime-info`).
+Both are **build-machine prerequisites** and a missing one fails the build loudly, because
+a bundle built without them looks perfectly well-formed and has no icons.
+
+`mime/packages` is deleted again after the copy. Nothing reads it at runtime —
+`xdg-mime-rs` reads exactly `aliases`, `globs2`, `icons`, `generic-icons`, `subclasses`
+and `magic` out of `<datadir>/mime`, never `mime.cache` and never the source XML — and
+Homebrew ships `packages/freedesktop.org.xml` as a symlink into the Cellar, which dangles
+once copied. **A dangling symlink anywhere inside a bundle makes `codesign --verify` fail
+the whole bundle with `No such file or directory`** and nothing more, which is an
+expensive error message to debug. The tests assert no symlink in the bundle dangles.
+
+**`src/launch_macos.rs` supplies the environment**, called from `main` before
+`localize()`. Three pure functions and one driver:
+
+- `XDG_DATA_DIRS` gets `<bundle>/Contents/Resources/share` prepended, keeping the entries
+  it already had, or the spec default `/usr/local/share:/usr/share` when it had none.
+  Prepending is idempotent because "open in new window" re-executes the same binary as a
+  child, and the value would otherwise grow one copy per generation.
+- `LANG`, when neither it nor `LC_ALL` is set, is built from `NSLocale`'s `languageCode`
+  and `countryCode` as `xx_YY.UTF-8`. `countryCode` is deprecated in favour of
+  `regionCode`, but `regionCode` is macOS 13 and `LSMinimumSystemVersion` is 11.0, where
+  sending it would be an unrecognised selector. Note that the *UI language* does not
+  depend on this: `i18n-embed`'s desktop requester uses `sys-locale`, which on Apple
+  platforms reads `CFLocaleCopyPreferredLanguages` and ignores the environment entirely.
+  `LANG` is what `LOCALE` in `src/localize.rs` reads, and that drives date and number
+  formatting, which without it silently fell back to `en-US`.
+- The working directory moves to the home directory when the process starts at `/`, which
+  is what Finder hands a bundle, the same thing alacritty does. A terminal launch, and a
+  bundle opened on a directory, keep the directory they were given.
+
+Writing to the environment is `unsafe` in edition 2024. It is sound here and only here:
+`main` is still single-threaded at that point, and every reader of these variables — the
+icon theme, the shared MIME database, the i18n loader — is a `LazyLock` that runs later.
+
+**External tools are already absolute.** `open::that_detached`, which is how files and
+URLs are opened, runs `/usr/bin/open` by absolute path in the `open` crate's macOS
+backend; every "new window" spawn goes through `env::current_exe()`. The three
+`Command::new` calls that do search `PATH` — `xdg-mime`, `cosmic-settings` and
+`cosmic-files` — are Linux desktop-integration paths that resolve to nothing on macOS
+either way. **Nothing depends on `/opt/homebrew` being on `PATH`.**
 
 ---
 
