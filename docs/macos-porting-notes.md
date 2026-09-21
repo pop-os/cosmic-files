@@ -187,6 +187,10 @@ have **no prompting API**. Detect the failure and deep-link:
 
 What *is* needed is the Info.plist usage strings — see §5.2.
 
+**Done here (#9):** `res/macos/Info.plist.in` carries all five usage strings, and the
+Trash view detects that it cannot list the Trash at all and offers the `Privacy_AllFiles`
+deep link (`tab::empty_reason`, `tab::open_privacy_settings`).
+
 ### 4.3 Denied folder access is an `EPERM` that lies, not a clean error
 
 **[V]** zed #5138: with Desktop access denied, `read_dir` **succeeds** while `open` and
@@ -200,6 +204,11 @@ exactly how that looks.
 **Rules for us:** treat `EPERM` as a displayable state, never a retry loop; do not
 recurse into `~/Library`, `~/.Trash`, `~/.cache` for sizes or thumbnails; never fan a
 thumbnailer across a TCC-protected tree before the user navigates there.
+
+**Done here (#9):** `tab::access_from_error` turns the refusal into an `ItemMetadata::Denied`
+entry, which renders locked and settles on `ItemThumbnail::NotImage` with no scale, so
+`Item::wants_thumbnail` never asks again. `tab::is_protected_tree` keeps `calculate_dir_size`'s
+`WalkDir` and the thumbnail fan-out out of the three trees.
 
 ### 4.4 Do not ship a universal binary
 
@@ -248,6 +257,11 @@ macOS kills the process outright.
 
 **Omit** `LSRequiresCarbon` and `CSResourcesFileMapped` — **[V]** present in tauri's
 generator with a 2016 cargo-bundle copyright header and *zero* commits justifying them.
+
+**Done here (#9, #10):** every key in this table is in `res/macos/Info.plist.in` and
+asserted by `scripts/test-macos-bundle.sh`. `NSNetworkVolumesUsageDescription` was added
+alongside the four in the table; `CFBundleDocumentTypes` is a single entry with
+`CFBundleTypeRole` `Viewer` and `LSHandlerRank` `Alternate`.
 
 ### 5.3 Signing and notarization gotchas
 
