@@ -5360,6 +5360,10 @@ impl Application for App {
             Message::Size(window_id, size) => {
                 if self.core.main_window_id() == Some(window_id) {
                     self.size = Some(size);
+                    // The window exists by the time it reports a size; pinning it to sRGB is a
+                    // no-op after the first one.
+                    #[cfg(target_os = "macos")]
+                    return crate::appkit_macos::pin_srgb_color_space(window_id);
                 } else {
                     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
                     self.layer_sizes.insert(window_id, size);

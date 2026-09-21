@@ -13,6 +13,8 @@ use crate::config::{Config, State};
 use crate::tab::Location;
 
 pub mod app;
+#[cfg(target_os = "macos")]
+pub(crate) mod appkit_macos;
 mod archive;
 pub mod channel;
 pub mod clipboard;
@@ -100,6 +102,9 @@ pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
         .with(log_layer)
         .init();
 
+    #[cfg(target_os = "macos")]
+    appkit_macos::disable_autofill_heuristics();
+
     localize::localize();
 
     let (config_handler, config) = Config::load();
@@ -148,6 +153,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .with(log_layer)
         .init();
+
+    #[cfg(target_os = "macos")]
+    appkit_macos::disable_autofill_heuristics();
 
     localize::localize();
 
