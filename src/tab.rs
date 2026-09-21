@@ -6415,7 +6415,7 @@ impl Tab {
                     item.rect_opt.set(None);
                     // Only count what turning hidden files on would reveal, so the empty
                     // folder message does not invite a setting change that shows nothing.
-                    if !show_hidden {
+                    if item.shown(true) {
                         hidden += 1;
                     }
                     continue;
@@ -6725,7 +6725,7 @@ impl Tab {
                     item.pos_opt.set(None);
                     item.rect_opt.set(None);
                     // See the grid view: only what the setting could reveal is counted.
-                    if !show_hidden {
+                    if item.shown(true) {
                         hidden += 1;
                     }
                     continue;
