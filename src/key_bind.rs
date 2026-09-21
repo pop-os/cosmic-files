@@ -12,10 +12,24 @@ use std::str::FromStr;
 use crate::app::Action;
 use crate::tab::{self, HeadingOptions};
 
-/// Default key bindings for a tab mode.
+/// Default key bindings for a tab mode, in the notation of the platform this build runs on.
+///
+/// macOS gets its own table ([`cmd_key_binds`]) rather than a blanket Ctrl to Cmd substitution: a
+/// blanket swap would take over the readline shortcuts that macOS text fields rely on (Ctrl+A,
+/// Ctrl+E and friends) and would invent Cmd shortcuts for actions Finder has no analogue for.
 ///
 /// User overrides are applied on top of these by [`key_binds_with_overrides`].
 pub fn key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
+    // `cfg!` rather than `#[cfg]` so that both tables are compiled, and testable, everywhere.
+    if cfg!(target_os = "macos") {
+        cmd_key_binds(mode)
+    } else {
+        ctrl_key_binds(mode)
+    }
+}
+
+/// Default key bindings everywhere except macOS, built around Ctrl.
+pub fn ctrl_key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
     let mut key_binds = HashMap::new();
 
     macro_rules! bind {
@@ -96,6 +110,112 @@ pub fn key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
         bind!([], Key::Named(Named::Backspace), HistoryPrevious);
         bind!([Alt], Key::Named(Named::ArrowUp), LocationUp);
         bind!([Ctrl], Key::Character("f".into()), SearchActivate);
+    }
+
+    key_binds
+}
+
+/// Default key bindings on macOS, built around Cmd the way Finder is.
+///
+/// This is a table in its own right rather than [`ctrl_key_binds`] with the modifier swapped.
+/// Ctrl is left alone apart from the keys Finder itself uses it for, so that the readline
+/// shortcuts macOS text fields provide (Ctrl+A, Ctrl+E, Ctrl+K and so on) keep working while
+/// renaming or searching. Actions Finder has no shortcut for keep the keys they have elsewhere.
+pub fn cmd_key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
+    let mut key_binds = HashMap::new();
+
+    macro_rules! bind {
+        ([$($modifier:ident),* $(,)?], $key:expr, $action:ident) => {{
+            key_binds.insert(
+                KeyBind {
+                    modifiers: vec![$(Modifier::$modifier),*],
+                    key: $key,
+                },
+                Action::$action,
+            );
+        }};
+    }
+
+    // Common keys
+    bind!([], Key::Named(Named::ArrowDown), ItemDown);
+    bind!([], Key::Named(Named::ArrowLeft), ItemLeft);
+    bind!([], Key::Named(Named::ArrowRight), ItemRight);
+    bind!([], Key::Named(Named::ArrowUp), ItemUp);
+    bind!([], Key::Named(Named::F5), Reload);
+    bind!([], Key::Named(Named::Home), SelectFirst);
+    bind!([], Key::Named(Named::End), SelectLast);
+    bind!([], Key::Named(Named::PageDown), ItemPageDown);
+    bind!([], Key::Named(Named::PageUp), ItemPageUp);
+    bind!([Shift], Key::Named(Named::ArrowDown), ItemDown);
+    bind!([Shift], Key::Named(Named::ArrowLeft), ItemLeft);
+    bind!([Shift], Key::Named(Named::ArrowRight), ItemRight);
+    bind!([Shift], Key::Named(Named::ArrowUp), ItemUp);
+    bind!([Shift], Key::Named(Named::Home), SelectFirst);
+    bind!([Shift], Key::Named(Named::End), SelectLast);
+    bind!([Shift], Key::Named(Named::PageDown), ItemPageDown);
+    bind!([Shift], Key::Named(Named::PageUp), ItemPageUp);
+    bind!([Super, Shift], Key::Character("n".into()), NewFolder);
+    // Finder opens with Cmd+Down and keeps Enter for renaming. Enter still opens in dialogs,
+    // where there is nothing to rename; the app and desktop section below rebinds it.
+    bind!([], Key::Named(Named::Enter), Open);
+    bind!([Super], Key::Named(Named::ArrowDown), Open);
+    // Cmd+Space belongs to Spotlight, so preview and gallery keep the keys they have elsewhere.
+    bind!([Ctrl], Key::Character(" ".into()), Preview);
+    bind!([], Key::Character(" ".into()), Gallery);
+
+    bind!([Super, Shift], Key::Character(".".into()), ToggleShowHidden);
+    bind!([Super], Key::Character("a".into()), SelectAll);
+    bind!([Super], Key::Character("=".into()), ZoomIn);
+    bind!([Super], Key::Character("+".into()), ZoomIn);
+    bind!([Super], Key::Character("0".into()), ZoomDefault);
+    bind!([Super], Key::Character("-".into()), ZoomOut);
+    // Switch view, in Finder's order: Cmd+1 as icons, Cmd+2 as a list.
+    bind!([Super], Key::Character("1".into()), TabViewGrid);
+    bind!([Super], Key::Character("2".into()), TabViewList);
+
+    // App-only keys
+    if matches!(mode, tab::Mode::App) {
+        // Finder's File > Add to Sidebar.
+        bind!([Super, Ctrl], Key::Character("t".into()), AddToSidebar);
+        bind!([Ctrl], Key::Named(Named::Enter), OpenInNewTab);
+        bind!([Super], Key::Character(",".into()), Settings);
+        bind!([Super], Key::Character("w".into()), TabClose);
+        bind!([Super], Key::Character("t".into()), TabNew);
+        bind!([Ctrl], Key::Named(Named::Tab), TabNext);
+        bind!([Ctrl, Shift], Key::Named(Named::Tab), TabPrev);
+        bind!([Super], Key::Character("q".into()), WindowClose);
+        bind!([Super, Shift], Key::Character("w".into()), WindowClose);
+        bind!([Super], Key::Character("n".into()), WindowNew);
+    }
+
+    // App and desktop only keys
+    if matches!(mode, tab::Mode::App | tab::Mode::Desktop) {
+        bind!([Super], Key::Character("c".into()), Copy);
+        // Finder's Copy as Pathname.
+        bind!([Super, Alt], Key::Character("c".into()), CopyPath);
+        bind!([Super], Key::Character("x".into()), Cut);
+        // The key labelled Delete on a Mac keyboard reports Backspace; the one on a full size
+        // keyboard reports Delete. Both trash, as they do in Finder. Neither is bound without a
+        // modifier: Finder does not trash on Delete alone.
+        bind!([Super], Key::Named(Named::Backspace), Delete);
+        bind!([Super], Key::Named(Named::Delete), Delete);
+        bind!([Super, Alt], Key::Named(Named::Backspace), PermanentlyDelete);
+        bind!([Super, Alt], Key::Named(Named::Delete), PermanentlyDelete);
+        bind!([Shift], Key::Named(Named::Enter), OpenInNewWindow);
+        bind!([Super], Key::Character("v".into()), Paste);
+        bind!([], Key::Named(Named::Enter), Rename);
+        bind!([], Key::Named(Named::F2), Rename);
+    }
+
+    // App and dialog only keys
+    if matches!(mode, tab::Mode::App | tab::Mode::Dialog(_)) {
+        // Finder's Go to Folder.
+        bind!([Super, Shift], Key::Character("g".into()), EditLocation);
+        bind!([Super], Key::Character("]".into()), HistoryNext);
+        bind!([Super], Key::Character("[".into()), HistoryPrevious);
+        bind!([], Key::Named(Named::Backspace), HistoryPrevious);
+        bind!([Super], Key::Named(Named::ArrowUp), LocationUp);
+        bind!([Super], Key::Character("f".into()), SearchActivate);
     }
 
     key_binds
@@ -994,8 +1114,15 @@ mod tests {
 
     #[test]
     fn default_bindings_round_trip() {
-        for mode in [tab::Mode::App, tab::Mode::Desktop] {
-            for key_bind in key_binds(&mode).into_keys() {
+        let tables = [
+            ctrl_key_binds as fn(&tab::Mode) -> HashMap<KeyBind, Action>,
+            cmd_key_binds,
+        ];
+        for (table, mode) in tables
+            .into_iter()
+            .flat_map(|table| [(table, tab::Mode::App), (table, tab::Mode::Desktop)])
+        {
+            for key_bind in table(&mode).into_keys() {
                 let binding = Binding::new(key_bind.clone());
                 assert_eq!(
                     parse(&binding.to_string()).into_key_bind(),
@@ -1004,6 +1131,102 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn macos_defaults_bind_the_finder_shortcuts_to_cmd() {
+        let binds = cmd_key_binds(&tab::Mode::App);
+        for (binding, action) in [
+            ("Cmd+c", Action::Copy),
+            ("Cmd+x", Action::Cut),
+            ("Cmd+v", Action::Paste),
+            ("Cmd+a", Action::SelectAll),
+            ("Cmd+q", Action::WindowClose),
+            ("Cmd+Shift+w", Action::WindowClose),
+            ("Cmd+w", Action::TabClose),
+            ("Cmd+,", Action::Settings),
+            ("Cmd+Shift+.", Action::ToggleShowHidden),
+            ("Cmd+Backspace", Action::Delete),
+            ("Cmd+Delete", Action::Delete),
+            ("Cmd+Alt+Backspace", Action::PermanentlyDelete),
+            ("Cmd+ArrowDown", Action::Open),
+            ("Cmd+ArrowUp", Action::LocationUp),
+            ("Cmd+n", Action::WindowNew),
+            ("Cmd+t", Action::TabNew),
+            ("Cmd+f", Action::SearchActivate),
+            ("Enter", Action::Rename),
+            ("F2", Action::Rename),
+            ("Cmd+=", Action::ZoomIn),
+            ("Cmd++", Action::ZoomIn),
+            ("Cmd+-", Action::ZoomOut),
+            ("Cmd+0", Action::ZoomDefault),
+        ] {
+            assert_eq!(
+                binds.get(parse(binding).key_bind()),
+                Some(&action),
+                "{binding} should be bound to {action:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn macos_defaults_leave_the_readline_ctrl_keys_free() {
+        // macOS text fields implement these as cursor and editing commands. A shortcut on any of
+        // them would swallow the keystroke while renaming a file or typing in the search field.
+        for mode in [
+            tab::Mode::App,
+            tab::Mode::Desktop,
+            tab::Mode::Dialog(crate::dialog::DialogKind::OpenFile),
+        ] {
+            let binds = cmd_key_binds(&mode);
+            for key in [
+                "a", "b", "d", "e", "f", "h", "k", "n", "o", "p", "t", "v", "y",
+            ] {
+                let binding = format!("ctrl+{key}");
+                assert_eq!(
+                    binds.get(parse(&binding).key_bind()),
+                    None,
+                    "{binding} should be free for text fields in {mode:?} mode"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_platform_default_table_is_the_cmd_table_on_macos() {
+        let expected = if cfg!(target_os = "macos") {
+            cmd_key_binds(&tab::Mode::App)
+        } else {
+            ctrl_key_binds(&tab::Mode::App)
+        };
+        assert_eq!(key_binds(&tab::Mode::App), expected);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn overrides_replace_a_macos_default() {
+        let shortcuts = shortcuts_from(&[
+            // Replace a macOS default...
+            ("Cmd+c", "CopyPath"),
+            // ...switch one off...
+            ("Cmd+w", "Disable"),
+            // ...and add a binding the macOS table does not have.
+            ("Cmd+Shift+r", "Reload"),
+        ])
+        .expect("shortcuts should deserialize");
+
+        let merged = key_binds_with_overrides(&tab::Mode::App, &shortcuts);
+        assert_eq!(
+            merged.get(parse("Cmd+c").key_bind()),
+            Some(&Action::CopyPath)
+        );
+        assert_eq!(merged.get(parse("Cmd+w").key_bind()), None);
+        assert_eq!(
+            merged.get(parse("Cmd+Shift+r").key_bind()),
+            Some(&Action::Reload)
+        );
+        // Untouched macOS defaults survive.
+        assert_eq!(merged.get(parse("Cmd+v").key_bind()), Some(&Action::Paste));
     }
 
     #[test]
@@ -1016,34 +1239,31 @@ mod tests {
     #[test]
     fn overrides_take_precedence_over_defaults() {
         let shortcuts = shortcuts_from(&[
-            // Rebind a key that has a default.
-            ("ctrl+t", "WindowNew"),
+            // Rebind a key that has a default on every platform.
+            ("F5", "WindowNew"),
             // Add a key that has no default.
             ("ctrl+shift+p", "Preview"),
         ])
         .expect("shortcuts should deserialize");
 
         let merged = key_binds_with_overrides(&tab::Mode::App, &shortcuts);
-        assert_eq!(
-            merged.get(parse("ctrl+t").key_bind()),
-            Some(&Action::WindowNew)
-        );
+        assert_eq!(merged.get(parse("F5").key_bind()), Some(&Action::WindowNew));
         assert_eq!(
             merged.get(parse("ctrl+shift+p").key_bind()),
             Some(&Action::Preview)
         );
         // Untouched defaults survive.
         assert_eq!(
-            merged.get(parse("ctrl+w").key_bind()),
-            Some(&Action::TabClose)
+            merged.get(parse("Home").key_bind()),
+            Some(&Action::SelectFirst)
         );
     }
 
     #[test]
     fn disable_removes_a_default_binding() {
-        let shortcuts = shortcuts_from(&[("ctrl+w", "Disable")]).expect("should deserialize");
+        let shortcuts = shortcuts_from(&[("F5", "Disable")]).expect("should deserialize");
         let merged = key_binds_with_overrides(&tab::Mode::App, &shortcuts);
-        assert_eq!(merged.get(parse("ctrl+w").key_bind()), None);
+        assert_eq!(merged.get(parse("F5").key_bind()), None);
         assert!(!merged.is_empty());
     }
 
@@ -1063,7 +1283,7 @@ mod tests {
             desktop.get(parse("ctrl+t").key_bind()),
             Some(&Action::TabNew)
         );
-        assert_eq!(desktop.get(parse("ctrl+w").key_bind()), None);
+        assert!(!desktop.values().any(|action| *action == Action::TabClose));
     }
 
     #[test]
@@ -1072,7 +1292,7 @@ mod tests {
             ("ctrl+shift+p", "Preview"),
             ("", "Copy"),
             ("ctrl+", "Copy"),
-            ("ctrl+q", "NoSuchAction"),
+            ("F5", "NoSuchAction"),
             ("ctrl+e", "SetSort(Nope, true)"),
             ("ctrl+g", "Gallery"),
         ])
@@ -1090,10 +1310,7 @@ mod tests {
 
         // The defaults for the skipped entries are untouched.
         let merged = key_binds_with_overrides(&tab::Mode::App, &shortcuts);
-        assert_eq!(
-            merged.get(parse("ctrl+q").key_bind()),
-            Some(&Action::WindowClose)
-        );
+        assert_eq!(merged.get(parse("F5").key_bind()), Some(&Action::Reload));
     }
 
     #[test]
