@@ -159,6 +159,8 @@ objc2-foundation = { version = "0.3", default-features = false, features = [
     "std",
     "NSError",
     "NSGeometry",
+    # The system language a Finder launch does not pass in (src/launch_macos.rs).
+    "NSLocale",
     "NSString",
     "NSURL",
 ] }

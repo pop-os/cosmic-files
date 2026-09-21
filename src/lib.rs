@@ -24,6 +24,8 @@ mod gesture;
 pub(crate) mod gesture_macos;
 mod key_bind;
 pub(crate) mod large_image;
+#[cfg(target_os = "macos")]
+mod launch_macos;
 pub(crate) mod load_image;
 mod localize;
 mod menu;
@@ -148,6 +150,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .with(log_layer)
         .init();
+
+    #[cfg(target_os = "macos")]
+    launch_macos::prepare();
 
     localize::localize();
 
