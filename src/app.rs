@@ -137,6 +137,38 @@ pub struct Flags {
     pub uris: Vec<url::Url>,
 }
 
+/// What closing a window leaves behind.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CloseOutcome {
+    /// Close the window; the process carries on with the windows that are left.
+    CloseWindow,
+    /// Close the window and carry on with none at all, the way a Mac app waits in the Dock.
+    KeepRunning,
+    /// Close the window and leave, once there is nothing left to finish.
+    Quit,
+}
+
+/// Decide what closing a window means for the process.
+///
+/// A Mac app outlives its windows: closing the last one leaves it in the Dock, where clicking
+/// the icon brings a window back, and only Cmd+Q ends it. Everywhere else closing the last
+/// window is how the application is quit. A quit request ends the process on either.
+pub const fn close_window_outcome(
+    platform_is_macos: bool,
+    open_window_count: usize,
+    is_quit_request: bool,
+) -> CloseOutcome {
+    if is_quit_request {
+        CloseOutcome::Quit
+    } else if open_window_count > 1 {
+        CloseOutcome::CloseWindow
+    } else if platform_is_macos {
+        CloseOutcome::KeepRunning
+    } else {
+        CloseOutcome::Quit
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Action {
     About,
@@ -160,6 +192,7 @@ pub enum Action {
     ExtractHere,
     ExtractTo,
     Gallery,
+    Hide,
     HistoryNext,
     HistoryPrevious,
     ItemDown,
@@ -182,6 +215,7 @@ pub enum Action {
     Paste,
     PermanentlyDelete,
     Preview,
+    Quit,
     Reload,
     RemoveFromRecents,
     Rename,
@@ -235,6 +269,7 @@ impl Action {
                 Message::TabMessage(entity_opt, tab::Message::ExecEntryAction(None, *action))
             }
             Self::Gallery => Message::TabMessage(entity_opt, tab::Message::GalleryToggle),
+            Self::Hide => Message::Hide,
             Self::HistoryNext => Message::TabMessage(entity_opt, tab::Message::GoNext),
             Self::HistoryPrevious => Message::TabMessage(entity_opt, tab::Message::GoPrevious),
             Self::ItemDown => Message::TabMessage(entity_opt, tab::Message::ItemDown),
@@ -259,6 +294,7 @@ impl Action {
             Self::Paste => Message::Paste(entity_opt),
             Self::PermanentlyDelete => Message::PermanentlyDelete(entity_opt),
             Self::Preview => Message::Preview(entity_opt),
+            Self::Quit => Message::Quit,
             Self::Reload => Message::TabMessage(entity_opt, tab::Message::Reload),
             Self::RemoveFromRecents => Message::RemoveFromRecents(entity_opt),
             Self::Rename => Message::Rename(entity_opt),
@@ -370,6 +406,8 @@ pub enum Message {
     ExtractToResult(DialogResult),
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     Focused(window::Id),
+    /// Hide the application, the way Cmd+H hides any other Mac app. Nothing to hide elsewhere.
+    Hide,
     Key(window::Id, Modifiers, Key, Physical, Option<SmolStr>),
     LaunchUrl(String),
     MaybeExit,
@@ -435,7 +473,13 @@ pub enum Message {
     PendingPauseAll(bool),
     PermanentlyDelete(Option<Entity>),
     Preview(Option<Entity>),
+    /// Leave, once the pending operations have finished.
+    Quit,
     ReloadMimeAppCache,
+    /// The application was brought to the front, which on macOS is how a click on the Dock icon
+    /// asks for a window back.
+    #[cfg(target_os = "macos")]
+    Reopen,
     ReorderTab(ReorderEvent),
     RescanRecents,
     RescanTrash,
@@ -767,6 +811,14 @@ pub struct App {
     progress_operations: BTreeSet<u64>,
     complete_operations: BTreeMap<u64, Operation>,
     failed_operations: BTreeMap<u64, (Operation, Controller, String)>,
+    /// Set once the last close was a quit, so that [`Message::MaybeExit`] ends the process as
+    /// soon as the pending operations have finished. Left unset when a close only hides the
+    /// application, which is what closing the last window does on macOS.
+    quit_requested: bool,
+    /// Where the last tab was looking when it was closed, so that a window reopened from the
+    /// Dock comes back to it. Nothing on disk remembers a location between runs.
+    #[cfg(target_os = "macos")]
+    last_tab_location: Option<Location>,
     scrollable_id: widget::Id,
     /// Physical pixels per logical pixel, per window. A window missing from the map has not
     /// reported its scale factor yet and is treated as 1.0.
@@ -1486,6 +1538,32 @@ impl App {
         // Manually rescan any trash tabs after any operation is completed
         tasks.push(self.rescan_trash());
         Task::batch(tasks)
+    }
+
+    /// Close the main window, and act on what [`close_window_outcome`] says that means for the
+    /// process.
+    ///
+    /// A quit does not exit here: it only records the intent. [`Message::MaybeExit`] does the
+    /// leaving, once the pending operations are finished, which is how the close path has always
+    /// kept an in-flight copy or move from being lost.
+    fn close_main_window(&mut self, is_quit_request: bool) -> Task<Message> {
+        // cosmic-files runs one main window per process: `WindowNew` spawns another process.
+        let open_window_count = usize::from(self.core.main_window_id().is_some());
+        let outcome = close_window_outcome(
+            cfg!(target_os = "macos"),
+            open_window_count,
+            is_quit_request,
+        );
+        log::info!("closing window, {open_window_count} open: {outcome:?}");
+        self.quit_requested = matches!(outcome, CloseOutcome::Quit);
+
+        let maybe_exit = Task::future(async move { cosmic::action::app(Message::MaybeExit) });
+        let Some(window_id) = self.core.main_window_id() else {
+            // A quit with no window left still has to go through the pending-operation check.
+            return maybe_exit;
+        };
+        self.core.set_main_window_id(None);
+        Task::batch([window::close(window_id), maybe_exit])
     }
 
     fn remove_window(&mut self, id: &window::Id) {
@@ -2478,6 +2556,9 @@ impl Application for App {
             progress_operations: BTreeSet::new(),
             complete_operations: BTreeMap::new(),
             failed_operations: BTreeMap::new(),
+            quit_requested: false,
+            #[cfg(target_os = "macos")]
+            last_tab_location: None,
             scrollable_id: widget::Id::new("File Scrollable"),
             scale_factors: FxHashMap::default(),
             search_id: widget::Id::new("File Search"),
@@ -3466,8 +3547,12 @@ impl Application for App {
                 }
             }
             Message::MaybeExit => {
-                if self.core.main_window_id().is_none() && self.pending_operations.is_empty() {
-                    // Exit if window is closed and there are no pending operations
+                if self.quit_requested
+                    && self.core.main_window_id().is_none()
+                    && self.pending_operations.is_empty()
+                {
+                    // Exit if the last close was a quit, the window is gone, and there are no
+                    // pending operations
                     process::exit(0);
                 }
             }
@@ -4493,6 +4578,15 @@ impl Application for App {
                 // If the last tab is closed, close the window
                 // Otherwise, activate closest item
                 if self.tab_model.len() == 1 {
+                    // The window outlives the process on macOS, so where it was looking has to
+                    // outlive the tab.
+                    #[cfg(target_os = "macos")]
+                    {
+                        self.last_tab_location = self
+                            .tab_model
+                            .data::<Tab>(entity)
+                            .map(|tab| tab.location.clone());
+                    }
                     tasks.push(Task::future(async move {
                         cosmic::action::app(Message::WindowClose)
                     }));
@@ -4867,14 +4961,49 @@ impl Application for App {
             Message::UndoTrashStart(items) => {
                 return self.operation(Operation::Restore { items });
             }
-            Message::WindowClose => {
-                if let Some(window_id) = self.core.main_window_id() {
-                    self.core.set_main_window_id(None);
-                    return Task::batch([
-                        window::close(window_id),
-                        Task::future(async move { cosmic::action::app(Message::MaybeExit) }),
-                    ]);
+            Message::WindowClose => return self.close_main_window(false),
+            Message::Quit => return self.close_main_window(true),
+            Message::Hide => {
+                // Only macOS has an application to hide; the binding exists nowhere else.
+                #[cfg(target_os = "macos")]
+                crate::appkit_macos::hide_application();
+            }
+            #[cfg(target_os = "macos")]
+            Message::Reopen => {
+                if self.core.main_window_id().is_some() {
+                    // Being activated only matters when there is nothing on screen.
+                    return Task::none();
                 }
+
+                let mut tasks = Vec::new();
+                if self.tab_model.iter().next().is_none() {
+                    let location = self
+                        .last_tab_location
+                        .clone()
+                        .unwrap_or_else(|| Location::Path(home_dir()));
+                    log::info!("reopening a window at {location:?}");
+                    tasks.push(self.open_tab(location, true, None));
+                } else {
+                    log::info!("reopening a window over {} tabs", self.tab_model.len());
+                }
+
+                // The settings libcosmic gave the window this process started with, which it
+                // built from the ones in `crate::main`.
+                let settings = window::Settings {
+                    size: self.size.unwrap_or(Size::new(1024.0, 768.0)),
+                    min_size: Some(Size::new(360.0, 180.0)),
+                    decorations: false,
+                    transparent: true,
+                    exit_on_close_request: false,
+                    ..window::Settings::default()
+                };
+                let (window_id, opened) = window::open(settings);
+                self.core.set_main_window_id(Some(window_id));
+                tasks.push(opened.discard());
+                // A new window on macOS is not focused, and may never report that it is.
+                tasks.push(window::gain_focus(window_id));
+                tasks.push(self.update_title());
+                return Task::batch(tasks);
             }
             Message::WindowCloseRequested(id) => {
                 self.remove_window(&id);
@@ -5403,6 +5532,10 @@ impl Application for App {
                     // Pinning the window to sRGB is a no-op after the first time.
                     #[cfg(target_os = "macos")]
                     tasks.push(crate::appkit_macos::pin_srgb_color_space(window_id));
+                    // The application menu exists by now, and its Quit item has to give Cmd+Q
+                    // up before the binding table can see it. Also a no-op after the first.
+                    #[cfg(target_os = "macos")]
+                    crate::appkit_macos::release_quit_key_equivalent();
                 } else {
                     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
                     self.layer_sizes.insert(window_id, size);
@@ -7164,7 +7297,58 @@ impl Application for App {
             }
         }));
 
+        #[cfg(target_os = "macos")]
+        subscriptions.push(crate::appkit_macos::activation_subscription().map(|_| Message::Reopen));
+
         Subscription::batch(subscriptions)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CloseOutcome, close_window_outcome};
+
+    const MACOS: bool = true;
+    const ELSEWHERE: bool = false;
+    const NOT_A_QUIT: bool = false;
+    const A_QUIT: bool = true;
+
+    #[test]
+    fn macos_keeps_running_when_its_last_window_closes() {
+        assert_eq!(
+            close_window_outcome(MACOS, 1, NOT_A_QUIT),
+            CloseOutcome::KeepRunning
+        );
+    }
+
+    #[test]
+    fn every_other_platform_quits_when_its_last_window_closes() {
+        assert_eq!(
+            close_window_outcome(ELSEWHERE, 1, NOT_A_QUIT),
+            CloseOutcome::Quit
+        );
+    }
+
+    #[test]
+    fn closing_one_of_several_windows_leaves_the_others_running() {
+        assert_eq!(
+            close_window_outcome(MACOS, 2, NOT_A_QUIT),
+            CloseOutcome::CloseWindow
+        );
+        assert_eq!(
+            close_window_outcome(ELSEWHERE, 2, NOT_A_QUIT),
+            CloseOutcome::CloseWindow
+        );
+    }
+
+    #[test]
+    fn a_quit_request_quits_on_every_platform() {
+        assert_eq!(close_window_outcome(MACOS, 1, A_QUIT), CloseOutcome::Quit);
+        assert_eq!(close_window_outcome(MACOS, 3, A_QUIT), CloseOutcome::Quit);
+        assert_eq!(
+            close_window_outcome(ELSEWHERE, 1, A_QUIT),
+            CloseOutcome::Quit
+        );
     }
 }
 
