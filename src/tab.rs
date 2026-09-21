@@ -2967,7 +2967,10 @@ pub struct Tab {
     /// The path a Quick Look preview is currently being rendered for, to avoid queueing it twice.
     #[cfg(all(target_os = "macos", feature = "quicklook"))]
     quicklook_pending: Option<PathBuf>,
-    /// Ctrl+scroll travel banked toward the next zoom step, in pixels.
+    /// Physical pixels per logical pixel for the window this tab is in. `1.0` until the
+    /// window reports its own; see `App::tab_scale_factor`.
+    scale_factor: f32,
+    /// Ctrl+scroll travel banked toward the next zoom step, in logical pixels.
     zoom_scroll_accum: f32,
     /// When the last Ctrl+scroll event arrived, used to discard momentum tails.
     zoom_scroll_last: Option<Instant>,
@@ -3187,8 +3190,30 @@ impl Tab {
             quicklook_preview: None,
             #[cfg(all(target_os = "macos", feature = "quicklook"))]
             quicklook_pending: None,
+            scale_factor: 1.0,
             zoom_scroll_accum: 0.0,
             zoom_scroll_last: None,
+        }
+    }
+
+    /// The window this tab draws into, if it has one of its own.
+    pub const fn window_id(&self) -> Option<window::Id> {
+        self.window_id
+    }
+
+    /// Physical pixels per logical pixel for the window this tab is in.
+    pub const fn scale_factor(&self) -> f32 {
+        self.scale_factor
+    }
+
+    /// Record the window's scale factor.
+    ///
+    /// A value that is not positive and finite is ignored: macOS reports zero before the
+    /// window is on a screen (docs/macos-porting-notes.md section 3.2), and a zero here would
+    /// make every scaled measurement infinite.
+    pub fn set_scale_factor(&mut self, scale_factor: f32) {
+        if scale_factor.is_finite() && scale_factor > 0.0 {
+            self.scale_factor = scale_factor;
         }
     }
 
@@ -5104,7 +5129,8 @@ impl Tab {
                 }
                 self.zoom_scroll_last = Some(now);
 
-                let steps = zoom_steps_for_scroll(delta, &mut self.zoom_scroll_accum);
+                let steps =
+                    zoom_steps_for_scroll(delta, &mut self.zoom_scroll_accum, self.scale_factor);
                 let action = if steps > 0 {
                     Action::ZoomIn
                 } else {
@@ -7721,12 +7747,28 @@ impl Tab {
     }
 }
 
-/// Pixels of Ctrl+scroll travel that make up one zoom step on a precise touchpad.
+/// Logical pixels of Ctrl+scroll travel that make up one zoom step on a precise touchpad.
 const PIXELS_PER_ZOOM_STEP: f32 = 50.0;
 
 /// Idle gap after which banked Ctrl+scroll travel is discarded, so that a touchpad's
 /// momentum tail does not coast into further zoom steps.
 const ZOOM_SCROLL_IDLE: Duration = Duration::from_millis(150);
+
+/// Convert scroll travel reported in physical pixels into logical pixels.
+///
+/// winit applies the window's scale factor before emitting a pixel delta and iced passes it
+/// through untouched, so the same finger travel reads twice as far on a 2x panel as on a 1x
+/// display. Dividing it back out keeps any pixel threshold in logical units.
+///
+/// A scale factor that is not a positive, finite number is not usable: macOS reports zero
+/// before the window is on a screen. Leave the delta alone rather than produce infinity.
+fn logical_scroll_pixels(physical: f32, scale_factor: f32) -> f32 {
+    if scale_factor.is_finite() && scale_factor > 0.0 {
+        physical / scale_factor
+    } else {
+        physical
+    }
+}
 
 /// Convert a Ctrl+scroll delta into a number of zoom steps, banking the remainder.
 ///
@@ -7734,7 +7776,10 @@ const ZOOM_SCROLL_IDLE: Duration = Duration::from_millis(150);
 /// touchpad reports `Pixels` as a rapid stream of small deltas, so those accumulate
 /// until they add up to a step's worth of travel; treating each one as a step walks the
 /// whole zoom range in a fraction of a second.
-fn zoom_steps_for_scroll(delta: ScrollDelta, accum: &mut f32) -> i32 {
+///
+/// Pixel deltas are physical, so `scale_factor` converts them to logical pixels first and the
+/// same finger travel zooms by the same amount on every display.
+fn zoom_steps_for_scroll(delta: ScrollDelta, accum: &mut f32, scale_factor: f32) -> i32 {
     match delta {
         ScrollDelta::Lines { y, .. } => {
             *accum = 0.0;
@@ -7747,6 +7792,8 @@ fn zoom_steps_for_scroll(delta: ScrollDelta, accum: &mut f32) -> i32 {
             }
         }
         ScrollDelta::Pixels { y, .. } => {
+            let y = logical_scroll_pixels(y, scale_factor);
+
             // Reversing direction should zoom back immediately, not spend the bank first.
             if y != 0.0 && *accum != 0.0 && (*accum > 0.0) != (y > 0.0) {
                 *accum = 0.0;
@@ -7832,7 +7879,7 @@ mod tests {
 
     use super::{
         ItemMetadata, ItemThumbnail, Location, Message, PIXELS_PER_ZOOM_STEP, Tab,
-        respond_to_scroll_direction, scan_path, zoom_steps_for_scroll,
+        logical_scroll_pixels, respond_to_scroll_direction, scan_path, zoom_steps_for_scroll,
     };
     use crate::app::test_utils::{
         NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED, assert_eq_tab_path, empty_fs,
@@ -8097,14 +8144,33 @@ mod tests {
     }
 
     #[test]
+    fn physical_scroll_travel_is_reported_in_logical_pixels() -> io::Result<()> {
+        // 100 physical pixels of finger travel on a 2x panel is 50 logical pixels, the same
+        // distance the finger covers for 50 physical pixels on a 1x display.
+        assert_eq!(logical_scroll_pixels(100.0, 2.0), 50.0);
+        assert_eq!(logical_scroll_pixels(50.0, 1.0), 50.0);
+        assert_eq!(logical_scroll_pixels(60.0, 1.5), 40.0);
+        Ok(())
+    }
+
+    #[test]
+    fn nonsense_scale_factors_leave_scroll_travel_alone() -> io::Result<()> {
+        // macOS can report a scale factor of zero before the window is on a screen.
+        assert_eq!(logical_scroll_pixels(50.0, 0.0), 50.0);
+        assert_eq!(logical_scroll_pixels(50.0, -2.0), 50.0);
+        assert_eq!(logical_scroll_pixels(50.0, f32::NAN), 50.0);
+        Ok(())
+    }
+
+    #[test]
     fn wheel_notch_is_one_zoom_step() -> io::Result<()> {
         let mut accum = 0.0;
         assert_eq!(
-            zoom_steps_for_scroll(ScrollDelta::Lines { x: 0.0, y: 1.0 }, &mut accum),
+            zoom_steps_for_scroll(ScrollDelta::Lines { x: 0.0, y: 1.0 }, &mut accum, 1.0),
             1
         );
         assert_eq!(
-            zoom_steps_for_scroll(ScrollDelta::Lines { x: 0.0, y: -1.0 }, &mut accum),
+            zoom_steps_for_scroll(ScrollDelta::Lines { x: 0.0, y: -1.0 }, &mut accum, 1.0),
             -1
         );
         Ok(())
@@ -8114,7 +8180,8 @@ mod tests {
     fn small_touchpad_deltas_do_not_zoom_on_their_own() -> io::Result<()> {
         let mut accum = 0.0;
         for _ in 0..10 {
-            let steps = zoom_steps_for_scroll(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, &mut accum);
+            let steps =
+                zoom_steps_for_scroll(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, &mut accum, 1.0);
             assert_eq!(steps, 0, "a 1px delta should not be a whole zoom step");
         }
         Ok(())
@@ -8126,7 +8193,7 @@ mod tests {
         let mut steps = 0;
         // Fifty 1px events is exactly one step's worth of travel.
         for _ in 0..50 {
-            steps += zoom_steps_for_scroll(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, &mut accum);
+            steps += zoom_steps_for_scroll(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, &mut accum, 1.0);
         }
         assert_eq!(steps, 1);
 
@@ -8138,9 +8205,47 @@ mod tests {
                     x: 0.0,
                     y: PIXELS_PER_ZOOM_STEP * 3.0
                 },
-                &mut accum
+                &mut accum,
+                1.0
             ),
             3
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn the_same_finger_travel_zooms_the_same_on_a_1x_and_a_2x_display() -> io::Result<()> {
+        // One step's worth of logical travel, delivered as fifty events, on a 1x display.
+        let mut accum = 0.0;
+        let mut steps_1x = 0;
+        for _ in 0..50 {
+            steps_1x +=
+                zoom_steps_for_scroll(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, &mut accum, 1.0);
+        }
+
+        // The same travel on a 2x panel arrives as twice as many physical pixels.
+        let mut accum = 0.0;
+        let mut steps_2x = 0;
+        for _ in 0..50 {
+            steps_2x +=
+                zoom_steps_for_scroll(ScrollDelta::Pixels { x: 0.0, y: 2.0 }, &mut accum, 2.0);
+        }
+
+        assert_eq!(steps_1x, 1);
+        assert_eq!(steps_2x, steps_1x);
+        Ok(())
+    }
+
+    #[test]
+    fn wheel_notches_ignore_the_scale_factor() -> io::Result<()> {
+        let mut accum = 0.0;
+        assert_eq!(
+            zoom_steps_for_scroll(ScrollDelta::Lines { x: 0.0, y: 1.0 }, &mut accum, 2.0),
+            1
+        );
+        assert_eq!(
+            zoom_steps_for_scroll(ScrollDelta::Lines { x: 0.0, y: -1.0 }, &mut accum, 2.0),
+            -1
         );
         Ok(())
     }
@@ -8154,10 +8259,11 @@ mod tests {
                 y: PIXELS_PER_ZOOM_STEP - 1.0,
             },
             &mut accum,
+            1.0,
         );
         assert!(accum > 0.0);
         // Reversing should not immediately fire a step from the opposite bank.
-        let steps = zoom_steps_for_scroll(ScrollDelta::Pixels { x: 0.0, y: -1.0 }, &mut accum);
+        let steps = zoom_steps_for_scroll(ScrollDelta::Pixels { x: 0.0, y: -1.0 }, &mut accum, 1.0);
         assert_eq!(steps, 0);
         assert!(accum < 0.0);
         Ok(())
