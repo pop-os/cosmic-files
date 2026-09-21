@@ -1879,6 +1879,9 @@ pub enum Message {
     Location(Location),
     LocationUp,
     Open(Option<PathBuf>),
+    /// Show the Privacy & Security pane of System Settings, the only place Full Disk
+    /// Access can be granted.
+    OpenPrivacySettings,
     Reload,
     RightClick(Option<Point>, Option<usize>),
     MiddleClick(usize),
@@ -1963,6 +1966,63 @@ pub enum ChecksumState {
     Calculating,
     Calculated(FileChecksums),
     Error(String),
+}
+
+/// The macOS `open` tool, named in full: a bundle launched from Finder inherits a bare
+/// PATH, so nothing may be looked up by name (porting notes 5.4).
+#[cfg(target_os = "macos")]
+pub const MACOS_OPEN: &str = "/usr/bin/open";
+
+/// The deep link to the pane that grants Full Disk Access. There is no API to prompt for
+/// it, so pointing at System Settings is all an app can do; porting notes 4.2.
+#[cfg(target_os = "macos")]
+const PRIVACY_ALL_FILES_URL: &str =
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
+
+/// Open the Privacy & Security pane of System Settings.
+#[cfg(target_os = "macos")]
+fn open_privacy_settings() {
+    let mut command = std::process::Command::new(MACOS_OPEN);
+    command.arg(PRIVACY_ALL_FILES_URL);
+    if let Err(err) = crate::spawn_detached::spawn_detached(&mut command) {
+        log::warn!("failed to open the privacy settings pane: {err}");
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn open_privacy_settings() {
+    log::warn!("no privacy settings pane to open on this platform");
+}
+
+/// Which explanation a listing with nothing in it shows.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EmptyReason {
+    /// Nothing is here.
+    Folder,
+    /// Nothing is here that is not hidden.
+    FolderWithHidden,
+    /// Nothing matched the search term.
+    NoSearchResults,
+    /// The Trash could not be listed at all: either this build has no API for it, or the
+    /// OS refused `~/.Trash`. Both need Full Disk Access, which cannot be prompted for.
+    TrashUnreadable,
+}
+
+/// Decide what an empty listing means.
+///
+/// `trash_listable` is whether the Trash can be read at all here. It is false on macOS,
+/// where the trash crate exposes no listing API and `~/.Trash` sits behind Full Disk
+/// Access, so an empty Trash view there is a denial rather than an empty bin.
+pub fn empty_reason(location: &Location, has_hidden: bool, trash_listable: bool) -> EmptyReason {
+    if matches!(location, Location::Trash) && !trash_listable {
+        EmptyReason::TrashUnreadable
+    } else if has_hidden {
+        EmptyReason::FolderWithHidden
+    } else if matches!(location, Location::Search(..)) {
+        EmptyReason::NoSearchResults
+    } else {
+        EmptyReason::Folder
+    }
 }
 
 /// What a listing should do with an entry it could see but not stat.
@@ -4867,6 +4927,9 @@ impl Tab {
                     }
                 }
             }
+            Message::OpenPrivacySettings => {
+                open_privacy_settings();
+            }
             Message::Reload => {
                 //TODO: support keeping selected locations without paths
                 let selected_paths = self
@@ -6178,26 +6241,36 @@ impl Tab {
     pub fn empty_view(&self, has_hidden: bool) -> Element<'_, Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = theme::spacing();
 
-        mouse_area::MouseArea::new(widget::column::with_children([widget::container(
-            match self.mode {
-                Mode::App | Mode::Dialog(_) => widget::column::with_children([
+        let reason = empty_reason(&self.location, has_hidden, Trash::listable());
+        let body = match self.mode {
+            Mode::App | Mode::Dialog(_) => match reason {
+                EmptyReason::TrashUnreadable => widget::column::with_children([
+                    Trash::icon_symbolic(64).icon().size(64).into(),
+                    widget::text::body(fl!("trash-needs-full-disk-access")).into(),
+                    // There is no API to prompt for Full Disk Access, so the deep link
+                    // into the Privacy pane is all the app can offer; porting notes 4.2.
+                    widget::button::link(fl!("open-privacy-settings"))
+                        .on_press(Message::OpenPrivacySettings)
+                        .into(),
+                ]),
+                other => widget::column::with_children([
                     widget::icon::from_name("folder-symbolic")
                         .size(64)
                         .icon()
                         .into(),
-                    widget::text::body(if has_hidden {
-                        fl!("empty-folder-hidden")
-                    } else if matches!(self.location, Location::Search(..)) {
-                        fl!("no-results")
-                    } else {
-                        fl!("empty-folder")
+                    widget::text::body(match other {
+                        EmptyReason::FolderWithHidden => fl!("empty-folder-hidden"),
+                        EmptyReason::NoSearchResults => fl!("no-results"),
+                        _ => fl!("empty-folder"),
                     })
                     .into(),
                 ]),
-                Mode::Desktop => widget::column::with_capacity(0),
-            }
-            .align_x(Alignment::Center)
-            .spacing(space_xxs),
+            },
+            Mode::Desktop => widget::column::with_capacity(0),
+        };
+
+        mouse_area::MouseArea::new(widget::column::with_children([widget::container(
+            body.align_x(Alignment::Center).spacing(space_xxs),
         )
         .center(Length::Fill)
         .into()]))
@@ -8065,9 +8138,10 @@ mod tests {
     use test_log::test;
 
     use super::{
-        Item, ItemAccess, ItemMetadata, ItemThumbnail, Location, Message, PIXELS_PER_ZOOM_STEP,
-        Path, Rectangle, Tab, access_from_error, is_protected_tree, item_from_denied_entry,
-        logical_scroll_pixels, respond_to_scroll_direction, scan_path, zoom_steps_for_scroll,
+        EmptyReason, Instant, Item, ItemAccess, ItemMetadata, ItemThumbnail, Location, Message,
+        PIXELS_PER_ZOOM_STEP, Path, Rectangle, SearchLocation, Tab, access_from_error,
+        empty_reason, is_protected_tree, item_from_denied_entry, logical_scroll_pixels,
+        respond_to_scroll_direction, scan_path, zoom_steps_for_scroll,
     };
     use crate::app::test_utils::{
         NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED, assert_eq_tab_path, empty_fs,
@@ -8423,6 +8497,47 @@ mod tests {
         assert_eq!(
             access_from_error(&io::Error::from(io::ErrorKind::InvalidData)),
             ItemAccess::Unavailable
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_trash_that_cannot_be_listed_asks_for_full_disk_access() -> io::Result<()> {
+        // macOS has no API to list the Trash and keeps ~/.Trash behind Full Disk Access,
+        // which has no prompting API either, so the only thing left is to say so.
+        assert_eq!(
+            empty_reason(&Location::Trash, false, false),
+            EmptyReason::TrashUnreadable
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_trash_that_was_listed_and_is_empty_just_says_so() -> io::Result<()> {
+        assert_eq!(
+            empty_reason(&Location::Trash, false, true),
+            EmptyReason::Folder
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn an_unreadable_trash_does_not_change_what_other_locations_say() -> io::Result<()> {
+        let path = Location::Path(PathBuf::from("/Users/someone/Documents"));
+        let search = Location::Search(
+            SearchLocation::Path(PathBuf::from("/Users/someone")),
+            "needle".to_string(),
+            false,
+            Instant::now(),
+        );
+        assert_eq!(empty_reason(&path, false, false), EmptyReason::Folder);
+        assert_eq!(
+            empty_reason(&path, true, false),
+            EmptyReason::FolderWithHidden
+        );
+        assert_eq!(
+            empty_reason(&search, false, false),
+            EmptyReason::NoSearchResults
         );
         Ok(())
     }

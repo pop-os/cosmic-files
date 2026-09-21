@@ -27,6 +27,15 @@ fn percent_decode(s: &str) -> Option<String> {
 }
 
 pub trait TrashExt {
+    /// Whether the Trash can be listed at all here.
+    ///
+    /// False by default, which is what macOS gets: `trash::os_limited` is not compiled
+    /// for it, and `~/.Trash` is behind Full Disk Access anyway. An empty Trash view on
+    /// such a platform is a denial to explain, not an empty bin.
+    fn listable() -> bool {
+        false
+    }
+
     fn is_empty() -> bool {
         true
     }
@@ -143,6 +152,10 @@ pub struct Trash;
     )
 ))]
 impl TrashExt for Trash {
+    fn listable() -> bool {
+        true
+    }
+
     fn is_empty() -> bool {
         trash::os_limited::is_empty().unwrap_or(true)
     }
