@@ -184,8 +184,11 @@ pub fn cmd_key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
         bind!([Super], Key::Character("t".into()), TabNew);
         bind!([Ctrl], Key::Named(Named::Tab), TabNext);
         bind!([Ctrl, Shift], Key::Named(Named::Tab), TabPrev);
-        bind!([Super], Key::Character("q".into()), WindowClose);
+        // Cmd+Q ends the process; Cmd+W and Cmd+Shift+W only close a tab and a window, which
+        // on macOS leaves the application running with nothing on screen.
+        bind!([Super], Key::Character("q".into()), Quit);
         bind!([Super, Shift], Key::Character("w".into()), WindowClose);
+        bind!([Super], Key::Character("h".into()), Hide);
         bind!([Super], Key::Character("n".into()), WindowNew);
     }
 
@@ -663,6 +666,7 @@ unit_actions![
     ExtractHere,
     ExtractTo,
     Gallery,
+    Hide,
     HistoryNext,
     HistoryPrevious,
     ItemDown,
@@ -684,6 +688,7 @@ unit_actions![
     Paste,
     PermanentlyDelete,
     Preview,
+    Quit,
     Reload,
     RemoveFromRecents,
     Rename,
@@ -1101,8 +1106,8 @@ mod tests {
             assert_eq!(&action.config_name(), name);
             assert_eq!(Action::from_config_name(name), Some(*action));
         }
-        // 64 payload-free variants plus the four parameterized ones below.
-        assert_eq!(UNIT_ACTIONS.len(), 64);
+        // 66 payload-free variants plus the four parameterized ones below.
+        assert_eq!(UNIT_ACTIONS.len(), 66);
     }
 
     #[test]
@@ -1229,7 +1234,8 @@ mod tests {
             ("Cmd+x", Action::Cut),
             ("Cmd+v", Action::Paste),
             ("Cmd+a", Action::SelectAll),
-            ("Cmd+q", Action::WindowClose),
+            ("Cmd+q", Action::Quit),
+            ("Cmd+h", Action::Hide),
             ("Cmd+Shift+w", Action::WindowClose),
             ("Cmd+w", Action::TabClose),
             ("Cmd+,", Action::Settings),
