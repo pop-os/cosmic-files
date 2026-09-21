@@ -1432,7 +1432,6 @@ dependencies = [
  "open",
  "ordermap",
  "paste",
- "pelite",
  "png 0.18.1",
  "procfs",
  "recently-used-xbel",
@@ -1469,6 +1468,14 @@ dependencies = [
  "cosmic-files",
  "log",
  "zbus 4.4.0",
+]
+
+[[package]]
+name = "cosmic-files-thumbnailer"
+version = "1.9.0"
+dependencies = [
+ "image",
+ "pelite",
 ]
 
 [[package]]

@@ -6,6 +6,10 @@ use std::ffi::{OsStr, OsString};
 use std::io;
 use std::path::Path;
 
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    thumbnail_from_args(std::env::args_os().skip(1))
+}
+
 #[allow(dead_code)]
 pub fn thumbnail_from_args(mut args: impl Iterator<Item = OsString>) -> Result<(), Box<dyn Error>> {
     let usage = || {

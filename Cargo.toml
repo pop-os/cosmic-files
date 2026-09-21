@@ -2,7 +2,6 @@
 name = "cosmic-files"
 version = "1.9.0"
 authors = ["Jeremy Soller <jeremy@system76.com>"]
-default-run = "cosmic-files"
 edition = "2024"
 license = "GPL-3.0-only"
 rust-version = "1.93"
@@ -19,9 +18,9 @@ gio = { version = "0.21", optional = true }
 glib = { version = "0.21", optional = true }
 glob = "0.3"
 ignore = "0.4"
-image = "0.25"
+image.workspace = true
 libc = "0.2"
-log = "0.4"
+log.workspace = true
 mime_guess = "2"
 notify-debouncer-full = "0.7"
 notify-rust = { version = "4", optional = true }
@@ -68,7 +67,6 @@ thiserror = "2.0.18"
 atomic_float = "1.1.0"
 num_enum = "0.7.6"
 bstr = "1.12.1"
-pelite = "0.10.0"
 
 # Completion-based IO runtime to enable io_uring / IOCP file IO support.
 [dependencies.compio]
@@ -164,4 +162,8 @@ tokio = { version = "1", features = ["rt", "macros"] }
 # smithay-clipboard = { path = "../smithay-clipboard" }
 
 [workspace]
-members = ["cosmic-files-applet"]
+members = ["cosmic-files-applet", "cosmic-files-thumbnailer"]
+
+[workspace.dependencies]
+image = "0.25"
+log = "0.4"

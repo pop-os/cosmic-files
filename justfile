@@ -53,13 +53,10 @@ clean-dist: clean clean-vendor
 build-debug *args:
     cargo build {{args}}
     cargo build --package {{applet-name}} {{args}}
+    cargo build --package {{thumbnailer-bin-name}} {{args}}
 
 # Compiles with release profile
 build-release *args: (build-debug '--release' args)
-
-# Compiles applet with release profile
-build-release-applet *args:
-    cargo build --package {{applet-name}} --release {{args}}
 
 # Compiles release profile with vendored dependencies
 build-vendored *args: vendor-extract (build-release '--frozen --offline' args)
