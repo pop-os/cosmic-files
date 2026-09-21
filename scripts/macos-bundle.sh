@@ -9,6 +9,13 @@
 # CARGO_TARGET_DIR is honoured; it defaults to <repo>/target. The bundle is
 # written to $CARGO_TARGET_DIR/macos/COSMIC Files.app.
 #
+# Build-machine prerequisites, copied into the bundle so the app needs neither
+# on the machine it runs on:
+#   COSMIC_ICON_THEME_DIR  the Cosmic icon theme, default ~/.local/share/icons/Cosmic
+#                          (github.com/pop-os/cosmic-icons, `just install`)
+#   SHARED_MIME_INFO_DIR   the shared MIME database, default /opt/homebrew/share/mime
+#                          (brew install shared-mime-info)
+#
 set -euo pipefail
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
@@ -19,6 +26,9 @@ bin_name=cosmic-files
 app_name="COSMIC Files"
 binary="$target_dir/release/$bin_name"
 app="$target_dir/macos/$app_name.app"
+
+icon_theme_dir=${COSMIC_ICON_THEME_DIR:-$HOME/.local/share/icons/Cosmic}
+mime_dir=${SHARED_MIME_INFO_DIR:-/opt/homebrew/share/mime}
 
 # The release build. Linux-only default features are off; `quicklook` is in the
 # default set but has to be re-listed because --no-default-features drops it.
@@ -37,6 +47,34 @@ echo "==> laying out $app"
 rm -rf -- "$app"
 mkdir -p -- "$app/Contents/MacOS" "$app/Contents/Resources"
 cp -- "$binary" "$app/Contents/MacOS/$bin_name"
+
+# The freedesktop data the app resolves icons through. Launched from Finder it
+# has no XDG_DATA_DIRS and no Homebrew (porting notes 5.4), so both have to
+# travel inside the bundle; src/launch_macos.rs points XDG_DATA_DIRS here.
+copy_share() {
+    local src=$1 dest=$2 what=$3 hint=$4
+    if [ ! -d "$src" ]; then
+        echo "error: no $what at $src" >&2
+        echo "       install it ($hint) or set the variable to where it is" >&2
+        exit 1
+    fi
+    mkdir -p -- "$(dirname -- "$dest")"
+    # -R and not -L: the icon theme may use symlinks for aliased names, and
+    # following them would multiply the copy.
+    cp -R -- "$src" "$dest"
+}
+
+echo "==> copying the Cosmic icon theme from $icon_theme_dir"
+copy_share "$icon_theme_dir" "$app/Contents/Resources/share/icons/Cosmic" \
+    "Cosmic icon theme" "COSMIC_ICON_THEME_DIR, from github.com/pop-os/cosmic-icons"
+
+echo "==> copying the shared MIME database from $mime_dir"
+copy_share "$mime_dir" "$app/Contents/Resources/share/mime" \
+    "shared MIME database" "SHARED_MIME_INFO_DIR, from brew install shared-mime-info"
+# packages/ is update-mime-database's input, never read at runtime, and Homebrew
+# ships it as a symlink into the Cellar. Left in place it dangles once copied,
+# and codesign --verify then fails the whole bundle with ENOENT.
+rm -rf -- "$app/Contents/Resources/share/mime/packages"
 
 echo "==> writing Info.plist"
 version=$(sed -n '/^\[package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' \
