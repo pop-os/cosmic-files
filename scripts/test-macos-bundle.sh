@@ -109,6 +109,55 @@ assert_plist_value CFBundleShortVersionString "$cargo_version" \
 assert_plist_absent LSRequiresCarbon "LSRequiresCarbon is omitted"
 assert_plist_absent CSResourcesFileMapped "CSResourcesFileMapped is omitted"
 
+echo "# bundled freedesktop data"
+# Without these the app has no UI icons and no per-file-type icons on a machine
+# that never installed cosmic-icons or shared-mime-info; src/launch_macos.rs
+# puts Contents/Resources/share in front of XDG_DATA_DIRS to find them.
+assert_dir "$app/Contents/Resources/share/icons/Cosmic" \
+    "the Cosmic icon theme is in Contents/Resources/share/icons"
+
+assert_file() {
+    if [ -f "$1" ]; then
+        ok "$2"
+    else
+        no "$2" "missing: $1"
+    fi
+}
+
+# The icon lookup only treats a directory as a theme when it has an index.theme.
+assert_file "$app/Contents/Resources/share/icons/Cosmic/index.theme" \
+    "the bundled icon theme carries its index.theme"
+
+assert_dir "$app/Contents/Resources/share/mime" \
+    "the shared MIME database is in Contents/Resources/share/mime"
+
+# The exact files xdg-mime-rs reads out of <datadir>/mime. globs2 is how a name
+# becomes a type and generic-icons is how a type becomes an icon name, so a copy
+# missing either leaves every file with the fallback icon.
+for mime_file in aliases globs2 icons generic-icons subclasses magic; do
+    assert_file "$app/Contents/Resources/share/mime/$mime_file" \
+        "the bundled MIME database carries $mime_file"
+done
+
+# Homebrew ships mime/packages as a symlink into the Cellar. It is
+# update-mime-database's input, never read at runtime, and a dangling symlink
+# inside the bundle makes codesign --verify fail with "No such file or
+# directory" - so the bundler must not carry it.
+if [ -e "$app/Contents/Resources/share/mime/packages" ]; then
+    no "the MIME source packages are not shipped in the bundle" \
+        "Resources/share/mime/packages was copied in"
+else
+    ok "the MIME source packages are not shipped in the bundle"
+fi
+
+dangling=$(find "$app" -type l ! -exec test -e {} \; -print)
+if [ -z "$dangling" ]; then
+    ok "no dangling symlinks are left inside the bundle"
+else
+    no "no dangling symlinks are left inside the bundle" \
+        "$(printf '%s' "$dangling" | head -n 3)"
+fi
+
 echo "# icon"
 icns="$app/Contents/Resources/cosmic-files.icns"
 if [ -f "$icns" ]; then
