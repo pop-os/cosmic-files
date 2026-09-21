@@ -30,6 +30,7 @@ impl ThumbnailCacher {
         let cache_base_dir = THUMBNAIL_CACHE_BASE_DIR
             .as_ref()
             .ok_or("failed to get thumbnail cache directory".to_string())?;
+        let thumbnail_relative_path = thumbnail_cache_relative_path(&file_uri, thumbnail_size);
         let thumbnail_filename = thumbnail_cache_filename(&file_uri);
         let thumbnail_dir = cache_base_dir.join(thumbnail_size.subdirectory_name());
         if !thumbnail_dir.is_dir() {
@@ -43,7 +44,7 @@ impl ThumbnailCacher {
             );
             fs::create_dir_all(&thumbnail_dir).unwrap_or(());
         }
-        let thumbnail_path = thumbnail_dir.join(&thumbnail_filename);
+        let thumbnail_path = cache_base_dir.join(&thumbnail_relative_path);
         let thumbnail_fail_marker_path = cache_base_dir
             .join("fail")
             .join(format!("cosmic-files-{}", env!("CARGO_PKG_VERSION")))
@@ -305,6 +306,34 @@ fn thumbnail_uri(path: &Path) -> io::Result<String> {
     Ok(url)
 }
 
+/// The number of pixels a thumbnail must be rendered at to look sharp when `logical_size`
+/// logical pixels of it are drawn on a display with `scale_factor` pixels per logical pixel.
+///
+/// A scale factor that is not a positive, finite number is not usable: macOS reports zero
+/// before the window is on a screen (docs/macos-porting-notes.md section 3.2). Fall back to
+/// the logical size rather than ask for a thumbnail of no pixels at all.
+pub fn thumbnail_pixel_size(logical_size: u32, scale_factor: f32) -> u32 {
+    if !scale_factor.is_finite() || scale_factor <= 0.0 {
+        return logical_size;
+    }
+
+    let scaled = (f64::from(logical_size) * f64::from(scale_factor)).round();
+    if scaled >= f64::from(u32::MAX) {
+        u32::MAX
+    } else {
+        scaled as u32
+    }
+}
+
+/// Where a thumbnail of `file_uri` at `size` is cached, relative to the cache root.
+///
+/// The size is part of the key, not just the name: the freedesktop layout gives each size its
+/// own directory, so a thumbnail rendered for one scale factor never overwrites or is read
+/// back in place of one rendered for another.
+fn thumbnail_cache_relative_path(file_uri: &str, size: ThumbnailSize) -> PathBuf {
+    Path::new(size.subdirectory_name()).join(thumbnail_cache_filename(file_uri))
+}
+
 fn thumbnail_cache_filename(file_uri: &str) -> String {
     let hash = Md5::digest(file_uri);
     format!("{hash:x}.png")
@@ -367,3 +396,56 @@ static THUMBNAIL_CACHE_BASE_DIR: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
 
     None
 });
+
+#[cfg(test)]
+mod tests {
+    use super::{ThumbnailSize, thumbnail_cache_relative_path, thumbnail_pixel_size};
+
+    /// Where a grid thumbnail of `file_uri` lands for a window at `scale_factor`.
+    fn cache_path_at(file_uri: &str, scale_factor: f32) -> std::path::PathBuf {
+        let pixel_size = thumbnail_pixel_size(320, scale_factor);
+        thumbnail_cache_relative_path(file_uri, ThumbnailSize::from_pixel_size(pixel_size))
+    }
+
+    #[test]
+    fn a_thumbnail_is_requested_at_the_displays_pixel_size() {
+        // A 320 logical pixel grid icon needs 640 pixels to be sharp on a 2x panel.
+        assert_eq!(thumbnail_pixel_size(320, 2.0), 640);
+        assert_eq!(thumbnail_pixel_size(320, 1.0), 320);
+        assert_eq!(thumbnail_pixel_size(320, 1.5), 480);
+    }
+
+    #[test]
+    fn an_unusable_scale_factor_requests_the_logical_size() {
+        // macOS reports a scale factor of zero before the window is on a screen.
+        assert_eq!(thumbnail_pixel_size(320, 0.0), 320);
+        assert_eq!(thumbnail_pixel_size(320, -2.0), 320);
+        assert_eq!(thumbnail_pixel_size(320, f32::NAN), 320);
+        assert_eq!(thumbnail_pixel_size(320, f32::INFINITY), 320);
+    }
+
+    #[test]
+    fn a_thumbnail_cached_for_one_scale_does_not_overwrite_another() {
+        let uri = "file:///home/shylo/holiday.jpg";
+        assert_ne!(cache_path_at(uri, 1.0), cache_path_at(uri, 2.0));
+    }
+
+    #[test]
+    fn the_same_file_at_the_same_scale_reuses_one_cache_entry() {
+        let uri = "file:///home/shylo/holiday.jpg";
+        assert_eq!(cache_path_at(uri, 2.0), cache_path_at(uri, 2.0));
+        assert_ne!(
+            cache_path_at(uri, 2.0),
+            cache_path_at("file:///home/shylo/other.jpg", 2.0)
+        );
+    }
+
+    #[test]
+    fn a_cache_entry_names_the_size_it_holds() {
+        // The freedesktop layout puts the size in the directory, so an entry rendered for one
+        // scale is never read back as if it were the other scale's.
+        let uri = "file:///home/shylo/holiday.jpg";
+        assert!(cache_path_at(uri, 1.0).starts_with(ThumbnailSize::XLarge.subdirectory_name()));
+        assert!(cache_path_at(uri, 2.0).starts_with(ThumbnailSize::XXLarge.subdirectory_name()));
+    }
+}

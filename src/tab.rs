@@ -63,7 +63,9 @@ use crate::localize::{LANGUAGE_SORTER, LOCALE};
 use crate::mime_icon::{mime_for_path, mime_icon};
 use crate::mounter::MOUNTERS;
 use crate::operation::{Controller, OperationError};
-use crate::thumbnail_cacher::{CachedThumbnail, ThumbnailCacher, ThumbnailSize};
+use crate::thumbnail_cacher::{
+    CachedThumbnail, ThumbnailCacher, ThumbnailSize, thumbnail_pixel_size,
+};
 use crate::thumbnailer::thumbnailer;
 use crate::trash::{Trash, TrashExt};
 use crate::{FxOrderMap, fl, menu, mime_app, mouse_area};
@@ -768,6 +770,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
         } else {
             None
         },
+        thumbnail_scale_opt: None,
         button_id: widget::Id::unique(),
         pos_opt: Cell::new(None),
         rect_opt: Cell::new(None),
@@ -884,6 +887,7 @@ pub fn item_from_entry(
         icon_handle_list,
         icon_handle_list_condensed,
         thumbnail_opt: remote.then_some(ItemThumbnail::NotImage),
+        thumbnail_scale_opt: None,
         button_id: widget::Id::unique(),
         pos_opt: Cell::new(None),
         rect_opt: Cell::new(None),
@@ -943,6 +947,7 @@ pub fn item_from_trash_entry(
         icon_handle_list,
         icon_handle_list_condensed,
         thumbnail_opt: Some(ItemThumbnail::NotImage),
+        thumbnail_scale_opt: None,
         button_id: widget::Id::unique(),
         pos_opt: Cell::new(None),
         rect_opt: Cell::new(None),
@@ -1409,6 +1414,7 @@ pub fn scan_desktop(
             icon_handle_list,
             icon_handle_list_condensed,
             thumbnail_opt: Some(ItemThumbnail::NotImage),
+            thumbnail_scale_opt: None,
             button_id: widget::Id::unique(),
             pos_opt: Cell::new(None),
             rect_opt: Cell::new(None),
@@ -1826,7 +1832,8 @@ pub enum Message {
     ShiftPermissions(Option<(PathBuf, u32)>, u32, u32),
     SetSort(HeadingOptions, bool),
     TabComplete(PathBuf, Vec<(String, PathBuf)>),
-    Thumbnail(PathBuf, ItemThumbnail),
+    /// A rendered thumbnail, and the scale factor it was rendered for.
+    Thumbnail(PathBuf, ItemThumbnail, f32),
     ToggleSort(HeadingOptions),
     Drop(Option<(Location, ClipboardPaste)>),
     DndHover(Location),
@@ -2441,6 +2448,9 @@ pub struct Item {
     pub icon_handle_list: widget::icon::Handle,
     pub icon_handle_list_condensed: widget::icon::Handle,
     pub thumbnail_opt: Option<ItemThumbnail>,
+    /// The scale factor the thumbnail in `thumbnail_opt` was rasterised for, if it was
+    /// rasterised at all. `None` for anything that does not depend on the display.
+    pub thumbnail_scale_opt: Option<f32>,
     pub button_id: widget::Id,
     pub pos_opt: Cell<Option<(usize, usize)>>,
     pub rect_opt: Cell<Option<Rectangle>>,
@@ -2483,6 +2493,29 @@ impl Item {
 
     pub fn path_opt(&self) -> Option<&PathBuf> {
         self.location_opt.as_ref()?.path_opt()
+    }
+
+    /// Whether a thumbnail should be rendered for this item now.
+    ///
+    /// Only items inside `visible_rect` are worth rendering, and an item that already has one
+    /// wants another only when it was rasterised for a different scale factor. Moving a window
+    /// to a display with another scale therefore re-renders what the user can see rather than
+    /// the whole listing; the rest follow as they are scrolled into view.
+    fn wants_thumbnail(&self, scale_factor: f32, visible_rect: &Rectangle) -> bool {
+        // An item with no rect has not been laid out, which includes hidden items.
+        let Some(rect) = self.rect_opt.get() else {
+            return false;
+        };
+        if !rect.intersects(visible_rect) {
+            return false;
+        }
+
+        self.thumbnail_scale_opt.map_or_else(
+            // Nothing rasterised: render one unless the item already settled on something that
+            // does not depend on the display, such as a directory or a vector.
+            || self.thumbnail_opt.is_none(),
+            |scale| scale != scale_factor,
+        )
     }
 
     pub fn can_gallery(&self) -> bool {
@@ -4974,7 +5007,7 @@ impl Tab {
                     ));
                 }
             }
-            Message::Thumbnail(path, thumbnail) => {
+            Message::Thumbnail(path, thumbnail, scale_factor) => {
                 if let Some(ref mut items) = self.items_opt {
                     let location = Location::Path(path);
                     for item in items.iter_mut() {
@@ -5002,6 +5035,14 @@ impl Tab {
                                 item.icon_handle_list.clone_from(&handle);
                                 item.icon_handle_list_condensed = handle;
                             }
+                            // Only a rasterised preview goes soft on another display; a
+                            // vector or a plain icon is good at any scale.
+                            item.thumbnail_scale_opt = match &thumbnail {
+                                ItemThumbnail::Image(..) => Some(scale_factor),
+                                #[cfg(all(target_os = "macos", feature = "quicklook"))]
+                                ItemThumbnail::QuickLook(_) => Some(scale_factor),
+                                _ => None,
+                            };
                             item.thumbnail_opt = Some(thumbnail);
                             break;
                         }
@@ -7346,23 +7387,10 @@ impl Tab {
                 ));
             }
 
+            let scale_factor = self.scale_factor;
             for item in items {
-                if item.thumbnail_opt.is_some() {
-                    // Skip items that already have a mime type and thumbnail
+                if !item.wants_thumbnail(scale_factor, &visible_rect) {
                     continue;
-                }
-
-                match item.rect_opt.get() {
-                    Some(rect) => {
-                        if !rect.intersects(&visible_rect) {
-                            // Skip items that are not visible
-                            continue;
-                        }
-                    }
-                    None => {
-                        // Skip items with no determined rect (this should include hidden items)
-                        continue;
-                    }
                 }
 
                 let Some(path) = item.path_opt().cloned() else {
@@ -7404,11 +7432,15 @@ impl Tab {
                         effective_max_mb: u64,
                         effective_jobs: usize,
                         max_size: u64,
+                        scale_factor: f32,
                     }
 
                     impl Hash for Wrapper {
                         fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
                             self.path.hash(state);
+                            // A render already in flight is for the display the window was on
+                            // when it started, so a rescale has to start a new one.
+                            self.scale_factor.to_bits().hash(state);
                         }
                     }
 
@@ -7420,6 +7452,7 @@ impl Tab {
                             effective_max_mb,
                             effective_jobs,
                             max_size,
+                            scale_factor,
                         },
                         |wrapper| {
                             let Wrapper {
@@ -7429,6 +7462,7 @@ impl Tab {
                                 effective_max_mb,
                                 effective_jobs,
                                 max_size,
+                                scale_factor,
                             } = wrapper.clone();
                             stream::channel(
                                 1,
@@ -7449,17 +7483,18 @@ impl Tab {
                                                 &path,
                                                 metadata,
                                                 mime,
-                                                THUMBNAIL_SIZE,
+                                                thumbnail_pixel_size(THUMBNAIL_SIZE, scale_factor),
                                                 effective_max_mb,
                                                 effective_jobs,
                                                 max_size,
                                             );
                                             log::debug!(
-                                                "thumbnailed {} in {:?}",
+                                                "thumbnailed {} at {}x in {:?}",
                                                 path.display(),
+                                                scale_factor,
                                                 start.elapsed()
                                             );
-                                            Message::Thumbnail(path, thumbnail)
+                                            Message::Thumbnail(path, thumbnail, scale_factor)
                                         })
                                         .await
                                         .unwrap()
@@ -7878,7 +7913,7 @@ mod tests {
     use test_log::test;
 
     use super::{
-        ItemMetadata, ItemThumbnail, Location, Message, PIXELS_PER_ZOOM_STEP, Tab,
+        Item, ItemMetadata, ItemThumbnail, Location, Message, PIXELS_PER_ZOOM_STEP, Rectangle, Tab,
         logical_scroll_pixels, respond_to_scroll_direction, scan_path, zoom_steps_for_scroll,
     };
     use crate::app::test_utils::{
@@ -8140,6 +8175,72 @@ mod tests {
         let message_maybe =
             respond_to_scroll_direction(ScrollDelta::Pixels { x: 0.0, y: 1.0 }, &Modifiers::CTRL);
         assert!(matches!(message_maybe, Some(Message::ScrollZoom(_))));
+        Ok(())
+    }
+
+    /// An item that already has a thumbnail rasterised for `scale_factor`, laid out at `rect`.
+    fn thumbnailed_item(rect: Rectangle, scale_factor: f32) -> Item {
+        let (_fs, tab) = tab_click_new(NUM_FILES, NUM_NESTED, NUM_DIRS, NUM_NESTED, NAME_LEN)
+            .expect("tab should be populated with Items");
+        let mut item = tab.items_opt().expect("items")[0].clone();
+        item.rect_opt.set(Some(rect));
+        item.thumbnail_opt = Some(ItemThumbnail::Image(
+            widget::image::Handle::from_rgba(1, 1, vec![0, 0, 0, 0]),
+            None,
+        ));
+        item.thumbnail_scale_opt = Some(scale_factor);
+        item
+    }
+
+    const VISIBLE: Rectangle = Rectangle {
+        x: 0.0,
+        y: 0.0,
+        width: 100.0,
+        height: 100.0,
+    };
+    const ON_SCREEN: Rectangle = Rectangle {
+        x: 10.0,
+        y: 10.0,
+        width: 10.0,
+        height: 10.0,
+    };
+    const OFF_SCREEN: Rectangle = Rectangle {
+        x: 10.0,
+        y: 5000.0,
+        width: 10.0,
+        height: 10.0,
+    };
+
+    #[test]
+    fn a_visible_thumbnail_is_rendered_again_for_a_new_scale_factor() -> io::Result<()> {
+        let item = thumbnailed_item(ON_SCREEN, 1.0);
+        assert!(item.wants_thumbnail(2.0, &VISIBLE));
+        Ok(())
+    }
+
+    #[test]
+    fn an_offscreen_thumbnail_is_left_alone_when_the_scale_factor_changes() -> io::Result<()> {
+        // The whole listing must not re-render when a window moves to another display.
+        let item = thumbnailed_item(OFF_SCREEN, 1.0);
+        assert!(!item.wants_thumbnail(2.0, &VISIBLE));
+        Ok(())
+    }
+
+    #[test]
+    fn a_thumbnail_rendered_for_this_scale_factor_is_kept() -> io::Result<()> {
+        let item = thumbnailed_item(ON_SCREEN, 2.0);
+        assert!(!item.wants_thumbnail(2.0, &VISIBLE));
+        Ok(())
+    }
+
+    #[test]
+    fn an_item_with_no_thumbnail_of_its_own_is_never_rendered_again() -> io::Result<()> {
+        // Directories and other things that cannot be thumbnailed settle on NotImage, which
+        // does not depend on the display and must not be asked for again on every rescale.
+        let mut item = thumbnailed_item(ON_SCREEN, 1.0);
+        item.thumbnail_opt = Some(ItemThumbnail::NotImage);
+        item.thumbnail_scale_opt = None;
+        assert!(!item.wants_thumbnail(2.0, &VISIBLE));
         Ok(())
     }
 
