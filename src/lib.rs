@@ -26,6 +26,8 @@ mod gesture;
 pub(crate) mod gesture_macos;
 mod key_bind;
 pub(crate) mod large_image;
+#[cfg(target_os = "macos")]
+mod launch_macos;
 pub(crate) mod load_image;
 mod localize;
 mod menu;
@@ -156,6 +158,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     #[cfg(target_os = "macos")]
     appkit_macos::disable_autofill_heuristics();
+
+    #[cfg(target_os = "macos")]
+    launch_macos::prepare();
 
     localize::localize();
 
