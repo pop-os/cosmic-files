@@ -15,6 +15,7 @@ use std::sync::LazyLock;
 use crate::app::{Action, Message};
 use crate::config::{Config, ContextActionPreset};
 use crate::fl;
+use crate::key_bind::{menu_key_bind, menu_key_binds};
 use crate::tab::{
     self, HeadingOptions, ItemMetadata, Location, LocationMenuAction, SearchLocation, Tab,
 };
@@ -398,7 +399,7 @@ pub fn context_menu<'a>(
 
     let key_binds: HashMap<KeyBind, TabAction> = key_binds
         .iter()
-        .map(|(key_bind, action)| (key_bind.clone(), TabAction(*action)))
+        .map(|(key_bind, action)| (menu_key_bind(key_bind), TabAction(*action)))
         .collect();
     menu::items(&key_binds, children)
 }
@@ -408,6 +409,8 @@ pub fn dialog_menu(
     key_binds: &HashMap<KeyBind, Action>,
     show_details: bool,
 ) -> Element<'static, Message> {
+    let key_binds = menu_key_binds(key_binds);
+    let key_binds = &*key_binds;
     let (sort_name, sort_direction, _) = tab.sort_options();
     let sort_item = |label, sort, dir| {
         menu::Item::CheckBox(
@@ -556,6 +559,8 @@ pub fn menu_bar<'a>(
     key_binds: &HashMap<KeyBind, Action>,
     clipboard_paste_available: bool,
 ) -> Element<'a, Message> {
+    let key_binds = menu_key_binds(key_binds);
+    let key_binds = &*key_binds;
     let sort_options = tab_opt.map(Tab::sort_options);
     let sort_item = |label, sort, dir| {
         menu::Item::CheckBox(

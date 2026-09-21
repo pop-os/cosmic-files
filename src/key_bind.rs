@@ -4,6 +4,7 @@ use cosmic::widget::menu::key_bind::{KeyBind, Modifier};
 use serde::de::Error as _;
 use serde::ser::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::ops::Deref;
@@ -199,7 +200,11 @@ pub fn cmd_key_binds(mode: &tab::Mode) -> HashMap<KeyBind, Action> {
         // modifier: Finder does not trash on Delete alone.
         bind!([Super], Key::Named(Named::Backspace), Delete);
         bind!([Super], Key::Named(Named::Delete), Delete);
-        bind!([Super, Alt], Key::Named(Named::Backspace), PermanentlyDelete);
+        bind!(
+            [Super, Alt],
+            Key::Named(Named::Backspace),
+            PermanentlyDelete
+        );
         bind!([Super, Alt], Key::Named(Named::Delete), PermanentlyDelete);
         bind!([Shift], Key::Named(Named::Enter), OpenInNewWindow);
         bind!([Super], Key::Character("v".into()), Paste);
@@ -241,6 +246,88 @@ pub fn key_binds_with_overrides(
         }
     }
     key_binds
+}
+
+/// How a key binding is written in this platform's menus.
+///
+/// Everywhere but macOS this is the widget's own spelling, `Ctrl + N`. macOS writes shortcuts as
+/// the glyphs its menus use, in Apple's order: `⌃⌥⇧⌘` followed by the key, so Cmd rather than
+/// Super, and `⇧⌘.` rather than `Super + Shift + .`.
+pub fn menu_label(key_bind: &KeyBind) -> String {
+    if !cfg!(target_os = "macos") {
+        return key_bind.to_string();
+    }
+
+    let mut label = String::new();
+    // Apple's modifier order, which is not the order the tables list them in.
+    for (modifier, glyph) in [
+        (Modifier::Ctrl, '⌃'),
+        (Modifier::Alt, '⌥'),
+        (Modifier::Shift, '⇧'),
+        (Modifier::Super, '⌘'),
+    ] {
+        if key_bind.modifiers.contains(&modifier) {
+            label.push(glyph);
+        }
+    }
+    match &key_bind.key {
+        Key::Character(c) => label.push_str(&c.to_uppercase().replace(' ', "␣")),
+        Key::Named(named) => label.push_str(&macos_key_glyph(*named)),
+        Key::Unidentified => label.push('?'),
+    }
+    label
+}
+
+/// The glyph, or name, macOS menus use for a named key.
+fn macos_key_glyph(named: Named) -> String {
+    let glyph = match named {
+        Named::ArrowDown => "↓",
+        Named::ArrowLeft => "←",
+        Named::ArrowRight => "→",
+        Named::ArrowUp => "↑",
+        Named::Backspace => "⌫",
+        Named::Delete => "⌦",
+        Named::End => "↘",
+        Named::Enter => "↩",
+        Named::Escape => "⎋",
+        Named::Home => "↖",
+        Named::PageDown => "⇟",
+        Named::PageUp => "⇞",
+        Named::Tab => "⇥",
+        // Function keys and anything else read better by name.
+        other => return named_key_name(other).unwrap_or("?").to_string(),
+    };
+    glyph.to_string()
+}
+
+/// A key binding that a menu widget renders as [`menu_label`].
+///
+/// Menu widgets build their shortcut text by displaying the [`KeyBind`] they are handed, so a
+/// platform spelling has to be carried in as a binding rather than as a string. The result is for
+/// display only: it is never matched against a key press.
+pub fn menu_key_bind(key_bind: &KeyBind) -> KeyBind {
+    if !cfg!(target_os = "macos") {
+        return key_bind.clone();
+    }
+    KeyBind {
+        modifiers: Vec::new(),
+        key: Key::Character(menu_label(key_bind).into()),
+    }
+}
+
+/// The key bindings a menu should display, keyed by [`menu_key_bind`].
+///
+/// Borrowed unchanged where the platform spelling is the widget's own.
+pub fn menu_key_binds<A: Clone>(key_binds: &HashMap<KeyBind, A>) -> Cow<'_, HashMap<KeyBind, A>> {
+    if !cfg!(target_os = "macos") {
+        return Cow::Borrowed(key_binds);
+    }
+    Cow::Owned(
+        key_binds
+            .iter()
+            .map(|(key_bind, action)| (menu_key_bind(key_bind), action.clone()))
+            .collect(),
+    )
 }
 
 /// Error returned when a key binding or an action cannot be parsed from its textual form.
@@ -1187,6 +1274,54 @@ mod tests {
                     binds.get(parse(&binding).key_bind()),
                     None,
                     "{binding} should be free for text fields in {mode:?} mode"
+                );
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn menu_labels_are_written_in_macos_notation() {
+        for (binding, label) in [
+            ("Cmd+c", "⌘C"),
+            ("Cmd+Shift+.", "⇧⌘."),
+            ("Cmd+Shift+w", "⇧⌘W"),
+            ("Cmd+Alt+c", "⌥⌘C"),
+            ("Cmd+Ctrl+t", "⌃⌘T"),
+            ("Cmd+Backspace", "⌘⌫"),
+            ("Cmd+Alt+Delete", "⌥⌘⌦"),
+            ("Cmd+ArrowDown", "⌘↓"),
+            ("Cmd+ArrowUp", "⌘↑"),
+            ("Cmd+,", "⌘,"),
+            ("Enter", "↩"),
+            ("F2", "F2"),
+            ("Ctrl+Space", "⌃␣"),
+            ("Ctrl+Shift+Tab", "⌃⇧⇥"),
+        ] {
+            assert_eq!(menu_label(parse(binding).key_bind()), label, "{binding}");
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn menu_labels_are_unchanged_off_macos() {
+        assert_eq!(menu_label(parse("Ctrl+n").key_bind()), "Ctrl + N");
+        assert_eq!(
+            menu_label(parse("Super+Shift+.").key_bind()),
+            "Super + Shift + ."
+        );
+    }
+
+    #[test]
+    fn a_menu_key_bind_renders_as_the_menu_label() {
+        // Menu widgets render a shortcut by displaying the `KeyBind` they are handed, so the two
+        // have to agree for the label to reach the menu.
+        for mode in [tab::Mode::App, tab::Mode::Desktop] {
+            for key_bind in key_binds(&mode).into_keys() {
+                assert_eq!(
+                    menu_key_bind(&key_bind).to_string(),
+                    menu_label(&key_bind),
+                    "{key_bind}"
                 );
             }
         }

@@ -113,6 +113,64 @@ Four actions take arguments, written in parentheses:
 
 `<column>` is one of `Name`, `Modified`, `Size`, `TrashedOn`. `<ascending>` is `true` or `false`.
 
+## Defaults on macOS
+
+macOS gets its own set of defaults, built around Cmd the way Finder is. It is a separate table
+rather than the usual defaults with Ctrl swapped for Cmd, for two reasons: the readline shortcuts
+macOS text fields provide (Ctrl+A to the start of the line, Ctrl+E to the end, and the rest) have
+to stay free so they keep working while renaming a file or typing in the search field, and actions
+Finder has no shortcut for are better left on the keys they have everywhere else than given an
+invented Cmd shortcut.
+
+Everything in this file works the same way on macOS. Write `Cmd`, `Command` or `Super` — they all
+mean the same modifier — and an entry replaces or disables a macOS default exactly as it would
+elsewhere.
+
+Selection and navigation keys are the same on every platform: the arrow keys, `Shift`+arrows,
+`Home`, `End`, `PageUp`, `PageDown` and `F5`. These differ:
+
+| Action | macOS | Elsewhere |
+| --- | --- | --- |
+| `Copy` | `⌘C` | `Ctrl+C` |
+| `CopyPath` | `⌥⌘C` | `Ctrl+Shift+C` |
+| `Cut` | `⌘X` | `Ctrl+X` |
+| `Paste` | `⌘V` | `Ctrl+V` |
+| `SelectAll` | `⌘A` | `Ctrl+A` |
+| `NewFolder` | `⇧⌘N` | `Ctrl+Shift+N` |
+| `WindowNew` | `⌘N` | `Ctrl+N` |
+| `TabNew` | `⌘T` | `Ctrl+T` |
+| `TabClose` | `⌘W` | `Ctrl+W` |
+| `WindowClose` | `⌘Q`, `⇧⌘W` | `Ctrl+Q` |
+| `Settings` | `⌘,` | `Ctrl+,` |
+| `ToggleShowHidden` | `⇧⌘.` | `Ctrl+H` |
+| `Delete` (move to trash) | `⌘⌫`, `⌘⌦` | `Delete` |
+| `PermanentlyDelete` | `⌥⌘⌫`, `⌥⌘⌦` | `Shift+Delete` |
+| `Open` | `⌘↓` | `Enter` |
+| `Rename` | `Enter`, `F2` | `F2` |
+| `LocationUp` | `⌘↑` | `Alt+ArrowUp` |
+| `HistoryPrevious` | `⌘[`, `Backspace` | `Alt+ArrowLeft`, `Backspace` |
+| `HistoryNext` | `⌘]` | `Alt+ArrowRight` |
+| `EditLocation` | `⇧⌘G` | `Ctrl+L` |
+| `SearchActivate` | `⌘F` | `Ctrl+F` |
+| `AddToSidebar` | `⌃⌘T` | `Ctrl+D` |
+| `ZoomIn` | `⌘=`, `⌘+` | `Ctrl+=`, `Ctrl++` |
+| `ZoomOut` | `⌘-` | `Ctrl+-` |
+| `ZoomDefault` | `⌘0` | `Ctrl+0` |
+| `TabViewGrid` | `⌘1` | `Ctrl+2` |
+| `TabViewList` | `⌘2` | `Ctrl+1` |
+
+The rest keep their usual keys, because Finder has no equivalent: `Ctrl+Enter` opens in a new tab,
+`Shift+Enter` in a new window, `Ctrl+Tab` and `Ctrl+Shift+Tab` switch tabs, `Ctrl+Space` previews
+and `Space` opens the gallery. `Cmd+Space` is deliberately left alone: it belongs to Spotlight.
+
+Two differences are worth spelling out. Enter renames rather than opens, as it does in Finder, and
+`⌘↓` opens; in open and save dialogs, where there is nothing to rename, Enter still opens. And
+nothing is bound to `Delete` on its own: Finder does not trash on an unmodified Delete, so trashing
+is `⌘⌫` — on a Mac keyboard that is Cmd and the key labelled `delete`.
+
+Menus write these shortcuts the way macOS menus do, as `⌘C` and `⇧⌘.` rather than `Ctrl + C` and
+`Super + Shift + .`.
+
 ## Removing a default binding
 
 Use the action `Disable` to switch a default off without replacing it:
