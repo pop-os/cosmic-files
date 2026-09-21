@@ -16,7 +16,7 @@ use cosmic::iced::{
 };
 use cosmic::widget::menu::action::MenuAction;
 use cosmic::widget::menu::key_bind::KeyBind;
-use cosmic::widget::{self, DndDestination, DndSource, Id, RcElementWrapper, Widget, space};
+use cosmic::widget::{self, DndDestination, DndSource, Id, RcElementWrapper, Widget, icon, space};
 use cosmic::{Apply, Element, cosmic_theme, font, theme};
 use i18n_embed::LanguageLoader;
 use icu::datetime::input::DateTime;
@@ -6032,11 +6032,51 @@ impl Tab {
                 // Only build elements if visible (for performance)
                 if item_rect.intersects(&visible_rect) {
                     //TODO: one focus group per grid item (needs custom widget)
-                    let mut buttons: Vec<Element<Message>> = vec![
+                    let item_icon = widget::container(
+                        widget::icon::icon(item.icon_handle_grid.clone())
+                            .content_fit(ContentFit::Contain)
+                            .size(icon_sizes.grid())
+                    );
+                    let mut emblems = vec![];
+
+                    if show_starred {
+                        emblems.push(
+                            if item.starred {
+                                widget::container(
+                                    widget::tooltip(
+                                        widget::button::icon(widget::icon::from_name("starred-symbolic").size(16))
+                                            .on_press(Message::RemoveFromStarred(item_path_vec))
+                                            .padding(2),
+                                        widget::text::body(fl!("remove-from-starred")),
+                                        widget::tooltip::Position::Top,
+                                    )
+                                )
+                                .into()
+                            } else {
+                                widget::container(
+                                    widget::tooltip(
+                                        widget::button::icon(widget::icon::from_name("non-starred-symbolic").size(16))
+                                            .on_press(Message::AddToStarred(item_path_vec))
+                                            .padding(2),
+                                        widget::text::body(fl!("add-to-starred")),
+                                        widget::tooltip::Position::Top,
+                                    )
+                                )
+                                .into()
+                            }
+                        )
+                    }
+
+                    let stack_emblems = widget::container(
+                        widget::column::with_children(emblems)
+                    ).align_right(Length::Fill);
+                    let icon_stack = stack![item_icon, stack_emblems];
+
+                    let buttons: Vec<Element<Message>> = vec![
                         widget::button::custom(
-                            widget::icon::icon(item.icon_handle_grid.clone())
-                                .content_fit(ContentFit::Contain)
-                                .size(icon_sizes.grid()),
+                            widget::container(icon_stack)
+                                .center_x(Length::Fill)
+                                .max_height(icon_sizes.grid()),
                         )
                         .padding(space_xxxs)
                         .class(button_style(
@@ -6049,7 +6089,7 @@ impl Tab {
                         ))
                         .into(),
                         widget::tooltip(
-                            widget::button::custom(Item::grid_display_name(&item.display_name, if show_starred { 2 } else { 3 }))
+                            widget::button::custom(Item::grid_display_name(&item.display_name, 3))
                                 .id(item.button_id.clone())
                                 .padding([0, space_xxxs])
                                 .class(button_style(
@@ -6065,29 +6105,6 @@ impl Tab {
                         )
                         .into(),
                     ];
-                    if show_starred {
-                        buttons.push(
-                            if item.starred {
-                                widget::tooltip(
-                                    widget::button::icon(widget::icon::from_name("starred-symbolic").size(16))
-                                        .on_press(Message::RemoveFromStarred(item_path_vec))
-                                        .padding(2),
-                                    widget::text::body(fl!("remove-from-starred")),
-                                    widget::tooltip::Position::Top,
-                                )
-                                .into()
-                            } else {
-                                widget::tooltip(
-                                    widget::button::icon(widget::icon::from_name("non-starred-symbolic").size(16))
-                                        .on_press(Message::AddToStarred(item_path_vec))
-                                        .padding(2),
-                                    widget::text::body(fl!("add-to-starred")),
-                                    widget::tooltip::Position::Top,
-                                )
-                                .into()
-                            }
-                        )
-                    }
 
                     let mut column = widget::column::with_capacity(buttons.len())
                         .align_x(Alignment::Center)

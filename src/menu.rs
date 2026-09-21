@@ -802,7 +802,7 @@ pub fn menu_bar<'a>(
         )
 }
 
-pub fn location_context_menu(ancestor_index: usize, tab_mode: tab::Mode) -> Vec<menu::Tree<tab::Message>> {
+pub fn location_context_menu(ancestor_index: usize) -> Vec<menu::Tree<tab::Message>> {
     //TODO: only add some of these when in App mode
     menu::items(
         &HashMap::new(),
