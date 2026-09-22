@@ -3220,9 +3220,13 @@ pub struct Tab {
     /// Physical pixels per logical pixel for the window this tab is in. `1.0` until the
     /// window reports its own; see `App::tab_scale_factor`.
     scale_factor: f32,
-    /// Ctrl+scroll travel banked toward the next zoom step, in logical pixels.
+    /// Ctrl+scroll travel banked toward the next zoom step, in logical pixels. Unused on
+    /// macOS, where `gesture::Zoom` banks the AppKit monitor's logical points instead.
+    #[allow(dead_code)]
     zoom_scroll_accum: f32,
-    /// When the last Ctrl+scroll event arrived, used to discard momentum tails.
+    /// When the last Ctrl+scroll event arrived, used to discard momentum tails. Unused on
+    /// macOS, where the events say for themselves which ones are momentum.
+    #[allow(dead_code)]
     zoom_scroll_last: Option<Instant>,
 }
 
@@ -5400,27 +5404,39 @@ impl Tab {
                 commands.push(Command::WindowToggleMaximize);
             }
             Message::ScrollZoom(delta) => {
-                let now = Instant::now();
-                // A touchpad keeps sending momentum events after the user lets go. Drop
-                // whatever was banked if there was a lull, so the tail cannot coast into
-                // another step.
-                if self
-                    .zoom_scroll_last
-                    .is_some_and(|last| now.duration_since(last) > ZOOM_SCROLL_IDLE)
+                // On macOS the AppKit monitor feeds `gesture::Zoom` from the same scroll,
+                // in logical points and with the momentum tail marked, so this path would
+                // only zoom a second time. The message is still produced there to keep the
+                // list from scrolling while Ctrl is held; see `respond_to_scroll_direction`.
+                #[cfg(target_os = "macos")]
+                let _ = delta;
+                #[cfg(not(target_os = "macos"))]
                 {
-                    self.zoom_scroll_accum = 0.0;
-                }
-                self.zoom_scroll_last = Some(now);
+                    let now = Instant::now();
+                    // A touchpad keeps sending momentum events after the user lets go. Drop
+                    // whatever was banked if there was a lull, so the tail cannot coast into
+                    // another step.
+                    if self
+                        .zoom_scroll_last
+                        .is_some_and(|last| now.duration_since(last) > ZOOM_SCROLL_IDLE)
+                    {
+                        self.zoom_scroll_accum = 0.0;
+                    }
+                    self.zoom_scroll_last = Some(now);
 
-                let steps =
-                    zoom_steps_for_scroll(delta, &mut self.zoom_scroll_accum, self.scale_factor);
-                let action = if steps > 0 {
-                    Action::ZoomIn
-                } else {
-                    Action::ZoomOut
-                };
-                for _ in 0..steps.abs() {
-                    commands.push(Command::Action(action));
+                    let steps = zoom_steps_for_scroll(
+                        delta,
+                        &mut self.zoom_scroll_accum,
+                        self.scale_factor,
+                    );
+                    let action = if steps > 0 {
+                        Action::ZoomIn
+                    } else {
+                        Action::ZoomOut
+                    };
+                    for _ in 0..steps.abs() {
+                        commands.push(Command::Action(action));
+                    }
                 }
             }
             Message::ZoomIn => {
@@ -8053,11 +8069,17 @@ impl Tab {
     }
 }
 
+// The Ctrl+scroll machinery below is iced's path, which macOS no longer takes: there the
+// AppKit monitor reports logical points and marks the momentum tail, and `gesture::Zoom`
+// banks them. It stays compiled on every platform so that its tests keep covering it.
+
 /// Logical pixels of Ctrl+scroll travel that make up one zoom step on a precise touchpad.
+#[allow(dead_code)]
 const PIXELS_PER_ZOOM_STEP: f32 = 50.0;
 
 /// Idle gap after which banked Ctrl+scroll travel is discarded, so that a touchpad's
 /// momentum tail does not coast into further zoom steps.
+#[allow(dead_code)]
 const ZOOM_SCROLL_IDLE: Duration = Duration::from_millis(150);
 
 /// Convert scroll travel reported in physical pixels into logical pixels.
@@ -8068,6 +8090,7 @@ const ZOOM_SCROLL_IDLE: Duration = Duration::from_millis(150);
 ///
 /// A scale factor that is not a positive, finite number is not usable: macOS reports zero
 /// before the window is on a screen. Leave the delta alone rather than produce infinity.
+#[allow(dead_code)]
 fn logical_scroll_pixels(physical: f32, scale_factor: f32) -> f32 {
     if scale_factor.is_finite() && scale_factor > 0.0 {
         physical / scale_factor
@@ -8085,6 +8108,7 @@ fn logical_scroll_pixels(physical: f32, scale_factor: f32) -> f32 {
 ///
 /// Pixel deltas are physical, so `scale_factor` converts them to logical pixels first and the
 /// same finger travel zooms by the same amount on every display.
+#[allow(dead_code)]
 fn zoom_steps_for_scroll(delta: ScrollDelta, accum: &mut f32, scale_factor: f32) -> i32 {
     match delta {
         ScrollDelta::Lines { y, .. } => {
@@ -8119,7 +8143,8 @@ pub fn respond_to_scroll_direction(delta: ScrollDelta, modifiers: &Modifiers) ->
     }
 
     // Capture the event whenever Ctrl is held, even if this delta is too small to make a
-    // step yet, so the list does not scroll while zooming.
+    // step yet, so the list does not scroll while zooming. On macOS the message does
+    // nothing else: the zoom itself comes from the AppKit monitor.
     Some(Message::ScrollZoom(delta))
 }
 

@@ -9,6 +9,9 @@
 //!
 //! A two-finger swipe arrives the same way, as scroll deltas carrying the phase of the
 //! fingers, and [`Swipe`] banks the horizontal ones until they amount to a navigation.
+//!
+//! Ctrl+scroll banks the vertical ones instead, and [`Zoom`] turns them into the same
+//! steps a pinch makes.
 
 /// Where an event sits in a gesture's lifetime.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -144,6 +147,62 @@ impl Swipe {
         } else {
             Direction::Forward
         })
+    }
+}
+
+/// Vertical travel that makes up one zoom step while Ctrl is held, in logical points.
+/// The same magnitude as the pixel threshold the other platforms bank against, so a
+/// Ctrl+scroll covers the zoom range at the same rate it always did.
+const POINTS_PER_ZOOM_STEP: f64 = 50.0;
+
+/// Banked Ctrl+scroll travel that has not yet amounted to a zoom step.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Zoom {
+    travel: f64,
+}
+
+impl Zoom {
+    /// Feed one scroll event and return the zoom steps it completes: positive to zoom in,
+    /// negative to zoom out.
+    pub fn feed(&mut self, scroll: Scroll) -> i32 {
+        // Inertia is not the user zooming. The platform says outright which events it
+        // threw off, so they are dropped rather than guessed at from a lull in the
+        // stream, and they bank nothing for the next gesture to inherit.
+        if scroll.momentum {
+            return 0;
+        }
+        match scroll.phase {
+            Some(Phase::Began) | Some(Phase::Ended) => {
+                self.travel = 0.0;
+                return 0;
+            }
+            // Precise deltas can arrive belonging to no gesture, as a Magic Mouse's do;
+            // there are still fingers behind them, so they bank like any other.
+            Some(Phase::Changed) | None => {}
+        }
+        // A wheel reports coarse notches far smaller than a step's worth of points, but
+        // each notch is a whole movement of the user's, so each one is a whole step.
+        if !scroll.precise {
+            self.travel = 0.0;
+            return if scroll.delta_y > 0.0 {
+                1
+            } else if scroll.delta_y < 0.0 {
+                -1
+            } else {
+                0
+            };
+        }
+        // Reversing direction should zoom back immediately, not spend the bank first.
+        if scroll.delta_y != 0.0
+            && self.travel != 0.0
+            && (self.travel > 0.0) != (scroll.delta_y > 0.0)
+        {
+            self.travel = 0.0;
+        }
+        self.travel += scroll.delta_y;
+        let steps = (self.travel / POINTS_PER_ZOOM_STEP) as i32;
+        self.travel -= f64::from(steps) * POINTS_PER_ZOOM_STEP;
+        steps
     }
 }
 
@@ -341,5 +400,86 @@ mod tests {
             precise: false,
         };
         assert_eq!(swipe.feed(coarse), None);
+    }
+
+    /// One coarse notch of a mouse wheel, which belongs to no gesture.
+    fn notch(delta_y: f64) -> Scroll {
+        Scroll {
+            phase: None,
+            momentum: false,
+            delta_x: 0.0,
+            delta_y,
+            precise: false,
+        }
+    }
+
+    #[test]
+    fn momentum_after_the_fingers_lift_never_zooms() {
+        let mut zoom = Zoom::default();
+        zoom.feed(finger(Phase::Began, 0.0, 0.0));
+        // The tail of a flick carries several steps' worth of travel on its own.
+        let inertia = Scroll {
+            phase: None,
+            momentum: true,
+            delta_x: 0.0,
+            delta_y: 120.0,
+            precise: true,
+        };
+        assert_eq!(zoom.feed(inertia), 0);
+        // It banked nothing either: the fingers still owe the whole step.
+        assert_eq!(zoom.feed(finger(Phase::Changed, 0.0, 40.0)), 0);
+        assert_eq!(zoom.feed(finger(Phase::Changed, 0.0, 10.0)), 1);
+    }
+
+    #[test]
+    fn small_scroll_deltas_bank_until_they_make_a_step() {
+        let mut zoom = Zoom::default();
+        zoom.feed(finger(Phase::Began, 0.0, 0.0));
+        // Forty-eight points of travel is a step short.
+        for _ in 0..4 {
+            assert_eq!(zoom.feed(finger(Phase::Changed, 0.0, 12.0)), 0);
+        }
+        // Sixty points is one step, and leaves ten banked rather than spending them.
+        assert_eq!(zoom.feed(finger(Phase::Changed, 0.0, 12.0)), 1);
+        assert_eq!(zoom.feed(finger(Phase::Changed, 0.0, 39.0)), 0);
+    }
+
+    #[test]
+    fn a_fast_scroll_completes_several_steps_at_once() {
+        let mut zoom = Zoom::default();
+        zoom.feed(finger(Phase::Began, 0.0, 0.0));
+        assert_eq!(zoom.feed(finger(Phase::Changed, 0.0, 160.0)), 3);
+    }
+
+    #[test]
+    fn a_wheel_notch_is_one_zoom_step() {
+        let mut zoom = Zoom::default();
+        // A wheel's deltas are coarse and nowhere near a step's worth of points, but a
+        // notch is the whole gesture the user made.
+        assert_eq!(zoom.feed(notch(3.0)), 1);
+        assert_eq!(zoom.feed(notch(-3.0)), -1);
+    }
+
+    #[test]
+    fn a_new_scroll_gesture_starts_from_an_empty_bank() {
+        let mut zoom = Zoom::default();
+        zoom.feed(finger(Phase::Began, 0.0, 0.0));
+        assert_eq!(zoom.feed(finger(Phase::Changed, 0.0, 40.0)), 0);
+        zoom.feed(finger(Phase::Ended, 0.0, 0.0));
+        // Lifting the fingers throws the banked forty points away.
+        zoom.feed(finger(Phase::Began, 0.0, 0.0));
+        assert_eq!(zoom.feed(finger(Phase::Changed, 0.0, 40.0)), 0);
+        assert_eq!(zoom.feed(finger(Phase::Changed, 0.0, 10.0)), 1);
+    }
+
+    #[test]
+    fn reversing_scroll_direction_responds_immediately() {
+        let mut zoom = Zoom::default();
+        zoom.feed(finger(Phase::Began, 0.0, 0.0));
+        // Bank most of a step of zooming in, then scroll the other way: the bank must not
+        // absorb the first part of the motion back out.
+        assert_eq!(zoom.feed(finger(Phase::Changed, 0.0, 40.0)), 0);
+        assert_eq!(zoom.feed(finger(Phase::Changed, 0.0, -40.0)), 0);
+        assert_eq!(zoom.feed(finger(Phase::Changed, 0.0, -10.0)), -1);
     }
 }
