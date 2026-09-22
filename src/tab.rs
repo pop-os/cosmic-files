@@ -5171,7 +5171,7 @@ impl Tab {
         let count_emblem = if drag_item_icons.len() > 3 {
             widget::container(
                 widget::container(
-                    widget::text(drag_item_icons.len().to_string())
+                    widget::text(if drag_item_icons.len() > 99 { "99+".to_string() } else { drag_item_icons.len().to_string() })
                 )
                 .height(20)
                 .padding([space_xxxs, space_xs])
@@ -6018,71 +6018,6 @@ impl Tab {
                 }
             }
         }
-
-        let drag_list = (!dnd_items.is_empty()).then(|| {
-            let mut dnd_grid = widget::grid()
-                .column_spacing(column_spacing)
-                .row_spacing(grid_spacing)
-                .padding(space_xxs.into());
-
-            let mut dnd_item_i = 0;
-            for r in drag_n_i..=drag_s_i {
-                dnd_grid = dnd_grid.insert_row();
-                for c in drag_w_i..=drag_e_i {
-                    let Some((i, (row, col), item)) = dnd_items.get(dnd_item_i) else {
-                        break;
-                    };
-                    if *row == r && *col == c {
-                        let buttons = vec![
-                            widget::button::custom(
-                                widget::icon::icon(item.icon_handle_grid.clone())
-                                    .content_fit(ContentFit::Contain)
-                                    .size(icon_sizes.grid()),
-                            )
-                            .on_press(Message::Click(Some(*i)))
-                            .padding(space_xxxs)
-                            .class(button_style(
-                                item.selected,
-                                item.highlighted,
-                                item.cut,
-                                false,
-                                false,
-                                false,
-                            )),
-                            widget::button::custom(Item::grid_display_name(
-                                item.display_name.clone(),
-                            ))
-                            .id(item.button_id.clone())
-                            .on_press(Message::Click(Some(*i)))
-                            .padding([0, space_xxxs])
-                            .class(button_style(
-                                item.selected,
-                                item.highlighted,
-                                item.cut,
-                                true,
-                                true,
-                                false,
-                            )),
-                        ];
-
-                        let column =
-                            widget::column::with_children(buttons.into_iter().map(Element::from))
-                                .align_x(Alignment::Center)
-                                .height(Length::Fixed(item_height as f32))
-                                .width(Length::Fixed(item_width as f32));
-
-                        dnd_grid = dnd_grid.push(column);
-                        dnd_item_i += 1;
-                    } else {
-                        dnd_grid = dnd_grid.push(
-                            widget::container(space::vertical().height(item_width as f32))
-                                .height(Length::Fixed(item_height as f32)),
-                        );
-                    }
-                }
-            }
-            Element::from(dnd_grid)
-        });
 
         let mouse_area = mouse_area::MouseArea::new(column.width(Length::Fill))
             .on_press(|_| Message::Click(None))
