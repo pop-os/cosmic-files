@@ -1783,6 +1783,7 @@ pub enum Message {
     LocationMenuAction(LocationMenuAction),
     Drag(Option<Rectangle>),
     DragEnd,
+    DragCursorMoved(f32, f32),
     EditLocation(Option<EditLocation>),
     EditLocationComplete(usize),
     EditLocationEnable,
@@ -3584,6 +3585,21 @@ impl Tab {
             }
             Message::DragEnd => {
                 self.clicked = None;
+                commands.push(Command::AutoScroll(None));
+            }
+            Message::DragCursorMoved(_cursor_x, cursor_y) => {
+                let tab_ui_offset = 130.0;
+                let edge_threshold = 30.0;
+                let viewport_height = self.viewport_opt.map_or(0.0, |v| v.height);
+                let scroll_speed = 10.0;
+
+                if cursor_y < edge_threshold + tab_ui_offset {
+                    commands.push(Command::AutoScroll(Some(-scroll_speed)));
+                } else if cursor_y > viewport_height + tab_ui_offset - edge_threshold {
+                    commands.push(Command::AutoScroll(Some(scroll_speed)));
+                } else {
+                    commands.push(Command::AutoScroll(None));
+                }
             }
             Message::DoubleClick(click_i_opt) => {
                 if let Some(clicked_item) = self
