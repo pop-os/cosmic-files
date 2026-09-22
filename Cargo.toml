@@ -11,16 +11,16 @@ anyhow = "1"
 jiff = "0.2"
 jiff-icu = "0.2"
 icu = { version = "2.2.0", features = ["compiled_data"] }
-cctk = { git = "https://github.com/pop-os/cosmic-protocols", package = "cosmic-client-toolkit", rev = "32283d7", optional = true }
+cctk = { git = "https://github.com/pop-os/cosmic-protocols", package = "cosmic-client-toolkit", rev = "c0cff4d", optional = true }
 cosmic-mime-apps = { git = "https://github.com/pop-os/cosmic-mime-apps.git", optional = true }
 dirs = "6.0.0"
 gio = { version = "0.21", optional = true }
 glib = { version = "0.21", optional = true }
 glob = "0.3"
 ignore = "0.4"
-image = "0.25"
+image.workspace = true
 libc = "0.2"
-log = "0.4"
+log.workspace = true
 mime_guess = "2"
 notify-debouncer-full = "0.7"
 notify-rust = { version = "4", optional = true }
@@ -162,4 +162,8 @@ tokio = { version = "1", features = ["rt", "macros"] }
 # smithay-clipboard = { path = "../smithay-clipboard" }
 
 [workspace]
-members = ["cosmic-files-applet"]
+members = ["cosmic-files-applet", "cosmic-files-thumbnailer"]
+
+[workspace.dependencies]
+image = "0.25"
+log = "0.4"

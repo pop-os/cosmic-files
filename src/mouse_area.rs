@@ -214,8 +214,9 @@ impl<'a, Message, F> OnAutoScroll<'a, Message> for F where F: Fn(Option<f32>) ->
 pub trait OnMouseButton<'a, Message>: Fn(Option<Point>) -> Message + 'a {}
 impl<'a, Message, F> OnMouseButton<'a, Message> for F where F: Fn(Option<Point>) -> Message + 'a {}
 
-pub trait OnDrag<'a, Message>: Fn(Option<Rectangle>) -> Message + 'a {}
-impl<'a, Message, F> OnDrag<'a, Message> for F where F: Fn(Option<Rectangle>) -> Message + 'a {}
+pub trait OnDrag<'a, Message>: Fn(Option<Rectangle>) -> Option<Message> + 'a {}
+impl<'a, Message, F> OnDrag<'a, Message> for F where F: Fn(Option<Rectangle>) -> Option<Message> + 'a
+{}
 
 pub trait OnResize<'a, Message>: Fn(Rectangle) -> Message + 'a {}
 impl<'a, Message, F> OnResize<'a, Message> for F where F: Fn(Rectangle) -> Message + 'a {}
@@ -798,12 +799,13 @@ fn update<Message: Clone>(
     }
 
     if let Some((message, drag_rect)) = widget.on_drag.as_ref().zip(state.drag_rect(cursor)) {
-        shell.publish(message(drag_rect.intersection(&layout_bounds).map(
-            |mut rect| {
-                rect.x -= layout_bounds.x;
-                rect.y -= layout_bounds.y;
-                rect
-            },
-        )));
+        let rect_opt = drag_rect.intersection(&layout_bounds).map(|mut rect| {
+            rect.x -= layout_bounds.x;
+            rect.y -= layout_bounds.y;
+            rect
+        });
+        if let Some(message) = message(rect_opt) {
+            shell.publish(message);
+        }
     }
 }

@@ -2834,7 +2834,6 @@ pub struct Tab {
     search_context: Option<SearchContext>,
     date_time_formatter: DateTimeFormatter<fieldsets::YMDT>,
     time_formatter: DateTimeFormatter<fieldsets::T>,
-    watch_drag: bool,
     window_id: Option<window::Id>,
     large_image_manager: LargeImageManager,
 }
@@ -2979,7 +2978,6 @@ impl Tab {
             search_context: None,
             date_time_formatter: date_time_formatter(config.military_time),
             time_formatter: time_formatter(config.military_time),
-            watch_drag: true,
             window_id,
             large_image_manager: LargeImageManager::new(),
         }
@@ -3586,7 +3584,6 @@ impl Tab {
             }
             Message::DragEnd => {
                 self.clicked = None;
-                self.watch_drag = true;
             }
             Message::DoubleClick(click_i_opt) => {
                 if let Some(clicked_item) = self
@@ -3826,7 +3823,6 @@ impl Tab {
                 }
             }
             Message::Drag(rect_opt) => {
-                self.watch_drag = false;
                 if let Some(rect) = rect_opt {
                     if self.mode.multiple() {
                         self.select_rect(rect, mod_ctrl, mod_shift);
@@ -4464,13 +4460,11 @@ impl Tab {
                 }
             }
             Message::HighlightDeactivate(i) => {
-                self.watch_drag = true;
                 if let Some(item) = self.items_opt.as_mut().and_then(|f| f.get_mut(i)) {
                     item.highlighted = false;
                 }
             }
             Message::HighlightActivate(i) => {
-                self.watch_drag = true;
                 if let Some(item) = self.items_opt.as_mut().and_then(|f| f.get_mut(i)) {
                     item.highlighted = true;
                 }
@@ -4496,7 +4490,6 @@ impl Tab {
             }
             Message::Scroll(viewport) => {
                 self.scroll_opt = Some(viewport.absolute_offset());
-                self.watch_drag = true;
             }
             Message::ScrollTab(scroll_speed) => {
                 commands.push(Command::Iced(
@@ -6026,15 +6019,78 @@ impl Tab {
             }
         }
 
-        let mut mouse_area = mouse_area::MouseArea::new(column.width(Length::Fill))
+        let drag_list = (!dnd_items.is_empty()).then(|| {
+            let mut dnd_grid = widget::grid()
+                .column_spacing(column_spacing)
+                .row_spacing(grid_spacing)
+                .padding(space_xxs.into());
+
+            let mut dnd_item_i = 0;
+            for r in drag_n_i..=drag_s_i {
+                dnd_grid = dnd_grid.insert_row();
+                for c in drag_w_i..=drag_e_i {
+                    let Some((i, (row, col), item)) = dnd_items.get(dnd_item_i) else {
+                        break;
+                    };
+                    if *row == r && *col == c {
+                        let buttons = vec![
+                            widget::button::custom(
+                                widget::icon::icon(item.icon_handle_grid.clone())
+                                    .content_fit(ContentFit::Contain)
+                                    .size(icon_sizes.grid()),
+                            )
+                            .on_press(Message::Click(Some(*i)))
+                            .padding(space_xxxs)
+                            .class(button_style(
+                                item.selected,
+                                item.highlighted,
+                                item.cut,
+                                false,
+                                false,
+                                false,
+                            )),
+                            widget::button::custom(Item::grid_display_name(
+                                item.display_name.clone(),
+                            ))
+                            .id(item.button_id.clone())
+                            .on_press(Message::Click(Some(*i)))
+                            .padding([0, space_xxxs])
+                            .class(button_style(
+                                item.selected,
+                                item.highlighted,
+                                item.cut,
+                                true,
+                                true,
+                                false,
+                            )),
+                        ];
+
+                        let column =
+                            widget::column::with_children(buttons.into_iter().map(Element::from))
+                                .align_x(Alignment::Center)
+                                .height(Length::Fixed(item_height as f32))
+                                .width(Length::Fixed(item_width as f32));
+
+                        dnd_grid = dnd_grid.push(column);
+                        dnd_item_i += 1;
+                    } else {
+                        dnd_grid = dnd_grid.push(
+                            widget::container(space::vertical().height(item_width as f32))
+                                .height(Length::Fixed(item_height as f32)),
+                        );
+                    }
+                }
+            }
+            Element::from(dnd_grid)
+        });
+
+        let mouse_area = mouse_area::MouseArea::new(column.width(Length::Fill))
             .on_press(|_| Message::Click(None))
             .on_auto_scroll(Message::AutoScroll)
+            .on_drag(move |rect_opt| self.on_drag(rect_opt))
             .on_drag_end(|_| Message::DragEnd)
             .show_drag_rect(self.mode.multiple())
             .on_release(|_| Message::ClickRelease(None));
-        if self.watch_drag {
-            mouse_area = mouse_area.on_drag(Message::Drag);
-        }
 
         (self.drag_stack(drag_item_icons), mouse_area.into(), true)
     }
@@ -6343,16 +6399,14 @@ impl Tab {
             }
         }
 
-        let mut mouse_area = mouse_area::MouseArea::new(column.padding([0, space_s]))
+        let mouse_area = mouse_area::MouseArea::new(column.padding([0, space_s]))
             .with_id(Id::new("list-view"))
             .on_press(|_| Message::Click(None))
             .on_auto_scroll(Message::AutoScroll)
+            .on_drag(move |rect_opt| self.on_drag(rect_opt))
             .on_drag_end(|_| Message::DragEnd)
             .show_drag_rect(self.mode.multiple())
             .on_release(|_| Message::ClickRelease(None));
-        if self.watch_drag {
-            mouse_area = mouse_area.on_drag(Message::Drag);
-        }
 
         (self.drag_stack(drag_item_icons), mouse_area.into(), true)
     }
@@ -7346,6 +7400,19 @@ impl Tab {
 
     const fn format_time(&self, time: SystemTime) -> FormatTime<'_> {
         format_time(time, &self.date_time_formatter, &self.time_formatter)
+    }
+
+    fn on_drag<'a>(&self, rect_opt: Option<Rectangle>) -> Option<Message> {
+        let rect = rect_opt?;
+        // We only want to publish a drag message if the overlapped items of the drag rect change,
+        // otherwise a view rebuild is triggered on every drag event.
+        let changed = self.items_opt.as_ref().is_some_and(|items| {
+            items.iter().any(|item| {
+                let overlaps = item.rect_opt.get().is_some_and(|r| r.intersects(&rect));
+                overlaps != item.overlaps_drag_rect
+            })
+        });
+        changed.then_some(Message::Drag(Some(rect)))
     }
 }
 
