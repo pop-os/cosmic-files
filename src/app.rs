@@ -6632,11 +6632,6 @@ impl Application for App {
         ))]
         struct RecentsWatcherSubscription;
 
-        // This is where we subscribe to important events coming from the iced UI framework. The iced events are
-        // converted into equivalent messages defined in this project and then dispatched to the update() methods of
-        // each relevant component. Redefining the messages might seem redundant, but it provides modularity and
-        // decoupling from any one UI framework. If people one day decide to migrate away from iced to another UI
-        // framework, it'll be significantly easier.
         let mut subscriptions = vec![
             //TODO: filter more events by window id
             event::listen_with(|event, status, window_id| match event {
