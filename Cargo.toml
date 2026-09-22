@@ -27,6 +27,9 @@ notify-rust = { version = "4", optional = true }
 open = "5.3.4"
 paste = "1.0"
 regex = "1"
+# Theme files are RON. Matches the version cosmic-theme itself uses, so no second copy
+# of the parser enters the tree.
+ron = "0.12"
 rustc-hash = "2.1"
 serde = { version = "1", features = ["serde_derive"] }
 shlex = { version = "1.3" }

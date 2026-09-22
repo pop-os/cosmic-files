@@ -76,6 +76,13 @@ copy_share "$mime_dir" "$app/Contents/Resources/share/mime" \
 # and codesign --verify then fails the whole bundle with ENOENT.
 rm -rf -- "$app/Contents/Resources/share/mime/packages"
 
+# The themes the picker offers. Outside the COSMIC desktop nothing installs any, so
+# without these the theme dropdown has only match-desktop/dark/light. They land on the
+# same themes/cosmic path Cosmic Tweaks uses, so a user's own themes sit beside them.
+echo "==> copying the bundled themes"
+copy_share "$repo_root/res/themes/cosmic" "$app/Contents/Resources/share/themes/cosmic" \
+    "bundled themes" "they are committed at res/themes/cosmic"
+
 echo "==> writing Info.plist"
 version=$(sed -n '/^\[package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' \
     "$repo_root/Cargo.toml" | head -n 1)

@@ -79,6 +79,7 @@ use crate::tab::{
     self, HOVER_DURATION, HeadingOptions, ItemMetadata, Location, SORT_OPTION_FALLBACK,
     SearchLocation, Tab,
 };
+use crate::theme_catalog;
 use crate::trash::{Trash, TrashExt};
 use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
 use crate::{FxOrderMap, context_action, fl, home_dir, menu, mime_icon};
@@ -109,6 +110,10 @@ static MOUNT_ERROR_TRY_AGAIN_BUTTON_ID: LazyLock<widget::Id> =
 
 pub(crate) static REPLACE_BUTTON_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("replace-button"));
+
+/// Match desktop, dark, light: the rows of the theme dropdown that are not themes found
+/// by [`crate::theme_catalog`], which follow them.
+const BUILT_IN_APP_THEMES: usize = 3;
 
 #[derive(Clone, Debug)]
 pub enum Mode {
@@ -2327,10 +2332,16 @@ impl App {
             settings::section()
                 .title(fl!("appearance"))
                 .add({
-                    let app_theme_selected = match self.config.app_theme {
+                    let app_theme_selected = match &self.config.app_theme {
                         AppTheme::Dark => 1,
                         AppTheme::Light => 2,
                         AppTheme::System => 0,
+                        // A theme that has since left the search path has no row to
+                        // select; show the system entry, which is what it resolves to.
+                        AppTheme::Named(name) => theme_catalog::themes()
+                            .iter()
+                            .position(|theme| &theme.name == name)
+                            .map_or(0, |index| index + BUILT_IN_APP_THEMES),
                     };
                     settings::item::builder(fl!("theme")).control(widget::dropdown(
                         &self.app_themes,
@@ -2339,7 +2350,12 @@ impl App {
                             Message::AppTheme(match index {
                                 1 => AppTheme::Dark,
                                 2 => AppTheme::Light,
-                                _ => AppTheme::System,
+                                0 => AppTheme::System,
+                                index => theme_catalog::themes()
+                                    .get(index - BUILT_IN_APP_THEMES)
+                                    .map_or(AppTheme::System, |theme| {
+                                        AppTheme::Named(theme.name.clone())
+                                    }),
                             })
                         },
                     ))
@@ -2493,7 +2509,14 @@ impl Application for App {
             }
         }
 
-        let app_themes = vec![fl!("match-desktop"), fl!("dark"), fl!("light")];
+        // The built-ins come first and in a fixed order, so BUILT_IN_APP_THEMES is what
+        // separates a dropdown row from an index into the discovered themes.
+        let mut app_themes = vec![fl!("match-desktop"), fl!("dark"), fl!("light")];
+        app_themes.extend(
+            theme_catalog::themes()
+                .iter()
+                .map(|theme| theme.name.clone()),
+        );
 
         let key_binds = key_binds_with_overrides(&flags.mode.tab_mode(), &flags.config.keybinds);
 

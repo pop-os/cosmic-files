@@ -40,6 +40,7 @@ pub mod operation;
 pub(crate) mod quicklook_macos;
 mod spawn_detached;
 pub mod tab;
+mod theme_catalog;
 mod thumbnail_cacher;
 mod thumbnailer;
 pub(crate) mod trash;

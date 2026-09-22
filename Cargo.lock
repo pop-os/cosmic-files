@@ -1442,6 +1442,7 @@ dependencies = [
  "procfs",
  "recently-used-xbel",
  "regex",
+ "ron 0.12.2",
  "rust-embed",
  "rustc-hash 2.1.3",
  "serde",

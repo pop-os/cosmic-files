@@ -32,28 +32,60 @@ macro_rules! percent {
     };
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum AppTheme {
     Dark,
     Light,
     System,
+    /// A theme file found by [`crate::theme_catalog`], stored by name.
+    Named(String),
 }
 
 impl AppTheme {
     pub fn theme(&self) -> theme::Theme {
         match self {
             Self::Dark => {
-                let mut t = theme::system_dark();
+                let mut t = system_or_builtin(theme::system_dark, theme::Theme::dark, true);
                 t.theme_type.prefer_dark(Some(true));
                 t
             }
             Self::Light => {
-                let mut t = theme::system_light();
+                let mut t = system_or_builtin(theme::system_light, theme::Theme::light, false);
                 t.theme_type.prefer_dark(Some(false));
                 t
             }
             Self::System => theme::system_preference(),
+            Self::Named(name) => crate::theme_catalog::get(name)
+                .map(|found| {
+                    let mut t = found.theme();
+                    // Declare the polarity the same way the built-in arms do, so anything
+                    // keying off it sees a named dark theme as dark.
+                    t.theme_type.prefer_dark(Some(found.is_dark));
+                    t
+                })
+                .unwrap_or_else(|| {
+                    log::warn!("theme {name:?} is no longer on the theme search path");
+                    Self::System.theme()
+                }),
         }
+    }
+}
+
+/// The COSMIC desktop keeps the light and dark themes in shared cosmic-config stores that
+/// only its own settings app writes. Nothing populates them when we run standalone, and
+/// libcosmic answers an empty store with its *dark* default rather than an error, so
+/// asking for light would silently return dark. Fall back to the compiled-in theme
+/// whenever the store hands back the wrong polarity.
+fn system_or_builtin(
+    from_system: fn() -> theme::Theme,
+    builtin: fn() -> theme::Theme,
+    want_dark: bool,
+) -> theme::Theme {
+    let theme = from_system();
+    if theme.cosmic().is_dark == want_dark {
+        theme
+    } else {
+        builtin()
     }
 }
 
