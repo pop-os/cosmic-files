@@ -814,6 +814,8 @@ pub struct App {
     pinch: crate::gesture::Pinch,
     #[cfg(target_os = "macos")]
     swipe: crate::gesture::Swipe,
+    #[cfg(target_os = "macos")]
+    zoom: crate::gesture::Zoom,
     must_save_sort_names: bool,
     network_drive_connecting: Option<(MounterKey, String)>,
     network_drive_input: String,
@@ -2541,6 +2543,8 @@ impl Application for App {
             pinch: crate::gesture::Pinch::default(),
             #[cfg(target_os = "macos")]
             swipe: crate::gesture::Swipe::default(),
+            #[cfg(target_os = "macos")]
+            zoom: crate::gesture::Zoom::default(),
             nav_bar_context_id: segmented_button::Entity::null(),
             nav_model: segmented_button::ModelBuilder::default().build(),
             tab_model: segmented_button::ModelBuilder::default().build(),
@@ -3592,14 +3596,28 @@ impl Application for App {
             }
             #[cfg(target_os = "macos")]
             Message::Scroll(scroll) => {
+                let mut tasks = Vec::new();
                 // A two-finger swipe walks the active tab's history, as it does in Finder.
                 if let Some(direction) = self.swipe.feed(scroll) {
                     let tab_message = match direction {
                         crate::gesture::Direction::Back => tab::Message::GoPrevious,
                         crate::gesture::Direction::Forward => tab::Message::GoNext,
                     };
-                    return self.update(Message::TabMessage(None, tab_message));
+                    tasks.push(self.update(Message::TabMessage(None, tab_message)));
                 }
+                // Ctrl+scroll zooms. AppKit's events carry logical points and say outright
+                // which of them are momentum, so the tab's pixel path is left idle here and
+                // no idle timer is needed to cut the tail of a flick off.
+                if self.modifiers.control() {
+                    let steps = self.zoom.feed(scroll);
+                    let message = if steps > 0 {
+                        Message::ZoomIn(None)
+                    } else {
+                        Message::ZoomOut(None)
+                    };
+                    tasks.extend((0..steps.abs()).map(|_| self.update(message.clone())));
+                }
+                return Task::batch(tasks);
             }
             Message::ModifiersChanged(window_id, modifiers) => {
                 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
