@@ -303,9 +303,9 @@ pub struct ClipboardPasteText {
 impl AllowedMimeTypes for ClipboardPasteText {
     fn allowed() -> Cow<'static, [String]> {
         Cow::from(vec![
-            "text/plain".to_string(),
             "text/plain;charset=utf-8".to_string(),
             "UTF8_STRING".to_string(),
+            "text/plain".to_string(),
             "STRING".to_string(),
             "TEXT".to_string(),
         ])
