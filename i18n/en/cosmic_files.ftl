@@ -315,6 +315,7 @@ error = Error
 settings = Settings
 single-click = Single click to open
 show-recents = Recents folder in the sidebar
+network-drive-thumbnails = Show thumbnails on network drives
 
 ### Appearance
 appearance = Appearance

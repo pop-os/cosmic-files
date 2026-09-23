@@ -61,7 +61,7 @@ use crate::clipboard::{
 };
 use crate::config::{
     AppTheme, Config, DesktopConfig, Favorite, IconSizes, State, TIME_CONFIG_ID, TabConfig,
-    TimeConfig, TypeToSearch,
+    ThumbCfg, TimeConfig, TypeToSearch,
 };
 use crate::dialog::{Dialog, DialogKind, DialogMessage, DialogResult, DialogSettings};
 use crate::key_bind::key_binds;
@@ -444,6 +444,7 @@ pub enum Message {
     TabPrev,
     TabClose(Option<Entity>),
     TabConfig(TabConfig),
+    ThumbConfig(ThumbCfg),
     TabMessage(Option<Entity>, tab::Message),
     TabNew,
     TabRescan(
@@ -1689,10 +1690,16 @@ impl App {
         // Update main conf and each tab with the new config
         let commands = std::iter::once(cosmic::command::set_theme(self.config.app_theme.theme()))
             .chain(tabs.into_iter().map(|entity| {
-                self.update(Message::TabMessage(
-                    Some(entity),
-                    tab::Message::Config(self.config.tab),
-                ))
+                Task::batch([
+                    self.update(Message::TabMessage(
+                        Some(entity),
+                        tab::Message::Config(self.config.tab),
+                    )),
+                    self.update(Message::TabMessage(
+                        Some(entity),
+                        tab::Message::ThumbConfig(self.config.thumb_cfg),
+                    )),
+                ])
             }));
         Task::batch(commands)
     }
@@ -2187,6 +2194,7 @@ impl App {
 
     fn settings(&self) -> Element<'_, Message> {
         let tab_config = self.config.tab;
+        let thumb_cfg = self.config.thumb_cfg;
 
         // TODO: Should dialog be updated here too?
         settings::view_column(vec![
@@ -2249,6 +2257,17 @@ impl App {
                 .add({
                     settings::item::builder(fl!("show-recents"))
                         .toggler(self.config.show_recents, Message::SetShowRecents)
+                })
+                .add({
+                    settings::item::builder(fl!("network-drive-thumbnails")).toggler(
+                        thumb_cfg.network_thumbnails,
+                        move |network_thumbnails| {
+                            Message::ThumbConfig(ThumbCfg {
+                                network_thumbnails,
+                                ..thumb_cfg
+                            })
+                        },
+                    )
                 })
                 .into(),
         ])
@@ -4452,6 +4471,12 @@ impl Application for App {
             Message::TabConfig(config) => {
                 if config != self.config.tab {
                     config_set!(tab, config);
+                    return self.update_config();
+                }
+            }
+            Message::ThumbConfig(config) => {
+                if config != self.config.thumb_cfg {
+                    config_set!(thumb_cfg, config);
                     return self.update_config();
                 }
             }

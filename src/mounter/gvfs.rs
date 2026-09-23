@@ -23,6 +23,7 @@ const SCAN_ATTRIBUTES: &str = "standard::name,\
 standard::display-name,\
 standard::type,\
 standard::size,\
+standard::fast-content-type,\
 standard::icon,\
 standard::is-hidden,\
 time::modified";
@@ -211,8 +212,13 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
                     )
             };
             (
-                //TODO: get mime from content_type?
-                "inode/directory".parse().unwrap(),
+                if metadata.is_dir() {
+                    "inode/directory".parse().unwrap()
+                } else {
+                    info.attribute_as_string(gio::FILE_ATTRIBUTE_STANDARD_FAST_CONTENT_TYPE)
+                        .and_then(|content_type| content_type.parse().ok())
+                        .unwrap_or_else(|| mime_guess::from_path(&name).first_or_octet_stream())
+                },
                 file_icon(sizes.grid()),
                 file_icon(sizes.list()),
                 file_icon(sizes.list_condensed()),
@@ -223,6 +229,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
         let hidden = name.starts_with('.')
             || info.boolean(gio::FILE_ATTRIBUTE_STANDARD_IS_HIDDEN)
             || hidden_files.contains(&name);
+        let can_thumbnail = !metadata.is_dir() && location.path_opt().is_some();
 
         items.push(tab::Item {
             name,
@@ -236,7 +243,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
             icon_handle_grid,
             icon_handle_list,
             icon_handle_list_condensed,
-            thumbnail_opt: Some(ItemThumbnail::NotImage),
+            thumbnail_opt: (!can_thumbnail).then_some(ItemThumbnail::NotImage),
             button_id: widget::Id::unique(),
             pos_opt: Cell::new(None),
             rect_opt: Cell::new(None),

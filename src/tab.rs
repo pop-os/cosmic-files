@@ -763,11 +763,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
         icon_handle_grid,
         icon_handle_list,
         icon_handle_list_condensed,
-        thumbnail_opt: if remote {
-            Some(ItemThumbnail::NotImage)
-        } else {
-            None
-        },
+        thumbnail_opt: (remote && is_dir).then_some(ItemThumbnail::NotImage),
         button_id: widget::Id::unique(),
         pos_opt: Cell::new(None),
         rect_opt: Cell::new(None),
@@ -867,6 +863,7 @@ pub fn item_from_entry(
     }
 
     let display_name = display_name_for_file(&path, &name, is_gvfs, is_desktop);
+    let thumbnail_opt = (remote && metadata.is_dir()).then_some(ItemThumbnail::NotImage);
 
     Item {
         name,
@@ -883,7 +880,7 @@ pub fn item_from_entry(
         icon_handle_grid,
         icon_handle_list,
         icon_handle_list_condensed,
-        thumbnail_opt: remote.then_some(ItemThumbnail::NotImage),
+        thumbnail_opt,
         button_id: widget::Id::unique(),
         pos_opt: Cell::new(None),
         rect_opt: Cell::new(None),
@@ -1776,6 +1773,7 @@ pub enum Message {
     DoubleClick(Option<usize>),
     ClickRelease(Option<usize>),
     Config(TabConfig),
+    ThumbConfig(ThumbCfg),
     ContextAction(Action),
     RightClickBackground,
     Surface(cosmic::surface::Action<Message>),
@@ -2374,6 +2372,30 @@ impl Item {
 
     pub fn path_opt(&self) -> Option<&PathBuf> {
         self.location_opt.as_ref()?.path_opt()
+    }
+
+    fn is_remote(&self) -> bool {
+        if matches!(self.location_opt, Some(Location::Network(..))) {
+            return true;
+        }
+
+        let Some(path) = self.path_opt() else {
+            return false;
+        };
+
+        match &self.metadata {
+            ItemMetadata::Path { metadata, .. } => match fs_kind(metadata) {
+                FsKind::Local => false,
+                FsKind::Remote => true,
+                #[cfg(feature = "gvfs")]
+                FsKind::Gvfs => path.parent().is_none_or(gvfs_dir_is_remote),
+                #[cfg(not(feature = "gvfs"))]
+                FsKind::Gvfs => true,
+            },
+            #[cfg(feature = "gvfs")]
+            ItemMetadata::GvfsPath { .. } => path.parent().is_none_or(gvfs_dir_is_remote),
+            _ => false,
+        }
     }
 
     pub fn can_gallery(&self) -> bool {
@@ -3749,6 +3771,9 @@ impl Tab {
                     }
                 }
             }
+            Message::ThumbConfig(config) => {
+                self.thumb_config = config;
+            }
             Message::ContextAction(action) => {
                 commands.push(Command::Action(action));
             }
@@ -4679,9 +4704,8 @@ impl Tab {
             }
             Message::Thumbnail(path, thumbnail) => {
                 if let Some(ref mut items) = self.items_opt {
-                    let location = Location::Path(path);
                     for item in items.iter_mut() {
-                        if item.location_opt.as_ref() == Some(&location) {
+                        if item.path_opt() == Some(&path) {
                             let handle_opt = match &thumbnail {
                                 ItemThumbnail::NotImage => None,
                                 ItemThumbnail::Image(handle, _) => Some(widget::icon::Handle {
@@ -7004,6 +7028,10 @@ impl Tab {
                         // Skip items with no determined rect (this should include hidden items)
                         continue;
                     }
+                }
+
+                if !self.thumb_config.network_thumbnails && item.is_remote() {
+                    continue;
                 }
 
                 let Some(path) = item.path_opt().cloned() else {
