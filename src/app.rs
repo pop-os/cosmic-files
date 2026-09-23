@@ -6419,7 +6419,7 @@ impl Application for App {
     }
 
     fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
-        let mut elements = Vec::with_capacity(2);
+        let mut elements = Vec::with_capacity(1);
         elements.push(menu::menu_bar(
             &self.core,
             self.tab_model.active_data::<Tab>(),
@@ -6428,6 +6428,11 @@ impl Application for App {
             &self.key_binds,
             self.clipboard_has_content(),
         ));
+        elements
+    }
+
+    fn header_end(&self) -> Vec<Element<'_, Self::Message>> {
+        let mut elements = Vec::with_capacity(2);
         if let Some(term) = self.search_get() {
             if self.core.is_condensed() {
                 elements.push(
@@ -6456,11 +6461,6 @@ impl Application for App {
                     .into(),
             );
         }
-        elements
-    }
-
-    fn header_end(&self) -> Vec<Element<'_, Self::Message>> {
-        let mut elements = Vec::new();
         elements.push(
             widget::button::icon(icon::from_name("list-add-symbolic"))
                 .on_press(Message::TabNew)
