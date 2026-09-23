@@ -338,6 +338,7 @@ pub struct ThumbCfg {
     pub jobs: NonZeroU16,
     pub max_mem_mb: NonZeroU16,
     pub max_size_mb: NonZeroU16,
+    pub network_thumbnails: bool,
 }
 
 impl Default for ThumbCfg {
@@ -346,6 +347,7 @@ impl Default for ThumbCfg {
             jobs: 4.try_into().unwrap(),
             max_mem_mb: 2000.try_into().unwrap(),
             max_size_mb: 64.try_into().unwrap(),
+            network_thumbnails: false,
         }
     }
 }
