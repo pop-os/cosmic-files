@@ -52,6 +52,7 @@ pub fn context_menu<'a>(
     key_binds: &HashMap<KeyBind, Action>,
     modifiers: &Modifiers,
     clipboard_paste_available: bool,
+    show_starred: &bool,
     context_actions: &[ContextActionPreset],
 ) -> Vec<menu::Tree<tab::Message>> {
     let menu_item =
@@ -84,6 +85,7 @@ pub fn context_menu<'a>(
     let mut selected_types: Vec<Mime> = vec![];
     let mut selected_mount_point = 0;
     let mut any_trash_item = false;
+    let mut starred = 0;
     if let Some(items) = tab.items_opt() {
         for item in items {
             if item.selected {
@@ -91,6 +93,9 @@ pub fn context_menu<'a>(
                 if item.metadata.is_dir() {
                     selected_mount_point += i32::from(item.is_mount_point);
                     selected_dir += 1;
+                }
+                if item.starred {
+                    starred += 1
                 }
                 match &item.location_opt {
                     Some(Location::Trash) | Some(Location::Search(SearchLocation::Trash, ..)) => {
@@ -143,7 +148,9 @@ pub fn context_menu<'a>(
             | Location::Path(..)
             | Location::Search(SearchLocation::Path(..), ..)
             | Location::Search(SearchLocation::Recents, ..)
+            | Location::Search(SearchLocation::Starred, ..)
             | Location::Recents
+            | Location::Starred
             | Location::Network(_, _, Some(_)),
         ) => {
             if selected_trash_only {
@@ -243,8 +250,22 @@ pub fn context_menu<'a>(
                     children.push(menu::Item::Divider);
                     children.push(menu_item(fl!("delete-permanently"), Action::Delete));
                 } else {
-                    if matches!(tab.mode, tab::Mode::App) {
-                        children.push(menu::Item::Divider);
+                    children.push(menu::Item::Divider);
+                    if *show_starred {
+                        if starred > 0 || matches!(tab.location, Location::Starred) {
+                            children.push(menu_item(
+                                fl!("remove-from-starred"),
+                                Action::RemoveFromStarred
+                            ));
+                        }
+                        if starred < selected && !matches!(tab.location, Location::Starred) {
+                            children.push(menu_item(
+                                fl!("add-to-starred"),
+                                Action::AddToStarred
+                            ));
+                        }
+                    }
+                    if matches!(tab.mode, tab::Mode::App) && selected > 0 && selected == selected_dir {
                         children.push(menu_item(fl!("add-to-sidebar"), Action::AddToSidebar));
                     }
                     children.push(menu::Item::Divider);
@@ -271,7 +292,7 @@ pub fn context_menu<'a>(
             } else {
                 //TODO: need better designs for menu with no selection
                 //TODO: have things like properties but they apply to the folder?
-                if tab.location != Location::Recents {
+                if tab.location != Location::Recents && tab.location != Location::Starred {
                     children.push(menu_item(fl!("new-folder"), Action::NewFolder));
                     children.push(menu_item(fl!("new-file"), Action::NewFile));
                     children.push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal));
@@ -324,7 +345,9 @@ pub fn context_menu<'a>(
             | Location::Path(..)
             | Location::Search(SearchLocation::Path(..), ..)
             | Location::Search(SearchLocation::Recents, ..)
+            | Location::Search(SearchLocation::Starred, ..)
             | Location::Recents
+            | Location::Starred
             | Location::Network(_, _, Some(_)),
         ) => {
             if selected > 0 {
@@ -596,6 +619,171 @@ pub fn menu_bar<'a>(
         (fl!("move-to-trash"), Action::Delete)
     };
 
+    let menu_file = (
+        fl!("file"),
+        vec![
+            menu::Item::Button(fl!("new-tab"), None, Action::TabNew),
+            menu::Item::Button(fl!("new-window"), None, Action::WindowNew),
+            menu::Item::Button(fl!("new-folder"), None, Action::NewFolder),
+            menu::Item::Button(fl!("new-file"), None, Action::NewFile),
+            menu_button_optional(
+                fl!("open"),
+                Action::Open,
+                (selected > 0 && selected_dir == 0)
+                    || (selected_dir == 1 && selected == 1),
+            ),
+            menu_button_optional(
+                fl!("menu-open-with"),
+                Action::OpenWith,
+                selected == 1,
+            ),
+            menu::Item::Divider,
+            menu_button_optional(fl!("rename"), Action::Rename, selected > 0),
+            menu::Item::Divider,
+            menu::Item::Button(fl!("reload-folder"), None, Action::Reload),
+            menu::Item::Divider,
+            menu_button_optional(
+                fl!("add-to-starred"),
+                Action::AddToStarred,
+                selected > 0,
+            ),
+            menu_button_optional(
+                fl!("add-to-sidebar"),
+                Action::AddToSidebar,
+                selected_dir > 0 && selected_dir == selected,
+            ),
+            menu::Item::Divider,
+            menu_button_optional(
+                fl!("restore-from-trash"),
+                Action::RestoreFromTrash,
+                selected > 0 && in_trash,
+            ),
+            menu_button_optional(delete_item, delete_item_action, selected > 0),
+            menu::Item::Divider,
+            menu::Item::Button(fl!("close-tab"), None, Action::TabClose),
+            menu::Item::Button(fl!("quit"), None, Action::WindowClose),
+        ],
+    );
+
+    let menu_edit = (
+        (fl!("edit")),
+        vec![
+            menu_button_optional(fl!("cut"), Action::Cut, selected > 0),
+            menu_button_optional(fl!("copy"), Action::Copy, selected > 0),
+            menu_button_optional(fl!("move-to"), Action::MoveTo, selected > 0),
+            menu_button_optional(fl!("copy-to"), Action::CopyTo, selected > 0),
+            menu_button_optional(fl!("paste"), Action::Paste, can_paste),
+            menu::Item::Button(fl!("select-all"), None, Action::SelectAll),
+            menu::Item::Divider,
+            menu::Item::Button(fl!("history"), None, Action::EditHistory),
+        ],
+    );
+    let menu_view = (
+        (fl!("view")),
+        vec![
+            menu::Item::Button(fl!("zoom-in"), None, Action::ZoomIn),
+            menu::Item::Button(fl!("default-size"), None, Action::ZoomDefault),
+            menu::Item::Button(fl!("zoom-out"), None, Action::ZoomOut),
+            menu::Item::Divider,
+            menu::Item::CheckBox(
+                fl!("grid-view"),
+                None,
+                tab_opt.is_some_and(|tab| matches!(tab.config.view, tab::View::Grid)),
+                Action::TabViewGrid,
+            ),
+            menu::Item::CheckBox(
+                fl!("list-view"),
+                None,
+                tab_opt.is_some_and(|tab| matches!(tab.config.view, tab::View::List)),
+                Action::TabViewList,
+            ),
+            menu::Item::Divider,
+            menu::Item::CheckBox(
+                fl!("show-hidden-files"),
+                None,
+                tab_opt.is_some_and(|tab| tab.config.show_hidden),
+                Action::ToggleShowHidden,
+            ),
+            menu::Item::CheckBox(
+                fl!("list-directories-first"),
+                None,
+                tab_opt.is_some_and(|tab| tab.config.folders_first),
+                Action::ToggleFoldersFirst,
+            ),
+            menu::Item::CheckBox(
+                fl!("show-details"),
+                None,
+                config.show_details,
+                Action::Preview,
+            ),
+            menu::Item::Divider,
+            menu_button_optional(
+                fl!("gallery-preview"),
+                Action::Gallery,
+                selected_gallery > 0,
+            ),
+            menu::Item::Divider,
+            menu::Item::Button(fl!("menu-settings"), None, Action::Settings),
+            menu::Item::Divider,
+            menu::Item::Button(fl!("menu-about"), None, Action::About),
+        ],
+    );
+
+    let mut menu_sort = (
+        (fl!("sort")),
+        vec![
+            sort_item(fl!("sort-a-z"), tab::HeadingOptions::Name, true),
+            sort_item(fl!("sort-z-a"), tab::HeadingOptions::Name, false),
+            sort_item(
+                fl!("sort-newest-first"),
+                if in_trash {
+                    tab::HeadingOptions::TrashedOn
+                } else {
+                    tab::HeadingOptions::Modified
+                },
+                false,
+            ),
+            sort_item(
+                fl!("sort-oldest-first"),
+                if in_trash {
+                    tab::HeadingOptions::TrashedOn
+                } else {
+                    tab::HeadingOptions::Modified
+                },
+                true,
+            ),
+            sort_item(
+                fl!("sort-smallest-to-largest"),
+                tab::HeadingOptions::Size,
+                true,
+            ),
+            sort_item(
+                fl!("sort-largest-to-smallest"),
+                tab::HeadingOptions::Size,
+                false,
+            ),
+        ],
+    );
+
+    //TODO: sort by type
+
+    if config.show_starred {
+        menu_sort.1.push(
+            sort_item(
+                fl!("sort-starred-first"),
+                tab::HeadingOptions::Starred,
+                false,
+            ),
+        );
+        menu_sort.1.push(
+            sort_item(
+                fl!("sort-starred-last"),
+                tab::HeadingOptions::Starred,
+                true,
+            ),
+        );
+    }
+
     responsive_menu_bar()
         .item_height(ItemHeight::Dynamic(40))
         .item_width(ItemWidth::Uniform(360))
@@ -606,145 +794,10 @@ pub fn menu_bar<'a>(
             MENU_ID.clone(),
             Message::Surface,
             vec![
-                (
-                    fl!("file"),
-                    vec![
-                        menu::Item::Button(fl!("new-tab"), None, Action::TabNew),
-                        menu::Item::Button(fl!("new-window"), None, Action::WindowNew),
-                        menu::Item::Button(fl!("new-folder"), None, Action::NewFolder),
-                        menu::Item::Button(fl!("new-file"), None, Action::NewFile),
-                        menu_button_optional(
-                            fl!("open"),
-                            Action::Open,
-                            (selected > 0 && selected_dir == 0)
-                                || (selected_dir == 1 && selected == 1),
-                        ),
-                        menu_button_optional(
-                            fl!("menu-open-with"),
-                            Action::OpenWith,
-                            selected == 1,
-                        ),
-                        menu::Item::Divider,
-                        menu_button_optional(fl!("rename"), Action::Rename, selected > 0),
-                        menu::Item::Divider,
-                        menu::Item::Button(fl!("reload-folder"), None, Action::Reload),
-                        menu::Item::Divider,
-                        menu_button_optional(
-                            fl!("add-to-sidebar"),
-                            Action::AddToSidebar,
-                            selected > 0,
-                        ),
-                        menu::Item::Divider,
-                        menu_button_optional(
-                            fl!("restore-from-trash"),
-                            Action::RestoreFromTrash,
-                            selected > 0 && in_trash,
-                        ),
-                        menu_button_optional(delete_item, delete_item_action, selected > 0),
-                        menu::Item::Divider,
-                        menu::Item::Button(fl!("close-tab"), None, Action::TabClose),
-                        menu::Item::Button(fl!("quit"), None, Action::WindowClose),
-                    ],
-                ),
-                (
-                    (fl!("edit")),
-                    vec![
-                        menu_button_optional(fl!("cut"), Action::Cut, selected > 0),
-                        menu_button_optional(fl!("copy"), Action::Copy, selected > 0),
-                        menu_button_optional(fl!("move-to"), Action::MoveTo, selected > 0),
-                        menu_button_optional(fl!("copy-to"), Action::CopyTo, selected > 0),
-                        menu_button_optional(fl!("paste"), Action::Paste, can_paste),
-                        menu::Item::Button(fl!("select-all"), None, Action::SelectAll),
-                        menu::Item::Divider,
-                        menu::Item::Button(fl!("history"), None, Action::EditHistory),
-                    ],
-                ),
-                (
-                    (fl!("view")),
-                    vec![
-                        menu::Item::Button(fl!("zoom-in"), None, Action::ZoomIn),
-                        menu::Item::Button(fl!("default-size"), None, Action::ZoomDefault),
-                        menu::Item::Button(fl!("zoom-out"), None, Action::ZoomOut),
-                        menu::Item::Divider,
-                        menu::Item::CheckBox(
-                            fl!("grid-view"),
-                            None,
-                            tab_opt.is_some_and(|tab| matches!(tab.config.view, tab::View::Grid)),
-                            Action::TabViewGrid,
-                        ),
-                        menu::Item::CheckBox(
-                            fl!("list-view"),
-                            None,
-                            tab_opt.is_some_and(|tab| matches!(tab.config.view, tab::View::List)),
-                            Action::TabViewList,
-                        ),
-                        menu::Item::Divider,
-                        menu::Item::CheckBox(
-                            fl!("show-hidden-files"),
-                            None,
-                            tab_opt.is_some_and(|tab| tab.config.show_hidden),
-                            Action::ToggleShowHidden,
-                        ),
-                        menu::Item::CheckBox(
-                            fl!("list-directories-first"),
-                            None,
-                            tab_opt.is_some_and(|tab| tab.config.folders_first),
-                            Action::ToggleFoldersFirst,
-                        ),
-                        menu::Item::CheckBox(
-                            fl!("show-details"),
-                            None,
-                            config.show_details,
-                            Action::Preview,
-                        ),
-                        menu::Item::Divider,
-                        menu_button_optional(
-                            fl!("gallery-preview"),
-                            Action::Gallery,
-                            selected_gallery > 0,
-                        ),
-                        menu::Item::Divider,
-                        menu::Item::Button(fl!("menu-settings"), None, Action::Settings),
-                        menu::Item::Divider,
-                        menu::Item::Button(fl!("menu-about"), None, Action::About),
-                    ],
-                ),
-                (
-                    (fl!("sort")),
-                    vec![
-                        sort_item(fl!("sort-a-z"), tab::HeadingOptions::Name, true),
-                        sort_item(fl!("sort-z-a"), tab::HeadingOptions::Name, false),
-                        sort_item(
-                            fl!("sort-newest-first"),
-                            if in_trash {
-                                tab::HeadingOptions::TrashedOn
-                            } else {
-                                tab::HeadingOptions::Modified
-                            },
-                            false,
-                        ),
-                        sort_item(
-                            fl!("sort-oldest-first"),
-                            if in_trash {
-                                tab::HeadingOptions::TrashedOn
-                            } else {
-                                tab::HeadingOptions::Modified
-                            },
-                            true,
-                        ),
-                        sort_item(
-                            fl!("sort-smallest-to-largest"),
-                            tab::HeadingOptions::Size,
-                            true,
-                        ),
-                        sort_item(
-                            fl!("sort-largest-to-smallest"),
-                            tab::HeadingOptions::Size,
-                            false,
-                        ),
-                        //TODO: sort by type
-                    ],
-                ),
+                menu_file,
+                menu_edit,
+                menu_view,
+                menu_sort,
             ],
         )
 }
@@ -772,6 +825,12 @@ pub fn location_context_menu(ancestor_index: usize) -> Vec<menu::Tree<tab::Messa
             ),
             menu::Item::Divider,
             menu::Item::Button(
+                fl!("add-to-starred"),
+                None,
+                LocationMenuAction::AddToStarred(ancestor_index),
+            ),
+            menu::Item::Divider,
+            menu::Item::Button(
                 fl!("add-to-sidebar"),
                 None,
                 LocationMenuAction::AddToSidebar(ancestor_index),
@@ -779,3 +838,4 @@ pub fn location_context_menu(ancestor_index: usize) -> Vec<menu::Tree<tab::Messa
         ],
     )
 }
+

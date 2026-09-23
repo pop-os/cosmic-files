@@ -785,6 +785,8 @@ impl App {
                     Some(SearchLocation::Path(path.clone()))
                 } else if self.tab.location.is_recents() {
                     Some(SearchLocation::Recents)
+                } else if self.tab.location.is_starred() {
+                    Some(SearchLocation::Starred)
                 } else if self.tab.location.is_trash() {
                     Some(SearchLocation::Trash)
                 } else {
@@ -807,6 +809,7 @@ impl App {
                 Location::Search(search_location, ..) => match search_location {
                     SearchLocation::Path(path) => Some((Location::Path(path.clone()), false)),
                     SearchLocation::Recents => Some((Location::Recents, false)),
+                    SearchLocation::Starred => Some((Location::Starred, false)),
                     SearchLocation::Trash => Some((Location::Trash, false)),
                 },
                 _ => None,
@@ -872,6 +875,13 @@ impl App {
         }
     }
 
+    fn has_bookmarks(&mut self) -> bool {
+        match user_places_xbel::parse_file() {
+            Ok(bookmarks) => !bookmarks.bookmarks.is_empty(),
+            Err(_) => false,
+        }
+    }
+
     fn update_nav_model(&mut self) {
         let mut nav_model = segmented_button::ModelBuilder::default();
 
@@ -880,6 +890,14 @@ impl App {
                 b.text(fl!("recents"))
                     .icon(widget::icon::from_name("document-open-recent-symbolic"))
                     .data(Location::Recents)
+            });
+        }
+
+        if self.flags.config.show_starred {
+            nav_model = nav_model.insert(|b| {
+                b.text(fl!("starred"))
+                    .icon(widget::icon::from_name("starred-symbolic"))
+                    .data(Location::Starred)
             });
         }
 
@@ -1954,7 +1972,13 @@ impl Application for App {
 
         col = col.push(
             self.tab
-                .view(&self.key_binds, &self.modifiers, false, &[])
+                .view(
+                    &self.key_binds,
+                    &self.modifiers,
+                    false,  // Clipboard has content
+                    &false, // Show Starred
+                    &[]
+                )
                 .map(Message::TabMessage),
         );
 

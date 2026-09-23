@@ -348,6 +348,9 @@ pub struct OperationSelection {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Operation {
+    AddToStarred {
+        paths: Vec<PathBuf>,
+    },
     /// Compress files
     Compress {
         paths: Vec<PathBuf>,
@@ -394,6 +397,9 @@ pub enum Operation {
     },
     RemoveFromRecents {
         paths: Box<[PathBuf]>,
+    },
+    RemoveFromStarred {
+        paths: Vec<PathBuf>,
     },
     Rename {
         from: PathBuf,
@@ -480,6 +486,7 @@ impl Operation {
             ControllerState::Failed => fl!("progress-failed", percent = percent),
         };
         match self {
+            Self::AddToStarred { paths } => fl!("adding-to-starred", items = paths.len()),
             Self::Compress { paths, to, .. } => fl!(
                 "compressing",
                 items = paths.len(),
@@ -538,6 +545,7 @@ impl Operation {
                 fl!("renaming", from = file_name(from), to = file_name(to))
             }
             Self::RemoveFromRecents { paths } => fl!("removing-from-recents", items = paths.len()),
+            Self::RemoveFromStarred { paths } => fl!("removing-from-starred", items = paths.len()),
             Self::Restore { items } => fl!("restoring", items = items.len(), progress = progress()),
             Self::SetExecutableAndLaunch { path } => {
                 fl!("setting-executable-and-launching", name = file_name(path))
@@ -554,6 +562,7 @@ impl Operation {
 
     pub fn completed_text(&self) -> String {
         match self {
+            Self::AddToStarred { paths } => fl!("added-to-starred", items = paths.len()),
             Self::Compress { paths, to, .. } => fl!(
                 "compressed",
                 items = paths.len(),
@@ -602,6 +611,7 @@ impl Operation {
             ),
             Self::PermanentlyDelete { paths } => fl!("permanently-deleted", items = paths.len()),
             Self::RemoveFromRecents { paths } => fl!("removed-from-recents", items = paths.len()),
+            Self::RemoveFromStarred { paths } => fl!("removed-from-starred", items = paths.len()),
             Self::Rename { from, to } => fl!("renamed", from = file_name(from), to = file_name(to)),
             Self::Restore { items } => fl!("restored", items = items.len()),
             Self::SetExecutableAndLaunch { path } => {
@@ -629,9 +639,11 @@ impl Operation {
             | Self::Move { .. }
             | Self::PermanentlyDelete { .. }
             | Self::Restore { .. } => true,
-            Self::NewFile { .. }
+            Self::AddToStarred { .. }
+            | Self::NewFile { .. }
             | Self::NewFolder { .. }
             | Self::RemoveFromRecents { .. }
+            | Self::RemoveFromStarred { .. }
             | Self::Rename { .. }
             | Self::SetExecutableAndLaunch { .. }
             | Self::SetPermissions { .. } => false,
@@ -658,6 +670,31 @@ impl Operation {
 
         //TODO: IF ERROR, RETURN AN Operation THAT CAN UNDO THE CURRENT STATE
         let paths: Result<OperationSelection, OperationError> = match self {
+            Self::AddToStarred { paths } => {
+                let paths_clone = paths.clone();
+                let total = paths_clone.len();
+                for (i, path) in paths_clone.into_iter().enumerate() {
+                    controller
+                        .check()
+                        .await
+                        .map_err(|s| OperationError::from_state(s, &controller))?;
+
+                    controller.set_progress((i as f32) / (total as f32));
+
+                    compio::runtime::spawn_blocking(move ||
+                        user_places_xbel::update_user_place(
+                            &PathBuf::from(&path),
+                            "com.system76.CosmicFiles".to_string(),
+                            "cosmic-files".to_string(),
+                            None,
+                        )
+                    )
+                    .await
+                    .map_err(wrap_compio_spawn_error)?
+                    .map_err(|e| OperationError::from_err(e, &controller))?;
+                }
+                Ok(OperationSelection::default())
+            }
             Self::Compress {
                 paths,
                 to,
@@ -1105,18 +1142,28 @@ impl Operation {
                 Ok(OperationSelection::default())
             }
             Self::RemoveFromRecents { paths } => {
-                tokio::task::spawn_blocking(move || {
+                let _ = tokio::task::spawn_blocking(move || {
                     let path_refs = paths.iter().map(PathBuf::as_path).collect::<Box<[_]>>();
                     recently_used_xbel::remove_recently_used(&path_refs)
                 })
                 .await
-                .map_err(|e| OperationError::from_err(e, &controller))?
+                .map_err(|e| OperationError::from_err(e, &controller))?;
+
+                Ok(OperationSelection::default())
+            }
+            Self::RemoveFromStarred { paths } => {
+                let _ = tokio::task::spawn_blocking(move || {
+                    let path_refs = paths.iter().map(PathBuf::as_path).collect::<Box<[_]>>();
+                    user_places_xbel::remove_user_place(&path_refs)
+                })
+                .await
                 .map_err(|e| OperationError::from_err(e, &controller))?;
 
                 Ok(OperationSelection::default())
             }
             Self::Rename { from, to } => {
                 let controller_clone = controller.clone();
+                let to_clone = to.clone();
 
                 compio::runtime::spawn(async move {
                     let controller = controller_clone;
@@ -1127,6 +1174,18 @@ impl Operation {
                     compio::fs::rename(&from, &to)
                         .await
                         .map_err(|e| OperationError::from_err(e, &controller))?;
+
+                    let _ = tokio::task::spawn_blocking(move || {
+                        recently_used_xbel::update_recently_used(
+                            &to_clone,
+                            "com.system76.CosmicFiles".to_string(),
+                            "cosmic-files".to_string(),
+                            None,
+                        )
+                    })
+                    .await
+                    .map_err(|e| OperationError::from_err(e, &controller))?;
+
                     Result::<_, OperationError>::Ok(OperationSelection {
                         ignored: vec![from],
                         selected: vec![to],
