@@ -344,6 +344,11 @@ pub struct OperationSelection {
     pub ignored: Vec<PathBuf>,
     // Paths to select
     pub selected: Vec<PathBuf>,
+    // When true, do not record a new undo entry for this completed operation.
+    pub suppress_recording: bool,
+    // The trash items captured by Operation::Delete so undo-delete can restore
+    // them. ONLY Operation::Delete sets this (None otherwise).
+    pub undo_items: Option<Vec<trash::TrashItem>>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -678,6 +683,7 @@ impl Operation {
                         let op_sel = OperationSelection {
                             ignored: paths.clone(),
                             selected: vec![to.clone()],
+                            ..Default::default()
                         };
 
                         let mut paths = paths;
@@ -848,6 +854,17 @@ impl Operation {
             }
             Self::Delete { paths } => {
                 let total = paths.len();
+                #[cfg(any(
+                    target_os = "windows",
+                    all(
+                        unix,
+                        not(target_os = "macos"),
+                        not(target_os = "ios"),
+                        not(target_os = "android")
+                    )
+                ))]
+                let mut trashed_paths: Vec<PathBuf> = Vec::with_capacity(total);
+
                 for (i, path) in paths.into_iter().enumerate() {
                     futures::executor::block_on(async {
                         controller
@@ -858,12 +875,70 @@ impl Operation {
 
                     controller.set_progress((i as f32) / (total as f32));
 
-                    let _items_opt = compio::runtime::spawn_blocking(|| trash::delete(path))
+                    // Move the path into the trash. NOTE: `trash::delete` returns
+                    // `Result<(), Error>` (no items), so the trash items are captured
+                    // below by listing the trash and matching the original paths.
+                    let path_clone = path.clone();
+                    let _ = compio::runtime::spawn_blocking(move || trash::delete(path_clone))
                         .await
                         .map_err(wrap_compio_spawn_error)?;
-                    //TODO: items_opt allows for easy restore
+                    #[cfg(any(
+                        target_os = "windows",
+                        all(
+                            unix,
+                            not(target_os = "macos"),
+                            not(target_os = "ios"),
+                            not(target_os = "android")
+                        )
+                    ))]
+                    trashed_paths.push(path);
                 }
-                Ok(OperationSelection::default())
+
+                // Capture the just-trashed items so undo-delete can restore them.
+                // Restore-from-trash is unsupported on macOS, so only capture on
+                // platforms where `Operation::Restore` works.
+                #[cfg(any(
+                    target_os = "windows",
+                    all(
+                        unix,
+                        not(target_os = "macos"),
+                        not(target_os = "ios"),
+                        not(target_os = "android")
+                    )
+                ))]
+                let undo_items = {
+                    if trashed_paths.is_empty() {
+                        None
+                    } else {
+                        let items = compio::runtime::spawn_blocking(move || {
+                            trash::os_limited::list().map(|all| {
+                                all.into_iter()
+                                    .filter(|item| trashed_paths.contains(&item.original_path()))
+                                    .collect::<Vec<_>>()
+                            })
+                        })
+                        .await
+                        .map_err(wrap_compio_spawn_error)?
+                        .map_err(|e| OperationError::from_err(e, &controller))?;
+                        if items.is_empty() { None } else { Some(items) }
+                    }
+                };
+
+                #[cfg(not(any(
+                    target_os = "windows",
+                    all(
+                        unix,
+                        not(target_os = "macos"),
+                        not(target_os = "ios"),
+                        not(target_os = "android")
+                    )
+                )))]
+                let undo_items = None;
+
+                Ok(OperationSelection {
+                    undo_items,
+                    ..Default::default()
+                })
             }
             Self::DeleteTrash { items } => {
                 #[cfg(any(
@@ -1051,6 +1126,7 @@ impl Operation {
                     Result::<_, OperationError>::Ok(OperationSelection {
                         ignored: Vec::new(),
                         selected: vec![path],
+                        ..Default::default()
                     })
                 })
             }
@@ -1070,6 +1146,7 @@ impl Operation {
                     Result::<_, OperationError>::Ok(OperationSelection {
                         ignored: Vec::new(),
                         selected: vec![path],
+                        ..Default::default()
                     })
                 })
             }
@@ -1124,12 +1201,26 @@ impl Operation {
                         .check()
                         .await
                         .map_err(|s| OperationError::from_state(s, &controller))?;
+
+                    // Collision safety: if the target already exists (a forward rename
+                    // onto an existing path, or an undo-rename restoring a name that was
+                    // taken again), pick a unique name so the rename NEVER overwrites an
+                    // existing file. `copy_unique_path` bases the generated name on the
+                    // desired `to` (e.g. "b (Copy 1).txt") in the same parent directory.
+                    let to = if to.exists() {
+                        let parent = to.parent().unwrap_or_else(|| Path::new("."));
+                        copy_unique_path(&to, parent)
+                    } else {
+                        to
+                    };
+
                     compio::fs::rename(&from, &to)
                         .await
                         .map_err(|e| OperationError::from_err(e, &controller))?;
                     Result::<_, OperationError>::Ok(OperationSelection {
                         ignored: vec![from],
                         selected: vec![to],
+                        ..Default::default()
                     })
                 })
             }
@@ -1180,6 +1271,7 @@ impl Operation {
                 Ok(OperationSelection {
                     ignored: Vec::new(),
                     selected: paths,
+                    ..Default::default()
                 })
             }
             Self::SetExecutableAndLaunch { path } => {
@@ -1245,6 +1337,7 @@ impl Operation {
                 Ok(OperationSelection {
                     ignored: Vec::new(),
                     selected: vec![path],
+                    ..Default::default()
                 })
             }
         };
@@ -1497,6 +1590,92 @@ mod tests {
 
         assert!(file_path.exists(), "Original file should still exist");
         assert!(expected.exists(), "File should have been copied");
+
+        Ok(())
+    }
+
+    /// Simple wrapper around `[Operation::Rename]` — performs the rename and
+    /// drains any messages it sends through `msg_tx` (same shape as
+    /// `operation_copy`; a rename sends nothing today, but the drain keeps the
+    /// channel from blocking if that ever changes).
+    pub async fn operation_rename(
+        from: PathBuf,
+        to: PathBuf,
+    ) -> Result<OperationSelection, OperationError> {
+        let (tx, mut rx) = mpsc::channel(1);
+
+        let handle_rename = async move {
+            Operation::Rename { from, to }
+                .perform(&sync::Mutex::new(tx).into(), Controller::default())
+                .await
+        };
+
+        // Drain messages so the mpsc channel (capacity 1) never blocks the
+        // operation; the sender is dropped when `perform` returns, which closes
+        // the channel and ends this loop.
+        let handle_messages = async move {
+            while let Some(msg) = rx.next().await {
+                if let Message::DialogPush(DialogPage::Replace { tx, .. }, _id_to_focus) = msg {
+                    tx.send(ReplaceResult::Cancel)
+                        .await
+                        .expect("Sending a response to a replace request should succeed");
+                }
+            }
+        };
+
+        future::join(handle_messages, handle_rename).await.1
+    }
+
+    // Todo 9 acceptance: a rename whose target ALREADY EXISTS yields a unique
+    // name and NEVER overwrites the existing target. This is the execution-time
+    // collision guard that also makes undo-rename safe: the inverse is
+    // structurally the same `Operation::Rename.perform()` arm.
+    #[test(compio::test)]
+    async fn undo_rename_collision() -> io::Result<()> {
+        let fs = empty_fs()?;
+        let path = fs.path();
+
+        // Forward-style rename: a.txt -> b.txt while b.txt exists and holds
+        // data that must survive.
+        let from = path.join("a.txt");
+        File::create(&from)?;
+        let to = path.join("b.txt");
+        File::create(&to)?;
+        fs::write(&to, "pre-existing")?;
+
+        let op_sel = operation_rename(from.clone(), to.clone())
+            .await
+            .expect("Rename should succeed");
+        assert!(!from.exists(), "source should have been renamed away");
+        assert!(to.exists(), "colliding target must never be overwritten");
+        assert_eq!(fs::read_to_string(&to)?, "pre-existing");
+        let unique = path.join(format!("b ({} 1).txt", fl!("copy_noun")));
+        assert_eq!(
+            op_sel.selected[0], unique,
+            "rename should pick a unique name instead of overwriting"
+        );
+        assert!(
+            unique.exists(),
+            "file should have been renamed to the unique name"
+        );
+
+        // Inverse-style rename (undo-rename): c.txt -> a.txt while a.txt exists
+        // again (it was re-created after the original rename). Same collision
+        // safety, derived from the desired target name.
+        let from = path.join("c.txt");
+        File::create(&from)?;
+        let to = path.join("a.txt");
+        File::create(&to)?;
+        fs::write(&to, "re-created")?;
+
+        let op_sel = operation_rename(from.clone(), to.clone())
+            .await
+            .expect("Rename should succeed");
+        assert!(!from.exists(), "source should have been renamed away");
+        assert_eq!(fs::read_to_string(&to)?, "re-created");
+        let unique = path.join(format!("a ({} 1).txt", fl!("copy_noun")));
+        assert_eq!(op_sel.selected[0], unique);
+        assert!(unique.exists());
 
         Ok(())
     }

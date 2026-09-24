@@ -11,6 +11,27 @@ notification-in-progress = File operations are in progress
 trash = Trash
 recents = Recents
 undo = Undo
+redo = Redo
+undo-delete = Undo Delete
+undo-rename = Undo Rename
+undo-move = Undo Move
+undo-copy = Undo Copy
+undo-create = Undo Create
+redo-delete = Redo Delete
+redo-rename = Redo Rename
+redo-move = Redo Move
+redo-copy = Redo Copy
+redo-create = Redo Create
+confirm-undo-copy = Move {$count} {$count ->
+    [one] item
+    *[other] items
+} to the Trash?
+confirm-undo-create = Delete the created {$count ->
+    [one] item
+    *[other] items
+}?
+confirm-undo-trash = Move to Trash
+confirm-undo-cancel = Cancel
 today = Today
 
 # Desktop view options
