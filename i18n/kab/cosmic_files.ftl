@@ -320,3 +320,18 @@ move-to = Smutti ɣer…
 show-recents = Akaram n melmi kan deg ufeggag adisan
 clear-recents-history = Sfeḍ azray n melmi kan
 copy-path = Nɣel abrid
+rename-confirm = Senfel isem
+calculate = Siḍen
+error = Tuccḍa
+context-action-confirm-title = Selkem "{ $name }"?
+search-application = Nadi s yisem n usnas
+sidebar-label = Tabzimt n ugalis adisan
+change-sidebar-label = Beddel tabzimt n ugalis adisan
+context-action = Tigawt n usatal
+context-action-confirm-warning =
+    Aya ad yettwaselkem ɣef { $items } { $items ->
+        [one] uferdis
+       *[other] iferdisen
+    }.
+run = Selkem
+mixed = Yexleḍ
