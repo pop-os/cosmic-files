@@ -1336,8 +1336,6 @@ pub fn scan_desktop(
 ) -> Vec<Item> {
     sizes.grid = layout.config.icon_size;
 
-    eprintln!("scan_desktop {}", display);
-
     let mut items = Vec::new();
 
     if layout.config.show_content {
@@ -1424,24 +1422,25 @@ pub fn scan_desktop(
     }
 
     items.retain(|item| {
-        // Remove items not on this display
+        // Hide items with a position on another connected display
         if let Some(path) = item.path_opt() {
             if let Some(pos) = layout.positions.get(path) {
-                if pos.display != display {
-                    return false;
+                if layout.display_names.contains(&pos.display) {
+                    return display == pos.display;
                 }
             }
         }
 
-        // Any items without a set display will be on the primary display
+        // Any items other items will be on the primary display
         if let Some(primary_display) = &layout.primary_display {
-            if display != primary_display {
-                return false;
-            }
+            return display == primary_display;
         }
 
+        // Show any remaining items if there is no primary display
         true
     });
+
+    eprintln!("scan_desktop {}: {} items", display, items.len());
 
     items
 }
