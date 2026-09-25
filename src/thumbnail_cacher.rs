@@ -8,9 +8,16 @@ use std::io::{self, BufReader, BufWriter};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
-use std::time::UNIX_EPOCH;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tempfile::NamedTempFile;
 use url::Url;
+
+/// Fail markers older than this are ignored, so a file that previously failed
+/// to thumbnail (e.g. because a thumbnailer was missing) is retried even when
+/// the source file itself never changed.
+// 24h: long enough to avoid hammering a file that keeps failing, short enough
+// that a fix (e.g. installing a thumbnailer) is picked up the same day.
+const FAIL_MARKER_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// Implements thumbnail caching based on the freedesktop.org Thumbnail Managing Standard.
 /// <https://specifications.freedesktop.org/thumbnail-spec/latest>/
@@ -80,7 +87,7 @@ impl ThumbnailCacher {
         }
 
         // Check if there is a fail marker from an earlier failure.
-        if self.is_thumbnail_valid(&self.thumbnail_fail_marker_path) {
+        if self.is_fail_marker_valid() {
             return CachedThumbnail::Failed;
         }
 
@@ -287,6 +294,39 @@ impl ThumbnailCacher {
 
         true
     }
+
+    /// Like `is_thumbnail_valid`, but also treats the fail marker as invalid
+    /// once it's older than `FAIL_MARKER_TTL`. This covers failures caused by
+    /// a transient or environmental issue (e.g. a missing thumbnailer that
+    /// gets installed later), where the source file's mtime/size never
+    /// change and so would otherwise never be retried.
+    fn is_fail_marker_valid(&self) -> bool {
+        match fs::metadata(&self.thumbnail_fail_marker_path).and_then(|m| m.modified()) {
+            Ok(marker_mtime) => match SystemTime::now().duration_since(marker_mtime) {
+                Ok(age) if is_fail_marker_expired(age) => return false,
+                // Age within the TTL: fall through to the normal validity check.
+                Ok(_) => {}
+                Err(_) => {
+                    // The marker's mtime is in the future (clock skew, a
+                    // restored backup, etc). Don't trust a clock that's
+                    // wrong: treat the marker as expired so we retry
+                    // instead of getting stuck on it indefinitely.
+                    return false;
+                }
+            },
+            Err(_) => {
+                // No fail marker on disk, or its metadata can't be read.
+                // `is_thumbnail_valid` below will correctly return false
+                // in that case too, causing a retry.
+            }
+        }
+
+        self.is_thumbnail_valid(&self.thumbnail_fail_marker_path)
+    }
+}
+
+fn is_fail_marker_expired(age: Duration) -> bool {
+    age > FAIL_MARKER_TTL
 }
 
 fn thumbnail_uri(path: &Path) -> io::Result<String> {
@@ -367,3 +407,22 @@ static THUMBNAIL_CACHE_BASE_DIR: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
 
     None
 });
+
+#[cfg(test)]
+mod tests {
+    use super::{FAIL_MARKER_TTL, is_fail_marker_expired};
+    use std::time::Duration;
+
+    #[test]
+    fn fail_marker_not_expired_within_ttl() {
+        assert!(!is_fail_marker_expired(Duration::ZERO));
+        assert!(!is_fail_marker_expired(FAIL_MARKER_TTL));
+    }
+
+    #[test]
+    fn fail_marker_expired_past_ttl() {
+        assert!(is_fail_marker_expired(
+            FAIL_MARKER_TTL + Duration::from_secs(1)
+        ));
+    }
+}

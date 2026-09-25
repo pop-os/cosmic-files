@@ -3694,7 +3694,10 @@ impl Application for App {
                                                             );
                                                         }
                                                     }
-                                                    //TODO item.thumbnail_opt =
+                                                    // Force the thumbnail to be regenerated, since the
+                                                    // file's data or metadata (mtime/size) changed and any
+                                                    // previous thumbnail or failure marker may be stale.
+                                                    item.thumbnail_opt = None;
                                                 }
                                             }
                                         }
