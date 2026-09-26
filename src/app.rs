@@ -817,6 +817,28 @@ impl App {
         'outer: for (mime, paths) in groups {
             log::debug!("Attempting to launch app\n\tfor: {mime}\n\twith: {paths:?}");
 
+            // Windows executables are launched through Wine when it is available.
+            if paths.iter().all(|path| wine::is_supported(path)) && wine::is_available() {
+                for path in paths {
+                    match wine::open(path) {
+                        Ok(_) => {
+                            if self.config.show_recents {
+                                let _ = recently_used_xbel::update_recently_used(
+                                    &path,
+                                    Self::APP_ID.to_string(),
+                                    "cosmic-files".to_string(),
+                                    None,
+                                );
+                            }
+                        }
+                        Err(err) => {
+                            log::warn!("failed to launch {} with Wine: {}", path.display(), err);
+                        }
+                    }
+                }
+                continue;
+            }
+
             // First launch apps that can be launched directly
             if mime == "application/x-desktop" {
                 #[cfg(feature = "desktop")]
