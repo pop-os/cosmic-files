@@ -773,6 +773,7 @@ pub struct App {
     auto_scroll_speed: Option<i16>,
     file_dialog_opt: Option<Dialog<Message>>,
     clipboard_cache: ClipboardCache,
+    dir_confirm: bool,
 }
 
 impl App {
@@ -2326,15 +2327,37 @@ impl App {
         window_id: WindowId,
     ) -> Option<cosmic::prelude::Task<cosmic::Action<Message>>> {
         let entity = self.tab_model.active();
-        let tab = self.tab_model.data::<Tab>(entity)?;
+        let tab = self.tab_model.data_mut::<Tab>(entity)?;
 
+        let focused = tab.items_opt.as_ref().map(|items| {
+            items
+                .iter()
+                .enumerate()
+                .filter_map(|(i, item)| item.selected.then_some(i))
+                .collect::<Vec<_>>()
+        });
         if tab.gallery
-            || tab
-                .items_opt
+            || focused
                 .as_ref()
-                .is_some_and(|items| items.iter().any(|item| item.selected))
+                .is_some_and(|f| f.len() > 1 || f.first().is_some_and(|i| *i != 0))
         {
+            self.dir_confirm = false;
             return Some(Task::none());
+        }
+
+        if focused.is_some_and(|f| f.len() == 1 && f.first().is_none_or(|f| *f == 0))
+            && matches!(dir, Direction::Up | Direction::Left)
+        {
+            if self.dir_confirm {
+                self.dir_confirm = false;
+                tab.items_opt_mut().unwrap()[0].selected = false;
+                return None;
+            } else {
+                self.dir_confirm = true;
+                return Some(Task::none());
+            }
+        } else {
+            self.dir_confirm = false;
         }
 
         let items: Vec<_> = tab
@@ -2507,6 +2530,7 @@ impl Application for App {
             clipboard_cache: ClipboardCache::Empty,
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             layer_sizes: FxHashMap::default(),
+            dir_confirm: false,
         };
 
         let mut commands = vec![app.update_config(), app.update(Message::CheckClipboard)];
