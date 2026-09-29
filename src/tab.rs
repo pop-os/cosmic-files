@@ -5861,6 +5861,7 @@ impl Tab {
                 Empty,
             }
 
+            let mut filled_pages = HashSet::new();
             let mut desktop_items = if let Mode::Desktop = &self.mode
                 && let Location::Desktop {
                     display, layout, ..
@@ -5877,7 +5878,7 @@ impl Tab {
                             remove = true;
                             //TODO: resize grid if rows/cols do not match
                             if pos.display == *display {
-                                pos_opt = Some((pos.page, pos.row, pos.col));
+                                pos_opt = Some(pos.clone());
                             }
                         }
                     }
@@ -5894,7 +5895,8 @@ impl Tab {
                     if remove {
                         let item = items.remove(i);
                         if let Some(pos) = pos_opt {
-                            desktop_items.insert(pos, item);
+                            filled_pages.insert(pos.page);
+                            desktop_items.insert((pos.page, pos.row, pos.col), item);
                         }
                     } else {
                         i += 1;
@@ -5905,7 +5907,6 @@ impl Tab {
                 None
             };
 
-            let mut filled_pages = HashSet::new();
             let mut items_iter = items.iter();
             let mut grid_item_at = |page: usize, row: usize, col: usize| -> Option<GridItem> {
                 // Manually placed desktop items
@@ -5913,7 +5914,6 @@ impl Tab {
                     .as_mut()
                     .and_then(|x| x.remove(&(page, row, col)))
                 {
-                    filled_pages.insert(page);
                     return Some(GridItem::Item(i, item));
                 }
 
