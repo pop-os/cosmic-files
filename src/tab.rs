@@ -32,7 +32,7 @@ use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 use std::cell::Cell;
 use std::cmp::{Ordering, Reverse};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::fs::{self, File, Metadata};
@@ -5852,7 +5852,7 @@ impl Tab {
                             remove = true;
                             //TODO: resize grid if rows/cols do not match
                             if pos.display == *display {
-                                pos_opt = Some((pos.row, pos.col));
+                                pos_opt = Some((pos.page, pos.row, pos.col));
                             }
                         }
                     }
@@ -5880,21 +5880,30 @@ impl Tab {
                 None
             };
 
+            let mut filled_pages = HashSet::new();
             let mut items_iter = items.iter();
-            let mut grid_item_at = |row: usize, col: usize| -> Option<GridItem> {
+            let mut grid_item_at = |page: usize, row: usize, col: usize| -> Option<GridItem> {
                 // Manually placed desktop items
-                if let Some((i, item)) = desktop_items.as_mut().and_then(|x| x.remove(&(row, col)))
+                if let Some((i, item)) = desktop_items
+                    .as_mut()
+                    .and_then(|x| x.remove(&(page, row, col)))
                 {
+                    filled_pages.insert(page);
                     return Some(GridItem::Item(i, item));
                 }
 
                 // Regular items
                 if let Some((i, item)) = items_iter.next() {
+                    filled_pages.insert(page);
                     return Some(GridItem::Item(*i, item));
                 }
 
                 // Empty spaces on desktop for drag and drop
-                if matches!(self.mode, Mode::Desktop) && row < rows {
+                if matches!(self.mode, Mode::Desktop)
+                    && filled_pages.contains(&page)
+                    && col < cols
+                    && row < rows
+                {
                     return Some(GridItem::Empty);
                 }
 
@@ -5908,7 +5917,8 @@ impl Tab {
             let mut row = 0;
             let mut hidden = 0;
             let mut grid_elements = Vec::new();
-            while let Some(grid_item) = grid_item_at(row, col) {
+            let mut content_height = 0;
+            while let Some(grid_item) = grid_item_at(page, row, col) {
                 let item_rect = Rectangle::new(
                     Point::new(
                         (col * (item_width + column_spacing as usize) + space_xxs as usize) as f32,
@@ -5916,6 +5926,8 @@ impl Tab {
                     ),
                     Size::new(item_width as f32, item_height as f32),
                 );
+                content_height =
+                    content_height.max((item_rect.y + item_rect.height).ceil() as usize);
 
                 if let GridItem::Item(_i, item) = grid_item {
                     if !self.config.show_hidden && item.hidden {
@@ -6080,12 +6092,11 @@ impl Tab {
                 if matches!(self.mode, Mode::Desktop) {
                     row += 1;
                     if row >= (page + 1) * rows {
-                        row = page * rows;
+                        row = 0;
                         col += 1;
                         if col >= cols {
                             col = 0;
                             page += 1;
-                            row = page * rows;
                         }
                     }
                 } else {
@@ -6112,20 +6123,14 @@ impl Tab {
 
             //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
             {
-                let mut max_bottom = 0;
-                for (_, item) in items {
-                    if let Some(rect) = item.rect_opt.get() {
-                        let bottom = (rect.y + rect.height).ceil() as usize;
-                        if bottom > max_bottom {
-                            max_bottom = bottom;
-                        }
-                    }
-                }
-
                 // Cache content height for scroll clamping on next frame
-                self.content_height_opt.set(Some(max_bottom as f32));
+                self.content_height_opt.set(Some(content_height as f32));
 
-                let top_deduct = 7 * (space_xxs as usize);
+                let top_deduct = if matches!(self.mode, Mode::Desktop) {
+                    0
+                } else {
+                    7 * (space_xxs as usize)
+                };
 
                 self.item_view_size_opt
                     .set(self.size_opt.get().map(|s| Size {
@@ -6133,7 +6138,7 @@ impl Tab {
                         height: s.height - top_deduct as f32,
                     }));
 
-                let spacer_height = height.saturating_sub(max_bottom + top_deduct);
+                let spacer_height = height.saturating_sub(content_height + top_deduct);
                 if spacer_height > 0 {
                     column = column.push(widget::container(
                         space::vertical().height(Length::Fixed(spacer_height as f32)),
