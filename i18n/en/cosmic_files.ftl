@@ -204,7 +204,7 @@ username = Username
 ## Operations
 cancelled = Cancelled
 edit-history = Edit history
-history = History
+history = History...
 no-history = No items in history.
 pending = Pending
 progress = {$percent}%
@@ -299,7 +299,7 @@ default-app = {$name} (default)
 search-application = Search by app name
 
 ## Show details
-show-details = Show details
+show-details = Show details...
 type = Type: {$mime}
 items = Items: {$items}
 item-size = Size: {$size}
