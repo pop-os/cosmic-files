@@ -771,6 +771,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
         button_id: widget::Id::unique(),
         pos_opt: Cell::new(None),
         rect_opt: Cell::new(None),
+        grid_bounds: None,
         selected: false,
         highlighted: false,
         overlaps_drag_rect: false,
@@ -887,6 +888,7 @@ pub fn item_from_entry(
         button_id: widget::Id::unique(),
         pos_opt: Cell::new(None),
         rect_opt: Cell::new(None),
+        grid_bounds: None,
         selected: false,
         highlighted: false,
         overlaps_drag_rect: false,
@@ -946,6 +948,7 @@ pub fn item_from_trash_entry(
         button_id: widget::Id::unique(),
         pos_opt: Cell::new(None),
         rect_opt: Cell::new(None),
+        grid_bounds: None,
         selected: false,
         highlighted: false,
         overlaps_drag_rect: false,
@@ -1412,6 +1415,7 @@ pub fn scan_desktop(
             button_id: widget::Id::unique(),
             pos_opt: Cell::new(None),
             rect_opt: Cell::new(None),
+            grid_bounds: None,
             selected: false,
             highlighted: false,
             overlaps_drag_rect: false,
@@ -1836,6 +1840,7 @@ pub enum Message {
     GalleryToggle,
     GoNext,
     GoPrevious,
+    ItemBounds(usize, Rectangle),
     ItemDown,
     ItemLeft,
     ItemPageDown,
@@ -2372,6 +2377,7 @@ pub struct Item {
     pub button_id: widget::Id,
     pub pos_opt: Cell<Option<(usize, usize)>>,
     pub rect_opt: Cell<Option<Rectangle>>,
+    pub grid_bounds: Option<Rectangle>,
     pub selected: bool,
     pub highlighted: bool,
     pub cut: bool,
@@ -2384,6 +2390,15 @@ impl Item {
     fn display_name(name: &str) -> String {
         // In order to wrap at periods and underscores, add a zero width space after each one
         name.replace('.', ".\u{200B}").replace('_', "_\u{200B}")
+    }
+
+    fn drag_overlap(&self, drag_rect: &Rectangle, view: View) -> bool {
+        if matches!(view, View::Grid)
+            && let Some(bounds) = self.grid_bounds
+        {
+            return bounds.intersects(drag_rect);
+        }
+        self.rect_opt.get().is_some_and(|r| r.intersects(drag_rect))
     }
 
     /// Text widget for a filename in grid/icon view: word-or-glyph wrapping, middle-ellipsized to 3 lines.
@@ -3326,7 +3341,7 @@ impl Tab {
         if let Some(ref mut items) = self.items_opt {
             for item in items.iter_mut() {
                 let was_overlapped = item.overlaps_drag_rect;
-                item.overlaps_drag_rect = item.rect_opt.get().is_some_and(|r| r.intersects(&rect));
+                item.overlaps_drag_rect = item.drag_overlap(&rect, self.config.view);
 
                 item.selected = if mod_ctrl || mod_shift {
                     if was_overlapped == item.overlaps_drag_rect {
@@ -4065,6 +4080,16 @@ impl Tab {
                 {
                     cd = Some(location.clone());
                     history_i_opt = Some(history_i);
+                }
+            }
+            Message::ItemBounds(i, mut bounds) => {
+                if let Some(item) = self.items_opt.as_mut().and_then(|x| x.get_mut(i)) {
+                    // The bounds are offset by the viewport position
+                    if let Some(viewport) = self.viewport_opt {
+                        bounds.x -= viewport.x;
+                        bounds.y -= viewport.y;
+                    }
+                    item.grid_bounds = Some(bounds);
                 }
             }
             Message::ItemDown => {
@@ -5988,9 +6013,7 @@ impl Tab {
                             ];
 
                             let mut column = widget::column::with_capacity(buttons.len())
-                                .align_x(Alignment::Center)
-                                .height(Length::Fixed(item_height as f32))
-                                .width(Length::Fixed(item_width as f32));
+                                .align_x(Alignment::Center);
                             for button in buttons {
                                 column = column.push(
                                     mouse_area::MouseArea::new(button)
@@ -6001,9 +6024,23 @@ impl Tab {
                                 );
                             }
 
-                            let column: Element<Message> =
+                            let container = widget::container(
+                                mouse_area::MouseArea::new(column)
+                                    .on_press(move |_| Message::Click(Some(i)))
+                                    .on_double_click(move |_| Message::DoubleClick(Some(i)))
+                                    .on_release(move |_| Message::ClickRelease(Some(i)))
+                                    .on_middle_press(move |_| Message::MiddleClick(i))
+                                    .on_resize_bounds(move |bounds| Message::ItemBounds(i, bounds))
+                                    .on_enter(move || Message::HighlightActivate(i))
+                                    .on_exit(move || Message::HighlightDeactivate(i)),
+                            )
+                            .align_x(Alignment::Center)
+                            .height(Length::Fixed(item_height as f32))
+                            .width(Length::Fixed(item_width as f32));
+
+                            let element: Element<Message> =
                                 if item.metadata.is_dir() && item.location_opt.is_some() {
-                                    self.dnd_dest(&item.location_opt.clone().unwrap(), column)
+                                    self.dnd_dest(&item.location_opt.clone().unwrap(), container)
                                 } else if matches!(self.mode, Mode::Desktop) {
                                     if let Location::Desktop {
                                         path,
@@ -6023,12 +6060,12 @@ impl Tab {
                                                 col,
                                             }),
                                         };
-                                        self.dnd_dest(&location, column)
+                                        self.dnd_dest(&location, container)
                                     } else {
-                                        column.into()
+                                        container.into()
                                     }
                                 } else {
-                                    column.into()
+                                    container.into()
                                 };
 
                             if item.selected {
@@ -6038,14 +6075,7 @@ impl Tab {
                                 drag_e_i = drag_e_i.max(col);
                                 drag_s_i = drag_s_i.max(row);
                             }
-                            let mouse_area = crate::mouse_area::MouseArea::new(column)
-                                .on_press(move |_| Message::Click(Some(i)))
-                                .on_double_click(move |_| Message::DoubleClick(Some(i)))
-                                .on_release(move |_| Message::ClickRelease(Some(i)))
-                                .on_middle_press(move |_| Message::MiddleClick(i))
-                                .on_enter(move || Message::HighlightActivate(i))
-                                .on_exit(move || Message::HighlightDeactivate(i));
-                            grid_elements[row].push(Element::from(mouse_area));
+                            grid_elements[row].push(element);
                         }
                         GridItem::Empty => {
                             // Add empty spaces for drag and drop reordering on desktop
@@ -6692,9 +6722,9 @@ impl Tab {
         let mouse_area = mouse_area::MouseArea::new(item_view)
             .on_press(move |_point_opt| Message::Click(None))
             .on_release(|_| Message::ClickRelease(None))
-            .on_resize(Message::Resize)
             .on_back_press(move |_point_opt| Message::GoPrevious)
             .on_forward_press(move |_point_opt| Message::GoNext)
+            .on_resize_viewport(Message::Resize)
             .on_scroll(|delta| respond_to_scroll_direction(delta, modifiers))
             .on_right_press(|_| Message::RightClickBackground);
 
@@ -7609,7 +7639,7 @@ impl Tab {
         // otherwise a view rebuild is triggered on every drag event.
         let changed = self.items_opt.as_ref().is_some_and(|items| {
             items.iter().any(|item| {
-                let overlaps = item.rect_opt.get().is_some_and(|r| r.intersects(&rect));
+                let overlaps = item.drag_overlap(&rect, self.config.view);
                 overlaps != item.overlaps_drag_rect
             })
         });

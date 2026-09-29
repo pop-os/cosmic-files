@@ -26,7 +26,8 @@ pub struct MouseArea<'a, Message> {
     on_press: Option<Box<dyn OnMouseButton<'a, Message>>>,
     on_drag_end: Option<Box<dyn OnMouseButton<'a, Message>>>,
     on_release: Option<Box<dyn OnMouseButton<'a, Message>>>,
-    on_resize: Option<Box<dyn OnResize<'a, Message>>>,
+    on_resize_bounds: Option<Box<dyn OnResize<'a, Message>>>,
+    on_resize_viewport: Option<Box<dyn OnResize<'a, Message>>>,
     on_right_press: Option<Box<dyn OnMouseButton<'a, Message>>>,
     on_right_press_no_capture: bool,
     on_right_press_window_position: bool,
@@ -86,10 +87,17 @@ impl<'a, Message> MouseArea<'a, Message> {
         self
     }
 
-    /// The message to emit on resizing.
+    /// The message to emit on resizing bounds.
     #[must_use]
-    pub fn on_resize(mut self, message: impl OnResize<'a, Message>) -> Self {
-        self.on_resize = Some(Box::new(message));
+    pub fn on_resize_bounds(mut self, message: impl OnResize<'a, Message>) -> Self {
+        self.on_resize_bounds = Some(Box::new(message));
+        self
+    }
+
+    /// The message to emit on resizing viewport.
+    #[must_use]
+    pub fn on_resize_viewport(mut self, message: impl OnResize<'a, Message>) -> Self {
+        self.on_resize_viewport = Some(Box::new(message));
         self
     }
 
@@ -236,6 +244,7 @@ struct State {
     last_auto_scroll: Option<f32>,
     last_position: Option<Point>,
     last_virtual_position: Option<Point>,
+    bounds: Option<Rectangle>,
     drag_initiated: Option<Point>,
     prev_click: Option<(mouse::Click, Instant)>,
     viewport: Option<Rectangle>,
@@ -298,7 +307,8 @@ impl<'a, Message> MouseArea<'a, Message> {
             on_double_click: None,
             on_press: None,
             on_release: None,
-            on_resize: None,
+            on_resize_bounds: None,
+            on_resize_viewport: None,
             on_right_press: None,
             on_right_press_no_capture: false,
             on_right_press_window_position: false,
@@ -529,14 +539,19 @@ fn update<Message: Clone>(
     let offset = layout.virtual_offset();
     let layout_bounds = layout.bounds();
 
-    let viewport_changed = state.viewport != Some(*viewport);
+    if let Some(message) = widget.on_resize_bounds.as_ref()
+        && state.bounds != Some(layout_bounds)
+    {
+        shell.publish(message(layout_bounds));
+    }
+    state.bounds = Some(layout_bounds);
 
-    if let Some(message) = widget.on_resize.as_ref()
+    let viewport_changed = state.viewport != Some(*viewport);
+    if let Some(message) = widget.on_resize_viewport.as_ref()
         && viewport_changed
     {
         shell.publish(message(*viewport));
     }
-
     state.viewport = Some(*viewport);
 
     let should_check_hover = viewport_changed
