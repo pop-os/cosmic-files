@@ -1,10 +1,10 @@
 [package]
 name = "cosmic-files-applet"
-version = "1.8.0"
+version = "1.9.0"
 edition = "2024"
 
 [dependencies]
-log = "0.4"
+log.workspace = true
 zbus = "4" # Blocking connection in zbus 5 hangs
 
 [dependencies.cosmic-files]
