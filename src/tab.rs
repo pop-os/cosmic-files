@@ -437,7 +437,9 @@ impl<'a> FormatTime<'a> {
 
 impl Display for FormatTime<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let zoned = jiff::Zoned::try_from(self.time).unwrap();
+        let Ok(zoned) = jiff::Zoned::try_from(self.time) else {
+            return Ok(());
+        };
         let now = jiff::Zoned::now();
         let icu_datetime = DateTime::convert_from(zoned.datetime());
         if zoned.date() == now.date() {
@@ -640,6 +642,41 @@ fn display_name_for_file(path: &Path, name: &str, get_from_gvfs: bool, is_deskto
     Item::display_name(name)
 }
 
+// Whether a dir lives on a remote filesystem, according to GIO.
+#[cfg(feature = "gvfs")]
+fn gvfs_dir_is_remote(dir: &Path) -> bool {
+    static REMOTE_CACHE: LazyLock<RwLock<FxHashMap<PathBuf, bool>>> =
+        LazyLock::new(|| RwLock::new(FxHashMap::default()));
+
+    if let Some(remote) = REMOTE_CACHE.read().unwrap().get(dir) {
+        return *remote;
+    }
+
+    let remote = match gio::prelude::FileExt::query_filesystem_info(
+        &gio::File::for_path(dir),
+        gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE,
+        gio::Cancellable::NONE,
+    ) {
+        Ok(info) => info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE),
+        Err(err) => {
+            log::warn!(
+                "failed to get GIO filesystem info for {}: {}",
+                dir.display(),
+                err
+            );
+
+            //Assume remote so that the "expensive tasks" are rather skipped then actually executed.
+            true
+        }
+    };
+
+    REMOTE_CACHE
+        .write()
+        .unwrap()
+        .insert(dir.to_path_buf(), remote);
+    remote
+}
+
 #[cfg(feature = "gvfs")]
 pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconSizes) -> Item {
     let file_name = file_info
@@ -647,7 +684,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
         .unwrap_or_default();
     let mtime = file_info.attribute_uint64(gio::FILE_ATTRIBUTE_TIME_MODIFIED);
     let mut is_desktop = false;
-    let remote = file_info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE);
+    let remote = path.parent().is_none_or(gvfs_dir_is_remote);
     let is_dir = matches!(file_info.file_type(), gio::FileType::Directory);
 
     let size_opt = (!is_dir).then_some(file_info.size() as u64);
@@ -715,6 +752,7 @@ pub fn item_from_gvfs_info(path: PathBuf, file_info: gio::FileInfo, sizes: IconS
             mtime,
             size_opt,
             children_opt,
+            is_dir,
         },
         hidden,
         image_dimensions: (!remote && mime.type_() == mime::IMAGE)
@@ -766,23 +804,7 @@ pub fn item_from_entry(
         #[cfg(feature = "gvfs")]
         FsKind::Gvfs => {
             is_gvfs = true;
-            let file = gio::File::for_path(&path);
-
-            match gio::prelude::FileExt::query_filesystem_info(
-                &file,
-                gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE,
-                gio::Cancellable::NONE,
-            ) {
-                Ok(info) => info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE),
-                Err(err) => {
-                    log::warn!(
-                        "failed to get GIO filesystem info for {}: {}",
-                        path.display(),
-                        err
-                    );
-                    true
-                }
-            }
+            path.parent().is_none_or(gvfs_dir_is_remote)
         }
         #[cfg(not(feature = "gvfs"))]
         FsKind::Gvfs => {
@@ -1009,7 +1031,6 @@ pub fn scan_path(tab_path: &PathBuf, sizes: IconSizes) -> Vec<Item> {
             // gio crate expects a comma delimited string
             let attr_string = [
                 gio::FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME.as_str(),
-                gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE.as_str(),
                 gio::FILE_ATTRIBUTE_TIME_MODIFIED.as_str(),
                 gio::FILE_ATTRIBUTE_STANDARD_SIZE.as_str(),
                 gio::FILE_ATTRIBUTE_STANDARD_TYPE.as_str(),
@@ -1721,11 +1742,11 @@ impl fmt::Debug for TaskWrapper {
 #[derive(Debug)]
 pub enum Command {
     Action(Action),
+    Surface(cosmic::surface::Action<Message>),
     AddNetworkDrive,
     AddToSidebar(PathBuf),
     AutoScroll(Option<f32>),
     ChangeLocation(String, Location, Option<Vec<PathBuf>>),
-    ContextMenu(Option<Point>, Option<window::Id>),
     Delete(Vec<PathBuf>),
     DropFiles(PathBuf, ClipboardPaste),
     ClearRecents,
@@ -1756,9 +1777,9 @@ pub enum Message {
     ClickRelease(Option<usize>),
     Config(TabConfig),
     ContextAction(Action),
-    ContextMenu(Option<Point>, Option<window::Id>),
-    LocationContextMenuPoint(Option<Point>),
-    LocationContextMenuIndex(Option<Point>, Option<usize>),
+    RightClickBackground,
+    Surface(cosmic::surface::Action<Message>),
+    LocationContextMenuIndex(Option<usize>),
     LocationMenuAction(LocationMenuAction),
     Drag(Option<Rectangle>),
     DragEnd,
@@ -1818,6 +1839,8 @@ pub enum Message {
     HighlightDeactivate(usize),
     HighlightActivate(usize),
     DirectorySize(PathBuf, DirSize),
+    #[cfg(feature = "gvfs")]
+    DirectoryChildren(PathBuf, usize),
     Checksums(PathBuf, ChecksumState),
     CalculateChecksums(PathBuf),
     CopyChecksum(String),
@@ -1886,6 +1909,7 @@ pub enum ItemMetadata {
         mtime: u64,
         size_opt: Option<u64>,
         children_opt: Option<usize>,
+        is_dir: bool,
     },
 }
 
@@ -1900,7 +1924,7 @@ impl ItemMetadata {
             Self::SimpleDir { .. } => true,
             Self::SimpleFile { .. } => false,
             #[cfg(feature = "gvfs")]
-            Self::GvfsPath { children_opt, .. } => children_opt.is_some(),
+            Self::GvfsPath { is_dir, .. } => *is_dir,
         }
     }
 
@@ -1909,7 +1933,7 @@ impl ItemMetadata {
             Self::Path { metadata, .. } => metadata.modified().ok(),
             #[cfg(feature = "gvfs")]
             Self::GvfsPath { mtime, .. } => {
-                Some(SystemTime::UNIX_EPOCH + Duration::from_secs(*mtime))
+                SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(*mtime))
             }
             _ => None,
         }
@@ -2331,6 +2355,7 @@ impl Item {
     ) -> widget::Text<'a, cosmic::Theme, cosmic::Renderer> {
         widget::text::body(name)
             .wrapping(text::Wrapping::WordOrGlyph)
+            .align_x(text::Alignment::Center)
             .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
                 3,
             )))
@@ -2386,10 +2411,8 @@ impl Item {
                 widget::image(handle.clone()).into()
             }
             ItemThumbnail::Svg(handle) => widget::svg(handle.clone()).into(),
-            ItemThumbnail::Text(content) => widget::text_editor(content)
-                .class(cosmic::theme::iced::TextEditor::Custom(Box::new(
-                    text_editor_class,
-                )))
+            ItemThumbnail::Text(content) => widget::text_editor::text_editor(content)
+                .style(text_editor_class)
                 .width(THUMBNAIL_SIZE as f32)
                 .height(Length::Fixed(THUMBNAIL_SIZE as f32))
                 .padding(spacing.space_xxs)
@@ -2440,7 +2463,7 @@ impl Item {
         );
 
         let mut details = widget::column::with_capacity(8).spacing(space_xxxs);
-        details = details.push(widget::text::heading(self.name.clone()));
+        details = details.push(widget::selectable_text::heading(self.name.clone()));
         details = details.push(widget::text::body(fl!(
             "type",
             mime = self.mime.to_string()
@@ -2497,21 +2520,21 @@ impl Item {
             let time_formatter = time_formatter(military_time);
 
             if let Ok(time) = metadata.created() {
-                details = details.push(widget::text::body(fl!(
+                details = details.push(widget::selectable_text::body(fl!(
                     "item-created",
                     created = format_time(time, &date_time_formatter, &time_formatter).to_string()
                 )));
             }
 
             if let Ok(time) = metadata.modified() {
-                details = details.push(widget::text::body(fl!(
+                details = details.push(widget::selectable_text::body(fl!(
                     "item-modified",
                     modified = format_time(time, &date_time_formatter, &time_formatter).to_string()
                 )));
             }
 
             if let Ok(time) = metadata.accessed() {
-                details = details.push(widget::text::body(fl!(
+                details = details.push(widget::selectable_text::body(fl!(
                     "item-accessed",
                     accessed = format_time(time, &date_time_formatter, &time_formatter).to_string()
                 )));
@@ -2782,9 +2805,8 @@ pub struct Tab {
     pub location: Location,
     pub location_ancestors: Vec<(Location, String)>,
     pub location_title: String,
-    pub location_context_menu_point: Option<Point>,
+    /// Breadcrumb whose context menu is open, drawn as active while it shows
     pub location_context_menu_index: Option<usize>,
-    pub context_menu: Option<Point>,
     pub mode: Mode,
     pub scroll_opt: Option<AbsoluteOffset>,
     pub size_opt: Cell<Option<Size>>,
@@ -2812,7 +2834,6 @@ pub struct Tab {
     search_context: Option<SearchContext>,
     date_time_formatter: DateTimeFormatter<fieldsets::YMDT>,
     time_formatter: DateTimeFormatter<fieldsets::T>,
-    watch_drag: bool,
     window_id: Option<window::Id>,
     large_image_manager: LargeImageManager,
 }
@@ -2929,8 +2950,6 @@ impl Tab {
             location,
             location_ancestors,
             location_title,
-            context_menu: None,
-            location_context_menu_point: None,
             location_context_menu_index: None,
             mode: Mode::App,
             scroll_opt: None,
@@ -2959,7 +2978,6 @@ impl Tab {
             search_context: None,
             date_time_formatter: date_time_formatter(config.military_time),
             time_formatter: time_formatter(config.military_time),
-            watch_drag: true,
             window_id,
             large_image_manager: LargeImageManager::new(),
         }
@@ -3472,7 +3490,6 @@ impl Tab {
         self.location = location.normalize();
         self.location_ancestors = self.location.ancestors();
         self.location_title = self.location.title();
-        self.context_menu = None;
         self.edit_location = None;
         self.items_opt = None;
         //TODO: remember scroll by location?
@@ -3517,7 +3534,6 @@ impl Tab {
         let mut history_i_opt = None;
         let mod_ctrl = modifiers.contains(Modifiers::CTRL) && self.mode.multiple();
         let mod_shift = modifiers.contains(Modifiers::SHIFT) && self.mode.multiple();
-        let last_context_menu = self.context_menu;
         match message {
             Message::AddNetworkDrive => {
                 commands.push(Command::AddNetworkDrive);
@@ -3552,8 +3568,6 @@ impl Tab {
                 }
 
                 if click_i_opt != self.clicked.take() {
-                    self.context_menu = None;
-                    self.location_context_menu_index = None;
                     if let Some(ref mut items) = self.items_opt {
                         for (i, item) in items.iter_mut().enumerate() {
                             if mod_ctrl {
@@ -3570,7 +3584,6 @@ impl Tab {
             }
             Message::DragEnd => {
                 self.clicked = None;
-                self.watch_drag = true;
             }
             Message::DoubleClick(click_i_opt) => {
                 if let Some(clicked_item) = self
@@ -3595,9 +3608,7 @@ impl Tab {
             }
             Message::Click(click_i_opt) => {
                 self.selected_clicked = false;
-                self.context_menu = None;
                 self.edit_location = None;
-                self.location_context_menu_index = None;
                 if click_i_opt.is_none() {
                     self.clicked = click_i_opt;
                 }
@@ -3739,24 +3750,16 @@ impl Tab {
                 }
             }
             Message::ContextAction(action) => {
-                // Close context menu
-                self.context_menu = None;
-
                 commands.push(Command::Action(action));
             }
             Message::RunContextAction(action) => {
-                self.context_menu = None;
-
                 commands.push(Command::RunContextAction(action));
             }
-            Message::ContextMenu(point_opt, _) => {
+            Message::RightClickBackground => {
                 self.edit_location = None;
-                self.context_menu = point_opt;
-                self.location_context_menu_index = None;
 
                 //TODO: hack for clearing selecting when right clicking empty space
-                if self.context_menu.is_some()
-                    && self.last_right_click.take().is_none()
+                if self.last_right_click.take().is_none()
                     && let Some(ref mut items) = self.items_opt
                 {
                     for item in items.iter_mut() {
@@ -3764,17 +3767,13 @@ impl Tab {
                     }
                 }
             }
-            Message::LocationContextMenuPoint(point_opt) => {
-                self.context_menu = None;
-                self.location_context_menu_point = point_opt;
+            Message::Surface(action) => {
+                commands.push(Command::Surface(action));
             }
-            Message::LocationContextMenuIndex(p, index_opt) => {
-                self.context_menu = None;
-                self.location_context_menu_point = p;
-                self.location_context_menu_index = index_opt;
+            Message::LocationContextMenuIndex(index) => {
+                self.location_context_menu_index = index;
             }
             Message::LocationMenuAction(action) => {
-                self.location_context_menu_index = None;
                 let path_for_index = |ancestor_index| {
                     self.location
                         .path_opt()
@@ -3824,10 +3823,7 @@ impl Tab {
                 }
             }
             Message::Drag(rect_opt) => {
-                self.watch_drag = false;
                 if let Some(rect) = rect_opt {
-                    self.context_menu = None;
-                    self.location_context_menu_index = None;
                     if self.mode.multiple() {
                         self.select_rect(rect, mod_ctrl, mod_shift);
                     }
@@ -3863,6 +3859,28 @@ impl Tab {
             }
             Message::EditLocationSubmit => {
                 if let Some(mut edit_location) = self.edit_location.take() {
+                    let typed_opt = match &edit_location.location {
+                        Location::Path(path) => path.to_str().map(str::to_string),
+                        Location::Network(uri, ..) => Some(uri.clone()),
+                        _ => None,
+                    };
+                    let mut typed_uri = false;
+                    if let Some(typed) = typed_opt {
+                        match typed.trim().parse::<url::Url>() {
+                            Ok(url) if url.scheme() != "file" && url.has_host() => {
+                                let uri = url.as_str().to_string();
+                                edit_location =
+                                    Location::Network(uri.clone(), uri, None).normalize().into();
+                                typed_uri = true;
+                            }
+                            Err(_) if matches!(edit_location.location, Location::Network(..)) => {
+                                edit_location =
+                                    Location::Path(PathBuf::from(typed)).normalize().into();
+                            }
+                            _ => {}
+                        }
+                    }
+
                     // Select first completion if current location does not exist
                     if edit_location.selected.is_none()
                         && edit_location
@@ -3878,6 +3896,9 @@ impl Tab {
                     }
 
                     cd = edit_location.resolve();
+                    if cd.is_none() && typed_uri {
+                        cd = Some(edit_location.location);
+                    }
                 }
             }
             Message::EditLocationTab => {
@@ -4439,13 +4460,11 @@ impl Tab {
                 }
             }
             Message::HighlightDeactivate(i) => {
-                self.watch_drag = true;
                 if let Some(item) = self.items_opt.as_mut().and_then(|f| f.get_mut(i)) {
                     item.highlighted = false;
                 }
             }
             Message::HighlightActivate(i) => {
-                self.watch_drag = true;
                 if let Some(item) = self.items_opt.as_mut().and_then(|f| f.get_mut(i)) {
                     item.highlighted = true;
                 }
@@ -4471,7 +4490,6 @@ impl Tab {
             }
             Message::Scroll(viewport) => {
                 self.scroll_opt = Some(viewport.absolute_offset());
-                self.watch_drag = true;
             }
             Message::ScrollTab(scroll_speed) => {
                 commands.push(Command::Iced(
@@ -4804,6 +4822,20 @@ impl Tab {
                     }
                 }
             }
+            #[cfg(feature = "gvfs")]
+            Message::DirectoryChildren(path, children) => {
+                if let Some(ref mut items) = self.items_opt {
+                    for item in items.iter_mut() {
+                        if item.path_opt() == Some(&path) {
+                            if let ItemMetadata::GvfsPath { children_opt, .. } = &mut item.metadata
+                            {
+                                *children_opt = Some(children);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
             Message::Checksums(path, checksum_state) => {
                 let location = Location::Path(path);
                 if let Some(ref mut item) = self.parent_item_opt
@@ -4910,16 +4942,6 @@ impl Tab {
             }
         }
 
-        // Update context menu popup
-        if self.context_menu != last_context_menu {
-            if last_context_menu.is_some() {
-                commands.push(Command::ContextMenu(None, self.window_id));
-            }
-            if let Some(point) = self.context_menu {
-                commands.push(Command::ContextMenu(Some(point), self.window_id));
-            }
-        }
-
         commands
     }
 
@@ -4965,11 +4987,15 @@ impl Tab {
                         ItemMetadata::GvfsPath {
                             size_opt,
                             children_opt,
+                            is_dir,
                             ..
-                        } => match children_opt {
-                            Some(child_count) => (true, *child_count as u64),
-                            None => (false, size_opt.unwrap_or_default()),
-                        },
+                        } => {
+                            if *is_dir {
+                                (true, children_opt.unwrap_or_default() as u64)
+                            } else {
+                                (false, size_opt.unwrap_or_default())
+                            }
+                        }
                     };
                     let (a_is_entry, a_size) = get_size(a.1);
                     let (b_is_entry, b_size) = get_size(b.1);
@@ -5178,9 +5204,11 @@ impl Tab {
                 }
                 ItemThumbnail::Text(text) => {
                     element_opt = Some(
-                        widget::container(widget::text_editor(text).padding(space_xxs).class(
-                            cosmic::theme::iced::TextEditor::Custom(Box::new(text_editor_class)),
-                        ))
+                        widget::container(
+                            widget::text_editor::text_editor(text)
+                                .padding(space_xxs)
+                                .style(text_editor_class),
+                        )
                         .center(Length::Fill)
                         .into(),
                     );
@@ -5524,31 +5552,20 @@ impl Tab {
                     }
 
                     let location = self.location.with_path(ancestor.to_path_buf());
-                    let mut mouse_area = crate::mouse_area::MouseArea::new(
+                    let mouse_area = crate::mouse_area::MouseArea::new(
                         widget::button::custom(row)
                             .padding(space_xxxs)
-                            .class(theme::Button::Link)
+                            .class(if self.location_context_menu_index == Some(index) {
+                                theme::Button::LinkActive
+                            } else {
+                                theme::Button::Link
+                            })
                             .on_press(if ancestor == path {
                                 Message::EditLocation(Some(self.location.clone().into()))
                             } else {
                                 Message::Location(location.clone())
                             }),
                     );
-
-                    if self.location_context_menu_index.is_some() {
-                        mouse_area = mouse_area
-                            .on_right_press(move |point_opt| {
-                                Message::LocationContextMenuIndex(point_opt, None)
-                            })
-                            .wayland_on_right_press_window_position();
-                    } else {
-                        mouse_area = mouse_area
-                            .on_right_press_no_capture()
-                            .on_right_press(move |point_opt| {
-                                Message::LocationContextMenuIndex(point_opt, Some(index))
-                            })
-                            .wayland_on_right_press_window_position();
-                    }
 
                     let mouse_area = if let Location::Path(_) = &self.location {
                         mouse_area
@@ -5557,7 +5574,16 @@ impl Tab {
                         mouse_area
                     };
 
-                    children.push(self.dnd_dest(&location, mouse_area));
+                    // Each breadcrumb carries the menu for its own ancestor index
+                    let mut context_menu =
+                        widget::context_menu(mouse_area, Some(menu::location_context_menu(index)))
+                            .on_open(Message::LocationContextMenuIndex(Some(index)))
+                            .on_close(Message::LocationContextMenuIndex(None))
+                            .on_surface_action(Message::Surface);
+                    if let Some(window_id) = self.window_id {
+                        context_menu = context_menu.window_id(window_id);
+                    }
+                    children.push(self.dnd_dest(&location, context_menu));
 
                     if found_home || overflow {
                         break;
@@ -5608,20 +5634,7 @@ impl Tab {
             column = column.push(heading_rule);
         }
 
-        let mouse_area = crate::mouse_area::MouseArea::new(column)
-            .on_right_press(Message::LocationContextMenuPoint);
-
-        let mut popover = widget::popover(mouse_area);
-        if let (Some(point), Some(index)) = (
-            self.location_context_menu_point,
-            self.location_context_menu_index,
-        ) {
-            popover = popover
-                .popup(menu::location_context_menu(index))
-                .position(widget::popover::Position::Point(point));
-        }
-
-        popover.into()
+        column.into()
     }
 
     pub fn empty_view(&self, has_hidden: bool) -> Element<'_, Message> {
@@ -5810,18 +5823,13 @@ impl Tab {
                         .height(Length::Fixed(item_height as f32))
                         .width(Length::Fixed(item_width as f32));
                     for button in buttons {
-                        if self.context_menu.is_some() {
-                            column = column.push(button);
-                        } else {
-                            column = column.push(
-                                mouse_area::MouseArea::new(button)
-                                    .on_right_press_no_capture()
-                                    .wayland_on_right_press_window_position()
-                                    .on_right_press(move |point_opt| {
-                                        Message::RightClick(point_opt, Some(i))
-                                    }),
-                            );
-                        }
+                        column = column.push(
+                            mouse_area::MouseArea::new(button)
+                                .on_right_press_no_capture()
+                                .on_right_press(move |point_opt| {
+                                    Message::RightClick(point_opt, Some(i))
+                                }),
+                        );
                     }
 
                     let column: Element<Message> =
@@ -5988,15 +5996,13 @@ impl Tab {
             Element::from(dnd_grid)
         });
 
-        let mut mouse_area = mouse_area::MouseArea::new(column.width(Length::Fill))
+        let mouse_area = mouse_area::MouseArea::new(column.width(Length::Fill))
             .on_press(|_| Message::Click(None))
             .on_auto_scroll(Message::AutoScroll)
+            .on_drag(move |rect_opt| self.on_drag(rect_opt))
             .on_drag_end(|_| Message::DragEnd)
             .show_drag_rect(self.mode.multiple())
             .on_release(|_| Message::ClickRelease(None));
-        if self.watch_drag {
-            mouse_area = mouse_area.on_drag(Message::Drag);
-        }
 
         (drag_list, mouse_area.into(), true)
     }
@@ -6145,17 +6151,21 @@ impl Tab {
                         ItemMetadata::GvfsPath {
                             size_opt,
                             children_opt,
+                            is_dir,
                             ..
-                        } => match children_opt {
-                            Some(child_count) => {
-                                if *child_count == 1 {
-                                    format!("{child_count} item")
-                                } else {
-                                    format!("{child_count} items")
+                        } => {
+                            if *is_dir {
+                                // Children are not counted on remote filesystems
+                                match children_opt {
+                                    //TODO: translate
+                                    Some(1) => "1 item".to_string(),
+                                    Some(child_count) => format!("{child_count} items"),
+                                    None => String::new(),
                                 }
+                            } else {
+                                format_size(size_opt.unwrap_or_default())
                             }
-                            None => format_size(size_opt.unwrap_or_default()),
-                        },
+                        }
                     };
 
                     let row = if condensed {
@@ -6182,11 +6192,18 @@ impl Tab {
                                 .size(icon_size)
                                 .into(),
                             widget::column::with_children([
-                                Item::list_display_name(item.display_name.clone()).into(),
+                                Item::list_display_name(item.display_name.clone())
+                                .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
+                                    1,
+                                )))
+                                .into(),
                                 widget::text::caption(match item.path_opt() {
                                     Some(path) => path.display().to_string(),
                                     None => String::new(),
                                 })
+                                .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
+                                    1,
+                                )))
                                 .into(),
                             ])
                             .width(Length::Fill)
@@ -6222,39 +6239,33 @@ impl Tab {
                         .spacing(space_xxs)
                     };
 
-                    let button = |row| {
-                        let mouse_area = crate::mouse_area::MouseArea::new(
-                            widget::button::custom(row)
-                                .width(Length::Fill)
-                                .id(item.button_id.clone())
-                                .padding([0, space_xxs])
-                                .class(button_style(
-                                    item.selected,
-                                    item.highlighted,
-                                    item.cut,
-                                    true,
-                                    true,
-                                    false,
-                                )),
-                        )
-                        .on_press(move |_| Message::Click(Some(i)))
-                        .on_double_click(move |_| Message::DoubleClick(Some(i)))
-                        .on_release(move |_| Message::ClickRelease(Some(i)))
-                        .on_middle_press(move |_| Message::MiddleClick(i))
-                        .on_enter(move || Message::HighlightActivate(i))
-                        .on_exit(move || Message::HighlightDeactivate(i));
+                    let button =
+                        |row| {
+                            let mouse_area = crate::mouse_area::MouseArea::new(
+                                widget::button::custom(row)
+                                    .width(Length::Fill)
+                                    .id(item.button_id.clone())
+                                    .padding([0, space_xxs])
+                                    .class(button_style(
+                                        item.selected,
+                                        item.highlighted,
+                                        item.cut,
+                                        true,
+                                        true,
+                                        false,
+                                    )),
+                            )
+                            .on_press(move |_| Message::Click(Some(i)))
+                            .on_double_click(move |_| Message::DoubleClick(Some(i)))
+                            .on_release(move |_| Message::ClickRelease(Some(i)))
+                            .on_middle_press(move |_| Message::MiddleClick(i))
+                            .on_enter(move || Message::HighlightActivate(i))
+                            .on_exit(move || Message::HighlightDeactivate(i));
 
-                        if self.context_menu.is_some() {
-                            mouse_area
-                        } else {
-                            mouse_area
-                                .on_right_press_no_capture()
-                                .wayland_on_right_press_window_position()
-                                .on_right_press(move |point_opt| {
-                                    Message::RightClick(point_opt, Some(i))
-                                })
-                        }
-                    };
+                            mouse_area.on_right_press_no_capture().on_right_press(
+                                move |point_opt| Message::RightClick(point_opt, Some(i)),
+                            )
+                        };
 
                     let button_row = button(row.into());
                     let button_row: Element<_> = if item.metadata.is_dir()
@@ -6294,11 +6305,18 @@ impl Tab {
                                     .size(icon_size)
                                     .into(),
                                 widget::column::with_children([
-                                    Item::list_display_name(item.display_name.clone()).into(),
+                                    Item::list_display_name(item.display_name.clone())
+                                    .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
+                                        1,
+                                    )))
+                                    .into(),
                                     widget::text::caption(match item.path_opt() {
                                         Some(path) => path.display().to_string(),
                                         None => String::new(),
                                     })
+                                    .ellipsize(text::Ellipsize::Middle(text::EllipsizeHeightLimit::Lines(
+                                        1,
+                                    )))
                                     .into(),
                                 ])
                                 .width(Length::Fill)
@@ -6382,16 +6400,14 @@ impl Tab {
         let drag_col = (!drag_items.is_empty())
             .then(|| Element::from(widget::column::with_children(drag_items)));
 
-        let mut mouse_area = mouse_area::MouseArea::new(column.padding([0, space_s]))
+        let mouse_area = mouse_area::MouseArea::new(column.padding([0, space_s]))
             .with_id(Id::new("list-view"))
             .on_press(|_| Message::Click(None))
             .on_auto_scroll(Message::AutoScroll)
+            .on_drag(move |rect_opt| self.on_drag(rect_opt))
             .on_drag_end(|_| Message::DragEnd)
             .show_drag_rect(self.mode.multiple())
             .on_release(|_| Message::ClickRelease(None));
-        if self.watch_drag {
-            mouse_area = mouse_area.on_drag(Message::Drag);
-        }
 
         (drag_col, mouse_area.into(), true)
     }
@@ -6478,51 +6494,47 @@ impl Tab {
             .on_back_press(move |_point_opt| Message::GoPrevious)
             .on_forward_press(move |_point_opt| Message::GoNext)
             .on_scroll(|delta| respond_to_scroll_direction(delta, modifiers))
-            .on_right_press(move |p| {
-                Message::ContextMenu(
-                    if self.context_menu.is_some() { None } else { p },
-                    self.window_id,
-                )
-            })
-            .wayland_on_right_press_window_position();
+            .on_right_press(|_| Message::RightClickBackground);
 
-        let mut popover = widget::popover(mouse_area);
-        if let Some(point) = self.context_menu
-            && (!cfg!(feature = "wayland") || !crate::is_wayland())
-        {
-            let context_menu = menu::context_menu(
+        let items_area: Element<'_, Message> = if can_scroll {
+            // FIXME: new responsive widget will remove the state from the scrollable
+            // id_container with custom id forces the state to be extracted in a diff
+            // pre-processing step
+            widget::id_container(
+                widget::scrollable(mouse_area)
+                    .id(self.scrollable_id.clone())
+                    .on_scroll(Message::Scroll)
+                    .width(Length::Fill)
+                    .height(Length::Fill),
+                widget::Id::new(format!("{}-scrollable", self.scrollable_id)),
+            )
+            .into()
+        } else {
+            mouse_area.into()
+        };
+
+        // Wrap the scrollable, not its content, so the popup anchors in window coordinates
+        let mut context_menu = widget::context_menu(
+            items_area,
+            Some(menu::context_menu(
                 self,
                 key_binds,
                 modifiers,
                 clipboard_paste_available,
                 context_actions,
-            );
-            popover = popover
-                .popup(context_menu)
-                .position(widget::popover::Position::Point(point));
+            )),
+        )
+        .item_width(cosmic::widget::menu::ItemWidth::Uniform(360))
+        .on_surface_action(Message::Surface);
+        if let Some(window_id) = self.window_id {
+            context_menu = context_menu.window_id(window_id);
         }
 
         let mut tab_column = widget::column::with_capacity(3);
         if let Some(location_view) = location_view_opt {
             tab_column = tab_column.push(location_view);
         }
-        if can_scroll {
-            tab_column = tab_column.push(
-                // FIXME: new responsive widget will remove the state from the scrollable
-                // id_container with custom id forces the state to be extracted in a diff
-                // pre-processing step
-                widget::id_container(
-                    widget::scrollable(popover)
-                        .id(self.scrollable_id.clone())
-                        .on_scroll(Message::Scroll)
-                        .width(Length::Fill)
-                        .height(Length::Fill),
-                    widget::Id::new(format!("{}-scrollable", self.scrollable_id)),
-                ),
-            );
-        } else {
-            tab_column = tab_column.push(popover);
-        }
+        tab_column = tab_column.push(context_menu);
         match &self.location {
             Location::Trash | Location::Search(SearchLocation::Trash, ..) => {
                 if let Some(items) = self.items_opt()
@@ -6921,6 +6933,74 @@ impl Tab {
                 Rectangle::new(point, size)
             };
 
+            // Count the children of visible directories in the background. Doing it while
+            // scanning costs one directory listing per entry, which stalls remote filesystems.
+            #[cfg(feature = "gvfs")]
+            for item in items {
+                let ItemMetadata::GvfsPath {
+                    children_opt: None,
+                    is_dir: true,
+                    ..
+                } = &item.metadata
+                else {
+                    continue;
+                };
+
+                // Skip items that are not visible, or have no determined rect
+                match item.rect_opt.get() {
+                    Some(rect) if rect.intersects(&visible_rect) => {}
+                    _ => continue,
+                }
+
+                let Some(path) = item.path_opt().cloned() else {
+                    continue;
+                };
+
+                struct ChildrenWrapper(PathBuf);
+                impl Hash for ChildrenWrapper {
+                    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                        self.0.hash(state);
+                    }
+                }
+
+                subscriptions.push(Subscription::run_with(
+                    ChildrenWrapper(path),
+                    |ChildrenWrapper(path)| {
+                        let path = path.clone();
+                        stream::channel(
+                            1,
+                            move |mut output: futures::channel::mpsc::Sender<_>| async move {
+                                let message = {
+                                    let path = path.clone();
+                                    tokio::task::spawn_blocking(move || {
+                                        let children = match fs::read_dir(&path) {
+                                            Ok(entries) => entries.count(),
+                                            Err(err) => {
+                                                log::warn!(
+                                                    "failed to read directory {}: {}",
+                                                    path.display(),
+                                                    err
+                                                );
+                                                0
+                                            }
+                                        };
+                                        Message::DirectoryChildren(path, children)
+                                    })
+                                    .await
+                                    .unwrap()
+                                };
+
+                                if let Err(err) = output.send(message).await {
+                                    log::warn!("failed to send directory children: {err}");
+                                }
+
+                                std::future::pending().await
+                            },
+                        )
+                    },
+                ));
+            }
+
             for item in items {
                 if item.thumbnail_opt.is_some() {
                     // Skip items that already have a mime type and thumbnail
@@ -7016,8 +7096,7 @@ impl Tab {
                                         let path = path.clone();
 
                                         // Acquire semaphore permit
-                                        let _permit =
-                                            THUMB_SEMAPHORE.acquire().await.unwrap();
+                                        let _permit = THUMB_SEMAPHORE.acquire().await.unwrap();
 
                                         tokio::task::spawn_blocking(move || {
                                             let start = Instant::now();
@@ -7320,6 +7399,19 @@ impl Tab {
 
     const fn format_time(&self, time: SystemTime) -> FormatTime<'_> {
         format_time(time, &self.date_time_formatter, &self.time_formatter)
+    }
+
+    fn on_drag<'a>(&self, rect_opt: Option<Rectangle>) -> Option<Message> {
+        let rect = rect_opt?;
+        // We only want to publish a drag message if the overlapped items of the drag rect change,
+        // otherwise a view rebuild is triggered on every drag event.
+        let changed = self.items_opt.as_ref().is_some_and(|items| {
+            items.iter().any(|item| {
+                let overlaps = item.rect_opt.get().is_some_and(|r| r.intersects(&rect));
+                overlaps != item.overlaps_drag_rect
+            })
+        });
+        changed.then_some(Message::Drag(Some(rect)))
     }
 }
 

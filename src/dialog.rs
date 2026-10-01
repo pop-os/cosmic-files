@@ -3,6 +3,7 @@
 
 use cosmic::app::cosmic::Cosmic;
 use cosmic::app::{Core, Task, context_drawer};
+use cosmic::cosmic_config::ConfigSet;
 use cosmic::iced::core::SmolStr;
 use cosmic::iced::core::widget::operation;
 use cosmic::iced::futures::{self, SinkExt};
@@ -33,12 +34,12 @@ use crate::app::{
     Action, ContextPage, Message as AppMessage, PreviewItem, PreviewKind, REPLACE_BUTTON_ID,
 };
 use crate::config::{
-    Config, DialogConfig, Favorite, TIME_CONFIG_ID, ThumbCfg, TimeConfig, TypeToSearch,
+    Config, DialogConfig, State, TIME_CONFIG_ID, ThumbCfg, TimeConfig, TypeToSearch,
 };
 use crate::key_bind::key_binds;
 use crate::localize::LANGUAGE_SORTER;
 use crate::mounter::{MOUNTERS, MounterItem, MounterItems, MounterKey, MounterMessage};
-use crate::tab::{self, ItemMetadata, Location, SearchLocation, Tab};
+use crate::tab::{self, HeadingOptions, ItemMetadata, Location, SearchLocation, Tab};
 use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
 use crate::{fl, home_dir, menu, mime_icon};
 
@@ -253,6 +254,7 @@ impl<M: Send + 'static> Dialog<M> {
         crate::localize::localize();
 
         let (config_handler, config) = Config::load();
+        let (state_handler, state) = State::load();
 
         let mut settings = window::Settings {
             decorations: false,
@@ -287,6 +289,8 @@ impl<M: Send + 'static> Dialog<M> {
             window_id,
             config_handler,
             config,
+            state_handler,
+            state,
         };
 
         let (cosmic, cosmic_command) = Cosmic::<App>::init((core, flags));
@@ -441,6 +445,8 @@ struct Flags {
     #[allow(dead_code)]
     config_handler: Option<cosmic_config::Config>,
     config: Config,
+    state_handler: Option<cosmic_config::Config>,
+    state: State,
 }
 
 /// Messages that are used specifically by our [`App`].
@@ -470,7 +476,7 @@ enum Message {
     SearchActivate,
     SearchClear,
     SearchInput(String),
-    Surface(cosmic::surface::Action),
+    Surface(cosmic::surface::Action<Message>),
     #[allow(clippy::enum_variant_names)]
     TabMessage(tab::Message),
     TabRescan(
@@ -503,7 +509,7 @@ impl From<AppMessage> for Message {
             AppMessage::ZoomIn(_entity_opt) => Self::ZoomIn,
             AppMessage::ZoomOut(_entity_opt) => Self::ZoomOut,
             AppMessage::NewItem(_entity_opt, true) => Self::NewFolder,
-            AppMessage::Surface(action) => Self::Surface(action),
+            AppMessage::Surface(action) => Self::Surface(action.map(Self::from)),
             unsupported => {
                 log::warn!("{unsupported:?} not supported in dialog mode");
                 Self::None
@@ -543,7 +549,6 @@ struct App {
     title: String,
     accept_label: DialogLabel,
     choices: Vec<DialogChoice>,
-    context_menu_window: Option<window::Id>,
     context_page: ContextPage,
     dialog_pages: VecDeque<DialogPage>,
     dialog_text_input: widget::Id,
@@ -867,15 +872,6 @@ impl App {
         }
     }
 
-    fn close_context_menus(&mut self) -> Task<Message> {
-        self.tab.location_context_menu_index = None;
-        if self.tab.context_menu.is_some() {
-            return self.update(Message::TabMessage(tab::Message::ContextMenu(None, None)));
-        }
-
-        Task::none()
-    }
-
     fn update_nav_model(&mut self) {
         let mut nav_model = segmented_button::ModelBuilder::default();
 
@@ -889,13 +885,7 @@ impl App {
 
         for favorite in &self.flags.config.favorites {
             if let Some(path) = favorite.path_opt() {
-                let name = if matches!(favorite, Favorite::Home) {
-                    fl!("home")
-                } else if let Favorite::Network { name, .. } = favorite {
-                    name.clone()
-                } else if let Some(file_name) = path.file_name().and_then(|x| x.to_str()) {
-                    file_name.to_string()
-                } else {
+                let Some(name) = favorite.display_name() else {
                     continue;
                 };
                 nav_model = nav_model.insert(move |b| {
@@ -1045,8 +1035,7 @@ impl Application for App {
             None,
         );
         tab.mode = tab::Mode::Dialog(flags.kind.clone());
-        tab.sort_name = tab::HeadingOptions::Modified;
-        tab.sort_direction = false;
+        (tab.sort_name, tab.sort_direction) = flags.state.dialog_sort_name;
 
         let key_binds = key_binds(&tab.mode);
 
@@ -1056,7 +1045,6 @@ impl Application for App {
             title,
             accept_label: DialogLabel::from(accept_label),
             choices: Vec::new(),
-            context_menu_window: None,
             context_page: ContextPage::Preview(None, PreviewKind::Selected),
             dialog_pages: VecDeque::new(),
             dialog_text_input: widget::Id::new("Dialog Text Input"),
@@ -1327,15 +1315,6 @@ impl Application for App {
             return Task::none();
         }
 
-        if self.tab.location_context_menu_index.is_some() {
-            self.tab.location_context_menu_index = None;
-            return Task::none();
-        }
-
-        if self.tab.context_menu.is_some() {
-            return self.update(Message::TabMessage(tab::Message::ContextMenu(None, None)));
-        }
-
         if self.tab.edit_location.is_some() {
             // Close location editing if enabled
             self.tab.edit_location = None;
@@ -1570,7 +1549,7 @@ impl Application for App {
             Message::Mouse(window_id, _button) => {
                 // Close context menu when clicking outside.
                 if self.core.main_window_id() == Some(window_id) {
-                    return self.close_context_menus();
+                    return Task::none();
                 }
             }
             Message::NewFolder => {
@@ -1730,7 +1709,7 @@ impl Application for App {
                 )));
             }
             Message::SearchActivate => {
-                let mut tasks = vec![self.close_context_menus()];
+                let mut tasks = vec![];
 
                 if self.search_get().is_none() {
                     tasks.push(self.search_set(Some(String::new())));
@@ -1741,7 +1720,7 @@ impl Application for App {
                 return Task::batch(tasks);
             }
             Message::SearchClear => {
-                return Task::batch([self.close_context_menus(), self.search_set(None)]);
+                return self.search_set(None);
             }
             Message::SearchInput(input) => {
                 return self.search_set(Some(input));
@@ -1777,94 +1756,9 @@ impl Application for App {
                                 self.rescan_tab(selection_paths),
                             ]));
                         }
-                        tab::Command::ContextMenu(point_opt, parent_id) => {
-                            #[cfg(feature = "wayland")]
-                            match point_opt {
-                                Some(point) => {
-                                    if crate::is_wayland() {
-                                        // Open context menu
-                                        use cctk::wayland_protocols::xdg::shell::client::xdg_positioner::{
-                                            Anchor, Gravity,
-                                        };
-                                        use cosmic::iced::runtime::platform_specific::wayland::popup::{
-                                            SctkPopupSettings, SctkPositioner,
-                                        };
-                                        use cosmic::iced::Rectangle;
-                                        use cosmic::widget::menu::StyleSheet as _;
-
-                                        let window_id = window::Id::unique();
-                                        self.context_menu_window = Some(window_id);
-                                        let autosize_id = widget::Id::unique();
-                                        let t = self.core.system_theme();
-                                        let styling = t.appearance(
-                                            &cosmic::theme::menu_bar::MenuBarStyle::Default,
-                                            false,
-                                        );
-                                        let rad = styling.menu_border_radius;
-                                        commands.push(self.update(Message::Surface(
-                                            cosmic::surface::action::app_popup(
-                                                move |_| cosmic::surface::action::LiveSettings {
-                                                    corners: Some(iced::runtime::platform_specific::wayland::CornerRadius {
-                                                        top_left: rad[0] as u32,
-                                                        top_right: rad[1] as u32,
-                                                        bottom_left: rad[2] as u32,
-                                                        bottom_right: rad[3] as u32,
-                                                    }),
-                                                    ..Default::default()
-                                                },
-                                                move |app: &mut Self| -> SctkPopupSettings {
-                                                    let anchor_rect = Rectangle {
-                                                        x: point.x as i32,
-                                                        y: point.y as i32,
-                                                        width: 1,
-                                                        height: 1,
-                                                    };
-                                                    let positioner = SctkPositioner {
-                                                        size: None,
-                                                        anchor_rect,
-                                                        anchor: Anchor::None,
-                                                        gravity: Gravity::BottomRight,
-                                                        reactive: true,
-                                                        ..Default::default()
-                                                    };
-                                                    SctkPopupSettings {
-                                                        parent: parent_id
-                                                            .unwrap_or(app.flags.window_id),
-                                                        id: window_id,
-                                                        positioner,
-                                                        parent_size: None,
-                                                        grab: true,
-                                                        close_with_children: false,
-                                                        input_zone: None,
-                                                    }
-                                                },
-                                                Some(Box::new(move |app: &Self| {
-                                                    widget::autosize::autosize(
-                                                        menu::context_menu(
-                                                            &app.tab,
-                                                            &app.key_binds,
-                                                            &app.modifiers,
-                                                            false, // Paste not used in dialogs
-                                                            &app.flags.config.context_actions,
-                                                        )
-                                                        .map(Message::TabMessage)
-                                                        .map(cosmic::Action::App),
-                                                        autosize_id.clone(),
-                                                    )
-                                                    .into()
-                                                })),
-                                            ),
-                                        )));
-                                    }
-                                }
-                                None => {
-                                    if let Some(window_id) = self.context_menu_window.take() {
-                                        commands.push(self.update(Message::Surface(
-                                            cosmic::surface::action::destroy_popup(window_id),
-                                        )));
-                                    }
-                                }
-                            }
+                        tab::Command::Surface(action) => {
+                            let action = action.map(Message::TabMessage);
+                            commands.push(self.update(Message::Surface(action)));
                         }
                         tab::Command::Iced(iced_command) => {
                             commands.push(iced_command.0.map(|tab_message| {
@@ -1897,6 +1791,17 @@ impl Application for App {
                                 self.auto_scroll_speed = Some((scroll_speed_float * 10.0) as i16);
                             } else {
                                 self.auto_scroll_speed = None;
+                            }
+                        }
+                        tab::Command::SetSort(_, heading_options, direction) => {
+                            self.flags.state.dialog_sort_name = (heading_options, direction);
+                            if let Some(state_handler) = self.flags.state_handler.as_ref()
+                                && let Err(err) = state_handler.set::<&(HeadingOptions, bool)>(
+                                    "dialog_sort_name",
+                                    &self.flags.state.dialog_sort_name,
+                                )
+                            {
+                                log::warn!("Failed to save dialog sort name: {err:?}");
                             }
                         }
                         unsupported => {
@@ -2019,9 +1924,7 @@ impl Application for App {
                 });
             }
             Message::Surface(action) => {
-                return cosmic::task::message(cosmic::Action::Cosmic(
-                    cosmic::app::Action::Surface(action),
-                ));
+                return cosmic::task::message(cosmic::Action::Surface(action));
             }
         }
 

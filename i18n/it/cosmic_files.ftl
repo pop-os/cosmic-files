@@ -1,5 +1,5 @@
 cosmic-files = COSMIC Files
-comment = File manager di COSMIC
+comment = File manager per il desktop COSMIC
 keywords = File;Archivi;Cartelle;Explorer;
 empty-folder = Cartella vuota
 empty-folder-hidden = Cartella vuota (con elementi nascosti)
@@ -7,7 +7,7 @@ no-results = Nessun risultato trovato
 filesystem = Filesystem
 home = Home
 networks = Reti
-notification-in-progress = Operazioni sui file in corso.
+notification-in-progress = Operazioni sui file in corso
 trash = Cestino
 recents = Recenti
 undo = Annulla
@@ -322,7 +322,7 @@ single-click = Click singolo per aprire
 
 appearance = Aspetto
 theme = Tema
-match-desktop = Sistema
+match-desktop = Abbina al desktop
 dark = Scuro
 light = Chiaro
 

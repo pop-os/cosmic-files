@@ -1,5 +1,5 @@
 cosmic-files = Pliki COSMIC
-comment = Menedżer plików pulpitu COSMIC
+comment = Menedżer plików dla środowiska COSMIC
 keywords = Katalogi;Pliki;Menedżer;
 empty-folder = Pusty katalog
 empty-folder-hidden = Pusty katalog (z ukrytymi plikami)
@@ -450,3 +450,6 @@ rename-confirm = Zmień nazwę
 checksum = { $kind } suma kontrolna
 calculate = Oblicz
 error = Błąd
+sidebar-label = Etykieta panelu bocznego
+search-application = Wyszukaj po nazwie aplikacji
+change-sidebar-label = Zmień etykietę panelu bocznego

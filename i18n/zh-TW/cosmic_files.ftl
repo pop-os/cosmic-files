@@ -42,7 +42,7 @@ name-no-slashes = 名稱不能包含斜線
 ## Open/Save Dialog
 
 cancel = 取消
-create = 建立
+create = 創作
 open = 開啟
 open-file = 開啟檔案
 open-folder = 開啟資料夾
@@ -396,3 +396,6 @@ rename-confirm = 重新命名
 checksum = { $kind } 核對和
 calculate = 計算
 error = 錯誤
+sidebar-label = 側邊欄標籤
+search-application = 依應用程式名稱搜尋
+change-sidebar-label = 變更側邊欄標籤
