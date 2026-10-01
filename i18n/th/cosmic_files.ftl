@@ -202,17 +202,9 @@ moved =
        *[other] ไฟล์
     } จาก "{ $from }" สู่ "{ $to }"
 renaming = กำลังเปลี่ยนชื่อจาก "{ $from }" เป็น "{ $to }"
-renamed = Renamed "{ $from }" to "{ $to }"
-restoring =
-    Restoring { $items } { $items ->
-        [one] item
-       *[other] items
-    } from { trash } ({ $progress })...
-restored =
-    Restored { $items } { $items ->
-        [one] item
-       *[other] items
-    } from { trash }
+renamed = เปลี่ยนชื่อจาก "{ $from }" เป็น "{ $to }" แล้ว
+restoring = กำลังกู้คืน { $items } รายการจาก { trash } ({ $progress })...
+restored = กู้คืน { $items } รายการจาก { trash } แล้ว
 unknown-folder = แฟ้มที่ไม่รู้จัก
 
 ## Open with
@@ -240,8 +232,8 @@ settings = การตั้งค่า
 appearance = ลักษณะ
 theme = ธีม
 match-desktop = ใช้ตามธีมหน้าจอหลัก
-dark = ธีมมืด
-light = ธีมสว่าง
+dark = มืด
+light = สว่าง
 # Context menu
 add-to-sidebar = เพิ่มเข้าแถบด้านข้าง
 compress = บีบอัด
@@ -306,3 +298,4 @@ sort-newest-first = ไฟล์ใหม่ก่อน
 sort-oldest-first = ไฟล์เก่าก่อน
 sort-smallest-to-largest = ขนาดเล็กก่อน
 sort-largest-to-smallest = ขนาดใหญ่ก่อน
+remove = ลบ
