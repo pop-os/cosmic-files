@@ -48,7 +48,7 @@ use std::num::NonZeroU16;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::{Arc, LazyLock, Mutex};
-use std::time::{self, Duration, Instant};
+use std::time::{self, Duration, Instant, SystemTime};
 use std::{env, fmt, fs, io, process};
 use tokio::sync::mpsc;
 use trash::TrashItem;
@@ -65,14 +65,14 @@ use crate::config::{
 };
 use crate::dialog::{Dialog, DialogKind, DialogMessage, DialogResult, DialogSettings};
 use crate::key_bind::key_binds;
-use crate::localize::LANGUAGE_SORTER;
+use crate::localize::{LANGUAGE_SORTER, date_time_formatter, format_time, time_formatter};
 use crate::mime_app::{self, MimeApp, MimeAppCache, MimeAppMatch};
 use crate::mounter::{
     MOUNTERS, MounterAuth, MounterItem, MounterItems, MounterKey, MounterMessage,
 };
 use crate::operation::{
     Controller, Operation, OperationError, OperationErrorType, OperationSelection, ReplaceResult,
-    copy_unique_path,
+    TrackedOperation, copy_unique_path,
 };
 use crate::spawn_detached::spawn_detached;
 use crate::tab::{
@@ -413,10 +413,13 @@ pub enum Message {
     ClipboardCached(ClipboardCache),
     PendingCancel(u64),
     PendingCancelAll,
-    PendingComplete(u64, OperationSelection),
+    PendingComplete(u64, OperationSelection, SystemTime),
     PendingDismiss,
-    PendingError(u64, OperationError),
-    PendingResults(Vec<(u64, OperationSelection)>, Vec<(u64, OperationError)>),
+    PendingError(u64, OperationError, SystemTime),
+    PendingResults(
+        Vec<(u64, OperationSelection, SystemTime)>,
+        Vec<(u64, OperationError, SystemTime)>,
+    ),
     PendingPause(u64, bool),
     PendingPauseAll(bool),
     PermanentlyDelete(Option<Entity>),
@@ -743,10 +746,10 @@ pub struct App {
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     overlap: FxHashMap<String, (window::Id, Rectangle)>,
     pending_operation_id: u64,
-    pending_operations: BTreeMap<u64, (Operation, Controller)>,
+    pending_operations: BTreeMap<u64, (TrackedOperation, Controller)>,
     progress_operations: BTreeSet<u64>,
-    complete_operations: BTreeMap<u64, Operation>,
-    failed_operations: BTreeMap<u64, (Operation, Controller, String)>,
+    complete_operations: BTreeMap<u64, TrackedOperation>,
+    failed_operations: BTreeMap<u64, (TrackedOperation, Controller, String)>,
     scrollable_id: widget::Id,
     search_id: widget::Id,
     size: Option<Size>,
@@ -1270,8 +1273,13 @@ impl App {
         if operation.show_progress_notification() {
             self.progress_operations.insert(id);
         }
+        let tracked_op = TrackedOperation {
+            operation: operation.clone(),
+            started_at: SystemTime::now(),
+            finished_at: None,
+        };
         self.pending_operations
-            .insert(id, (operation.clone(), controller.clone()));
+            .insert(id, (tracked_op, controller.clone()));
 
         // Use a task to send operations to the compio runtime thread.
         cosmic::Task::stream(cosmic::iced::stream::channel(4, move |msg_tx| async move {
@@ -1283,9 +1291,11 @@ impl App {
 
             _ = compio_tx
                 .send(Box::pin(async move {
-                    let msg = match operation.perform(&msg_tx_clone, controller).await {
-                        Ok(result_paths) => Message::PendingComplete(id, result_paths),
-                        Err(err) => Message::PendingError(id, err),
+                    let op_res = operation.perform(&msg_tx_clone, controller).await;
+                    let finished_at = SystemTime::now();
+                    let msg = match op_res {
+                        Ok(result_paths) => Message::PendingComplete(id, result_paths, finished_at),
+                        Err(err) => Message::PendingError(id, err, finished_at),
                     };
 
                     _ = tx.send(msg);
@@ -1314,11 +1324,15 @@ impl App {
                 |mut acc, message| {
                     if let Message::PendingResults(completed, errors) = &mut acc {
                         match message {
-                            cosmic::Action::App(Message::PendingComplete(id, selection)) => {
-                                completed.push((id, selection));
+                            cosmic::Action::App(Message::PendingComplete(
+                                id,
+                                selection,
+                                finished_at,
+                            )) => {
+                                completed.push((id, selection, finished_at));
                             }
-                            cosmic::Action::App(Message::PendingError(id, err)) => {
-                                errors.push((id, err));
+                            cosmic::Action::App(Message::PendingError(id, err, finished_at)) => {
+                                errors.push((id, err, finished_at));
                             }
                             _ => {}
                         }
@@ -1332,17 +1346,19 @@ impl App {
 
     fn handle_completed_operations(
         &mut self,
-        completed: Vec<(u64, OperationSelection)>,
+        completed: Vec<(u64, OperationSelection, SystemTime)>,
     ) -> Task<Message> {
         let mut commands = Vec::with_capacity(4 * completed.len());
         let mut op_sel = OperationSelection::default();
-        for (id, op_sel_pending) in completed {
+        for (id, op_sel_pending, finished_at) in completed {
             op_sel.ignored.extend(op_sel_pending.ignored);
             op_sel.selected.extend(op_sel_pending.selected);
-            if let Some((op, _)) = self.pending_operations.remove(&id) {
+            if let Some((mut tracked_op, _)) = self.pending_operations.remove(&id) {
+                tracked_op.finished_at = Some(finished_at);
+                let op = &tracked_op.operation;
                 // Show toast for some operations
                 if let Some(description) = op.toast() {
-                    if let Operation::Delete { ref paths } = op {
+                    if let Operation::Delete { paths } = op {
                         let paths: Arc<[PathBuf]> = Arc::from(paths.as_slice());
                         commands.push(
                             self.toasts
@@ -1364,14 +1380,11 @@ impl App {
                 }
 
                 // If a favorite for a path has been renamed or moved, update it.
-                if let Operation::Rename { ref from, ref to } = op {
+                if let Operation::Rename { from, to } = op {
                     if self.update_favorites([(from, to)].as_slice()) {
                         commands.push(self.update_config());
                     }
-                } else if let Operation::Move {
-                    ref paths, ref to, ..
-                } = op
-                {
+                } else if let Operation::Move { paths, to, .. } = op {
                     let path_changes: Box<[_]> = paths
                         .iter()
                         .filter_map(|from| from.file_name().map(|name| (from, to.join(name))))
@@ -1385,14 +1398,14 @@ impl App {
                     commands.push(self.rescan_recents());
                 }
 
-                self.complete_operations.insert(id, op);
+                self.complete_operations.insert(id, tracked_op);
             }
         }
         // Close progress notification if all relevant operations are finished
         if !self
             .pending_operations
             .values()
-            .any(|(op, _)| op.show_progress_notification())
+            .any(|(op, _)| op.operation.show_progress_notification())
         {
             self.progress_operations.clear();
         }
@@ -1406,11 +1419,15 @@ impl App {
         Task::batch(commands)
     }
 
-    fn handle_operation_errors(&mut self, errors: Vec<(u64, OperationError)>) -> Task<Message> {
+    fn handle_operation_errors(
+        &mut self,
+        errors: Vec<(u64, OperationError, SystemTime)>,
+    ) -> Task<Message> {
         let mut tasks = Vec::new();
         let mut failed = Vec::new();
-        for (id, err) in errors.into_iter() {
-            if let Some((op, controller)) = self.pending_operations.remove(&id) {
+        for (id, err, finished_at) in errors.into_iter() {
+            if let Some((mut op, controller)) = self.pending_operations.remove(&id) {
+                op.finished_at = Some(finished_at);
                 // Only show dialog if not cancelled
                 if !controller.is_cancelled() {
                     match err.kind {
@@ -1442,7 +1459,7 @@ impl App {
         if !self
             .pending_operations
             .values()
-            .any(|(op, _)| op.show_progress_notification())
+            .any(|(op, _)| op.operation.show_progress_notification())
         {
             self.progress_operations.clear();
         }
@@ -2030,6 +2047,8 @@ impl App {
         let cosmic_theme::Spacing { space_m, .. } = theme::spacing();
 
         let mut children = Vec::new();
+        let date_time_formatter = date_time_formatter(self.config.tab.military_time);
+        let time_formatter = time_formatter(self.config.tab.military_time);
 
         //TODO: get height from theme?
         let progress_bar_height = Length::Fixed(4.0);
@@ -2078,7 +2097,13 @@ impl App {
                     ])
                     .align_y(Alignment::Center)
                     .into(),
-                    widget::text::body(op.pending_text(progress, controller.state())).into(),
+                    widget::text::body(op.operation.pending_text(progress, controller.state()))
+                        .into(),
+                    widget::text::caption(
+                        format_time(op.started_at, &date_time_formatter, &time_formatter)
+                            .to_string(),
+                    )
+                    .into(),
                 ]));
             }
             children.push(section.into());
@@ -2088,9 +2113,15 @@ impl App {
             let mut section = widget::settings::section().title(fl!("failed"));
             for (op, controller, error) in self.failed_operations.values().rev() {
                 let progress = controller.progress();
+                let timestamp = op.finished_at.unwrap_or(op.started_at);
                 section = section.add(widget::column::with_children([
-                    widget::text::body(op.pending_text(progress, controller.state())).into(),
+                    widget::text::body(op.operation.pending_text(progress, controller.state()))
+                        .into(),
                     widget::text::body(error).into(),
+                    widget::text::caption(
+                        format_time(timestamp, &date_time_formatter, &time_formatter).to_string(),
+                    )
+                    .into(),
                 ]));
             }
             children.push(section.into());
@@ -2099,7 +2130,14 @@ impl App {
         if !self.complete_operations.is_empty() {
             let mut section = widget::settings::section().title(fl!("complete"));
             for op in self.complete_operations.values().rev() {
-                section = section.add(widget::text::body(op.completed_text()));
+                let timestamp = op.finished_at.unwrap_or(op.started_at);
+                section = section.add(widget::column::with_children([
+                    widget::text::body(op.operation.completed_text()).into(),
+                    widget::text::caption(
+                        format_time(timestamp, &date_time_formatter, &time_formatter).to_string(),
+                    )
+                    .into(),
+                ]));
             }
             children.push(section.into());
         }
@@ -3142,7 +3180,7 @@ impl Application for App {
                         }
                         DialogPage::ExtractPassword { id, password } => {
                             let (operation, _, _err) = self.failed_operations.get(&id).unwrap();
-                            let new_op = match &operation {
+                            let new_op = match &operation.operation {
                                 Operation::Extract { to, paths, .. } => Operation::Extract {
                                     to: to.clone(),
                                     paths: paths.clone(),
@@ -4129,14 +4167,14 @@ impl Application for App {
                     self.progress_operations.remove(id);
                 }
             }
-            Message::PendingComplete(id, op_sel) => {
-                return self.handle_completed_operations(vec![(id, op_sel)]);
+            Message::PendingComplete(id, op_sel, finished_at) => {
+                return self.handle_completed_operations(vec![(id, op_sel, finished_at)]);
             }
             Message::PendingDismiss => {
                 self.progress_operations.clear();
             }
-            Message::PendingError(id, err) => {
-                return self.handle_operation_errors(vec![(id, err)]);
+            Message::PendingError(id, err, finished_at) => {
+                return self.handle_operation_errors(vec![(id, err, finished_at)]);
             }
             Message::PendingResults(completed, errors) => {
                 return Task::batch(vec![
@@ -6321,10 +6359,10 @@ impl Application for App {
             if !controller.is_paused() {
                 all_paused = false;
             }
-            if op.show_progress_notification() {
+            if op.operation.show_progress_notification() {
                 let progress = controller.progress();
                 if title.is_empty() {
-                    title = op.pending_text(progress, controller.state());
+                    title = op.operation.pending_text(progress, controller.state());
                 }
                 total_progress += progress;
                 count += 1;

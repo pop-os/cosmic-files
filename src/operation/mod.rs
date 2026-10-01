@@ -10,6 +10,7 @@ use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::SystemTime;
 use tokio::sync::{Mutex as TokioMutex, mpsc};
 use walkdir::WalkDir;
 use zip::AesMode::Aes256;
@@ -412,6 +413,13 @@ pub enum Operation {
         path: PathBuf,
         mode: u32,
     },
+}
+
+#[derive(Clone, Debug)]
+pub struct TrackedOperation {
+    pub operation: Operation,
+    pub started_at: SystemTime,
+    pub finished_at: Option<SystemTime>,
 }
 
 #[derive(Clone, Debug)]
