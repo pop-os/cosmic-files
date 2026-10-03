@@ -1083,7 +1083,7 @@ impl App {
             .sort_by(|a, b| (b.1.width * b.1.height).total_cmp(&(a.1.width * b.1.height)));
 
         for (w_id, overlap) in sorted_overlaps {
-            let Some((bl, br, tl, tr, mut size)) = self.layer_sizes.get(w_id).map(|s| {
+            let Some((bl, br, tl, tr, size)) = self.layer_sizes.get(w_id).map(|s| {
                 (
                     Rectangle::new(
                         Point::new(0., s.height / 2.),
@@ -1133,30 +1133,18 @@ impl App {
             if tl && !(tr || bl) {
                 *top += min_dim.1;
                 *left += min_dim.0;
-
-                size.height -= min_dim.1;
-                size.width -= min_dim.0;
             }
             if tr && !(tl || br) {
                 *top += min_dim.1;
                 *right += min_dim.0;
-
-                size.height -= min_dim.1;
-                size.width -= min_dim.0;
             }
             if bl && !(br || tl) {
                 *bottom += min_dim.1;
                 *left += min_dim.0;
-
-                size.height -= min_dim.1;
-                size.width -= min_dim.0;
             }
             if br && !(bl || tr) {
                 *bottom += min_dim.1;
                 *right += min_dim.0;
-
-                size.height -= min_dim.1;
-                size.width -= min_dim.0;
             }
         }
         self.margin = overlaps;
@@ -5357,12 +5345,11 @@ impl Application for App {
             }
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             Message::Focused(id) => {
-                if let Some(w) = self.windows.get(&id) {
-                    match &w.kind {
-                        WindowKind::Desktop(entity) => self.tab_model.activate(*entity),
-                        _ => {}
-                    };
-                }
+                if let Some(w) = self.windows.get(&id)
+                    && let WindowKind::Desktop(entity) = &w.kind
+                {
+                    self.tab_model.activate(*entity)
+                };
                 // Check clipboard when window gains focus
                 // HACK: Wait a moment for the data to be available.
                 return cosmic::task::future(async {
@@ -7071,10 +7058,9 @@ pub(crate) mod test_utils {
     use log::{debug, trace};
     use tempfile::{TempDir, tempdir};
 
+    use super::*;
     use crate::config::{IconSizes, TabConfig, ThumbCfg};
     use crate::tab::Item;
-
-    use super::*;
 
     // Default number of files, directories, and nested directories for test file system
     pub const NUM_FILES: usize = 2;
@@ -7177,7 +7163,7 @@ pub(crate) mod test_utils {
     ///
     /// Directories are placed before files.
     /// Files are lexically sorted.
-    /// This is more or less copied right from the [Tab] code
+    /// This is more or less copied right from the [Tab] code.
     pub fn sort_files(a: &Path, b: &Path) -> Ordering {
         match (a.is_dir(), b.is_dir()) {
             (true, false) => Ordering::Less,
@@ -7268,7 +7254,7 @@ pub(crate) mod test_utils {
         let is_dir = path.is_dir();
 
         // NOTE: I don't want to change `tab::hidden_attribute` to `pub(crate)` for
-        // tests without asking
+        // tests without asking.
         #[cfg(not(target_os = "windows"))]
         let is_hidden = name.starts_with('.');
 
@@ -7299,32 +7285,6 @@ pub(crate) mod test_utils {
             "Tab's path is {} instead of being updated to {}",
             tab_path.display(),
             path.display()
-        );
-    }
-
-    /// Assert that tab's items are equal to a path's entries.
-    pub fn assert_eq_tab_path_contents(tab: &Tab, path: &Path) {
-        let Some(tab_path) = tab.location.path_opt() else {
-            panic!("Expected tab's location to be a path");
-        };
-
-        // Tab items are sorted so paths from read_dir must be too
-        let entries = read_dir_sorted(path).expect("should be able to read paths from temp dir");
-
-        // Check lengths.
-        // `items_opt` is optional and the directory at `path` may have zero entries
-        // Therefore, this doesn't panic if `items_opt` is None
-        let items_len = tab.items_opt().map(Vec::len).unwrap_or_default();
-        assert_eq!(entries.len(), items_len);
-
-        assert!(
-            entries
-                .into_iter()
-                .zip(tab.items_opt().map_or([].as_slice(), Vec::as_slice))
-                .all(|(a, b)| eq_path_item(&a, b)),
-            "Path ({}) and Tab path ({}) don't have equal contents",
-            path.display(),
-            tab_path.display()
         );
     }
 }
