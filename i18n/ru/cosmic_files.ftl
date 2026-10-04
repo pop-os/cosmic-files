@@ -84,8 +84,8 @@ connecting = Подключение…
 domain = Домен
 enter-server-address = Введите адрес сервера
 network-drive-description =
-    Адреса серверов включают префикс протокола и адрес.
-    Пример: ssh://192.168.0.1, ftp://[2001:db8::1]
+    Адреса серверов содержат префикс протокола и адрес.
+    Примеры: ssh://192.168.0.1, ftp://[2001:db8::1]
 
 ### Make sure to keep the comma which separates the columns
 
@@ -106,7 +106,7 @@ username = Имя пользователя
 ## Operations
 
 edit-history = История редактирования
-history = История
+history = История...
 no-history = В истории нет записей.
 pending = В процессе
 failed = Не удалась
@@ -178,7 +178,7 @@ search-application = Поиск по названию приложения
 
 ## Show details
 
-show-details = Показать подробности
+show-details = Показать подробности...
 
 ## Properties
 
