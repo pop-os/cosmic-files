@@ -331,3 +331,6 @@ rename-confirm = Атын өзгерту
 checksum = { $kind } бақылау сомасы
 calculate = Есептеу
 error = Қате
+sidebar-label = Бүйірлік панель белгісі
+search-application = Қолданба атауы бойынша іздеу
+change-sidebar-label = Бүйірлік панель белгісін өзгерту

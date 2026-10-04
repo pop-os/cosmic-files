@@ -221,7 +221,7 @@ username = Usuário
 
 cancelled = Cancelado
 edit-history = Editar histórico
-history = Histórico
+history = Histórico...
 no-history = Nenhum item no histórico.
 pending = Pendente
 progress = { $percent }%
@@ -330,7 +330,7 @@ default-app = { $name } (padrão)
 
 ## Show details
 
-show-details = Mostrar detalhes
+show-details = Mostrar detalhes...
 type = Tipo: { $mime }
 items = Itens: { $items }
 item-size = Tamanho: { $size }
