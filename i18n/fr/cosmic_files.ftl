@@ -212,7 +212,7 @@ username = Nom d'utilisateur
 
 cancelled = Annulé
 edit-history = Modifier l'historique
-history = Historique
+history = Historique...
 no-history = Aucun élément dans l'historique.
 pending = En attente
 progress = { $percent }%
@@ -308,7 +308,7 @@ default-app = { $name } (par défaut)
 
 ## Show details
 
-show-details = Afficher les détails
+show-details = Afficher les détails...
 type = Type : { $mime }
 items = Éléments : { $items }
 item-size = Taille : { $size }
@@ -371,7 +371,7 @@ quit = Quitter
 
 ## Edit
 
-edit = Modifier
+edit = Édition
 cut = Couper
 copy = Copier
 paste = Coller
@@ -383,8 +383,8 @@ zoom-in = Zoomer
 default-size = Taille par défaut
 zoom-out = Dézoomer
 view = Affichage
-grid-view = Vue en grille
-list-view = Vue en liste
+grid-view = Affichage en grille
+list-view = Affichage en liste
 show-hidden-files = Afficher les fichiers cachés
 list-directories-first = Lister les répertoires en premier
 gallery-preview = Aperçu de la galerie

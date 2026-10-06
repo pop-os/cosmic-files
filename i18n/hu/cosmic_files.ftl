@@ -216,7 +216,7 @@ username = Felhasználónév
 
 cancelled = Megszakítva
 edit-history = Fájlműveleti előzmények
-history = Előzmények
+history = Előzmények…
 no-history = Nem találhatók elemek az előzményekben.
 pending = Függőben
 progress = { $percent }%
@@ -324,7 +324,7 @@ default-app = { $name } (alapértelmezett)
 
 ## Show details
 
-show-details = Részletek megjelenítése
+show-details = Részletek megjelenítése…
 type = Típus: { $mime }
 items = Elemek száma: { $items }
 item-size = Méret: { $size }
