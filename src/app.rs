@@ -4,7 +4,7 @@
 use cosmic::app::{self, Core, Task, context_drawer};
 use cosmic::core::Auto;
 use cosmic::cosmic_config::{self, ConfigSet};
-use cosmic::iced::clipboard::dnd::DndAction;
+use cosmic::iced::clipboard::dnd::{DndAction, DndEvent, OfferEvent, SourceEvent};
 use cosmic::iced::core::SmolStr;
 use cosmic::iced::core::widget::operation::focusable::unfocus;
 use cosmic::iced::futures::{self, SinkExt};
@@ -6663,6 +6663,15 @@ impl Application for App {
                     Some(Message::Size(window_id, size))
                 }
                 Event::Window(WindowEvent::Resized(s)) => Some(Message::Size(window_id, s)),
+                // Catches events of dragging something around and tells the active tab to start scrolling up or down
+                // depending on the cursor location.
+                Event::Dnd(DndEvent::Offer(_, OfferEvent::Motion { x, y })) => {
+                    Some(Message::TabMessage(None, tab::Message::DragCursorMoved(x as f32, y as f32)))
+                }
+                // If iced UI gives us a Finish drag event or says that the dragging has left the origin viewport, stop scrolling. 
+                Event::Dnd(DndEvent::Source(SourceEvent::Finished)) | Event::Dnd(DndEvent::Offer(_, OfferEvent::Leave)) => {
+                    Some(Message::TabMessage(None, tab::Message::DragEnd))
+                }
                 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
                 Event::PlatformSpecific(event::PlatformSpecific::Wayland(wayland_event)) => {
                     match wayland_event {
