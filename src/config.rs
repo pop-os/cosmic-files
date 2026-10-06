@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::FxOrderMap;
 use crate::app::App;
+use crate::desktop::DesktopChange;
 use crate::tab::{HeadingOptions, Location, View};
 
 pub use crate::context_action::{ContextActionPreset, ContextActionSelection};
@@ -149,6 +150,7 @@ pub enum TypeToSearch {
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(default)]
 pub struct State {
+    pub desktop_changes: Vec<DesktopChange>,
     pub sort_names: FxOrderMap<String, (HeadingOptions, bool)>,
     pub dialog_sort_name: (HeadingOptions, bool),
 }
@@ -156,6 +158,7 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
+            desktop_changes: Default::default(),
             sort_names: FxOrderMap::from_iter(dirs::download_dir().into_iter().map(|dir| {
                 (
                     Location::Path(dir).normalize().to_string(),
