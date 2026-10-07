@@ -788,25 +788,25 @@ impl App {
         }
     }
 
-    fn open_file(&mut self, paths: &[impl AsRef<Path>]) -> Task<Message> {
+    fn open_file(&mut self, paths: &[tab::OpenTarget]) -> Task<Message> {
         let mut tasks = Vec::new();
 
         // Associate all paths to its MIME type
         // This allows handling paths as groups if possible, such as launching a single video
         // player that is passed every path.
-        let mut groups: FxHashMap<Mime, Vec<PathBuf>> = FxHashMap::default();
+        let mut groups: FxHashMap<Mime, Vec<&tab::OpenTarget>> = FxHashMap::default();
         let mut all_archives = true;
         let supported_archive_types = crate::archive::SUPPORTED_ARCHIVE_TYPES;
-        for (mime, path) in paths.iter().map(|path| {
+        for (mime, target) in paths.iter().map(|target| {
             (
-                mime_icon::mime_for_path(path, None, false),
-                path.as_ref().to_owned(),
+                mime_icon::mime_for_path(target, None, false),
+                target,
             )
         }) {
             if all_archives && !supported_archive_types.iter().copied().any(|t| mime == t) {
                 all_archives = false;
             }
-            groups.entry(mime).or_default().push(path);
+            groups.entry(mime).or_default().push(target);
         }
 
         if all_archives {
@@ -828,19 +828,21 @@ impl App {
             } else if mime == "application/x-executable" || mime == "application/vnd.appimage" {
                 // Try opening executable
                 for path in paths {
-                    let mut command = std::process::Command::new(&path);
+                    let mut command = std::process::Command::new(&path.path);
                     match spawn_detached(&mut command) {
                         Ok(()) => {}
                         Err(err) => match err.kind() {
                             io::ErrorKind::PermissionDenied => {
                                 // If permission is denied, try marking as executable, then running
                                 tasks.push(self.push_dialog(
-                                    DialogPage::SetExecutableAndLaunch { path },
+                                    DialogPage::SetExecutableAndLaunch {
+                                        path: path.path.clone(),
+                                    },
                                     Some(SET_EXECUTABLE_AND_LAUNCH_CONFIRM_BUTTON_ID.clone()),
                                 ));
                             }
                             _ => {
-                                log::warn!("failed to execute {}: {}", path.display(), err);
+                                log::warn!("failed to execute {}: {}", path.path.display(), err);
                             }
                         },
                     }
@@ -868,7 +870,7 @@ impl App {
                     Ok(()) => {
                         if self.config.show_recents {
                             let _ = recently_used_xbel::update_recently_used(
-                                &path,
+                                &path.path,
                                 Self::APP_ID.to_string(),
                                 "cosmic-files".to_string(),
                                 None,
@@ -876,7 +878,7 @@ impl App {
                         }
                     }
                     Err(err) => {
-                        log::warn!("failed to open {}: {}", path.display(), err);
+                        log::warn!("failed to open {}: {}", path.path.display(), err);
                     }
                 }
             }
@@ -936,12 +938,22 @@ impl App {
         }
     }
 
-    fn launch_from_mime_cache<P>(&self, mime: &Mime, paths: &[P]) -> bool
-    where
-        P: std::fmt::Debug + AsRef<Path> + AsRef<std::ffi::OsStr>,
-    {
+    fn launch_from_mime_cache(
+        &self,
+        mime: &Mime,
+        targets: &[&tab::OpenTarget],
+    ) -> bool {
+        let paths: Vec<&std::ffi::OsStr> = targets
+            .iter()
+            .map(|target| target.path.as_os_str())
+            .collect();
+        let uris: Vec<Option<&str>> = targets
+            .iter()
+            .map(|target| target.uri_opt.as_deref())
+            .collect();
+
         for app in self.mime_app_cache.get(mime) {
-            let Some(commands) = app.command(paths, None) else {
+            let Some(commands) = app.command(&paths, Some(&uris)) else {
                 continue;
             };
             let len = commands.len();
@@ -950,9 +962,9 @@ impl App {
                 match spawn_detached(&mut command) {
                     Ok(()) => {
                         if self.config.show_recents {
-                            for path in paths {
+                            for target in targets {
                                 let _ = recently_used_xbel::update_recently_used(
-                                    &path.into(),
+                                    &target.path,
                                     Self::APP_ID.to_string(),
                                     "cosmic-files".to_string(),
                                     None,
@@ -967,12 +979,12 @@ impl App {
                         // is associated with one instance
                         //
                         // One command: Attempted to launch one app with multiple paths
-                        let path = if len > 1 {
-                            format!("{:?}", paths.get(i))
+                        let target = if len > 1 {
+                            format!("{:?}", targets.get(i))
                         } else {
-                            format!("{paths:?}")
+                            format!("{targets:?}")
                         };
-                        log::warn!("failed to open {:?} with {:?}: {}", path, app.id, err);
+                        log::warn!("failed to open {:?} with {:?}: {}", target, app.id, err);
                     }
                 }
             }
@@ -5030,7 +5042,10 @@ impl Application for App {
                         .and_then(Location::path_opt)
                         .cloned()
                     {
-                        return self.open_file(&[path]);
+                        return self.open_file(&[tab::OpenTarget {
+                            path,
+                            uri_opt: None,
+                        }]);
                     }
                 }
                 NavMenuAction::OpenWith(entity) => {
